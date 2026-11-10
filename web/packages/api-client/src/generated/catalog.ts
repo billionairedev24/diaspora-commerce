@@ -728,6 +728,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/{id}/tax-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tax publish gate of a product, per variant (owner or staff)
+         * @description Calls tax-returns POST /v1/tax/classifications/resolve for every variant with its facts and the seller's behaviour facts. A product goes live only when status is READY. Missing facts are listed in plain words; the tax is never guessed (TX-10).
+         */
+        get: operations["productTaxReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/variants/{atin}/tax-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The evidence files of a variant (owner or staff) */
+        get: operations["listTaxEvidence"];
+        put?: never;
+        /**
+         * Upload the proof for an exemption fact (label photo, Drug Facts, Supplement Facts)
+         * @description Stored with the variant and shown to tax review. Allowed: PDF, JPEG, PNG up to 10 MB. Re-uploading a fact adds a version; earlier files are kept for audit.
+         */
+        post: operations["uploadTaxEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/products/{id}": {
         parameters: {
             query?: never;
@@ -739,7 +780,7 @@ export interface paths {
         get: operations["get"];
         /**
          * Edit a product (one-step form in edit mode)
-         * @description Owner or staff. The whole content is validated again; variants are matched by sellerSku (new SKUs get ATINs; a published listing keeps its category and variants). A rejected listing goes back to review. Publishes catalog.product.updated, plus catalog.product.terms_changed when prices, quantities or listing terms changed and catalog.product.resubmitted when a rejected listing is resubmitted. 409 when version is stale.
+         * @description Owner or staff. The whole content is validated again; variants are matched by sellerSku, else GTIN, else ATIN (new variants get ATINs and, when sellerSku is empty, a generated one; a published listing keeps its category and variants). A rejected listing goes back to review. Publishes catalog.product.updated, plus catalog.product.terms_changed when prices, quantities or listing terms changed and catalog.product.resubmitted when a rejected listing is resubmitted. 409 when version is stale.
          */
         put: operations["updateProduct"];
         post?: never;
@@ -1516,8 +1557,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Description, condition, search keywords, fulfilment, package, handling time and ship-from */
+        /** @description Description, condition, search keywords, fulfilment, package, handling time and ship-from, and the seller's tax behaviour facts */
         ListingDetails: {
+            /** @description Behaviour facts of this seller's listing (owner OFFER): sold_heated, heated_by_seller, utensils_provided. seller_is_bakery comes from the seller profile. */
+            sellerBehaviour?: {
+                [key: string]: unknown;
+            };
             description?: string;
             /** @enum {string} */
             condition?: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
@@ -1596,11 +1641,19 @@ export interface components {
             /** Format: uuid */
             draftId?: string;
         };
+        /** @description sellerSku is optional (generated, stable and organisation-prefixed, when empty). Variants are matched by sellerSku, else gtin, else atin. */
         VariantRequest: {
             options: {
                 [key: string]: string;
             };
-            sellerSku: string;
+            /** @description The seller's own SKU. Optional; when empty the service generates one (see Variant.sellerSkuGenerated). */
+            sellerSku?: string;
+            /** @description Existing variant ATIN, used to match a variant when sellerSku and gtin are absent (bulk update) */
+            atin?: string;
+            /** @description Product tax facts of this variant by fact id (owner VARIANT): net_weight_oz, servings_per_package, juice_percent, label_type, is_candy... Evidence files are uploaded through the tax-evidence endpoint, not sent here. */
+            taxFacts?: {
+                [key: string]: unknown;
+            };
             gtin?: string;
             gtinExempt?: boolean;
             /** Format: int64 */
@@ -1619,6 +1672,7 @@ export interface components {
             /** Format: uuid */
             id?: string;
             atin?: string;
+            taxStatus?: components["schemas"]["VariantTaxStatus"];
             ownerKind?: string;
             ownerOrgId?: string;
             /** Format: uuid */
@@ -1650,6 +1704,14 @@ export interface components {
             id?: string;
             atin?: string;
             sellerSku?: string;
+            /** @description True when the service generated sellerSku because the seller left it empty */
+            sellerSkuGenerated?: boolean;
+            taxFacts?: {
+                [key: string]: unknown;
+            };
+            taxStatus?: components["schemas"]["VariantTaxStatus"];
+            /** @description Facts still needed before this variant can be published (empty when taxStatus is READY) */
+            missingTaxFacts?: components["schemas"]["MissingTaxFact"][];
             gtin?: string;
             gtinExempt?: boolean;
             options?: {
@@ -2252,14 +2314,34 @@ export interface components {
             options?: string[];
             required?: boolean;
             multiline?: boolean;
-            /** @enum {string} */
-            kind?: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND";
+            /**
+             * @description BOOLEAN, DECIMAL (with unit), INTEGER, PERCENT and FILE (evidence upload) are the typed tax facts; older kinds are unchanged
+             * @enum {string}
+             */
+            kind?: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND" | "BOOLEAN" | "DECIMAL" | "INTEGER" | "PERCENT" | "FILE";
             units?: string[];
+            /** @description Unit of a DECIMAL or PERCENT value, e.g. oz or % */
+            unit?: string;
             /** @enum {string} */
-            section?: "DETAILS" | "FOOD" | "REGULATED";
+            section?: "DETAILS" | "FOOD" | "REGULATED" | "TAX";
             help?: string;
             applies?: boolean;
+            /** @description True when the attribute is a tax fact; its key is the fact id of contracts/openapi/tax-returns.yaml FactDefinition and the value is sent to /v1/tax/classifications/resolve */
+            taxFact?: boolean;
+            /**
+             * @description VARIANT facts are stored on the variant (taxFacts); OFFER facts are the seller's behaviour and are stored with the listing (listing.sellerBehaviour)
+             * @enum {string}
+             */
+            owner?: "VARIANT" | "OFFER";
+            showWhen?: components["schemas"]["ShowCondition"];
+            requiredWhen?: components["schemas"]["ShowCondition"];
+            /** @description A FILE attribute that is proof for an exemption claim (uploaded through the tax-evidence endpoint) */
+            evidence?: boolean;
         };
+        /** @description Expression tree: {all:[..]}, {any:[..]}, {not:..} or a leaf {op: isTrue|isFalse|eq|in|gt|gte|lt|lte, fact, value|values} over fact ids; null means always. Same grammar as tax-returns Condition. */
+        ShowCondition: {
+            [key: string]: unknown;
+        } | null;
         /** @description Attributes carry kind (TEXT, MULTILINE, ENUM, NUMBER), units, the form section (DETAILS, FOOD, REGULATED) and a help line; traits decide the conditional form sections */
         ProductType: {
             code?: string;
@@ -2396,6 +2478,42 @@ export interface components {
             cached?: boolean;
             message?: string;
         };
+        /**
+         * @description READY = the tax rules resolved to a chargeable decision and the review (if any) is approved. The others block publication: MISSING_FACTS, PENDING_REVIEW, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN (same meaning as tax-returns ResolveStatus) and REJECTED.
+         * @enum {string}
+         */
+        VariantTaxStatus: "READY" | "MISSING_FACTS" | "PENDING_REVIEW" | "BLOCKED" | "NEEDS_APPROVAL" | "REFINE_CODE" | "CONFLICT_OPEN" | "REJECTED";
+        MissingTaxFact: {
+            factId: string;
+            label?: string;
+            /** @description Plain words for the seller */
+            message: string;
+        };
+        /** @description Publish gate for a product: it can go live only when status is READY (every variant READY) */
+        TaxReadiness: {
+            /** Format: uuid */
+            productId?: string;
+            status?: components["schemas"]["VariantTaxStatus"];
+            categoryCode?: string;
+            ruleVersion?: string;
+            variants?: {
+                atin?: string;
+                sellerSku?: string;
+                status?: components["schemas"]["VariantTaxStatus"];
+                missingTaxFacts?: components["schemas"]["MissingTaxFact"][];
+                reason?: string;
+            }[];
+        };
+        TaxEvidence: {
+            atin?: string;
+            factId?: string;
+            fileName?: string;
+            contentType?: string;
+            url?: string;
+            uploadedBy?: string;
+            /** Format: date-time */
+            uploadedAt?: string;
+        };
         CategoryNode: {
             /** Format: uuid */
             id?: string;
@@ -2409,6 +2527,13 @@ export interface components {
             path?: string;
             /** @description On a department, the evidence sellers must have on file to sell in it (FOOD_PERMIT, BEAUTY_LABELLING) */
             compliance?: string[];
+            /** @description On a category node (the tax-bearing level of department > category > product type): the tax profile it uses, equal to the profile categoryCode of tax-returns (e.g. nuts-seeds). Absent on departments and product types. */
+            taxProfileId?: string;
+            /**
+             * @description Gate of the tax profile, read from tax-returns: sellers cannot publish into a category whose status is not ACTIVE
+             * @enum {string}
+             */
+            taxStatus?: "ACTIVE" | "NEEDS_APPROVAL" | "BLOCKED_BUNDLE" | "REFINE_CODE" | "CONFLICT_OPEN";
         };
         SellerCatalogScope: {
             /** @description AfroTransact Retail and staff; every department is allowed */
@@ -4148,6 +4273,87 @@ export interface operations {
         responses: {
             /** @description No Content */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    productTaxReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxReadiness"];
+                };
+            };
+        };
+    };
+    listTaxEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxEvidence"][];
+                };
+            };
+        };
+    };
+    uploadTaxEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    factId: string;
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxEvidence"];
+                };
+            };
+            /** @description catalog.tax-evidence-invalid (not an evidence fact, wrong type or too large) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

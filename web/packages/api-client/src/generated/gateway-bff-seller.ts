@@ -963,6 +963,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/products/{productId}/tax-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What is still needed before a product can go live (tax questions, per variant, in plain words)
+         * @description catalog `GET /v1/products/{id}/tax-readiness`. Nothing is guessed - a variant without a definite tax decision input is not READY.
+         */
+        get: operations["productTaxReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/variants/{atin}/tax-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The proof files of a variant */
+        get: operations["listVariantTaxEvidence"];
+        put?: never;
+        /**
+         * Upload the proof for an exemption question (label photo, Drug Facts, Supplement Facts)
+         * @description catalog `POST /v1/variants/{atin}/tax-evidence`. PDF, JPEG or PNG up to 10 MB; a new upload of a question is a new version.
+         */
+        post: operations["uploadVariantTaxEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/products": {
         parameters: {
             query?: never;
@@ -3998,18 +4039,29 @@ export interface components {
             level: string;
             productType: string | null;
             path: string;
+            /**
+             * @description Category nodes only: the gate of the category's tax profile. Sellers can publish only into ACTIVE ones; a gated category is shown with a plain message and what happens next (docs/engineering/category-tax-design.md section 6).
+             * @enum {string|null}
+             */
+            taxStatus?: "ACTIVE" | "NEEDS_APPROVAL" | "BLOCKED_BUNDLE" | "REFINE_CODE" | "CONFLICT_OPEN" | null;
             children: components["schemas"]["CategoryNode"][];
         };
+        /** @description Show-when / required-when expression: {all:[..]}, {any:[..]}, {not:..} or a leaf {op: isTrue|isFalse|eq|in|gt|gte|lt|lte, fact, value|values}; null = always. Semantics and test vectors: docs/engineering/fact-expression-vectors.json */
+        FactExpression: {
+            [key: string]: unknown;
+        } | null;
+        /** @description An answer to a tax question: yes/no, a number, or the chosen option value */
+        FactValue: boolean | number | string;
         /**
          * @description BRAND: chosen from the brand registry of the category; options are the no-brand choices (UNBRANDED, HANDMADE)
          * @enum {string}
          */
-        AttributeKind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND";
+        AttributeKind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND" | "BOOLEAN" | "DECIMAL" | "INTEGER" | "PERCENT" | "FILE";
         /**
          * @description Where the form shows it: product details, the food section or the regulated-items section
          * @enum {string}
          */
-        AttributeSection: "DETAILS" | "FOOD" | "REGULATED";
+        AttributeSection: "DETAILS" | "FOOD" | "REGULATED" | "TAX";
         /**
          * @description The unit of a chart's values; the other unit is shown by conversion
          * @enum {string}
@@ -4209,6 +4261,23 @@ export interface components {
                 units: string[];
                 section: components["schemas"]["AttributeSection"];
                 help: string | null;
+                /** @description A plain-word question whose answer decides how the item is taxed (section TAX) */
+                taxFact?: boolean;
+                /**
+                 * @description VARIANT: answered per variant (product facts). OFFER: the seller's own behaviour, part of "Your listing"
+                 * @enum {string|null}
+                 */
+                owner?: "VARIANT" | "OFFER" | null;
+                /** @description Unit of a DECIMAL or PERCENT answer (oz, %) */
+                unit?: string | null;
+                showWhen?: components["schemas"]["FactExpression"];
+                requiredWhen?: components["schemas"]["FactExpression"];
+                /** @description A FILE question that is proof for an exemption claim (uploaded for each item once saved) */
+                evidence?: boolean;
+                /** @description ENUM tax questions: the plain label of each option value */
+                optionLabels?: {
+                    [key: string]: string;
+                };
             }[];
             themes: {
                 name: string;
@@ -4271,7 +4340,14 @@ export interface components {
             options: {
                 [key: string]: string;
             };
-            sellerSku: string;
+            /** @description Optional: when empty a stable, organisation-prefixed SKU is generated. Edits match a variant by sellerSku, else gtin, else atin. */
+            sellerSku?: string;
+            /** @description The existing variant's ATIN (matches it when sellerSku and gtin are absent) */
+            atin?: string;
+            /** @description Product facts of this variant by fact id (net_weight_oz, servings_per_package ...): the category's questions, validated like the form does (422 on variants[i].taxFacts.<id>) */
+            taxFacts?: {
+                [key: string]: components["schemas"]["FactValue"];
+            };
             gtin?: string;
             gtinExempt?: boolean;
             priceMinor: number;
@@ -4311,6 +4387,10 @@ export interface components {
             sizeChartId?: string | null;
             /** @description How the sizes fit; shown beside the chart (defaults to the chart's own) */
             fitNote?: components["schemas"]["FitNote"] | null;
+            /** @description "Your listing": how this seller sells the item (sold_heated, heated_by_seller, utensils_provided), by fact id */
+            sellerBehaviour?: {
+                [key: string]: components["schemas"]["FactValue"];
+            };
         };
         /** @description Exactly one of categoryId or categoryRequestId. variationTheme "" = a product without variations (one variant without options). */
         ProductDraft: {
@@ -4345,6 +4425,51 @@ export interface components {
             compareAtMinor: number | null;
             quantity: number;
             images: components["schemas"]["ProductImageInput"][];
+            /** @description True when the catalog generated the SKU because it was left empty */
+            sellerSkuGenerated?: boolean;
+            taxFacts?: {
+                [key: string]: components["schemas"]["FactValue"];
+            };
+            taxStatus?: components["schemas"]["VariantTaxStatus"];
+            missingTaxFacts?: components["schemas"]["MissingTaxFact"][];
+        };
+        /**
+         * @description READY = tax rules resolved and approved; any other status keeps the item from going live
+         * @enum {string}
+         */
+        VariantTaxStatus: "READY" | "MISSING_FACTS" | "PENDING_REVIEW" | "BLOCKED" | "NEEDS_APPROVAL" | "REFINE_CODE" | "CONFLICT_OPEN" | "REJECTED";
+        MissingTaxFact: {
+            factId: string;
+            label?: string | null;
+            /** @description Plain words for the seller */
+            message: string;
+        };
+        ProductTaxReadiness: {
+            productId: string;
+            status: components["schemas"]["VariantTaxStatus"];
+            categoryCode?: string | null;
+            categoryStatus?: string | null;
+            categoryMessage?: string | null;
+            ruleVersion?: string | null;
+            variants: {
+                atin: string;
+                sellerSku: string;
+                status: components["schemas"]["VariantTaxStatus"];
+                missingTaxFacts: components["schemas"]["MissingTaxFact"][];
+                reason?: string | null;
+            }[];
+        };
+        VariantTaxEvidence: {
+            id: string;
+            atin: string;
+            factId: string;
+            version: number;
+            fileName: string;
+            contentType: string;
+            bytes: number;
+            url: string;
+            /** Format: date-time */
+            uploadedAt: string;
         };
         ListingDetails: {
             description: string | null;
@@ -4357,6 +4482,9 @@ export interface components {
             /** Format: uuid */
             sizeChartId?: string | null;
             fitNote?: components["schemas"]["FitNote"] | null;
+            sellerBehaviour?: {
+                [key: string]: components["schemas"]["FactValue"];
+            };
         };
         ProductDetail: {
             productId: string;
@@ -7225,6 +7353,83 @@ export interface operations {
             409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    productTaxReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductTaxReadiness"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    listVariantTaxEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantTaxEvidence"][];
+                };
+            };
+        };
+    };
+    uploadVariantTaxEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    factId: string;
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantTaxEvidence"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
         };
     };
     submitProduct: {

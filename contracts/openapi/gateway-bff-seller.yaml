@@ -1027,6 +1027,42 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/products/{productId}/tax-readiness:
+    get:
+      tags: [Listings]
+      operationId: productTaxReadiness
+      security: [{sessionCookie: []}]
+      summary: What is still needed before a product can go live (tax questions, per variant, in plain words)
+      description: catalog `GET /v1/products/{id}/tax-readiness`. Nothing is guessed - a variant without a definite tax decision input is not READY.
+      parameters: [{name: productId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/ProductTaxReadiness'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/seller/variants/{atin}/tax-evidence:
+    post:
+      tags: [Listings]
+      operationId: uploadVariantTaxEvidence
+      security: [{sessionCookie: []}]
+      summary: Upload the proof for an exemption question (label photo, Drug Facts, Supplement Facts)
+      description: catalog `POST /v1/variants/{atin}/tax-evidence`. PDF, JPEG or PNG up to 10 MB; a new upload of a question is a new version.
+      parameters: [{name: atin, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: {type: object, required: [factId, file], properties: {factId: {type: string}, file: {type: string, format: binary}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/VariantTaxEvidence'}}}}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+    get:
+      tags: [Listings]
+      operationId: listVariantTaxEvidence
+      security: [{sessionCookie: []}]
+      summary: The proof files of a variant
+      parameters: [{name: atin, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/VariantTaxEvidence'}}}}}
   /v1/seller/products:
     post:
       tags: [Listings]
@@ -4252,9 +4288,12 @@ components:
         level: {type: string, description: 'DEPARTMENT, CATEGORY or PRODUCT_TYPE'}
         productType: {type: [string, 'null']}
         path: {type: string}
+        taxStatus: {type: [string, 'null'], enum: [ACTIVE, NEEDS_APPROVAL, BLOCKED_BUNDLE, REFINE_CODE, CONFLICT_OPEN, null], description: 'Category nodes only: the gate of the category''s tax profile. Sellers can publish only into ACTIVE ones; a gated category is shown with a plain message and what happens next (docs/engineering/category-tax-design.md section 6).'}
         children: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}
-    AttributeKind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER, BRAND], description: 'BRAND: chosen from the brand registry of the category; options are the no-brand choices (UNBRANDED, HANDMADE)'}
-    AttributeSection: {type: string, enum: [DETAILS, FOOD, REGULATED], description: 'Where the form shows it: product details, the food section or the regulated-items section'}
+    FactExpression: {type: [object, 'null'], additionalProperties: true, description: 'Show-when / required-when expression: {all:[..]}, {any:[..]}, {not:..} or a leaf {op: isTrue|isFalse|eq|in|gt|gte|lt|lte, fact, value|values}; null = always. Semantics and test vectors: docs/engineering/fact-expression-vectors.json'}
+    FactValue: {oneOf: [{type: boolean}, {type: number}, {type: string}], description: 'An answer to a tax question: yes/no, a number, or the chosen option value'}
+    AttributeKind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER, BRAND, BOOLEAN, DECIMAL, INTEGER, PERCENT, FILE], description: 'BRAND: chosen from the brand registry of the category; options are the no-brand choices (UNBRANDED, HANDMADE)'}
+    AttributeSection: {type: string, enum: [DETAILS, FOOD, REGULATED, TAX], description: 'Where the form shows it: product details, the food section or the regulated-items section'}
     SizeChartUnit: {type: string, enum: [CM, IN], description: 'The unit of a chart''s values; the other unit is shown by conversion'}
     FitNote: {type: string, enum: [RUNS_SMALL, TRUE_TO_SIZE, RUNS_LARGE], description: How the sizes fit; shown beside the size chart}
     SizeChartColumnInput:
@@ -4439,6 +4478,13 @@ components:
               units: {type: array, items: {type: string}, description: 'NUMBER only: allowed units, the first is the default (value stored as "12 months")'}
               section: {$ref: '#/components/schemas/AttributeSection'}
               help: {type: [string, 'null']}
+              taxFact: {type: boolean, description: 'A plain-word question whose answer decides how the item is taxed (section TAX)'}
+              owner: {type: [string, 'null'], enum: [VARIANT, OFFER, null], description: 'VARIANT: answered per variant (product facts). OFFER: the seller''s own behaviour, part of "Your listing"'}
+              unit: {type: [string, 'null'], description: 'Unit of a DECIMAL or PERCENT answer (oz, %)'}
+              showWhen: {$ref: '#/components/schemas/FactExpression'}
+              requiredWhen: {$ref: '#/components/schemas/FactExpression'}
+              evidence: {type: boolean, description: 'A FILE question that is proof for an exemption claim (uploaded for each item once saved)'}
+              optionLabels: {type: object, additionalProperties: {type: string}, description: 'ENUM tax questions: the plain label of each option value'}
         themes:
           type: array
           items:
@@ -4508,10 +4554,12 @@ components:
         alt: {type: [string, 'null'], maxLength: 200, description: 'Optional alternative text (what the picture shows), stored with the image'}
     VariantInput:
       type: object
-      required: [options, sellerSku, priceMinor, quantity]
+      required: [options, priceMinor, quantity]
       properties:
         options: {type: object, additionalProperties: {type: string}, description: 'Empty for a product without variations'}
-        sellerSku: {type: string, minLength: 1, maxLength: 64}
+        sellerSku: {type: string, maxLength: 64, description: 'Optional: when empty a stable, organisation-prefixed SKU is generated. Edits match a variant by sellerSku, else gtin, else atin.'}
+        atin: {type: string, description: 'The existing variant''s ATIN (matches it when sellerSku and gtin are absent)'}
+        taxFacts: {type: object, additionalProperties: {$ref: '#/components/schemas/FactValue'}, description: 'Product facts of this variant by fact id (net_weight_oz, servings_per_package ...): the category''s questions, validated like the form does (422 on variants[i].taxFacts.<id>)'}
         gtin: {type: string}
         gtinExempt: {type: boolean}
         priceMinor: {type: integer, minimum: 1}
@@ -4544,6 +4592,7 @@ components:
         shipFromId: {type: [string, 'null'], description: 'A ship-from address id (GET /v1/seller/ship-from-addresses); null = the default'}
         sizeChartId: {type: [string, 'null'], format: uuid, description: 'One of the organisation''s size charts (POST /v1/seller/size-charts). Required when the product type''s sizing trait says sizeChartRequired; every size the variants sell needs a row in it (422 on sizeChartId or variants[i].options.Size). Another organisation''s chart is never accepted.'}
         fitNote: {oneOf: [{$ref: '#/components/schemas/FitNote'}, {type: 'null'}], description: 'How the sizes fit; shown beside the chart (defaults to the chart''s own)'}
+        sellerBehaviour: {type: object, additionalProperties: {$ref: '#/components/schemas/FactValue'}, description: '"Your listing": how this seller sells the item (sold_heated, heated_by_seller, utensils_provided), by fact id'}
     ProductDraft:
       type: object
       required: [title, attributes, images, variationTheme, variants]
@@ -4579,6 +4628,52 @@ components:
         compareAtMinor: {type: [integer, 'null']}
         quantity: {type: integer}
         images: {type: array, items: {$ref: '#/components/schemas/ProductImageInput'}}
+        sellerSkuGenerated: {type: boolean, description: 'True when the catalog generated the SKU because it was left empty'}
+        taxFacts: {type: object, additionalProperties: {$ref: '#/components/schemas/FactValue'}}
+        taxStatus: {$ref: '#/components/schemas/VariantTaxStatus'}
+        missingTaxFacts: {type: array, items: {$ref: '#/components/schemas/MissingTaxFact'}}
+    VariantTaxStatus: {type: string, enum: [READY, MISSING_FACTS, PENDING_REVIEW, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN, REJECTED], description: 'READY = tax rules resolved and approved; any other status keeps the item from going live'}
+    MissingTaxFact:
+      type: object
+      required: [factId, message]
+      properties:
+        factId: {type: string}
+        label: {type: [string, 'null']}
+        message: {type: string, description: Plain words for the seller}
+    ProductTaxReadiness:
+      type: object
+      required: [productId, status, variants]
+      properties:
+        productId: {type: string}
+        status: {$ref: '#/components/schemas/VariantTaxStatus'}
+        categoryCode: {type: [string, 'null']}
+        categoryStatus: {type: [string, 'null']}
+        categoryMessage: {type: [string, 'null']}
+        ruleVersion: {type: [string, 'null']}
+        variants:
+          type: array
+          items:
+            type: object
+            required: [atin, sellerSku, status, missingTaxFacts]
+            properties:
+              atin: {type: string}
+              sellerSku: {type: string}
+              status: {$ref: '#/components/schemas/VariantTaxStatus'}
+              missingTaxFacts: {type: array, items: {$ref: '#/components/schemas/MissingTaxFact'}}
+              reason: {type: [string, 'null']}
+    VariantTaxEvidence:
+      type: object
+      required: [id, atin, factId, version, fileName, contentType, bytes, url, uploadedAt]
+      properties:
+        id: {type: string}
+        atin: {type: string}
+        factId: {type: string}
+        version: {type: integer}
+        fileName: {type: string}
+        contentType: {type: string}
+        bytes: {type: integer}
+        url: {type: string}
+        uploadedAt: {type: string, format: date-time}
     ListingDetails:
       type: object
       required: [description, condition, keywords, fulfilment, packaging, handlingDays, shipFromId]
@@ -4595,6 +4690,7 @@ components:
         shipFromId: {type: [string, 'null']}
         sizeChartId: {type: [string, 'null'], format: uuid}
         fitNote: {oneOf: [{$ref: '#/components/schemas/FitNote'}, {type: 'null'}]}
+        sellerBehaviour: {type: object, additionalProperties: {$ref: '#/components/schemas/FactValue'}}
     ProductDetail:
       type: object
       required: [productId, atin, status, statusLabel, moderationNote, categoryId, categoryRequestId, categoryPath, productType, title,

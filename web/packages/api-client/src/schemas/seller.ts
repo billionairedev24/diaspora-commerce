@@ -1118,11 +1118,11 @@ export const ListingDetailsSchema = z.object({
 export type ListingDetails = z.infer<typeof ListingDetailsSchema>;
 
 /** The tax publish gate of a product, per variant, in plain words (GET /v1/seller/products/{id}/tax-readiness). */
-export const TaxStatusSchema = z.enum(['READY', 'MISSING_FACTS', 'PENDING_REVIEW', 'BLOCKED', 'NEEDS_APPROVAL', 'REFINE_CODE', 'CONFLICT_OPEN', 'REJECTED']);
-export type TaxStatus = z.infer<typeof TaxStatusSchema>;
-export const TaxReadinessSchema = z.object({
+export const VariantTaxStatusSchema = z.enum(['READY', 'MISSING_FACTS', 'PENDING_REVIEW', 'BLOCKED', 'NEEDS_APPROVAL', 'REFINE_CODE', 'CONFLICT_OPEN', 'REJECTED']);
+export type VariantTaxStatus = z.infer<typeof VariantTaxStatusSchema>;
+export const ProductTaxReadinessSchema = z.object({
   productId: z.string(),
-  status: TaxStatusSchema,
+  status: VariantTaxStatusSchema,
   categoryCode: nullableString.optional(),
   categoryStatus: nullableString.optional(),
   categoryMessage: nullableString.optional(),
@@ -1130,14 +1130,14 @@ export const TaxReadinessSchema = z.object({
   variants: z.array(z.object({
     atin: z.string(),
     sellerSku: z.string(),
-    status: TaxStatusSchema,
+    status: VariantTaxStatusSchema,
     missingTaxFacts: z.array(z.object({ factId: z.string(), label: nullableString.optional(), message: z.string() })),
     reason: nullableString.optional()
   }))
 });
-export type TaxReadiness = z.infer<typeof TaxReadinessSchema>;
+export type ProductTaxReadiness = z.infer<typeof ProductTaxReadinessSchema>;
 /** A proof file stored for an exemption fact of a variant. */
-export const TaxEvidenceSchema = z.object({
+export const VariantTaxEvidenceSchema = z.object({
   id: z.string(),
   atin: z.string(),
   factId: z.string(),
@@ -1148,7 +1148,7 @@ export const TaxEvidenceSchema = z.object({
   url: z.string(),
   uploadedAt: z.string()
 });
-export type TaxEvidence = z.infer<typeof TaxEvidenceSchema>;
+export type VariantTaxEvidence = z.infer<typeof VariantTaxEvidenceSchema>;
 
 /* ── Size charts (sellers write them; the category only suggests sizes and measurements) ── */
 

@@ -1435,7 +1435,7 @@ export const sellerHandlers = [
     route(async (ctx) => {
       const d = await body(ctx.request, ProductDraftSchema);
       if (!d.categoryId === !d.categoryRequestId) throw invalid({ categoryId: 'Choose a category, or request a new one.' });
-      const skus = d.variants.map((v) => v.sellerSku.toUpperCase());
+      const skus = d.variants.map((v) => (v.sellerSku ?? '').toUpperCase());
       if (new Set(skus).size !== skus.length) throw invalid({ variants: 'SKUs must be unique.' });
       const leafOf = categoryLeaves().find((c) => c.id === d.categoryId);
       const problems = { ...listingProblems(d), ...sizeProblems(d, leafOf ? PRODUCT_TYPES[leafOf.productType] : undefined, ctx.db.sizeCharts, ctx.org.id) };
@@ -1452,7 +1452,7 @@ export const sellerHandlers = [
         status, statusLabel: status === 'IN_REVIEW' ? 'In review' : 'Waiting for category approval', moderationNote: null, imageUrl: d.images[0]?.url ?? null,
         updatedAt: ctx.now.toISOString()
       };
-      ctx.db.listings.unshift({ ...row, variants: d.variants.map((v) => ({ sku: v.sellerSku.toUpperCase(), quantity: v.quantity })) });
+      ctx.db.listings.unshift({ ...row, variants: d.variants.map((v) => ({ sku: (v.sellerSku ?? '').toUpperCase(), quantity: v.quantity })) });
       ctx.db.productDetails[row.productId] = detailOf(row.productId, d, row, 1, leaf?.path ?? 'Requested category', leaf?.productType ?? 'custom');
       if (d.draftId) ctx.db.drafts = ctx.db.drafts.filter((x) => x.id !== d.draftId);
       return row;
@@ -1462,7 +1462,7 @@ export const sellerHandlers = [
     `${W}/products/:productId`,
     route(async (ctx, p) => {
       const d = await body(ctx.request, ProductDraftSchema.extend({ version: z.number().int().optional() }));
-      const skus = d.variants.map((v) => v.sellerSku.toUpperCase());
+      const skus = d.variants.map((v) => (v.sellerSku ?? '').toUpperCase());
       if (new Set(skus).size !== skus.length) throw invalid({ variants: 'SKUs must be unique.' });
       const l = ctx.db.listings.find((x) => x.productId === p.productId);
       const stored = l ? productDetail(ctx.db, l) : undefined;
@@ -1477,19 +1477,19 @@ export const sellerHandlers = [
       const current = productDetail(ctx.db, l);
       if (d.version !== undefined && d.version !== current.version) throw conflict('This listing changed since you opened it. Reload to see the latest version.');
       const live = l.status === 'LIVE' || l.status === 'PAUSED';
-      if (live && current.variants.some((v) => !skus.includes(v.sellerSku.toUpperCase()))) throw invalid({ variants: 'A live listing keeps its variants; set the stock to 0 instead of removing one.' });
+      if (live && current.variants.some((v) => !skus.includes((v.sellerSku ?? '').toUpperCase()))) throw invalid({ variants: 'A live listing keeps its variants; set the stock to 0 instead of removing one.' });
       if (live && d.categoryId && d.categoryId !== current.categoryId) throw invalid({ category: 'A live listing can’t move to another category.' });
       if (l.status === 'REJECTED') Object.assign(l, { status: 'IN_REVIEW', statusLabel: 'In review', moderationNote: null });
       Object.assign(l, {
         title: d.title, sku: skus[0] ?? l.sku, variantCount: d.variants.length, priceMinor: Math.min(...d.variants.map((v) => v.priceMinor)),
         stock: d.variants.reduce((a, v) => a + v.quantity, 0), imageUrl: d.images[0]?.url ?? l.imageUrl, updatedAt: ctx.now.toISOString(),
         fulfilment: d.listing?.fulfilment ?? l.fulfilment,
-        variants: d.variants.map((v) => ({ sku: v.sellerSku.toUpperCase(), quantity: v.quantity }))
+        variants: d.variants.map((v) => ({ sku: (v.sellerSku ?? '').toUpperCase(), quantity: v.quantity }))
       });
       const { variants: _v, ...row } = l;
       ctx.db.productDetails[l.productId] = { ...detailOf(l.productId, { ...d, categoryId: d.categoryId ?? current.categoryId ?? undefined }, row, current.version + 1, current.categoryPath, current.productType),
         variants: d.variants.map((v, i) => ({ ...(detailOf(l.productId, d, row, 0, '', '').variants[i] as SellerProductDetail['variants'][number]),
-          atin: current.variants.find((c) => c.sellerSku.toUpperCase() === v.sellerSku.toUpperCase())?.atin ?? '' })) };
+          atin: current.variants.find((c) => c.sellerSku.toUpperCase() === (v.sellerSku ?? '').toUpperCase())?.atin ?? '' })) };
       if (d.draftId) ctx.db.drafts = ctx.db.drafts.filter((x) => x.id !== d.draftId);
       return row;
     })

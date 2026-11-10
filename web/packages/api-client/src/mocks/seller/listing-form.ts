@@ -14,6 +14,10 @@ import {
   type SavedProductDraft,
   type SellerProductDetail
 } from '../../schemas/seller';
+/** The SKU the catalog generates for an empty one: stable and prefixed (the mock uses the title and row). */
+export const generatedSku = (typed: string | undefined, i: number, title: string): string =>
+  typed?.trim() ? typed.trim().toUpperCase() : `MOCK-${title.replace(/[^A-Za-z0-9]+/g, '').toUpperCase().slice(0, 6)}${i + 1}`;
+
 import { CATEGORY_TREE, type MockSellerDb, PRODUCT_TYPES } from './db';
 
 export type MockListing = MockSellerDb['listings'][number];
@@ -97,11 +101,12 @@ export function productDetail(db: MockSellerDb, l: MockListing): SellerProductDe
       priceMinor: l.priceMinor + i * 200,
       compareAtMinor: null,
       quantity: v.quantity,
-      images: []
+      images: [],
+      sellerSkuGenerated: false, taxFacts: {}, taxStatus: 'READY' as const, missingTaxFacts: []
     })),
     preorderEligible: type?.traits.preorder ?? false,
     listing: { description: null, condition: 'NEW', keywords: [], fulfilment: l.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
-      packaging: l.fulfilment === 'AFROTRANSACT' ? { lengthIn: 8, widthIn: 6, heightIn: 3, weightLb: 1.2 } : null, handlingDays: 2, shipFromId: null, sizeChartId: null, fitNote: null },
+      packaging: l.fulfilment === 'AFROTRANSACT' ? { lengthIn: 8, widthIn: 6, heightIn: 3, weightLb: 1.2 } : null, handlingDays: 2, shipFromId: null, sizeChartId: null, fitNote: null, sellerBehaviour: {} },
     currency: 'USD',
     version: 1,
     updatedAt: l.updatedAt
@@ -124,22 +129,27 @@ export function detailOf(productId: string, d: ProductDraft, row: ListingRow, ve
     attributes: d.attributes,
     images: d.images,
     variationTheme: d.variationTheme,
-    variants: d.variants.map((v) => ({
+    variants: d.variants.map((v, i) => ({
       atin: '',
-      sellerSku: v.sellerSku.toUpperCase(),
+      sellerSku: generatedSku(v.sellerSku, i, d.title),
       gtin: v.gtin ?? null,
       gtinExempt: v.gtinExempt ?? !v.gtin,
       options: v.options,
       priceMinor: v.priceMinor,
       compareAtMinor: v.compareAtMinor ?? null,
       quantity: v.quantity,
-      images: v.images ?? []
+      images: v.images ?? [],
+      sellerSkuGenerated: !v.sellerSku?.trim(),
+      taxFacts: v.taxFacts ?? {},
+      taxStatus: 'PENDING_REVIEW' as const,
+      missingTaxFacts: []
     })),
     preorderEligible: d.preorderEligible ?? false,
     listing: {
       description: d.listing?.description ?? null,
       condition: d.listing?.condition ?? 'NEW',
       keywords: d.listing?.keywords ?? [],
+      sellerBehaviour: d.listing?.sellerBehaviour ?? {},
       fulfilment: d.listing?.fulfilment ?? 'SELLER',
       packaging: d.listing?.packaging ?? null,
       handlingDays: d.listing?.handlingDays ?? 2,

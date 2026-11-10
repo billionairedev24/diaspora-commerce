@@ -154,6 +154,10 @@ import {
   SellerOrderPageSchema,
   type SellerProductDetail,
   SellerProductDetailSchema,
+  type VariantTaxEvidence,
+  VariantTaxEvidenceSchema,
+  type ProductTaxReadiness,
+  ProductTaxReadinessSchema,
   type SellerReturn,
   SellerReturnListSchema,
   type SellerRewardsView,
@@ -378,17 +382,17 @@ export function createSellerApiClient(options: ApiClientOptions) {
     setListingActive: (productId: string, active: boolean): Promise<ListingRow> =>
       request(`/v1/seller/listings/${enc(productId)}/status`, ListingRowSchema, { method: 'POST', body: { active } }),
     /** The tax publish gate of a product per variant, in plain words: what is still needed before it can go live. */
-    getTaxReadiness: (productId: string, signal?: AbortSignal): Promise<TaxReadiness> =>
-      request(`/v1/seller/products/${encodeURIComponent(productId)}/tax-readiness`, TaxReadinessSchema, { signal }),
+    getTaxReadiness: (productId: string, signal?: AbortSignal): Promise<ProductTaxReadiness> =>
+      request(`/v1/seller/products/${encodeURIComponent(productId)}/tax-readiness`, ProductTaxReadinessSchema, { signal }),
     /** Uploads the proof file of an exemption question (label photo, Drug Facts) for a saved variant. */
-    uploadTaxEvidence: (atin: string, factId: string, file: File): Promise<TaxEvidence> => {
+    uploadTaxEvidence: (atin: string, factId: string, file: File): Promise<VariantTaxEvidence> => {
       const body = new FormData();
       body.set('factId', factId);
       body.set('file', file);
-      return request(`/v1/seller/variants/${encodeURIComponent(atin)}/tax-evidence`, TaxEvidenceSchema, { method: 'POST', body });
+      return request(`/v1/seller/variants/${encodeURIComponent(atin)}/tax-evidence`, VariantTaxEvidenceSchema, { method: 'POST', body });
     },
-    listTaxEvidence: (atin: string, signal?: AbortSignal): Promise<TaxEvidence[]> =>
-      request(`/v1/seller/variants/${encodeURIComponent(atin)}/tax-evidence`, z.array(TaxEvidenceSchema), { signal }),
+    listTaxEvidence: (atin: string, signal?: AbortSignal): Promise<VariantTaxEvidence[]> =>
+      request(`/v1/seller/variants/${encodeURIComponent(atin)}/tax-evidence`, z.array(VariantTaxEvidenceSchema), { signal }),
     submitProduct: (draft: ProductDraft): Promise<ListingRow> => request('/v1/seller/products', ListingRowSchema, { method: 'POST', body: draft }),
     /** One listing with everything the one-step form edits (S307). */
     getProduct: (productId: string, signal?: AbortSignal): Promise<SellerProductDetail> =>

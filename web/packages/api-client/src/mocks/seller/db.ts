@@ -410,7 +410,7 @@ const COLORS = ['Black', 'White', 'Gold', 'Royal blue', 'Emerald', 'Wine'];
 type Attr = ProductTypeSchema['attributes'][number];
 /** An attribute of a mock product type (kind follows the options unless given). */
 const attr = (key: string, label: string, options: string[] = [], extra: Partial<Attr> = {}): Attr => ({
-  key, label, options, required: true, multiline: false, kind: options.length ? 'ENUM' : 'TEXT', units: [], section: 'DETAILS', help: null, ...extra
+  key, label, options, required: true, multiline: false, kind: options.length ? 'ENUM' : 'TEXT', units: [], section: 'DETAILS', help: null, taxFact: false, evidence: false, optionLabels: {}, ...extra
 });
 /** The brand attribute of a type (catalog V13): label, required, help and the no-brand choices all come from the type. */
 const brandAttr = (label: string, required: boolean, reasons: string[], help: string): Attr =>
