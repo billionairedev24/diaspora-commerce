@@ -3,7 +3,9 @@
    numbers, GTIN check digits, duplicate SKUs, https image links) so the preview, error report and import journey
    can be exercised without the services. Excel files are not parsed in the mock: an .xlsx upload yields a fixed
    sample with two errors. */
+import { categoryClosed, checkFacts, missingMessage, taxQuestionsOf } from '../../fact-rules';
 import {
+  type CategoryTaxStatus,
   type ImportMode,
   type ImportRowMessage,
   type ListingRow,
@@ -11,14 +13,16 @@ import {
   type ProductDraftSummary,
   type ProductImport,
   type ProductImportRow,
+  type ProductTypeSchema,
   type SavedProductDraft,
   type SellerProductDetail
 } from '../../schemas/seller';
+import { CATEGORY_TREE, type MockSellerDb, PRODUCT_TYPES } from './db';
+
 /** The SKU the catalog generates for an empty one: stable and prefixed (the mock uses the title and row). */
 export const generatedSku = (typed: string | undefined, i: number, title: string): string =>
   typed?.trim() ? typed.trim().toUpperCase() : `MOCK-${title.replace(/[^A-Za-z0-9]+/g, '').toUpperCase().slice(0, 6)}${i + 1}`;
 
-import { CATEGORY_TREE, type MockSellerDb, PRODUCT_TYPES } from './db';
 
 export type MockListing = MockSellerDb['listings'][number];
 
@@ -171,6 +175,27 @@ export function listingProblems(d: ProductDraft): Record<string, string> {
   d.variants.forEach((v, i) => {
     if (v.compareAtMinor != null && v.compareAtMinor <= v.priceMinor) errs[`variants[${i}].compareAtMinor`] = 'The compare-at price must be higher than the price';
     if (v.gtin && !gtinCheck(v.gtin)) errs[`variants[${i}].gtin`] = 'The check digit doesn’t match';
+  });
+  return errs;
+}
+
+/** What the catalog's publish gate refuses: a closed category, and wrong or missing answers to the category's tax questions
+    (proof files may follow the upload). Keys are those of the server's 422: variants[i].taxFacts.<id>, sellerBehaviour.<id>. */
+export function taxProblems(d: ProductDraft, type: ProductTypeSchema | undefined, categoryStatus: CategoryTaxStatus | null | undefined): Record<string, string> {
+  const errs: Record<string, string> = {};
+  if (categoryClosed(categoryStatus)) errs.category = 'This category is not open for publishing yet. You can save your product as a draft; we will tell you when it opens.';
+  const defs = taxQuestionsOf(type?.attributes ?? []);
+  if (!defs.length) return errs;
+  d.variants.forEach((v, i) => {
+    const raw: Record<string, string> = {};
+    defs.forEach((def) => {
+      const value = def.owner === 'OFFER' ? d.listing?.sellerBehaviour?.[def.key] : v.taxFacts?.[def.key];
+      if (value !== undefined && def.kind !== 'FILE') raw[def.key] = typeof value === 'boolean' ? (value ? 'yes' : 'no') : String(value);
+    });
+    const r = checkFacts(defs, raw);
+    const at = (def: { key: string; owner?: string | null | undefined }) => (def.owner === 'OFFER' ? `sellerBehaviour.${def.key}` : `variants[${i}].taxFacts.${def.key}`);
+    Object.keys(r.problems).forEach((k) => { const def = defs.find((x) => x.key === k); if (def) errs[at(def)] = `${def.label}: check the answer`; });
+    r.missing.forEach((k) => { const def = defs.find((x) => x.key === k); if (def && def.kind !== 'FILE') errs[at(def)] = missingMessage(def); });
   });
   return errs;
 }

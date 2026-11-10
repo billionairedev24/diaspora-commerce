@@ -121,6 +121,8 @@ import {
   type ProductImportRowPage,
   ProductImportRowPageSchema,
   ProductImportSchema,
+  type ProductTaxReadiness,
+  ProductTaxReadinessSchema,
   type ProductTypeSchema,
   ProductTypeSchemaSchema,
   type ProductUpdate,
@@ -154,10 +156,6 @@ import {
   SellerOrderPageSchema,
   type SellerProductDetail,
   SellerProductDetailSchema,
-  type VariantTaxEvidence,
-  VariantTaxEvidenceSchema,
-  type ProductTaxReadiness,
-  ProductTaxReadinessSchema,
   type SellerReturn,
   SellerReturnListSchema,
   type SellerRewardsView,
@@ -198,7 +196,8 @@ import {
   TeamViewSchema,
   type UploadRequest,
   type UploadTicket,
-  UploadTicketSchema} from './schemas/seller';
+  UploadTicketSchema,  type VariantTaxEvidence,
+  VariantTaxEvidenceSchema} from './schemas/seller';
 import { tableSearchParams } from './table-query';
 
 /** Server-driven orders table query: one search over every column, the sort (`<column>,asc|desc`), cursor, limit. */

@@ -1,4 +1,5 @@
 export { type AddressLookup, addressLookup, type AddressLookupClient, type AddressSearchOptions, newAddressSessionToken, type ResolvableAddressSuggestion } from './address-lookup';
+export { isCartMismatch } from './cart-mismatch';
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, type PutWithProgress, uploadHelpEvidence, uploadResume } from './client';
 export { CORRELATION_HEADER, EDGE_GEO_HEADERS, newCorrelationId, withCorrelationHeaders } from './correlation';
 export * from './credit-client';
@@ -6,10 +7,10 @@ export { creditSplit, MIN_CARD_MINOR } from './credit-split';
 export * from './custom-values';
 export * from './delivery-runs';
 export { ApiError, isApiError } from './errors';
+export * from './fact-rules';
 export * from './fee-rates';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { BACKGROUND, BACKGROUND_HEADER, type DownloadedFile, type RequestOptions } from './http';
-export { isCartMismatch } from './cart-mismatch';
 export { definitiveFailure, keepIdempotencyKey } from './idempotency';
 export * from './inventory-hub';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';

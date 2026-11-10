@@ -47,6 +47,7 @@ import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from
 import { type MockApplication } from './onboarding';
 import { seedRunPickups } from './run-pickups';
 import { type MockSizeChart, seedSizeCharts } from './size-charts';
+import { TAX_PRODUCT_TYPES, TAX_TREE } from './taxonomy';
 export interface MockOrg {
   id: string;
   kind: OrgKind;
@@ -115,6 +116,8 @@ export interface MockSellerDb {
   productDetails: Record<string, SellerProductDetail>;
   /** The organisations' size charts (catalog /v1/size-charts; every chart has its owner in `orgId`). */
   sizeCharts: MockSizeChart[];
+  /** Proof files uploaded for tax questions, by `<variant ATIN>:<fact id>`. */
+  taxEvidence?: Record<string, string>;
   /** Autosaved drafts of the product form (S307). */
   drafts: MockDraft[];
   /** Bulk uploads with their validated rows (S308). */
@@ -372,7 +375,8 @@ export function departmentsOf(tree: CategoryNode[], idOrCode: { category?: strin
   return out;
 }
 
-export const CATEGORY_TREE: CategoryNode[] = [
+/** The classic mock fixtures (kept for the flows that predate the category tax tree) followed by the 13 > 74 tax tree. */
+const LEGACY_TREE: CategoryNode[] = [
   { id: 'dep-groceries', name: 'Groceries', level: 'DEPARTMENT', productType: null, path: 'Groceries', children: [
     { id: 'cat-pantry', name: 'Pantry', level: 'CATEGORY', productType: null, path: 'Groceries › Pantry', children: [
       { id: 'pt-grains', name: 'Rice, grains & flours', level: 'PRODUCT_TYPE', productType: 'grocery', path: 'Groceries › Pantry › Rice, grains & flours', children: [] },
@@ -404,6 +408,8 @@ export const CATEGORY_TREE: CategoryNode[] = [
     ] }
   ] }
 ];
+
+export const CATEGORY_TREE: CategoryNode[] = [...LEGACY_TREE, ...TAX_TREE];
 
 const COLORS = ['Black', 'White', 'Gold', 'Royal blue', 'Emerald', 'Wine'];
 
@@ -492,9 +498,10 @@ const PRODUCT_TYPE_SOURCES: Record<string, z.input<typeof ProductTypeSchemaSchem
 };
 
 /** The mock product types as the BFF serves them (defaults filled: custom values off, no sizing). */
-export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = Object.fromEntries(
-  Object.entries(PRODUCT_TYPE_SOURCES).map(([code, source]) => [code, ProductTypeSchemaSchema.parse(source)])
-);
+export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
+  ...Object.fromEntries(Object.entries(PRODUCT_TYPE_SOURCES).map(([code, source]) => [code, ProductTypeSchemaSchema.parse(source)])),
+  ...TAX_PRODUCT_TYPES
+};
 
 /** One offer per listing variant (offers-service creates the seller's offers from catalog.product.created). */
 function seedOffers(listings: MockSellerDb['listings']): SellerOffer[] {

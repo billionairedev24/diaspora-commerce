@@ -5,6 +5,7 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { z } from 'zod';
 
+import { categoryClosed, taxQuestionsOf } from '../../fact-rules';
 import { type BookingTakeHome, type SellerRateCard } from '../../fee-rates';
 import { applyBps } from '../../fees';
 import { bffProblemType } from '../../problem-types';
@@ -22,6 +23,7 @@ import {
   CarrierSchema,
   type CategoryNode,
   CategoryRequestInputSchema,
+  type CategoryTaxStatus,
   type ChartSpec,
   CreateSellerCouponSchema,
   type Dashboard,
@@ -81,6 +83,7 @@ import {
   productDetail,
   reportCsv,
   SAMPLE_UPLOAD,
+  taxProblems,
   templateCsv,
   validateSheet
 } from './listing-form';
@@ -664,6 +667,20 @@ const TEAM_TITLES: Record<string, string> = {
   INVITATION_EXPIRED: 'Invitation expired', INVITATION_USED: 'Invitation already used', INVITATION_REVOKED: 'Invitation withdrawn'
 };
 const teamProblem = (status: number, code: string) => new SellerProblem(status, code, TEAM_TITLES[code] ?? code, TEAM_ERROR_MESSAGES[code] ?? code);
+
+/** The tax gate of the category above a product-type leaf (by node id). */
+const categoryStatusOf = (leafId: string | null | undefined): CategoryTaxStatus | null => {
+  const walk = (nodes: CategoryNode[], status: CategoryTaxStatus | null): CategoryTaxStatus | null | undefined => {
+    for (const n of nodes) {
+      const next = n.taxStatus ?? status;
+      if (n.id === leafId) return next;
+      const hit = walk(n.children, next);
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  };
+  return walk(CATEGORY_TREE, null) ?? null;
+};
 
 const W = '*/v1/seller';
 /** Reviews this mock member has already reported (one report per member and review). */
@@ -1438,7 +1455,8 @@ export const sellerHandlers = [
       const skus = d.variants.map((v) => (v.sellerSku ?? '').toUpperCase());
       if (new Set(skus).size !== skus.length) throw invalid({ variants: 'SKUs must be unique.' });
       const leafOf = categoryLeaves().find((c) => c.id === d.categoryId);
-      const problems = { ...listingProblems(d), ...sizeProblems(d, leafOf ? PRODUCT_TYPES[leafOf.productType] : undefined, ctx.db.sizeCharts, ctx.org.id) };
+      const leafType = leafOf ? PRODUCT_TYPES[leafOf.productType] : undefined;
+      const problems = { ...listingProblems(d), ...taxProblems(d, leafType, categoryStatusOf(d.categoryId)), ...sizeProblems(d, leafType, ctx.db.sizeCharts, ctx.org.id) };
       if (Object.keys(problems).length) throw invalid(problems);
       require(ctx, 'listings', 'EDIT', 'SELLER');
       const taken = skus.find((s) => ctx.db.listings.some((l) => l.variants.some((v) => v.sku.toUpperCase() === s)));
@@ -1457,6 +1475,35 @@ export const sellerHandlers = [
       if (d.draftId) ctx.db.drafts = ctx.db.drafts.filter((x) => x.id !== d.draftId);
       return row;
     }, 201)
+  ),
+  http.get(
+    `${W}/products/:productId/tax-readiness`,
+    route((ctx, p) => {
+      const l = ctx.db.listings.find((x) => x.productId === p.productId);
+      if (!l) throw notFound('No such listing.');
+      const detail = productDetail(ctx.db, l);
+      const status = categoryStatusOf(detail.categoryId);
+      const closed = categoryClosed(status);
+      const evidenceMissing = (atin: string) => taxQuestionsOf(PRODUCT_TYPES[detail.productType]?.attributes ?? []).filter((a) => a.kind === 'FILE' && a.required && !ctx.db.taxEvidence?.[`${atin}:${a.key}`]);
+      const variants = detail.variants.map((v) => {
+        const missing = evidenceMissing(v.atin).map((a) => ({ factId: a.key, label: a.label, message: `Please upload: ${a.label}.${a.help ? ` ${a.help}` : ''}` }));
+        const st = closed ? ('NEEDS_APPROVAL' as const) : missing.length ? ('MISSING_FACTS' as const) : ('PENDING_REVIEW' as const);
+        return { atin: v.atin, sellerSku: v.sellerSku, status: st, missingTaxFacts: missing, reason: st === 'PENDING_REVIEW' ? 'Waiting for our team to check the details. This usually needs no action from you.' : null };
+      });
+      return { productId: detail.productId, status: variants.find((v) => v.status !== 'PENDING_REVIEW')?.status ?? 'PENDING_REVIEW', categoryCode: null, categoryStatus: status ?? 'ACTIVE', categoryMessage: closed ? 'This category is not open for publishing yet.' : null, ruleVersion: 'mock', variants };
+    })
+  ),
+  http.post(
+    `${W}/variants/:atin/tax-evidence`,
+    route(async (ctx, p) => {
+      const form = await ctx.request.formData();
+      const factId = String(form.get('factId') ?? '');
+      const file = form.get('file');
+      if (!factId || !(file instanceof File)) throw invalid({ file: 'Choose a file' });
+      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) throw invalid({ file: 'Use a PDF, JPEG or PNG file' });
+      ctx.db.taxEvidence = { ...(ctx.db.taxEvidence ?? {}), [`${p.atin}:${factId}`]: file.name };
+      return { id: `ev-${p.atin}-${factId}`, atin: p.atin ?? '', factId, version: 1, fileName: file.name, contentType: file.type, bytes: file.size, url: `/v1/tax-evidence/ev-${p.atin}/file`, uploadedAt: ctx.now.toISOString() };
+    })
   ),
   http.put(
     `${W}/products/:productId`,
