@@ -35,7 +35,7 @@ monitoring:
 #   - KAFKA_BOOTSTRAP
 #   - GS1_API_KEY (optional: Verified by GS1 for the S031 GTIN prefill; also set extraEnv GS1_ENABLED: "true")
 #   - FGA_API_TOKEN            (one of OpenFGA's pre-shared keys, afrotransact/openfga preshared-keys; S248)
-#   - CATALOG_CLIENT_SECRET    (identity's catalog-service client, scopes media:import: bulk-upload images, S308, orders:purchase-check: verified-purchase reviews, S324, and sellers:catalog-scope.read: the departments a seller may list in)
+#   - CATALOG_CLIENT_SECRET    (identity's catalog-service client, scopes media:import: bulk-upload images, S308, orders:purchase-check: verified-purchase reviews, S324, sellers:catalog-scope.read: the departments a seller may list in, and tax:classify: the tax publish gate asks tax-returns to resolve a variant's facts)
 secrets:
   enabled: true
   store: platform-secrets
@@ -46,5 +46,9 @@ workloadIdentity:
 extraEnv:
   # Which departments a seller may list in: seller-service's catalog scope (fail closed when it is down).
   SELLER_URL: http://seller:8080
+  # The tax publish gate: tax-returns' resolve endpoint (scope tax:classify on the catalog-service client). `local` (the
+  # dataset fake) is for the local stack only.
+  TAX_RETURNS_URL: http://tax-returns:8080
+  CATALOG_TAX_RESOLVER: http
 nodeSelector: {}
 tolerations: []

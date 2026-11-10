@@ -8,6 +8,11 @@ at:
       # In-cluster OpenFGA (infra/k8s/platform/openfga); FGA_API_TOKEN comes from the service's secret.
       api-url: ${FGA_API_URL:http://openfga.openfga.svc:8080}
   catalog:
+    tax:
+      # The publish gate asks tax-returns (POST /v1/tax/classifications/resolve, scope tax:classify). `local` is the
+      # dataset fake for the local stack only: a deployed catalog never resolves tax by itself.
+      resolver: ${CATALOG_TAX_RESOLVER:http}
+      base-url: ${TAX_RETURNS_URL:http://tax-returns:8080}
     media:
       # In-cluster service name of media-service (Helm chart `media`, port 8080).
       base-url: ${MEDIA_URL:http://media:8080}

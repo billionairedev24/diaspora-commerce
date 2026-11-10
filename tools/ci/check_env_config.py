@@ -28,6 +28,11 @@ Checks every service against the environment rules in docs/engineering/environme
                at.orders.checkout-response-timeout in every environment, and upstreams.deliveryRuns.slowTimeout above
                delivery-runs' orders timeout: the BFF never reports a failure for a checkout or late add that still
                completes (a retry would then look like a new purchase).
+  category tax (category tax build) the wiring that makes checkout and publishing work outside the local stack: identity's
+               catalog-service client holds tax:classify (and catalog asks for it), orders-service and gateway-bff hold
+               tax:quote, orders and catalog reach tax-returns by an in-cluster URL (never the localhost default) and
+               catalog's resolver is not the local fake in dev/uat/prod, and the delivery-allocation setting of orders
+               (ORDERS_TAX_SHIPPING_ALLOCATION) equals gateway-bff's (CHECKOUT_SHIPPING_ALLOCATION) in every environment.
 
   python3 tools/ci/check_env_config.py                 # whole repository; exit 1 on violations
   python3 tools/ci/check_env_config.py --format github # ::error annotations
@@ -360,6 +365,61 @@ def check_plan_fees(rep: Report) -> None:
                           "the seller-service client needs the payments:plan-fees scope while plan fees may be paid from earnings")
 
 
+def helm_env(svc_dir: pathlib.Path, env: str) -> dict:
+    chart = svc_dir / "deploy/helm"
+    if not chart.is_dir():
+        return {}
+    merged = deep_merge(load(chart / "values.yaml"), load(chart / f"values-{env}.yaml"))
+    return {k: str(v) for k, v in (merged.get("extraEnv") or {}).items()}
+
+
+def check_category_tax(rep: Report) -> None:
+    java = ROOT / "java/services"
+    bff = ROOT / "go/services/gateway-bff"
+    identity = java / "identity/src/main/resources"
+    orders, catalog = java / "orders", java / "catalog"
+    if not (identity.is_dir() and orders.is_dir() and catalog.is_dir() and bff.is_dir()):
+        return
+    o_base, c_base = load(orders / "src/main/resources/application.yml"), load(catalog / "src/main/resources/application.yml")
+    if "tax:classify" not in str(get(c_base, "at.catalog.oauth.scopes") or "").split():
+        rep.error(catalog / "src/main/resources/application.yml",
+                  "at.catalog.oauth.scopes must include tax:classify (the publish gate calls tax-returns' resolve endpoint)")
+    for env in ENVS:
+        id_file = identity / f"application-{env}.yml"
+        id_cfg = load(id_file)
+        clients = get(id_cfg, "at.identity.clients") or get(id_cfg, "identity.clients") or []
+        scopes = {c.get("client-id"): c.get("scopes") or [] for c in clients if isinstance(c, dict)}
+        for client, scope in (("catalog-service", "tax:classify"), ("orders-service", "tax:quote"), ("gateway-bff", "tax:quote")):
+            if scope not in scopes.get(client, []):
+                rep.error(id_file, f"the {client} client needs the {scope} scope (category tax build)")
+    for env in DEPLOYED:
+        def profile(svc: pathlib.Path, base: dict) -> dict:
+            f = svc / f"src/main/resources/application-{env}.yml"
+            return deep_merge(base, load(f)) if f.exists() else base
+        o_prof, c_prof = profile(orders, o_base), profile(catalog, c_base)
+        o_env, c_env, t_env = helm_env(orders, env), helm_env(catalog, env), helm_env(java / "tax-returns", env)
+        o_url = str(o_env.get("TAX_RETURNS_URL") or resolve(get(o_prof, "at.orders.upstreams.tax-returns-url")) or "")
+        if not o_url or "localhost" in o_url:
+            rep.error(orders / f"src/main/resources/application-{env}.yml",
+                      "at.orders.upstreams.tax-returns-url defaults to localhost: set TAX_RETURNS_URL's default to the in-cluster service")
+        c_url = str(c_env.get("TAX_RETURNS_URL") or resolve(get(c_prof, "at.catalog.tax.base-url")) or "")
+        if not c_url or "localhost" in c_url:
+            rep.error(catalog / f"src/main/resources/application-{env}.yml",
+                      "at.catalog.tax.base-url defaults to localhost: the publish gate could never reach tax-returns")
+        resolver = str(c_env.get("CATALOG_TAX_RESOLVER") or resolve(get(c_prof, "at.catalog.tax.resolver")) or "http")
+        if resolver != "http":
+            rep.error(catalog / f"src/main/resources/application-{env}.yml",
+                      f"at.catalog.tax.resolver is {resolver!r} in {env}: only the local stack may use the dataset fake")
+        bff_cfg = load(bff / "config" / f"{env}.yaml")
+        b_alloc = (helm_env(bff, env).get("CHECKOUT_SHIPPING_ALLOCATION") or str(get(bff_cfg, "checkout.shippingAllocation") or "")).upper()
+        o_alloc = str(o_env.get("ORDERS_TAX_SHIPPING_ALLOCATION") or resolve(get(o_prof, "at.orders.tax.shipping-allocation")) or "").upper()
+        if b_alloc != o_alloc:
+            rep.error(bff / "deploy/helm" / f"values-{env}.yaml",
+                      f"CHECKOUT_SHIPPING_ALLOCATION ({b_alloc or 'unset'}) must equal orders' ORDERS_TAX_SHIPPING_ALLOCATION ({o_alloc or 'unset'})")
+        if str(t_env.get("TAX_PROVIDER", "RULES")) not in ("RULES", "STRIPE_TAX", "AVALARA"):
+            rep.error(java / "tax-returns/deploy/helm" / f"values-{env}.yaml", "TAX_PROVIDER must be RULES, STRIPE_TAX or AVALARA")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--format", choices=["text", "github"], default="text")
@@ -382,6 +442,7 @@ def main() -> int:
     if not args.service:
         check_timeouts(rep)
         check_plan_fees(rep)
+        check_category_tax(rep)
     if args.service and rep.checked == 0:
         print(f"no such service: {', '.join(args.service)}", file=sys.stderr)
         return 2

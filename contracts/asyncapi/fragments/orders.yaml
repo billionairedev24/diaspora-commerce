@@ -354,6 +354,7 @@ components:
                     providerTaxCode: {type: [string, 'null']}
                     taxRuleVersion: {type: [string, 'null']}
                     taxProvider: {type: [string, 'null'], description: Tax method that priced the line}
+                    taxAddressPrecision: {type: [string, 'null'], enum: [ZIP, ADDRESS, null], description: 'How exactly the tax jurisdiction was resolved (TX-03); the tax ledger keeps it with the sale'}
                     imageUrl: {type: [string, 'null'], format: uri, description: 'S279: product photo snapshotted at checkout (order emails)'}
     OrdersOrderCancelled:
       type: object

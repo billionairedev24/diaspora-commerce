@@ -29,6 +29,8 @@ at:
       promise-url: ${PROMISE_URL:http://promise}
       content-url: ${CONTENT_URL:http://content}
       catalog-url: ${CATALOG_URL:http://catalog}
+      # POST /v1/tax/quotes at checkout (scope tax:quote). Without it orders would call localhost and every checkout would fail.
+      tax-returns-url: ${TAX_RETURNS_URL:http://tax-returns}
       offers-url: ${OFFERS_URL:http://offers}
       seller-url: ${SELLER_URL:http://seller}
       geo-url: ${GEO_URL:http://geo}

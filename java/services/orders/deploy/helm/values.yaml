@@ -47,6 +47,10 @@ workloadIdentity:
   aws: {roleArn: ""}
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
-extraEnv: {}
+extraEnv:
+  # How a package's delivery charge is spread over its lines for tax (TX-05 to TX-07). gateway-bff's checkout estimate
+  # (CHECKOUT_SHIPPING_ALLOCATION in its chart) must hold the same value, or the estimate and the charge differ.
+  # PROPORTIONAL | FIRST_LINE (rollback). tools/ci/check_env_config.py checks the two agree.
+  ORDERS_TAX_SHIPPING_ALLOCATION: PROPORTIONAL
 nodeSelector: {}
 tolerations: []

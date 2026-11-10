@@ -122,7 +122,7 @@ at:
       token-path: /oauth2/token
       client-id: ${CATALOG_CLIENT_ID:catalog-service}
       client-secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
-      scopes: media:import orders:purchase-check sellers:catalog-scope.read
+      scopes: media:import orders:purchase-check sellers:catalog-scope.read tax:classify
     # Which departments an organisation may sell in: seller-service GET /v1/orgs/{orgId}/catalog-scope (scope
     # sellers:catalog-scope.read). Unreachable = the catalog refuses non-exempt organisations (fail closed).
     seller:

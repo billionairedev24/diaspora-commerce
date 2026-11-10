@@ -8483,7 +8483,8 @@ components:
                       - ZIP
                       - ADDRESS
                       - null
-                      description: How exactly the tax jurisdiction was resolved (TX-03); the tax ledger keeps it with the sale
+                      description: How exactly the tax jurisdiction was resolved (TX-03); the tax ledger keeps it with the
+                        sale
                     imageUrl:
                       type:
                       - string

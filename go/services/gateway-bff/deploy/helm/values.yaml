@@ -41,6 +41,9 @@ workloadIdentity:
   aws: {roleArn: ""}
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
-extraEnv: {}
+extraEnv:
+  # Must equal orders' ORDERS_TAX_SHIPPING_ALLOCATION (PROPORTIONAL | FIRST_LINE): the estimate shown before payment
+  # spreads the delivery charge the way the order will. tools/ci/check_env_config.py checks the two agree.
+  CHECKOUT_SHIPPING_ALLOCATION: PROPORTIONAL
 nodeSelector: {}
 tolerations: []

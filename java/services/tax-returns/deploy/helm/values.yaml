@@ -42,6 +42,9 @@ workloadIdentity:
   aws: {roleArn: ""}
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
-extraEnv: {}
+extraEnv:
+  # A provider (Stripe Tax, Avalara) is only ever sent provider codes a person verified: switch to "true" at cutover
+  # (docs/runbooks/tax-provider-cutover.md). With the in-house RULES method it changes nothing a customer sees.
+  TAX_REQUIRE_VERIFIED_CODES: "false"
 nodeSelector: {}
 tolerations: []
