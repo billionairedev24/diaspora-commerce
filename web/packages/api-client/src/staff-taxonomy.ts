@@ -32,7 +32,10 @@ export const TaxonomyNodeSchema = z.object({
   version: z.number().int(),
   productCount: z.number().int(),
   subtreeProductCount: z.number().int(),
-  childCount: z.number().int()
+  childCount: z.number().int(),
+  /** Category nodes: the tax profile it uses and the gate of that profile. Read-only here: the tax screens change the status. */
+  taxProfileId: z.string().nullish(),
+  taxStatus: z.enum(['ACTIVE', 'NEEDS_APPROVAL', 'BLOCKED_BUNDLE', 'REFINE_CODE', 'CONFLICT_OPEN']).nullish()
 });
 export type TaxonomyNode = z.infer<typeof TaxonomyNodeSchema>;
 
@@ -427,7 +430,7 @@ export interface PreviewSection {
  */
 export function sellerFormPreview(type: Pick<TaxonomyProductType, 'identifierRule' | 'traits' | 'attributes'>): PreviewSection[] {
   const control = (a: TaxonomyAttribute): PreviewField['control'] =>
-    a.kind === 'MULTILINE' ? 'textarea' : a.kind === 'ENUM' ? 'select' : a.kind === 'NUMBER' ? 'number' : a.kind === 'BRAND' ? 'brand' : 'text';
+    a.kind === 'MULTILINE' ? 'textarea' : a.kind === 'ENUM' || a.kind === 'BOOLEAN' ? 'select' : ['NUMBER', 'DECIMAL', 'INTEGER', 'PERCENT'].includes(a.kind) ? 'number' : a.kind === 'BRAND' ? 'brand' : 'text';
   const fieldOf = (a: TaxonomyAttribute): PreviewField => ({
     key: a.key,
     label: a.label,

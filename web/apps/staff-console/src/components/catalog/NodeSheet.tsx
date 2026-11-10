@@ -294,6 +294,17 @@ function NodeDetails({ node, nodes, canEdit, onMode }: { node: TaxonomyNode; nod
         {node.productTypeLabel ? <Detail label={t('st.catalog.detail.productType')}>{node.productTypeLabel}</Detail> : null}
         <Detail label={t('st.catalog.detail.products')}>{t('st.catalog.detail.productsValue', { own: node.productCount, below: node.subtreeProductCount })}</Detail>
         <Detail label={t('st.catalog.detail.status')}>{node.active ? t('st.catalog.status.active') : t('st.catalog.status.retired')}</Detail>
+        {node.taxProfileId ? (
+          <Detail label={t('st.catalog.detail.taxProfile')}>
+            <span className="font-mono text-xs" data-testid="tax-profile">{node.taxProfileId}</span>
+          </Detail>
+        ) : null}
+        {node.level === 'CATEGORY' && node.taxStatus ? (
+          <Detail label={t('st.catalog.detail.taxStatus')}>
+            <span data-testid="tax-status">{t(`st.catalog.taxStatus.${node.taxStatus}` as MessageKey)}</span>{' '}
+            <a href="/tax" className="text-xs text-link hover:underline">{t('st.catalog.detail.taxScreens')}</a>
+          </Detail>
+        ) : null}
         {!node.active && node.retiredReason ? <Detail label={t('st.catalog.detail.retiredFor')}>{node.retiredReason}</Detail> : null}
       </dl>
       {canEdit ? (

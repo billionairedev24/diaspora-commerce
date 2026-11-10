@@ -2269,5 +2269,14 @@
   "st.dashboardView.moduleError": "No pudimos cargar esto ahora mismo.",
   "st.dashboardView.reports": "Informes y exportaciones",
   "st.dashboardView.help.title": "Estamos aquí para ayudarte",
-  "st.dashboardView.help.description": "Pide a Lola, la asistente de la esquina, que busque un registro o explique una pantalla."
+  "st.dashboardView.help.description": "Pide a Lola, la asistente de la esquina, que busque un registro o explique una pantalla.",
+  "st.catalog.detail.taxProfile": "Perfil fiscal",
+  "st.catalog.detail.taxStatus": "Estado fiscal",
+  "st.catalog.detail.taxScreens": "Cámbialo en las pantallas de impuestos",
+  "st.catalog.taxStatus.ACTIVE": "Abierta a la publicación",
+  "st.catalog.taxStatus.NEEDS_APPROVAL": "Requiere aprobación fiscal",
+  "st.catalog.taxStatus.BLOCKED_BUNDLE": "Bloqueada: lotes",
+  "st.catalog.taxStatus.REFINE_CODE": "Requiere un código afinado por artículo",
+  "st.catalog.taxStatus.CONFLICT_OPEN": "En pausa: decisión abierta",
+  "st.catalog.preview.tax": "Sobre el artículo (preguntas fiscales, gestionadas por el perfil fiscal)"
 }

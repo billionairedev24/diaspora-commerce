@@ -2269,5 +2269,14 @@
   "st.dashboardView.moduleError": "A kò lè gbé èyí wá báyìí.",
   "st.dashboardView.reports": "Àwọn ìròyìn àti ìgbéjáde",
   "st.dashboardView.help.title": "A wà níbí láti ràn ọ́ lọ́wọ́",
-  "st.dashboardView.help.description": "Bi Lola, olùrànlọ́wọ́ tó wà ní igun, láti wá àkọsílẹ̀ tàbí láti ṣàlàyé ojú ìwé kan."
+  "st.dashboardView.help.description": "Bi Lola, olùrànlọ́wọ́ tó wà ní igun, láti wá àkọsílẹ̀ tàbí láti ṣàlàyé ojú ìwé kan.",
+  "st.catalog.detail.taxProfile": "Àkọsílẹ̀ owó orí",
+  "st.catalog.detail.taxStatus": "Ipò owó orí",
+  "st.catalog.detail.taxScreens": "Yí i padà ní àwọn ojú ewé owó orí",
+  "st.catalog.taxStatus.ACTIVE": "Ṣí fún títẹ̀jáde",
+  "st.catalog.taxStatus.NEEDS_APPROVAL": "Ó nílò ìfọwọ́sí owó orí",
+  "st.catalog.taxStatus.BLOCKED_BUNDLE": "A dá dúró: àkójọpọ̀",
+  "st.catalog.taxStatus.REFINE_CODE": "Ó nílò kóòdù tó péye fún ọjà kọ̀ọ̀kan",
+  "st.catalog.taxStatus.CONFLICT_OPEN": "Ó dúró: ìpinnu ṣì ṣí",
+  "st.catalog.preview.tax": "Nípa ọjà (ìbéèrè owó orí, àkọsílẹ̀ owó orí ló ń ṣàkóso)"
 }

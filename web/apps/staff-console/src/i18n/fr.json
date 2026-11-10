@@ -2269,5 +2269,14 @@
   "st.dashboardView.moduleError": "Impossible de charger cette section pour le moment.",
   "st.dashboardView.reports": "Rapports et exports",
   "st.dashboardView.help.title": "Nous sommes là pour vous aider",
-  "st.dashboardView.help.description": "Demandez à Lola, l’assistante dans le coin, de trouver un dossier ou d’expliquer un écran."
+  "st.dashboardView.help.description": "Demandez à Lola, l’assistante dans le coin, de trouver un dossier ou d’expliquer un écran.",
+  "st.catalog.detail.taxProfile": "Profil fiscal",
+  "st.catalog.detail.taxStatus": "Statut fiscal",
+  "st.catalog.detail.taxScreens": "À modifier dans les écrans fiscaux",
+  "st.catalog.taxStatus.ACTIVE": "Ouverte à la publication",
+  "st.catalog.taxStatus.NEEDS_APPROVAL": "Validation fiscale requise",
+  "st.catalog.taxStatus.BLOCKED_BUNDLE": "Bloquée : lots",
+  "st.catalog.taxStatus.REFINE_CODE": "Code à préciser par article",
+  "st.catalog.taxStatus.CONFLICT_OPEN": "En attente : décision ouverte",
+  "st.catalog.preview.tax": "À propos de l'article (questions fiscales, gérées par le profil fiscal)"
 }

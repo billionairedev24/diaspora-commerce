@@ -42,13 +42,14 @@ final class TaxonomyDtos {
     record TaxonomyNodeResponse(UUID id, UUID parentId, String code, String name, String level, String productType,
                                 String productTypeLabel, String path, int position, boolean active,
                                 Instant retiredAt, String retiredReason, long version, long productCount,
-                                long subtreeProductCount, int childCount) {
+                                long subtreeProductCount, int childCount, String taxProfileId, String taxStatus) {
 
         static TaxonomyNodeResponse of(CategoryNodeView v) {
             CategoryNode n = v.node();
             return new TaxonomyNodeResponse(n.id(), n.parentId(), n.code(), n.name(), n.level().name(),
                     n.productTypeCode(), v.productTypeLabel(), n.path(), n.position(), n.active(), n.retiredAt(),
-                    n.retiredReason(), n.version(), v.productCount(), v.subtreeProductCount(), v.childCount());
+                    n.retiredReason(), n.version(), v.productCount(), v.subtreeProductCount(), v.childCount(), n.taxProfileId(),
+                    n.taxStatus());
         }
     }
 

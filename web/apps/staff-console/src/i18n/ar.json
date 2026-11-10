@@ -2269,5 +2269,14 @@
   "st.dashboardView.moduleError": "تعذّر تحميل هذا القسم الآن.",
   "st.dashboardView.reports": "التقارير والتصدير",
   "st.dashboardView.help.title": "نحن هنا لمساعدتك",
-  "st.dashboardView.help.description": "اطلب من لولا، المساعدة في الزاوية، العثور على سجل أو شرح شاشة."
+  "st.dashboardView.help.description": "اطلب من لولا، المساعدة في الزاوية، العثور على سجل أو شرح شاشة.",
+  "st.catalog.detail.taxProfile": "الملف الضريبي",
+  "st.catalog.detail.taxStatus": "الحالة الضريبية",
+  "st.catalog.detail.taxScreens": "غيّرها من شاشات الضرائب",
+  "st.catalog.taxStatus.ACTIVE": "مفتوحة للنشر",
+  "st.catalog.taxStatus.NEEDS_APPROVAL": "تحتاج إلى موافقة ضريبية",
+  "st.catalog.taxStatus.BLOCKED_BUNDLE": "محظورة: الحزم",
+  "st.catalog.taxStatus.REFINE_CODE": "تحتاج رمزًا مدققًا لكل منتج",
+  "st.catalog.taxStatus.CONFLICT_OPEN": "معلّقة: قرار مفتوح",
+  "st.catalog.preview.tax": "عن المنتج (أسئلة ضريبية يديرها الملف الضريبي)"
 }

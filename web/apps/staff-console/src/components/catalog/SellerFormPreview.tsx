@@ -9,7 +9,8 @@ const SECTION_TITLE: Record<PreviewSection['section'], MessageKey> = {
   IDENTIFIER: 'st.catalog.preview.identifier',
   DETAILS: 'st.catalog.preview.details',
   FOOD: 'st.catalog.preview.food',
-  REGULATED: 'st.catalog.preview.regulated'
+  REGULATED: 'st.catalog.preview.regulated',
+  TAX: 'st.catalog.preview.tax'
 };
 
 const BOX = 'flex min-h-9 items-center rounded-sm border border-border-strong bg-ink-0 px-2 text-sm text-subtle';

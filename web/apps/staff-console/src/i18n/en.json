@@ -2262,5 +2262,14 @@
   "st.dashboardView.moduleError": "We couldn’t load this just now.",
   "st.dashboardView.reports": "Reports and exports",
   "st.dashboardView.help.title": "We’re here to help",
-  "st.dashboardView.help.description": "Ask Lola, the assistant in the corner, to find a record or explain a screen."
+  "st.dashboardView.help.description": "Ask Lola, the assistant in the corner, to find a record or explain a screen.",
+  "st.catalog.detail.taxProfile": "Tax profile",
+  "st.catalog.detail.taxStatus": "Tax status",
+  "st.catalog.detail.taxScreens": "Change it on the tax screens",
+  "st.catalog.taxStatus.ACTIVE": "Open for publishing",
+  "st.catalog.taxStatus.NEEDS_APPROVAL": "Needs tax approval",
+  "st.catalog.taxStatus.BLOCKED_BUNDLE": "Blocked: bundles",
+  "st.catalog.taxStatus.REFINE_CODE": "Needs a refined code per item",
+  "st.catalog.taxStatus.CONFLICT_OPEN": "On hold: open decision",
+  "st.catalog.preview.tax": "About your item (tax questions, managed by the category's tax profile)"
 }
