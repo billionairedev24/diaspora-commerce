@@ -48,7 +48,7 @@ extraEnv:
   SELLER_URL: http://seller:8080
   # The tax publish gate: tax-returns' resolve endpoint (scope tax:classify on the catalog-service client). `local` (the
   # dataset fake) is for the local stack only.
-  TAX_RETURNS_URL: http://tax-returns:8080
+  TAX_RETURNS_URL: http://tax-returns
   CATALOG_TAX_RESOLVER: http
 nodeSelector: {}
 tolerations: []
