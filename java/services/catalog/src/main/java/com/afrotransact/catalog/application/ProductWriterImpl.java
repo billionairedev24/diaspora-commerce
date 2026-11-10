@@ -140,7 +140,12 @@ class ProductWriterImpl implements ProductWriter {
         UUID categoryId = current.categoryId();
         String typeCode = current.productTypeCode();
         if (cmd.categoryId() != null && !cmd.categoryId().equals(current.categoryId())) {
-            if (current.published() || current.categoryRequestId() != null && current.categoryId() == null) {
+            CategoryNode onNode = node(current.categoryId());
+            boolean onRetiredNode = onNode != null && !onNode.active();
+            // A listing on a node of the replaced initial tree may move to a current category, live or not: it cannot
+            // be published again under the old node (it has no tax profile), so the seller must re-categorise it.
+            if (current.published() && !onRetiredNode
+                    || current.categoryRequestId() != null && current.categoryId() == null) {
                 throw new CatalogRuleViolation("The category of a published listing cannot change",
                         Map.of("category", "Cannot change after publishing"));
             }
