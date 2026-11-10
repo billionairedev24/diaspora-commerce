@@ -20,7 +20,7 @@ ENV          ?= dev
 TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
-.PHONY: help ovh-gh-setup deploy-guide deploy-guide-test upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
+.PHONY: help db-reset ovh-gh-setup deploy-guide deploy-guide-test upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
@@ -65,6 +65,9 @@ logs: ## Follow logs (SERVICE=<name> for one service)
 
 ps: ## Show local stack containers and health
 	$(COMPOSE) --profile apps ps -a
+
+db-reset: ## DELETE every local database on YOUR Postgres (asks you to type wipe), recreate them empty, remove old jars and seed state; then make reset (Docker volumes), make up, make seed
+	tools/dev/local.sh db-reset
 
 reset: ## Stop the local stack and delete all its Docker volumes (databases, topics, indices, metrics), then check no afrotransact_* volume is left. Also run: rm -rf .local/bin .local/seed (docs/engineering/local-development.md, "Start fresh locally")
 	tools/dev/local.sh down

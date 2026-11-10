@@ -15,6 +15,7 @@
 #   tools/dev/local.sh device android customer # build + install the development build on a USB phone
 #   tools/dev/local.sh docs                    # only the developer portal (:3100) and Storybook (:6006)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
+#   tools/dev/local.sh db-reset                # DELETE all local data on your Postgres (type wipe), recreate empty; make db-reset
 #   tools/dev/local.sh repair-orgs             # identity re-syncs every approved seller/provider org from seller now
 #   tools/dev/local.sh reindex [flags]         # rebuild the search index from catalog, offers and inventory (--dry-run, --since 48h …)
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
@@ -1257,9 +1258,43 @@ cmd_down() {
   compose stop postgres valkey $INFRA_BASE $OBS_BASE postgres-exporter redis-exporter >/dev/null 2>&1 || true
 }
 
+# Deletes EVERY local database on YOUR Postgres (the 22 service databases + Temporal's visibility database), recreates them
+# empty and removes the old service jars and the seed state: a clean start. Services run their Flyway migrations on the
+# next `make up`, `make seed` fills them. `make reset` only removes Docker volumes: it never touches your own Postgres.
+cmd_db_reset() {
+  local dbs="identity catalog offers inventory orders payments seller retail fulfilment bookings trustops taxreturns content ai cart geo media notifications carriers deliveryruns temporal temporal_visibility openfga"
+  [[ "${PG_EXTERNAL:-auto}" != 0 ]] || { echo "PG_EXTERNAL=0: the Docker Postgres is in use, run make reset instead." >&2; exit 1; }
+  command -v psql >/dev/null || { echo "psql not found: install the Postgres client (brew install libpq)." >&2; exit 1; }
+  pick_psql_mode || {
+    echo "Can't reach your Postgres on localhost:5432 as a superuser: PG_SUPERUSER=<superuser> PGPASSWORD=<password> make db-reset" >&2
+    exit 1; }
+  echo "This DELETES these databases on your Postgres (localhost:5432, connected via $PSQL_MODE) and all their data:"
+  echo "  $dbs"
+  if [[ "${WIPE:-}" != yes ]]; then
+    local answer
+    read -r -p "Type wipe to continue: " answer
+    [[ "$answer" == wipe ]] || { echo "Nothing changed."; exit 1; }
+  fi
+  cmd_down
+  local d
+  for d in $dbs; do
+    if [[ "$(psql_su -d postgres -c "select count(*) from pg_database where datname = '$d'")" == 1 ]]; then
+      psql_su -d postgres -c "drop database \"$d\" with (force)" >/dev/null
+      echo "  dropped $d"
+    fi
+  done
+  echo "==> recreating them empty: infra/local/postgres/create-local-databases.sql"
+  PGOPTIONS="-c afrotransact.su_password=${PGPASSWORD:-}" psql_su -d postgres \
+    <"$ROOT/infra/local/postgres/create-local-databases.sql" >/dev/null
+  rm -rf "$STATE/bin" "$STATE/seed"
+  echo "  removed old service jars (.local/bin) and the seed state (.local/seed)"
+  echo "Done. Next: make reset (Docker volumes: Kafka, search, MinIO), make up, make seed, make reindex-search."
+}
+
 case "${1:-}" in
   up) shift; cmd_up "$@" ;;
   down) cmd_down ;;
+  db-reset) cmd_db_reset ;;
   status) cmd_status ;;
   links) links ;;
   mobile) mkdir -p "$LOGS" "$PIDS"; load_secrets

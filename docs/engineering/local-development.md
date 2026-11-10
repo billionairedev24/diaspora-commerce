@@ -20,25 +20,31 @@ issuer, the web apps, image links) on your Wi-Fi address: [mobile on your phone]
 
 ## Start fresh locally
 
-Wipe everything the stack keeps (databases, Kafka topics, search index, MinIO files, the seeder's memory) and begin again:
+Wipe everything the stack keeps (databases, Kafka topics, search index, MinIO files, the seeder's memory) and begin again.
+Two things hold data, and each has its own command:
+
+| Where the data is | Wipe it with |
+|---|---|
+| **Your own Postgres on localhost:5432** (what `make up` uses when it finds one) | `make db-reset` (asks you to type `wipe`) |
+| Docker volumes: Kafka, search index, MinIO files (and the Docker Postgres only if you use it: `PG_EXTERNAL=0`) | `make reset` |
 
 ```bash
-tools/dev/local.sh down        # stops the web apps and services (make reset does this first too)
-make reset                     # docker compose project "afrotransact": down -v, then checks no afrotransact_* volume is left
-docker volume ls | grep afrotransact     # must print nothing; make reset prints the same check and fails if a volume remains
-rm -rf .local/bin .local/seed  # built service jars/binaries, and the seed state (.local/seed/state.json) with its image cache
-make up                        # recreates the databases (Flyway runs the baselines), starts everything
-make seed                      # demo data (make up seeds an empty catalogue by itself unless SEED=0)
+make db-reset      # drops the 22 service databases + Temporal's visibility database on YOUR Postgres, recreates them
+                   # empty, removes .local/bin (old jars) and .local/seed (seed state and image cache), stops the stack
+make reset         # Docker volumes (Kafka topics, search index, MinIO objects); docker compose project "afrotransact"
+make up            # starts everything; every service runs its Flyway migrations on its empty database
+make seed          # demo data
+make reindex-search
 ```
 
-- The volume is `afrotransact_postgres-data` (the compose file's `name: afrotransact` plus the volume `postgres-data`; a
-  `COMPOSE_PROJECT_NAME` in your shell would rename it, which `make reset` also handles). Keep `.local/secrets.env`,
-  `.local/web-ports` and the image cache `.local/seed/images` if you want to; the seed state is `.local/seed/state.json`:
-  without removing it `make seed` believes its records still exist and skips them.
-- `make down` keeps data; only `make reset` deletes it. If `make up` found a PostgreSQL of your own on port 5432 it used that
-  one instead of the container (`.local/compose.external-postgres.yml`), and `make reset` cannot empty it: drop the service
-  databases yourself (`drop database catalog;` and the other `<service>` databases of `infra/local/postgres/init-databases.sh`, then
-  create them again with their `<service>` role as owner) or recreate the cluster.
+- `make reset` never touches your own Postgres: that is why a database "survived" a reset before. `make db-reset` only touches
+  the databases listed above (see `infra/local/postgres/create-local-databases.sql`), never other databases on your server.
+  It needs a superuser connection the same way `make up` does (`PG_SUPERUSER=<name> PGPASSWORD=<password> make db-reset` if
+  your login is not one). Skip the prompt with `WIPE=yes make db-reset`.
+- Using the Docker Postgres instead (`PG_EXTERNAL=0`): `make reset` deletes its volume `afrotransact_postgres-data` and checks
+  that no `afrotransact_*` volume is left.
+- Valkey/Redis only keeps sessions and caches; if you use your own, flush the database the stack uses if you want a clean one.
+- `make down` keeps data. Keep `.local/secrets.env` and `.local/web-ports` across a wipe (they are not removed).
 
 **Databases created before the catalog baseline must be recreated.** The catalog's migration history was replaced by a clean
 baseline (`V1__baseline.sql`, `V1_1__initial_data.sql`; see [taxonomy.md](./taxonomy.md#changing-the-tree-after-the-baseline)),
