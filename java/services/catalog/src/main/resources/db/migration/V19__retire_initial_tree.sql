@@ -65,6 +65,10 @@ insert into legacy_node (id, lvl) values
 create table legacy_brand_scope as
 select bs.brand_id,
        case when c.code like 'fashion-fabrics%' then 'fabrics-textiles'
+            -- clothing labels (Nike, Levi's ...) were scoped to the women, men and kids categories only, not to bags,
+            -- jewellery or fabrics: keep them on the clothing categories of the new tree
+            when c.code like 'fashion-women%' or c.code like 'fashion-men%' then 'adult-clothing-footwear'
+            when c.code like 'fashion-kids%' then 'childrens-clothing'
             when c.code like 'fashion-%' then 'fashion-accessories'
             when c.code like 'beauty-%' then 'beauty-personal-care'
             when c.code like 'groceries%' then 'groceries-food'

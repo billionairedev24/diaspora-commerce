@@ -123,7 +123,7 @@ class BrandRegistryIT {
         seller("org_scope");
         JsonNode dresses = get("/v1/brands?category=" + leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses").id(), 200);
         assertThat(names(dresses)).contains("Nike", "Levi's").doesNotContain(samsung, "Maggi", "Cantu", "Vlisco");
-        assertThat(dresses.get("departmentName").asString()).isEqualTo("Fashion");
+        assertThat(dresses.get("departmentName").asString()).isEqualTo("Fashion & Accessories");
         JsonNode byType = get("/v1/brands?productType=dress", 200);
         assertThat(names(byType)).contains("Nike").doesNotContain(samsung, "Maggi");
         assertThat(names(get("/v1/brands?category=" + phone, 200))).contains(samsung).doesNotContain("Nike", "Maggi");
@@ -238,22 +238,22 @@ class BrandRegistryIT {
             assertThat(b.required()).isTrue();
             assertThat(b.unbrandedReasons()).extracting(Enum::name).containsExactly("UNBRANDED", "HANDMADE");
         });
-        assertThat(brand("beauty")).satisfies(b -> {
+        assertThat(brand("haircare")).satisfies(b -> {
             assertThat(b.required()).isTrue();
             assertThat(b.unbrandedReasons()).isEmpty();
         });
-        assertThat(brand("grocery").required()).isFalse();
-        assertThat(brand("home").label()).isEqualTo("Maker or artisan");
-        assertThat(brand("electronics").required()).isTrue();
-        assertThat(categories.productType("electronics").attribute("model").orElseThrow().required()).isTrue();
-        assertThat(categories.productType("book").brandAttribute()).isEmpty();
+        assertThat(brand("rice-grains").required()).isFalse();
+        assertThat(brand("decor-candles").label()).isEqualTo("Maker or brand");
+        assertThat(brand("phones").required()).isTrue();
+        assertThat(categories.productType("phones").attribute("model").orElseThrow().required()).isTrue();
+        assertThat(categories.productType("printed-books").brandAttribute()).isEmpty();
     }
 
     @Test
     void aBookHasNoBrandEvenWhenOneIsSent() {
         seller("org_book");
         CategoryNode fiction = leaf("Books & Media › Printed books › Printed books");
-        ProductType book = categories.productType("book");
+        ProductType book = categories.productType("printed-books");
         Map<String, String> attrs = new LinkedHashMap<>(fill(book));
         attrs.put("brand", "Penguin Random House");
         attrs.put("brand_id", UUID.randomUUID().toString());
@@ -275,7 +275,7 @@ class BrandRegistryIT {
                 .isZero();
         // beauty is regulated: a brand is needed, and "unbranded" is not accepted there
         CategoryNode oils = leaf("Beauty & Personal Care › Haircare › Haircare");
-        Map<String, String> beauty = new LinkedHashMap<>(fill(categories.productType("beauty")));
+        Map<String, String> beauty = new LinkedHashMap<>(fill(categories.productType("haircare")));
         beauty.remove("brand");
         beauty.put("brand", "No brand");
         assertThatThrownBy(() -> products.create(new CreateProductCommand(oils.id(), null, "Castor oil " + suffix(),
@@ -325,7 +325,7 @@ class BrandRegistryIT {
         assertThat(row.get("products").asLong()).isEqualTo(2);
         assertThat(row.get("sellers").asLong()).isEqualTo(1);
         assertThat(row.get("createdByOrg").asString()).isEqualTo("org_q_a");
-        assertThat(row.get("scope").get(0).get("path").asString()).isEqualTo("Fashion");
+        assertThat(row.get("scope").get(0).get("path").asString()).isEqualTo("Fashion & Accessories");
         assertThat(queue.get("counts").get("PENDING").asLong()).isGreaterThanOrEqualTo(1);
         String id = row.get("id").asString();
 
@@ -409,7 +409,7 @@ class BrandRegistryIT {
     void staffEditNameAndScopeAddBulkAndRetire() throws Exception {
         String sfx = suffix();
         asStaff();
-        String fashion = nodeId("Fashion");
+        String fashion = nodeId("Fashion & Accessories");
         String women = nodeId("Fashion & Accessories › Adult clothing & footwear");
         JsonNode created = postIfMatch("/v1/taxonomy/brands", Map.of("name", "Ade Bakare " + sfx, "scope",
                 List.of(women), "reason", "Lagos label"), null, 201);
@@ -484,12 +484,12 @@ class BrandRegistryIT {
         // a department-level scope: Fashion only, so Groceries never offers it to the seller who typed it for a dress
         assertThat(jdbc.sql("select c.path from brand_scope s join category c on c.id = s.node_id where s.brand_id = "
                 + "cast(:id as uuid)").param("id", reloaded.attributes().get("brand_id")).query(String.class).list())
-                .containsExactly("Fashion");
+                .containsExactly("Fashion & Accessories");
         assertThat(reload(groceryHomonym.id()).attributes().get("brand_id"))
                 .isNotEqualTo(reloaded.attributes().get("brand_id"));
         assertThat(jdbc.sql("select c.path from brand_scope s join category c on c.id = s.node_id where s.brand_id = "
                 + "cast(:id as uuid)").param("id", reload(groceryHomonym.id()).attributes().get("brand_id"))
-                .query(String.class).list()).containsExactly("Groceries");
+                .query(String.class).list()).containsExactly("Groceries & Food");
 
         // three distinct sellers: approved
         String sharedId = reload(loneProductSharedId(dresses, shared)).attributes().get("brand_id");
@@ -541,7 +541,7 @@ class BrandRegistryIT {
 
     private Product createLegacyBook(CategoryNode node, String org, String brand) {
         seller(org);
-        Map<String, String> attrs = new LinkedHashMap<>(fill(categories.productType("book")));
+        Map<String, String> attrs = new LinkedHashMap<>(fill(categories.productType("printed-books")));
         Product p = products.create(new CreateProductCommand(node.id(), null, "Legacy book " + suffix(), attrs,
                 List.of(IMAGE), "", List.of(new VariantDraft(Map.of(), "LB-" + suffix(), isbn(), false, 999,
                         2)), "USD"));

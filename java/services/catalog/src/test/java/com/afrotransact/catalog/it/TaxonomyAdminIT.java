@@ -256,7 +256,7 @@ class TaxonomyAdminIT {
                 "reason", "departments stay"), "\"0\"").status()).isEqualTo(422);
         // a name already used in the target category is refused
         Reply clash = call("POST", "/v1/taxonomy/nodes", Map.of("level", "PRODUCT_TYPE", "parentId", f.category,
-                "name", "Strategy", "reason", "same name elsewhere", "productType", "home"), null);
+                "name", "Strategy", "reason", "same name elsewhere", "productType", "decor-candles"), null);
         assertThat(clash.status()).isEqualTo(201);
         Reply refused = call("POST", "/v1/taxonomy/nodes/" + clash.body().get("id").asString() + "/move",
                 Map.of("parentId", puzzles, "reason", "would collide"), "\"0\"");
@@ -387,17 +387,18 @@ class TaxonomyAdminIT {
         // the placeholder type and the sales-tax question are protected
         assertThat(call("PATCH", "/v1/taxonomy/product-types/custom", Map.of("label", "Mine", "reason", "tamper"),
                 "\"0\"").status()).isEqualTo(422);
-        JsonNode grocery = call("GET", "/v1/taxonomy/product-types/grocery", null, null).body();
-        List<Map<String, Object>> groceryAttributes = new ArrayList<>();
-        for (JsonNode a : grocery.get("attributes")) {
-            if (!"tax_class".equals(a.get("key").asString())) {
-                groceryAttributes.add(JSON.convertValue(a, Map.class));
+        // tax questions belong to the category's tax profile: none of them can be removed or changed here
+        JsonNode nuts = call("GET", "/v1/taxonomy/product-types/nuts-seeds", null, null).body();
+        List<Map<String, Object>> nutsAttributes = new ArrayList<>();
+        for (JsonNode a : nuts.get("attributes")) {
+            if (!"net_weight_oz".equals(a.get("key").asString())) {
+                nutsAttributes.add(JSON.convertValue(a, Map.class));
             }
         }
-        Reply taxRemoved = call("PATCH", "/v1/taxonomy/product-types/grocery", Map.of("attributes", groceryAttributes,
-                "reason", "drop the tax question"), "\"" + grocery.get("version").asLong() + "\"");
+        Reply taxRemoved = call("PATCH", "/v1/taxonomy/product-types/nuts-seeds", Map.of("attributes", nutsAttributes,
+                "reason", "drop the tax question"), "\"" + nuts.get("version").asLong() + "\"");
         assertThat(taxRemoved.status()).isEqualTo(422);
-        assertThat(taxRemoved.body().get("fieldErrors").get("attributes").asString()).contains("tax_class");
+        assertThat(taxRemoved.body().get("fieldErrors").get("attributes").asString()).contains("cannot be removed here");
 
         Reply audit = call("GET", "/v1/taxonomy/audit?subject=" + f.type, null, null);
         assertThat(audit.body().findValuesAsString("action")).contains("TYPE_UPDATED", "TYPE_CREATED");
@@ -487,7 +488,7 @@ class TaxonomyAdminIT {
         String name = "Chess sets " + suffix();
         CategoryRequest request = categories.request(f.dept, name, "Wooden chess set", "Board size, material");
         Reply plan = call("POST", "/v1/category-requests/" + request.id() + "/approval-preview",
-                Map.of("parentCategoryId", f.deptId, "categoryName", "Classic games", "productType", "home"), null);
+                Map.of("parentCategoryId", f.deptId, "categoryName", "Classic games", "productType", "decor-candles"), null);
         assertThat(plan.status()).isEqualTo(200);
         assertThat(plan.body().get("nodes")).hasSize(2);
         assertThat(plan.body().get("nodes").get(0).get("level").asString()).isEqualTo("CATEGORY");
@@ -495,14 +496,14 @@ class TaxonomyAdminIT {
         assertThat(plan.body().get("productType").get("created").asBoolean()).isFalse();
 
         Reply approved = call("POST", "/v1/category-requests/" + request.id() + "/approve",
-                Map.of("parentCategoryId", f.deptId, "categoryName", "Classic games", "productType", "home"), null);
+                Map.of("parentCategoryId", f.deptId, "categoryName", "Classic games", "productType", "decor-candles"), null);
         assertThat(approved.status()).isEqualTo(200);
         assertThat(categories.tree()).anyMatch(n -> n.path().equals(f.dept + " › Classic games"))
                 .anyMatch(n -> n.path().equals(f.dept + " › Classic games › " + name));
         // a second request in the same category reuses it
         CategoryRequest second = categories.request(f.dept, "Checkers " + suffix(), "Checkers", "Board size");
         Reply reuse = call("POST", "/v1/category-requests/" + second.id() + "/approval-preview",
-                Map.of("parentCategoryId", f.deptId, "categoryName", "classic GAMES", "productType", "home"), null);
+                Map.of("parentCategoryId", f.deptId, "categoryName", "classic GAMES", "productType", "decor-candles"), null);
         assertThat(reuse.body().get("nodes").get(0).get("created").asBoolean()).isFalse();
     }
 
