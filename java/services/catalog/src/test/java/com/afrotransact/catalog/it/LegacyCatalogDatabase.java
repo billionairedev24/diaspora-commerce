@@ -90,6 +90,18 @@ final class LegacyCatalogDatabase {
         return url;
     }
 
+    /** A database no one has touched: created empty, the service migrates it from V1 to the latest version. */
+    static String createEmpty(String name) {
+        try (Connection admin = DriverManager.getConnection(adminUrl(), user(), password());
+             Statement st = admin.createStatement()) {
+            st.execute("drop database if exists " + name + " with (force)");
+            st.execute("create database " + name);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Cannot create database " + name, ex);
+        }
+        return adminUrl().replaceFirst("/[^/?]+(\\?|$)", "/" + name + "$1");
+    }
+
     private static void migrate(String url, String targetVersion) {
         Flyway.configure().dataSource(url, user(), password())
                 .locations("classpath:db/platform", "classpath:db/migration")
