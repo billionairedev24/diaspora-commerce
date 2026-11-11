@@ -23,7 +23,7 @@ import { secureStorage } from '@/auth/secureStorage';
 import { env } from '@/config/env';
 import { decideAccess } from '@/domain/access';
 import { decodeJwt, isExpiring } from '@/domain/jwt';
-import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
+import { type EnrolMethod, type SecondFactor, type SignInStep, type TotpSetup } from '@/domain/nativeSignIn';
 import { SessionGuard } from '@/domain/sessionGuard';
 import { type SessionEndReason, type SessionWarning } from '@/domain/sessionPolicy';
 import { onShift } from '@/domain/shift';
@@ -63,6 +63,14 @@ interface Ctx {
   /** In-app form: email + password; resolves a second-factor step when the account needs one. */
   signInWithPassword(email: string, password: string): Promise<SignInStep>;
   sendSignInCode(): Promise<string>;
+  /** "Email me a code": emails a sign-in code to the verified account email (throttled). */
+  sendEmailCode(): Promise<string>;
+  /** Forced enrolment after the password (mandatory two-step verification, nothing set up): no code was sent. */
+  enrolTotp(): Promise<TotpSetup>;
+  enrolEmail(): Promise<string>;
+  /** Confirms the first code. Resolves the recovery codes to show once; the session starts after finishEnrolment(). */
+  confirmEnrol(method: EnrolMethod, code: string): Promise<string[]>;
+  finishEnrolment(): Promise<void>;
   verifySecondFactor(factor: SecondFactor, code: string, trustDevice: boolean): Promise<SignInStep>;
   cancelSignIn(): void;
   /** Set when the session ended on its own (the refresh token was refused). */
@@ -320,6 +328,41 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     return attempt.current.sendSmsCode();
   }, []);
 
+  const sendEmailCode = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.sendEmailCode();
+  }, []);
+
+  const enrolTotp = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.enrolTotp();
+  }, []);
+
+  const enrolEmail = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.enrolEmail();
+  }, []);
+
+  /** The first factor is confirmed: the recovery codes are shown once before the session starts. */
+  const enrolled = useRef<SignInStep | null>(null);
+  const confirmEnrol = useCallback(async (method: EnrolMethod, code: string) => {
+    if (!attempt.current) throw new Error('Start again');
+    const step = await attempt.current.confirmEnrol(method, code);
+    if (step.kind !== 'done') return [];
+    if (step.recoveryCodes.length === 0) {
+      await settle(step);
+      return [];
+    }
+    enrolled.current = step;
+    return step.recoveryCodes;
+  }, [settle]);
+
+  const finishEnrolment = useCallback(async () => {
+    const step = enrolled.current;
+    enrolled.current = null;
+    if (step) await settle(step);
+  }, [settle]);
+
   const verifySecondFactor = useCallback(async (factor: SecondFactor, code: string, trustDevice: boolean) => {
     if (!attempt.current) throw new Error('Start again');
     return settle(await attempt.current.verify(factor, code, trustDevice));
@@ -405,9 +448,9 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Ctx>(() => ({
     phase, user, denied, engine, sync, api, paused, sessionWarning, noteActivity, staySignedIn,
     setPaused: (p) => { setPausedState(p); void driverStore.setKv(PAUSED, p); },
-    signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, notice, signOut,
+    signInWithPassword, sendSignInCode, sendEmailCode, enrolTotp, enrolEmail, confirmEnrol, finishEnrolment, verifySecondFactor, cancelSignIn, notice, signOut,
     recheckAccess: async () => { if (user) await checkAccess(user); }
-  }), [phase, user, denied, engine, sync, api, paused, sessionWarning, noteActivity, staySignedIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, notice, signOut, checkAccess]);
+  }), [phase, user, denied, engine, sync, api, paused, sessionWarning, noteActivity, staySignedIn, signInWithPassword, sendSignInCode, sendEmailCode, enrolTotp, enrolEmail, confirmEnrol, finishEnrolment, verifySecondFactor, cancelSignIn, notice, signOut, checkAccess]);
 
   return <DriverContext.Provider value={value}>{children}</DriverContext.Provider>;
 }

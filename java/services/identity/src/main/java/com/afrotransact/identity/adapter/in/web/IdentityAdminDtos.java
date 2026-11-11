@@ -189,8 +189,14 @@ final class IdentityAdminDtos {
     }
 
     @Schema(name = "AuthSettingsValues")
-    record SettingsValues(int passwordMinLength, boolean mfaRequiredAccount, boolean mfaRequiredSeller,
-                          boolean mfaRequiredProvider, int sessionIdleTimeoutMinutes,
+    record SettingsValues(int passwordMinLength,
+                          @Schema(description = "Customers must have a second factor: at their next sign-in they set "
+                                  + "one up (authenticator or email codes) after their password. No code is sent "
+                                  + "before they enrol") boolean mfaRequiredAccount,
+                          @Schema(description = "Same for seller organisation members: must enrol at next sign-in")
+                          boolean mfaRequiredSeller,
+                          @Schema(description = "Same for service-provider organisation members: must enrol at "
+                                  + "next sign-in") boolean mfaRequiredProvider, int sessionIdleTimeoutMinutes,
                           int sessionAbsoluteTimeoutMinutes, Integer accessTokenTtlCapMinutes,
                           Integer refreshTokenTtlCapMinutes) {
 

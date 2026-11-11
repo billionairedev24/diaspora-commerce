@@ -5,7 +5,7 @@ import { useRef, useState } from 'react';
 import { type TextInput, View } from 'react-native';
 
 import { formatWait } from '@/domain/cooldown';
-import { type Factors } from '@/domain/nativeSignIn';
+import { type EnrolMethod, type Factors } from '@/domain/nativeSignIn';
 import { classifySignInFailure, failureField, type SignInFailure } from '@/domain/signInFailure';
 import { useT } from '@/i18n';
 import { useDriver } from '@/session/DriverProvider';
@@ -19,7 +19,7 @@ import { PasswordField } from './PasswordField';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
-export function PasswordForm({ onSecondFactor, message }: { onSecondFactor: (factors: Factors) => void; message?: string }) {
+export function PasswordForm({ onSecondFactor, onEnrol, message }: { onSecondFactor: (factors: Factors) => void; onEnrol: (methods: EnrolMethod[]) => void; message?: string }) {
   const tr = useT();
   const { signInWithPassword, notice } = useDriver();
   const [email, setEmail] = useState('');
@@ -38,6 +38,7 @@ export function PasswordForm({ onSecondFactor, message }: { onSecondFactor: (fac
     try {
       const step = await signInWithPassword(e, password);
       if (step.kind === 'second-factor') onSecondFactor(step.factors);
+      else if (step.kind === 'enrol') onEnrol(step.methods);
     } catch (x) {
       const f = classifySignInFailure(x, 'password');
       if (f.kind === 'rate-limited' && f.retryAfterSeconds) wait.start(f.retryAfterSeconds);

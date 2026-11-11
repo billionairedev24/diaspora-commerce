@@ -125,8 +125,9 @@ describe('My account in the staff console', () => {
       </AccountEnv>
     );
     await waitFor(() => expect(screen.getByTestId('two-step')).toHaveTextContent('Required'), { timeout: 5000 });
-    // SMS is the only method: it can't be turned off; the authenticator can be set up.
-    expect(within(screen.getByTestId('mfa-sms')).getByRole('button', { name: 'Turn off' })).toBeDisabled();
+    // Email codes are the only method: they can't be turned off; the authenticator can be set up; SMS is not offered.
+    expect(within(screen.getByTestId('mfa-email')).getByRole('button', { name: 'Turn off' })).toBeDisabled();
+    expect(screen.queryByTestId('mfa-sms')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('mfa-totp')).getByRole('button', { name: 'Set up' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: /Account menu for/ }));
     const items = await screen.findAllByRole('menuitem');

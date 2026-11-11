@@ -10,23 +10,26 @@ test.describe('staff console · my account', () => {
     await page.goto('/account/security');
     const card = page.getByTestId('two-step');
     await expect(card).toContainText('Required');
-    await expect(card).toContainText('required for staff accounts');
+    await expect(card).toContainText('required for your account');
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'staff sign-in & security' });
 
     const app = page.getByTestId('mfa-totp');
-    const sms = page.getByTestId('mfa-sms');
+    const email = page.getByTestId('mfa-email');
+    await expect(page.getByTestId('mfa-sms')).toHaveCount(0); // SMS is not offered while its flag is off
     if (await app.getByRole('button', { name: 'Set up' }).isVisible()) await enrolAuthenticator(page, 'ifeoma@afrotransact.com');
-    if (await sms.getByRole('button', { name: 'Set up' }).isVisible()) {
-      await sms.getByRole('button', { name: 'Set up' }).click();
-      await page.getByRole('button', { name: 'Text me a code' }).click();
+    if (await email.getByRole('button', { name: 'Set up' }).isVisible()) {
+      await email.getByRole('button', { name: 'Set up' }).click();
+      await page.getByRole('button', { name: 'Email me a code' }).click();
       await page.getByLabel('6-digit code').fill('246810');
       await page.getByRole('button', { name: 'Verify and turn on' }).click();
-      await expect(sms.getByText('On', { exact: true })).toBeVisible();
+      await expect(email.getByText('On', { exact: true })).toBeVisible();
     }
-    // Both on: either may go. Turn SMS off → the authenticator is now the last method and stays.
-    await sms.getByRole('button', { name: 'Turn off' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Turn off' }).click();
-    await expect(sms.getByRole('button', { name: 'Set up' })).toBeVisible();
+    // Both on: either may go (the password is asked again). Turn email codes off → the authenticator is the last method and stays.
+    await email.getByRole('button', { name: 'Turn off' }).click();
+    const confirm = page.getByRole('dialog');
+    await confirm.getByLabel('Password').fill('Plantain-Jollof-2026');
+    await confirm.getByRole('button', { name: 'Turn off' }).click();
+    await expect(email.getByRole('button', { name: 'Set up' })).toBeVisible();
     await expect(app.getByRole('button', { name: 'Turn off' })).toBeDisabled();
   });
 

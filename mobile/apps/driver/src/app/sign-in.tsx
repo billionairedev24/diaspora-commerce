@@ -9,7 +9,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { env } from '@/config/env';
-import { type Factors } from '@/domain/nativeSignIn';
+import { type EnrolMethod, type Factors } from '@/domain/nativeSignIn';
+import { EnrolView } from '@/features/auth/EnrolView';
 import { PasswordForm } from '@/features/auth/PasswordForm';
 import { SecondFactorView } from '@/features/auth/SecondFactorView';
 import { SignInHero, useHeroHeight } from '@/features/auth/SignInHero';
@@ -25,20 +26,22 @@ export default function SignIn() {
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
   const [factors, setFactors] = useState<Factors | null>(null);
+  const [enrol, setEnrol] = useState<EnrolMethod[] | null>(null);
   const [message, setMessage] = useState('');
   const backToPassword = (m?: string) => {
     cancelSignIn();
     setFactors(null);
+    setEnrol(null);
     setMessage(m ?? '');
   };
   // With the keyboard up the picture gives way to the form, and the form lifts above the keyboard.
-  const heroHeight = useHeroHeight(keyboard > 0 || factors !== null);
+  const heroHeight = useHeroHeight(keyboard > 0 || factors !== null || enrol !== null);
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
       <SignInHero height={heroHeight} title={tr('dr.signIn.signInToDrive')} />
       <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: Math.max(insets.bottom, keyboard) + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        {factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : <PasswordForm onSecondFactor={setFactors} message={message} />}
+        {enrol ? <EnrolView methods={enrol} onBack={backToPassword} /> : factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : <PasswordForm onSecondFactor={setFactors} onEnrol={setEnrol} message={message} />}
         {env.mocks ? (
           <View style={styles.demo}>
             <AppText variant="small" style={{ fontWeight: t.fontWeight.bold }}>{tr('dr.signIn.demoAccountsDevMocks')}</AppText>

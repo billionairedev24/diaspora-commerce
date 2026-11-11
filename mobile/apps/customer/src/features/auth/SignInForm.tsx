@@ -8,7 +8,7 @@ import { Pressable, StyleSheet, type TextInput, View } from 'react-native';
 
 import { type SignOutFlash, useAuth } from '@/auth/AuthProvider';
 import { SignInCancelled, type SignInIntent } from '@/auth/oidc';
-import { type Factors } from '@/domain/nativeSignIn';
+import { type EnrolMethod, type Factors } from '@/domain/nativeSignIn';
 import { describeSignInError, isValidEmail } from '@/domain/signInErrors';
 import { type MessageKey, useT } from '@/i18n';
 import { sp, t } from '@/theme';
@@ -37,7 +37,7 @@ interface Errors {
   form?: string;
 }
 
-export function SignInForm({ notice, onSecondFactor }: { notice: string; onSecondFactor: (factors: Factors) => void }) {
+export function SignInForm({ notice, onSecondFactor, onEnrol }: { notice: string; onSecondFactor: (factors: Factors) => void; onEnrol: (methods: EnrolMethod[]) => void }) {
   const tr = useT();
   const { signIn, signInWithPassword, flash } = useAuth();
   const [email, setEmail] = useState('');
@@ -69,6 +69,7 @@ export function SignInForm({ notice, onSecondFactor }: { notice: string; onSecon
     try {
       const step = await signInWithPassword(e, password);
       if (step.kind === 'second-factor') onSecondFactor(step.factors);
+      else if (step.kind === 'enrol') onEnrol(step.methods);
     } catch (x) {
       const failure = describeSignInError(x);
       const text = failureText(tr, failure);

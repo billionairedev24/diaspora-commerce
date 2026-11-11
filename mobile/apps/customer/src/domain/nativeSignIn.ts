@@ -6,13 +6,26 @@ import { ApiError } from '@afrotransact/api-client';
 
 import type { JsonRequester } from '@/api/http';
 
-export type SecondFactor = 'TOTP' | 'SMS' | 'RECOVERY_CODE';
+/** SMS only appears while identity's SMS feature flag is on (off by default). */
+export type SecondFactor = 'TOTP' | 'EMAIL_OTP' | 'SMS' | 'RECOVERY_CODE';
+
+/** What a person with mandatory two-step verification and nothing set up may enrol (no code is sent before they do). */
+export type EnrolMethod = 'TOTP' | 'EMAIL_OTP';
 
 export interface Factors {
   totp: boolean;
+  /** Email codes are on; the code goes to emailHint (sent with the password step when it is the only factor). */
+  emailOtp?: boolean;
+  emailHint?: string;
   sms: boolean;
   smsHint?: string;
   recoveryCode: boolean;
+  enrolMethods?: EnrolMethod[];
+}
+
+export interface TotpSetup {
+  secret: string;
+  otpauthUri: string;
 }
 
 export interface Pkce {
@@ -42,15 +55,18 @@ export async function makePkce(randomBytes: (n: number) => Uint8Array, sha256Bas
 }
 
 export type SignInStep =
-  | { kind: 'done'; trustedDeviceToken: string | null }
-  | { kind: 'second-factor'; challengeId: string; factors: Factors };
+  | { kind: 'done'; trustedDeviceToken: string | null; recoveryCodes: string[]; mfaSetupSuggested: boolean }
+  | { kind: 'second-factor'; challengeId: string; factors: Factors }
+  | { kind: 'enrol'; challengeId: string; methods: EnrolMethod[] };
 
 interface ServerResult {
-  status: 'MFA_REQUIRED' | 'AUTHENTICATED';
+  status: 'MFA_REQUIRED' | 'MFA_ENROLMENT_REQUIRED' | 'AUTHENTICATED';
   challengeId?: string;
   factors?: Factors;
   code?: string;
   trustedDeviceToken?: string;
+  recoveryCodes?: string[];
+  mfaSetupSuggested?: boolean;
 }
 
 export interface NativeSignInDeps<T> {
@@ -93,6 +109,30 @@ export class NativeSignIn<T> {
     return r.sentTo ?? '';
   }
 
+  /** Emails a sign-in code ("send me an email code instead"); resolves the masked address. Resends are throttled. */
+  async sendEmailCode(): Promise<string> {
+    const r = await this.d.request<{ sentTo?: string }>('/v1/auth/native/mfa/email', { method: 'POST', body: { ...this.base(), challengeId: this.challengeId } });
+    return r.sentTo ?? '';
+  }
+
+  /** Forced enrolment: the authenticator's secret and otpauth URI (QR or manual key). */
+  async enrolTotp(): Promise<TotpSetup> {
+    return this.d.request<TotpSetup>('/v1/auth/native/mfa/enrol/totp', { method: 'POST', body: { ...this.base(), challengeId: this.challengeId } });
+  }
+
+  /** Forced enrolment: emails a first code to the verified email; resolves the masked address. */
+  async enrolEmail(): Promise<string> {
+    const r = await this.d.request<{ sentTo?: string }>('/v1/auth/native/mfa/enrol/email', { method: 'POST', body: { ...this.base(), challengeId: this.challengeId } });
+    return r.sentTo ?? '';
+  }
+
+  /** Forced enrolment: confirms the first code; the sign-in completes (recovery codes come back once). */
+  async confirmEnrol(method: EnrolMethod, code: string): Promise<SignInStep> {
+    const path = method === 'TOTP' ? '/v1/auth/native/mfa/enrol/totp/confirm' : '/v1/auth/native/mfa/enrol/email/confirm';
+    const r = await this.d.request<ServerResult>(path, { method: 'POST', body: { ...this.base(), challengeId: this.challengeId, code: code.replace(/\s+/g, '') } });
+    return this.step(r);
+  }
+
   async verify(factor: SecondFactor, code: string, trustDevice: boolean): Promise<SignInStep> {
     const r = await this.d.request<ServerResult>('/v1/auth/native/mfa/verify', {
       method: 'POST',
@@ -102,14 +142,18 @@ export class NativeSignIn<T> {
   }
 
   private async step(r: ServerResult): Promise<SignInStep> {
+    if (r.status === 'MFA_ENROLMENT_REQUIRED' && r.challengeId) {
+      this.challengeId = r.challengeId;
+      return { kind: 'enrol', challengeId: r.challengeId, methods: r.factors?.enrolMethods ?? ['TOTP', 'EMAIL_OTP'] };
+    }
     if (r.status === 'MFA_REQUIRED' && r.challengeId) {
       this.challengeId = r.challengeId;
-      return { kind: 'second-factor', challengeId: r.challengeId, factors: r.factors ?? { totp: true, sms: false, recoveryCode: true } };
+      return { kind: 'second-factor', challengeId: r.challengeId, factors: r.factors ?? { totp: true, emailOtp: false, sms: false, recoveryCode: true } };
     }
     if (r.status !== 'AUTHENTICATED' || !r.code) throw new Error('Sign-in did not complete. Try again.');
     this.tokens = await this.d.exchange(r.code, this.d.pkce.verifier);
     if (r.trustedDeviceToken) await this.d.trustedDevice.set(this.email, r.trustedDeviceToken);
-    return { kind: 'done', trustedDeviceToken: r.trustedDeviceToken ?? null };
+    return { kind: 'done', trustedDeviceToken: r.trustedDeviceToken ?? null, recoveryCodes: r.recoveryCodes ?? [], mfaSetupSuggested: r.mfaSetupSuggested ?? false };
   }
 }
 

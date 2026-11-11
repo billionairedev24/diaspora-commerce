@@ -11,7 +11,8 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
-import { type Factors } from '@/domain/nativeSignIn';
+import { type EnrolMethod, type Factors } from '@/domain/nativeSignIn';
+import { EnrolView } from '@/features/auth/EnrolView';
 import { SecondFactorView } from '@/features/auth/SecondFactorView';
 import { SignInForm } from '@/features/auth/SignInForm';
 import { SignInHero } from '@/features/auth/SignInHero';
@@ -21,6 +22,7 @@ import { useKeyboardHeight } from '@/ui/useKeyboardHeight';
 export default function SignIn() {
   const { cancelSignIn } = useAuth();
   const [factors, setFactors] = useState<Factors | null>(null);
+  const [enrol, setEnrol] = useState<EnrolMethod[] | null>(null);
   const [notice, setNotice] = useState('');
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -29,6 +31,7 @@ export default function SignIn() {
   const backToPassword = (message?: string) => {
     cancelSignIn();
     setFactors(null);
+    setEnrol(null);
     setNotice(message ?? '');
   };
 
@@ -47,7 +50,7 @@ export default function SignIn() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        {factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : <SignInForm notice={notice} onSecondFactor={setFactors} />}
+        {enrol ? <EnrolView methods={enrol} onBack={backToPassword} /> : factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : <SignInForm notice={notice} onSecondFactor={setFactors} onEnrol={setEnrol} />}
       </ScrollView>
     </View>
   );

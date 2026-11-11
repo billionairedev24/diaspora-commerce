@@ -6,7 +6,7 @@ import * as Crypto from 'expo-crypto';
 
 import { createJsonRequester } from '@/api/http';
 import { env } from '@/config/env';
-import { makePkce, NativeSignIn, type Pkce, type SignInStep } from '@/domain/nativeSignIn';
+import { type EnrolMethod, makePkce, NativeSignIn, type Pkce, type SignInStep, type TotpSetup } from '@/domain/nativeSignIn';
 
 import { exchangeSignInCode, mockTokens, redirectUri, type TokenSet } from './oidc';
 import { secureStorage } from './secureStorage';
@@ -30,7 +30,12 @@ export type { SignInStep };
 export interface NativeAttempt {
   password(email: string, password: string): Promise<SignInStep>;
   sendSmsCode(): Promise<string>;
-  verify(factor: 'TOTP' | 'SMS' | 'RECOVERY_CODE', code: string, trustDevice: boolean): Promise<SignInStep>;
+  sendEmailCode(): Promise<string>;
+  verify(factor: 'TOTP' | 'EMAIL_OTP' | 'SMS' | 'RECOVERY_CODE', code: string, trustDevice: boolean): Promise<SignInStep>;
+  /** Forced enrolment (mandatory two-step verification, nothing set up yet): no code was sent before this. */
+  enrolTotp(): Promise<TotpSetup>;
+  enrolEmail(): Promise<string>;
+  confirmEnrol(method: EnrolMethod, code: string): Promise<SignInStep>;
   tokens(): TokenSet | null;
 }
 
@@ -40,7 +45,11 @@ export async function beginNativeSignIn(): Promise<NativeAttempt> {
   return {
     password: (e, p) => flow.password(e, p),
     sendSmsCode: () => flow.sendSmsCode(),
+    sendEmailCode: () => flow.sendEmailCode(),
     verify: (f, c, t) => flow.verify(f, c, t),
+    enrolTotp: () => flow.enrolTotp(),
+    enrolEmail: () => flow.enrolEmail(),
+    confirmEnrol: (m, c) => flow.confirmEnrol(m, c),
     tokens: () => flow.tokens
   };
 }
@@ -48,9 +57,10 @@ export async function beginNativeSignIn(): Promise<NativeAttempt> {
 function mockAttempt(): NativeAttempt {
   let tokens: TokenSet | null = null;
   let needsCode = false;
-  const finish = (): SignInStep => {
+  let enrolling = false;
+  const finish = (recoveryCodes: string[] = []): SignInStep => {
     tokens = mockTokens();
-    return { kind: 'done', trustedDeviceToken: null };
+    return { kind: 'done', trustedDeviceToken: null, recoveryCodes, mfaSetupSuggested: false };
   };
   const wrong = (title: string, status: number, code: string) => new ApiError({ type: 'about:blank', title, status, code, detail: title });
   return {
@@ -59,12 +69,29 @@ function mockAttempt(): NativeAttempt {
       if (password === 'wrong') throw wrong('The email or password is incorrect.', 401, 'INVALID_CREDENTIALS');
       if (email.trim().toLowerCase().startsWith('mfa')) {
         needsCode = true;
-        return { kind: 'second-factor', challengeId: 'mock-challenge', factors: { totp: true, sms: true, smsHint: '•••• 0142', recoveryCode: true } };
+        return { kind: 'second-factor', challengeId: 'mock-challenge', factors: { totp: true, emailOtp: true, emailHint: 'm••@example.com', sms: false, recoveryCode: true } };
+      }
+      if (email.trim().toLowerCase().startsWith('staff')) {
+        enrolling = true;
+        return { kind: 'enrol', challengeId: 'mock-enrol', methods: ['TOTP', 'EMAIL_OTP'] };
       }
       return finish();
     },
     async sendSmsCode() {
       return '•••• 0142';
+    },
+    async sendEmailCode() {
+      return 'm••@example.com';
+    },
+    async enrolTotp() {
+      return { secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/AfroTransact:staff@example.com?secret=JBSWY3DPEHPK3PXP&issuer=AfroTransact' };
+    },
+    async enrolEmail() {
+      return 's••@example.com';
+    },
+    async confirmEnrol(_method, code) {
+      if (!enrolling || code.replace(/\s+/g, '') !== '123456') throw wrong('That code is incorrect or expired.', 422, 'INVALID_CODE');
+      return finish(['abcde-fghjk', 'mnpqr-stuvw', 'xyzab-cdefg']);
     },
     async verify(_factor, code) {
       if (!needsCode || code.replace(/\s+/g, '') !== '123456') throw wrong('That code is incorrect or expired.', 422, 'INVALID_CODE');

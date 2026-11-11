@@ -8,7 +8,7 @@ import { type TokenSource } from '@/api/http';
 import { env } from '@/config/env';
 import { decodeJwt, initialsOf, isExpiring } from '@/domain/jwt';
 import { phaseOnLaunch, type SessionPhase, shouldLockOnResume } from '@/domain/lockPolicy';
-import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
+import { type EnrolMethod, type SecondFactor, type SignInStep, type TotpSetup } from '@/domain/nativeSignIn';
 import { digestsEqual, passcodeDigestInput, recordUnlockAttempt, type UnlockResult } from '@/domain/passcode';
 import { flashCodeFor, type SessionFlashCode } from '@/domain/sessionFlash';
 import { SessionGuard } from '@/domain/sessionGuard';
@@ -53,6 +53,14 @@ interface AuthContextValue {
   /** In-app form: email + password. Resolves a second-factor step when the account needs one, else signs in. */
   signInWithPassword(email: string, password: string): Promise<SignInStep>;
   sendSignInCode(): Promise<string>;
+  /** "Email me a code": emails a sign-in code to the verified account email (throttled). */
+  sendEmailCode(): Promise<string>;
+  /** Forced enrolment after the password (mandatory two-step verification, nothing set up): no code was sent. */
+  enrolTotp(): Promise<TotpSetup>;
+  enrolEmail(): Promise<string>;
+  /** Confirms the first code. Resolves the recovery codes to show once; the session starts after finishEnrolment(). */
+  confirmEnrol(method: EnrolMethod, code: string): Promise<string[]>;
+  finishEnrolment(): Promise<void>;
   verifySecondFactor(factor: SecondFactor, code: string, trustDevice: boolean): Promise<SignInStep>;
   /** Drops a half-finished sign-in (back from the code screen). */
   cancelSignIn(): void;
@@ -295,6 +303,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return attempt.current.sendSmsCode();
   }, []);
 
+  const sendEmailCode = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.sendEmailCode();
+  }, []);
+
+  const enrolTotp = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.enrolTotp();
+  }, []);
+
+  const enrolEmail = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.enrolEmail();
+  }, []);
+
+  /** The first factor is confirmed: the recovery codes are shown once before the session starts. */
+  const enrolled = useRef<SignInStep | null>(null);
+  const confirmEnrol = useCallback(async (method: EnrolMethod, code: string) => {
+    if (!attempt.current) throw new Error('Start again');
+    const step = await attempt.current.confirmEnrol(method, code);
+    if (step.kind !== 'done') return [];
+    if (step.recoveryCodes.length === 0) {
+      await settle(step);
+      return [];
+    }
+    enrolled.current = step;
+    return step.recoveryCodes;
+  }, [settle]);
+
+  const finishEnrolment = useCallback(async () => {
+    const step = enrolled.current;
+    enrolled.current = null;
+    if (step) await settle(step);
+  }, [settle]);
+
   const verifySecondFactor = useCallback(async (factor: SecondFactor, code: string, trustDevice: boolean) => {
     if (!attempt.current) throw new Error('Start again');
     return settle(await attempt.current.verify(factor, code, trustDevice));
@@ -419,10 +462,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => ({
     ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, sessionWarning, noteActivity, staySignedIn, registerPolicyFetcher,
-    signIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode,
+    signIn, signInWithPassword, sendSignInCode, sendEmailCode, enrolTotp, enrolEmail, confirmEnrol, finishEnrolment, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode,
     lock: () => setPhase((p) => (p === 'unlocked' ? 'locked' : p)),
     signOut, confirmWithDevice, onSignOut
-  }), [ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, sessionWarning, noteActivity, staySignedIn, registerPolicyFetcher, signIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode, signOut, confirmWithDevice, onSignOut]);
+  }), [ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, sessionWarning, noteActivity, staySignedIn, registerPolicyFetcher, signIn, signInWithPassword, sendSignInCode, sendEmailCode, enrolTotp, enrolEmail, confirmEnrol, finishEnrolment, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode, signOut, confirmWithDevice, onSignOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

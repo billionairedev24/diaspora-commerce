@@ -6,7 +6,9 @@ import java.time.Duration;
  * The authentication settings in force: the stored overrides over the configured defaults.
  *
  * @param passwordMinLength        shortest accepted password (upper bound {@link PasswordPolicy#MAX_LENGTH})
- * @param mfaRequiredAccount       customers must use a second factor when they can (an enrolled factor or a phone)
+ * @param mfaRequiredAccount       customers must have a second factor: at their next sign-in, after their password,
+ *                                 they must set one up (authenticator app or email codes) before they get a session.
+ *                                 No code is sent before they enrol; people who already enrolled answer it as usual
  * @param mfaRequiredSeller        same for seller organisation members
  * @param mfaRequiredProvider      same for service-provider organisation members
  * @param sessionIdleTimeoutMinutes  sign-in (single sign-on) session ends after this long without a request

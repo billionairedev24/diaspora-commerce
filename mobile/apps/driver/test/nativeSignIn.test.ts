@@ -40,7 +40,7 @@ describe('NativeSignIn', () => {
   it('trades the code for tokens when the password is enough', async () => {
     const { f, calls, exchange } = flow([{ status: 'AUTHENTICATED', code: 'code-1' }]);
     const step = await f.password(' Ada@Example.com ', 'Passw0rd!');
-    expect(step).toEqual({ kind: 'done', trustedDeviceToken: null });
+    expect(step).toEqual({ kind: 'done', trustedDeviceToken: null, recoveryCodes: [], mfaSetupSuggested: false });
     expect(calls[0]).toEqual({ path: '/v1/auth/native/password', body: { app: 'driver', codeChallenge: pkce.challenge, redirectUri: 'com.afrotransact.driver:/oauth2redirect', email: 'ada@example.com', password: 'Passw0rd!' } });
     expect(exchange).toHaveBeenCalledWith('code-1', pkce.verifier);
     expect(f.tokens).toEqual({ code: 'code-1', verifier: pkce.verifier });
@@ -57,9 +57,59 @@ describe('NativeSignIn', () => {
     expect(f.tokens).toBeNull();
     expect(await f.sendSmsCode()).toBe('•••• 0142');
     const done = await f.verify('SMS', '123 456', true);
-    expect(done).toEqual({ kind: 'done', trustedDeviceToken: 'trusted-1' });
+    expect(done).toEqual({ kind: 'done', trustedDeviceToken: 'trusted-1', recoveryCodes: [], mfaSetupSuggested: false });
     expect(calls[2]?.body).toMatchObject({ challengeId: 'chal-1', factor: 'SMS', code: '123456', trustDevice: true, codeChallenge: pkce.challenge });
     expect(store.get('ada@example.com')).toBe('trusted-1');
+  });
+
+  it('emails a code for the email factor and verifies it', async () => {
+    const { f, calls } = flow([
+      { status: 'MFA_REQUIRED', challengeId: 'chal-3', factors: { totp: true, emailOtp: true, emailHint: 'a••@example.com', sms: false, recoveryCode: true } },
+      { sentTo: 'a••@example.com' },
+      { status: 'AUTHENTICATED', code: 'code-3' }
+    ]);
+    const first = await f.password('ada@example.com', 'pw');
+    expect(first).toMatchObject({ kind: 'second-factor', factors: { emailOtp: true, sms: false } });
+    expect(await f.sendEmailCode()).toBe('a••@example.com');
+    expect(calls[1]).toMatchObject({ path: '/v1/auth/native/mfa/email', body: { challengeId: 'chal-3' } });
+    expect(await f.verify('EMAIL_OTP', '123456', false)).toMatchObject({ kind: 'done' });
+    expect(calls[2]?.body).toMatchObject({ factor: 'EMAIL_OTP', code: '123456' });
+  });
+
+  it('forces enrolment when two-step verification is mandatory and nothing is set up: no code, enrol, then sign in with recovery codes', async () => {
+    const { f, calls, exchange } = flow([
+      { status: 'MFA_ENROLMENT_REQUIRED', challengeId: 'chal-e', factors: { totp: false, sms: false, recoveryCode: false, enrolMethods: ['TOTP', 'EMAIL_OTP'] } },
+      { secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/AfroTransact:a@b.co?secret=JBSWY3DPEHPK3PXP' },
+      { recoveryCodes: ['abcde-fghjk'], status: 'AUTHENTICATED', code: 'code-e' }
+    ]);
+    const first = await f.password('ada@example.com', 'pw');
+    expect(first).toEqual({ kind: 'enrol', challengeId: 'chal-e', methods: ['TOTP', 'EMAIL_OTP'] });
+    expect(f.tokens).toBeNull();
+    expect((await f.enrolTotp()).secret).toBe('JBSWY3DPEHPK3PXP');
+    expect(calls[1]?.path).toBe('/v1/auth/native/mfa/enrol/totp');
+    const done = await f.confirmEnrol('TOTP', '123 456');
+    expect(done).toMatchObject({ kind: 'done', recoveryCodes: ['abcde-fghjk'] });
+    expect(calls[2]).toMatchObject({ path: '/v1/auth/native/mfa/enrol/totp/confirm', body: { challengeId: 'chal-e', code: '123456' } });
+    expect(exchange).toHaveBeenCalledWith('code-e', pkce.verifier);
+  });
+
+  it('enrols email codes by emailing a first code to the verified address', async () => {
+    const { f, calls } = flow([
+      { status: 'MFA_ENROLMENT_REQUIRED', challengeId: 'chal-m', factors: { totp: false, sms: false, recoveryCode: false } },
+      { sentTo: 's••@example.com' },
+      { recoveryCodes: [], status: 'AUTHENTICATED', code: 'code-m' }
+    ]);
+    const first = await f.password('staff@afrotransact.com', 'pw');
+    expect(first).toMatchObject({ kind: 'enrol', methods: ['TOTP', 'EMAIL_OTP'] });
+    expect(await f.enrolEmail()).toBe('s••@example.com');
+    expect(calls[1]?.path).toBe('/v1/auth/native/mfa/enrol/email');
+    await f.confirmEnrol('EMAIL_OTP', '654321');
+    expect(calls[2]?.path).toBe('/v1/auth/native/mfa/enrol/email/confirm');
+  });
+
+  it('passes the "secure your account" suggestion on a password-only sign-in', async () => {
+    const { f } = flow([{ status: 'AUTHENTICATED', code: 'c', mfaSetupSuggested: true }]);
+    expect(await f.password('ada@example.com', 'pw')).toMatchObject({ kind: 'done', mfaSetupSuggested: true });
   });
 
   it('sends the trusted-device token it kept so the code is skipped', async () => {

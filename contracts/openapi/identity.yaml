@@ -4656,10 +4656,13 @@ components:
           format: int32
         mfaRequiredAccount:
           type: boolean
+          description: 'Customers must have a second factor: at their next sign-in they set one up (authenticator or email codes) after their password. No code is sent before they enrol'
         mfaRequiredSeller:
           type: boolean
+          description: 'Same for seller organisation members: must enrol at next sign-in'
         mfaRequiredProvider:
           type: boolean
+          description: 'Same for service-provider organisation members: must enrol at next sign-in'
         sessionIdleTimeoutMinutes:
           type: integer
           format: int32
