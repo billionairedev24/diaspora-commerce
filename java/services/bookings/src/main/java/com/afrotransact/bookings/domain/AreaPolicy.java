@@ -6,24 +6,18 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Staff-set service-area rules.
+ * Staff-set service-area rules. The default of each rule is the search radius a shopper gets until they choose their
+ * own (a default, never a limit); min and max bound the radius a provider declares for how far they travel.
  *
- * @param byCategory         radius rule per service category (lower case, e.g. "hair &amp; beauty")
- * @param fallback           rule for a category without its own
- * @param customerTravelMiles how far a customer is assumed to travel to a provider's shop ("You go to them")
- * @param nearestMaxMiles    providers beyond their usual coverage are suggested only within this many miles
+ * @param byCategory radius rule per service category (lower case, e.g. "hair &amp; beauty")
+ * @param fallback   rule for a category without its own
  */
-public record AreaPolicy(Map<String, RadiusRule> byCategory, RadiusRule fallback, int customerTravelMiles,
-                         int nearestMaxMiles) {
+public record AreaPolicy(Map<String, RadiusRule> byCategory, RadiusRule fallback) {
 
     public AreaPolicy {
         Map<String, RadiusRule> copy = new LinkedHashMap<>();
         byCategory.forEach((k, v) -> copy.put(k.trim().toLowerCase(Locale.ROOT), v));
         byCategory = Map.copyOf(copy);
-        if (customerTravelMiles < 1 || customerTravelMiles > 150 || nearestMaxMiles < 0 || nearestMaxMiles > 300) {
-            throw new BookingsRuleViolation("bookings.invalid-area-policy", "Area policy is invalid",
-                    Map.of("customerTravelMiles", "1-150 miles; nearestMaxMiles 0-300 (0 turns the fallback off)"));
-        }
     }
 
     public static AreaPolicy defaults() {
@@ -32,11 +26,17 @@ public record AreaPolicy(Map<String, RadiusRule> byCategory, RadiusRule fallback
         m.put("catering", new RadiusRule(40, 10, 100));
         m.put("tailoring", new RadiusRule(25, 5, 60));
         m.put("tax & legal", new RadiusRule(30, 5, 60));
-        return new AreaPolicy(m, new RadiusRule(25, 5, 60), 30, 60);
+        return new AreaPolicy(m, new RadiusRule(25, 5, 60));
     }
 
     public RadiusRule ruleFor(String category) {
         return byCategory.getOrDefault(category == null ? "" : category.trim().toLowerCase(Locale.ROOT), fallback);
+    }
+
+    /** The widest default radius of any category: the candidate bound when a search has no chosen distance. */
+    public int widestDefaultMiles() {
+        return Math.max(fallback.defaultMiles(), byCategory.values().stream().mapToInt(RadiusRule::defaultMiles)
+                .max().orElse(0));
     }
 
     /** Bounds for a provider's one radius: widest of the categories it offers (the fallback when none). */

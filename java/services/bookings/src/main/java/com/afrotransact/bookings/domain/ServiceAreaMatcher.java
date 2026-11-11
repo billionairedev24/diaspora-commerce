@@ -4,34 +4,30 @@ package com.afrotransact.bookings.domain;
  * The matching rule, pure and deterministic (see docs/engineering/service-areas.md). With d the straight-line
  * distance from the provider's base to the customer's ZIP centroid, a provider serves the customer when any holds:
  * <ol>
- *   <li>the service comes to the customer (AT_HOME) and d &lt;= the provider's radius;</li>
- *   <li>the customer goes to the provider (IN_PERSON) and d &lt;= min(radius, the platform's customer-travel
- *       limit);</li>
+ *   <li>the service comes to the customer (AT_HOME) and d &lt;= the provider's own declared radius: they cannot
+ *       travel farther, whatever the shopper chose;</li>
+ *   <li>the customer goes to the provider (IN_PERSON) and d is within the distance the shopper chose (any distance
+ *       when the shopper chose "Any"): the shopper decides how far to go, the platform sets no limit;</li>
  *   <li>the customer's ZIP, city or metro zone is one of the provider's named extra areas.</li>
  * </ol>
- * Otherwise a provider within the policy's nearest-fallback distance is NEAREST (shown, clearly labelled, only when
- * nobody serves the place), and anything farther is NONE. Distances are inclusive: exactly the radius still matches.
+ * Distances are inclusive: exactly the radius still matches.
  */
 public final class ServiceAreaMatcher {
 
     private ServiceAreaMatcher() {
     }
 
-    public static AreaMatch match(ServiceOffering offering, ServiceArea area, CustomerPlace customer, AreaPolicy policy,
-                                  Zones zones) {
+    public static AreaMatch match(ServiceOffering offering, ServiceArea area, CustomerPlace customer,
+                                  ShopperRadius shopper, Zones zones) {
         double miles = distanceMiles(area.lat(), area.lon(), customer.lat(), customer.lon());
         if (offering.modes().contains(ServiceMode.AT_HOME) && miles <= area.radiusMiles()) {
             return new AreaMatch(AreaMatch.Coverage.LOCAL, AreaMatch.Reason.RADIUS, miles);
         }
-        if (offering.modes().contains(ServiceMode.IN_PERSON)
-                && miles <= Math.min(area.radiusMiles(), policy.customerTravelMiles())) {
-            return new AreaMatch(AreaMatch.Coverage.LOCAL, AreaMatch.Reason.TRAVEL_LIMIT, miles);
+        if (offering.modes().contains(ServiceMode.IN_PERSON) && shopper.reaches(miles)) {
+            return new AreaMatch(AreaMatch.Coverage.LOCAL, AreaMatch.Reason.SHOPPER_RADIUS, miles);
         }
         if (area.extraAreas().stream().anyMatch(a -> a.covers(customer, zones))) {
             return new AreaMatch(AreaMatch.Coverage.LOCAL, AreaMatch.Reason.NAMED_AREA, miles);
-        }
-        if (policy.nearestMaxMiles() > 0 && miles <= policy.nearestMaxMiles()) {
-            return new AreaMatch(AreaMatch.Coverage.NEAREST, AreaMatch.Reason.NONE, miles);
         }
         return new AreaMatch(AreaMatch.Coverage.NONE, AreaMatch.Reason.NONE, miles);
     }

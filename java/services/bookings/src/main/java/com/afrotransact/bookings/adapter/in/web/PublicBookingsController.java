@@ -57,13 +57,11 @@ class PublicBookingsController {
     record AreaDto(String baseCity, String baseState,
                    @Schema(description = "Straight-line miles from the provider's base to the ZIP") double distanceMiles,
                    @Schema(description = "Metro zone of the base city, or null") String zone,
-                   @Schema(description = "Cities served, the searched city first") List<String> serves,
-                   @Schema(description = "true = outside the provider's usual coverage (a nearest suggestion)")
-                   boolean nearest) {
+                   @Schema(description = "Cities served, the searched city first") List<String> serves) {
 
         static AreaDto of(AreaView a) {
             return a == null ? null : new AreaDto(a.baseCity(), a.baseState(), a.distanceMiles(), a.zone(),
-                    a.serves(), a.nearest());
+                    a.serves());
         }
     }
 
@@ -97,18 +95,22 @@ class PublicBookingsController {
     record CategoryCountDto(String category, int count) {
     }
 
-    @Schema(name = "PublicServiceSearch", description = "services = providers that serve the place; nearest = only "
-            + "when none do, providers outside their usual coverage within the staff-set maximum (coverage NEAREST); "
-            + "categories = services per category that serve the place (hide a category with no services)")
-    record SearchResponse(PlaceDto place, @Schema(allowableValues = {"LOCAL", "NEAREST", "NONE", "ANY"}) String coverage,
-                          List<ListingDto> services, List<ListingDto> nearest, List<CategoryCountDto> categories) {
+    @Schema(name = "PublicServiceSearch", description = "services = providers that serve the place within the "
+            + "distance searched, nearest first; categories = services per category that serve the place (hide a "
+            + "category with no services); radiusMiles = the distance searched (0 = any distance)")
+    record SearchResponse(PlaceDto place, @Schema(allowableValues = {"LOCAL", "NONE", "ANY"}) String coverage,
+                          List<ListingDto> services, List<CategoryCountDto> categories,
+                          @Schema(description = "Miles searched for shops you go to; 0 = any distance")
+                          int radiusMiles,
+                          @Schema(description = "true = the category default, the shopper chose nothing")
+                          boolean radiusDefault) {
 
         static SearchResponse of(SearchResult r) {
             return new SearchResponse(r.place() == null ? null : new PlaceDto(r.place().zip(), r.place().city(),
                     r.place().state(), r.place().zone()), r.coverage(),
                     r.services().stream().map(ListingDto::of).toList(),
-                    r.nearest().stream().map(ListingDto::of).toList(),
-                    r.categories().stream().map(c -> new CategoryCountDto(c.category(), c.count())).toList());
+                    r.categories().stream().map(c -> new CategoryCountDto(c.category(), c.count())).toList(),
+                    r.radiusMiles(), r.radiusDefault());
         }
     }
 
@@ -168,21 +170,22 @@ class PublicBookingsController {
     }
 
     @Operation(summary = "Search in-person services near a ZIP, with the next free time",
-            description = "zip (5 digits) keeps providers that serve it: within the provider's radius (comes to "
-                    + "you), within min(radius, the customer-travel limit) (you go to them) or a named area/zone. "
-                    + "Nobody from another region is shown as local. When nothing serves the ZIP, nearest lists "
-                    + "providers outside their usual coverage within the staff-set maximum. sort: NEAREST "
-                    + "(default), SOONEST, PRICE, RATING. Without zip every provider is listed, no distance. "
-                    + "rating / ratingCount come from reviews of completed bookings. 422 bookings.invalid-zip, "
-                    + "502 bookings.geo-unavailable.")
+            description = "zip (5 digits) keeps providers that serve it: a service that comes to you (AT_HOME) "
+                    + "when the ZIP is inside the provider's own radius; a shop you go to (IN_PERSON) when it is "
+                    + "within radiusMiles of you (the shopper's choice: any value 1-1000, 0 = any distance; absent "
+                    + "= the category's staff-set default); or a named area/zone of the provider. Nearest first by "
+                    + "default; sort: NEAREST, SOONEST, PRICE, RATING. Without zip every provider is listed, no "
+                    + "distance. rating / ratingCount come from reviews of completed bookings. 422 "
+                    + "bookings.invalid-zip, bookings.invalid-radius, 502 bookings.geo-unavailable.")
     @GetMapping("/v1/public/services/search")
     ResponseEntity<SearchResponse> search(@RequestParam(required = false) String q,
                                           @RequestParam(required = false) String category,
                                           @RequestParam(required = false) String zip,
                                           @RequestParam(required = false) Sort sort,
+                                          @RequestParam(required = false) Integer radiusMiles,
                                           @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)).cachePublic())
-                .body(SearchResponse.of(catalog.search(new SearchQuery(q, category, zip, sort, size))));
+                .body(SearchResponse.of(catalog.search(new SearchQuery(q, category, zip, sort, size, radiusMiles))));
     }
 
     @Schema(name = "ServiceAlertRequest")
@@ -214,7 +217,7 @@ class PublicBookingsController {
                                                @RequestParam(required = false) String category,
                                                @RequestParam(required = false) String zip,
                                                @RequestParam(defaultValue = "10") int size) {
-        return search(q, category, zip, null, size);
+        return search(q, category, zip, null, null, size);
     }
 
     @Operation(summary = "A provider's booking page: services, policy and bookable team")

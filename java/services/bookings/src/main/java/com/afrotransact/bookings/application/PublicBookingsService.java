@@ -52,17 +52,18 @@ public interface PublicBookingsService {
      * @param distanceMiles base to the customer's ZIP centroid, one decimal
      * @param zone          the metro zone of the base city, or null
      * @param serves        cities served (the customer's first), for "Serves Georgetown, Hutto, Pflugerville"
-     * @param nearest       true when outside the provider's usual coverage (a suggestion, not a match)
      */
-    record AreaView(String baseCity, String baseState, double distanceMiles, String zone, List<String> serves,
-                    boolean nearest) {
+    record AreaView(String baseCity, String baseState, double distanceMiles, String zone, List<String> serves) {
     }
 
     /** Sort orders of the result list. */
     enum Sort { NEAREST, SOONEST, PRICE, RATING }
 
-    /** A search request. {@code zip} null = no location (every provider, no distance). */
-    record SearchQuery(String text, String category, String zip, Sort sort, int size) {
+    /**
+     * A search request. {@code zip} null = no location (every provider, no distance). {@code radiusMiles} is how far
+     * the shopper will go to a provider's shop: null = the category's default, 0 = any distance.
+     */
+    record SearchQuery(String text, String category, String zip, Sort sort, int size, Integer radiusMiles) {
     }
 
     /** The customer's place and its metro zone. */
@@ -74,12 +75,12 @@ public interface PublicBookingsService {
     }
 
     /**
-     * A location search. {@code coverage}: LOCAL (services serve the place), NEAREST (none do, {@code nearest} has
-     * providers outside their usual coverage, within the staff-set maximum), NONE (nothing, not even nearby), ANY (no
-     * location was given).
+     * A location search. {@code coverage}: LOCAL (services serve the place), NONE (nothing within reach), ANY (no
+     * location was given). {@code radiusMiles} is the distance searched (0 = any distance) and {@code radiusDefault}
+     * says it came from the category default, not from the shopper.
      */
-    record SearchResult(Place place, String coverage, List<Listing> services, List<Listing> nearest,
-                        List<CategoryCount> categories) {
+    record SearchResult(Place place, String coverage, List<Listing> services, List<CategoryCount> categories,
+                        int radiusMiles, boolean radiusDefault) {
     }
 
     /** A provider's public booking page. */

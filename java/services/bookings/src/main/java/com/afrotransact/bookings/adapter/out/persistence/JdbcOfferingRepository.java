@@ -126,14 +126,13 @@ class JdbcOfferingRepository implements OfferingRepository {
     }
 
     @Override
-    public List<ServiceOffering> searchNear(String text, double lat, double lon, int travelMiles, int nearestMiles,
-                                            int limit) {
+    public List<ServiceOffering> searchNear(String text, double lat, double lon, int reachMiles, int limit) {
         boolean hasText = text != null && !text.isBlank();
-        JdbcClient.StatementSpec spec = jdbc.sql(SELECT + LIVE + " and exists (select 1 from provider_service_area a"
-                + " where a.org_id = o.org_id and (" + Sql.HAVERSINE_MILES + " <= greatest(a.radius_miles, :travel,"
-                + " :nearest) or a.extra_areas <> cast('[]' as jsonb)))" + (hasText ? TEXT : "")
-                + " order by o.name, o.id limit :limit")
-                .param("lat", lat).param("lon", lon).param("travel", travelMiles).param("nearest", nearestMiles)
+        JdbcClient.StatementSpec spec = jdbc.sql(SELECT + " join provider_service_area a on a.org_id = o.org_id"
+                + LIVE + " and (:any or " + Sql.HAVERSINE_MILES + " <= greatest(a.radius_miles, :reach)"
+                + " or a.extra_areas <> cast('[]' as jsonb))" + (hasText ? TEXT : "")
+                + " order by " + Sql.HAVERSINE_MILES + ", o.name, o.id limit :limit")
+                .param("lat", lat).param("lon", lon).param("any", reachMiles == 0).param("reach", reachMiles)
                 .param("limit", limit);
         if (hasText) {
             spec = spec.param("q", like(text));

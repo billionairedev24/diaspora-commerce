@@ -25,6 +25,7 @@ import com.afrotransact.bookings.domain.ServiceArea;
 import com.afrotransact.bookings.domain.ServiceAreaMatcher;
 import com.afrotransact.bookings.domain.ServiceMode;
 import com.afrotransact.bookings.domain.ServiceOffering;
+import com.afrotransact.bookings.domain.ShopperRadius;
 import com.afrotransact.bookings.domain.ServiceZone;
 import com.afrotransact.bookings.domain.TeamMember;
 import com.afrotransact.bookings.domain.ZoneCity;
@@ -47,7 +48,6 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
     private static final int SEARCH_LOOKAHEAD_DAYS = 14;
     private static final int MAX_DAYS = 62;
     private static final int CANDIDATES = 300;
-    private static final int NEAREST_MAX_ITEMS = 6;
     private static final Pattern ZIP = Pattern.compile("^\\d{5}$");
 
     private final OfferingRepository offerings;
@@ -88,8 +88,11 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
         int size = Math.clamp(query.size(), 1, 50);
         Sort sort = query.sort() == null ? Sort.NEAREST : query.sort();
         Instant now = Instant.now(clock);
+        ShopperRadius chosen = query.radiusMiles() == null ? null : new ShopperRadius(query.radiusMiles());
+        AreaPolicy policy = areaConfig.policy();
+        int searched = chosen != null ? chosen.miles() : policy.ruleFor(category).defaultMiles();
         if (zip == null || zip.isEmpty()) {
-            return searchAnywhere(query.text(), category, sort, size, now);
+            return searchAnywhere(query.text(), category, sort, size, now, searched, chosen == null);
         }
         if (!ZIP.matcher(zip).matches()) {
             throw new BookingsRuleViolation("bookings.invalid-zip", "Enter a 5-digit ZIP code",
@@ -97,38 +100,33 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
         }
         Optional<CustomerPlace> found = geo.place(zip);
         if (found.isEmpty()) {
-            return new SearchResult(new Place(zip, "", "", null), "NONE", List.of(), List.of(), List.of());
+            return new SearchResult(new Place(zip, "", "", null), "NONE", List.of(), List.of(), searched,
+                    chosen == null);
         }
         CustomerPlace place = found.get();
-        AreaPolicy policy = areaConfig.policy();
         Zones zones = new Zones(areaConfig.zones());
         List<ServiceOffering> candidates = offerings.searchNear(query.text(), place.lat(), place.lon(),
-                policy.customerTravelMiles(), policy.nearestMaxMiles(), CANDIDATES);
+                chosen != null ? chosen.miles() : policy.widestDefaultMiles(), CANDIDATES);
         Map<String, ServiceArea> areas = areaRepo.byOrgs(candidates.stream().map(ServiceOffering::orgId).distinct()
                 .toList());
         List<Hit> local = new ArrayList<>();
-        List<Hit> nearby = new ArrayList<>();
         for (ServiceOffering o : candidates) {
             ServiceArea area = areas.get(o.orgId());
             if (area == null) {
                 continue;
             }
-            AreaMatch m = ServiceAreaMatcher.match(o, area, place, policy, zones);
+            ShopperRadius reach = chosen != null ? chosen : new ShopperRadius(policy.ruleFor(o.category())
+                    .defaultMiles());
+            AreaMatch m = ServiceAreaMatcher.match(o, area, place, reach, zones);
             if (m.local()) {
                 local.add(new Hit(o, area, m));
-            } else if (m.coverage() == AreaMatch.Coverage.NEAREST) {
-                nearby.add(new Hit(o, area, m));
             }
         }
         List<CategoryCount> categories = categoryCounts(local);
-        List<Hit> shown = inCategory(local, category);
-        List<Hit> suggested = shown.isEmpty() ? inCategory(nearby, category) : List.of();
-        String coverage = !shown.isEmpty() ? "LOCAL" : !suggested.isEmpty() ? "NEAREST" : "NONE";
         String zoneName = zones.ofCity(place.city(), place.state()).map(ServiceZone::name).orElse(null);
-        return new SearchResult(new Place(zip, place.city(), place.state(), zoneName), coverage,
-                listings(shown, sort, size, place, zones, now, false),
-                listings(suggested, Sort.NEAREST, Math.min(size, NEAREST_MAX_ITEMS), place, zones, now, true),
-                categories);
+        List<Hit> shown = inCategory(local, category);
+        return new SearchResult(new Place(zip, place.city(), place.state(), zoneName), shown.isEmpty() ? "NONE"
+                : "LOCAL", listings(shown, sort, size, place, zones, now), categories, searched, chosen == null);
     }
 
     @Override
@@ -140,11 +138,12 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
         return offerings.suggestions(text, Math.clamp(limit, 1, 20));
     }
 
-    private SearchResult searchAnywhere(String text, String category, Sort sort, int size, Instant now) {
+    private SearchResult searchAnywhere(String text, String category, Sort sort, int size, Instant now, int searched,
+                                        boolean radiusDefault) {
         List<Hit> all = offerings.search(text, CANDIDATES).stream()
                 .map(o -> new Hit(o, null, null)).toList();
         return new SearchResult(null, "ANY", listings(inCategory(all, category), sort == Sort.NEAREST ? Sort.PRICE
-                : sort, size, null, Zones.NONE, now, false), List.of(), categoryCounts(all));
+                : sort, size, null, Zones.NONE, now), categoryCounts(all), searched, radiusDefault);
     }
 
     private static List<Hit> inCategory(List<Hit> hits, String category) {
@@ -159,14 +158,14 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
                         .thenComparing(CategoryCount::category)).toList();
     }
 
-    private List<Listing> listings(List<Hit> hits, Sort sort, int size, CustomerPlace place, Zones zones, Instant now,
-                                   boolean nearest) {
+    private List<Listing> listings(List<Hit> hits, Sort sort, int size, CustomerPlace place, Zones zones,
+                                   Instant now) {
         Map<UUID, RatingSummary> ratings = reviews.summaries(hits.stream().map(h -> h.offering().id()).toList());
         List<Listing> all = new ArrayList<>();
         for (Hit h : hits) {
             providers.find(h.offering().orgId()).ifPresent(p -> all.add(new Listing(h.offering(), p,
                     needsAvailability(sort) ? nextAvailable(p, h.offering(), now) : null,
-                    ratings.getOrDefault(h.offering().id(), RatingSummary.NONE), areaView(h, place, zones, nearest))));
+                    ratings.getOrDefault(h.offering().id(), RatingSummary.NONE), areaView(h, place, zones))));
         }
         all.sort(order(sort));
         List<Listing> page = all.size() > size ? all.subList(0, size) : all;
@@ -200,27 +199,25 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
         };
     }
 
-    private static AreaView areaView(Hit h, CustomerPlace place, Zones zones, boolean nearest) {
+    private static AreaView areaView(Hit h, CustomerPlace place, Zones zones) {
         if (h.area() == null || place == null) {
             return null;
         }
         ServiceArea a = h.area();
         List<String> serves = new ArrayList<>();
-        if (!nearest && !place.city().isEmpty()) {
+        if (!place.city().isEmpty()) {
             serves.add(label(place.city(), place.state(), a.baseState()));
         }
-        if (!nearest) {
-            for (ZoneCity c : a.servedCities()) {
-                String l = label(c.city(), c.state(), a.baseState());
-                if (!serves.contains(l)) {
-                    serves.add(l);
-                }
+        for (ZoneCity c : a.servedCities()) {
+            String l = label(c.city(), c.state(), a.baseState());
+            if (!serves.contains(l)) {
+                serves.add(l);
             }
         }
         double miles = Math.round(h.match().miles() * 10) / 10.0;
         return new AreaView(a.baseCity(), a.baseState(), miles,
                 zones.ofCity(a.baseCity(), a.baseState()).map(ServiceZone::name).orElse(null),
-                List.copyOf(serves), nearest);
+                List.copyOf(serves));
     }
 
     private static String label(String city, String state, String homeState) {

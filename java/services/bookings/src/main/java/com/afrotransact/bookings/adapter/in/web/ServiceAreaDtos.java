@@ -76,21 +76,21 @@ final class ServiceAreaDtos {
         }
     }
 
-    @Schema(name = "AreaPolicy", description = "Staff-set service-area rules")
-    record PolicyDto(@NotEmpty Map<String, @Valid RadiusRuleDto> byCategory, @NotNull @Valid RadiusRuleDto fallback,
-                     @Min(1) @Max(150) int customerTravelMiles, @Min(0) @Max(300) int nearestMaxMiles) {
+    @Schema(name = "AreaPolicy", description = "Staff-set default search radius by category (a default for "
+            + "shoppers, never a limit) and the bounds of a provider's declared radius")
+    record PolicyDto(@NotEmpty Map<String, @Valid RadiusRuleDto> byCategory, @NotNull @Valid RadiusRuleDto fallback) {
 
         AreaPolicy toDomain() {
             Map<String, RadiusRule> m = new LinkedHashMap<>();
             byCategory.forEach((k, v) -> m.put(k, v.toDomain()));
-            return new AreaPolicy(m, fallback.toDomain(), customerTravelMiles, nearestMaxMiles);
+            return new AreaPolicy(m, fallback.toDomain());
         }
 
         static PolicyDto of(AreaPolicy p) {
             Map<String, RadiusRuleDto> m = new LinkedHashMap<>();
             p.byCategory().entrySet().stream().sorted(Map.Entry.comparingByKey())
                     .forEach(e -> m.put(e.getKey(), RadiusRuleDto.of(e.getValue())));
-            return new PolicyDto(m, RadiusRuleDto.of(p.fallback()), p.customerTravelMiles(), p.nearestMaxMiles());
+            return new PolicyDto(m, RadiusRuleDto.of(p.fallback()));
         }
     }
 
@@ -121,14 +121,14 @@ final class ServiceAreaDtos {
     }
 
     @Schema(name = "ServiceAreaView", description = "The saved area (null before the first save), the radius bounds "
-            + "for this provider's services, the platform's customer-travel limit and the zones to choose from")
-    record AreaViewResponse(AreaResponse area, RadiusRuleDto bounds, int customerTravelMiles, List<ZoneDto> zones,
+            + "for this provider's services (how far they travel to customers) and the zones to choose from")
+    record AreaViewResponse(AreaResponse area, RadiusRuleDto bounds, List<ZoneDto> zones,
                             @Schema(description = "Service categories with their staff-set radius rules (the "
                                     + "categories a service can be listed under)") List<CategoryRuleDto> categories) {
 
         static AreaViewResponse of(AreaView v) {
             return new AreaViewResponse(v.area() == null ? null : AreaResponse.of(v.area(), v.zones()),
-                    RadiusRuleDto.of(v.bounds()), v.policy().customerTravelMiles(),
+                    RadiusRuleDto.of(v.bounds()),
                     v.zones().stream().map(ZoneDto::of).toList(),
                     v.policy().byCategory().entrySet().stream().sorted(Map.Entry.comparingByKey())
                             .map(e -> new CategoryRuleDto(e.getKey(), RadiusRuleDto.of(e.getValue()))).toList());

@@ -15,7 +15,7 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * Service areas end to end on PostgreSQL: the haversine candidate query, the matching rules, the metro-zone labels,
- * the nearest fallback, category counts, sorting, in-person-only validation and the staff policy.
+ * the shopper's chosen search distance, category counts, sorting, in-person-only validation and the staff policy.
  */
 class ServiceAreasIT extends BookingsIntegrationTest {
 
@@ -62,8 +62,8 @@ class ServiceAreasIT extends BookingsIntegrationTest {
         assertThat(first.path("area").path("baseCity").asString()).isEqualTo("Hutto");
         assertThat(first.path("area").path("distanceMiles").asDouble()).isBetween(5.0, 10.0);
         assertThat(first.path("area").path("serves").get(0).asString()).isEqualTo("Georgetown");
-        assertThat(first.path("area").path("nearest").asBoolean()).isFalse();
-        assertThat(r.path("nearest").size()).isZero();
+        assertThat(r.path("radiusMiles").asInt()).as("no category: the general default").isEqualTo(25);
+        assertThat(r.path("radiusDefault").asBoolean()).isTrue();
         assertThat(r.path("categories").get(0).path("category").asString()).isEqualTo("hair & beauty");
         assertThat(r.path("categories").get(0).path("count").asInt()).isEqualTo(2);
 
@@ -80,32 +80,71 @@ class ServiceAreasIT extends BookingsIntegrationTest {
     }
 
     @Test
-    void nothingServingThePlaceGivesTheNearestWithinTheMaximumOrNothing() {
+    void theShopperChoosesHowFarToGoAndTheCategoryDefaultAppliesUntilThen() {
         String token = "near" + UUID.randomUUID().toString().substring(0, 8);
+        // Austin is ~28 mi from Georgetown; the provider's own 5 mi radius only limits trips to customers.
         Setup austin = placed("78701", 5, token, "tailor austin", "tailoring", 22_000, List.of("IN_PERSON"));
-        placed("11211", 25, token, "tailor brooklyn", "tailoring", 22_000, List.of("IN_PERSON"));
+        Setup austinHome = placed("78701", 5, token, "tailor home", "tailoring", 22_000, List.of("AT_HOME"));
+        Setup brooklyn = placed("11211", 25, token, "tailor brooklyn", "tailoring", 22_000, List.of("IN_PERSON"));
+        String base = "/v1/public/services/search?q=" + token + "&zip=78626&category=tailoring";
 
-        JsonNode r = ok(send("GET", "/v1/public/services/search?q=" + token + "&zip=78626&category=tailoring", null,
-                null));
-        assertThat(r.path("services").size()).isZero();
-        assertThat(r.path("coverage").asString()).isEqualTo("NEAREST");
-        assertThat(r.path("nearest").size()).isEqualTo(1);
-        JsonNode n = r.path("nearest").get(0);
-        assertThat(n.path("orgId").asString()).isEqualTo(austin.org());
-        assertThat(n.path("area").path("nearest").asBoolean()).isTrue();
-        assertThat(n.path("area").path("distanceMiles").asDouble()).isBetween(20.0, 35.0);
-        assertThat(r.path("categories").size()).as("no category serves Georgetown").isZero();
+        JsonNode byDefault = ok(send("GET", base, null, null));
+        assertThat(byDefault.path("radiusMiles").asInt()).as("tailoring default").isEqualTo(25);
+        assertThat(byDefault.path("radiusDefault").asBoolean()).isTrue();
+        assertThat(byDefault.path("coverage").asString()).isEqualTo("NONE");
+        assertThat(byDefault.path("services").size()).isZero();
+        assertThat(byDefault.has("nearest")).as("no nearest list any more").isFalse();
+        assertThat(byDefault.path("categories").size()).isZero();
+
+        JsonNode fifty = ok(send("GET", base + "&radiusMiles=50", null, null));
+        assertThat(fifty.path("radiusMiles").asInt()).isEqualTo(50);
+        assertThat(fifty.path("radiusDefault").asBoolean()).isFalse();
+        assertThat(fifty.path("coverage").asString()).isEqualTo("LOCAL");
+        assertThat(fifty.path("services").size()).isEqualTo(1);
+        JsonNode hit = fifty.path("services").get(0);
+        assertThat(hit.path("orgId").asString()).isEqualTo(austin.org());
+        assertThat(hit.path("area").path("distanceMiles").asDouble()).isBetween(20.0, 35.0);
+        assertThat(ok(send("GET", base + "&radiusMiles=10", null, null)).path("services").size()).isZero();
+
+        JsonNode any = ok(send("GET", base + "&radiusMiles=0", null, null));
+        assertThat(any.path("radiusMiles").asInt()).isZero();
+        assertThat(any.path("services").valueStream().map(n -> n.path("orgId").asString()).toList())
+                .containsExactly(austin.org(), brooklyn.org());
+        assertThat(any.path("services").get(1).path("area").path("distanceMiles").asDouble()).isGreaterThan(1_400);
+        assertThat(any.path("services").valueStream().map(n -> n.path("orgId").asString()).toList())
+                .as("a provider who comes to the customer keeps their own radius at any distance")
+                .doesNotContain(austinHome.org());
 
         JsonNode houston = ok(send("GET", "/v1/public/services/search?q=" + token + "&zip=77002", null, null));
         assertThat(houston.path("coverage").asString()).isEqualTo("NONE");
         assertThat(houston.path("services").size()).isZero();
-        assertThat(houston.path("nearest").size()).isZero();
 
         JsonNode unknown = ok(send("GET", "/v1/public/services/search?zip=99999", null, null));
         assertThat(unknown.path("coverage").asString()).isEqualTo("NONE");
         problem(send("GET", "/v1/public/services/search?zip=7700", null, null), 422, "bookings.invalid-zip");
+        problem(send("GET", base + "&radiusMiles=-5", null, null), 422, "bookings.invalid-radius");
+        problem(send("GET", base + "&radiusMiles=5000", null, null), 422, "bookings.invalid-radius");
         GEO.stubFor(WireMock.get(WireMock.urlEqualTo("/v1/zip/10001")).willReturn(WireMock.serverError()));
         problem(send("GET", "/v1/public/services/search?zip=10001", null, null), 502, "bookings.geo-unavailable");
+    }
+
+    @Test
+    void eachCategoryHasItsOwnDefaultRadiusWhenNothingIsChosen() {
+        String token = "dflt" + UUID.randomUUID().toString().substring(0, 8);
+        // From Georgetown: Hutto ~9 mi, Austin ~28 mi. Hair default 20, catering default 40 (shop-type services).
+        placed("78701", 5, token, "salon", "hair & beauty", 9_000, List.of("IN_PERSON"));
+        placed("78701", 5, token, "kitchen", "catering", 9_000, List.of("IN_PERSON"));
+        JsonNode hair = ok(send("GET", "/v1/public/services/search?q=" + token + "&zip=78626&category=hair%20%26%20beauty",
+                null, null));
+        assertThat(hair.path("radiusMiles").asInt()).isEqualTo(20);
+        assertThat(hair.path("services").size()).isZero();
+        JsonNode catering = ok(send("GET", "/v1/public/services/search?q=" + token + "&zip=78626&category=catering",
+                null, null));
+        assertThat(catering.path("radiusMiles").asInt()).isEqualTo(40);
+        assertThat(catering.path("services").size()).isEqualTo(1);
+        JsonNode all = ok(send("GET", "/v1/public/services/search?q=" + token + "&zip=78626", null, null));
+        assertThat(all.path("categories").size()).as("chips never list a zero").isEqualTo(1);
+        assertThat(all.path("categories").get(0).path("category").asString()).isEqualTo("catering");
     }
 
     @Test
@@ -136,15 +175,15 @@ class ServiceAreasIT extends BookingsIntegrationTest {
         assertThat(jdbc.sql("select count(*) from service_alert where email = :e").param("e", email)
                 .query(Long.class).single()).isEqualTo(1);
 
-        placed("78701", 40, "alert", "suit tailoring", "hair & beauty", 20_000, List.of("IN_PERSON"));
+        placed("78664", 40, "alert", "suit tailoring", "hair & beauty", 20_000, List.of("IN_PERSON"));
         assertThat(outboxTypes(alert.toString())).as("a hair provider does not match a tailoring alert").isEmpty();
-        Setup tailor = placed("78701", 40, "alert", "suit tailoring", "tailoring", 20_000, List.of("IN_PERSON"));
+        Setup tailor = placed("78664", 40, "alert", "suit tailoring", "tailoring", 20_000, List.of("IN_PERSON"));
         assertThat(outboxTypes(alert.toString())).containsExactly("booking.service_alert");
         String payload = jdbc.sql("select payload::text from platform_outbox where aggregate_id = :id")
                 .param("id", alert.toString()).query(String.class).single();
         assertThat(payload).contains(email).contains("\"locale\": \"fr\"").contains("tailoring");
         TestSupport.as(TestSupport.owner(tailor.org()));
-        ok(send("PUT", "/v1/providers/" + tailor.org() + "/service-area", Map.of("baseZip", "78701", "radiusMiles", 30)));
+        ok(send("PUT", "/v1/providers/" + tailor.org() + "/service-area", Map.of("baseZip", "78664", "radiusMiles", 30)));
         assertThat(outboxTypes(alert.toString())).as("emailed once").hasSize(1);
     }
 
@@ -155,7 +194,7 @@ class ServiceAreasIT extends BookingsIntegrationTest {
         JsonNode empty = ok(send("GET", "/v1/providers/" + s.org() + "/service-area", null, null));
         assertThat(empty.path("area").isNull()).isTrue();
         assertThat(empty.path("bounds").path("maxMiles").asInt()).isEqualTo(40);
-        assertThat(empty.path("customerTravelMiles").asInt()).isEqualTo(30);
+        assertThat(empty.has("customerTravelMiles")).as("no customer travel limit any more").isFalse();
 
         JsonNode saved = ok(send("PUT", "/v1/providers/" + s.org() + "/service-area", Map.of("baseZip", "78664",
                 "radiusMiles", 20, "extraAreas", List.of(Map.of("kind", "CITY", "value", "Taylor", "state", "TX"),
@@ -209,12 +248,15 @@ class ServiceAreasIT extends BookingsIntegrationTest {
         Map<String, Object> body = JSON.convertValue(policy, Map.class);
         assertThat(send("PUT", "/v1/staff/service-areas/policy", Map.of("policy", body, "reason", "")).statusCode())
                 .isEqualTo(400);
-        body.put("nearestMaxMiles", 45);
-        ok(send("PUT", "/v1/staff/service-areas/policy", Map.of("policy", body, "reason", "Tighten nearest fallback")));
-        assertThat(ok(send("GET", "/v1/staff/service-areas/policy", null, null)).path("nearestMaxMiles").asInt())
-                .isEqualTo(45);
-        body.put("nearestMaxMiles", 60);
-        ok(send("PUT", "/v1/staff/service-areas/policy", Map.of("policy", body, "reason", "Restore default")));
+        assertThat(policy.has("customerTravelMiles") || policy.has("nearestMaxMiles")).as("defaults, not limits")
+                .isFalse();
+        Map<String, Object> original = Map.copyOf(body);
+        body.put("fallback", Map.of("defaultMiles", 30, "minMiles", 5, "maxMiles", 60));
+        ok(send("PUT", "/v1/staff/service-areas/policy", Map.of("policy", body, "reason", "Wider default radius")));
+        assertThat(ok(send("GET", "/v1/staff/service-areas/policy", null, null)).path("fallback")
+                .path("defaultMiles").asInt()).isEqualTo(30);
+        ok(send("PUT", "/v1/staff/service-areas/policy", Map.of("policy", original, "reason", "Restore default")));
+        body.putAll(original);
 
         ok(send("PUT", "/v1/staff/service-areas/zones/it-zone", Map.of("reason", "Add a test zone", "zone",
                 Map.of("key", "it-zone", "name", "IT zone", "cities", List.of(Map.of("city", "Taylor", "state", "TX"))))));

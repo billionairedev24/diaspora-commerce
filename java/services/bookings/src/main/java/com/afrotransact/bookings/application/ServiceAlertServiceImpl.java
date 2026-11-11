@@ -16,6 +16,7 @@ import com.afrotransact.bookings.domain.Provider;
 import com.afrotransact.bookings.domain.ServiceArea;
 import com.afrotransact.bookings.domain.ServiceAreaMatcher;
 import com.afrotransact.bookings.domain.ServiceOffering;
+import com.afrotransact.bookings.domain.ShopperRadius;
 import com.afrotransact.bookings.domain.Zones;
 import com.afrotransact.bookings.port.GeoClient;
 import com.afrotransact.bookings.port.OfferingRepository;
@@ -90,12 +91,15 @@ class ServiceAlertServiceImpl implements ServiceAlertService {
         }
         AreaPolicy policy = config.policy();
         Zones zones = new Zones(config.zones());
-        int reach = Math.max(area.get().radiusMiles(), policy.customerTravelMiles());
+        // An alert has no chosen distance: a shop-type service serves it within the category's default radius, a
+        // service that comes to the customer within the provider's own radius.
+        int reach = Math.max(area.get().radiusMiles(), policy.widestDefaultMiles());
         for (Alert a : alerts.openNear(area.get().lat(), area.get().lon(), reach)) {
             CustomerPlace place = new CustomerPlace(a.zip(), a.city(), a.state(), a.lat(), a.lon());
             for (ServiceOffering o : offerings.byOrg(orgId, true)) {
                 boolean categoryOk = a.category() == null || a.category().equals(o.category());
-                if (categoryOk && ServiceAreaMatcher.match(o, area.get(), place, policy, zones).coverage()
+                if (categoryOk && ServiceAreaMatcher.match(o, area.get(), place,
+                        new ShopperRadius(policy.ruleFor(o.category()).defaultMiles()), zones).coverage()
                         == AreaMatch.Coverage.LOCAL) {
                     events.publish(BookingsEvents.SERVICE_ALERT, BookingsEvents.AGGREGATE, a.id().toString(),
                             ServiceAlertPayload.of(a, o, provider.get(), settings.serviceUrlBase()));
