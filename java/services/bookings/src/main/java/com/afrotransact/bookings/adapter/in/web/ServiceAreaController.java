@@ -58,38 +58,38 @@ class ServiceAreaController {
         return PreviewResponse.of(areas.preview(orgId, zip, radiusMiles));
     }
 
-    @Operation(summary = "Staff: radius policy (bookings:service-areas:manage)")
+    @Operation(summary = "Staff: radius policy (content:markets.edit)")
     @GetMapping("/v1/staff/service-areas/policy")
     PolicyDto serviceAreaPolicy() {
         return PolicyDto.of(admin.policy());
     }
 
-    @Operation(summary = "Staff: change the radius policy with a reason (bookings:service-areas:manage)")
+    @Operation(summary = "Staff: change the radius policy with a reason (content:markets.edit)")
     @PutMapping("/v1/staff/service-areas/policy")
     PolicyDto saveServiceAreaPolicy(@Valid @RequestBody PolicyChange body) {
         return PolicyDto.of(admin.savePolicy(body.policy().toDomain(), body.reason()));
     }
 
-    @Operation(summary = "Staff: metro zones (bookings:service-areas:manage)")
+    @Operation(summary = "Staff: metro zones (content:markets.edit)")
     @GetMapping("/v1/staff/service-areas/zones")
     List<ZoneDto> serviceZones() {
         return admin.zones().stream().map(ZoneDto::of).toList();
     }
 
-    @Operation(summary = "Staff: create or replace a metro zone with a reason (bookings:service-areas:manage)")
+    @Operation(summary = "Staff: create or replace a metro zone with a reason (content:markets.edit)")
     @PutMapping("/v1/staff/service-areas/zones/{key}")
     ZoneDto saveServiceZone(@PathVariable String key, @Valid @RequestBody ZoneChange body) {
         ServiceZone z = new ZoneDto(key, body.zone().name(), body.zone().cities()).toDomain();
         return ZoneDto.of(admin.saveZone(z, body.reason()));
     }
 
-    @Operation(summary = "Staff: delete a metro zone with a reason (bookings:service-areas:manage)")
+    @Operation(summary = "Staff: delete a metro zone with a reason (content:markets.edit)")
     @DeleteMapping("/v1/staff/service-areas/zones/{key}")
     void deleteServiceZone(@PathVariable String key, @RequestParam String reason) {
         admin.deleteZone(key, reason);
     }
 
-    @Operation(summary = "Staff: who changed policy and zones, and why (bookings:service-areas:manage)")
+    @Operation(summary = "Staff: who changed policy and zones, and why (content:markets.edit)")
     @GetMapping("/v1/staff/service-areas/audit")
     List<AuditDto> serviceAreaAudit(@RequestParam(defaultValue = "50") int limit) {
         return admin.audit(limit).stream().map(a -> new AuditDto(a.at(), a.actor(), a.subject(), a.reason())).toList();

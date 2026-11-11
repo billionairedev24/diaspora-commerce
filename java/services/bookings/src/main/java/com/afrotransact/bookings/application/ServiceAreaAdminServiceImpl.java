@@ -29,14 +29,14 @@ class ServiceAreaAdminServiceImpl implements ServiceAreaAdminService {
     @Override
     @Transactional(readOnly = true)
     public AreaPolicy policy() {
-        staff();
+        staff(BookingsPermissions.SERVICE_AREAS_VIEW);
         return config.policy();
     }
 
     @Override
     @Transactional
     public AreaPolicy savePolicy(AreaPolicy policy, String reason) {
-        Actor actor = staff();
+        Actor actor = staff(BookingsPermissions.SERVICE_AREAS_MANAGE);
         config.savePolicy(policy);
         config.audit(actor.subject(), "policy", reasonOf(reason), policy);
         return config.policy();
@@ -45,14 +45,14 @@ class ServiceAreaAdminServiceImpl implements ServiceAreaAdminService {
     @Override
     @Transactional(readOnly = true)
     public List<ServiceZone> zones() {
-        staff();
+        staff(BookingsPermissions.SERVICE_AREAS_VIEW);
         return config.zones();
     }
 
     @Override
     @Transactional
     public ServiceZone saveZone(ServiceZone zone, String reason) {
-        Actor actor = staff();
+        Actor actor = staff(BookingsPermissions.SERVICE_AREAS_MANAGE);
         config.saveZone(zone);
         config.audit(actor.subject(), "zone:" + zone.key(), reasonOf(reason), zone);
         return zone;
@@ -61,7 +61,7 @@ class ServiceAreaAdminServiceImpl implements ServiceAreaAdminService {
     @Override
     @Transactional
     public void deleteZone(String key, String reason) {
-        Actor actor = staff();
+        Actor actor = staff(BookingsPermissions.SERVICE_AREAS_MANAGE);
         String why = reasonOf(reason);
         if (!config.deleteZone(key)) {
             throw new NotFoundException("bookings.zone-not-found", "Zone " + key + " not found");
@@ -72,13 +72,13 @@ class ServiceAreaAdminServiceImpl implements ServiceAreaAdminService {
     @Override
     @Transactional(readOnly = true)
     public List<AuditEntry> audit(int limit) {
-        staff();
+        staff(BookingsPermissions.SERVICE_AREAS_VIEW);
         return config.auditTrail(Math.clamp(limit, 1, 200));
     }
 
     /** Staff only (principal type STAFF, or a platform administrator holding every permission). */
-    private Actor staff() {
-        Actor actor = permissions.require(BookingsPermissions.SERVICE_AREAS_MANAGE);
+    private Actor staff(String permission) {
+        Actor actor = permissions.require(permission);
         if (!BookingsAccess.isStaff(actor) && !actor.permissions().contains("*")) {
             throw new ForbiddenActionException("bookings.service-areas-staff-only",
                     "Only staff can change service-area settings");

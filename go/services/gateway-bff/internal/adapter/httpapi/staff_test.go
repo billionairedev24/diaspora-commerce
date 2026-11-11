@@ -642,6 +642,13 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/settings/summary":
 		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
 			map[string]any{"key": "payout.minimum", "label": "Smallest payout a seller can request", "value": "$25.00", "help": "Requests below it are refused.", "source": "PAYOUT_MINIMUM_MINOR"}})
+	case p == "/v1/staff/service-areas/policy":
+		writeJ(w, 200, map[string]any{"byCategory": map[string]any{"hair & beauty": map[string]any{"defaultMiles": 20, "minMiles": 5, "maxMiles": 40}, "catering": map[string]any{"defaultMiles": 40, "minMiles": 10, "maxMiles": 100}},
+			"fallback": map[string]any{"defaultMiles": 25, "minMiles": 5, "maxMiles": 60}, "customerTravelMiles": 30, "nearestMaxMiles": 60})
+	case p == "/v1/staff/service-areas/zones":
+		writeJ(w, 200, []any{map[string]any{"key": "greater-austin", "name": "Greater Austin", "cities": []any{map[string]any{"city": "Georgetown", "state": "TX"}, map[string]any{"city": "Round Rock", "state": "TX"}}}})
+	case strings.HasPrefix(p, "/v1/staff/service-areas/"):
+		writeJ(w, 200, body)
 	case p == "/v1/tax/nexus":
 		writeJ(w, 200, map[string]any{"through": "2026-10", "windowMonths": 12, "defaultSalesThresholdMinor": 10000000, "states": []any{
 			map[string]any{"jurisdiction": "US-TX", "name": "Texas", "facilitator": true, "salesMinor": 12000000, "orders": 340, "salesThresholdMinor": 10000000, "percent": 120, "status": "EXCEEDED", "registered": false, "customised": false},

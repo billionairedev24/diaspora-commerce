@@ -1723,7 +1723,7 @@ paths:
     get:
       tags:
       - Service areas
-      summary: 'Staff: who changed policy and zones, and why (bookings:service-areas:manage)'
+      summary: 'Staff: who changed policy and zones, and why (content:markets.edit)'
       operationId: serviceAreaAudit
       parameters:
       - name: limit
@@ -1746,7 +1746,7 @@ paths:
     get:
       tags:
       - Service areas
-      summary: 'Staff: radius policy (bookings:service-areas:manage)'
+      summary: 'Staff: radius policy (content:markets.edit)'
       operationId: serviceAreaPolicy
       responses:
         '200':
@@ -1758,7 +1758,7 @@ paths:
     put:
       tags:
       - Service areas
-      summary: 'Staff: change the radius policy with a reason (bookings:service-areas:manage)'
+      summary: 'Staff: change the radius policy with a reason (content:markets.edit)'
       operationId: saveServiceAreaPolicy
       requestBody:
         content:
@@ -1777,7 +1777,7 @@ paths:
     get:
       tags:
       - Service areas
-      summary: 'Staff: metro zones (bookings:service-areas:manage)'
+      summary: 'Staff: metro zones (content:markets.edit)'
       operationId: serviceZones
       responses:
         '200':
@@ -1792,7 +1792,7 @@ paths:
     put:
       tags:
       - Service areas
-      summary: 'Staff: create or replace a metro zone with a reason (bookings:service-areas:manage)'
+      summary: 'Staff: create or replace a metro zone with a reason (content:markets.edit)'
       operationId: saveServiceZone
       parameters:
       - name: key
@@ -1816,7 +1816,7 @@ paths:
     delete:
       tags:
       - Service areas
-      summary: 'Staff: delete a metro zone with a reason (bookings:service-areas:manage)'
+      summary: 'Staff: delete a metro zone with a reason (content:markets.edit)'
       operationId: deleteServiceZone
       parameters:
       - name: key
@@ -2374,6 +2374,13 @@ components:
           minItems: 0
       required:
       - baseZip
+    CategoryRadiusRule:
+      type: object
+      properties:
+        category:
+          type: string
+        rule:
+          $ref: '#/components/schemas/RadiusRule'
     ServiceArea:
       type: object
       properties:
@@ -2412,6 +2419,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ServiceZone'
+        categories:
+          type: array
+          description: Service categories with their staff-set radius rules (the categories a service can be listed under)
+          items:
+            $ref: '#/components/schemas/CategoryRadiusRule'
     CancellationPolicyRequest:
       type: object
       properties:

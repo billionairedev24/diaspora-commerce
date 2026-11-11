@@ -22,10 +22,15 @@ public final class BookingsPermissions {
      */
     public static final String REVIEWS_MODERATE = "bookings:reviews:moderate";
     /**
-     * Staff edit the service-area policy (radius defaults, minimums, maximums, customer-travel and nearest-fallback
-     * distances) and the metro zones, always with a reason. Staff principals only.
+     * Staff read the service-area policy and the metro zones: the Markets &amp; locations view permission
+     * (identity V5__content_permissions), so no new grant is needed.
      */
-    public static final String SERVICE_AREAS_MANAGE = "bookings:service-areas:manage";
+    public static final String SERVICE_AREAS_VIEW = "content:markets.view";
+    /**
+     * Staff change the service-area policy (radius defaults, minimums, maximums, customer-travel and nearest-fallback
+     * distances) and the metro zones, always with a reason: the Markets &amp; locations edit permission.
+     */
+    public static final String SERVICE_AREAS_MANAGE = "content:markets.edit";
 
     /** Identity role keys used to scope practitioners to their own calendar. */
     public static final String ROLE_OWNER = "provider.owner";

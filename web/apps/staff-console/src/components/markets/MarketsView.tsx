@@ -19,6 +19,7 @@ import { treePrimary } from '@/components/locations/PlacePicker';
 import { type StatusOption, type TreeCountry, type TreeRegion } from '@/components/locations/tree-model';
 import { ModulePage } from '@/components/module/ModulePage';
 import { Toggle } from '@/components/preorders/primitives';
+import { ResourceTable } from '@/components/resources/ResourceTable';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { staffApi } from '@/lib/api';
 
@@ -191,6 +192,28 @@ export function MarketsTree({ api }: { api: StaffMarketsApi }) {
   );
 }
 
+/** Where providers work: the radius a provider may choose per service category and the metro zones results name ("Serves Greater Austin"). */
+function ServiceAreaSettings() {
+  return (
+    <section aria-label="Service areas" className="flex flex-col gap-6" data-testid="service-area-settings">
+      <div className="flex flex-col gap-2">
+        <h2 className="m-0 text-lg font-semibold">Service areas</h2>
+        <p className="m-0 max-w-[80ch] text-sm text-muted">
+          Services are in person only. A provider sets a base location and a radius within the limits below; a customer sees providers whose area covers them, nearest first. Every change needs a reason and is kept in the audit trail.
+        </p>
+      </div>
+      <div className="flex flex-col gap-3">
+        <h3 className="m-0 text-base font-semibold">Radius rules</h3>
+        <ResourceTable resource="service-area-rules" urlPrefix="service-area-rules" />
+      </div>
+      <div className="flex flex-col gap-3">
+        <h3 className="m-0 text-base font-semibold">Metro zones</h3>
+        <ResourceTable resource="service-zones" urlPrefix="service-zones" />
+      </div>
+    </section>
+  );
+}
+
 /** Settings → Markets & locations. */
 export function MarketsView() {
   return (
@@ -199,6 +222,7 @@ export function MarketsView() {
         Only what is live or planned shows: countries, their states and their cities. Change a status, add states and cities, or remove one right in the tree; every change is a draft until you publish it.
       </p>
       <MarketsTree api={staffApi().markets} />
+      <ServiceAreaSettings />
     </ModulePage>
   );
 }

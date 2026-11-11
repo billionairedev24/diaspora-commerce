@@ -1413,7 +1413,7 @@ func (u *Upstreams) bookingsRoutes(mux *http.ServeMux) {
 		"servedCities": []any{map[string]any{"city": "Round Rock", "state": "TX"}, map[string]any{"city": "Georgetown", "state": "TX"}}, "zone": "Greater Austin"}
 	areaView := func(a any) map[string]any {
 		return map[string]any{"area": a, "bounds": map[string]any{"defaultMiles": 20, "minMiles": 5, "maxMiles": 40}, "customerTravelMiles": 30,
-			"zones": []any{map[string]any{"key": "greater-austin", "name": "Greater Austin", "cities": []any{map[string]any{"city": "Round Rock", "state": "TX"}}}},
+			"zones":      []any{map[string]any{"key": "greater-austin", "name": "Greater Austin", "cities": []any{map[string]any{"city": "Round Rock", "state": "TX"}}}},
 			"categories": []any{map[string]any{"category": "hair & beauty", "rule": map[string]any{"defaultMiles": 20, "minMiles": 5, "maxMiles": 40}}}}
 	}
 	mux.HandleFunc("GET /v1/providers/{org}/service-area", func(w http.ResponseWriter, r *http.Request) {
@@ -1438,6 +1438,33 @@ func (u *Upstreams) bookingsRoutes(mux *http.ServeMux) {
 				"cities": []any{map[string]any{"city": "Round Rock", "state": "TX"}, map[string]any{"city": "Hutto", "state": "TX"}}})
 		}
 	})
+	// Staff: radius policy and metro zones (reasons are audited in bookings).
+	radiusRule := map[string]any{"defaultMiles": 20, "minMiles": 5, "maxMiles": 40}
+	areaPolicyDoc := map[string]any{"byCategory": map[string]any{"hair & beauty": radiusRule, "catering": map[string]any{"defaultMiles": 40, "minMiles": 10, "maxMiles": 100}},
+		"fallback": map[string]any{"defaultMiles": 25, "minMiles": 5, "maxMiles": 60}, "customerTravelMiles": 30, "nearestMaxMiles": 60}
+	areaZonesDoc := []any{map[string]any{"key": "greater-austin", "name": "Greater Austin", "cities": []any{map[string]any{"city": "Georgetown", "state": "TX"}, map[string]any{"city": "Round Rock", "state": "TX"}}}}
+	mux.HandleFunc("GET /v1/staff/service-areas/policy", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, areaPolicyDoc) })
+	mux.HandleFunc("PUT /v1/staff/service-areas/policy", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if reason, _ := b["reason"].(string); len(reason) < 5 {
+			problem(w, 422, "bookings.reason-required", "Give a reason for the change", nil)
+			return
+		}
+		if p, ok := b["policy"].(map[string]any); ok {
+			areaPolicyDoc = p
+		}
+		writeJSON(w, 200, areaPolicyDoc)
+	})
+	mux.HandleFunc("GET /v1/staff/service-areas/zones", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, areaZonesDoc) })
+	mux.HandleFunc("PUT /v1/staff/service-areas/zones/{key}", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		z, _ := b["zone"].(map[string]any)
+		areaZonesDoc = append(areaZonesDoc, z)
+		writeJSON(w, 200, z)
+	})
+	mux.HandleFunc("DELETE /v1/staff/service-areas/zones/{key}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
 	mux.HandleFunc("PUT /v1/providers/{org}/cancellation-policy", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)

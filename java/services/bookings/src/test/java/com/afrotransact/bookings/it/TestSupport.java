@@ -57,6 +57,12 @@ class TestSupport {
                 Set.of("bookings:reviews:moderate"));
     }
 
+    /** Staff who maintain markets and locations: may read and change service areas. */
+    static Actor marketsStaff(boolean edit) {
+        return new Actor("staff-markets-1", PrincipalType.STAFF, Optional.empty(), Set.of("platform.product_owner"),
+                edit ? Set.of("content:markets.view", "content:markets.edit") : Set.of("content:markets.view"));
+    }
+
     /** The trust-ops service client deciding from its moderation queue. */
     static Actor trustOps() {
         return new Actor("trust-ops-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),

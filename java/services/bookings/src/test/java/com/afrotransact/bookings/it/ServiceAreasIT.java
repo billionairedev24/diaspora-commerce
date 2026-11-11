@@ -225,6 +225,13 @@ class ServiceAreasIT extends BookingsIntegrationTest {
         assertThat(ok(send("GET", "/v1/staff/service-areas/audit", null, null)).valueStream()
                 .map(a -> a.path("reason").asString()).toList()).contains("Add a test zone", "Remove test zone");
 
+        TestSupport.as(TestSupport.marketsStaff(false));
+        assertThat(send("GET", "/v1/staff/service-areas/policy", null, null).statusCode()).as("view is enough to read").isEqualTo(200);
+        assertThat(send("PUT", "/v1/staff/service-areas/policy", Map.of("policy", body, "reason", "Not allowed")).statusCode())
+                .as("view cannot change").isEqualTo(403);
+        TestSupport.as(TestSupport.marketsStaff(true));
+        ok(send("PUT", "/v1/staff/service-areas/policy", Map.of("policy", body, "reason", "Markets staff may change it")));
+
         TestSupport.as(TestSupport.owner(orgId()));
         assertThat(send("GET", "/v1/staff/service-areas/policy", null, null).statusCode()).isEqualTo(403);
     }

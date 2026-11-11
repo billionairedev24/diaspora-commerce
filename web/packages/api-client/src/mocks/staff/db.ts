@@ -19,6 +19,7 @@ import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTe
 import { seedShipments, syncOrder } from './order-shipments';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
+import { seedServiceAreaRules, seedServiceZones } from './service-areas';
 import { type MockTaxState, seedTax } from './tax';
 import { type MockTaxonomyState, seedCategoryRequests, seedTaxonomy } from './taxonomy';
 
@@ -683,7 +684,7 @@ function seed(now: Date): MockStaffDb {
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements, 'home-layout': homeLayout,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
-      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now),
+      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now), 'service-area-rules': seedServiceAreaRules(now), 'service-zones': seedServiceZones(now),
       ...seedIdentityAdmin(now)
     },
     notifications,
