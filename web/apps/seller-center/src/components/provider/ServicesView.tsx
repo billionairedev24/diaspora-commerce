@@ -1,26 +1,30 @@
 'use client';
 
-import { sellerKeys, sellerQueries, type ServiceInput, ServiceInputSchema, type ServiceOffer } from '@afrotransact/api-client';
+import { sellerKeys, sellerQueries, type ServiceDelivery, type ServiceInput, ServiceInputSchema, type ServiceOffer } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Checkbox, RowName, Sheet, TextField, useToast } from '@afrotransact/ui';
+import { Button, Checkbox, RowName, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
+import { ServiceAreaPanel } from '@/components/provider/ServiceAreaPanel';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { minutesLabel, money, toMinor } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 import { exportDataset, pollExport } from '@/lib/table-export';
 
-type Draft = { name: string; description: string; duration: string; price: string; deposit: string; active: boolean };
-const EMPTY: Draft = { name: '', description: '', duration: '60', price: '', deposit: '0', active: true };
+type Draft = { name: string; description: string; duration: string; price: string; deposit: string; active: boolean; category: string; delivery: ServiceDelivery; imageUrl: string };
+const EMPTY: Draft = { name: '', description: '', duration: '60', price: '', deposit: '0', active: true, category: '', delivery: 'AT_PROVIDER', imageUrl: '' };
+const DELIVERIES: ServiceDelivery[] = ['AT_PROVIDER', 'AT_CUSTOMER', 'BOTH'];
 
 const draftOf = (s: ServiceOffer): Draft => ({
-  name: s.name, description: s.description, duration: String(s.durationMinutes), price: (s.priceMinor / 100).toFixed(2), deposit: (s.depositMinor / 100).toFixed(2), active: s.active
+  name: s.name, description: s.description, duration: String(s.durationMinutes), price: (s.priceMinor / 100).toFixed(2), deposit: (s.depositMinor / 100).toFixed(2), active: s.active,
+  category: s.category, delivery: s.delivery, imageUrl: s.imageUrl
 });
 
 /** Estimate shown while typing; the saved row carries the platform's own take-home figures. */
@@ -32,12 +36,14 @@ export function estimateTakeHome(priceMinor: number, commissionPercent: number) 
 
 /** Services: what customers can book, with price, deposit and what the provider takes home. */
 export function ServicesView() {
+  const t = useT();
   const api = sellerApi();
   const qc = useQueryClient();
   const toast = useToast();
   const { orgId, can } = useSeller();
   const editable = can('services');
   const q = useQuery(sellerQueries.services(api, orgId));
+  const area = useQuery(sellerQueries.serviceArea(api, orgId));
   const state = useTableState({ searchParams: useSearchParams() });
   const [editing, setEditing] = useState<ServiceOffer | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -70,7 +76,8 @@ export function ServicesView() {
   const submit = () => {
     const r = ServiceInputSchema.safeParse({
       name: draft.name, description: draft.description, durationMinutes: Number(draft.duration), priceMinor: Number.isNaN(priceMinor) ? 0 : priceMinor,
-      depositMinor: toMinor(draft.deposit || '0'), active: draft.active
+      depositMinor: toMinor(draft.deposit || '0'), active: draft.active,
+      ...(draft.category ? { category: draft.category } : {}), delivery: draft.delivery, ...(draft.imageUrl.trim() ? { imageUrl: draft.imageUrl.trim() } : {})
     });
     if (!r.success) {
       setErrors(Object.fromEntries(r.error.issues.map((i) => [String(i.path[0]), i.message])));
@@ -81,6 +88,7 @@ export function ServicesView() {
   };
   return (
     <ModulePage module="services" actions={editable ? <Button onClick={() => open('new')}>Add service</Button> : null}>
+      <ServiceAreaPanel />
       <DataTable<ServiceOffer> id="seller.services" label="Services" columns={columns} data={q.data ?? []} getRowId={(s) => s.id} rowLabel={(s) => s.name}
         state={state} mode="client" loading={q.isPending} fetching={q.isFetching}
         error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
@@ -96,6 +104,21 @@ export function ServicesView() {
             <TextField label="Price ($)" inputMode="decimal" value={draft.price} error={errors.priceMinor} onChange={(e) => setDraft({ ...draft, price: e.target.value })} />
             <TextField label="Deposit ($)" inputMode="decimal" value={draft.deposit} error={errors.depositMinor} onChange={(e) => setDraft({ ...draft, deposit: e.target.value })} />
           </div>
+          <Select label={t('sc.svcArea.category')} value={draft.category} placeholder={t('sc.svcArea.categoryChoose')} error={errors.category} onChange={(e) => setDraft({ ...draft, category: e.currentTarget.value })}
+            options={(area.data?.categories ?? []).map((c) => ({ value: c.category, label: c.category.charAt(0).toUpperCase() + c.category.slice(1) }))} />
+          <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
+            <legend className="mb-1 text-sm font-semibold">{t('sc.svcArea.delivery')}</legend>
+            {DELIVERIES.map((d) => (
+              <label key={d} className="flex items-start gap-2 text-sm">
+                <input type="radio" name="delivery" value={d} checked={draft.delivery === d} onChange={() => setDraft({ ...draft, delivery: d })} />
+                {t(`sc.svcArea.delivery.${d}`)}
+                <span className="text-text-muted">· {t(`sc.svcArea.deliveryHelp.${d}`)}</span>
+              </label>
+            ))}
+            <p className="m-0 text-xs text-text-muted">{t('sc.svcArea.inPersonOnly')}</p>
+            {errors.delivery ? <span role="alert" className="text-sm text-danger">{errors.delivery}</span> : null}
+          </fieldset>
+          <TextField label={t('sc.svcArea.photo')} value={draft.imageUrl} error={errors.imageUrl} help={t('sc.svcArea.photoHelp')} onChange={(e) => setDraft({ ...draft, imageUrl: e.currentTarget.value })} />
           <Checkbox label="Bookable (show on my public page)" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />
           <dl aria-label="Take-home estimate" className="my-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-md bg-surface-muted p-3 text-sm">
             <dt>Price</dt><dd className="m-0 text-right">{money(Number.isNaN(priceMinor) ? 0 : priceMinor)}</dd>

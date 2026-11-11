@@ -169,6 +169,11 @@ import {
   type SellerStatusAction,
   type SellerTaxStatement,
   SellerTaxStatementSchema,
+  type ServiceAreaInput,
+  type ServiceAreaPreview,
+  ServiceAreaPreviewSchema,
+  type ServiceAreaView,
+  ServiceAreaViewSchema,
   type ServiceInput,
   type ServiceOffer,
   ServiceOfferSchema,
@@ -590,6 +595,12 @@ export function createSellerApiClient(options: ApiClientOptions) {
     createService: (input: ServiceInput): Promise<ServiceOffer> => request('/v1/seller/provider/services', ServiceOfferSchema, { method: 'POST', body: input }),
     updateService: (id: string, input: ServiceInput): Promise<ServiceOffer> =>
       request(`/v1/seller/provider/services/${enc(id)}`, ServiceOfferSchema, { method: 'PATCH', body: input }),
+    /** Where the provider works: base, radius, extra areas, with the staff-set radius bounds, zones and categories. */
+    getServiceArea: (signal?: AbortSignal): Promise<ServiceAreaView> => request('/v1/seller/provider/service-area', ServiceAreaViewSchema, { signal }),
+    saveServiceArea: (input: ServiceAreaInput): Promise<ServiceAreaView> => request('/v1/seller/provider/service-area', ServiceAreaViewSchema, { method: 'PUT', body: input }),
+    /** What a base ZIP and radius would cover (cities and metro zone), nothing saved. */
+    previewServiceArea: (zip: string, radiusMiles: number, signal?: AbortSignal): Promise<ServiceAreaPreview> =>
+      request('/v1/seller/provider/service-area/preview', ServiceAreaPreviewSchema, { query: { zip, radiusMiles: String(radiusMiles) }, signal }),
     getCancellationPolicy: (signal?: AbortSignal): Promise<CancellationPolicy> =>
       request('/v1/seller/provider/cancellation-policy', CancellationPolicySchema, { signal }),
     saveCancellationPolicy: (input: CancellationPolicyInput): Promise<CancellationPolicy> =>

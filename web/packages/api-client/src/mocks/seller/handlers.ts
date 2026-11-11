@@ -48,6 +48,7 @@ import {
   type SellerProductDetail,
   type SellerSession,
   SellerStatusActionSchema,
+  ServiceAreaInputSchema,
   ServiceInputSchema,
   type ShipFromAddress,
   type ShipmentStatus,
@@ -61,9 +62,11 @@ import {
 } from '../../schemas/seller';
 import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
+import { miles } from '../delivery';
 import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
+import { SERVICE_PLACES } from '../shopper-state';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import { MOCK_DEPARTMENTS, MOCK_ORG_DEPARTMENTS } from './departments';
@@ -2308,7 +2311,7 @@ export const sellerHandlers = [
     route(async (ctx) => {
       const s = await body(ctx.request, ServiceInputSchema);
       require(ctx, 'services', 'EDIT', 'PROVIDER');
-      const svc = { id: nextId(ctx.db, 'svc'), ...s, currency: 'USD', takeHome: takeHome(s.priceMinor) };
+      const svc = { id: nextId(ctx.db, 'svc'), ...s, currency: 'USD', takeHome: takeHome(s.priceMinor), category: s.category ?? '', delivery: s.delivery ?? ('AT_PROVIDER' as const), imageUrl: s.imageUrl ?? '' };
       ctx.db.services.push(svc);
       return svc;
     }, 201)
@@ -2322,6 +2325,30 @@ export const sellerHandlers = [
       if (!svc) throw notFound();
       Object.assign(svc, s, { takeHome: takeHome(s.priceMinor) });
       return svc;
+    })
+  ),
+  http.get(`${W}/provider/service-area`, route((ctx) => (require(ctx, 'services', 'VIEW', 'PROVIDER'), serviceAreaView(ctx.db)))),
+  http.put(
+    `${W}/provider/service-area`,
+    route(async (ctx) => {
+      const input = await body(ctx.request, ServiceAreaInputSchema);
+      require(ctx, 'services', 'EDIT', 'PROVIDER');
+      const bounds = serviceAreaBounds(ctx.db);
+      const radius = input.radiusMiles ?? bounds.defaultMiles;
+      if (radius < bounds.minMiles || radius > bounds.maxMiles) throw invalid({ radiusMiles: `Between ${bounds.minMiles} and ${bounds.maxMiles} miles for your services` });
+      if (!SERVICE_PLACES[input.baseZip]) throw invalid({ baseZip: 'We could not find that ZIP code' });
+      ctx.db.serviceArea = { baseZip: input.baseZip, radiusMiles: radius, extraAreas: input.extraAreas ?? [] };
+      return serviceAreaView(ctx.db);
+    })
+  ),
+  http.get(
+    `${W}/provider/service-area/preview`,
+    route((ctx) => {
+      require(ctx, 'services', 'VIEW', 'PROVIDER');
+      const q = new URL(ctx.request.url).searchParams;
+      const zip = q.get('zip') ?? '';
+      if (!SERVICE_PLACES[zip]) throw invalid({ baseZip: 'We could not find that ZIP code' });
+      return servedPreview(zip, Number(q.get('radiusMiles') ?? '20') || 20);
     })
   ),
   http.get(`${W}/provider/cancellation-policy`, route((ctx) => (require(ctx, 'policy', 'VIEW', 'PROVIDER'), describePolicy(ctx.db.policy)))),
@@ -2617,3 +2644,50 @@ export const sellerHandlers = [
   ...sellerSettingsHandlers
 ];
 
+
+
+/* ── Service area (bookings' radius policy and matching; see docs/engineering/service-areas.md) ── */
+
+const AREA_RULES: Record<string, { defaultMiles: number; minMiles: number; maxMiles: number }> = {
+  'hair & beauty': { defaultMiles: 20, minMiles: 5, maxMiles: 40 },
+  catering: { defaultMiles: 40, minMiles: 10, maxMiles: 100 },
+  tailoring: { defaultMiles: 25, minMiles: 5, maxMiles: 60 },
+  'tax & legal': { defaultMiles: 30, minMiles: 5, maxMiles: 60 }
+};
+const AREA_FALLBACK = { defaultMiles: 25, minMiles: 5, maxMiles: 60 };
+const MOCK_ZONES = [
+  { key: 'greater-austin', name: 'Greater Austin', cities: ['Georgetown', 'Round Rock', 'Hutto', 'Pflugerville', 'Austin'].map((city) => ({ city, state: 'TX' })) },
+  { key: 'houston', name: 'Houston', cities: [{ city: 'Houston', state: 'TX' }] },
+  { key: 'new-york-city', name: 'New York City', cities: [{ city: 'Brooklyn', state: 'NY' }, { city: 'Bronx', state: 'NY' }] }
+];
+
+/** The widest of the radius rules of the provider's active service categories (the fallback with none). */
+function serviceAreaBounds(db: MockSellerDb): { defaultMiles: number; minMiles: number; maxMiles: number } {
+  const rules = [...new Set(db.services.filter((s) => s.active).map((s) => s.category))].map((c) => AREA_RULES[c] ?? AREA_FALLBACK);
+  if (!rules.length) return AREA_FALLBACK;
+  return { defaultMiles: Math.max(...rules.map((r) => r.defaultMiles)), minMiles: Math.min(...rules.map((r) => r.minMiles)), maxMiles: Math.max(...rules.map((r) => r.maxMiles)) };
+}
+
+function servedPreview(zip: string, radiusMiles: number) {
+  const base = SERVICE_PLACES[zip];
+  if (!base) return { baseCity: '', baseState: '', cities: [] };
+  const cities = Object.values(SERVICE_PLACES)
+    .map((p) => ({ city: p.city, state: p.state, d: miles([base.lat, base.lon], [p.lat, p.lon]) }))
+    .filter((p) => p.d <= radiusMiles)
+    .sort((a, b) => a.d - b.d)
+    .map(({ city, state }) => ({ city, state }));
+  return { baseCity: base.city, baseState: base.state, ...(base.zone ? { zone: base.zone } : {}), cities };
+}
+
+function serviceAreaView(db: MockSellerDb) {
+  const saved = db.serviceArea;
+  const base = saved ? SERVICE_PLACES[saved.baseZip] : undefined;
+  const preview = saved ? servedPreview(saved.baseZip, saved.radiusMiles) : null;
+  return {
+    area: saved && base && preview ? { baseZip: saved.baseZip, baseCity: base.city, baseState: base.state, radiusMiles: saved.radiusMiles, extraAreas: saved.extraAreas, servedCities: preview.cities, ...(base.zone ? { zone: base.zone } : {}) } : null,
+    bounds: serviceAreaBounds(db),
+    customerTravelMiles: 30,
+    zones: MOCK_ZONES,
+    categories: Object.entries(AREA_RULES).map(([category, rule]) => ({ category, rule }))
+  };
+}

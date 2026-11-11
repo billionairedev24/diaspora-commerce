@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { BookingTakeHomeSchema, SellerNegotiatedRateSchema, SellerRateCardSchema } from '../fee-rates';
 import { DeliveryProofSchema } from './shopper';
+import { ServiceDeliverySchema } from './shopper';
 
 /* Zod schemas for contracts/openapi/gateway-bff-seller.yaml (Seller Center & Provider Hub). Every response is
    validated at runtime; test/seller-contract.test.ts keeps them assignable to the generated contract types. */
@@ -2080,7 +2081,10 @@ export const ServiceOfferSchema = z.object({
   depositMinor: z.number().int(),
   currency: z.string(),
   active: z.boolean(),
-  takeHome: TakeHomeSchema
+  takeHome: TakeHomeSchema,
+  category: z.string().default(''),
+  delivery: ServiceDeliverySchema.default('AT_PROVIDER'),
+  imageUrl: z.string().default('')
 });
 export type ServiceOffer = z.infer<typeof ServiceOfferSchema>;
 export const ServiceInputSchema = z
@@ -2090,10 +2094,51 @@ export const ServiceInputSchema = z
     durationMinutes: z.number().int().min(5, 'At least 5 minutes').max(1440, 'At most 24 hours'),
     priceMinor: z.number().int().min(1, 'Price must be above zero'),
     depositMinor: z.number().int().min(0),
-    active: z.boolean()
+    active: z.boolean(),
+    /** One of the staff-set service categories (the service-area view lists them). */
+    category: z.string().max(60).optional(),
+    delivery: ServiceDeliverySchema.optional(),
+    imageUrl: z.string().max(500).optional()
   })
   .refine((s) => s.depositMinor <= s.priceMinor, { path: ['depositMinor'], message: 'Deposit must be between 0 and the price' });
 export type ServiceInput = z.infer<typeof ServiceInputSchema>;
+
+/* ── Service area (where a provider works) ───────────────────────── */
+
+export const ServiceAreaCitySchema = z.object({ city: z.string(), state: z.string() });
+export type ServiceAreaCity = z.infer<typeof ServiceAreaCitySchema>;
+export const ServiceAreaNamedSchema = z.object({ kind: z.enum(['CITY', 'ZIP', 'ZONE']), value: z.string(), state: z.string().optional() });
+export type ServiceAreaNamed = z.infer<typeof ServiceAreaNamedSchema>;
+export const ServiceAreaRadiusSchema = z.object({ defaultMiles: z.number().int(), minMiles: z.number().int(), maxMiles: z.number().int() });
+export type ServiceAreaRadius = z.infer<typeof ServiceAreaRadiusSchema>;
+export const ServiceAreaViewSchema = z.object({
+  area: z
+    .object({
+      baseZip: z.string(),
+      baseCity: z.string(),
+      baseState: z.string(),
+      radiusMiles: z.number().int(),
+      extraAreas: z.array(ServiceAreaNamedSchema),
+      servedCities: z.array(ServiceAreaCitySchema),
+      zone: z.string().optional()
+    })
+    .nullable(),
+  /** The radius limits for this provider's service categories (staff-set). */
+  bounds: ServiceAreaRadiusSchema,
+  /** How far customers are assumed to travel to a shop ("You go to them"). */
+  customerTravelMiles: z.number().int(),
+  zones: z.array(z.object({ key: z.string(), name: z.string(), cities: z.array(ServiceAreaCitySchema) })),
+  categories: z.array(z.object({ category: z.string(), rule: ServiceAreaRadiusSchema }))
+});
+export type ServiceAreaView = z.infer<typeof ServiceAreaViewSchema>;
+export const ServiceAreaInputSchema = z.object({
+  baseZip: z.string().regex(/^\d{5}$/, 'Enter the 5-digit ZIP code of your base location'),
+  radiusMiles: z.number().int().min(1).max(150).nullable().optional(),
+  extraAreas: z.array(ServiceAreaNamedSchema).max(20).optional()
+});
+export type ServiceAreaInput = z.infer<typeof ServiceAreaInputSchema>;
+export const ServiceAreaPreviewSchema = z.object({ baseCity: z.string(), baseState: z.string(), zone: z.string().optional(), cities: z.array(ServiceAreaCitySchema) });
+export type ServiceAreaPreview = z.infer<typeof ServiceAreaPreviewSchema>;
 
 export const PolicyKindSchema = z.enum(['FLEXIBLE', 'MODERATE', 'STRICT', 'CUSTOM']);
 export type PolicyKind = z.infer<typeof PolicyKindSchema>;

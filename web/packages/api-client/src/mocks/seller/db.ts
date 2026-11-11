@@ -34,12 +34,12 @@ import {
   type SellerReturn,
   type SellerRewardsView,
   type SellerRunPickup,
+  type ServiceAreaNamed,
   type ServiceOffer,
   type ShipFromAddress,
   type ShipmentStatus,
   type Subscription,
-  type TeamMember
-} from '../../schemas/seller';
+  type TeamMember} from '../../schemas/seller';
 import { chargeTermsOf, planFeatureList } from '../../staff-plans';
 import { MOCK_FASHION_ORG, MOCK_FOOD_ORG } from './departments';
 import { type MockDraft, type MockImport } from './listing-form';
@@ -90,6 +90,8 @@ export interface MockSellerDb {
   bookings: BookingCard[];
   availability: Availability;
   services: ServiceOffer[];
+  /** Where the provider works (bookings /v1/providers/{orgId}/service-area); null until the first save. */
+  serviceArea: { baseZip: string; radiusMiles: number; extraAreas: ServiceAreaNamed[] } | null;
   policy: Required<CancellationPolicyInput>;
   earnings: EarningsRow[];
   /** The application per organisation (S286, S289): answers (prefilled from the account on start), Stripe, submission. */
@@ -667,7 +669,8 @@ function freshDb(now: Date): MockSellerDb {
       blockedDates: [{ date: atTime(now, 40, 12).toISOString().slice(0, 10), note: 'Thanksgiving' }],
       rules: { leadMinutes: 720, horizonDays: 30, bufferMinutes: 30, stepMinutes: 30, maxPerDay: 3, instantBooking: false, autoAcceptReschedule: true }
     },
-    services: PROVIDER_SERVICES.map((s) => ({ ...s, currency: 'USD', active: true, takeHome: takeHome(s.priceMinor) })),
+    services: PROVIDER_SERVICES.map((s) => ({ ...s, currency: 'USD', active: true, takeHome: takeHome(s.priceMinor), category: 'hair & beauty', delivery: 'BOTH' as const, imageUrl: '' })),
+    serviceArea: null,
     policy: { kind: 'MODERATE', freeHours: 48, partialRefund: true, partialFromHours: 24, partialPercent: 50, noShow: 'DEPOSIT', rescheduleHours: 48, maxReschedules: 2 },
     earnings: [],
     businessPage: {},

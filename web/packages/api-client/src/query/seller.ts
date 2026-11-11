@@ -67,6 +67,8 @@ export const sellerKeys = {
   requests: (orgId: string) => [...sellerKeys.org(orgId), 'requests'] as const,
   hours: (orgId: string) => [...sellerKeys.org(orgId), 'hours'] as const,
   services: (orgId: string) => [...sellerKeys.org(orgId), 'services'] as const,
+  serviceArea: (orgId: string) => [...sellerKeys.org(orgId), 'service-area'] as const,
+  serviceAreaPreview: (orgId: string, zip: string, radiusMiles: number) => [...sellerKeys.org(orgId), 'service-area', 'preview', zip, radiusMiles] as const,
   policy: (orgId: string) => [...sellerKeys.org(orgId), 'policy'] as const,
   earnings: (orgId: string, from?: string, to?: string) => [...sellerKeys.org(orgId), 'earnings', from ?? '', to ?? ''] as const,
   coupons: (orgId: string) => [...sellerKeys.org(orgId), 'coupons'] as const,
@@ -193,6 +195,9 @@ export const sellerQueries = {
   requests: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.requests(orgId), queryFn: ({ signal }) => api.listBookingRequests(signal), staleTime: 15_000 }),
   hours: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.hours(orgId), queryFn: ({ signal }) => api.getWorkingHours(signal), staleTime: MINUTE }),
+  serviceArea: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.serviceArea(orgId), queryFn: ({ signal }) => api.getServiceArea(signal), staleTime: MINUTE }),
+  serviceAreaPreview: (api: SellerApiClient, orgId: string, zip: string, radiusMiles: number) =>
+    queryOptions({ queryKey: sellerKeys.serviceAreaPreview(orgId, zip, radiusMiles), queryFn: ({ signal }) => api.previewServiceArea(zip, radiusMiles, signal), staleTime: MINUTE, enabled: /^\d{5}$/.test(zip), placeholderData: keepPreviousData }),
   services: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.services(orgId), queryFn: ({ signal }) => api.listServices(signal), staleTime: MINUTE }),
   policy: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.policy(orgId), queryFn: ({ signal }) => api.getCancellationPolicy(signal), staleTime: MINUTE }),
