@@ -146,9 +146,10 @@ export function SponsoredProducts({ block, children }: { block: HomeBlock; child
   const { ref } = useAdTracking(block.id, block.maxPerSession);
   if (!rail || rail.items.length === 0) return null;
   const report = (p: ProductSummary, position: number) => (e: MouseEvent) => {
-    if (!block.searchId || !(e.target instanceof Element) || !e.target.closest('a')) return;
+    const searchId = p.sponsor?.searchId ?? block.searchId;
+    if (!searchId || !(e.target instanceof Element) || !e.target.closest('a')) return;
     browserApi()
-      .recordSearchClick({ searchId: block.searchId, atin: p.atin, position, adToken: p.sponsor?.adToken })
+      .recordSearchClick({ searchId, atin: p.atin, position, adToken: p.sponsor?.adToken })
       .catch(() => undefined);
   };
   return (

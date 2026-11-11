@@ -793,6 +793,7 @@ class Seeder:
         mine = [p for p in current if p.get("name") == seeded and p.get("status") in ("LIVE", "SCHEDULED", "IN_REVIEW", "DRAFT")]
         zips = sorted(zip_prefixes or [])
         same = next((p for p in mine if p.get("payload") == payload and p.get("status") in ("LIVE", "SCHEDULED")
+                     and p.get("priority") == priority
                      and sorted((p.get("targeting") or {}).get("zipPrefixes") or []) == zips), None)
         if same:
             self.report.add("placements", "existing")
@@ -866,12 +867,39 @@ class Seeder:
                     continue
                 payload["skus"] = atins
             self._ensure_placement("home_product_row", r["name"], payload, r["priority"])
+        self._home_modules()
         for c in D.CATEGORY_BANNERS:
             key, queries = c["image"]
             url = self._upload_campaign_image(key, queries) or self._live_payload(c["name"]).get("imageUrl")
             payload = dict(c["payload"], imageUrl=url)
             self._ensure_placement("category_banner", c["name"], payload, 10, categories=[c["category"]])
         self.log("  ✓ placements live")
+
+    def _home_modules(self) -> None:
+        """The home composition: paid demo modules and rule-based modules (content slots home_*), ordered by priority."""
+        for m in D.HOME_MODULES:
+            payload = {k: v for k, v in m["payload"].items()}
+            if m.get("image"):
+                key, queries = m["image"]
+                url = self._upload_campaign_image(key, queries) or self._live_payload(m["name"]).get("imageUrl")
+                if url:
+                    payload["imageUrl"] = url
+            if m.get("ad_images"):
+                before = {a.get("href"): a.get("imageUrl") for a in self._live_payload(m["name"]).get("ads", [])}
+                ads = []
+                for ad, (key, queries) in zip(payload["ads"], m["ad_images"]):
+                    url = self._upload_campaign_image(key, queries) or before.get(ad["href"])
+                    if url:
+                        ads.append(dict(ad, imageUrl=url))
+                if len(ads) < 2:
+                    self.log(f"  ! {m['name']}: fewer than two ad images found; skipped")
+                    continue
+                payload["ads"] = ads
+            if m.get("skus_from"):
+                atins = [self.products[k]["atin"] for k in m["skus_from"] if k in self.products]
+                if atins:
+                    payload["skus"] = atins
+            self._ensure_placement(m["slot"], m["name"], payload, m["priority"])
 
     # ------------------------------------------------------------------------------------------------ ads
     def step_ads(self) -> None:

@@ -54,6 +54,9 @@ type Sponsor struct {
 	CampaignID string         `json:"campaignId,omitempty"`
 	Slot       int            `json:"slot,omitempty"`
 	AdToken    string         `json:"adToken,omitempty"`
+	// SearchID is the search the ad came from, set on home sponsored products (several searches fill one rail); a click
+	// is reported with it.
+	SearchID string `json:"searchId,omitempty"`
 	Reason     *SponsorReason `json:"reason,omitempty"`
 }
 

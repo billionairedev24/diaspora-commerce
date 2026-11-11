@@ -276,6 +276,16 @@ func capFor(e bodyEntry, t string) int {
 func (s *siteServiceImpl) resolvePaid(ctx context.Context, sc shopperScope, e bodyEntry) resolved {
 	t := paidSlots[e.slot]
 	p := e.p
+	switch t {
+	case domain.BlockAdRow: // each image ad names its own advertiser
+		for _, a := range p.Ads {
+			if strings.TrimSpace(a.Advertiser) != "" {
+				p.Advertiser = firstNonEmpty(p.Advertiser, a.Advertiser)
+			}
+		}
+	case domain.BlockSponsoredProducts: // each card names its seller's campaign; the rail itself is "from sellers"
+		p.Advertiser = firstNonEmpty(p.Advertiser, "Marketplace sellers")
+	}
 	if strings.TrimSpace(p.Advertiser) == "" {
 		return resolved{} // an unlabelled ad is never shown
 	}
@@ -299,8 +309,8 @@ func (s *siteServiceImpl) resolvePaid(ctx context.Context, sc shopperScope, e bo
 		return resolved{block: b, paid: true}
 	case domain.BlockAdRow:
 		for _, a := range p.Ads {
-			if a.ImageURL != "" && a.Href != "" && len(b.Ads) < 3 {
-				a.Advertiser = firstNonEmpty(a.Advertiser, p.Advertiser)
+			a.Advertiser = firstNonEmpty(a.Advertiser, e.advertiser)
+			if a.ImageURL != "" && a.Href != "" && strings.TrimSpace(a.Advertiser) != "" && len(b.Ads) < 3 {
 				b.Ads = append(b.Ads, a)
 			}
 		}
@@ -321,28 +331,58 @@ func (s *siteServiceImpl) resolvePaid(ctx context.Context, sc shopperScope, e bo
 }
 
 // sponsoredProducts asks search for the products sellers promote for the module's words or department, through the
-// same ad auction as search results (which records the impressions and signs the click tokens). Only the sponsored hits
-// are used, and only when eligible (in stock, real photo).
+// same ad auction as search results (which records the impressions and signs the click tokens). One auction places only
+// a couple of ads, so "rice OR shea OR kente" runs one auction per term (at most four, in parallel) and the sponsored hits
+// are merged. Only sponsored hits are used, and only when eligible (in stock, real photo). Each card says which search
+// it came from, which is what a click is reported with.
 func (s *siteServiceImpl) sponsoredProducts(ctx context.Context, p blockPayload) ([]domain.ProductSummary, string) {
 	if s.d.Search == nil {
 		return nil, ""
 	}
-	res, err := s.d.Search.Search(ctx, port.SearchParams{Q: strings.TrimSpace(p.Query), Market: s.d.Market, Department: p.Department,
-		Sort: domain.SortRelevance, Size: blockProducts, InStock: true, Ads: true, NoTrack: true})
-	if err != nil {
-		s.d.Log.InfoContext(ctx, "sponsored products unavailable; module omitted", "error", err)
-		return nil, ""
-	}
-	cards := []domain.ProductSummary{}
-	for _, h := range res.Hits {
-		if h.Sponsored == nil {
-			continue
+	terms := []string{""}
+	if q := strings.TrimSpace(p.Query); q != "" {
+		terms = terms[:0]
+		for _, t := range strings.Split(q, " OR ") {
+			if t = strings.TrimSpace(t); t != "" && len(terms) < 4 {
+				terms = append(terms, t)
+			}
 		}
-		if card := summaryFromHit(h, s.d.Estimator, s.d.Clock.now()); eligibleCard(card) {
+	}
+	results := make([]port.SearchResult, len(terms))
+	var wg sync.WaitGroup
+	for i, term := range terms {
+		wg.Go(func() {
+			res, err := s.d.Search.Search(ctx, port.SearchParams{Q: term, Market: s.d.Market, Department: p.Department,
+				Sort: domain.SortRelevance, Size: blockProducts, InStock: true, Ads: true, NoTrack: true})
+			if err != nil {
+				s.d.Log.InfoContext(ctx, "sponsored products unavailable for a term; omitted", "error", err)
+				return
+			}
+			results[i] = res
+		})
+	}
+	wg.Wait()
+	cards := []domain.ProductSummary{}
+	seen := map[string]bool{}
+	firstSearch := ""
+	for _, res := range results {
+		for _, h := range res.Hits {
+			if h.Sponsored == nil || seen[h.ATIN] {
+				continue
+			}
+			card := summaryFromHit(h, s.d.Estimator, s.d.Clock.now())
+			if !eligibleCard(card) {
+				continue
+			}
+			seen[h.ATIN] = true
+			if card.Sponsor != nil {
+				card.Sponsor.SearchID = res.SearchID
+			}
+			firstSearch = firstNonEmpty(firstSearch, res.SearchID)
 			cards = append(cards, card)
 		}
 	}
-	return eligibleOnly(withOffers(ctx, s.d.Offers, cards)), res.SearchID
+	return eligibleOnly(withOffers(ctx, s.d.Offers, cards)), firstSearch
 }
 
 func (s *siteServiceImpl) resolveBlock(ctx context.Context, c *domain.Caller, loc domain.DeliveryLocation, sc shopperScope, now time.Time, e bodyEntry) resolved {

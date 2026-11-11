@@ -71,6 +71,27 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(D.image_queries(garri)[0], "garri Nigerian food")
 
 
+class HomeModulesTest(unittest.TestCase):
+    PAID = {"home_brand_banner", "home_sponsored_products", "home_ad_row", "home_advertorial"}
+
+    def test_modules_are_ordered_by_distinct_priorities_among_the_rails_and_banners(self):
+        prios = [m["priority"] for m in D.HOME_MODULES] + [r["priority"] for r in D.RAILS] + [b["priority"] for b in D.BANNERS]
+        self.assertEqual(len(prios), len(set(prios)), "two home modules share a priority, so their order is by creation time")
+
+    def test_paid_demo_modules_name_their_advertiser_and_ad_rows_have_two_or_three_ads(self):
+        for m in D.HOME_MODULES:
+            self.assertIn(m["slot"], self.PAID | {"home_block"})
+            if m["slot"] in ("home_brand_banner", "home_advertorial"):
+                self.assertTrue(m["payload"]["advertiser"], m["name"])
+            if m["slot"] == "home_ad_row":
+                ads = m["payload"]["ads"]
+                self.assertIn(len(ads), (2, 3))
+                self.assertTrue(all(a["advertiser"] and a["alt"] for a in ads))
+                self.assertEqual(len(ads), len(m["ad_images"]))
+            if m["slot"] == "home_block":
+                self.assertIn("type", m["payload"])
+
+
 class LibraryFilterTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())

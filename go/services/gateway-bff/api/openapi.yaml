@@ -3744,6 +3744,7 @@ components:
             campaignId: {type: string}
             slot: {type: integer, minimum: 1, description: 1-based position the ad won}
             adToken: {type: string, description: Send back as adToken with POST /v1/search/clicks}
+            searchId: {type: string, description: 'Home sponsored products only: the search the ad came from; send it as searchId with the click'}
             reason: {$ref: '#/components/schemas/SponsorReason'}
     SponsorReason:
       type: object

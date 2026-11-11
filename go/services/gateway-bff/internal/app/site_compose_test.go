@@ -311,3 +311,42 @@ func TestRecordAdEventValidatesAndForwardsOnlyThePlacementAndKind(t *testing.T) 
 		t.Errorf("invalid events must not reach content: %v", c.events)
 	}
 }
+
+func TestSponsoredProductsRunOneAuctionPerTermAndKeepEachCardsSearchID(t *testing.T) {
+	search := fnSearch{fn: func(p port.SearchParams) (port.SearchResult, error) {
+		switch p.Q {
+		case "rice":
+			return port.SearchResult{SearchID: "srch-rice", Hits: []port.SearchHit{sponsoredHit("ATRIC00001", "c1"), sponsoredHit("ATRIC00002", "c2")}}, nil
+		case "shea":
+			return port.SearchResult{SearchID: "srch-shea", Hits: []port.SearchHit{sponsoredHit("ATRIC00002", "c2"), sponsoredHit("ATSHE00001", "c3")}}, nil
+		}
+		return port.SearchResult{}, nil
+	}}
+	pl := domain.Placements{Body: []domain.BodyPlacement{{ID: "plc_sp", Slot: "home_sponsored_products", Priority: 10, Advertiser: "Sellers", Payload: payload(`{"title":"Promoted","query":"rice OR shea"}`)}}}
+	h, _ := composeService(pl, search, nil).Home(context.Background(), nil)
+	sp := find(h, "plc_sp")
+	if sp == nil || len(sp.Rail.Items) != 3 {
+		t.Fatalf("three distinct sponsored products expected: %+v", sp)
+	}
+	got := map[string]string{}
+	for _, p := range sp.Rail.Items {
+		got[p.ATIN] = p.Sponsor.SearchID
+	}
+	if got["ATRIC00001"] != "srch-rice" || got["ATSHE00001"] != "srch-shea" || got["ATRIC00002"] != "srch-rice" {
+		t.Errorf("each card must carry the search its token was signed for: %v", got)
+	}
+}
+
+func TestAdRowWithoutAPlacementAdvertiserNeedsEachAdToNameOne(t *testing.T) {
+	pl := domain.Placements{Body: []domain.BodyPlacement{
+		{ID: "plc_named", Slot: "home_ad_row", Priority: 9, Payload: payload(`{"ads":[{"imageUrl":"https://i/1.jpg","alt":"a","href":"/x","advertiser":"Acme"},{"imageUrl":"https://i/2.jpg","alt":"b","href":"/y","advertiser":"Beta"}]}`)},
+		{ID: "plc_unnamed", Slot: "home_ad_row", Priority: 8, Payload: payload(`{"ads":[{"imageUrl":"https://i/1.jpg","alt":"a","href":"/x"},{"imageUrl":"https://i/2.jpg","alt":"b","href":"/y"}]}`)}}}
+	h, _ := composeService(pl, organic(0), nil).Home(context.Background(), nil)
+	named := find(h, "plc_named")
+	if named == nil || !named.Sponsored || len(named.Ads) != 2 || named.Ads[1].Advertiser != "Beta" {
+		t.Fatalf("named ad row = %+v", named)
+	}
+	if find(h, "plc_unnamed") != nil {
+		t.Errorf("image ads that name no advertiser must not be shown")
+	}
+}

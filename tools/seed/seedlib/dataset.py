@@ -632,12 +632,12 @@ TILE_RULES = [
 RETIRED_PLACEMENTS = ["Shop by department", "Spice cupboard", "Fabrics & fashion"]
 
 BANNERS = [
-    {"replaces": "plc_banner_kente", "name": "Bonwire kente banner", "priority": 10,
+    {"replaces": "plc_banner_kente", "name": "Bonwire kente banner", "priority": 45,
      "payload": {"position": "home-mid", "advertiser": "Bonwire Weavers Collective",
                  "title": "Hand-woven kente for graduation season", "sub": "Each stole is tagged with its weaver’s name.",
                  "cta": "Shop kente", "href": "/s?q=kente"},
      "image": ("banner-kente", ["kente", "kente cloth pattern", "kente weaver"])},
-    {"replaces": None, "name": "Tamale Naturals shea banner", "priority": 5,
+    {"replaces": None, "name": "Tamale Naturals shea banner", "priority": 20,
      "payload": {"position": "home-bottom", "advertiser": "Tamale Naturals", "title": "Shea from the women of Tamale",
                  "sub": "Grade A unrefined shea butter, straight from the cooperative.", "cta": "Shop shea",
                  "href": "/s?q=shea+butter"},
@@ -657,6 +657,58 @@ RAILS = [
     {"name": "Beauty from the source", "priority": 35, "payload": {"title": "Beauty from the source",
                                                                    "href": "/s?dept=Beauty%20%26%20Personal%20Care",
                                                                    "query": "shea OR soap OR oil"}},
+]
+
+# The home composition beyond rails and banners (content slots home_*). The body is ordered by priority, highest first:
+#   95 sign-in band · 90 deals of the day · 85 sponsored products · 75 brand banner · 62 pre-order band · 60..35 the rails above ·
+#   58 community spotlight · 52 ad row · 47 shop by occasion · 45 kente banner · 42 seller spotlight · 40 advertorial ·
+#   38 services near you · 36 membership band · 20 shea banner. "Based on your orders" opens the body for signed-in shoppers
+#   and "Recently viewed" closes it, unless staff place them.
+# Paid modules here are demo advertisers run by the seed (a real paid creative needs a second approver). `image` is
+# (key, queries) for the library; `skus_from` lists dataset product keys the seeder turns into ATINs.
+HOME_MODULES = [
+    {"slot": "home_block", "name": "Sign-in band", "priority": 95,
+     "payload": {"type": "signin-promo", "title": "Sign in for faster checkout and picks made for you",
+                 "sub": "Track orders, save your delivery address and see products based on what you buy.",
+                 "cta": "Sign in or create an account", "href": "/signin", "tone": "sand", "audience": "signed-out"}},
+    {"slot": "home_block", "name": "Deals of the day", "priority": 90,
+     "payload": {"type": "deals", "title": "Deals of the day", "href": "/s?sort=rating"}},
+    {"slot": "home_sponsored_products", "name": "Sponsored products from sellers", "priority": 85,
+     "payload": {"title": "Sponsored products from sellers", "href": "/s", "query": "jerk OR curry OR shea OR kente"}},
+    {"slot": "home_brand_banner", "name": "Kingston Kitchen brand banner", "priority": 75,
+     "payload": {"advertiser": "Kingston Kitchen", "headline": "Jerk season is every season",
+                 "sub": "Blue Mountain jerk paste, curry and ackee: everything for the grill in one order.",
+                 "cta": "Shop Kingston Kitchen", "href": "/s?q=Kingston+Kitchen", "tone": "gold", "maxPerSession": 3},
+     "image": ("home-brand-kingston", ["jerk chicken grill", "jamaican jerk", "caribbean barbecue"]),
+     "skus_from": ["jerk-paste", "jamaican-curry", "ackee"]},
+    {"slot": "home_block", "name": "Pre-order near you", "priority": 62, "payload": {"type": "preorders"}},
+    {"slot": "home_block", "name": "Community spotlight", "priority": 58,
+     "payload": {"type": "community-spotlight", "title": "Spotlight: the {community} kitchen", "cta": "Explore"}},
+    {"slot": "home_ad_row", "name": "Partner ad row", "priority": 52,
+     "payload": {"maxPerSession": 5, "ads": [
+         {"alt": "Unrefined shea butter from Tamale Naturals", "href": "/s?q=shea+butter", "advertiser": "Tamale Naturals"},
+         {"alt": "Hand-woven kente from Bonwire Weavers", "href": "/s?q=kente", "advertiser": "Bonwire Weavers Collective"},
+         {"alt": "Berbere and spices from Addis Spice House", "href": "/s?q=berbere", "advertiser": "Addis Spice House"}]},
+     "ad_images": [("home-ad-shea", ["shea butter jar", "shea butter"]), ("home-ad-kente", ["kente stole", "kente cloth"]),
+                   ("home-ad-berbere", ["berbere spice", "ethiopian spices"])]},
+    {"slot": "home_block", "name": "Shop by occasion", "priority": 47,
+     "payload": {"type": "occasions", "title": "Shop by occasion", "cells": [
+         {"label": "Party", "href": "/s?q=party", "source": {"kind": "search", "department": "Event & Party Supplies"}},
+         {"label": "Wedding & owambe", "href": "/s?q=owambe", "source": {"kind": "search", "query": "owambe"}},
+         {"label": "Naming ceremony", "href": "/s?q=naming", "source": {"kind": "search", "query": "naming"}},
+         {"label": "Graduation", "href": "/s?q=kente", "source": {"kind": "search", "query": "kente"}}]}},
+    {"slot": "home_block", "name": "Seller spotlight", "priority": 42, "payload": {"type": "seller-spotlight"}},
+    {"slot": "home_advertorial", "name": "Mama Put Pantry advertorial", "priority": 40,
+     "payload": {"advertiser": "Mama Put Pantry", "headline": "How a Houston kitchen packs a Sunday jollof for 40",
+                 "text": "Mama Put Pantry shares the pot size, the pepper base and the order list behind its party boxes.",
+                 "cta": "See the party pantry", "href": "/s?q=jollof", "maxPerSession": 3},
+     "image": ("home-adv-jollof", ["party jollof rice", "jollof rice pot", "nigerian jollof rice"])},
+    {"slot": "home_block", "name": "Services near you", "priority": 38,
+     "payload": {"type": "services-near-you", "title": "Services near {city}", "cta": "Browse services", "href": "/services"}},
+    {"slot": "home_block", "name": "Membership band", "priority": 36,
+     "payload": {"type": "membership-promo", "title": "AfroTransact Plus: free delivery and early access to festival stock",
+                 "sub": "Members get free delivery on every order. Gift cards are available for every occasion.",
+                 "cta": "See membership and gift cards", "href": "/membership", "tone": "ink"}},
 ]
 
 CATEGORY_BANNERS = [

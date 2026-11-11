@@ -90,6 +90,8 @@ export const ProductSummarySchema = z.object({
       campaignId: z.string().optional(),
       slot: z.number().int().min(1).optional(),
       adToken: z.string().optional(),
+      /** Home sponsored products: the search the ad came from (send with the click). */
+      searchId: z.string().optional(),
       reason: z
         .object({
           targeting: z.enum(['KEYWORD', 'CATEGORY']).catch('KEYWORD'),

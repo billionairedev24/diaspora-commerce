@@ -2991,6 +2991,8 @@ export interface components {
                 slot?: number;
                 /** @description Send back as adToken with POST /v1/search/clicks */
                 adToken?: string;
+                /** @description Home sponsored products only: the search the ad came from; send it as searchId with the click */
+                searchId?: string;
                 reason?: components["schemas"]["SponsorReason"];
             } | null;
         };
