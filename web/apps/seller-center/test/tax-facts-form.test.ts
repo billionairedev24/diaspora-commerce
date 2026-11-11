@@ -35,7 +35,8 @@ describe('tax questions in the product form', () => {
   it('adds a section for the product questions and keeps them out of the details', () => {
     expect(sectionsFor(snacks)).toContain('facts');
     expect(variantQuestions(snacks).map((q) => q.key)).toEqual(['is_candy', 'net_weight_oz', 'servings_per_package', 'individual_serving']);
-    expect(behaviourQuestions(bakery).map((q) => q.key)).toEqual(['sold_heated', 'heated_by_seller', 'utensils_provided', 'seller_is_bakery']);
+    // The old bakery question is hidden (Food service becomes a seller capability); the field stays in the data.
+    expect(behaviourQuestions(bakery).map((q) => q.key)).toEqual(['sold_heated', 'heated_by_seller', 'utensils_provided']);
     expect(sectionsFor(TAX_PRODUCT_TYPES['rice-grains'])).not.toContain('facts');
   });
 

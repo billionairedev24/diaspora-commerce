@@ -249,7 +249,13 @@ export const attributesIn = (type: ProductTypeSchema | undefined, section: Attri
 
 /** The category's tax questions about the product itself (answered per variant) and about how this seller sells it ("Your listing"). */
 export const variantQuestions = (type: ProductTypeSchema | undefined) => taxQuestionsOf(type?.attributes ?? []).filter((a) => a.owner !== 'OFFER');
-export const behaviourQuestions = (type: ProductTypeSchema | undefined) => taxQuestionsOf(type?.attributes ?? []).filter((a) => a.owner === 'OFFER');
+/**
+ * The old "your shop is a bakery" question is hidden: Food service becomes a verified seller capability (permit and expiry,
+ * granted through approval) that replaces it. The field stays in the data until the approval engine supplies the capability;
+ * until then a food service category (seller-baked food) answers it as yes.
+ */
+export const HIDDEN_BEHAVIOUR_FACTS: readonly string[] = ['seller_is_bakery'];
+export const behaviourQuestions = (type: ProductTypeSchema | undefined) => taxQuestionsOf(type?.attributes ?? []).filter((a) => a.owner === 'OFFER' && !HIDDEN_BEHAVIOUR_FACTS.includes(a.key));
 
 /** The answers of one variant position and the seller's own answers together (a question may depend on either). */
 export const answersOf = (s: Pick<FormState, 'facts' | 'behaviour'>, index: number): Record<string, string> => ({ ...(s.facts[String(index)] ?? {}), ...s.behaviour });
@@ -621,7 +627,7 @@ function validateFacts(s: FormState, type: ProductTypeSchema, add: AddProblem) {
     // Proof files cannot be attached before the item exists: the item's page asks for them once it is saved.
     r.missing.forEach((key) => {
       const def = defs.find((d) => d.key === key);
-      if (def && def.kind !== 'FILE') add(place(key).id, place(key).section, { text: def.label }, 'sc.pf.err.required');
+      if (def && def.kind !== 'FILE' && !HIDDEN_BEHAVIOUR_FACTS.includes(key)) add(place(key).id, place(key).section, { text: def.label }, 'sc.pf.err.required');
     });
   }
 }
@@ -768,7 +774,12 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
   const imageInput = (i: FormImage) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType, ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) });
   const defs = taxQuestionsOf(type?.attributes ?? []);
   const factsOf = (index: number): Record<string, FactValue> => checkFacts(defs.filter((d) => d.owner !== 'OFFER'), answersOf(s, index)).facts;
-  const behaviourOf = (): Record<string, FactValue> => checkFacts(defs, answersOf(s, 0)).facts;
+  const behaviourOf = (): Record<string, FactValue> => {
+    const facts = checkFacts(defs, answersOf(s, 0)).facts;
+    // Food service answers the hidden bakery question as yes (the seller bakes or cooks what is sold).
+    if (rules?.kind === 'SFD' && defs.some((d) => d.key === 'seller_is_bakery' && d.owner === 'OFFER') && 'utensils_provided' in facts && facts.utensils_provided === true) facts.seller_is_bakery = true;
+    return facts;
+  };
   const idStatus = statusOf(rules, 'product_id');
   const physical = isPhysical(rules) || (!rules && s.fulfilment === 'AFROTRANSACT');
   const first = firstPackage(s, type);
