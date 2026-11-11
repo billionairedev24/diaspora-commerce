@@ -190,7 +190,7 @@ at:
       tutoring-consulting: services
       fabrics-textiles: fashion
     # Listing rules D16 to D18: the delivery fee is NOT configured here. It is one staff-editable record in the database
-    # (shipping_settings, Settings > Delivery fee), read by the estimate and by checkout. Only the carrier fallback of
+    # (shipping_settings, Settings > Flat delivery fee), read by the estimate and by checkout. Only the carrier fallback of
     # seller-shipped packages (off at launch) and the fallback delivery estimates (business days) live here.
     shipping:
       carrier-standard-minor: 599

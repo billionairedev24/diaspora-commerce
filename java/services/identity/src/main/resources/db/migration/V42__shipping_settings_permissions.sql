@@ -1,5 +1,5 @@
 -- Launch shipping (listing rules D16): the one flat delivery fee, its free-above threshold and the seller carrier switch
--- are a staff-edited record owned by orders-service (Settings > Delivery fee, in the Fees & commissions module).
+-- are a staff-edited record owned by orders-service (Settings > Flat delivery fee, in the Fees & commissions module).
 -- Viewing the record and its history needs orders:shipping.view; changing it needs orders:shipping.edit and a reason.
 insert into permission (key, module, description) values
     ('orders:shipping.view', 'orders', 'View the shipping settings (delivery fee, free-above threshold) and their change history'),
