@@ -63,6 +63,8 @@ import {
   type Earnings,
   EarningsSchema,
   type GtinCheck,
+  type ListingRules,
+  ListingRulesSchema,
   GtinCheckSchema,
   type ImageLibraryItem,
   ImageLibraryItemSchema,
@@ -512,6 +514,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     getCategoryTree: (signal?: AbortSignal): Promise<CategoryNode[]> => request('/v1/seller/catalog/categories', z.array(CategoryNodeSchema), { signal }),
     getProductType: (code: string, signal?: AbortSignal): Promise<ProductTypeSchema> =>
       request(`/v1/seller/catalog/product-types/${enc(code)}`, ProductTypeSchemaSchema, { signal }),
+    /** What a category asks of a listing: the kind, the approval level and the status of every field. The one source of the form's rules. */
+    getListingRules: (categoryCode: string, signal?: AbortSignal): Promise<ListingRules> =>
+      request('/v1/seller/catalog/listing-rules', ListingRulesSchema, { query: { categoryCode }, signal }),
     checkGtin: (code: string, isbn: boolean, signal?: AbortSignal): Promise<GtinCheck> =>
       request(`/v1/seller/catalog/gtin/${enc(code)}`, GtinCheckSchema, { query: { isbn: String(isbn) }, signal }),
     listCategoryRequests: (signal?: AbortSignal): Promise<CategoryRequest[]> => request('/v1/seller/category-requests', z.array(CategoryRequestSchema), { signal }),

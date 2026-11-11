@@ -45,6 +45,13 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 			problem(w, 409, "catalog.concurrent-update", "This product was changed since you opened it", nil)
 			return
 		}
+		// Catalog owns the listing rules: a Fulfilled by AfroTransact listing without any package is refused with the
+		// field errors the form maps (stand-in for the real rule, which every physical variant needs a package for).
+		if l, ok := b["listing"].(map[string]any); ok && l["fulfilment"] == "AFROTRANSACT" && l["packaging"] == nil && !variantsHavePackage(b) {
+			problem(w, 422, "catalog.rule-violation", "The product has 1 problem(s)", map[string]any{
+				"errors": map[string]string{"variants[0].packaging": "Add the package length, width, height and weight of the box as shipped"}})
+			return
+		}
 		p := full(r.PathValue("id"))
 		p["title"], p["status"], p["moderationNote"] = b["title"], "IN_REVIEW", nil
 		u.mu.Lock()
@@ -305,4 +312,18 @@ func (u *Upstreams) SetSellerPlan(code string) {
 type AssistantCall struct {
 	Messages []map[string]any
 	Tools    []string
+}
+
+// variantsHavePackage reports whether every variant of a product body carries its own package.
+func variantsHavePackage(b map[string]any) bool {
+	vs, _ := b["variants"].([]any)
+	if len(vs) == 0 {
+		return false
+	}
+	for _, v := range vs {
+		if m, ok := v.(map[string]any); !ok || m["packaging"] == nil {
+			return false
+		}
+	}
+	return true
 }

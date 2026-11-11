@@ -1356,6 +1356,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/catalog/listing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a category asks of a listing (kind, approval level, the status of every field)
+         * @description catalog `GET /v1/listing-rules`, the single source of the listing rules. The one-step form shows the sections and
+         *     fields for the chosen category from this answer, marks what is required and why, and hides what the category
+         *     does not ask. The category code is the category above the product type (`dairy-eggs`); `general` answers the
+         *     general goods rules for a requested category. 404 for a code the rules do not know.
+         */
+        get: operations["getListingRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/catalog/gtin/{code}": {
         parameters: {
             query?: never;
@@ -4098,6 +4121,8 @@ export interface components {
         };
         CategoryNode: {
             id: string;
+            /** @description The category's stable code (dairy-eggs). The listing rules are asked for by the code of the category above a product type (GET /v1/seller/catalog/listing-rules). */
+            code?: string;
             name: string;
             /** @description DEPARTMENT, CATEGORY or PRODUCT_TYPE */
             level: string;
@@ -4398,6 +4423,11 @@ export interface components {
             contentType: string;
             /** @description Optional alternative text (what the picture shows), stored with the image */
             alt?: string | null;
+            /**
+             * @description LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts): a typed image slot the listing rules ask for in some categories. Absent for a product picture.
+             * @enum {string|null}
+             */
+            role?: "LABEL" | null;
         };
         VariantInput: {
             /** @description Empty for a product without variations */
@@ -4420,6 +4450,8 @@ export interface components {
             quantity: number;
             /** @description Images of this variant only */
             images?: components["schemas"]["ProductImageInput"][];
+            /** @description The box of this variant as shipped (inches, pounds). Required for every physical variant (422 on variants[i].packaging); a variant without one starts from the listing package. Hidden for digital items, gift cards and services. */
+            packaging?: components["schemas"]["PackageDimensions"] | null;
         };
         /** @enum {string} */
         ItemCondition: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
@@ -4455,6 +4487,68 @@ export interface components {
             sellerBehaviour?: {
                 [key: string]: components["schemas"]["FactValue"];
             };
+            /** @description The dangerous goods answer (aerosol, flammable, battery, candle, cleaner). Required where the category's listing rules ask it (422 on dangerousGoods), ignored elsewhere. A yes marks the listing: fulfilment by AfroTransact and carrier-gated flows read it. */
+            dangerousGoods?: boolean | null;
+            /** @description Documents uploaded on the form (permit, brand authorization, safety certificate, insurance, purchase invoice). Marked PENDING_REVIEW for the approval engine; they never block the listing. */
+            documents?: components["schemas"]["ListingDocument"][];
+            /** @description Rule field id to the reason the seller cannot provide a field the rules mark required_or_exemption (material, model_number, age_grade, shelf_life, label_photo) */
+            exemptions?: {
+                [key: string]: string;
+            };
+        };
+        ListingDocument: {
+            /** @enum {string} */
+            kind: "permit" | "brand_authorization" | "safety_certificate" | "liability_insurance" | "authenticity_invoice";
+            url: string;
+            fileName?: string | null;
+            contentType: string;
+            bytes?: number;
+            /**
+             * Format: date
+             * @description The expiry date the document states (insurance, permits)
+             */
+            expiresOn?: string | null;
+            /**
+             * @description Set by the server: PENDING_REVIEW until the approval engine decides
+             * @enum {string}
+             */
+            status?: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+        };
+        ListingRuleField: {
+            /** @description Stable field id (title, brand, product_id, label_photo, condition, package_size, country_of_origin, dangerous_goods, net_weight ...) */
+            id: string;
+            group: string;
+            label: string;
+            /**
+             * @description hidden = not shown, not required, a submitted value is ignored. required_or_exemption = answer it, or give a reason in listing.exemptions.
+             * @enum {string}
+             */
+            status: "required" | "required_or_exemption" | "document" | "optional" | "hidden";
+            note: string;
+            /** @enum {string} */
+            control: "text" | "long_text" | "choice" | "multi_choice" | "measure" | "whole_number" | "yes_no" | "brand" | "barcode" | "money" | "keywords" | "images" | "photo" | "condition" | "ship_from" | "package" | "sizes" | "document";
+            /** @description The product attribute that keeps the answer, for fields stored as attributes */
+            attributeKey?: string | null;
+            options: string[];
+            units: string[];
+            perVariant: boolean;
+        };
+        /** @description What one category asks of a listing, from the single rules source in catalog. The form, the API validation and the bulk template all follow it. */
+        ListingRules: {
+            categoryCode: string;
+            categoryName: string;
+            department: string;
+            /** @enum {string} */
+            kind: "PKG" | "PER" | "SFD" | "BBY" | "BEA" | "HLT" | "FSH" | "JWL" | "ELC" | "HOM" | "KID" | "PET" | "BOK" | "DIG" | "GFT" | "SRV";
+            kindName: string;
+            /** @enum {string} */
+            approval: "open" | "approval" | "brand_gated" | "conditional_approval" | "provider_application" | "blocked";
+            note: string;
+            /** @description A catalog category the owner has not placed in the approved matrix yet */
+            provisional: boolean;
+            fields: components["schemas"]["ListingRuleField"][];
+            /** @description Product-type detail keys the rules own: the form shows the rule field instead and ignores these product-type attributes */
+            replacedAttributeKeys: string[];
         };
         /** @description Exactly one of categoryId or categoryRequestId. variationTheme "" = a product without variations (one variant without options). */
         ProductDraft: {
@@ -4496,6 +4590,8 @@ export interface components {
             };
             taxStatus?: components["schemas"]["VariantTaxStatus"];
             missingTaxFacts?: components["schemas"]["MissingTaxFact"][];
+            /** @description This variant's box as shipped; null for items that ship nothing and for listings saved before packages were per variant */
+            packaging?: components["schemas"]["PackageDimensions"] | null;
         };
         /**
          * @description READY = tax rules resolved and approved; any other status keeps the item from going live
@@ -4548,6 +4644,11 @@ export interface components {
             fitNote?: components["schemas"]["FitNote"] | null;
             sellerBehaviour?: {
                 [key: string]: components["schemas"]["FactValue"];
+            };
+            dangerousGoods?: boolean | null;
+            documents?: components["schemas"]["ListingDocument"][];
+            exemptions?: {
+                [key: string]: string;
             };
         };
         ProductDetail: {
@@ -8118,6 +8219,33 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getListingRules: {
+        parameters: {
+            query: {
+                categoryCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingRules"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

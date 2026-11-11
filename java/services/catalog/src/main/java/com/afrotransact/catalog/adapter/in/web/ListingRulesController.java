@@ -22,7 +22,8 @@ class ListingRulesController {
     @Operation(operationId = "getListingRules", summary = "The listing rules of a category",
             description = "Kind of product, approval level and the status of every field (required, "
                     + "required_or_exemption, document, optional, hidden) for the category code (the category above "
-                    + "the product type, such as dairy-eggs). 404 for a code the rules do not know.")
+                    + "the product type, such as dairy-eggs); the code general answers the general goods rules for a "
+                    + "requested category. 404 for a code the rules do not know.")
     @GetMapping("/v1/listing-rules")
     RulesResponse forCategory(@RequestParam String categoryCode) {
         return RulesResponse.of(rules.forCode(categoryCode));

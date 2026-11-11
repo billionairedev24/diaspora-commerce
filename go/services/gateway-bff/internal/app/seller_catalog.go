@@ -22,6 +22,8 @@ type SellerCatalogService interface {
 	Submit(ctx context.Context, c *domain.Caller, d domain.ProductDraft) (domain.ListingRow, error)
 	Categories(ctx context.Context, c *domain.Caller) ([]domain.CategoryNode, error)
 	ProductType(ctx context.Context, c *domain.Caller, code string) (domain.ProductTypeSchema, error)
+	// ListingRules is what a category asks of a listing (kind, approval level, the status of every field), from catalog.
+	ListingRules(ctx context.Context, c *domain.Caller, categoryCode string) (json.RawMessage, error)
 	CheckGTIN(ctx context.Context, c *domain.Caller, code string, isbn bool) (domain.GtinCheck, error)
 	CategoryRequests(ctx context.Context, c *domain.Caller) ([]domain.CategoryRequest, error)
 	RequestCategory(ctx context.Context, c *domain.Caller, in domain.CategoryRequestInput) (domain.CategoryRequest, error)
@@ -305,7 +307,7 @@ func treeOf(nodes []port.CatalogCategoryNode) []domain.CategoryNode {
 			return out
 		}
 		for _, n := range list {
-			out = append(out, domain.CategoryNode{ID: n.ID, Name: n.Name, Level: strings.ToUpper(n.Level), ProductType: strPtr(n.ProductType),
+			out = append(out, domain.CategoryNode{ID: n.ID, Code: n.Code, Name: n.Name, Level: strings.ToUpper(n.Level), ProductType: strPtr(n.ProductType),
 				Path: n.Path, TaxStatus: strPtr(n.TaxStatus), Children: build(children[n.ID], depth+1)})
 		}
 		return out
@@ -331,6 +333,21 @@ func (s *sellerCatalogImpl) Categories(ctx context.Context, c *domain.Caller) ([
 		return nil, mapErr("catalog", err)
 	}
 	return treeOf(nodes), nil
+}
+
+func (s *sellerCatalogImpl) ListingRules(ctx context.Context, c *domain.Caller, categoryCode string) (json.RawMessage, error) {
+	if err := requireCustomer(c); err != nil {
+		return nil, err
+	}
+	code := strings.TrimSpace(categoryCode)
+	if code == "" {
+		return nil, domain.ValidationProblem(map[string]string{"categoryCode": "Required"})
+	}
+	raw, err := s.r.d.Catalog.ListingRules(ctx, code)
+	if err != nil {
+		return nil, mapErr("catalog", err)
+	}
+	return raw, nil
 }
 
 func (s *sellerCatalogImpl) ProductType(ctx context.Context, c *domain.Caller, code string) (domain.ProductTypeSchema, error) {

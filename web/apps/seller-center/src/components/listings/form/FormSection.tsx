@@ -27,19 +27,19 @@ export function SectionBadge({ status }: { status: SectionStatus }) {
   );
 }
 
-/** A wide card of the one-page form. Its content is a container (`@container`), so the field grids inside follow the card's width and not the screen's. */
+/** A flat section of the one-page form (no card): a heading with a rule above it, then the fields on the white page. Its content is a container (`@container`), so the field grids inside follow the section's width and not the screen's. */
 export function FormSection({ id, title, hint, status, children }: Props) {
   return (
     <section id={`pf-s-${id}`} aria-labelledby={`pf-h-${id}`} data-section={id} data-state={status?.state}
-      className="scroll-mt-[calc(var(--at-sticky-header-h)+4.5rem)] rounded-md border border-border bg-surface">
-      <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+      className="scroll-mt-[calc(var(--at-sticky-header-h)+4.5rem)] border-t border-border pt-5">
+      <header className="flex items-start justify-between gap-3 pb-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 id={`pf-h-${id}`} tabIndex={-1} className="m-0 text-lg font-semibold outline-none">{title}</h2>
           {hint ? <p className="m-0 text-sm text-muted">{hint}</p> : null}
         </div>
         {status ? <SectionBadge status={status} /> : null}
       </header>
-      <div className="@container px-4 py-4 sm:px-6 sm:py-5">
+      <div className="@container pb-5">
         <div className="flex flex-col gap-5">{children}</div>
       </div>
     </section>

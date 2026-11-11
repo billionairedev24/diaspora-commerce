@@ -379,34 +379,34 @@ export function departmentsOf(tree: CategoryNode[], idOrCode: { category?: strin
 
 /** The classic mock fixtures (kept for the flows that predate the category tax tree) followed by the 13 > 74 tax tree. */
 const LEGACY_TREE: CategoryNode[] = [
-  { id: 'dep-groceries', name: 'Groceries', level: 'DEPARTMENT', productType: null, path: 'Groceries', children: [
-    { id: 'cat-pantry', name: 'Pantry', level: 'CATEGORY', productType: null, path: 'Groceries › Pantry', children: [
-      { id: 'pt-grains', name: 'Rice, grains & flours', level: 'PRODUCT_TYPE', productType: 'grocery', path: 'Groceries › Pantry › Rice, grains & flours', children: [] },
-      { id: 'pt-spices', name: 'Spices & seasonings', level: 'PRODUCT_TYPE', productType: 'grocery', path: 'Groceries › Pantry › Spices & seasonings', children: [] }
+  { id: 'dep-groceries', code: 'groceries-food', name: 'Groceries', level: 'DEPARTMENT', productType: null, path: 'Groceries', children: [
+    { id: 'cat-pantry', code: 'beans-pantry-sauces', name: 'Pantry', level: 'CATEGORY', productType: null, path: 'Groceries › Pantry', children: [
+      { id: 'pt-grains', code: 'grains', name: 'Rice, grains & flours', level: 'PRODUCT_TYPE', productType: 'grocery', path: 'Groceries › Pantry › Rice, grains & flours', children: [] },
+      { id: 'pt-spices', code: 'spices', name: 'Spices & seasonings', level: 'PRODUCT_TYPE', productType: 'grocery', path: 'Groceries › Pantry › Spices & seasonings', children: [] }
     ] },
-    { id: 'cat-frozen', name: 'Frozen & chilled', level: 'CATEGORY', productType: null, path: 'Groceries › Frozen & chilled', children: [
-      { id: 'pt-frozen', name: 'Frozen vegetables & fish', level: 'PRODUCT_TYPE', productType: 'perishable', path: 'Groceries › Frozen & chilled › Frozen vegetables & fish', children: [] }
+    { id: 'cat-frozen', code: 'frozen-meals', name: 'Frozen & chilled', level: 'CATEGORY', productType: null, path: 'Groceries › Frozen & chilled', children: [
+      { id: 'pt-frozen', code: 'frozen', name: 'Frozen vegetables & fish', level: 'PRODUCT_TYPE', productType: 'perishable', path: 'Groceries › Frozen & chilled › Frozen vegetables & fish', children: [] }
     ] }
   ] },
-  { id: 'dep-fashion', name: 'Fashion', level: 'DEPARTMENT', productType: null, path: 'Fashion', children: [
-    { id: 'cat-women', name: 'Women', level: 'CATEGORY', productType: null, path: 'Fashion › Women', children: [
-      { id: 'pt-dresses', name: 'Dresses', level: 'PRODUCT_TYPE', productType: 'dress', path: 'Fashion › Women › Dresses', children: [] }
+  { id: 'dep-fashion', code: 'fashion-accessories', name: 'Fashion', level: 'DEPARTMENT', productType: null, path: 'Fashion', children: [
+    { id: 'cat-women', code: 'adult-clothing-footwear', name: 'Women', level: 'CATEGORY', productType: null, path: 'Fashion › Women', children: [
+      { id: 'pt-dresses', code: 'dresses', name: 'Dresses', level: 'PRODUCT_TYPE', productType: 'dress', path: 'Fashion › Women › Dresses', children: [] }
     ] },
-    { id: 'cat-men', name: 'Men', level: 'CATEGORY', productType: null, path: 'Fashion › Men', children: [
-      { id: 'pt-mens-tops', name: 'Kaftans & shirts', level: 'PRODUCT_TYPE', productType: 'menwear', path: 'Fashion › Men › Kaftans & shirts', children: [] }
+    { id: 'cat-men', code: 'adult-clothing-footwear', name: 'Men', level: 'CATEGORY', productType: null, path: 'Fashion › Men', children: [
+      { id: 'pt-mens-tops', code: 'mens-tops', name: 'Kaftans & shirts', level: 'PRODUCT_TYPE', productType: 'menwear', path: 'Fashion › Men › Kaftans & shirts', children: [] }
     ] },
-    { id: 'cat-footwear', name: 'Footwear', level: 'CATEGORY', productType: null, path: 'Fashion › Footwear', children: [
-      { id: 'pt-shoes', name: 'Sandals & shoes', level: 'PRODUCT_TYPE', productType: 'shoes', path: 'Fashion › Footwear › Sandals & shoes', children: [] }
+    { id: 'cat-footwear', code: 'adult-clothing-footwear', name: 'Footwear', level: 'CATEGORY', productType: null, path: 'Fashion › Footwear', children: [
+      { id: 'pt-shoes', code: 'shoes', name: 'Sandals & shoes', level: 'PRODUCT_TYPE', productType: 'shoes', path: 'Fashion › Footwear › Sandals & shoes', children: [] }
     ] }
   ] },
-  { id: 'dep-beauty', name: 'Beauty', level: 'DEPARTMENT', productType: null, path: 'Beauty', children: [
-    { id: 'cat-skin', name: 'Skin & body', level: 'CATEGORY', productType: null, path: 'Beauty › Skin & body', children: [
-      { id: 'pt-butters', name: 'Butters & oils', level: 'PRODUCT_TYPE', productType: 'beauty', path: 'Beauty › Skin & body › Butters & oils', children: [] }
+  { id: 'dep-beauty', code: 'beauty-personal-care', name: 'Beauty', level: 'DEPARTMENT', productType: null, path: 'Beauty', children: [
+    { id: 'cat-skin', code: 'skincare-cosmetics', name: 'Skin & body', level: 'CATEGORY', productType: null, path: 'Beauty › Skin & body', children: [
+      { id: 'pt-butters', code: 'butters', name: 'Butters & oils', level: 'PRODUCT_TYPE', productType: 'beauty', path: 'Beauty › Skin & body › Butters & oils', children: [] }
     ] }
   ] },
-  { id: 'dep-books', name: 'Books', level: 'DEPARTMENT', productType: null, path: 'Books', children: [
-    { id: 'cat-cookbooks', name: 'Cookbooks', level: 'CATEGORY', productType: null, path: 'Books › Cookbooks', children: [
-      { id: 'pt-cookbooks', name: 'African & Caribbean cooking', level: 'PRODUCT_TYPE', productType: 'book', path: 'Books › Cookbooks › African & Caribbean cooking', children: [] }
+  { id: 'dep-books', code: 'books-media', name: 'Books', level: 'DEPARTMENT', productType: null, path: 'Books', children: [
+    { id: 'cat-cookbooks', code: 'printed-books', name: 'Cookbooks', level: 'CATEGORY', productType: null, path: 'Books › Cookbooks', children: [
+      { id: 'pt-cookbooks', code: 'cookbooks', name: 'African & Caribbean cooking', level: 'PRODUCT_TYPE', productType: 'book', path: 'Books › Cookbooks › African & Caribbean cooking', children: [] }
     ] }
   ] }
 ];

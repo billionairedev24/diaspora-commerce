@@ -139,6 +139,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	}
 	route("GET /v1/seller/catalog/categories", h.categoryTree)
 	route("GET /v1/seller/catalog/product-types/{code}", h.productType)
+	route("GET /v1/seller/catalog/listing-rules", h.listingRules)
 	route("GET /v1/seller/catalog/gtin/{code}", h.checkGTIN)
 	route("GET /v1/seller/category-requests", h.categoryRequests)
 	route("POST /v1/seller/category-requests", h.requestCategory)
@@ -452,6 +453,11 @@ func (h *handlersImpl) categoryTree(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) productType(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerCatalog.ProductType(r.Context(), callerFrom(r.Context()), r.PathValue("code"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) listingRules(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerCatalog.ListingRules(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("categoryCode"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

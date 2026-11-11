@@ -10,7 +10,10 @@ public interface ListingRulesService {
     /** Every rule. */
     RuleBook book();
 
-    /** The rules of a category code; throws not-found for a code the rules do not know. */
+    /**
+     * The rules of a category code; throws not-found for a code the rules do not know. The code {@code general} answers
+     * the general goods rules (what a requested or newly created category gets).
+     */
     CategoryRules forCode(String categoryCode);
 
     /**

@@ -24,6 +24,9 @@ type ProductVariant struct {
 	TaxFacts           map[string]any   `json:"taxFacts"`
 	TaxStatus          string           `json:"taxStatus"`
 	MissingTaxFacts    []MissingTaxFact `json:"missingTaxFacts"`
+	// Packaging is this variant's box as shipped (nil for items that ship nothing and for listings saved before
+	// packages were per variant: the form then starts from the listing's package).
+	Packaging *PackageDimensions `json:"packaging"`
 }
 
 // MissingTaxFact is a question still to answer before a variant can go live, in plain words.
@@ -35,16 +38,19 @@ type MissingTaxFact struct {
 
 // ListingDetails is a stored listing's description, condition, keywords, fulfilment, package, handling and ship-from.
 type ListingDetails struct {
-	Description     *string            `json:"description"`
-	Condition       string             `json:"condition"`
-	Keywords        []string           `json:"keywords"`
-	Fulfilment      string             `json:"fulfilment"`
-	Packaging       *PackageDimensions `json:"packaging"`
-	HandlingDays    int                `json:"handlingDays"`
-	ShipFromID      *string            `json:"shipFromId"`
-	SizeChartID     *string            `json:"sizeChartId"`
-	FitNote         *string            `json:"fitNote"`
-	SellerBehaviour map[string]any     `json:"sellerBehaviour"`
+	Description     *string                `json:"description"`
+	Condition       string                 `json:"condition"`
+	Keywords        []string               `json:"keywords"`
+	Fulfilment      string                 `json:"fulfilment"`
+	Packaging       *PackageDimensions     `json:"packaging"`
+	HandlingDays    int                    `json:"handlingDays"`
+	ShipFromID      *string                `json:"shipFromId"`
+	SizeChartID     *string                `json:"sizeChartId"`
+	FitNote         *string                `json:"fitNote"`
+	SellerBehaviour map[string]any         `json:"sellerBehaviour"`
+	DangerousGoods  *bool                  `json:"dangerousGoods"`
+	Documents       []ListingDocumentInput `json:"documents"`
+	Exemptions      map[string]string      `json:"exemptions"`
 }
 
 // SellerProductDetail is GET /v1/seller/listings/{productId}: everything the one-step form edits.

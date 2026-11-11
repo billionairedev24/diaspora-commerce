@@ -1447,6 +1447,25 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/listing-rules:
+    get:
+      tags: [Listings]
+      operationId: getListingRules
+      security: [{sessionCookie: []}]
+      summary: What a category asks of a listing (kind, approval level, the status of every field)
+      description: |
+        catalog `GET /v1/listing-rules`, the single source of the listing rules. The one-step form shows the sections and
+        fields for the chosen category from this answer, marks what is required and why, and hides what the category
+        does not ask. The category code is the category above the product type (`dairy-eggs`); `general` answers the
+        general goods rules for a requested category. 404 for a code the rules do not know.
+      parameters: [{name: categoryCode, in: query, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Rules, content: {application/json: {schema: {$ref: '#/components/schemas/ListingRules'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/catalog/gtin/{code}:
     get:
       tags: [Listings]
@@ -4383,6 +4402,7 @@ components:
       required: [id, name, level, productType, path, children]
       properties:
         id: {type: string}
+        code: {type: string, description: 'The category''s stable code (dairy-eggs). The listing rules are asked for by the code of the category above a product type (GET /v1/seller/catalog/listing-rules).'}
         name: {type: string}
         level: {type: string, description: 'DEPARTMENT, CATEGORY or PRODUCT_TYPE'}
         productType: {type: [string, 'null']}
@@ -4651,6 +4671,7 @@ components:
         bytes: {type: integer, minimum: 0}
         contentType: {type: string}
         alt: {type: [string, 'null'], maxLength: 200, description: 'Optional alternative text (what the picture shows), stored with the image'}
+        role: {type: [string, 'null'], enum: [LABEL, null], description: 'LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts): a typed image slot the listing rules ask for in some categories. Absent for a product picture.'}
     VariantInput:
       type: object
       required: [options, priceMinor, quantity]
@@ -4665,6 +4686,11 @@ components:
         compareAtMinor: {type: [integer, 'null'], minimum: 1, description: '"Was" price shown struck through; above priceMinor'}
         quantity: {type: integer, minimum: 0, maximum: 100000}
         images: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/ProductImageInput'}, description: Images of this variant only}
+        packaging:
+          description: 'The box of this variant as shipped (inches, pounds). Required for every physical variant (422 on variants[i].packaging); a variant without one starts from the listing package. Hidden for digital items, gift cards and services.'
+          oneOf:
+            - {$ref: '#/components/schemas/PackageDimensions'}
+            - {type: 'null'}
     ItemCondition: {type: string, enum: [NEW, RENEWED, USED_LIKE_NEW, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE]}
     ListingFulfilment: {type: string, enum: [SELLER, AFROTRANSACT], description: 'Ships from the seller, or Fulfilled by AfroTransact'}
     PackageDimensions:
@@ -4692,6 +4718,49 @@ components:
         sizeChartId: {type: [string, 'null'], format: uuid, description: 'One of the organisation''s size charts (POST /v1/seller/size-charts). Required when the product type''s sizing trait says sizeChartRequired; every size the variants sell needs a row in it (422 on sizeChartId or variants[i].options.Size). Another organisation''s chart is never accepted.'}
         fitNote: {oneOf: [{$ref: '#/components/schemas/FitNote'}, {type: 'null'}], description: 'How the sizes fit; shown beside the chart (defaults to the chart''s own)'}
         sellerBehaviour: {type: object, additionalProperties: {$ref: '#/components/schemas/FactValue'}, description: '"Your listing": how this seller sells the item (sold_heated, heated_by_seller, utensils_provided), by fact id'}
+        dangerousGoods: {type: [boolean, 'null'], description: 'The dangerous goods answer (aerosol, flammable, battery, candle, cleaner). Required where the category''s listing rules ask it (422 on dangerousGoods), ignored elsewhere. A yes marks the listing: fulfilment by AfroTransact and carrier-gated flows read it.'}
+        documents: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/ListingDocument'}, description: 'Documents uploaded on the form (permit, brand authorization, safety certificate, insurance, purchase invoice). Marked PENDING_REVIEW for the approval engine; they never block the listing.'}
+        exemptions: {type: object, additionalProperties: {type: string, maxLength: 300}, description: 'Rule field id to the reason the seller cannot provide a field the rules mark required_or_exemption (material, model_number, age_grade, shelf_life, label_photo)'}
+    ListingDocument:
+      type: object
+      required: [kind, url, contentType]
+      properties:
+        kind: {type: string, enum: [permit, brand_authorization, safety_certificate, liability_insurance, authenticity_invoice]}
+        url: {type: string}
+        fileName: {type: [string, 'null'], maxLength: 200}
+        contentType: {type: string}
+        bytes: {type: integer, minimum: 0}
+        expiresOn: {type: [string, 'null'], format: date, description: 'The expiry date the document states (insurance, permits)'}
+        status: {type: string, enum: [PENDING_REVIEW, APPROVED, REJECTED], description: 'Set by the server: PENDING_REVIEW until the approval engine decides'}
+    ListingRuleField:
+      type: object
+      required: [id, group, label, status, note, control, options, units, perVariant]
+      properties:
+        id: {type: string, description: 'Stable field id (title, brand, product_id, label_photo, condition, package_size, country_of_origin, dangerous_goods, net_weight ...)'}
+        group: {type: string}
+        label: {type: string}
+        status: {type: string, enum: [required, required_or_exemption, document, optional, hidden], description: 'hidden = not shown, not required, a submitted value is ignored. required_or_exemption = answer it, or give a reason in listing.exemptions.'}
+        note: {type: string}
+        control: {type: string, enum: [text, long_text, choice, multi_choice, measure, whole_number, yes_no, brand, barcode, money, keywords, images, photo, condition, ship_from, package, sizes, document]}
+        attributeKey: {type: [string, 'null'], description: 'The product attribute that keeps the answer, for fields stored as attributes'}
+        options: {type: array, items: {type: string}}
+        units: {type: array, items: {type: string}}
+        perVariant: {type: boolean}
+    ListingRules:
+      type: object
+      required: [categoryCode, categoryName, department, kind, kindName, approval, note, provisional, fields, replacedAttributeKeys]
+      description: What one category asks of a listing, from the single rules source in catalog. The form, the API validation and the bulk template all follow it.
+      properties:
+        categoryCode: {type: string}
+        categoryName: {type: string}
+        department: {type: string}
+        kind: {type: string, enum: [PKG, PER, SFD, BBY, BEA, HLT, FSH, JWL, ELC, HOM, KID, PET, BOK, DIG, GFT, SRV]}
+        kindName: {type: string}
+        approval: {type: string, enum: [open, approval, brand_gated, conditional_approval, provider_application, blocked]}
+        note: {type: string}
+        provisional: {type: boolean, description: 'A catalog category the owner has not placed in the approved matrix yet'}
+        fields: {type: array, items: {$ref: '#/components/schemas/ListingRuleField'}}
+        replacedAttributeKeys: {type: array, items: {type: string}, description: 'Product-type detail keys the rules own: the form shows the rule field instead and ignores these product-type attributes'}
     ProductDraft:
       type: object
       required: [title, attributes, images, variationTheme, variants]
@@ -4731,6 +4800,11 @@ components:
         taxFacts: {type: object, additionalProperties: {$ref: '#/components/schemas/FactValue'}}
         taxStatus: {$ref: '#/components/schemas/VariantTaxStatus'}
         missingTaxFacts: {type: array, items: {$ref: '#/components/schemas/MissingTaxFact'}}
+        packaging:
+          oneOf:
+            - {$ref: '#/components/schemas/PackageDimensions'}
+            - {type: 'null'}
+          description: 'This variant''s box as shipped; null for items that ship nothing and for listings saved before packages were per variant'
     VariantTaxStatus: {type: string, enum: [READY, MISSING_FACTS, PENDING_REVIEW, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN, REJECTED], description: 'READY = tax rules resolved and approved; any other status keeps the item from going live'}
     MissingTaxFact:
       type: object
@@ -4790,6 +4864,9 @@ components:
         sizeChartId: {type: [string, 'null'], format: uuid}
         fitNote: {oneOf: [{$ref: '#/components/schemas/FitNote'}, {type: 'null'}]}
         sellerBehaviour: {type: object, additionalProperties: {$ref: '#/components/schemas/FactValue'}}
+        dangerousGoods: {type: [boolean, 'null']}
+        documents: {type: array, items: {$ref: '#/components/schemas/ListingDocument'}}
+        exemptions: {type: object, additionalProperties: {type: string}}
     ProductDetail:
       type: object
       required: [productId, atin, status, statusLabel, moderationNote, categoryId, categoryRequestId, categoryPath, productType, title,

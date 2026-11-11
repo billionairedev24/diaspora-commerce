@@ -78,9 +78,35 @@ func exerciseSellerListing(t *testing.T, bff *testkit.BFF, b *browser) {
 	mustStatus(t, b.do("DELETE", "/v1/seller/ship-from-addresses/"+shipFrom, nil), 200)
 	edit["listing"].(map[string]any)["shipFromId"] = "someone-elses"
 	mustStatus(t, b.do("PUT", "/v1/seller/products/prod-1", edit), 422)
+	// What a category requires is catalog's rule: the gateway forwards the submission and maps catalog's field errors.
+	edit["version"] = 3
 	edit["listing"] = map[string]any{"fulfilment": "AFROTRANSACT"}
+	if r := b.do("PUT", "/v1/seller/products/prod-1", edit); r.status != 422 || !strings.Contains(string(r.body), "variants[0].packaging") {
+		t.Fatalf("catalog's package refusal = %d %s", r.status, r.body)
+	}
+	// Shape only is checked here: a package with a zero side never reaches catalog.
+	edit["listing"] = map[string]any{"fulfilment": "AFROTRANSACT", "packaging": map[string]any{"lengthIn": 0, "widthIn": 4, "heightIn": 2, "weightLb": 1}}
 	if r := b.do("PUT", "/v1/seller/products/prod-1", edit); r.status != 422 || !strings.Contains(string(r.body), "listing.packaging") {
-		t.Fatalf("FBA without package = %d %s", r.status, r.body)
+		t.Fatalf("zero side = %d %s", r.status, r.body)
+	}
+	// Per-variant packages, dangerous goods, documents, exemptions and the label photo role are passed to catalog unchanged.
+	edit["variants"] = []map[string]any{{"options": map[string]string{}, "sellerSku": "OFADA-5LB", "gtin": "4006381333931", "priceMinor": 2399, "quantity": 4,
+		"packaging": map[string]any{"lengthIn": 8, "widthIn": 6, "heightIn": 2, "weightLb": 0.6}}}
+	edit["images"] = []map[string]any{{"url": "https://img.example/a.webp", "contentType": "image/webp"}, {"url": "https://img.example/label.webp", "contentType": "image/webp", "role": "LABEL"}}
+	edit["listing"] = map[string]any{"fulfilment": "AFROTRANSACT", "dangerousGoods": true, "exemptions": map[string]string{"material": "mixed"},
+		"documents": []map[string]any{{"kind": "permit", "url": "https://img.example/p.pdf", "contentType": "application/pdf"}}}
+	if r := b.do("PUT", "/v1/seller/products/prod-1", edit); r.status != 200 {
+		t.Fatalf("rule answers = %d %s", r.status, r.body)
+	}
+	sent := bff.Upstreams.LastProductBody
+	if v := sent["variants"].([]any)[0].(map[string]any)["packaging"].(map[string]any); v["weightLb"] != 0.6 {
+		t.Fatalf("variant package = %v", v)
+	}
+	if l := sent["listing"].(map[string]any); l["dangerousGoods"] != true || l["exemptions"].(map[string]any)["material"] != "mixed" || len(l["documents"].([]any)) != 1 {
+		t.Fatalf("listing answers = %v", l)
+	}
+	if im := sent["images"].([]any)[1].(map[string]any); im["role"] != "LABEL" {
+		t.Fatalf("label photo role = %v", im)
 	}
 	// Drafts: save, autosave with versions, list, read, discard.
 	d := b.do("POST", "/v1/seller/product-drafts", map[string]any{"title": "Ofada", "categoryPath": "Groceries › Pantry",

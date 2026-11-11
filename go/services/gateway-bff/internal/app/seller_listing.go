@@ -229,7 +229,7 @@ func (s *sellerListingImpl) detailOf(ctx context.Context, c *domain.Caller, p po
 		out.Variants = append(out.Variants, domain.ProductVariant{ATIN: v.ATIN, SellerSKU: v.SellerSKU, GTIN: strPtr(v.GTIN),
 			GTINExempt: v.GTINExempt, Options: opts, PriceMinor: v.PriceMinor, CompareAtMinor: v.CompareAtMinor, Quantity: v.Quantity,
 			Images: images, SellerSKUGenerated: v.SellerSKUGenerated, TaxFacts: emptyFactMap(v.TaxFacts), TaxStatus: firstNonEmpty(v.TaxStatus, "MISSING_FACTS"),
-			MissingTaxFacts: emptyMissingFacts(v.MissingTaxFacts)})
+			MissingTaxFacts: emptyMissingFacts(v.MissingTaxFacts), Packaging: v.Packaging})
 		if v.Currency != "" {
 			out.Currency = v.Currency
 		}
@@ -238,7 +238,8 @@ func (s *sellerListingImpl) detailOf(ctx context.Context, c *domain.Caller, p po
 	if l := p.Listing; l != nil {
 		out.Listing = domain.ListingDetails{Description: strPtr(l.Description), Condition: firstNonEmpty(l.Condition, "NEW"),
 			Keywords: l.Keywords, Fulfilment: firstNonEmpty(l.Fulfilment, "SELLER"), Packaging: l.Packaging,
-			HandlingDays: max(1, l.HandlingDays), SellerBehaviour: emptyFactMap(l.SellerBehaviour)}
+			HandlingDays: max(1, l.HandlingDays), SellerBehaviour: emptyFactMap(l.SellerBehaviour),
+			DangerousGoods: l.DangerousGoods, Documents: emptyDocuments(l.Documents), Exemptions: emptyReasons(l.Exemptions)}
 		if out.Listing.Keywords == nil {
 			out.Listing.Keywords = []string{}
 		}
@@ -267,6 +268,20 @@ func (s *sellerListingImpl) detailOf(ctx context.Context, c *domain.Caller, p po
 		}
 	}
 	return out
+}
+
+func emptyDocuments(d []domain.ListingDocumentInput) []domain.ListingDocumentInput {
+	if d == nil {
+		return []domain.ListingDocumentInput{}
+	}
+	return d
+}
+
+func emptyReasons(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
 }
 
 func draftSummaryOf(d port.CatalogDraft) domain.ProductDraftSummary {

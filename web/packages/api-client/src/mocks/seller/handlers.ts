@@ -68,6 +68,7 @@ import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { SERVICE_PLACES } from '../shopper-state';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
+import { listingRulesFor } from './listing-rules';
 import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import { MOCK_DEPARTMENTS, MOCK_ORG_DEPARTMENTS } from './departments';
 import { homeModules } from './home-modules';
@@ -1778,6 +1779,16 @@ export const sellerHandlers = [
       const t = PRODUCT_TYPES[p.code ?? ''];
       if (!t) throw notFound('Unknown product type.');
       return t;
+    })
+  ),
+  http.get(
+    `${W}/catalog/listing-rules`,
+    route((ctx) => {
+      const code = new URL(ctx.request.url).searchParams.get('categoryCode') ?? '';
+      if (!code) throw invalid({ categoryCode: 'Required' });
+      const rules = listingRulesFor(code);
+      if (!rules) throw notFound('No listing rules for that category.');
+      return rules;
     })
   ),
   http.get(

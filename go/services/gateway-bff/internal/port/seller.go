@@ -697,20 +697,24 @@ type CatalogProductVariant struct {
 	TaxFacts           map[string]any             `json:"taxFacts"`
 	TaxStatus          string                     `json:"taxStatus"`
 	MissingTaxFacts    []domain.MissingTaxFact    `json:"missingTaxFacts"`
+	Packaging          *domain.PackageDimensions  `json:"packaging"`
 }
 
 // CatalogListing is catalog's ListingDetails (S307).
 type CatalogListing struct {
-	Description     string                    `json:"description"`
-	Condition       string                    `json:"condition"`
-	Keywords        []string                  `json:"keywords"`
-	Fulfilment      string                    `json:"fulfilment"`
-	Packaging       *domain.PackageDimensions `json:"packaging"`
-	HandlingDays    int                       `json:"handlingDays"`
-	ShipFrom        *CatalogShipFrom          `json:"shipFrom"`
-	SizeChartID     string                    `json:"sizeChartId"`
-	FitNote         string                    `json:"fitNote"`
-	SellerBehaviour map[string]any            `json:"sellerBehaviour"`
+	Description     string                        `json:"description"`
+	Condition       string                        `json:"condition"`
+	Keywords        []string                      `json:"keywords"`
+	Fulfilment      string                        `json:"fulfilment"`
+	Packaging       *domain.PackageDimensions     `json:"packaging"`
+	HandlingDays    int                           `json:"handlingDays"`
+	ShipFrom        *CatalogShipFrom              `json:"shipFrom"`
+	SizeChartID     string                        `json:"sizeChartId"`
+	FitNote         string                        `json:"fitNote"`
+	SellerBehaviour map[string]any                `json:"sellerBehaviour"`
+	DangerousGoods  *bool                         `json:"dangerousGoods"`
+	Documents       []domain.ListingDocumentInput `json:"documents"`
+	Exemptions      map[string]string             `json:"exemptions"`
 }
 
 // CatalogShipFrom is catalog's ShipFrom snapshot of a seller ship-from address.
@@ -757,6 +761,7 @@ type CatalogProductPage struct {
 type CatalogCategoryNode struct {
 	ID          string `json:"id"`
 	ParentID    string `json:"parentId"`
+	Code        string `json:"code"`
 	Name        string `json:"name"`
 	Level       string `json:"level"`
 	ProductType string `json:"productType"`
@@ -828,6 +833,9 @@ type SellerCatalogClient interface {
 	SetActive(ctx context.Context, bearer, productID string, active bool) (CatalogOwnProduct, error)
 	CategoryTree(ctx context.Context) ([]CatalogCategoryNode, error)
 	ProductType(ctx context.Context, code string) (CatalogProductType, error)
+	// ListingRules is catalog's GET /v1/listing-rules for a category code, passed through unchanged: the rules live
+	// in catalog only, the gateway holds no copy.
+	ListingRules(ctx context.Context, categoryCode string) (json.RawMessage, error)
 	CheckGTIN(ctx context.Context, bearer, code string, isbn bool) (CatalogGtinCheck, error)
 	CategoryRequests(ctx context.Context, bearer string) ([]CatalogCategoryRequest, error)
 	RequestCategory(ctx context.Context, bearer string, in domain.CategoryRequestInput) (CatalogCategoryRequest, error)
