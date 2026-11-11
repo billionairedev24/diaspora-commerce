@@ -11,7 +11,6 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import com.afrotransact.platform.events.DomainEventPublisher;
-import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.seller.application.SellingViews.ApprovalView;
 import com.afrotransact.seller.domain.ApplicationStatus;

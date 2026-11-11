@@ -129,25 +129,25 @@ class SellingRuleController {
     record RuleBody(@NotBlank String scopeType, @NotBlank @Size(max = 200) String key, String categoryCode,
                     @Size(max = 200) String label, @NotBlank String level, List<DocBody> documents,
                     @Size(max = 500) @Schema(description = "NOT_AVAILABLE: the reason sellers read") String sellerReason,
-                    @Size(max = 500) String note, String capability, List<String> materials, boolean watch,
+                    @Size(max = 500) String note, String capability, List<String> materials, Boolean watch,
                     Integer reapplyAfterDays, Boolean active, Long version,
-                    @NotBlank @Size(min = 10, max = 500) @Schema(description = "Why this change (audited)") String reason,
+                    @NotBlank @Size(max = 500) @Schema(description = "Why this change (audited)") String reason,
                     @Size(max = 200) String actorName) {
 
         RuleInput toInput() {
             return new RuleInput(scopeType, key, categoryCode, label, level,
-                    documents == null ? List.of() : documents.stream().map(d -> new Doc(d.kind(), d.optional()))
-                            .toList(), sellerReason, note, capability, materials, watch, reapplyAfterDays, active,
+                    documents == null ? List.of() : documents.stream().map(d -> new Doc(d.kind(), Boolean.TRUE.equals(d.optional())))
+                            .toList(), sellerReason, note, capability, materials, Boolean.TRUE.equals(watch), reapplyAfterDays, active,
                     version);
         }
     }
 
     @Schema(name = "SellingRuleDocument")
-    record DocBody(@NotBlank String kind, boolean optional) {
+    record DocBody(@NotBlank String kind, Boolean optional) {
     }
 
     @Schema(name = "SellingApprovalAction")
-    record ApprovalAction(@NotBlank @Size(min = 10, max = 500) String reason, LocalDate reapplyAfter,
+    record ApprovalAction(@NotBlank @Size(max = 500) String reason, LocalDate reapplyAfter,
                           @Size(max = 200) String actorName) {
     }
 

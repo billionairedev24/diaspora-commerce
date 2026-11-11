@@ -117,10 +117,10 @@ class SellingController {
                         @Schema(description = "The date on an invoice") LocalDate issuedOn,
                         @Schema(description = "Expiry of a permit, licence or policy") LocalDate expiresOn,
                         @Schema(description = "Insurance: the policy names AfroTransact as additional insured")
-                        boolean namesAfroTransact, @Size(max = 500) String note) {
+                        Boolean namesAfroTransact, @Size(max = 500) String note) {
 
         DocumentInput toInput() {
-            return new DocumentInput(kind, assetId, fileName, issuedOn, expiresOn, namesAfroTransact, note);
+            return new DocumentInput(kind, assetId, fileName, issuedOn, expiresOn, Boolean.TRUE.equals(namesAfroTransact), note);
         }
     }
 

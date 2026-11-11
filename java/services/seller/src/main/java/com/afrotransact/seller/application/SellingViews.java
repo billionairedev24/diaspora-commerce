@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.seller.domain.DocumentAccess;
-import com.afrotransact.seller.domain.SellingApplication;
 import com.afrotransact.seller.domain.SellingApproval;
 import com.afrotransact.seller.domain.SellingDocument;
 import com.afrotransact.seller.domain.SellingDocumentRequirement;
