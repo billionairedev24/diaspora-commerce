@@ -23,10 +23,10 @@ export function citiesLine(cities: { city: string }[], shown = SHOWN): { text: s
 }
 
 /**
- * Service area: where the provider works. A base address, how far they go (a radius within the staff-set limits for their
- * service categories), optional named extra areas (cities, ZIPs, whole metro zones) and a live preview of the cities and
+ * Service area: where the provider is based. A base address, how far they travel to customers (a radius within the
+ * staff-set bounds for their service categories; customers who go to a shop choose their own distance), optional named extra areas (cities, ZIPs, whole metro zones) and a live preview of the cities and
  * the zone the radius covers. Whether a service comes to the customer or the customer goes to the provider is set on each
- * service. Customers are only shown providers whose area covers them.
+ * service. A service that comes to the customer is shown only to customers inside the radius.
  */
 export function ServiceAreaPanel() {
   const t = useT();
@@ -157,7 +157,7 @@ function AreaSheet({ view, onClose }: { view: ServiceAreaView; onClose: () => vo
           <input id="svc-area-radius" type="range" min={bounds.minMiles} max={bounds.maxMiles} step={1} value={radius} onChange={(e) => setRadius(Number(e.currentTarget.value))}
             aria-valuetext={t('sc.svcArea.radiusValue', { miles: radius })} aria-describedby="svc-area-radius-help" />
           <p id="svc-area-radius-help" className="m-0 text-xs text-text-muted">
-            {t('sc.svcArea.radiusHelp', { min: bounds.minMiles, max: bounds.maxMiles, travel: view.customerTravelMiles })}
+            {t('sc.svcArea.radiusHelp', { min: bounds.minMiles, max: bounds.maxMiles })}
           </p>
           {errors.radiusMiles ? <span role="alert" className="text-sm text-danger">{errors.radiusMiles}</span> : null}
         </div>

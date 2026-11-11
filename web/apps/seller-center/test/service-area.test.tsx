@@ -41,14 +41,16 @@ describe('Provider Hub: service area', () => {
     const preview = within(dialog).getByTestId('service-area-preview');
     await waitFor(() => expect(preview).toHaveTextContent(/Greater Austin: Round Rock/));
     fireEvent.change(slider, { target: { value: '30' } });
-    expect(within(dialog).getByText('Service radius: 30 miles')).toBeInTheDocument();
+    expect(within(dialog).getByText('How far you travel to customers: 30 miles')).toBeInTheDocument();
+    expect(within(dialog).getByText(/it never limits them/)).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/travel limit|smaller of your radius/i);
     await waitFor(() => expect(preview).toHaveTextContent(/Georgetown/));
     expect(preview).not.toHaveTextContent(/Brooklyn/);
 
     await user.click(within(dialog).getByRole('button', { name: 'Save service area' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Service area' })).not.toBeInTheDocument());
     const summary = await screen.findByTestId('service-area-summary');
-    expect(summary).toHaveTextContent('Based in Round Rock, TX · up to 30 miles · Greater Austin');
+    expect(summary).toHaveTextContent('Based in Round Rock, TX · you travel up to 30 miles to customers · Greater Austin');
     expect((await mockApi().getServiceArea()).area).toMatchObject({ baseZip: '78664', radiusMiles: 30 });
   });
 

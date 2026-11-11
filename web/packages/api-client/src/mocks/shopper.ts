@@ -699,29 +699,33 @@ export const shopperHandlers = [
     const category = (url.searchParams.get('category') ?? '').toLowerCase();
     const sort = url.searchParams.get('sort') ?? 'NEAREST';
     if (!['NEAREST', 'SOONEST', 'PRICE', 'RATING'].includes(sort)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'Choose a sort.', { errors: { sort: 'Choose NEAREST, SOONEST, PRICE or RATING' } });
+    const rawRadius = (url.searchParams.get('radiusMiles') ?? '').trim().toLowerCase();
+    const chosen = rawRadius === '' ? null : rawRadius === 'any' ? 0 : /^\d{1,4}$/.test(rawRadius) ? Number(rawRadius) : -1;
+    if (chosen !== null && (chosen < 0 || chosen > 1000)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Check the distance', 'Choose a distance from 1 to 1000 miles, or any.', { errors: { radiusMiles: 'Choose a distance from 1 to 1000 miles, or any.' } });
     const zip = url.searchParams.get('zip') ?? ctx.session.zip;
     if (!/^\d{5}$/.test(zip)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Check the ZIP code', 'Enter a 5-digit US ZIP code.', { errors: { zip: 'Enter a 5-digit US ZIP code.' } });
     const loc = sessionLocation(ctx.session);
     const known = SERVICE_PLACES[zip];
     const place = { zip, city: known?.city ?? (zip === loc.zip ? loc.city : ''), state: known?.state ?? (zip === loc.zip ? loc.state : ''), zone: known?.zone ?? undefined };
-    const empty = (coverage: 'NONE') => json({ ...place, coverage, services: [], nearest: [], categories: [] });
+    const searched = chosen ?? defaultRadius(category);
+    const empty = (coverage: 'NONE') => json({ ...place, coverage, services: [], categories: [], radiusMiles: searched, radiusDefault: chosen === null });
     if (!known) return empty('NONE');
     const text = (s: ServiceDetail) => `${s.name} ${s.providerName} ${s.category} ${s.description}`.toLowerCase();
     const hits = SERVICES.filter((s) => !q || q.split(/\s+/).every((w) => text(s).includes(w))).flatMap((s) => {
       const area = PROVIDER_AREAS[s.orgId];
       if (!area) return [];
-      return [{ s, area, ...matchService(s, area, known, zip) }];
+      return [{ s, area, ...matchService(s, area, known, zip, chosen) }];
     });
-    const listing = (h: (typeof hits)[number], nearest: boolean) => {
+    const listing = (h: (typeof hits)[number]) => {
       const meta = PROVIDERS[h.s.orgId];
       const base: [number, number] = [h.area.lat, h.area.lon];
       const served = Object.values(SERVICE_PLACES).filter((p) => miles(base, [p.lat, p.lon]) <= h.area.radiusMiles).map((p) => p.city);
-      const serves = nearest ? [] : [...new Set([known.city, ...served])];
+      const serves = [...new Set([known.city, ...served])];
       return { serviceId: h.s.id, orgId: h.s.orgId, name: h.s.name, providerName: h.s.providerName, description: h.s.description, category: h.s.category,
         durationMinutes: h.s.durationMinutes, priceFromMinor: h.s.priceMinor, depositMinor: h.s.depositMinor, currency: h.s.currency, modes: h.s.modes,
         rating: meta?.rating ?? 0, ratingCount: meta?.reviews ?? 0, nextAvailable: new Date(Date.UTC(ctx.now.getUTCFullYear(), ctx.now.getUTCMonth(), ctx.now.getUTCDate() + 1, 16)).toISOString(),
         location: meta?.location ?? '', delivery: deliveryOf(h.s.modes), imageUrl: `https://img.afrotransact.dev/services/${h.s.id}.webp`,
-        area: { baseCity: h.area.city, baseState: h.area.state, distanceMiles: Math.round(h.miles * 10) / 10, ...(h.area.zone ? { zone: h.area.zone } : {}), serves, nearest } };
+        area: { baseCity: h.area.city, baseState: h.area.state, distanceMiles: Math.round(h.miles * 10) / 10, ...(h.area.zone ? { zone: h.area.zone } : {}), serves } };
     };
     const local = hits.filter((h) => h.coverage === 'LOCAL');
     const counts = new Map<string, number>();
@@ -729,9 +733,8 @@ export const shopperHandlers = [
     const categories = [...counts].map(([c, count]) => ({ category: c, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
     const rank = (a: ReturnType<typeof listing>, b: ReturnType<typeof listing>) =>
       sort === 'PRICE' ? a.priceFromMinor - b.priceFromMinor : sort === 'RATING' ? b.rating - a.rating || b.ratingCount - a.ratingCount : sort === 'SOONEST' ? (a.nextAvailable ?? '').localeCompare(b.nextAvailable ?? '') : (a.area?.distanceMiles ?? 0) - (b.area?.distanceMiles ?? 0);
-    const shown = local.filter((h) => !category || h.s.category === category).map((h) => listing(h, false)).sort(rank);
-    const near = shown.length ? [] : hits.filter((h) => h.coverage === 'NEAREST' && (!category || h.s.category === category)).map((h) => listing(h, true)).sort((a, b) => (a.area?.distanceMiles ?? 0) - (b.area?.distanceMiles ?? 0)).slice(0, 6);
-    return json({ ...place, coverage: shown.length ? 'LOCAL' : near.length ? 'NEAREST' : 'NONE', services: shown, nearest: near, categories });
+    const shown = local.filter((h) => !category || h.s.category === category).map(listing).sort(rank);
+    return json({ ...place, coverage: shown.length ? 'LOCAL' : 'NONE', services: shown, categories, radiusMiles: searched, radiusDefault: chosen === null });
   })),
   http.get('*/v1/services/suggest', route((ctx) => {
     const q = (new URL(ctx.request.url).searchParams.get('q') ?? '').trim().toLowerCase();
@@ -869,16 +872,16 @@ function deliveryOf(modes: readonly string[]): 'AT_CUSTOMER' | 'AT_PROVIDER' | '
   return home && shop ? 'BOTH' : home ? 'AT_CUSTOMER' : 'AT_PROVIDER';
 }
 
-/** The platform's customer-travel limit and nearest-fallback maximum (staff-set; docs/engineering/service-areas.md). */
-const CUSTOMER_TRAVEL_MILES = 30;
-const NEAREST_MAX_MILES = 60;
+/** Default search radius per category (staff-editable in the real stack): used until the shopper chooses a distance. */
+const DEFAULT_RADIUS: Record<string, number> = { 'hair & beauty': 20, catering: 40, tailoring: 25, 'tax & legal': 30 };
+const defaultRadius = (category: string): number => DEFAULT_RADIUS[category.toLowerCase()] ?? 25;
 
-/** bookings' matching rule: radius when the provider comes to you, min(radius, travel limit) when you go to them, or a named area. */
-function matchService(s: ServiceDetail, area: MockArea, at: { city: string; state: string; lat: number; lon: number }, zip: string): { coverage: 'LOCAL' | 'NEAREST' | 'NONE'; miles: number } {
+/** bookings' matching rule: a provider who comes to you serves within their own radius; a shop you go to serves within the distance the shopper chose (0 = any; none chosen = the category default); or a named area. */
+function matchService(s: ServiceDetail, area: MockArea, at: { city: string; state: string; lat: number; lon: number }, zip: string, chosen: number | null): { coverage: 'LOCAL' | 'NONE'; miles: number } {
   const d = miles([area.lat, area.lon], [at.lat, at.lon]);
+  const reach = chosen ?? defaultRadius(s.category);
   const comes = s.modes.includes('AT_HOME') && d <= area.radiusMiles;
-  const goes = s.modes.includes('IN_PERSON') && d <= Math.min(area.radiusMiles, CUSTOMER_TRAVEL_MILES);
+  const goes = s.modes.includes('IN_PERSON') && (reach === 0 || d <= reach);
   const named = area.extra.some((e) => e === `ZIP:${zip}` || e === `CITY:${at.city}:${at.state}`);
-  if (comes || goes || named) return { coverage: 'LOCAL', miles: d };
-  return { coverage: d <= NEAREST_MAX_MILES ? 'NEAREST' : 'NONE', miles: d };
+  return { coverage: comes || goes || named ? 'LOCAL' : 'NONE', miles: d };
 }

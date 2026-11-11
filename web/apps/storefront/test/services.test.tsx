@@ -1,17 +1,23 @@
 import { createApiClient } from '@afrotransact/api-client';
 import { http, HttpResponse,mockServer } from '@afrotransact/api-client/mocks/node';
 import { createFormatters } from '@afrotransact/i18n';
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { formatNext, monogram } from '@/components/services/format';
 import { ServicesView } from '@/components/services/ServicesView';
+import { parseRadius, RADIUS_PARAM, widerRadius } from '@/lib/services/radius';
 
 import { installMockBff, sent } from './mockBff';
 import { renderWithProviders } from './render';
 
 installMockBff();
+
+beforeEach(() => {
+  window.localStorage.clear();
+  window.history.replaceState(null, '', '/services');
+});
 
 const api = () => createApiClient({ baseUrl: `${window.location.origin}/api/bff` });
 const at = (city: string, state: string, zip: string) => api().setDeliveryLocation({ suggestionId: `pl:${zip}:${state}:${encodeURIComponent(city)}` });
@@ -112,14 +118,163 @@ describe('services near the deliver-to place', () => {
   });
 });
 
+describe('the shopper chooses how far to go', () => {
+  const radiusBox = () => screen.getByRole('combobox', { name: 'Within' });
+  const lastRadius = () => new URL(searches().at(-1)?.url ?? 'http://x/').searchParams.get('radiusMiles');
+
+  it('shows a compact "Within [25 miles]" select beside the title with every step and "Any distance"', async () => {
+    await at('Georgetown', 'TX', '78626');
+    renderWithProviders(<ServicesView />);
+    await rows();
+    const heading = screen.getByRole('heading', { level: 1, name: /Services near Georgetown/ });
+    expect(heading.parentElement).toBe(radiusBox().parentElement?.parentElement); // same row as the title
+    expect(within(radiusBox()).getAllByRole('option').map((o) => o.textContent)).toEqual(['5 miles', '10 miles', '25 miles', '50 miles', '100 miles', 'Any distance']);
+    expect(radiusBox()).toHaveValue('25'); // no category: the general default
+    expect(radiusBox()).toHaveAccessibleName('Within');
+    expect(radiusBox()).toBeEnabled();
+    expect(radiusBox().tagName).toBe('SELECT'); // native: keyboard and screen readers just work
+    expect(lastRadius()).toBeNull(); // nothing chosen: the server applies the category default
+    expect(screen.queryByTestId('service-listing-card')).not.toBeInTheDocument();
+  });
+
+  it('shows the category default (hair and beauty: 20 miles) when the shopper has not chosen', async () => {
+    await at('Georgetown', 'TX', '78626');
+    renderWithProviders(<ServicesView initialCategory="hair & beauty" />);
+    await rows();
+    await waitFor(() => expect(radiusBox()).toHaveValue('20'));
+    expect(within(radiusBox()).getAllByRole('option').map((o) => o.textContent)).toEqual(['5 miles', '10 miles', '20 miles', '25 miles', '50 miles', '100 miles', 'Any distance']);
+  });
+
+  it('a choice searches again, is remembered in this browser and appears in the URL', async () => {
+    const user = userEvent.setup();
+    await at('Georgetown', 'TX', '78626');
+    renderWithProviders(<ServicesView initialCategory="tailoring" />);
+    await screen.findByRole('heading', { name: 'No tailoring providers within 25 miles of Georgetown' });
+
+    await user.selectOptions(radiusBox(), '50');
+    await expectRows(1); // Capital City Tailors, about 28 miles away
+    expect(screen.getByText('Alterations and made-to-measure')).toBeInTheDocument();
+    expect(lastRadius()).toBe('50');
+    expect(new URL(window.location.href).searchParams.get(RADIUS_PARAM)).toBe('50');
+    expect(window.localStorage.getItem('at.servicesRadius')).toBe('50');
+    expect(within(await rows().then((r) => r[0] as HTMLElement)).getByText(/Austin · \d+ mi/)).toBeInTheDocument(); // distance is shown
+
+    // Back later in the same browser: the remembered distance is used from the first request.
+    cleanup();
+    sent.length = 0;
+    renderWithProviders(<ServicesView initialCategory="tailoring" />);
+    await expectRows(1);
+    expect(searches()).toHaveLength(1);
+    expect(lastRadius()).toBe('50');
+    expect(radiusBox()).toHaveValue('50');
+  });
+
+  it('the link wins over memory, and a value the control does not offer is ignored', async () => {
+    window.localStorage.setItem('at.servicesRadius', '100');
+    await at('Georgetown', 'TX', '78626');
+    renderWithProviders(<ServicesView initialCategory="tailoring" initialRadius={parseRadius('10')} />);
+    await screen.findByRole('heading', { name: 'No tailoring providers within 10 miles of Georgetown' });
+    expect(searches()).toHaveLength(1);
+    expect(lastRadius()).toBe('10');
+    expect(parseRadius('37')).toBeNull();
+    expect(parseRadius('-5')).toBeNull();
+    expect(parseRadius('25mi')).toBeNull();
+    expect(parseRadius('')).toBeNull();
+    expect(parseRadius('ANY')).toBe('any');
+    expect(parseRadius(' 100 ')).toBe(100);
+  });
+
+  it('any distance has no limit for shops you go to, yet a provider who comes to you keeps their own radius', async () => {
+    const user = userEvent.setup();
+    await at('Houston', 'TX', '77002');
+    renderWithProviders(<ServicesView initialCategory="tailoring" />);
+    await screen.findByRole('heading', { name: 'No tailoring providers within 25 miles of Houston' });
+    await user.selectOptions(radiusBox(), 'any');
+    await waitFor(() => expect(lastRadius()).toBe('any'));
+    await expectRows(3); // Austin, Atlanta and Brooklyn tailors: well past any old limit
+    const list = (await rows()).map((r) => r.textContent ?? '');
+    expect(list[0]).toContain('Capital City Tailors'); // nearest first
+    expect(list[2]).toContain('Adire Tailors');
+    expect(list.every((r) => /\d+ mi/.test(r))).toBe(true);
+    expect(new URL(window.location.href).searchParams.get(RADIUS_PARAM)).toBe('any');
+
+    await user.click(within(await screen.findByRole('group', { name: 'Kinds of service' })).getByRole('button', { name: /All services/ }));
+    await waitFor(() => expect(screen.getAllByTestId('service-listing').length).toBeGreaterThan(3));
+    expect(screen.queryByText('Box braids at your home')).not.toBeInTheDocument(); // comes to you: Round Rock radius is 20 miles
+  });
+
+  it('keeps working when storage is blocked (private window)', async () => {
+    const user = userEvent.setup();
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    try {
+      await at('Georgetown', 'TX', '78626');
+      renderWithProviders(<ServicesView initialCategory="tailoring" />);
+      await screen.findByRole('heading', { name: 'No tailoring providers within 25 miles of Georgetown' });
+      await user.selectOptions(radiusBox(), '50');
+      await expectRows(1);
+      expect(new URL(window.location.href).searchParams.get(RADIUS_PARAM)).toBe('50');
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
+  });
+
+  it('steps wider by one step at a time and stops at any distance', () => {
+    expect(widerRadius(5)).toBe(10);
+    expect(widerRadius(20)).toBe(25);
+    expect(widerRadius(25)).toBe(50);
+    expect(widerRadius(100)).toBe('any');
+    expect(widerRadius('any')).toBeNull();
+    expect(widerRadius(0)).toBeNull();
+    expect(widerRadius(500)).toBe('any');
+  });
+});
+
+describe('the empty state says how far we looked', () => {
+  it('names the miles searched, offers Search wider (next step) and the alert, and chips never show zero', async () => {
+    const user = userEvent.setup();
+    await at('Houston', 'TX', '77002');
+    renderWithProviders(<ServicesView initialCategory="tailoring" />);
+    expect(await screen.findByRole('heading', { name: 'No tailoring providers within 25 miles of Houston' })).toBeInTheDocument();
+    const empty = screen.getByTestId('service-empty');
+    expect(within(empty).getByText(/We looked within 25 miles of Houston/)).toBeInTheDocument();
+    expect(within(empty).getByRole('button', { name: 'Search wider (50 miles)' })).toBeInTheDocument();
+    expect(within(empty).getByRole('button', { name: 'Tell me' })).toBeInTheDocument();
+    expect(empty.textContent).not.toMatch(/\(0\)/);
+    expect(screen.queryByTestId('service-nearest')).not.toBeInTheDocument();
+
+    await user.click(within(empty).getByRole('button', { name: 'Search wider (50 miles)' }));
+    expect(await screen.findByRole('heading', { name: 'No tailoring providers within 50 miles of Houston' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Within' })).toHaveValue('50');
+    await user.click(screen.getByRole('button', { name: 'Search wider (100 miles)' }));
+    await screen.findByRole('heading', { name: 'No tailoring providers within 100 miles of Houston' });
+    await user.click(screen.getByRole('button', { name: 'Search wider (any distance)' }));
+    await expectRows(3);
+    expect(screen.queryByRole('button', { name: /Search wider/ })).not.toBeInTheDocument();
+  });
+
+  it('at any distance with nothing at all there is no wider step, only the alert', async () => {
+    await at('Lubbock', 'TX', '79401');
+    renderWithProviders(<ServicesView initialCategory="catering" initialRadius="any" />);
+    expect(await screen.findByRole('heading', { name: /No catering providers/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Search wider/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tell me' })).toBeInTheDocument();
+  });
+});
+
 describe('when nothing serves the place', () => {
   it('says so plainly, lists what the place does have, and never shows another state as local', async () => {
     const user = userEvent.setup();
     await at('Houston', 'TX', '77002');
     renderWithProviders(<ServicesView initialCategory="tailoring" />);
-    expect(await screen.findByRole('heading', { name: 'No tailoring providers serve Houston yet' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No tailoring providers within 25 miles of Houston' })).toBeInTheDocument();
     expect(screen.queryByTestId('service-listing')).not.toBeInTheDocument(); // Atlanta and Brooklyn tailors are not shown
-    expect(screen.getByText(/in-person services/)).toBeInTheDocument();
+    expect(screen.getByText(/We looked within 25 miles of Houston/)).toBeInTheDocument();
     expect(screen.queryByText(/online|virtual|video/i)).not.toBeInTheDocument();
     const empty = screen.getByTestId('service-empty');
     expect(within(empty).getByText('Available near Houston')).toBeInTheDocument();
@@ -127,19 +282,10 @@ describe('when nothing serves the place', () => {
     await expectRows(2);
   });
 
-  it('shows the nearest providers outside their usual coverage, clearly labelled, only within the maximum', async () => {
-    await at('Georgetown', 'TX', '78626');
-    renderWithProviders(<ServicesView initialCategory="tailoring" />);
-    const nearest = await screen.findByTestId('service-nearest');
-    expect(within(nearest).getByText(/^Nearest: Capital City Tailors, \d+ miles away, does not usually travel to Georgetown$/)).toBeInTheDocument();
-    expect(within(nearest).queryByText(/Adire Tailors|Kente Tailors/)).not.toBeInTheDocument(); // 1,500 miles: not offered
-    expect(screen.getByRole('heading', { name: 'No tailoring providers serve Georgetown yet' })).toBeInTheDocument();
-  });
-
   it('a place with no services at all offers the alert and "Offer your services"', async () => {
     await at('Dallas', 'TX', '75201');
     renderWithProviders(<ServicesView />);
-    expect(await screen.findByRole('heading', { name: 'No services in Dallas yet' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No services within 25 miles of Dallas' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Offer your services' })).toHaveAttribute('href', '/provide');
     expect(screen.queryByRole('group', { name: 'Kinds of service' })).not.toBeInTheDocument();
   });
@@ -148,7 +294,7 @@ describe('when nothing serves the place', () => {
     const user = userEvent.setup();
     await at('Dallas', 'TX', '75201');
     renderWithProviders(<ServicesView initialCategory="tailoring" />);
-    await screen.findByRole('heading', { name: 'No tailoring providers serve Dallas yet' });
+    await screen.findByRole('heading', { name: 'No tailoring providers within 25 miles of Dallas' });
     const email = screen.getByLabelText('Your email');
     await user.click(screen.getByRole('button', { name: 'Tell me' }));
     expect(await screen.findByText('Enter your email address so we know where to write.')).toBeInTheDocument();
@@ -171,7 +317,7 @@ describe('when nothing serves the place', () => {
     const user = userEvent.setup();
     await at('Dallas', 'TX', '75201');
     renderWithProviders(<ServicesView />);
-    await screen.findByRole('heading', { name: 'No services in Dallas yet' });
+    await screen.findByRole('heading', { name: 'No services within 25 miles of Dallas' });
     mockServer.use(http.post('*/v1/services/alerts', () => HttpResponse.json({ type: 'about:blank', title: 'x', status: 429 }, { status: 429, headers: { 'content-type': 'application/problem+json' } })));
     await user.type(screen.getByLabelText('Your email'), 'ada@example.com');
     await user.click(screen.getByRole('button', { name: 'Tell me' }));

@@ -175,8 +175,8 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
       request(`/v1/pay-links/${enc(orderNumber)}/confirm`, PayLinkSchema, { method: 'POST', body: { token } }),
 
     /* Services & bookings (bookings) */
-    searchServices: (q: { q?: string; category?: string; zip?: string; sort?: ServiceSort }, signal?: AbortSignal): Promise<ServiceSearch> =>
-      request('/v1/services/search', ServiceSearchSchema, { query: q, signal }),
+    searchServices: (q: { q?: string; category?: string; zip?: string; sort?: ServiceSort; radiusMiles?: number | 'any' }, signal?: AbortSignal): Promise<ServiceSearch> =>
+      request('/v1/services/search', ServiceSearchSchema, { query: { ...q, radiusMiles: q.radiusMiles === undefined ? undefined : String(q.radiusMiles) }, signal }),
     /** Search-box suggestions: service types and provider names containing the text. */
     suggestServices: (q: string, signal?: AbortSignal): Promise<string[]> => request('/v1/services/suggest', z.array(z.string()), { query: { q }, signal }),
     /** "Tell me when a provider joins" for the deliver-to place; works signed out (the email is typed). */

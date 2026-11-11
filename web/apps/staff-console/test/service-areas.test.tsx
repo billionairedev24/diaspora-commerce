@@ -9,7 +9,7 @@ import { asRoles } from './mock-api';
 import { renderScreen } from './render';
 import { nav } from './setup';
 
-/* Settings > Markets & locations > Service areas: radius rules and metro zones, every change with a reason. */
+/* Settings > Markets & locations > Service areas: the default search radius by category and the metro zones, every change with a reason. */
 
 describe('service areas (staff)', () => {
   beforeEach(() => {
@@ -18,14 +18,20 @@ describe('service areas (staff)', () => {
     nav.set('/markets');
   });
 
-  it('lists the radius rule per category and the platform limits', async () => {
+  it('lists the default search radius per category, with no customer travel limit anywhere', async () => {
     await renderScreen(<ResourceTable resource="service-area-rules" urlPrefix="service-area-rules" />);
-    const table = await screen.findByRole('table', { name: 'Service radius rules' });
+    const table = await screen.findByRole('table', { name: 'Default search radius by category' });
     const hair = within(table).getByRole('row', { name: /Hair & beauty/ });
     expect(within(hair).getByText('20')).toBeInTheDocument();
     expect(within(hair).getByText('40')).toBeInTheDocument();
-    expect(within(table).getByText('Platform limits')).toBeInTheDocument();
-    expect(within(table).getByText(/travel up to 30 miles to a shop/)).toBeInTheDocument();
+    for (const [name, miles] of [['Catering', '40'], ['Tailoring', '25'], ['Tax & legal', '30'], ['Any other category', '25']] as const) {
+      expect(within(within(table).getByRole('row', { name: new RegExp(name) })).getAllByText(miles).length).toBeGreaterThan(0);
+    }
+    expect(within(table).getByText('Default search radius (mi)')).toBeInTheDocument();
+    expect(within(table).getByText('Provider maximum (mi)')).toBeInTheDocument();
+    expect(within(table).queryByText('Platform limits')).not.toBeInTheDocument();
+    expect(table.textContent).not.toMatch(/travel limit|travel up to|nearest suggestion/i);
+    expect(document.body.textContent).not.toMatch(/Customer travel limit|Nearest suggestions up to|Service radius rules/);
   });
 
   it('changes a rule only with a reason, and shows it on the record', async () => {
@@ -34,15 +40,17 @@ describe('service areas (staff)', () => {
     await renderScreen(<ResourceTable resource="service-area-rules" urlPrefix="service-area-rules" />);
     const sheet = await screen.findByRole('dialog', { name: /Catering/ });
     await user.click(within(sheet).getByRole('button', { name: 'Edit' }));
-    const form = await screen.findByRole('dialog', { name: 'Radius rule for Catering' });
-    const max = within(form).getByLabelText('Maximum (miles)');
+    const form = await screen.findByRole('dialog', { name: 'Default search radius for Catering' });
+    expect(within(form).getByText(/it is not a limit, shoppers may pick any distance/)).toBeInTheDocument();
+    expect(form.textContent).not.toMatch(/travel limit/i);
+    const max = within(form).getByLabelText('Provider maximum radius (miles)');
     await user.clear(max);
     await user.type(max, '90');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
     expect(within(form).getAllByText('Required').length).toBeGreaterThan(0);
     await user.type(within(form).getByLabelText('Reason (kept in the audit trail)'), 'Caterers rarely go beyond 90 miles');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Radius rule for Catering' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Default search radius for Catering' })).not.toBeInTheDocument());
     expect(await screen.findByText(/Changed: Caterers rarely go beyond 90 miles/)).toBeInTheDocument();
   });
 

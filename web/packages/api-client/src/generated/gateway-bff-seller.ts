@@ -5679,8 +5679,6 @@ export interface components {
                 zone?: string;
             } | null;
             bounds: components["schemas"]["ServiceAreaRadius"];
-            /** @description How far customers are assumed to travel to a shop ("You go to them") */
-            customerTravelMiles: number;
             zones: {
                 key: string;
                 name: string;

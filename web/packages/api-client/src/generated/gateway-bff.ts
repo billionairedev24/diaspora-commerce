@@ -2597,11 +2597,13 @@ export interface paths {
         };
         /**
          * In-person services that serve the visitor's place (the deliver-to location; zip overrides)
-         * @description Services are in person only. A provider is listed when it serves the place: within its radius (comes to you),
-         *     within the customer-travel limit (you go to them) or a named area/zone. Results are ranked per `sort`.
-         *     `coverage` is LOCAL, NEAREST (nobody serves the place: `nearest` lists providers outside their usual coverage,
-         *     within the staff-set maximum, each flagged `area.nearest`), NONE, or ANY (no location). `categories` counts the
-         *     services per category at the place; categories with no services are not listed.
+         * @description Services are in person only. A provider is listed when it serves the place: a service that comes to you when
+         *     you are within the provider's own radius, a shop you go to when it is within `radiusMiles` of you (your choice,
+         *     any value 1-1000 or `any`; omitted = the category's default, staff-editable), or a named area/zone. There is no
+         *     platform distance limit. Results are ranked per `sort` (nearest first by default) and carry the distance.
+         *     `coverage` is LOCAL, NONE (nothing within the distance searched) or ANY (no location). `radiusMiles` in the
+         *     response is the distance searched (0 = any distance) and `radiusDefault` says it was the category default.
+         *     `categories` counts the services per category at the place; categories with no services are not listed.
          */
         get: operations["searchServices"];
         put?: never;
@@ -5717,8 +5719,6 @@ export interface components {
             zone?: string;
             /** @description Cities served, the visitor's first */
             serves: string[];
-            /** @description Outside the provider's usual coverage (a suggestion */
-            nearest: boolean;
         };
         ServiceListing: {
             serviceId: string;
@@ -5756,9 +5756,12 @@ export interface components {
             state: string;
             zone?: string;
             /** @enum {string} */
-            coverage: "LOCAL" | "NEAREST" | "NONE" | "ANY";
+            coverage: "LOCAL" | "NONE" | "ANY";
             services: components["schemas"]["ServiceListing"][];
-            nearest: components["schemas"]["ServiceListing"][];
+            /** @description Miles searched for shops the shopper goes to; 0 = any distance */
+            radiusMiles: number;
+            /** @description true = the category default, the shopper chose nothing */
+            radiusDefault: boolean;
             categories: {
                 category: string;
                 count: number;
@@ -9938,6 +9941,8 @@ export interface operations {
                 category?: string;
                 zip?: string;
                 sort?: "NEAREST" | "SOONEST" | "PRICE" | "RATING";
+                /** @description How far the shopper will go to a shop, in miles (1-1000), or `any` / `0` for any distance. Omitted = the category default. */
+                radiusMiles?: string;
             };
             header?: never;
             path?: never;

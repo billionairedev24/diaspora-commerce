@@ -192,18 +192,18 @@ export function MarketsTree({ api }: { api: StaffMarketsApi }) {
   );
 }
 
-/** Where providers work: the radius a provider may choose per service category and the metro zones results name ("Serves Greater Austin"). */
+/** Where providers work: the default search radius per service category (a default, never a limit: shoppers choose any distance) and the metro zones results name ("Serves Greater Austin"). */
 function ServiceAreaSettings() {
   return (
     <section aria-label="Service areas" className="flex flex-col gap-6" data-testid="service-area-settings">
       <div className="flex flex-col gap-2">
         <h2 className="m-0 text-lg font-semibold">Service areas</h2>
         <p className="m-0 max-w-[80ch] text-sm text-muted">
-          Services are in person only. A provider sets a base location and a radius within the limits below; a customer sees providers whose area covers them, nearest first. Every change needs a reason and is kept in the audit trail.
+          Services are in person only. Shoppers choose how far they will go to a provider’s shop, so there is no distance limit; the default search radius below is what a shopper gets until they choose. A provider who comes to the customer declares how far they travel, between the minimum and the maximum below. Every change needs a reason and is kept in the audit trail.
         </p>
       </div>
       <div className="flex flex-col gap-3">
-        <h3 className="m-0 text-base font-semibold">Radius rules</h3>
+        <h3 className="m-0 text-base font-semibold">Default search radius by category</h3>
         <ResourceTable resource="service-area-rules" urlPrefix="service-area-rules" />
       </div>
       <div className="flex flex-col gap-3">

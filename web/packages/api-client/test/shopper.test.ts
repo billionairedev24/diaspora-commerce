@@ -185,6 +185,29 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     await expect(api.getHelpRequest('help-nope')).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 404);
   });
 
+  it('searches services within the distance the shopper chooses: a default per category, any value, any distance, no cap', async () => {
+    const api = await signedIn();
+    // Georgetown to Austin is about 28 miles: out of reach by default (tailoring 25), in reach at 50 and at any distance.
+    const byDefault = await api.searchServices({ zip: '78626', category: 'tailoring' });
+    expect(byDefault).toMatchObject({ coverage: 'NONE', radiusMiles: 25, radiusDefault: true, services: [] });
+    expect((await api.searchServices({ zip: '78626', category: 'hair & beauty' })).radiusMiles).toBe(20);
+    expect((await api.searchServices({ zip: '78626', category: 'catering' })).radiusMiles).toBe(40);
+    const fifty = await api.searchServices({ zip: '78626', category: 'tailoring', radiusMiles: 50 });
+    expect(fifty).toMatchObject({ coverage: 'LOCAL', radiusMiles: 50, radiusDefault: false });
+    expect(fifty.services.map((s) => s.providerName)).toEqual(['Capital City Tailors']);
+    expect(fifty.services[0]?.area?.distanceMiles).toBeGreaterThan(20);
+    const any = await api.searchServices({ zip: '77002', category: 'tailoring', radiusMiles: 'any' });
+    expect(any.radiusMiles).toBe(0);
+    expect(any.services.map((s) => s.providerName)).toEqual(['Capital City Tailors', 'Kente Tailors', 'Adire Tailors']); // nearest first, Brooklyn included
+    // A provider who comes to the customer keeps their own radius, even at any distance.
+    const all = await api.searchServices({ zip: '77002', radiusMiles: 'any' });
+    expect(all.services.map((s) => s.name)).not.toContain('Box braids at your home');
+    expect(all.services.every((s) => s.area !== null && s.area.distanceMiles >= 0)).toBe(true);
+    // Nothing caps the choice, but it must be a distance.
+    await expect(api.searchServices({ zip: '78626', radiusMiles: -1 })).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 422);
+    await expect(api.searchServices({ zip: '78626', radiusMiles: 5000 })).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 422);
+  });
+
   it('books a service with a deposit, then cancels with the quoted refund', async () => {
     const api = await signedIn();
     const search = await api.searchServices({ q: 'braids', zip: '77042' });

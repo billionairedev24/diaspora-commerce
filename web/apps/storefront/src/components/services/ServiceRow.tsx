@@ -19,13 +19,12 @@ const SERVES_SHOWN = 3;
  * placeholder), service and provider, rating only when there are reviews, where they are and how far, the cities they
  * serve, price and deposit, the next opening in the visitor's time zone, how it is delivered and a Book button.
  */
-export function ServiceRow({ service: s, visitorCity, visitorState }: { service: ServiceListing; visitorCity: string; visitorState: string }) {
+export function ServiceRow({ service: s, visitorState }: { service: ServiceListing; visitorState: string }) {
   const t = useT();
   const fmt = useFormatters();
   const [broken, setBroken] = useState(false);
   const href = `/services/${encodeURIComponent(s.serviceId)}`;
   const area = s.area;
-  const nearest = area?.nearest === true;
   const serves = area?.serves ?? [];
   const shown = serves.slice(0, SERVES_SHOWN);
   const catKey = categoryKey(s.category);
@@ -56,15 +55,11 @@ export function ServiceRow({ service: s, visitorCity, visitorState }: { service:
           {area ? ` · ${area.distanceMiles < 1 ? t('svc.lessThanMile') : t('svc.miles', { n: fmt.number(Math.round(area.distanceMiles)) })}` : ''}
           {area?.zone ? ` · ${area.zone}` : ''}
         </span>
-        {nearest ? (
-          <span className={styles.outside}>{t('svc.nearest.item', { provider: s.providerName, miles: fmt.number(Math.round(area?.distanceMiles ?? 0)), city: visitorCity })}</span>
-        ) : (
-          shown.length > 0 && (
-            <span className={styles.serves}>
-              {t('svc.serves', { cities: fmt.list(shown) })}
-              {serves.length > shown.length ? ` +${serves.length - shown.length}` : ''}
-            </span>
-          )
+        {shown.length > 0 && (
+          <span className={styles.serves}>
+            {t('svc.serves', { cities: fmt.list(shown) })}
+            {serves.length > shown.length ? ` +${serves.length - shown.length}` : ''}
+          </span>
         )}
         <span className={styles.badges}>
           <span className={styles.badge}>{t(`svc.delivery.${s.delivery}` as MessageKey)}</span>

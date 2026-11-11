@@ -404,9 +404,7 @@ export const ServiceListingAreaSchema = z.object({
   distanceMiles: z.number(),
   zone: z.string().optional(),
   /** Cities served, the visitor's own first. */
-  serves: z.array(z.string()),
-  /** Outside the provider's usual coverage: a suggestion, never a local match. */
-  nearest: z.boolean()
+  serves: z.array(z.string())
 });
 export type ServiceListingArea = z.infer<typeof ServiceListingAreaSchema>;
 
@@ -434,7 +432,7 @@ export const ServiceListingSchema = z.object({
 });
 export type ServiceListing = z.infer<typeof ServiceListingSchema>;
 
-export const ServiceCoverageSchema = z.enum(['LOCAL', 'NEAREST', 'NONE', 'ANY']);
+export const ServiceCoverageSchema = z.enum(['LOCAL', 'NONE', 'ANY']);
 export type ServiceCoverage = z.infer<typeof ServiceCoverageSchema>;
 
 export const ServiceSearchSchema = z.object({
@@ -444,12 +442,18 @@ export const ServiceSearchSchema = z.object({
   zone: z.string().optional(),
   coverage: ServiceCoverageSchema.default('ANY'),
   services: z.array(ServiceListingSchema),
-  /** Providers outside their usual coverage, only when nobody serves the place and within the staff-set maximum. */
-  nearest: z.array(ServiceListingSchema).default([]),
   /** Services per category at this place; categories without services are not listed. */
-  categories: z.array(z.object({ category: z.string(), count: z.number().int().min(1) })).default([])
+  categories: z.array(z.object({ category: z.string(), count: z.number().int().min(1) })).default([]),
+  /** Miles searched for shops the shopper goes to; 0 = any distance. */
+  radiusMiles: z.number().int().min(0).default(0),
+  /** true = the category default applied, the shopper chose nothing. */
+  radiusDefault: z.boolean().default(true)
 });
 export type ServiceSearch = z.infer<typeof ServiceSearchSchema>;
+
+/** The distances a shopper can pick for shops they go to; the platform sets no limit. `any` = any distance. */
+export const SERVICE_RADIUS_STEPS = [5, 10, 25, 50, 100, 'any'] as const;
+export type ServiceRadius = (typeof SERVICE_RADIUS_STEPS)[number];
 
 export const SERVICE_SORTS = ['NEAREST', 'SOONEST', 'PRICE', 'RATING'] as const;
 export type ServiceSort = (typeof SERVICE_SORTS)[number];

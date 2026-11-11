@@ -2686,7 +2686,6 @@ function serviceAreaView(db: MockSellerDb) {
   return {
     area: saved && base && preview ? { baseZip: saved.baseZip, baseCity: base.city, baseState: base.state, radiusMiles: saved.radiusMiles, extraAreas: saved.extraAreas, servedCities: preview.cities, ...(base.zone ? { zone: base.zone } : {}) } : null,
     bounds: serviceAreaBounds(db),
-    customerTravelMiles: 30,
     zones: MOCK_ZONES,
     categories: Object.entries(AREA_RULES).map(([category, rule]) => ({ category, rule }))
   };

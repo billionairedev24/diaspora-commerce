@@ -27,12 +27,7 @@ const RULES: [string, string, number, number, number][] = [
 
 export function seedServiceAreaRules(now: Date): MockRecord[] {
   const at = now.toISOString();
-  const rows: MockRecord[] = RULES.map(([id, name, defaultMiles, minMiles, maxMiles]) => ({ id, fields: { name, defaultMiles, minMiles, maxMiles, note: null }, activity: [{ at, actor: 'System', text: 'Seeded default' }] }));
-  rows.push({
-    id: '_limits',
-    fields: { name: 'Platform limits', customerTravelMiles: 30, nearestMaxMiles: 60, defaultMiles: null, minMiles: null, maxMiles: null, note: 'Customers are assumed to travel up to 30 miles to a shop; the nearest suggestions go up to 60 miles.' },
-    activity: [{ at, actor: 'System', text: 'Seeded default' }]
-  });
+  const rows: MockRecord[] = RULES.map(([id, name, defaultMiles, minMiles, maxMiles]) => ({ id, fields: { name, defaultMiles, minMiles, maxMiles }, activity: [{ at, actor: 'System', text: 'Seeded default' }] }));
   return rows;
 }
 
@@ -64,38 +59,29 @@ function parseCities(text: string): string[] {
 const form = (title: string, submitLabel: string, fields: FormField[], intro: string): StaffForm => ({ title, submitLabel, fields, intro });
 
 export const serviceAreaRulesDef: MockResource = {
-  title: 'Service radius rules',
+  title: 'Default search radius by category',
   columns: [
-    { key: 'name', label: 'Service category', kind: 'strong', width: 34 }, { key: 'defaultMiles', label: 'Default radius (mi)', kind: 'number', width: 16 }, { key: 'minMiles', label: 'Minimum (mi)', kind: 'number', width: 14 },
-    { key: 'maxMiles', label: 'Maximum (mi)', kind: 'number', width: 14 }, { key: 'note', label: 'Notes', kind: 'text', width: 22 }
+    { key: 'name', label: 'Service category', kind: 'strong', width: 34 }, { key: 'defaultMiles', label: 'Default search radius (mi)', kind: 'number', width: 20 }, { key: 'minMiles', label: 'Provider minimum (mi)', kind: 'number', width: 18 },
+    { key: 'maxMiles', label: 'Provider maximum (mi)', kind: 'number', width: 18 }
   ],
   facets: [],
   search: ['name'],
-  sort: (a, b) => (a.id === '_limits' ? 1 : b.id === '_limits' ? -1 : a.id === '_fallback' ? 1 : b.id === '_fallback' ? -1 : str(a.fields.name).localeCompare(str(b.fields.name))),
+  sort: (a, b) => (a.id === '_fallback' ? 1 : b.id === '_fallback' ? -1 : str(a.fields.name).localeCompare(str(b.fields.name))),
   exportable: false,
   titleOf: (r) => str(r.fields.name),
-  subtitleOf: () => 'Providers choose their radius between the minimum and the maximum',
-  sections: [['Radius', ['defaultMiles', 'minMiles', 'maxMiles']], ['Platform limits', ['customerTravelMiles', 'nearestMaxMiles']]],
+  subtitleOf: () => 'Shoppers search this far by default and can choose any distance; providers declare how far they travel to customers between the minimum and the maximum',
+  sections: [['Radius', ['defaultMiles', 'minMiles', 'maxMiles']]],
   actions: [],
   edit: {
     permission: PERMISSION,
     form: (r) =>
-      r.id === '_limits'
-        ? form('Platform limits', 'Save', [miles('customerTravelMiles', 'Customer travel limit (miles)', num(r.fields.customerTravelMiles)), miles('nearestMaxMiles', 'Nearest suggestions up to (miles)', num(r.fields.nearestMaxMiles), 300), reason()],
-            'Services are in person only. A customer who goes to a provider’s shop is matched within the smaller of the provider’s radius and the travel limit. When nobody serves a place, providers outside their usual coverage are suggested up to the nearest-suggestion distance (0 turns the suggestions off).')
-        : form(`Radius rule for ${str(r.fields.name)}`, 'Save', [miles('defaultMiles', 'Default radius (miles)', num(r.fields.defaultMiles)), miles('minMiles', 'Minimum (miles)', num(r.fields.minMiles)), miles('maxMiles', 'Maximum (miles)', num(r.fields.maxMiles)), reason()],
-            'What a provider may choose for the radius of the services it lists in this category.'),
+      form(`Default search radius for ${str(r.fields.name)}`, 'Save', [miles('defaultMiles', 'Default search radius (miles)', num(r.fields.defaultMiles)), miles('minMiles', 'Provider minimum radius (miles)', num(r.fields.minMiles)), miles('maxMiles', 'Provider maximum radius (miles)', num(r.fields.maxMiles)), reason()],
+        'The default is how far shoppers search in this category until they choose their own distance: it is not a limit, shoppers may pick any distance. Providers declare how far they travel to customers between the minimum and the maximum.'),
     apply: (r, v, ctx) => {
       requireReason(v);
-      if (r.id === '_limits') {
-        r.fields.customerTravelMiles = num(v.customerTravelMiles);
-        r.fields.nearestMaxMiles = num(v.nearestMaxMiles);
-        r.fields.note = `Customers are assumed to travel up to ${num(v.customerTravelMiles)} miles to a shop; the nearest suggestions go up to ${num(v.nearestMaxMiles)} miles.`;
-      } else {
-        const [d, lo, hi] = [num(v.defaultMiles), num(v.minMiles), num(v.maxMiles)];
-        if (lo < 1 || hi < lo || d < lo || d > hi) throw new Error('Need 1 <= minimum <= default <= maximum');
-        Object.assign(r.fields, { defaultMiles: d, minMiles: lo, maxMiles: hi });
-      }
+      const [d, lo, hi] = [num(v.defaultMiles), num(v.minMiles), num(v.maxMiles)];
+      if (lo < 1 || hi < lo || d < lo || d > hi) throw new Error('Need 1 <= minimum <= default <= maximum');
+      Object.assign(r.fields, { defaultMiles: d, minMiles: lo, maxMiles: hi });
       if (ctx) r.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.actor, text: `Changed: ${str(v.reason)}` });
     }
   }

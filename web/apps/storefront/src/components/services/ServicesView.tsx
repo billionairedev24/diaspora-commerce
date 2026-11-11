@@ -1,19 +1,21 @@
 'use client';
 
-import { isApiError } from '@afrotransact/api-client';
+import { isApiError, type ServiceRadius } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { buttonClassName, CalendarCheck, Skeleton } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { LocationPicker } from '@/components/shell/LocationPicker';
 import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries, shopperQueries, siteQueries } from '@/lib/api/queries';
+import { readStoredRadius, reflectRadiusInUrl, storeRadius } from '@/lib/services/radius';
 
 import { categoryKey } from './format';
 import { ServiceEmpty } from './ServiceEmpty';
+import { ServiceRadiusSelect } from './ServiceRadiusSelect';
 import { ServiceRow } from './ServiceRow';
 import styles from './Services.module.css';
 import { ServiceSearchBox } from './ServiceSearchBox';
@@ -25,8 +27,12 @@ type Sort = (typeof SORTS)[number];
  * Services near you (S150): in-person services that serve the deliver-to place. The place comes from the navbar location
  * ("Services near Georgetown", with a small Change link that opens the same location popover): there is no ZIP box. One
  * search box with suggestions, category chips with counts for this place, sorting, flat rows, and designed empty states.
+ *
+ * The shopper chooses how far they will go to a shop ("Within 25 miles"): the choice comes from ?radius=, else from this
+ * browser's memory, else the category default the server reports. Nothing limits it. Search waits for that decision so it
+ * runs once.
  */
-export function ServicesView({ initialCategory = '', initialText = '' }: { initialCategory?: string; initialText?: string }) {
+export function ServicesView({ initialCategory = '', initialText = '', initialRadius = null }: { initialCategory?: string; initialText?: string; initialRadius?: ServiceRadius | null }) {
   const t = useT();
   const fmt = useFormatters();
   const api = browserApi();
@@ -35,9 +41,29 @@ export function ServicesView({ initialCategory = '', initialText = '' }: { initi
   const [text, setText] = useState(initialText);
   const [category, setCategory] = useState(initialCategory);
   const [sort, setSort] = useState<Sort>('NEAREST');
+  const [radius, setRadius] = useState<ServiceRadius | null>(initialRadius);
+  const [radiusReady, setRadiusReady] = useState(initialRadius !== null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const changeRef = useRef<HTMLButtonElement>(null);
-  const results = useQuery(shopperQueries.serviceSearch(api, { ...(text ? { q: text } : {}), ...(category ? { category } : {}), sort }));
+  const results = useQuery({
+    ...shopperQueries.serviceSearch(api, { ...(text ? { q: text } : {}), ...(category ? { category } : {}), sort, ...(radius !== null ? { radiusMiles: radius } : {}) }),
+    enabled: radiusReady
+  });
+
+  // No ?radius= in the link: use what this browser remembers (read after mount so server and client markup agree).
+  useEffect(() => {
+    if (radiusReady) return;
+    const stored = readStoredRadius();
+    if (stored !== null) setRadius(stored);
+    setRadiusReady(true);
+  }, [radiusReady]);
+  useEffect(() => {
+    if (radius !== null) reflectRadiusInUrl(radius);
+  }, [radius]);
+  const chooseRadius = (next: ServiceRadius) => {
+    setRadius(next);
+    storeRadius(next);
+  };
 
   const data = results.data;
   const city = data?.city || loc.data?.city || '';
@@ -49,12 +75,15 @@ export function ServicesView({ initialCategory = '', initialText = '' }: { initi
     <div className={styles.page}>
       <div className={styles.head}>
         <div>
-          <h1 className={styles.h1}>
-            {city ? t('svc.near', { city }) : t('svc.title')}
-            <button ref={changeRef} type="button" className={styles.change} onClick={() => setPickerOpen(true)} aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label={city ? t('svc.changeAria', { city }) : t('svc.setLocation')}>
-              {city ? t('svc.change') : t('svc.setLocation')}
-            </button>
-          </h1>
+          <div className={styles.titleRow}>
+            <h1 className={styles.h1}>
+              {city ? t('svc.near', { city }) : t('svc.title')}
+              <button ref={changeRef} type="button" className={styles.change} onClick={() => setPickerOpen(true)} aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label={city ? t('svc.changeAria', { city }) : t('svc.setLocation')}>
+                {city ? t('svc.change') : t('svc.setLocation')}
+              </button>
+            </h1>
+            <ServiceRadiusSelect value={radius ?? data?.radiusMiles ?? 25} onChange={chooseRadius} />
+          </div>
           {data?.zone && <p className={styles.zone}>{t('svc.zoneLine', { zone: data.zone })}</p>}
         </div>
         {me.data?.authenticated && (
@@ -109,12 +138,12 @@ export function ServicesView({ initialCategory = '', initialText = '' }: { initi
       {data && data.services.length > 0 && (
         <ul className={styles.list} aria-label={t('svc.resultsAria', { city })}>
           {data.services.map((s) => (
-            <ServiceRow key={s.serviceId} service={s} visitorCity={city} visitorState={state} />
+            <ServiceRow key={s.serviceId} service={s} visitorState={state} />
           ))}
         </ul>
       )}
       {data && data.services.length === 0 && (
-        <ServiceEmpty search={data} city={city} state={state} category={category} text={text} accountEmail={accountEmail} onCategory={setCategory} onClearText={() => setText('')} />
+        <ServiceEmpty search={data} city={city} state={state} category={category} text={text} accountEmail={accountEmail} onCategory={setCategory} onClearText={() => setText('')} onRadius={chooseRadius} />
       )}
     </div>
   );

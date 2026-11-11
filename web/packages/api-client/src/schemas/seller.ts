@@ -2123,10 +2123,8 @@ export const ServiceAreaViewSchema = z.object({
       zone: z.string().optional()
     })
     .nullable(),
-  /** The radius limits for this provider's service categories (staff-set). */
+  /** How far this provider may travel to customers: the bounds for their service categories (staff-set). */
   bounds: ServiceAreaRadiusSchema,
-  /** How far customers are assumed to travel to a shop ("You go to them"). */
-  customerTravelMiles: z.number().int(),
   zones: z.array(z.object({ key: z.string(), name: z.string(), cities: z.array(ServiceAreaCitySchema) })),
   categories: z.array(z.object({ category: z.string(), rule: ServiceAreaRadiusSchema }))
 });

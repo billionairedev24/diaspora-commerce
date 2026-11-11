@@ -1,7 +1,6 @@
 'use client';
 
-import { type ServiceSearch } from '@afrotransact/api-client';
-import { isApiError, isPlainEmail } from '@afrotransact/api-client';
+import { isApiError, isPlainEmail, type ServiceRadius, type ServiceSearch } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, TextField } from '@afrotransact/ui';
 import { useMutation } from '@tanstack/react-query';
@@ -10,9 +9,9 @@ import { type FormEvent, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
+import { widerRadius } from '@/lib/services/radius';
 
 import { categoryKey } from './format';
-import { ServiceRow } from './ServiceRow';
 import styles from './Services.module.css';
 
 interface Props {
@@ -24,23 +23,32 @@ interface Props {
   accountEmail?: string;
   onCategory: (category: string) => void;
   onClearText: () => void;
+  onRadius: (radius: ServiceRadius) => void;
 }
 
 /**
- * Nothing serves the visitor's place for this search. Says so plainly, shows what IS available there (categories with
- * their counts), the nearest providers outside their usual coverage (clearly labelled, only within the staff-set maximum),
+ * Nothing serves the visitor's place for this search within the distance they chose. Says so plainly, with the miles
+ * searched, offers "Search wider" (the next distance step), shows what IS available there (categories with their counts),
  * "Tell me when one joins" (works signed out) and "Offer your services" for providers.
  */
-export function ServiceEmpty({ search, city, state, category, text, accountEmail, onCategory, onClearText }: Props) {
+export function ServiceEmpty({ search, city, category, text, accountEmail, onCategory, onClearText, onRadius }: Props) {
   const t = useT();
   const fmt = useFormatters();
   const catKey = category ? categoryKey(category) : null;
   const catName = category ? (catKey ? t(catKey) : category).toLowerCase() : '';
+  const searched = search.coverage !== 'ANY' && search.radiusMiles > 0 ? fmt.number(search.radiusMiles) : null;
   const title = text
-    ? t('svc.empty.titleText', { q: text, city })
+    ? searched
+      ? t('svc.empty.titleTextRadius', { q: text, city, miles: searched })
+      : t('svc.empty.titleText', { q: text, city })
     : category
-      ? t('svc.empty.titleCategory', { category: catName, city })
-      : t('svc.empty.titleAll', { city });
+      ? searched
+        ? t('svc.empty.titleCategoryRadius', { category: catName, city, miles: searched })
+        : t('svc.empty.titleCategory', { category: catName, city })
+      : searched
+        ? t('svc.empty.titleAllRadius', { city, miles: searched })
+        : t('svc.empty.titleAll', { city });
+  const wider = widerRadius(search.radiusMiles);
   const elsewhere = search.categories.filter((c) => c.category !== category);
 
   return (
@@ -48,7 +56,12 @@ export function ServiceEmpty({ search, city, state, category, text, accountEmail
       <h2 id="svc-empty-title" className={styles.emptyTitle}>
         {title}
       </h2>
-      <p className={styles.muted}>{t('svc.empty.body')}</p>
+      <p className={styles.muted}>{searched ? t('svc.empty.bodyRadius', { miles: searched, city }) : t('svc.empty.body')}</p>
+      {wider !== null && (
+        <button type="button" className={styles.linkButton} onClick={() => onRadius(wider)} data-testid="service-search-wider">
+          {t('svc.empty.wider', { distance: wider === 'any' ? t('svc.radius.any').toLowerCase() : t('svc.radius.miles', { n: wider }) })}
+        </button>
+      )}
       {text && (
         <button type="button" className={styles.linkButton} onClick={onClearText}>
           {t('svc.empty.clearSearch')}
@@ -68,17 +81,6 @@ export function ServiceEmpty({ search, city, state, category, text, accountEmail
               );
             })}
           </div>
-        </div>
-      )}
-
-      {search.nearest.length > 0 && (
-        <div className={styles.emptyBlock} data-testid="service-nearest">
-          <h3 className={styles.h3}>{t('svc.nearest.title')}</h3>
-          <ul className={styles.list}>
-            {search.nearest.map((s) => (
-              <ServiceRow key={s.serviceId} service={s} visitorCity={city} visitorState={state} />
-            ))}
-          </ul>
         </div>
       )}
 
