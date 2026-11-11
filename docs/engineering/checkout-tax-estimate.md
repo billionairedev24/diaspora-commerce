@@ -22,7 +22,18 @@ Shoppers see **estimated tax** on the checkout summary before they place an orde
 3. The BFF maps the quote to `taxMinor`, `taxRateLabel`, `taxJurisdictionLabel` ("Houston, TX", from the delivery address), `taxLines` (per line: `TAXABLE`, `EXEMPT` or `BLOCKED`, its tax and its delivery share), `blockedLines`, `canPlaceOrder`, `shippingTaxAllocation`, plus `discountMinor`, `shippingDiscountMinor`, `coupon` and `totalMinor` aligned with the same delivery selections.
 4. Orders' `CheckoutTaxImpl` quotes the same way when the order is placed (orders-service token, `tax:quote`), blocks undecided lines, and writes the **decision snapshot** on each order line.
 
-When the shopper changes address, delivery option, or promo code, the UI refetches the summary. **Redemption** of a coupon still happens only when orders places the checkout; failed payments release it idempotently.
+When the shopper changes address, delivery option, or promo code, the UI refetches the summary.
+
+## Delivery in the estimate (launch shipping v1)
+
+The shipping line is **what orders will charge**, from the **same record** (orders' staff-edited shipping settings; [shipping-and-tax-data.md](./shipping-and-tax-data.md#shipping-at-launch-v1-afrotransact-sets-all-shipping)):
+
+- **Options per package:** *Delivery by AfroTransact* (Fulfilled by AfroTransact) or *AfroTransact collects from the store and delivers* (seller-store item) at **one flat fee** (default $5.99, free above an optional threshold); *Pickup at an AfroTransact point* or *Collect from the store* at $0. No express and no carrier name; seller-shipped carrier options exist only behind the staff switch (off at launch).
+- **Pre-orders:** a pre-order line is its own package and pays **its window's or run's own fee** (door or pickup); `shippingMinor` includes it. Tax on shipping follows the item through the proportional allocation below, unchanged.
+- **Outside every delivery zone:** the package's delivery option is the single `quote_required` ("Too far for standard delivery. Ask us for a quote"), pickup stays, `canPlaceOrder = false` and `deliveryBlockedReason` says why. The storefront disables payment for it and shows a button (stub `onRequestQuote`).
+- **If the fee cannot be read:** the estimate keeps the last known fee (15 second poll, logged); with none ever read the option is `feeUnknown` (never $0 or FREE) and the order cannot be placed from the estimate. Orders itself never guesses.
+- **Estimate equals charge:** proven on shared vectors (`tools/checkout/shipping-fee-vectors.json`) by orders, gateway-bff and both mocks.
+ **Redemption** of a coupon still happens only when orders places the checkout; failed payments release it idempotently.
 
 ## What the summary shows
 

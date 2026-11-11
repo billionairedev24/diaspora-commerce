@@ -4,7 +4,7 @@ This note answers three questions for product and engineering:
 
 1. **Is a line taxable?** (what we look at first)
 2. **What tax rate applies?**
-3. **How is shipping priced — us or a carrier provider?**
+3. **How is shipping priced?** (at launch: by us, one flat fee; see "Shipping at launch (v1)")
 
 Checkout **estimates** are described in [checkout-tax-estimate.md](./checkout-tax-estimate.md). **Authoritative** tax and shipping for a placed order are computed in the **orders** checkout saga (`prepare`), using the same services and shapes as the BFF estimate where possible.
 
@@ -100,27 +100,58 @@ Staff maintain rates: `GET/PUT /v1/tax/rates` (permissions `tax:read`, `tax:conf
 
 ---
 
-## Shipping — hybrid: **our commercial rules** at checkout, **carriers** at label time
+## Shipping at launch (v1): AfroTransact sets all shipping
 
-We do **not** use a shipping aggregator (no EasyPost/Shippo). **Carrier-gateway** integrates **directly** with **USPS, UPS, FedEx, DHL Express** for rates, labels, void, tracking, pickups, and address validation.
+Listing rules D16 to D22 (`docs/engineering/listing-rules.md`, section 3 "Launch shipping (v1)") are final. **AfroTransact sets all shipping at launch.** Sellers do not set shipping, there are **no carrier rates at checkout**, and **no carrier is named anywhere a shopper reads** (cart, product page, checkout, email, customer app). There is **no express** option.
 
-What the **shopper pays for delivery** at checkout is **mostly platform-owned pricing**, not a live multi-carrier shop of every package:
+| Situation | Option (shopper label, key) | Fee |
+|---|---|---|
+| Fulfilled by AfroTransact item | **Delivery by AfroTransact** (`afrotransact_delivery`) | **One flat fee set by staff** (default **$5.99** = 599 minor), optional free-above threshold (default none) |
+| Fulfilled by AfroTransact item | **Pickup at an AfroTransact point** (`pickup`) | $0 |
+| Item sold from a seller store | **AfroTransact collects from the store and delivers** (`afrotransact_delivery`) | **The same flat fee** |
+| Item sold from a seller store | **Collect from the store** (`pickup`) | $0, address and hours shown |
+| Pre-order item | The window date and the **run's own delivery fee**, in **its own package** | As set on the window or run (delivery-runs) |
+| Address outside every geo delivery zone | **Too far for standard delivery. Ask us for a quote** (`quote_required`) | Agreed by customer care (D20); disabled for payment, pickup stays |
+| Seller-shipped carrier option (`carrier`) | Hidden behind the staff setting `sellerCarrierShippingEnabled` | **OFF at launch** |
 
-| Fulfilment / method | Who sets the **customer charge** at checkout | Provider / service |
-|---------------------|-----------------------------------------------|---------------------|
-| **Seller-shipped** (`SELLER_FULFILLED`, carrier ground) | **Flat fee + free-shipping threshold** | BFF **`domain.Estimator`** + **orders** `DefaultShippingPolicy` (YAML/config: e.g. standard **599** minor, free above threshold). Same numbers drive cart labels (“USPS Ground Advantage”) |
-| **Fulfilled by AfroTransact** (FC, carrier / express) | **Free ground** (policy) + **flat express fee** | Estimator + shipping policy; **promise** service for **dates** only |
-| **AfroTransact Delivery** (seller store → door) | **Distance-based quote** | **geo** road miles (Routes/OSRM) + **payments** `POST /v1/delivery-pricing/quote`; **geo** zones for eligibility; **promise** for delivery windows |
-| **Pickup** | **$0** shipping | **carrier-gateway** pickup locations + hours; no carrier rate at checkout |
+A seller-shipped package (not a store item) is offered the same flat AfroTransact delivery while the carrier switch is off (open decision below).
 
-**Promise** (Go, port 8204) does **not** price shipping; it computes **delivery/pickup dates** from FC cutoffs, ZIP3 transit tables, seller handling days, and driver zones (`POST /v1/promises`).
+### One source of the fee
 
-**At fulfilment** (after the order), **actual** outbound/return postage uses **carrier-gateway**:
+The fee is **one staff-edited record owned by orders** (`shipping_settings`, one row per currency, migration V11) and **nothing else**:
 
-- `POST /v1/rates` — parallel rate shop (1.5s budget) across enabled carriers for **label purchase** (Seller Center, FC ops, return labels from tax-returns).
-- `POST /v1/labels` — buy label on AfroTransact carrier accounts; billing policy decides seller vs platform (S256).
+- **Fields:** `flatFeeMinor` (0 to 10,000), `freeAboveMinor` (null = never free), `sellerCarrierShippingEnabled` (default false), `version`. The formula is `freeAboveMinor != null && itemsMinor >= freeAboveMinor ? 0 : flatFeeMinor`, per package, on the package's items (Java `ShippingSettings.deliveryFee`, Go `domain.ShippingSettings.DeliveryFee`, web and customer-app mocks).
+- **History and audit:** every change is a new version in `shipping_settings_change` with who, when, the record before and after, and a **required reason** (10 to 500 characters). A save that changes nothing makes no version. The launch default (v1, $5.99) is seeded by the migration, so a value always exists.
+- **Permissions:** `orders:shipping.view` (history) and `orders:shipping.edit` (change); super admin and finance edit, operations, customer support, auditor and product owner view (identity V41). The staff screen is **Settings > Flat delivery fee** (Fees & commissions module, resource `shipping-settings`); the history shows names, not ids.
+- **Who reads it:** gateway-bff reads `GET /v1/public/shipping-settings` (no sign-in) every 15 seconds for the estimate; **orders reads the same row for every charge** (`DefaultShippingPolicy`), including AfroTransact collecting from a store (the distance quote only keeps the route and the seller's pickup fee, never the shopper's price).
+- **Proof:** [`tools/checkout/shipping-fee-vectors.json`](../../tools/checkout/shipping-fee-vectors.json) lists, for four settings and ten cart values, what each option costs. Orders (`ShippingFeeContractTest`, which charges every option through checkout), gateway-bff (`TestShippingFeeContractEstimateEqualsWhatOrdersCharges`), the web mock and the customer app each assert the same numbers. Add a case there when the rule changes.
 
-So: **checkout shipping totals = our policy + payments delivery pricing**; **carrier-gateway = real carrier API for operations and return labels**, not the primary shopper checkout quote for standard cart packages.
+### When the settings cannot be read
+
+- **Estimate (gateway-bff):** keeps the **last known value** (a 15 second poll is the short cache) and logs it plainly (`shipping settings unavailable; keeping the last known delivery fee`, with the version and age). If **no value was ever read**, the option carries `feeUnknown: true` ("Delivery fee shown at checkout", never $0 or FREE) and the summary has `canPlaceOrder = false` with `deliveryBlockedReason`; the storefront and the app disable Place order until it is known. Pickup needs no fee and stays available.
+- **Placement (orders):** reads its own database row for every charge; if it cannot, the checkout step fails and is retried. Nothing is ever charged from a guess.
+
+### Address outside the delivery zones (D21)
+
+The BFF asks geo `GET /v1/zones/covering?type=DELIVERY` for the address's position. **Inside any active DELIVERY zone the flat fee applies. Outside every zone** each non-pre-order package offers a single delivery option, `quote_required` (plus free pickup when a point is near), the summary has `canPlaceOrder = false`, and orders refuses a `quote_required` selection in plain words. If geo cannot be read, or the address has no position, the shopper is not turned away: the flat fee applies (logged). Staff add or widen zones in geo; **zones must be seeded before launch**, or every address is "too far". The quote request flow behind the key (case, agreed amount, 48 hour pay link) is a separate change; the storefront and the app call a stub `onRequestQuote`.
+
+### Pre-orders (D22)
+
+A pre-order line and an in-stock line in one cart are **separate packages**: the pre-order package pays the **fee of its own window or run** (door or pickup), the in-stock package the flat fee, each once. The estimate now adds the pre-order package's fee (`preorder.feeMinor` from the cart) to `shippingMinor`; before this change the BFF estimate left it out while orders charged it. Tax on shipping follows the item through the existing proportional allocation ([checkout-tax-estimate.md](./checkout-tax-estimate.md), **open legal decision 5, unchanged**).
+
+### Weight mode and tiers (D18)
+
+Launch uses the one flat fee. The weight mode is the existing flat or per-weight switch in the staff fee editor (payments delivery pricing); orders and the cart carry **no package weights yet**, so the checkout does not use it. When data shows heavy or oversize items lose money, switch the weight mode on (base plus per pound) in the settings record, with a reason, then size tiers. **No size tiers are built.**
+
+### Carriers: labels and tracking only (D17)
+
+**carrier-gateway** stays for our own outbound and return **labels and tracking** (`POST /v1/rates`, `/v1/labels`, tracking webhooks) and for seller back-office label screens, which are not shopper-facing. Revisit live carrier rates, and direct carriers versus an aggregator, only when sellers start shipping themselves or the flat fee loses money. When a real carrier shipment is tracked the carrier name is data on that shipment, never copy in a template.
+
+### Guard against carrier names
+
+`TestNoShopperFacingTextNamesACarrierWhileTheSellerCarrierSwitchIsOff` (gateway-bff) and `carrier-names.test.ts` (web, scanning the storefront, shared shopper UI, customer app and the mock BFF's shopper content) fail when a shopper-facing string names USPS, UPS, FedEx, DHL, "Ground Advantage", "Next Day Air" or similar while the switch is off. Known exceptions outside shopper copy: the published legal documents (privacy notice sub-processors, seller fees), which counsel owns, still name carriers.
+
+**Promise** (Go, port 8204) does **not** price shipping; it computes **delivery/pickup dates** from FC cutoffs, ZIP3 transit tables, seller handling days, and driver zones (`POST /v1/promises`), and only dates an option, never removes it.
 
 ---
 
@@ -131,25 +162,25 @@ So: **checkout shipping totals = our policy + payments delivery pricing**; **car
 | Data point | Source | Affects |
 |------------|--------|---------|
 | **Fulfilment type** | Offer / cart package (`FulfilledByAfroTransact`, `AfroTransactDelivery`, seller) | Which options and fee rules apply |
-| **Package subtotal** | Cart | Free shipping threshold (seller packages) |
-| **Delivery option key** | Shopper choice (`carrier`, `express`, `afrotransact_delivery`, `pickup`) | Fee and tax shipping allocation |
+| **Package subtotal** | Cart | Free-above threshold of the flat delivery fee |
+| **Delivery option key** | Shopper choice (`afrotransact_delivery`, `pickup`; `quote_required` is not payable; `carrier` only behind the staff switch) | Fee and tax shipping allocation |
 | **Ship-to address** | Identity address book | Promise dates, ATD eligibility, **tax** ship-to |
 | **Address lat/lng or geocoded street** | Identity / geo | ATD distance and zone checks |
 | **Ship-from location** | Seller `ship-from-locations` (offers) | ATD origin, promise origin |
-| **Road distance (miles)** | geo `POST /v1/distance` | ATD customer charge |
-| **Seller org id** | Package seller | payments delivery-pricing quote |
+| **Road distance (miles)** | geo `POST /v1/distance` | Whether a seller store can be served (radius) and the route; **not** the shopper's price |
+| **Seller org id** | Package seller | Seller's pickup-delivery fee (payments delivery pricing); never the shopper's price |
 | **Destination ZIP** | Address | promise batches, FC transit |
 | **FC id** (platform fulfilment) | Derived from ship-to ZIP (BFF) | promise origin, ATD zone (FC-owned) |
 | **`packageDelivery` query** | Storefront → BFF | Re-sync **shipping + estimated tax** when options change |
 
-BFF wiring: `shopper_checkout.Summary` (delivery facts, local delivery, tax quote). Config: gateway BFF `DeliveryPolicy` / commerce seller shipping minors (aligned with orders properties).
+BFF wiring: `shopper_checkout.Summary` (delivery facts, delivery zones, local delivery, tax quote); the fee comes from `ShippingSettingsSync` (orders' shipping settings), not from configuration.
 
 ### Place order (authoritative)
 
 | Data point | Source |
 |------------|--------|
 | **Delivery selections** | `PlaceOrderRequest.deliverySelections` |
-| **Shipping per shipment** | orders `ShippingPolicy.fee(method, serviceLevel, itemsMinor)` or ATD quote snapshot |
+| **Shipping per shipment** | orders `ShippingPolicy.fee(method, serviceLevel, itemsMinor)` reading the shipping settings; a pre-order package pays its window or run fee; the store-delivery snapshot keeps the route and the seller fee |
 | **Promised dates** | promise (or fallback estimates) |
 | **Tax lines** | tax-returns quote (same line shape: each line carries its allocated share of the shipment’s shipping) |
 
@@ -173,7 +204,8 @@ BFF wiring: `shopper_checkout.Summary` (delivery facts, local delivery, tax quot
 | Delivery **dates** | promise | 8204 |
 | **Carrier** rates/labels/tracking | carrier-gateway | 8209 |
 | Road distance / zones | geo | (see PORTS) |
-| ATD **pricing formula** | payments | (see PORTS) |
+| Seller pickup-delivery fee (not the shopper's price) | payments | (see PORTS) |
+| **Shipping settings** (the flat fee) | orders | 8104 |
 | Product type / perishable | catalog | (see PORTS) |
 | Ship-from / seller pickup | seller | (see PORTS) |
 

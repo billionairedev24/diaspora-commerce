@@ -49,7 +49,7 @@ test.describe('storefront · help center', () => {
   test('shipping & delivery renders the design sections; unknown pages are 404', async ({ page }, testInfo) => {
     await page.goto('/help/shipping');
     await expect(page.getByRole('heading', { level: 1, name: 'Shipping & delivery' })).toBeVisible();
-    for (const h of ['Carrier shipping', 'AfroTransact Delivery', 'Pickup']) await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
+    for (const h of ['Delivery fee', 'AfroTransact Delivery', 'Pickup']) await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'help shipping' });
     const res = await page.goto('/help/no-such-page');
     expect(res?.status()).toBe(404);

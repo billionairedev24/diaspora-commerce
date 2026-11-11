@@ -78,7 +78,7 @@ test.describe('storefront · pre-orders (S273)', () => {
     await page.goto('/?src=ig&cr=story&po=LBK-7');
     await page.goto('/cart');
     await expect(page.getByTestId('cart-preorder-head')).toContainText(/Pre-order · delivered \w{3}, \w{3} \d+/);
-    await expect(page.getByTestId('cart-ships-now-head')).toHaveText('Ships now · UPS Ground, 3–5 days');
+    await expect(page.getByTestId('cart-ships-now-head')).toHaveText('Ships now · Delivery by AfroTransact');
     const summary = page.getByTestId('cart-preorder-summary');
     await expect(summary).toContainText('Pre-order · door delivery$7.99');
     await page.getByTestId('fulfil-pickup').click();
@@ -124,7 +124,7 @@ test.describe('storefront · pre-orders (S273)', () => {
     await expect(page.getByTestId('preorder-ribbon')).toHaveCount(0);
     await expect(page.getByTestId('preorder-hero')).toHaveCount(0);
     await expect(page.getByTestId('preorder-off')).toHaveCount(0);
-    await expect(page.getByText(/UPS Ground|Join the waitlist/)).toHaveCount(0);
+    await expect(page.getByText(/Delivery by AfroTransact for now|Join the waitlist/)).toHaveCount(0);
     await page.goto('/pre-orders');
     await expect(page.getByRole('heading', { name: 'Pre-orders are coming to Lubbock.' })).toBeVisible();
     await page.getByLabel('Email').fill('kwame@example.com');
@@ -136,7 +136,7 @@ test.describe('storefront · pre-orders (S273)', () => {
     await page.goto('/');
     await expect(page.getByTestId('preorder-off')).toHaveCount(0);
     await page.goto('/pre-orders');
-    await expect(page.getByRole('heading', { name: 'Shipping by UPS Ground for now.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Delivery by AfroTransact for now.' })).toBeVisible();
   });
 
   test('waitlist email unsubscribe link: asks, confirms, and explains a bad link', async ({ page }, testInfo) => {

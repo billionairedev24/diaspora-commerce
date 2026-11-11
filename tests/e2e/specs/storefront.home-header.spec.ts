@@ -18,7 +18,7 @@ test.describe('storefront · home and fixed header', () => {
     await expect(page.getByTestId('preorder-hero')).toHaveCount(0);
     await expect(page.getByTestId('preorder-off')).toHaveCount(0);
     // Prototype annotations (image size hints, "no pre-order" previews) never reach the real UI.
-    await expect(page.getByText(/UPS Ground|1600×900|970×250|Campaign image|Advertiser creative|Preview pre-order city/)).toHaveCount(0);
+    await expect(page.getByText(/Delivery by AfroTransact for now|1600×900|970×250|Campaign image|Advertiser creative|Preview pre-order city/)).toHaveCount(0);
     // Carousel first, then tiles, sponsored banners and rails.
     const order = await main.evaluate((m) => {
       const pick = (sel: string) => {

@@ -40,7 +40,7 @@ test.describe('storefront · AfroTransact Delivery from the seller’s store (S2
     await toDelivery(page, /Adaeze Nwosu 9800 Westheimer/);
     const quote = page.getByTestId('local-delivery-quote');
     await expect(quote).toContainText('7.4 mi from Houston, TX · about 18 min drive');
-    await expect(quote).toContainText('Delivery charge $11.28');
+    await expect(quote).toContainText('Delivery charge $5.99');
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'storefront checkout local delivery' });
 
     await page.getByRole('button', { name: 'Place your order' }).click();
@@ -48,7 +48,7 @@ test.describe('storefront · AfroTransact Delivery from the seller’s store (S2
     const placed = new URL(page.url()).searchParams.get('placed') ?? '';
     await page.goto(`/orders/${encodeURIComponent(placed)}`);
     await expect(page.getByTestId('order-local-delivery').first()).toContainText('AfroTransact Delivery from the seller’s store');
-    await expect(page.getByTestId('order-local-delivery').first()).toContainText('$11.28');
+    await expect(page.getByTestId('order-local-delivery').first()).toContainText('$5.99');
   });
 
   test('out of range: explains why, blocks the order, and offers to remove the package or change address', async ({ page }, testInfo) => {
