@@ -58,8 +58,23 @@ export function Details({ record }: { record: RecordDetail }) {
     <>
       {record.sections.map((s) => (
         <section key={s.title} aria-label={s.title} className="flex flex-col gap-2">
-          <h3 className="m-0 text-sm font-bold">{s.title}</h3>
-          {s.fields.length > 0 && s.fields.every((f) => f.kind === 'image') ? (
+          {s.collapsed ? null : <h3 className="m-0 text-sm font-bold">{s.title}</h3>}
+          {s.collapsed ? (
+            <details className="text-sm" data-testid="technical-details">
+              <summary className="cursor-pointer font-bold">{s.title}</summary>
+              <dl className="m-0 mt-2 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1.5">
+                {s.fields.map((f) => (
+                  <div key={f.label} className="contents">
+                    <dt className="text-muted">{f.label}</dt>
+                    <dd className="m-0 [overflow-wrap:anywhere]">
+                      <span className="font-mono text-xs">{f.value}</span>
+                      {f.value !== '—' ? <CopyId value={f.value} label={f.label} /> : null}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          ) : s.fields.length > 0 && s.fields.every((f) => f.kind === 'image') ? (
             <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
               {s.fields.map((f) => (
                 <li key={f.label}>
@@ -84,7 +99,7 @@ export function Details({ record }: { record: RecordDetail }) {
                   ) : (
                     <>
                       <span className={f.kind === 'mono' ? 'font-mono text-xs' : undefined}>{fieldText(f.kind, f.value)}</span>
-                      {s.title === 'IDs' && f.kind === 'mono' && f.value !== '—' ? <CopyId value={f.value} label={f.label} /> : null}
+                      {s.collapsed && f.kind === 'mono' && f.value !== '—' ? <CopyId value={f.value} label={f.label} /> : null}
                     </>
                   )}
                 </dd>

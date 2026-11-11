@@ -16,7 +16,7 @@ import (
 // row is about. A resource says which of its fields hold an id (nameRef); the framework then, for every page it reads
 // (a table page, a scan for search and sort, an export, a sheet), resolves all the ids of that page to display names in
 // one pass per kind and puts them on the record under the ref's nameKey. Tables, search, sort, exports and sheets all
-// work from that name; the id stays searchable and is shown, copyable, as an "ID" field in the sheet only.
+// work from that name; the id stays searchable and is shown, copyable, as an "ID" field in a collapsed "Technical details" section of the sheet only.
 //
 // Resolution never fails a request: an id nobody can name (the directory is down, the person was deleted, the staff
 // member may not read users) becomes a neutral label such as "Unknown seller".
@@ -592,11 +592,12 @@ func (r *staffResource) nameSections(o jobj, sections []domain.DetailSection) []
 		sections[0].Fields = append(lead, sections[0].Fields...)
 	}
 	if len(ids) > 0 {
-		title := firstNonEmpty(r.idsTitle, "IDs")
+		title := firstNonEmpty(r.idsTitle, domain.TechnicalDetails)
 		if i := slices.IndexFunc(sections, func(s domain.DetailSection) bool { return s.Title == title }); i >= 0 {
 			sections[i].Fields = append(sections[i].Fields, ids...)
+			sections[i].Collapsed = true
 		} else {
-			sections = append(sections, domain.DetailSection{Title: title, Fields: ids})
+			sections = append(sections, domain.DetailSection{Title: title, Fields: ids, Collapsed: true})
 		}
 	}
 	return sections

@@ -83,6 +83,19 @@ class InternalLookupController {
         return new OrgOwnersResponse(v.orgId(), v.ownerUserIds());
     }
 
+    @Schema(name = "StaffMember")
+    record StaffMemberResponse(String userId, String name, String email) {
+    }
+
+    @Operation(summary = "Enabled staff holding a permission or a role (application review roster: who can be assigned)")
+    @GetMapping("/v1/internal/staff")
+    List<StaffMemberResponse> staff(@RequestParam(required = false) String permission,
+                                    @RequestParam(required = false) String role,
+                                    @RequestParam(required = false) List<String> ids) {
+        return lookups.staff(permission, role, ids).stream()
+                .map(m -> new StaffMemberResponse(m.userId(), m.name(), m.email())).toList();
+    }
+
     /** Ids that are not account UUIDs cannot exist: 404 (not 400), so callers treat them as unknown recipients. */
     private static UUID parse(String userId) {
         try {

@@ -277,16 +277,16 @@ func TestTheSheetShowsTheNameAndKeepsTheIdAsASecondaryIdField(t *testing.T) {
 			if f.Label == "Seller" && f.Value != "Kente Naturals" {
 				t.Errorf("Seller field = %q", f.Value)
 			}
-			if strings.HasPrefix(f.Value, "org_") && d.Sections[i].Title != "IDs" {
+			if strings.HasPrefix(f.Value, "org_") && d.Sections[i].Title != domain.TechnicalDetails {
 				t.Errorf("section %q shows the raw id in %q", d.Sections[i].Title, f.Label)
 			}
 		}
-		if d.Sections[i].Title == "IDs" {
+		if d.Sections[i].Title == domain.TechnicalDetails {
 			ids = &d.Sections[i]
 		}
 	}
-	if ids == nil || len(ids.Fields) != 1 || ids.Fields[0].Label != "Seller ID" || ids.Fields[0].Value != "org_rf8luoko6kjmaln7d5al" || ids.Fields[0].Kind != "mono" {
-		t.Fatalf("IDs section = %+v", ids)
+	if ids == nil || len(ids.Fields) != 1 || ids.Fields[0].Label != "Seller ID" || ids.Fields[0].Value != "org_rf8luoko6kjmaln7d5al" || ids.Fields[0].Kind != "mono" || !ids.Collapsed {
+		t.Fatalf("Technical details section = %+v", ids)
 	}
 	seller := false
 	for _, s := range d.Sections {

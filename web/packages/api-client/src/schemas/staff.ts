@@ -179,7 +179,7 @@ export const DetailFieldSchema = z.object({
   href: z.string().optional()
 });
 export type DetailField = z.infer<typeof DetailFieldSchema>;
-export const DetailSectionSchema = z.object({ title: z.string(), fields: z.array(DetailFieldSchema) });
+export const DetailSectionSchema = z.object({ title: z.string(), fields: z.array(DetailFieldSchema), collapsed: z.boolean().optional() });
 export type DetailSection = z.infer<typeof DetailSectionSchema>;
 export const DetailTableSchema = z.object({ title: z.string(), columns: z.array(ResourceColumnSchema), rows: z.array(ResourceRowSchema) });
 export type DetailTable = z.infer<typeof DetailTableSchema>;

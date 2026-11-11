@@ -13,7 +13,11 @@ public enum ReviewAction {
     REQUEST_INFO,
     FINAL_APPROVE,
     SEND_BACK,
-    REJECT;
+    REJECT,
+    /** Workflow entries (not decisions): who holds the case, and escalation. */
+    ASSIGNED,
+    RELEASED,
+    ESCALATED;
 
     public boolean isReviewerAction() {
         return this == APPROVE || this == FLAG || this == REQUEST_INFO;
@@ -21,5 +25,10 @@ public enum ReviewAction {
 
     public boolean isFinalAction() {
         return this == FINAL_APPROVE || this == SEND_BACK || this == REJECT || this == REQUEST_INFO;
+    }
+
+    /** Assignment and escalation entries: they never change the status and never count as a decision. */
+    public boolean isWorkflow() {
+        return this == ASSIGNED || this == RELEASED || this == ESCALATED;
     }
 }

@@ -440,7 +440,12 @@ type DetailField struct {
 type DetailSection struct {
 	Title  string        `json:"title"`
 	Fields []DetailField `json:"fields"`
+	// Collapsed sections are shown closed ("Technical details": the raw ids, copyable): staff UIs show names first.
+	Collapsed bool `json:"collapsed,omitempty"`
 }
+
+// TechnicalDetails is the title of the collapsed section that keeps the raw ids behind the names.
+const TechnicalDetails = "Technical details"
 
 // DetailTable is a nested list on a sheet (shipments, PO lines, route stops…).
 type DetailTable struct {

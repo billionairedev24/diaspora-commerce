@@ -115,14 +115,14 @@ describe('names instead of ids', () => {
     expect(table).not.toHaveTextContent('rte-1000');
   });
 
-  it('keeps the ids in the sheet as copyable ID fields', async () => {
+  it('keeps the ids in the sheet as copyable ID fields under Technical details', async () => {
     const user = userEvent.setup();
     nav.set('/dispatch?open=sos-1');
     await renderScreen(<ResourceTable resource="sos-alerts" />);
-    const ids = await screen.findByRole('region', { name: 'IDs' });
+    const ids = await screen.findByRole('region', { name: 'Technical details' });
     expect(within(ids).getByText('Driver ID')).toBeInTheDocument();
     expect(within(ids).getByText('drv-1')).toBeInTheDocument();
-    // Nothing outside the IDs section shows the raw id.
+    // Nothing outside the Technical details section shows the raw id.
     const sheet = ids.closest('[role="dialog"]') ?? document.body;
     expect(within(sheet as HTMLElement).getAllByText('drv-1')).toHaveLength(1);
     await user.click(within(ids).getByRole('button', { name: 'Copy Driver ID' }));

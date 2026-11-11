@@ -1,5 +1,6 @@
 package com.afrotransact.identity.port;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -29,4 +30,14 @@ public interface UserAccessRepository {
     boolean grantPermission(UUID userId, String permissionKey, String grantedBy);
 
     boolean revokePermission(UUID userId, String permissionKey);
+
+    /** Enabled accounts that hold {@code permissionKey} through a role or a direct grant, with their names. */
+    List<StaffMember> staffWithPermission(String permissionKey);
+
+    /** Enabled accounts that hold the role. */
+    List<StaffMember> staffWithRole(String roleKey);
+
+    /** A staff account as seen by directory lookups. */
+    record StaffMember(UUID userId, String name, String email) {
+    }
 }

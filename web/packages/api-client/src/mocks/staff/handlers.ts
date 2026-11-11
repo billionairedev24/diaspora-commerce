@@ -241,7 +241,7 @@ function actionView(ctx: Ctx, resource: ResourceKey, r: MockRecord, a: MockActio
 function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
   const def = RESOURCES[resource];
   const keys = Object.keys(r.fields);
-  // Ids of people and organisations are not part of the sheet's body: the name is, and the id sits apart under "IDs".
+  // Ids of people and organisations are not part of the sheet's body: the name is, and the id sits apart in the collapsed "Technical details" section.
   const idLabels = def.ids ?? {};
   const grouped = def.sections ?? [['Details', keys.filter((k) => !(k in idLabels))]];
   const used = new Set(grouped.flatMap(([, ks]) => ks));
@@ -253,7 +253,7 @@ function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
   const idFields = Object.entries(idLabels)
     .filter(([k]) => r.fields[k])
     .map(([k, label]) => ({ label: `${label} ID`, value: String(r.fields[k]), kind: 'mono' as const }));
-  if (idFields.length && !def.sheetSections) sections.push({ title: 'IDs', fields: idFields });
+  if (idFields.length && !def.sheetSections) sections.push({ title: 'Technical details', fields: idFields, collapsed: true });
   const mayShip = (def.shipmentPermissions ?? []).some((p) => ctx.permissions.includes(p)) && allows(ctx.roles, RESOURCE_MODULE[resource], 'EDIT');
   const status = def.statusKey ? (r.fields[def.statusKey] as string | null) ?? null : null;
   const canEdit = !!def.edit && ctx.permissions.includes(def.edit.permission) && allows(ctx.roles, RESOURCE_MODULE[resource], 'EDIT');

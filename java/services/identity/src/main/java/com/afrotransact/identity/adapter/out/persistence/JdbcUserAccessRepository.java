@@ -1,6 +1,9 @@
 package com.afrotransact.identity.adapter.out.persistence;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -83,5 +86,31 @@ class JdbcUserAccessRepository implements UserAccessRepository {
     public boolean revokePermission(UUID userId, String permissionKey) {
         return jdbc.sql("delete from user_permission where user_id = :u and permission_key = :p")
                 .param("u", userId).param("p", permissionKey).update() == 1;
+    }
+
+    @Override
+    public List<StaffMember> staffWithPermission(String permissionKey) {
+        return jdbc.sql("""
+                select u.id, u.first_name, u.last_name, u.email from user_account u
+                where u.enabled and (
+                    exists (select 1 from user_role ur join role_permission rp on rp.role_key = ur.role_key
+                            where ur.user_id = u.id and rp.permission_key = :p)
+                    or exists (select 1 from user_permission up where up.user_id = u.id and up.permission_key = :p))
+                order by lower(u.last_name), lower(u.first_name)
+                """).param("p", permissionKey).query(JdbcUserAccessRepository::member).list();
+    }
+
+    @Override
+    public List<StaffMember> staffWithRole(String roleKey) {
+        return jdbc.sql("""
+                select u.id, u.first_name, u.last_name, u.email from user_account u
+                join user_role ur on ur.user_id = u.id
+                where u.enabled and ur.role_key = :r order by lower(u.last_name), lower(u.first_name)
+                """).param("r", roleKey).query(JdbcUserAccessRepository::member).list();
+    }
+
+    private static StaffMember member(ResultSet rs, int n) throws SQLException {
+        return new StaffMember(rs.getObject("id", UUID.class),
+                (rs.getString("first_name") + " " + rs.getString("last_name")).trim(), rs.getString("email"));
     }
 }

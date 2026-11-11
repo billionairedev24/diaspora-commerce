@@ -3,6 +3,7 @@ package com.afrotransact.identity.application;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 import com.afrotransact.identity.domain.MarketCodes;
@@ -15,9 +16,11 @@ import com.afrotransact.identity.port.NotificationPreferencesRepository;
 import com.afrotransact.identity.port.OrganizationRepository;
 import com.afrotransact.identity.port.PhoneVerificationRepository;
 import com.afrotransact.identity.port.PushDeviceRepository;
+import com.afrotransact.identity.port.UserAccessRepository;
 import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.BusinessRuleException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -33,11 +36,12 @@ class ContactLookupServiceImpl implements ContactLookupService {
     private final PhoneVerificationRepository phoneVerifications;
     private final AddressRepository addresses;
     private final OrganizationRepository orgs;
+    private final UserAccessRepository access;
 
     ContactLookupServiceImpl(CurrentUser current, UserAccountRepository users,
                              NotificationPreferencesRepository preferences, PushDeviceRepository devices,
                              PhoneVerificationRepository phoneVerifications, AddressRepository addresses,
-                             OrganizationRepository orgs) {
+                             OrganizationRepository orgs, UserAccessRepository access) {
         this.current = current;
         this.users = users;
         this.preferences = preferences;
@@ -45,6 +49,7 @@ class ContactLookupServiceImpl implements ContactLookupService {
         this.phoneVerifications = phoneVerifications;
         this.addresses = addresses;
         this.orgs = orgs;
+        this.access = access;
     }
 
     @Override
@@ -73,6 +78,30 @@ class ContactLookupServiceImpl implements ContactLookupService {
         orgs.findById(orgId).orElseThrow(() -> new NotFoundException("identity.org-not-found",
                 "Organisation not found"));
         return new OrgOwnersView(orgId, orgs.ownerUserIds(orgId).stream().map(UUID::toString).toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StaffEntry> staff(String permission, String role, List<String> ids) {
+        requireServiceLookup();
+        if (ids != null && !ids.isEmpty()) {
+            return ids.stream().map(String::trim).distinct().limit(100).map(i -> {
+                try {
+                    return users.findById(UUID.fromString(i)).filter(UserAccount::enabled).orElse(null);
+                } catch (IllegalArgumentException e) {
+                    return null;
+                }
+            }).filter(Objects::nonNull)
+                    .map(u -> new StaffEntry(u.id().toString(), (u.firstName() + " " + u.lastName()).trim(),
+                            u.email())).toList();
+        }
+        boolean byRole = role != null && !role.isBlank();
+        if (!byRole && (permission == null || permission.isBlank())) {
+            throw new BusinessRuleException("identity.staff-filter-required",
+                    "Pass a permission or a role");
+        }
+        return (byRole ? access.staffWithRole(role.trim()) : access.staffWithPermission(permission.trim())).stream()
+                .map(m -> new StaffEntry(m.userId().toString(), m.name(), m.email())).toList();
     }
 
     private String market(UserAccount u) {
