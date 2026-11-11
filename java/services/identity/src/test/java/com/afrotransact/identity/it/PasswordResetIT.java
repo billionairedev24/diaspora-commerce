@@ -287,7 +287,7 @@ class PasswordResetIT {
                 """).param("e", email).query(String.class).single();
         HttpResponse<String> verified = s.form("/signup/verify", Map.of("code", code,
                 "_csrf", BrowserSession.csrfOf(s.get(base() + "/signup/verify").body())));
-        assertThat(BrowserSession.location(verified)).isEqualTo("http://localhost:3000");
+        assertThat(s.skipMfaSetup(verified)).isEqualTo("http://localhost:3000");
         return email;
     }
 

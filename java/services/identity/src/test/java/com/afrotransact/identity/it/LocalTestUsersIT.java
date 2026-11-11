@@ -108,12 +108,12 @@ class LocalTestUsersIT {
     }
 
     @Test
-    void staffKeepTheirTwoStepPolicyWithATextedCode() {
+    void staffMustEnrolASecondStepFirstAndNoCodeIsSentToThePhoneOnFile() {
         JsonNode staff = signIn(new BrowserSession(base()), bffToken(), "staff.support@afrotransact.test");
-        assertThat(staff.get("status").asString()).isEqualTo("MFA_REQUIRED");
+        assertThat(staff.get("status").asString()).isEqualTo("MFA_ENROLMENT_REQUIRED");
         assertThat(staff.has("loginTicket")).isFalse();
-        assertThat(staff.get("factors").get("sms").asBoolean()).isTrue();
-        assertThat(staff.get("factors").get("smsHint").asString()).endsWith("0105");
+        assertThat(staff.get("factors").get("sms").asBoolean()).isFalse();
+        assertThat(staff.get("factors").get("enrolMethods").toString()).contains("TOTP", "EMAIL_OTP");
     }
 
     @Test

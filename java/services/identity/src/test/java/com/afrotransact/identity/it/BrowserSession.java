@@ -141,7 +141,7 @@ final class BrowserSession {
         if (!first.mfaRequired()) {
             return first;
         }
-        String key = base + "|" + email;
+        String key = email;
         HttpResponse<String> mfa = get(base + "/login/mfa");
         if (mfa.statusCode() == 200) {
             String recovery = STAFF_RECOVERY.get(key).poll();
@@ -170,6 +170,21 @@ final class BrowserSession {
         HttpResponse<String> resumed = get(absolute(location(finished)));
         expect(resumed, 302);
         return new AuthorizeResult(code(location(resumed)), false, first.verifier());
+    }
+
+    /**
+     * After the sign-up email code the browser is offered "Secure your account": checks that, presses "Skip for now"
+     * and returns where the browser continues (the pending authorization request or the home page).
+     */
+    String skipMfaSetup(HttpResponse<String> verified) {
+        if (!location(verified).endsWith("/login/mfa/setup")) {
+            throw new IllegalStateException("Expected the Secure your account step, got " + location(verified));
+        }
+        HttpResponse<String> setup = get(absolute(location(verified)));
+        expect(setup, 200);
+        HttpResponse<String> skipped = submit("/login/mfa/setup/skip", setup, Map.of());
+        expect(skipped, 302);
+        return location(skipped);
     }
 
     /** Page helpers for the hosted flows (sign-up, "Secure your account", forced setup). */

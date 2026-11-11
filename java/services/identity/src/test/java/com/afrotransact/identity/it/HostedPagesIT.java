@@ -177,7 +177,7 @@ class HostedPagesIT {
 
         HttpResponse<String> verified = s.form("/signup/verify", Map.of("code", latestCode(email),
                 "_csrf", BrowserSession.csrfOf(wrong.body())));
-        String resumed = BrowserSession.location(verified);
+        String resumed = s.skipMfaSetup(verified);
         assertThat(resumed).contains("/oauth2/authorize").contains("prompt=create");
         HttpResponse<String> issued = s.get(resumed.startsWith("http") ? resumed : base() + resumed);
         String code = BrowserSession.code(BrowserSession.location(issued));
@@ -204,7 +204,7 @@ class HostedPagesIT {
         assertThat(BrowserSession.location(created)).endsWith("/signup/verify");
         HttpResponse<String> verified = s.form("/signup/verify", Map.of("code", latestCode(email),
                 "_csrf", BrowserSession.csrfOf(s.get(base() + "/signup/verify").body())));
-        String resumed = BrowserSession.location(verified);
+        String resumed = s.skipMfaSetup(verified);
         HttpResponse<String> issued = s.get(resumed.startsWith("http") ? resumed : base() + resumed);
         assertThat(BrowserSession.location(issued)).startsWith(SELLER_CALLBACK + "?code=");
         assertThat(jdbc.sql("""
@@ -351,8 +351,9 @@ class HostedPagesIT {
         assertThat(BrowserSession.location(created)).endsWith("/signup/verify");
         HttpResponse<String> verified = s.form("/signup/verify", Map.of("code", latestCode(email),
                 "_csrf", BrowserSession.csrfOf(s.get(base() + "/signup/verify").body())));
-        // No pending authorization request: the new account lands on the home page, signed in.
-        assertThat(BrowserSession.location(verified)).isEqualTo("http://localhost:3000");
+        // The email is confirmed: "Secure your account" is offered first. No pending authorization request, so
+        // skipping lands the new account on the home page, signed in.
+        assertThat(s.skipMfaSetup(verified)).isEqualTo("http://localhost:3000");
         return email;
     }
 
