@@ -68,7 +68,9 @@ class ReviewServiceImplTest {
         when(reasons.find("ALL_CHECKS_PASSED")).thenReturn(Optional.of(mock(ReasonCode.class)));
         when(apps.lockById("app_1")).thenReturn(Optional.of(approved));
         when(apps.timeline("app_1")).thenReturn(List.of(finalApproval));
-        when(views.view(any(), any(), any(), any())).thenReturn(mock(ApplicationView.class));
+        ApplicationView shown = mock(ApplicationView.class);
+        when(shown.withWorkflow(any())).thenReturn(shown);
+        when(views.view(any(), any(), any(), any())).thenReturn(shown);
     }
 
     private void as(String subject, String... permissions) {
