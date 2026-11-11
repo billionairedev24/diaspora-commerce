@@ -41,6 +41,8 @@ interface SettingsState {
   profile: Pick<AccountProfile, 'firstName' | 'lastName' | 'phone' | 'phoneVerified' | 'jobTitle'>;
   security: Omit<AccountSecurity, 'passkeyRegistrationUrl'>;
   pendingTotp: string | null;
+  pendingEmail: boolean;
+  promptDismissed: boolean;
   pendingSms: boolean;
   pendingPhone: boolean;
   activity: SignInEvent[];
@@ -114,15 +116,21 @@ async function read<T>(request: Request): Promise<Partial<T>> {
   }
 }
 
+/** Turning a factor off asks for the account password again (any non-empty password passes in the demo). */
+async function wrongPassword(request: Request) {
+  const b = await read<{ currentPassword: string }>(request);
+  return b.currentPassword ? null : problem(422, 'VALIDATION_FAILED', 'Check your password', 'Your current password is incorrect.', { currentPassword: 'Your current password is incorrect.' });
+}
+
 function seed(kind: SettingsMockConfig['kind']): SettingsState {
   const staff = kind === 'staff';
   return {
     profile: { firstName: '', lastName: '', phone: '+17135550142', phoneVerified: true, jobTitle: kind === 'customer' ? null : staff ? 'Trust & Safety lead' : 'Store manager' },
     security: {
-      // The demo shopper already uses both methods (as the storefront mock always has); staff start with SMS only.
+      // The demo shopper already uses the authenticator app; staff (mandatory) start with email codes; SMS is off.
       mfa: kind === 'customer'
-        ? { totp: true, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: true, mayDisable: true, mayRemoveTotp: true, mayRemoveSms: true }
-        : { totp: false, sms: staff, smsPhone: staff ? '•••• 0142' : null, recoveryCodesLeft: staff ? 10 : 0, required: staff, mayDisable: !staff, mayRemoveTotp: false, mayRemoveSms: !staff },
+        ? { totp: true, emailOtp: false, sms: false, smsPhone: null, recoveryCodesLeft: 8, required: false, mayDisable: true, mayRemoveTotp: true, mayRemoveEmailOtp: false, mayRemoveSms: false, setupSuggested: false, smsAvailable: false }
+        : { totp: false, emailOtp: staff, sms: false, smsPhone: null, recoveryCodesLeft: staff ? 10 : 0, required: staff, mayDisable: !staff, mayRemoveTotp: false, mayRemoveEmailOtp: false, mayRemoveSms: false, setupSuggested: !staff, smsAvailable: false },
       passkeys: [{ credentialId: 'cred-macbook', label: 'MacBook Pro · Touch ID', createdAt: ago(40 * DAY), lastUsedAt: ago(2 * DAY) }],
       trustedBrowsers: [{ id: 'tb-1', label: 'Chrome on macOS', createdAt: ago(3 * DAY), expiresAt: iso(new Date(Date.now() + 27 * DAY)) }],
       sessions: [
@@ -133,6 +141,8 @@ function seed(kind: SettingsMockConfig['kind']): SettingsState {
       linkedAccounts: { accounts: kind === 'customer' ? [{ provider: 'google', email: 'adaeze.nwosu@gmail.com', canUnlink: true }] : [], hasPassword: true }
     },
     pendingTotp: null,
+    pendingEmail: false,
+    promptDismissed: false,
     pendingSms: false,
     pendingPhone: false,
     activity: [
@@ -151,10 +161,13 @@ const LOCKED: Partial<Record<AlertTopic, boolean>> = { 'seller.compliance': true
 
 function recompute(s: SettingsState, staff: boolean) {
   const m = s.security.mfa;
-  m.required = staff || m.totp || m.sms;
+  const count = Number(m.totp) + Number(m.emailOtp) + Number(m.sms);
+  m.required = staff;
   m.mayDisable = !staff;
-  m.mayRemoveTotp = m.totp && (!staff || m.sms);
-  m.mayRemoveSms = m.sms && (!staff || m.totp);
+  m.mayRemoveTotp = m.totp && (!staff || count > 1);
+  m.mayRemoveEmailOtp = m.emailOtp && (!staff || count > 1);
+  m.mayRemoveSms = m.sms && (!staff || count > 1);
+  m.setupSuggested = !staff && count === 0 && !s.promptDismissed;
 }
 
 /** MSW handlers for /v1/account/{profile,security,…}; state is per person and lives for the process. */
@@ -278,9 +291,38 @@ export function settingsHandlers(cfg: SettingsMockConfig): HttpHandler[] {
       recompute(s, staff);
       return ok({ recoveryCodes: first ? ['k7q2m-9xdpw', 'p4wz3-hnac8', 'c8rty-v6eb2', 'l2jfq-k7bm4', 'x9tn4-r2dq7', 'm3hv8-z5kcw', 'b6pw2-n8tjx', 'f4yq7-c2mrh', 'd9kt3-w6zbp', 'h2nx5-q8vfa'] : [] });
     })),
-    http.delete('*/v1/account/mfa/totp', authed((s) => {
-      if (!s.security.mfa.mayRemoveTotp) return problem(403, 'FORBIDDEN', 'Two-step verification is required', 'Two-step verification is mandatory for staff accounts: turn on another method first.');
+    http.delete('*/v1/account/mfa/totp', authed(async (s, _p, r) => {
+      if (!s.security.mfa.mayRemoveTotp) return problem(403, 'FORBIDDEN', 'Two-step verification is required', 'Two-step verification is mandatory for your account: turn on another method first.');
+      const wrong = await wrongPassword(r);
+      if (wrong) return wrong;
       s.security.mfa.totp = false;
+      recompute(s, staff);
+      return none();
+    })),
+    http.post('*/v1/account/mfa/email', authed((s) => {
+      s.pendingEmail = true;
+      return ok({ codeExpiresAt: iso(new Date(Date.now() + 600_000)) }, 202);
+    })),
+    http.post('*/v1/account/mfa/email/confirm', authed(async (s, _p, r) => {
+      if (!s.pendingEmail || (await codeOf(r)) !== SETTINGS_DEMO_CODE) return badCode();
+      const m = s.security.mfa;
+      const first = m.recoveryCodesLeft === 0;
+      m.emailOtp = true;
+      s.pendingEmail = false;
+      if (first) m.recoveryCodesLeft = 10;
+      recompute(s, staff);
+      return ok({ recoveryCodes: first ? ['e2m3a-i4l5c', 'o6d7e-s8k9m', 'p2q3r-s4t5u', 'v6w7x-y8z2a', 'b3c4d-e5f6g', 'h7j8k-m9n2p', 'q3r4s-t5u6v', 'w7x8y-z9a2b', 'c3d4e-f5g6h', 'j7k8m-n9p2q'] : [] });
+    })),
+    http.delete('*/v1/account/mfa/email', authed(async (s, _p, r) => {
+      if (!s.security.mfa.mayRemoveEmailOtp) return problem(403, 'FORBIDDEN', 'Two-step verification is required', 'Two-step verification is mandatory for your account: turn on another method first.');
+      const wrong = await wrongPassword(r);
+      if (wrong) return wrong;
+      s.security.mfa.emailOtp = false;
+      recompute(s, staff);
+      return none();
+    })),
+    http.post('*/v1/account/mfa/prompt/dismiss', authed((s) => {
+      s.promptDismissed = true;
       recompute(s, staff);
       return none();
     })),
@@ -300,8 +342,10 @@ export function settingsHandlers(cfg: SettingsMockConfig): HttpHandler[] {
       recompute(s, staff);
       return ok({ recoveryCodes: first ? ['a2b3c-d4e5f', 'g6h7j-k8m9n', 'p2q3r-s4t5u', 'v6w7x-y8z2a', 'b3c4d-e5f6g', 'h7j8k-m9n2p', 'q3r4s-t5u6v', 'w7x8y-z9a2b', 'c3d4e-f5g6h', 'j7k8m-n9p2q'] : [] });
     })),
-    http.delete('*/v1/account/mfa/sms', authed((s) => {
-      if (!s.security.mfa.mayRemoveSms) return problem(403, 'FORBIDDEN', 'Two-step verification is required', 'Two-step verification is mandatory for staff accounts: turn on another method first.');
+    http.delete('*/v1/account/mfa/sms', authed(async (s, _p, r) => {
+      if (!s.security.mfa.mayRemoveSms) return problem(403, 'FORBIDDEN', 'Two-step verification is required', 'Two-step verification is mandatory for your account: turn on another method first.');
+      const wrong = await wrongPassword(r);
+      if (wrong) return wrong;
       s.security.mfa.sms = false;
       s.security.mfa.smsPhone = null;
       recompute(s, staff);

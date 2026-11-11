@@ -841,7 +841,9 @@ export interface paths {
          * Sign in inside the customer or driver app with email and password
          * @description The native apps show their own sign-in form instead of identity's hosted page. The BFF checks the credentials
          *     with identity's first-party sign-in API and either asks for a second factor (`MFA_REQUIRED`, continue at
-         *     `/v1/auth/native/mfa/verify`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
+         *     `/v1/auth/native/mfa/verify`; only for people who enrolled a factor: authenticator app, email codes), asks the person to set one
+         *     up first (`MFA_ENROLMENT_REQUIRED`: MFA is mandatory for them and nothing is enrolled, no code is sent; continue at
+         *     `/v1/auth/native/mfa/enrol/*`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
          *     request and returns the authorization `code` (`AUTHENTICATED`). The app exchanges the code with its PKCE
          *     verifier at identity's `/oauth2/token` and receives its own access and refresh tokens. A wrong password is 401
          *     `INVALID_CREDENTIALS` (no token was sent, so the app shows it on the form), repeated failures 429 `RATE_LIMITED`.
@@ -862,7 +864,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Text a sign-in code for a second-factor step */
+        /** Text a sign-in code for a second-factor step (only while identity's SMS flag is on; off by default) */
         post: operations["nativeSendSmsCode"];
         delete?: never;
         options?: never;
@@ -881,6 +883,100 @@ export interface paths {
         put?: never;
         /** Verify the second factor and get the authorization code */
         post: operations["nativeVerifySecondFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email a sign-in code for a second-factor step (people who turned email codes on)
+         * @description "Send me an email code instead" when both an authenticator and email codes are on; when email is the only
+         *     factor identity already sent the code with the password step. Resends are throttled (one per 30 seconds,
+         *     five per hour).
+         */
+        post: operations["nativeSendEmailCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/enrol/totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forced enrolment (MFA_ENROLMENT_REQUIRED) - start the authenticator app
+         * @description MFA is mandatory for this person (staff, or their portal's Auth setting) and nothing is set up yet. No code was
+         *     sent. They must set up the authenticator app or email codes with the `challengeId` before they get a session.
+         */
+        post: operations["nativeEnrolTotp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/enrol/totp/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forced enrolment - confirm the authenticator with a code and sign in */
+        post: operations["nativeConfirmEnrolTotp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/enrol/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forced enrolment - email a first code to the verified account email */
+        post: operations["nativeEnrolEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/enrol/email/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forced enrolment - confirm the emailed code, turn email codes on and sign in */
+        post: operations["nativeConfirmEnrolEmail"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1917,7 +2013,7 @@ export interface paths {
         put?: never;
         /** Start authenticator-app enrolment (render otpauthUri as a QR code) */
         post: operations["startTotp"];
-        /** Turn off the authenticator app */
+        /** Turn off the authenticator app (needs the account password; 403 while MFA is mandatory and it is the last factor) */
         delete: operations["disableTotp"];
         options?: never;
         head?: never;
@@ -1950,9 +2046,9 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Text a code to the account phone to turn on SMS sign-in codes */
+        /** Text a code to the account phone to turn on SMS sign-in codes (409 CONFLICT while identity's SMS flag is off) */
         post: operations["startSmsMfa"];
-        /** Turn off SMS sign-in codes */
+        /** Turn off SMS sign-in codes (needs the account password) */
         delete: operations["disableSmsMfa"];
         options?: never;
         head?: never;
@@ -1970,6 +2066,58 @@ export interface paths {
         put?: never;
         /** Confirm SMS sign-in codes; returns recovery codes the first time */
         post: operations["confirmSmsMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email a first code to the verified account email to turn on email sign-in codes */
+        post: operations["startEmailMfa"];
+        /** Turn off email sign-in codes (needs the account password; 403 while MFA is mandatory and it is the last factor) */
+        delete: operations["disableEmailMfa"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/email/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm the emailed code and turn email codes on; returns recovery codes the first time */
+        post: operations["confirmEmailMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/prompt/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Not now: hide the "Secure your account" reminder until the reminder interval has passed */
+        post: operations["dismissMfaPrompt"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2801,30 +2949,71 @@ export interface components {
             app: components["schemas"]["NativeApp"];
             /** Format: uuid */
             challengeId: string;
-            /** @enum {string} */
-            factor: "TOTP" | "SMS" | "RECOVERY_CODE";
+            /**
+             * @description SMS only while identity's SMS flag is on
+             * @enum {string}
+             */
+            factor: "TOTP" | "EMAIL_OTP" | "SMS" | "RECOVERY_CODE";
             code: string;
             /** @description Return a trustedDeviceToken so this phone skips the second factor for 30 days */
             trustDevice?: boolean;
             codeChallenge: string;
             redirectUri: string;
         };
+        NativeChallengeRequest: {
+            app: components["schemas"]["NativeApp"];
+            /** Format: uuid */
+            challengeId: string;
+            codeChallenge: string;
+            redirectUri: string;
+        };
+        NativeEnrolConfirmRequest: {
+            app: components["schemas"]["NativeApp"];
+            /** Format: uuid */
+            challengeId: string;
+            code: string;
+            codeChallenge: string;
+            redirectUri: string;
+        };
+        NativeCodeSent: {
+            /**
+             * @description Masked destination
+             * @example a••••@example.com
+             */
+            sentTo?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+        };
         NativeSignInResult: {
-            /** @enum {string} */
-            status: "MFA_REQUIRED" | "AUTHENTICATED";
+            /**
+             * @description MFA_REQUIRED: the person enrolled a factor, ask for it. MFA_ENROLMENT_REQUIRED: MFA is mandatory for them and
+             *     nothing is set up (no code was sent): enrol with `factors.enrolMethods`. AUTHENTICATED: exchange `code`.
+             * @enum {string}
+             */
+            status: "MFA_REQUIRED" | "MFA_ENROLMENT_REQUIRED" | "AUTHENTICATED";
             /**
              * Format: uuid
-             * @description MFA_REQUIRED only
+             * @description MFA_REQUIRED and MFA_ENROLMENT_REQUIRED only
              */
             challengeId?: string;
             /** Format: date-time */
             challengeExpiresAt?: string;
             factors?: {
                 totp?: boolean;
+                /** @description Email codes are on; the code goes to emailHint */
+                emailOtp?: boolean;
+                emailHint?: string;
+                /** @description Always false unless identity's SMS flag is on */
                 sms?: boolean;
                 smsHint?: string;
                 recoveryCode?: boolean;
+                /** @description MFA_ENROLMENT_REQUIRED only */
+                enrolMethods?: ("TOTP" | "EMAIL_OTP")[];
             };
+            /** @description Shown once after the first factor was enrolled (forced enrolment) */
+            recoveryCodes?: string[];
+            /** @description AUTHENTICATED only: show a gentle, dismissable "Secure your account" prompt (never blocking) */
+            mfaSetupSuggested?: boolean;
             /** @description AUTHENTICATED only: authorization code to exchange at identity /oauth2/token with the PKCE verifier */
             code?: string;
             trustedDeviceToken?: string;
@@ -5279,6 +5468,10 @@ export interface components {
                 timeline: components["schemas"]["TimelineEvent"][];
             }[];
         };
+        PasswordConfirmation: {
+            /** @description The account password */
+            currentPassword: string;
+        };
         CodeInput: {
             code: string;
         };
@@ -5301,17 +5494,26 @@ export interface components {
         SecurityOverview: {
             mfa: {
                 totp: boolean;
+                /** @description Email codes are on (a code is emailed at sign-in) */
+                emailOtp: boolean;
+                /** @description Always false while SMS codes are switched off */
                 sms: boolean;
                 smsPhone: string | null;
                 recoveryCodesLeft: number;
-                /** @description Two-step verification is required at sign-in (always for staff) */
+                /** @description Two-step verification is mandatory for this person (staff, or their portal's Auth setting): they cannot turn off their last factor */
                 required: boolean;
-                /** @description Two-step verification may be turned off altogether (never for staff) */
+                /** @description Two-step verification may be turned off altogether (never when required) */
                 mayDisable: boolean;
-                /** @description The authenticator app may be turned off now (staff only while SMS codes stay on) */
+                /** @description The authenticator app may be turned off now (when required */
                 mayRemoveTotp: boolean;
-                /** @description SMS codes may be turned off now (staff only while the authenticator app stays on) */
+                /** @description Email codes may be turned off now (when required */
+                mayRemoveEmailOtp: boolean;
+                /** @description SMS codes may be turned off now */
                 mayRemoveSms: boolean;
+                /** @description Show the gentle, dismissable "Secure your account" reminder */
+                setupSuggested: boolean;
+                /** @description SMS codes are offered at all (feature flag */
+                smsAvailable: boolean;
             };
             passkeys: components["schemas"]["Passkey"][];
             /** @description Browsers that skip the second factor until expiresAt ("Trust this browser") */
@@ -6940,6 +7142,140 @@ export interface operations {
             429: components["responses"]["Problem"];
         };
     };
+    nativeSendEmailCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Code sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeCodeSent"];
+                };
+            };
+            410: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeEnrolTotp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Secret and otpauth URI (render as a QR code) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TotpSetup"];
+                };
+            };
+            410: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeConfirmEnrolTotp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeEnrolConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in (`recoveryCodes` are shown once) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeSignInResult"];
+                };
+            };
+            410: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeEnrolEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Code sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeCodeSent"];
+                };
+            };
+            410: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeConfirmEnrolEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeEnrolConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in (`recoveryCodes` are shown once) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeSignInResult"];
+                };
+            };
+            410: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
     signOut: {
         parameters: {
             query?: never;
@@ -8468,7 +8804,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordConfirmation"];
+            };
+        };
         responses: {
             /** @description Off */
             204: {
@@ -8479,6 +8819,8 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Problem"];
         };
     };
@@ -8544,7 +8886,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordConfirmation"];
+            };
+        };
         responses: {
             /** @description Off */
             204: {
@@ -8555,6 +8901,8 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Problem"];
         };
     };
@@ -8582,6 +8930,109 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    startEmailMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: date-time */
+                        codeExpiresAt: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    disableEmailMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordConfirmation"];
+            };
+        };
+        responses: {
+            /** @description Off */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmEmailMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            /** @description On */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    dismissMfaPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dismissed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Problem"];
         };

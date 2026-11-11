@@ -1,8 +1,8 @@
 'use client';
 
-import { type AccountSecurity, settingsKeys } from '@afrotransact/api-client';
+import { type AccountSecurity, isApiError, settingsKeys } from '@afrotransact/api-client';
 import { Button, Checkbox, Dialog, QrCodeImage, TextField, useToast } from '@afrotransact/ui';
-import { ChatText, CopySimple, DeviceMobile, DownloadSimple, Key, WarningCircle } from '@phosphor-icons/react';
+import { ChatText, CopySimple, DeviceMobile, DownloadSimple, EnvelopeSimple, Key, ShieldCheck, WarningCircle } from '@phosphor-icons/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useReducer, useState } from 'react';
 
@@ -234,33 +234,175 @@ export function SmsEnrolmentDialog({ open, phone, email, onClose }: { open: bool
   );
 }
 
-/** Two-step verification: authenticator app, text message and recovery codes. Staff can switch methods but never turn it off. */
+/** Email codes: we email a first code to the verified account email, confirm it, then show recovery codes the first time. */
+export function EmailCodesDialog({ open, email, onClose }: { open: boolean; email: string; onClose: () => void }) {
+  const t = useAccountT();
+  const { api } = useAccountEnv();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const reset = () => {
+    setSent(false);
+    setCode('');
+    setError(null);
+    setCodes(null);
+  };
+  const finish = async () => {
+    await qc.invalidateQueries({ queryKey: settingsKeys.security() });
+    toast.show(t('email.done'));
+    reset();
+    onClose();
+  };
+  const send = useMutation({ mutationFn: () => api.startEmailMfa(), onSuccess: () => { setSent(true); setError(null); }, onError: (e) => setError(errorText(t, e)) });
+  const confirm = useMutation({
+    mutationFn: () => api.confirmEmailMfa(code),
+    onSuccess: async (rc) => {
+      if (rc.recoveryCodes.length) setCodes(rc.recoveryCodes);
+      else await finish();
+    },
+    onError: (e) => { setCode(''); setError(errorText(t, e, 'code')); }
+  });
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !codes) { reset(); onClose(); } }} title={codes ? t('codes.title') : t('email.title')} closeLabel={t('common.close')} width={520}>
+      {codes ? (
+        <RecoveryCodesPanel codes={codes} email={email} onDone={() => void finish()} />
+      ) : !sent ? (
+        <div className={styles.cardBody} style={{ padding: 0 }}>
+          <p className={styles.muted}>{t('email.intro', { email })}</p>
+          {error ? <p className={styles.error} role="alert">{error}</p> : null}
+          <div className={`${styles.actions} ${styles.actionsEnd}`}>
+            <Button onClick={() => send.mutate()} loading={send.isPending} icon={<EnvelopeSimple aria-hidden />}>
+              {t('email.send')}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form
+          className={styles.cardBody}
+          style={{ padding: 0 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (code.length !== 6) return setError(t('totp.codeInvalid'));
+            confirm.mutate();
+          }}
+          noValidate
+        >
+          <p className={styles.muted} role="status">{t('email.sent', { email })}</p>
+          <TextField className={styles.codeInput} label={t('totp.code')} value={code} onChange={(e) => setCode(cleanCode(e.target.value))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} error={error} />
+          <div className={styles.actions}>
+            <Button type="submit" loading={confirm.isPending}>
+              {t('totp.verify')}
+            </Button>
+            <button type="button" className={styles.link} onClick={() => send.mutate()} disabled={send.isPending}>
+              {t('email.resend')}
+            </button>
+          </div>
+        </form>
+      )}
+    </Dialog>
+  );
+}
+
+/** Turning a factor off is a sensitive change: the account password is asked again. */
+export function PasswordConfirm({ open, title, body, confirmLabel, busy, error, onConfirm, onClose }: {
+  open: boolean;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  busy?: boolean;
+  error?: string | null;
+  onConfirm: (password: string) => void;
+  onClose: () => void;
+}) {
+  const t = useAccountT();
+  const [password, setPassword] = useState('');
+  useEffect(() => {
+    if (!open) setPassword('');
+  }, [open]);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={title} closeLabel={t('common.close')} width={440}>
+      <form
+        className={styles.cardBody}
+        style={{ padding: 0 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (password) onConfirm(password);
+        }}
+        noValidate
+      >
+        <p className={styles.muted}>{body}</p>
+        <TextField label={t('mfa.password')} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} error={error ?? null} />
+        <div className={`${styles.actions} ${styles.actionsEnd}`}>
+          <Button type="button" variant="neutral" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" variant="dark" loading={busy} disabled={!password}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** The gentle reminder: nothing is set up yet and it is optional. Dismissing it hides it for a while (identity decides how long). */
+export function SecureAccountPrompt({ onChoose, onLater, busy }: { onChoose: (method: 'totp' | 'email') => void; onLater: () => void; busy?: boolean }) {
+  const t = useAccountT();
+  return (
+    <div className={styles.note} role="region" aria-label={t('mfa.suggestTitle')} data-testid="mfa-setup-prompt">
+      <ShieldCheck aria-hidden /> <strong>{t('mfa.suggestTitle')}</strong> {t('mfa.suggestBody')}
+      <div className={styles.actions}>
+        <button type="button" className={styles.pill} onClick={() => onChoose('totp')}>{t('mfa.suggestAuth')}</button>
+        <button type="button" className={styles.pill} onClick={() => onChoose('email')}>{t('mfa.suggestEmail')}</button>
+        <button type="button" className={styles.link} onClick={onLater} disabled={busy}>{t('mfa.suggestLater')}</button>
+      </div>
+    </div>
+  );
+}
+
+/** Two-step verification: authenticator app, email codes and recovery codes (text messages only while switched on). Where it is mandatory (staff, portal settings) a person can switch methods but never turn the last one off. */
 export function TwoStepCard({ security, email, phone }: { security: AccountSecurity; email: string; phone: string | null }) {
   const t = useAccountT();
   const { api } = useAccountEnv();
   const qc = useQueryClient();
   const toast = useToast();
-  const [dialog, setDialog] = useState<'totp' | 'sms' | null>(null);
-  const [confirmOff, setConfirmOff] = useState<'totp' | 'sms' | null>(null);
+  const [dialog, setDialog] = useState<'totp' | 'email' | 'sms' | null>(null);
+  const [confirmOff, setConfirmOff] = useState<'totp' | 'email' | 'sms' | null>(null);
+  const [offError, setOffError] = useState<string | null>(null);
   const [confirmNew, setConfirmNew] = useState(false);
   const [newCodes, setNewCodes] = useState<string[] | null>(null);
   const m = security.mfa;
   const mandatory = m.required && !m.mayDisable;
+  const factorCount = Number(m.totp) + Number(m.emailOtp) + Number(m.sms);
   const refresh = () => qc.invalidateQueries({ queryKey: settingsKeys.security() });
   const off = useMutation({
-    mutationFn: (which: 'totp' | 'sms') => (which === 'totp' ? api.disableTotp() : api.disableSmsMfa()),
-    onSuccess: async () => { setConfirmOff(null); await refresh(); toast.show(t('mfa.turnedOff')); },
-    onError: (e) => { setConfirmOff(null); toast.show(errorText(t, e), 'error'); }
+    mutationFn: ({ which, password }: { which: 'totp' | 'email' | 'sms'; password: string }) =>
+      which === 'totp' ? api.disableTotp(password) : which === 'email' ? api.disableEmailMfa(password) : api.disableSmsMfa(password),
+    onSuccess: async () => { setConfirmOff(null); setOffError(null); await refresh(); toast.show(t('mfa.turnedOff')); },
+    // A wrong password stays in the dialog so it can be retried; anything else is a toast.
+    onError: (e) => {
+      const field = errorText(t, e, 'currentPassword');
+      if (isApiError(e) && e.fieldErrors.currentPassword) setOffError(field);
+      else { setConfirmOff(null); toast.show(errorText(t, e), 'error'); }
+    }
+  });
+  const later = useMutation({
+    mutationFn: () => api.dismissMfaPrompt(),
+    onSuccess: async () => { await refresh(); }
   });
   const regenerate = useMutation({
     mutationFn: () => api.regenerateRecoveryCodes(),
     onSuccess: async (rc) => { setConfirmNew(false); setNewCodes(rc.recoveryCodes); await refresh(); },
     onError: (e) => { setConfirmNew(false); toast.show(errorText(t, e), 'error'); }
   });
-  const any = m.totp || m.sms;
+  const any = m.totp || m.emailOtp || m.sms;
+  const methodName = (which: 'totp' | 'email' | 'sms') => (which === 'sms' ? t('mfa.sms') : which === 'email' ? t('mfa.email') : t('mfa.app'));
   const badge = mandatory ? <Status tone="required">{t('mfa.badgeRequired')}</Status> : any ? <Status tone="on">{t('mfa.badgeOn')}</Status> : <Status tone="off">{t('mfa.badgeOff')}</Status>;
-  const offButton = (which: 'totp' | 'sms', removable: boolean) => (
-    <button type="button" className={styles.link} onClick={() => setConfirmOff(which)} disabled={!removable} title={removable ? undefined : t('mfa.lockedHint')}>
+  const offButton = (which: 'totp' | 'email' | 'sms', removable: boolean) => (
+    <button type="button" className={styles.link} onClick={() => { setOffError(null); setConfirmOff(which); }} disabled={!removable} title={removable ? undefined : t('mfa.lockedHint')}>
       {t('mfa.turnOff')}
     </button>
   );
@@ -274,11 +416,12 @@ export function TwoStepCard({ security, email, phone }: { security: AccountSecur
       note={
         mandatory ? (
           <>
-            <WarningCircle aria-hidden /> {t('mfa.staffNote')} {!any ? t('mfa.staffFallback') : !(m.totp && m.sms) ? t('mfa.staffNoteSingle') : null}
+            <WarningCircle aria-hidden /> {t('mfa.staffNote')} {!any ? t('mfa.staffFallback') : factorCount < 2 ? t('mfa.staffNoteSingle') : null}
           </>
         ) : undefined
       }
     >
+      {m.setupSuggested && !any ? <SecureAccountPrompt onChoose={(which) => setDialog(which)} onLater={() => later.mutate()} busy={later.isPending} /> : null}
       <ul className={styles.list}>
         <Row
           testId="mfa-totp"
@@ -288,12 +431,21 @@ export function TwoStepCard({ security, email, phone }: { security: AccountSecur
           actions={m.totp ? offButton('totp', m.mayRemoveTotp) : <button type="button" className={styles.pill} onClick={() => setDialog('totp')}>{t('mfa.setUp')}</button>}
         />
         <Row
-          testId="mfa-sms"
-          icon={<ChatText />}
-          title={<>{t('mfa.sms')} {m.sms ? <Status tone="on">{t('common.on')}</Status> : null}</>}
-          sub={m.sms ? t('mfa.smsOn', { phone: m.smsPhone ?? '' }) : t('mfa.smsSub')}
-          actions={m.sms ? offButton('sms', m.mayRemoveSms) : <button type="button" className={styles.pill} onClick={() => setDialog('sms')}>{t('mfa.setUp')}</button>}
+          testId="mfa-email"
+          icon={<EnvelopeSimple />}
+          title={<>{t('mfa.email')} {m.emailOtp ? <Status tone="on">{t('common.on')}</Status> : null}</>}
+          sub={m.emailOtp ? t('mfa.emailOn', { email }) : t('mfa.emailSub', { email })}
+          actions={m.emailOtp ? offButton('email', m.mayRemoveEmailOtp) : <button type="button" className={styles.pill} onClick={() => setDialog('email')}>{t('mfa.setUp')}</button>}
         />
+        {m.smsAvailable ? (
+          <Row
+            testId="mfa-sms"
+            icon={<ChatText />}
+            title={<>{t('mfa.sms')} {m.sms ? <Status tone="on">{t('common.on')}</Status> : null}</>}
+            sub={m.sms ? t('mfa.smsOn', { phone: m.smsPhone ?? '' }) : t('mfa.smsSub')}
+            actions={m.sms ? offButton('sms', m.mayRemoveSms) : <button type="button" className={styles.pill} onClick={() => setDialog('sms')}>{t('mfa.setUp')}</button>}
+          />
+        ) : null}
         <Row
           icon={<Key />}
           title={t('mfa.recovery')}
@@ -302,14 +454,16 @@ export function TwoStepCard({ security, email, phone }: { security: AccountSecur
         />
       </ul>
       <TotpEnrolmentDialog open={dialog === 'totp'} email={email} onClose={() => setDialog(null)} />
+      <EmailCodesDialog open={dialog === 'email'} email={email} onClose={() => setDialog(null)} />
       <SmsEnrolmentDialog open={dialog === 'sms'} phone={phone} email={email} onClose={() => setDialog(null)} />
-      <Confirm
+      <PasswordConfirm
         open={confirmOff !== null}
-        title={t('mfa.offConfirmTitle', { method: confirmOff === 'sms' ? t('mfa.sms') : t('mfa.app') })}
-        body={(confirmOff === 'totp' ? m.sms : m.totp) ? t('mfa.offConfirmSwitch') : t('mfa.offConfirmBody')}
+        title={t('mfa.offConfirmTitle', { method: confirmOff ? methodName(confirmOff) : '' })}
+        body={factorCount > 1 ? t('mfa.offConfirmSwitch') : t('mfa.offConfirmBody')}
         confirmLabel={t('mfa.turnOff')}
         busy={off.isPending}
-        onConfirm={() => confirmOff && off.mutate(confirmOff)}
+        error={offError}
+        onConfirm={(password) => confirmOff && off.mutate({ which: confirmOff, password })}
         onClose={() => setConfirmOff(null)}
       />
       <Confirm open={confirmNew} title={t('codes.newTitle')} body={t('codes.newBody')} confirmLabel={t('codes.newConfirm')} busy={regenerate.isPending} onConfirm={() => regenerate.mutate()} onClose={() => setConfirmNew(false)} />

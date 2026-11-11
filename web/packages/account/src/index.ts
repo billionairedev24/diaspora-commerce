@@ -2,7 +2,7 @@
 export { type AccountEnv, type AccountLinkProps, AccountProvider, useAccountEnv } from './context';
 export { cleanCode, type EnrolmentAction, enrolmentReducer, type EnrolmentState, type EnrolmentStep, groupKey, initialEnrolment, recoveryFile } from './enrolment';
 export { ACCOUNT_CATALOGS, type AccountMessageKey, accountTranslator, useAccountT } from './i18n/t';
-export { RecoveryCodesPanel, SmsEnrolmentDialog, TotpEnrolmentDialog, TwoStepCard } from './mfa';
+export { EmailCodesDialog, PasswordConfirm, RecoveryCodesPanel, SecureAccountPrompt, SmsEnrolmentDialog, TotpEnrolmentDialog, TwoStepCard } from './mfa';
 export { ACCOUNT_ROUTES, type AccountSection, accountSectionOf, AccountShell } from './nav';
 export { alertChanges, AlertsScreen, CustomerNotificationsScreen } from './notifications';
 export { flatAccountClassName } from './parts';

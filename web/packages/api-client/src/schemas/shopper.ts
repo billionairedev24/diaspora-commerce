@@ -147,13 +147,22 @@ export type LinkedAccounts = z.infer<typeof LinkedAccountsSchema>;
 export const SecurityOverviewSchema = z.object({
   mfa: z.object({
     totp: z.boolean(),
+    /** Email codes are on: a code is emailed at sign-in. */
+    emailOtp: z.boolean(),
+    /** Always false while SMS codes are switched off. */
     sms: z.boolean(),
     smsPhone: nullableString,
     recoveryCodesLeft: z.number().int(),
+    /** Mandatory for this person (staff, or their portal's Auth setting): the last factor cannot be turned off. */
     required: z.boolean(),
     mayDisable: z.boolean(),
     mayRemoveTotp: z.boolean(),
-    mayRemoveSms: z.boolean()
+    mayRemoveEmailOtp: z.boolean(),
+    mayRemoveSms: z.boolean(),
+    /** Show the gentle, dismissable "Secure your account" reminder. */
+    setupSuggested: z.boolean(),
+    /** SMS codes are offered at all (feature flag, off by default): hide every SMS option when false. */
+    smsAvailable: z.boolean()
   }),
   passkeys: z.array(z.object({ credentialId: z.string(), label: z.string(), createdAt: nullableString, lastUsedAt: nullableString })),
   trustedBrowsers: z.array(z.object({ id: z.string(), label: z.string(), createdAt: nullableString, expiresAt: nullableString })),

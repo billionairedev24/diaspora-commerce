@@ -50,6 +50,7 @@ export interface AccountState {
   setupIntents: Set<string>;
   pendingTotp: boolean;
   pendingSms: boolean;
+  pendingEmail: boolean;
 }
 
 export interface ShopperState {
@@ -184,11 +185,11 @@ export function bookingFor(svc: ServiceDetail, id: string, reference: string, st
 function seed(userId: string): AccountState {
   const empty: AccountState = {
     addresses: [], paymentMethods: [], orders: [], helpRequests: [], evidence: new Map(), bookings: [],
-    security: { mfa: { totp: false, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: false, mayDisable: true, mayRemoveTotp: false, mayRemoveSms: true },
+    security: { mfa: { totp: false, emailOtp: false, sms: false, smsPhone: null, recoveryCodesLeft: 0, required: false, mayDisable: true, mayRemoveTotp: false, mayRemoveEmailOtp: false, mayRemoveSms: false, setupSuggested: true, smsAvailable: false },
       passkeys: [], trustedBrowsers: [], sessions: [{ id: 'sess-web', clientName: 'AfroTransact web · this browser', signedInAt: iso(daysAgo(0)), lastActiveAt: iso(new Date()), current: true }],
       devices: [], linkedAccounts: { accounts: [], hasPassword: true } },
     prefs: { email: true, sms: true, push: true, marketingOptIn: false },
-    checkouts: new Map(), setupIntents: new Set(), pendingTotp: false, pendingSms: false
+    checkouts: new Map(), setupIntents: new Set(), pendingTotp: false, pendingSms: false, pendingEmail: false
   };
   if (userId !== 'u_adaeze') return empty;
   const braids = SERVICES[0] as ServiceDetail;
@@ -220,7 +221,7 @@ function seed(userId: string): AccountState {
     ],
     security: {
       ...empty.security,
-      mfa: { totp: true, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: false, mayDisable: true, mayRemoveTotp: true, mayRemoveSms: true },
+      mfa: { totp: true, emailOtp: false, sms: false, smsPhone: null, recoveryCodesLeft: 8, required: false, mayDisable: true, mayRemoveTotp: true, mayRemoveEmailOtp: false, mayRemoveSms: false, setupSuggested: false, smsAvailable: false },
       passkeys: [{ credentialId: 'cred-macbook', label: 'MacBook Touch ID', createdAt: iso(daysAgo(40)), lastUsedAt: iso(daysAgo(2)) }],
       sessions: [
         { id: 'sess-web', clientName: 'AfroTransact web · this browser', signedInAt: iso(daysAgo(0)), lastActiveAt: iso(new Date()), current: true },

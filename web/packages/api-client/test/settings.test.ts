@@ -37,8 +37,31 @@ describe('mock authenticator', () => {
     const code = await totpAt(setup.secret, Math.floor(Date.now() / 30_000));
     expect((await call('POST', '/v1/account/mfa/totp/confirm', { code })).status).toBe(200);
     const mfa = ((await call('GET', '/v1/account/security')).json as AccountSecurity).mfa;
-    expect(mfa).toMatchObject({ totp: true, sms: true, required: true, mayDisable: false, mayRemoveTotp: true, mayRemoveSms: true });
-    expect((await call('DELETE', '/v1/account/mfa/sms')).status).toBe(204);
-    expect((await call('DELETE', '/v1/account/mfa/totp')).status).toBe(403);
+    expect(mfa).toMatchObject({ totp: true, emailOtp: true, sms: false, smsAvailable: false, required: true, mayDisable: false, mayRemoveTotp: true, mayRemoveEmailOtp: true });
+    // turning a factor off asks for the password again
+    expect((await call('DELETE', '/v1/account/mfa/email')).status).toBe(422);
+    expect((await call('DELETE', '/v1/account/mfa/email', { currentPassword: 'Right-Password-1' })).status).toBe(204);
+    // the last factor of a mandatory account stays on
+    expect((await call('DELETE', '/v1/account/mfa/totp', { currentPassword: 'Right-Password-1' })).status).toBe(403);
+  });
+
+  it('turns email codes on with a first emailed code, and the reminder goes away once dismissed', async () => {
+    const seller = settingsHandlers({ kind: 'seller', person: () => ({ id: 'slr-3', firstName: 'Ama', lastName: 'Boateng', email: 'ama@example.com' }) });
+    const run = async (method: string, path: string, body?: unknown) => {
+      const res = await getResponse(seller, new Request(`http://bff.test${path}`, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }));
+      if (!res) throw new Error(`no mock for ${method} ${path}`);
+      return { status: res.status, json: res.status === 204 ? null : ((await res.json()) as Record<string, unknown>) };
+    };
+    const before = ((await run('GET', '/v1/account/security')).json as AccountSecurity).mfa;
+    expect(before).toMatchObject({ totp: false, emailOtp: false, sms: false, setupSuggested: true, required: false });
+    expect((await run('POST', '/v1/account/mfa/email/confirm', { code: '246810' })).status).toBe(422);
+    expect((await run('POST', '/v1/account/mfa/email')).status).toBe(202);
+    expect((await run('POST', '/v1/account/mfa/email/confirm', { code: '000000' })).status).toBe(422);
+    const done = (await run('POST', '/v1/account/mfa/email/confirm', { code: '246810' })).json as { recoveryCodes: string[] };
+    expect(done.recoveryCodes).toHaveLength(10);
+    expect(((await run('GET', '/v1/account/security')).json as AccountSecurity).mfa).toMatchObject({ emailOtp: true, setupSuggested: false });
+    expect((await run('DELETE', '/v1/account/mfa/email', { currentPassword: 'x' })).status).toBe(204);
+    expect((await run('POST', '/v1/account/mfa/prompt/dismiss')).status).toBe(204);
+    expect(((await run('GET', '/v1/account/security')).json as AccountSecurity).mfa.setupSuggested).toBe(false);
   });
 });

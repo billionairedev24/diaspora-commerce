@@ -352,6 +352,12 @@ const seenClicks = new Set<string>();
 /** The mock pay-now link (Playwright mock mode): /orders/AT-2026-PAY001/pay?token=mock-pay-token. */
 export const MOCK_PAY_LINK = { orderNumber: 'AT-2026-PAY001', token: 'mock-pay-token', expiredToken: 'mock-expired-token' } as const;
 
+/** Turning a factor off asks for the account password again (any non-empty password passes in the demo). */
+async function passwordOf(request: Request): Promise<void> {
+  const { currentPassword } = await body(request, z.object({ currentPassword: z.string().min(1, 'Enter your current password') }));
+  if (!currentPassword) throw new MockProblem(422, 'VALIDATION_FAILED', 'Check your password', 'Your current password is incorrect.', { errors: { currentPassword: 'Your current password is incorrect.' } });
+}
+
 export const shopperHandlers = [
   /* Search result clicks (S240): once per search and product; a mock ad token is "charged" once. */
   http.post('*/v1/search/clicks', route(async (ctx) => {
@@ -468,12 +474,34 @@ export const shopperHandlers = [
     const a = me(ctx);
     const { code } = await body(ctx.request, z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code') }));
     if (code !== DEMO_CODE || !a.pendingTotp) throw new MockProblem(422, 'INVALID_CODE', 'Incorrect code', 'That code is incorrect or expired.', { errors: { code: 'That code is incorrect or expired.' } });
-    const first = !a.security.mfa.totp && !a.security.mfa.sms;
+    const first = !a.security.mfa.totp && !a.security.mfa.emailOtp && !a.security.mfa.sms;
     a.security.mfa.totp = true;
+    a.security.mfa.setupSuggested = false;
     a.pendingTotp = false;
     return json({ recoveryCodes: first ? ['7KQ2-M9XD', 'P4WZ-3HNA', 'C8RT-YV6E', 'L2JF-QK7B'] : [] });
   })),
-  http.delete('*/v1/account/mfa/totp', route((ctx) => { me(ctx).security.mfa.totp = false; return noContent(); })),
+  http.delete('*/v1/account/mfa/totp', route(async (ctx) => {
+    await passwordOf(ctx.request);
+    me(ctx).security.mfa.totp = false;
+    return noContent();
+  })),
+  http.post('*/v1/account/mfa/email', route((ctx) => { me(ctx).pendingEmail = true; return json({ codeExpiresAt: iso(new Date(ctx.now.getTime() + 600_000)) }, 202); })),
+  http.post('*/v1/account/mfa/email/confirm', route(async (ctx) => {
+    const a = me(ctx);
+    const { code } = await body(ctx.request, z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code') }));
+    if (code !== DEMO_CODE || !a.pendingEmail) throw new MockProblem(422, 'INVALID_CODE', 'Incorrect code', 'That code is incorrect or expired.', { errors: { code: 'That code is incorrect or expired.' } });
+    const first = !a.security.mfa.totp && !a.security.mfa.emailOtp && !a.security.mfa.sms;
+    a.security.mfa.emailOtp = true;
+    a.security.mfa.setupSuggested = false;
+    a.pendingEmail = false;
+    return json({ recoveryCodes: first ? ['7KQ2-M9XD', 'P4WZ-3HNA', 'C8RT-YV6E', 'L2JF-QK7B'] : [] });
+  })),
+  http.delete('*/v1/account/mfa/email', route(async (ctx) => {
+    await passwordOf(ctx.request);
+    me(ctx).security.mfa.emailOtp = false;
+    return noContent();
+  })),
+  http.post('*/v1/account/mfa/prompt/dismiss', route((ctx) => { me(ctx).security.mfa.setupSuggested = false; return noContent(); })),
   http.post('*/v1/account/mfa/sms', route((ctx) => { me(ctx).pendingSms = true; return json({ codeExpiresAt: iso(new Date(ctx.now.getTime() + 600_000)) }, 202); })),
   http.post('*/v1/account/mfa/sms/confirm', route(async (ctx) => {
     const a = me(ctx);
@@ -483,7 +511,11 @@ export const shopperHandlers = [
     a.pendingSms = false;
     return json({ recoveryCodes: [] });
   })),
-  http.delete('*/v1/account/mfa/sms', route((ctx) => { me(ctx).security.mfa.sms = false; return noContent(); })),
+  http.delete('*/v1/account/mfa/sms', route(async (ctx) => {
+    await passwordOf(ctx.request);
+    me(ctx).security.mfa.sms = false;
+    return noContent();
+  })),
   http.post('*/v1/account/mfa/recovery-codes', route((ctx) => {
     me(ctx).security.mfa.recoveryCodesLeft = 8;
     return json({ recoveryCodes: ['Q7M2-XK4D', 'H8NA-2PWZ', 'V6YE-C3RT', 'B7JF-L9QK', 'D4TS-8MHW', 'N2CX-6GAE', 'R5UP-1ZBY', 'W9KL-4FJV'] });

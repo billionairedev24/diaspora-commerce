@@ -92,7 +92,7 @@ describe('authenticator enrolment dialog', () => {
 });
 
 const base: AccountSecurity = {
-  mfa: { totp: true, sms: false, smsPhone: null, recoveryCodesLeft: 9, required: true, mayDisable: false, mayRemoveTotp: false, mayRemoveSms: false },
+  mfa: { totp: true, emailOtp: false, sms: false, smsPhone: null, recoveryCodesLeft: 9, required: true, mayDisable: false, mayRemoveTotp: false, mayRemoveEmailOtp: false, mayRemoveSms: false, setupSuggested: false, smsAvailable: false },
   passkeys: [],
   trustedBrowsers: [],
   sessions: [],
@@ -102,22 +102,67 @@ const base: AccountSecurity = {
 };
 
 describe('two-step verification card', () => {
-  it('keeps staff on at least one method: the only method cannot be turned off', () => {
+  it('keeps a mandatory account on at least one method and offers authenticator and email codes, never SMS', () => {
     renderWith(<TwoStepCard security={base} email="ops@afrotransact.com" phone="+17135550142" />, fakeApi({}));
     expect(screen.getByText('Required')).toBeInTheDocument();
     expect(within(screen.getByTestId('mfa-totp')).getByRole('button', { name: 'Turn off' })).toBeDisabled();
-    expect(within(screen.getByTestId('mfa-sms')).getByRole('button', { name: 'Set up' })).toBeEnabled();
-    expect(screen.getByTestId('two-step')).toHaveTextContent('required for staff accounts');
+    expect(within(screen.getByTestId('mfa-email')).getByRole('button', { name: 'Set up' })).toBeEnabled();
+    expect(screen.queryByTestId('mfa-sms')).not.toBeInTheDocument();
+    expect(screen.queryByText('Text message')).not.toBeInTheDocument();
+    expect(screen.getByTestId('two-step')).toHaveTextContent('required for your account');
   });
 
-  it('lets staff switch once both methods are on, and customers turn methods off', async () => {
+  it('shows the SMS option only when the feature flag says it is available', () => {
+    renderWith(<TwoStepCard security={{ ...base, mfa: { ...base.mfa, smsAvailable: true } }} email="ops@afrotransact.com" phone="+17135550142" />, fakeApi({}));
+    expect(screen.getByTestId('mfa-sms')).toBeInTheDocument();
+  });
+
+  it('asks for the password to turn a method off, keeps the dialog open on a wrong one, and sends it with the request', async () => {
     const user = userEvent.setup();
-    const disableTotp = vi.fn(async () => undefined);
-    renderWith(<TwoStepCard security={{ ...base, mfa: { ...base.mfa, sms: true, smsPhone: '•••• 0142', mayRemoveTotp: true, mayRemoveSms: true } }} email="ops@afrotransact.com" phone="+17135550142" />, fakeApi({ disableTotp }));
+    const disableTotp = vi.fn(async (password: string) => {
+      if (password !== 'Right-Password-1') throw Object.assign(new Error('wrong'), { fieldErrors: {} });
+    });
+    renderWith(<TwoStepCard security={{ ...base, mfa: { ...base.mfa, emailOtp: true, mayRemoveTotp: true, mayRemoveEmailOtp: true } }} email="ops@afrotransact.com" phone="+17135550142" />, fakeApi({ disableTotp }));
     await user.click(within(screen.getByTestId('mfa-totp')).getByRole('button', { name: 'Turn off' }));
-    expect(await screen.findByText('You’ll sign in with your other method from now on.'.replace('’', "'"))).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Turn off' }));
-    await waitFor(() => expect(disableTotp).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/You.ll sign in with your other method from now on/)).toBeInTheDocument();
+    const confirm = screen.getByRole('button', { name: 'Turn off' });
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByLabelText('Password'), 'Right-Password-1');
+    await user.click(confirm);
+    await waitFor(() => expect(disableTotp).toHaveBeenCalledWith('Right-Password-1'));
+  });
+
+  it('turns email codes on: emails a first code, confirms it, shows recovery codes once', async () => {
+    const user = userEvent.setup();
+    const startEmailMfa = vi.fn(async () => ({ codeExpiresAt: '2026-11-01T10:10:00Z' }));
+    const confirmEmailMfa = vi.fn(async (code: string) => {
+      if (code !== '123456') throw new Error('bad');
+      return { recoveryCodes: ['k7q2m-9xdpw'] };
+    });
+    renderWith(<TwoStepCard security={{ ...base, mfa: { ...base.mfa, totp: false, required: false, mayDisable: true } }} email="ada@example.com" phone={null} />, fakeApi({ startEmailMfa, confirmEmailMfa }));
+    await user.click(within(screen.getByTestId('mfa-email')).getByRole('button', { name: 'Set up' }));
+    await user.click(await screen.findByRole('button', { name: 'Email me a code' }));
+    expect(startEmailMfa).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/We emailed a code to ada@example.com/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verify and turn on' }));
+    const panel = await screen.findByTestId('recovery-codes');
+    expect(within(panel).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['k7q2m-9xdpw']);
+  });
+
+  it('shows a gentle, dismissable "Secure your account" prompt only when nothing is set up and it is suggested', async () => {
+    const user = userEvent.setup();
+    const dismissMfaPrompt = vi.fn(async () => undefined);
+    const none = { ...base.mfa, totp: false, required: false, mayDisable: true, setupSuggested: true };
+    const { unmount } = renderWith(<TwoStepCard security={{ ...base, mfa: none }} email="ada@example.com" phone={null} />, fakeApi({ dismissMfaPrompt }));
+    const prompt = screen.getByTestId('mfa-setup-prompt');
+    expect(within(prompt).getByRole('button', { name: 'Use an authenticator app' })).toBeInTheDocument();
+    expect(within(prompt).getByRole('button', { name: 'Use email codes' })).toBeInTheDocument();
+    await user.click(within(prompt).getByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(dismissMfaPrompt).toHaveBeenCalledTimes(1));
+    unmount();
+    renderWith(<TwoStepCard security={{ ...base, mfa: { ...none, setupSuggested: false } }} email="ada@example.com" phone={null} />, fakeApi({}));
+    expect(screen.queryByTestId('mfa-setup-prompt')).not.toBeInTheDocument();
   });
 });
 
