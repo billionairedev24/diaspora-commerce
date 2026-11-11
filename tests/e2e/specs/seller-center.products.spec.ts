@@ -53,7 +53,10 @@ test.describe('seller center · products', () => {
     await expect(page.getByRole('listbox').getByRole('option')).toHaveText([/Spices & seasonings/, /Request “pantry spices” as a new category/]);
     await page.keyboard.press('Enter');
     await expect(category).toHaveValue(SPICES);
-    await expect(page.getByRole('heading', { name: 'Food information' })).toBeVisible();
+    // The listing rules of the category (packaged food) decide the sections: facts under Details, upload slots under Compliance, and a summary of what is required.
+    await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible();
+    await expect(page.getByTestId('required-summary')).toContainText('Packaged food and drink');
+    await expect(page.getByTestId('selling-status')).toHaveAttribute('data-status', 'SELL');
     await expect(page.getByRole('form', { name: 'Product' }).getByRole('heading', { level: 2 })).toHaveText(
       ['Basics', 'Photos', 'Price & stock', 'Details', 'Variants', 'Shipping & fulfilment', 'Compliance']
     );
@@ -66,16 +69,28 @@ test.describe('seller center · products', () => {
     await page.getByTestId('image-input').setInputFiles({ name: 'yaji.png', mimeType: 'image/png', buffer: await productImage(page) });
     await expect(page.getByText('1200×1200')).toBeVisible();
     await page.getByLabel('Description of image 1').fill('Jar of yaji suya spice on a white background');
-    await page.getByLabel('Ingredients', { exact: true }).fill('Groundnut, chilli, ginger, salt');
-    await page.getByLabel('Allergens (FALCPA)', { exact: true }).selectOption('Contains peanuts');
-    await page.getByLabel('Shelf life', { exact: true }).fill('12');
-    await page.getByLabel('Unit of Shelf life').selectOption('months');
-    await page.getByLabel('Storage', { exact: true }).selectOption('Room temperature');
+    // Packaged groceries have no typed ingredients: a photo of the label instead (a typed slot of its own), and an optional "contains" tick list.
+    await expect(page.getByLabel('Ingredients', { exact: true })).toHaveCount(0);
+    await page.getByTestId('label-photo-input').setInputFiles({ name: 'label.png', mimeType: 'image/png', buffer: await productImage(page) });
+    await expect(page.getByTestId('label-photo').getByRole('status')).toHaveCount(0, { timeout: 15_000 });
+    await page.getByLabel('Contains peanuts', { exact: true }).check();
+    await page.getByLabel('Net weight or volume', { exact: true }).fill('4');
+    await page.getByLabel('Unit of Net weight or volume').selectOption('oz');
+    await page.getByLabel('Servings or unit count', { exact: true }).fill('8');
+    await page.getByLabel('Shelf life or expiry', { exact: true }).fill('12');
+    await page.getByLabel('Unit of Shelf life or expiry').selectOption('months');
+    await page.getByLabel('Storage (optional)', { exact: true }).selectOption('Room temperature');
     await page.getByLabel('Country of origin', { exact: true }).fill('Nigeria');
     await page.getByLabel('Price (USD)', { exact: true }).fill('7.99');
     await page.getByLabel('Quantity', { exact: true }).fill('48');
     await page.getByLabel('SKU', { exact: true }).fill(`E2E-${RUN}-YAJI-4`);
     await page.getByLabel(/I don’t have a barcode/).check();
+    // The package is the box as shipped, asked for every physical product.
+    const box = page.getByTestId('package-inputs');
+    await box.getByLabel('Length', { exact: true }).fill('6');
+    await box.getByLabel('Width', { exact: true }).fill('4');
+    await box.getByLabel('Height', { exact: true }).fill('2');
+    await box.getByLabel('Weight', { exact: true }).fill('0.5');
     // Fulfilment is a segmented control, handling time a dropdown.
     await expect(page.getByRole('group', { name: 'Who ships it?' }).getByRole('button', { name: 'I ship it' })).toHaveAttribute('aria-pressed', 'true');
     await page.getByLabel('Handling time (business days)').selectOption('3');
@@ -99,11 +114,11 @@ test.describe('seller center · products', () => {
     const form = page.getByRole('form', { name: 'Product' });
     for (const label of ['Publisher', 'Language', 'Pages', 'ISBN-13']) await expect(form.getByLabel(label, { exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: /Brand/ })).toHaveCount(0);
-    await expect(page.getByText('Brand', { exact: false })).toHaveCount(0);
+    await expect(page.getByText(/^Brand( \(optional\))?$/)).toHaveCount(0);
 
     // The navigator lists the sections with what is left in each; the panel jumps to a missing field and focuses it.
     const nav = page.getByRole('navigation', { name: 'Sections' });
-    await expect(nav.getByRole('link', { name: /Details/ })).toContainText('4 to do');
+    await expect(nav.getByRole('link', { name: /Details/ })).toContainText('5 to do');
     const panel = page.getByRole('complementary', { name: 'Listing readiness' });
     await panel.getByTestId('quality-details').getByRole('link', { name: /Publisher/ }).click();
     await expect(page.getByLabel('Publisher', { exact: true })).toBeFocused();
