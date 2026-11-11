@@ -1,0 +1,233 @@
+{
+  "description": "Launch shipping fee vectors (listing rules D16): for each staff setting and each package items subtotal, the delivery charge of 'afrotransact_delivery' (Delivery by AfroTransact, and AfroTransact collects from the store and delivers: the same flat fee) and of 'pickup' (always 0). The estimate the shopper sees (gateway-bff Go ShippingFeeContractTest, the web and mobile mocks) and the amount orders charges (Java ShippingFeeContractTest) must both equal these numbers. Formula: freeAboveMinor != null and itemsMinor >= freeAboveMinor ? 0 : flatFeeMinor. There is no express and no carrier option while sellerCarrierShippingEnabled is false.",
+  "settings": [
+    {
+      "name": "launch default",
+      "flatFeeMinor": 599,
+      "freeAboveMinor": null,
+      "carts": [
+        {
+          "itemsMinor": 0,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 1,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 2499,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3499,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3500,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 4999,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5000,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5001,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 10000,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 99999,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        }
+      ]
+    },
+    {
+      "name": "free above $50",
+      "flatFeeMinor": 599,
+      "freeAboveMinor": 5000,
+      "carts": [
+        {
+          "itemsMinor": 0,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 1,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 2499,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3499,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3500,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 4999,
+          "afrotransactDeliveryMinor": 599,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5000,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5001,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 10000,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 99999,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        }
+      ]
+    },
+    {
+      "name": "free delivery",
+      "flatFeeMinor": 0,
+      "freeAboveMinor": null,
+      "carts": [
+        {
+          "itemsMinor": 0,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 1,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 2499,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3499,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3500,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 4999,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5000,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5001,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 10000,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 99999,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        }
+      ]
+    },
+    {
+      "name": "$7.99 free above $35",
+      "flatFeeMinor": 799,
+      "freeAboveMinor": 3500,
+      "carts": [
+        {
+          "itemsMinor": 0,
+          "afrotransactDeliveryMinor": 799,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 1,
+          "afrotransactDeliveryMinor": 799,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 2499,
+          "afrotransactDeliveryMinor": 799,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3499,
+          "afrotransactDeliveryMinor": 799,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 3500,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 4999,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5000,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 5001,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 10000,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        },
+        {
+          "itemsMinor": 99999,
+          "afrotransactDeliveryMinor": 0,
+          "pickupMinor": 0
+        }
+      ]
+    }
+  ]
+}

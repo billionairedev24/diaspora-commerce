@@ -30,6 +30,7 @@ import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.PreorderFulfilment;
 import com.afrotransact.orders.domain.PreorderPackage;
+import com.afrotransact.orders.domain.ShippingSettingsFixtures;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.port.CartClient;
@@ -44,7 +45,7 @@ import org.junit.jupiter.api.Test;
 /**
  * ADR 0005 §3 at checkout: the staff delivery fee rule prices a standard carrier shipment (what an address beyond
  * AfroTransact's coverage pays) and a window's package; the rule applied is kept on the shipment and the order, so later
- * rule edits never change it. Express stays on the flat rates, and a checkout never fails because the rules are
+ * rule edits never change it. There is no express, and a checkout never fails because the rules are
  * unavailable.
  */
 class CheckoutDeliveryFeeRuleTest {
@@ -65,7 +66,8 @@ class CheckoutDeliveryFeeRuleTest {
         OrdersSettings settings = new OrdersSettings("org-retail", Duration.ofMinutes(15), Duration.ofSeconds(5),
                 Duration.ofHours(1), Set.of(), Map.of(), 10, 3, "America/Chicago");
         activities = new CheckoutActivitiesImpl(mock(MarketEligibility.class), null, null, tax,
-                new DefaultShippingPolicy(DefaultShippingPolicy.Rates.defaults()), handover, null, null, null, null,
+                new DefaultShippingPolicy(() -> ShippingSettingsFixtures.of(599, null, true),
+                        DefaultShippingPolicy.Rates.defaults()), handover, null, null, null, null,
                 null, null, null, null, null, null, null, mock(PreorderEligibility.class), mock(DeliveryRunSlots.class), rules,
                 mock(MemberBenefits.class), new PreorderSettings(true, 100, 24, null, null), settings, Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -122,14 +124,6 @@ class CheckoutDeliveryFeeRuleTest {
         assertThat(shipment.feeRule()).isEqualTo(rule);
         assertThat(shipment.withCapture("cap-1", NOW).feeRule()).as("kept when captured").isEqualTo(rule);
         assertThat(shipment.withTracking("usps", "9400").feeRule()).as("kept with a label").isEqualTo(rule);
-    }
-
-    @Test
-    void expressStaysOnTheFlatRateAndNeverAsksForARule() {
-        OrderDraft.DraftShipment express = reserve(carrier("express"));
-        assertThat(express.shippingMinor()).isEqualTo(1499);
-        assertThat(express.feeRule()).isNull();
-        verify(rules, never()).carrier(any(), any(), anyLong());
     }
 
     @Test

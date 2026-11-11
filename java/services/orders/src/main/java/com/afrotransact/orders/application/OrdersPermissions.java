@@ -37,6 +37,10 @@ public final class OrdersPermissions {
     public static final String QUOTES_AGREE = "delivery-quotes:agree";
     /** Assign, reassign and take over quote requests; change their SLA, escalation and amount settings. */
     public static final String QUOTES_ASSIGN = "delivery-quotes:assign";
+    /** View the shipping settings (the delivery fee) and their change history (staff). */
+    public static final String SHIPPING_VIEW = "orders:shipping.view";
+    /** Change the shipping settings; every change needs a reason. */
+    public static final String SHIPPING_EDIT = "orders:shipping.edit";
 
     private OrdersPermissions() {
     }

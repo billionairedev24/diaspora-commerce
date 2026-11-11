@@ -27,4 +27,10 @@ public record LocalDelivery(String shipFromLocationId, double pickupLat, double 
             throw new OrdersRuleViolation("orders.invalid-amount", "Delivery amounts and distances cannot be negative");
         }
     }
+
+    /** The same quote charged {@code charge} instead (the staff flat fee replaces the distance tariff, listing rules D16). */
+    public LocalDelivery withCustomerCharge(long charge) {
+        return new LocalDelivery(shipFromLocationId, pickupLat, pickupLng, straightLineMiles, distanceMiles,
+                distanceMethod, charge, sellerFeeMinor, pricingVersion, durationMinutes);
+    }
 }

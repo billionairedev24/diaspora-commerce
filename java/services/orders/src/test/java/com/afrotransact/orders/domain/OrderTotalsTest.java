@@ -72,14 +72,14 @@ class OrderTotalsTest {
 
     @Test
     void shippingFeesAndEstimates() {
-        ShippingPolicy p = new DefaultShippingPolicy(DefaultShippingPolicy.Rates.defaults());
+        ShippingPolicy p = new DefaultShippingPolicy(() -> ShippingSettingsFixtures.of(599, 5000, false),
+                DefaultShippingPolicy.Rates.defaults());
         assertThat(p.fee(DeliveryMethod.CARRIER, "standard", 3499)).isEqualTo(599);
         assertThat(p.fee(DeliveryMethod.CARRIER, "standard", 3500)).isZero();
-        assertThat(p.fee(DeliveryMethod.CARRIER, "express", 99_999)).isEqualTo(1499);
-        assertThat(p.fee(DeliveryMethod.AFROTRANSACT_DELIVERY, "local", 4999)).isEqualTo(499);
+        assertThat(p.fee(DeliveryMethod.AFROTRANSACT_DELIVERY, "local", 4999)).isEqualTo(599);
         assertThat(p.fee(DeliveryMethod.AFROTRANSACT_DELIVERY, "local", 5000)).isZero();
         assertThat(p.fee(DeliveryMethod.PICKUP, "pickup", 10)).isZero();
-        assertThat(p.estimatedDays(DeliveryMethod.CARRIER, "express")).isEqualTo(2);
+        assertThat(p.carrierEnabled()).isFalse();
         assertThat(p.defaultServiceLevel(DeliveryMethod.AFROTRANSACT_DELIVERY)).isEqualTo("local");
     }
 

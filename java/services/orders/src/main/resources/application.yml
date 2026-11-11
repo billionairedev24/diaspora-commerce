@@ -87,6 +87,9 @@ springdoc:
 
 at:
   security:
+    # What delivery costs is public (the storefront estimate reads it): GET /v1/public/shipping-settings.
+    public-paths:
+      - /v1/public/shipping-settings
     # S248 fine-grained authorisation (OpenFGA, docs/engineering/authorisation.md). Off unless FGA_ENABLED=true;
     # enforce=false is shadow mode: relationship denials are logged ("FGA shadow:"), not enforced.
     fga:
@@ -186,14 +189,13 @@ at:
       residential-cleaning: services
       tutoring-consulting: services
       fabrics-textiles: fashion
+    # Listing rules D16 to D18: the delivery fee is NOT configured here. It is one staff-editable record in the database
+    # (shipping_settings, Settings > Delivery fee), read by the estimate and by checkout. Only the carrier fallback of
+    # seller-shipped packages (off at launch) and the fallback delivery estimates (business days) live here.
     shipping:
       carrier-standard-minor: 599
-      carrier-express-minor: 1499
       free-carrier-above-minor: 3500
-      delivery-minor: 499
-      free-delivery-above-minor: 5000
       standard-days: 5
-      express-days: 2
       delivery-days: 1
       pickup-days: 1
     # Checkout tax: tax-returns' POST /v1/tax/quotes (orders-service token, scope tax:quote) reads the stored per-line

@@ -115,6 +115,17 @@ abstract class OrdersIntegrationTest {
         this.handover = handoverPolicy;
         this.vault = codeVault;
         this.port = serverPort;
+        // The launch default is carrier shipping OFF (listing rules D16); most scenarios here exercise the seller
+        // carrier path, so they run with the staff switch ON. LaunchShippingIT turns it off.
+        sellerCarrierShipping(true);
+    }
+
+    /** Sets the staff switch for seller-shipped carrier options and the launch flat fee ($5.99, no free-above). */
+    void sellerCarrierShipping(boolean enabled) {
+        jdbc.sql("""
+                update shipping_settings set seller_carrier_shipping_enabled = :on, flat_fee_minor = 599,
+                    free_above_minor = null where currency = 'USD'
+                """).param("on", enabled).update();
     }
 
     @AfterEach

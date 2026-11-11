@@ -17,7 +17,6 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import com.afrotransact.orders.domain.BusinessDays;
-import com.afrotransact.orders.domain.DefaultShippingPolicy;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FeeRuleSnapshot;
@@ -230,7 +229,6 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             }
             String level = sel != null && sel.serviceLevel() != null && !sel.serviceLevel().isBlank()
                     ? sel.serviceLevel().trim().toLowerCase(Locale.ROOT)
-                    : sel != null && "express".equalsIgnoreCase(sel.option()) ? "express"
                     : shipping.defaultServiceLevel(method);
             String pickup = sel == null ? null : sel.pickupLocationId();
             if (method == DeliveryMethod.PICKUP && (pickup == null || pickup.isBlank())) {
@@ -262,6 +260,12 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             LocalDelivery quoted = sellerStore && method == DeliveryMethod.AFROTRANSACT_DELIVERY
                     ? localDelivery.quote(first.sellerOrgId(), first.sellerName(), pickups.get(offerKey(first)), to)
                     : null;
+            if (quoted != null) {
+                // Listing rules D16: AfroTransact collects from the store and delivers at the same flat fee as every
+                // other delivery; the distance quote only keeps the route and the seller's pickup fee.
+                long packageItems = lines.stream().mapToLong(CheckoutPlan.Line::itemsMinor).sum();
+                quoted = quoted.withCustomerCharge(shipping.fee(method, level, packageItems));
+            }
             CheckoutPlan.Package pack = new CheckoutPlan.Package(e.getKey(), first.sellerOrgId(), first.sellerName(),
                     fulfilmentType(first), method, level, method == DeliveryMethod.PICKUP ? pickup.trim() : null,
                     prefs, days, lines, quoted);
@@ -606,8 +610,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         return switch (s.method()) {
             case PICKUP -> MemberBenefits.FeeKind.PICKUP;
             case AFROTRANSACT_DELIVERY -> MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
-            case CARRIER -> DefaultShippingPolicy.EXPRESS.equalsIgnoreCase(s.serviceLevel())
-                    ? MemberBenefits.FeeKind.EXPRESS : MemberBenefits.FeeKind.CARRIER;
+            case CARRIER -> MemberBenefits.FeeKind.CARRIER;
         };
     }
 
@@ -936,7 +939,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
      * The quoted AfroTransact Delivery charge for a seller's store (S255), the pre-order window's fee (S272), else the
      * shipping policy's fee.
      */
-    private long shippingOf(CheckoutPlan.Package p, long itemsMinor, FeeRuleSnapshot rule) {
+    long shippingOf(CheckoutPlan.Package p, long itemsMinor, FeeRuleSnapshot rule) {
         if (p.preorder() != null) {
             return p.preorderFeeMinor();
         }
@@ -955,12 +958,11 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
 
     /**
      * The staff carrier rate (ADR 0005 §3) of a standard carrier shipment, which is what an address beyond
-     * AfroTransact's coverage pays; the rule is kept on the shipment. Null for every other method and for express
-     * (flat rates), and when staff configured no carrier rule or delivery-runs cannot answer.
+     * AfroTransact's coverage pays; the rule is kept on the shipment. Null for every other method, and when staff
+     * configured no carrier rule or delivery-runs cannot answer. Only reached while the seller carrier switch is on.
      */
     private FeeRuleSnapshot carrierRule(CheckoutPlan.Package p, long itemsMinor, String currency) {
-        if (p.preorder() != null || p.localDelivery() != null || p.method() != DeliveryMethod.CARRIER
-                || DefaultShippingPolicy.EXPRESS.equalsIgnoreCase(p.serviceLevel())) {
+        if (p.preorder() != null || p.localDelivery() != null || p.method() != DeliveryMethod.CARRIER) {
             return null;
         }
         return deliveryFees.carrier(currency, null, itemsMinor).orElse(null);
@@ -993,15 +995,38 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         return platform ? FulfilmentType.RETAIL_1P : FulfilmentType.FBA_AFROTRANSACT;
     }
 
-    private static DeliveryMethod method(CheckoutInput.Selection sel) {
-        String option = sel == null || sel.option() == null ? "carrier" : sel.option().trim().toLowerCase(Locale.ROOT);
+    /**
+     * The delivery method a package's selection names. With the seller carrier switch off (launch), a package with no
+     * selection is delivered by AfroTransact, and the retired options (carrier, standard, express) are refused in plain
+     * words so a stale page is told to reload instead of being charged something it did not show.
+     */
+    private DeliveryMethod method(CheckoutInput.Selection sel) {
+        String option = sel == null || sel.option() == null || sel.option().isBlank() ? null
+                : sel.option().trim().toLowerCase(Locale.ROOT);
+        boolean carrier = shipping.carrierEnabled();
+        if (option == null) {
+            return carrier ? DeliveryMethod.CARRIER : DeliveryMethod.AFROTRANSACT_DELIVERY;
+        }
         return switch (option) {
-            case "carrier", "standard", "express", "ship" -> DeliveryMethod.CARRIER;
             case "afrotransact_delivery", "delivery", "local" -> DeliveryMethod.AFROTRANSACT_DELIVERY;
             case "pickup" -> DeliveryMethod.PICKUP;
+            case "carrier", "standard", "ship" -> {
+                if (!carrier) {
+                    throw optionsChanged();
+                }
+                yield DeliveryMethod.CARRIER;
+            }
+            case "express" -> throw optionsChanged();
+            case "quote_required" -> throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION,
+                    "This address is too far for standard delivery. Ask us for a quote, or choose another address.");
             default -> throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION,
-                    "Unknown delivery option " + sel.option());
+                    "We don't recognise that delivery option. Reload the page and choose again.");
         };
+    }
+
+    private static OrdersRuleViolation optionsChanged() {
+        return new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, "The delivery options have changed. Reload "
+                + "the page and choose Delivery by AfroTransact or pickup.");
     }
 
     /** Maps business refusals to non-retryable failures typed with the checkout code; outages stay retryable. */

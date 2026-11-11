@@ -135,9 +135,9 @@ class CheckoutIT extends OrdersIntegrationTest {
         assertThat(number).matches("AT-\\d{4}-[2-9A-HJ-NP-Z]{6}");
         assertThat(created.path("status").asString()).isEqualTo("awaiting_payment");
         assertThat(created.path("clientSecret").asString()).isEqualTo("pi_" + paymentId + "_secret");
-        // items 2×12.50 + 40.00; tax 8.25 % per line (206 + 330); AfroTransact Delivery free above 50? no: 499;
+        // items 2×12.50 + 40.00; tax 8.25 % per line (206 + 330); AfroTransact Delivery is the flat 5.99;
         // carrier standard free above 35.00 → 0.
-        assertThat(created.path("totalMinor").asLong()).isEqualTo(2500 + 4000 + 206 + 330 + 499);
+        assertThat(created.path("totalMinor").asLong()).isEqualTo(2500 + 4000 + 206 + 330 + 599);
         assertThat(created.path("shipments")).hasSize(2);
         JsonNode delivery = created.path("shipments").get(0);
         assertThat(delivery.path("deliveryMethod").asString()).isEqualTo("AFROTRANSACT_DELIVERY");
@@ -152,7 +152,7 @@ class CheckoutIT extends OrdersIntegrationTest {
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
                 .withHeader("Idempotency-Key", WireMock.equalTo(orderId))
                 .withRequestBody(WireMock.matchingJsonPath("$.amountMinor",
-                        WireMock.equalTo(String.valueOf(2500 + 4000 + 206 + 330 + 499))))
+                        WireMock.equalTo(String.valueOf(2500 + 4000 + 206 + 330 + 599))))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.fulfilment == 'FBA')]"))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.fulfilment == 'SELF')]"))
                 .withRequestBody(WireMock.notContaining("saveForOffSession")));

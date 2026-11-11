@@ -5,6 +5,7 @@ import java.util.Set;
 
 import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.application.PreorderSettings;
+import com.afrotransact.orders.application.ShippingSettingsService;
 import com.afrotransact.orders.application.TaxSettings;
 import com.afrotransact.orders.domain.ShippingAllocation;
 import com.afrotransact.orders.domain.CourierProofPolicy;
@@ -54,12 +55,13 @@ class OrdersConfiguration {
         return new DefaultOrderNumberGenerator();
     }
 
+    /** Delivery fees come from the staff-edited shipping settings, read for every charge (never a guess). */
     @Bean
-    ShippingPolicy shippingPolicy(OrdersProperties props) {
+    ShippingPolicy shippingPolicy(OrdersProperties props, ShippingSettingsService settings) {
         OrdersProperties.Shipping s = props.shipping();
-        return new DefaultShippingPolicy(new DefaultShippingPolicy.Rates(s.carrierStandardMinor(),
-                s.carrierExpressMinor(), s.freeCarrierAboveMinor(), s.deliveryMinor(), s.freeDeliveryAboveMinor(),
-                s.standardDays(), s.expressDays(), s.deliveryDays(), s.pickupDays()));
+        return new DefaultShippingPolicy(() -> settings.current("USD"),
+                new DefaultShippingPolicy.Rates(s.carrierStandardMinor(), s.freeCarrierAboveMinor(), s.standardDays(),
+                        s.deliveryDays(), s.pickupDays()));
     }
 
     @Bean

@@ -82,12 +82,12 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
         JsonNode created = ok(send("POST", "/v1/checkout", request, "Idempotency-Key", "idem-" + customer,
                 "Authorization", "Bearer " + bearer), 201);
         String orderId = created.path("orderId").asString();
-        // items 25.00 + 40.00, AfroTransact Delivery 4.99, carrier free above 35.00; tax 1.00 per line from the quote
-        assertThat(created.path("totalMinor").asLong()).isEqualTo(2500 + 4000 + 499 + 200);
+        // items 25.00 + 40.00, AfroTransact Delivery 5.99, carrier free above 35.00; tax 1.00 per line from the quote
+        assertThat(created.path("totalMinor").asLong()).isEqualTo(2500 + 4000 + 599 + 200);
         WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/tax/quotes"))
                 .withRequestBody(WireMock.matchingJsonPath("$.shipTo.postalCode", WireMock.equalTo("77002")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.atin == '" + fbaAtin
-                        + "' && @.shippingMinor == 499 && @.productType == 'frozen-meals')]"))
+                        + "' && @.shippingMinor == 599 && @.productType == 'frozen-meals')]"))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.atin == '" + sellerAtin
                         + "' && @.shippingMinor == 0)]")));
         WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations"))
@@ -104,7 +104,7 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
         assertThat(placed.path("shipToName").asString()).isEqualTo("Ada Obi");
         assertThat(placed.path("paymentId").asString()).isEqualTo(paymentId);
         JsonNode fba = placed.path("shipments").get(0);
-        assertThat(fba.path("shippingMinor").asLong()).isEqualTo(499);
+        assertThat(fba.path("shippingMinor").asLong()).isEqualTo(599);
         assertThat(fba.path("shipBy").asString()).isNotBlank();
         JsonNode fbaLine = fba.path("lines").get(0);
         assertThat(fbaLine.path("productType").asString()).isEqualTo("frozen-meals");

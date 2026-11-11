@@ -17,7 +17,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param zone                    business time zone for promised dates
  * @param perishableTypes         catalog product types treated as perishable
  * @param commissionCategories    catalog product type → payments commission category
- * @param shipping                fees and fallback delivery estimates
+ * @param shipping                fallback delivery estimates and the carrier fallback fee
  * @param tax                     checkout tax: delivery charge allocation (rates come from tax-returns)
  * @param jobs                    follow-up job settings
  * @param returns                 return windows shown on order views (tax-returns decides eligibility)
@@ -37,26 +37,24 @@ public record OrdersProperties(String retailOrgId, Duration paymentTimeout,
         zone = zone == null ? "America/Chicago" : zone;
         perishableTypes = perishableTypes == null ? List.of("perishable") : List.copyOf(perishableTypes);
         commissionCategories = commissionCategories == null ? Map.of() : Map.copyOf(commissionCategories);
-        shipping = shipping == null ? new Shipping(null, null, null, null, null, null, null, null, null) : shipping;
+        shipping = shipping == null ? new Shipping(null, null, null, null, null) : shipping;
         tax = tax == null ? new Tax(null) : tax;
         jobs = jobs == null ? new Jobs(null, null, null) : jobs;
         returns = returns == null ? new Returns(null, null, null) : returns;
         shipBy = shipBy == null ? new ShipBy(null, null) : shipBy;
     }
 
-    /** Shipping fees (minor units) and fallback estimates (business days). */
-    public record Shipping(Long carrierStandardMinor, Long carrierExpressMinor, Long freeCarrierAboveMinor,
-                           Long deliveryMinor, Long freeDeliveryAboveMinor, Integer standardDays, Integer expressDays,
+    /**
+     * Fallback delivery estimates (business days) and the carrier fallback fee of seller-shipped packages (off at
+     * launch). The delivery fee itself is the staff-edited shipping settings record, not configuration.
+     */
+    public record Shipping(Long carrierStandardMinor, Long freeCarrierAboveMinor, Integer standardDays,
                            Integer deliveryDays, Integer pickupDays) {
 
         public Shipping {
             carrierStandardMinor = carrierStandardMinor == null ? 599L : carrierStandardMinor;
-            carrierExpressMinor = carrierExpressMinor == null ? 1499L : carrierExpressMinor;
             freeCarrierAboveMinor = freeCarrierAboveMinor == null ? 3500L : freeCarrierAboveMinor;
-            deliveryMinor = deliveryMinor == null ? 499L : deliveryMinor;
-            freeDeliveryAboveMinor = freeDeliveryAboveMinor == null ? 5000L : freeDeliveryAboveMinor;
             standardDays = standardDays == null ? 5 : standardDays;
-            expressDays = expressDays == null ? 2 : expressDays;
             deliveryDays = deliveryDays == null ? 1 : deliveryDays;
             pickupDays = pickupDays == null ? 1 : pickupDays;
         }
