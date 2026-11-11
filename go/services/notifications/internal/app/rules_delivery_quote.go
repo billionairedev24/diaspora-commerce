@@ -11,7 +11,7 @@ func enrichDeliveryQuoteReady(d map[string]any, l Links) {
 	nullable(d, "reference", "quoteId", "expiresAt")
 	d["amount"] = moneyField(d, "amountMinor")
 	d["expiresDisplay"] = firstNonEmptyStr(friendlyDateTime(str(d, "expiresAt")), "the date shown at checkout")
-	d["payUrl"] = join(l.Storefront, "/checkout?quote="+url.QueryEscape(str(d, "quoteId")))+"&src=email"
+	d["payUrl"] = join(l.Storefront, "/checkout?quote="+url.QueryEscape(str(d, "quoteId"))) + "&src=email"
 	d["quotesUrl"] = join(l.Storefront, "/account/delivery-quotes")
 }
 

@@ -54,6 +54,7 @@ export function AccountHome() {
       title: 'acct.group.orders',
       entries: [
         { id: 'orders', href: '/orders', title: 'hub.orders', sub: 'hub.ordersSub' },
+        { id: 'deliveryQuotes', href: '/account/delivery-quotes', title: 'hub.deliveryQuotes', sub: 'hub.deliveryQuotesSub' },
         { id: 'bookings', href: '/account/bookings', title: 'hub.bookings', sub: 'hub.bookingsSub' }
       ]
     },

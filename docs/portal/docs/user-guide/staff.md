@@ -66,6 +66,31 @@ Notes on approve, flag and send-back are internal. Only the message on *Return t
 shown to the applicant. Staff names are never shown to applicants.
 :::
 
+## Delivery quotes (Customer care)
+
+When a shopper's address is outside the delivery zones, checkout shows **Too far for standard delivery. Ask us for a quote**.
+The request lands in **Delivery quotes** (under Commerce). You see it if your role has `delivery-quotes:view`; you can act if
+it has `delivery-quotes:agree`; supervisors with `delivery-quotes:assign` assign, take over and set the rules.
+
+- **Tabs**: **My queue** (cases you hold), **Unassigned** (the pool), **Waiting on customer** (a quote is ready, the shopper has
+  not used it), **Closed** (declined, expired, used). **Escalated** and **Overdue** are chips; **All** shows everything.
+- **Who has it**: the **With**, **Waiting** and **SLA** columns say who holds each request and for how long. The target is one
+  business day. A request nobody has taken after a few hours is escalated, and the people set for that level are told.
+- **Claim** a request from the pool. A supervisor can **Assign…** or take it over; you can **Release to the pool**, or
+  **Escalate now** with a reason.
+- **Agree a charge…**: enter the delivery charge in dollars and **why this amount** (required, kept in the audit trail). The
+  amount must be inside the bounds shown on the form (default $5.00 to $500.00). The shopper is emailed a link back to checkout;
+  the quote is for that cart and address, can be used once and stays valid for 48 hours. Delivery tax is added to the order like any
+  other delivery tax, so you do not add it.
+- **Decline** with a reason when we cannot deliver there. The shopper is told plainly and is not shown your reason.
+- There is no second approver: whoever holds the case decides it. Every step is on the timeline with the person's name.
+- If the shopper changes their cart or address after the quote is agreed, the quote no longer applies and they ask again.
+- **SLA, escalation and amounts** (second tab, needs `delivery-quotes:assign`): the answer time in business days, who is told when
+  a request is late, auto-assignment, the smallest and largest amount, how long a quote stays valid and the limit on how often a shopper
+  can ask. Every change needs a reason and is kept with what it was before.
+
+See the [runbook](../../../runbooks/delivery-quotes.md).
+
 ## Department requests
 
 A seller can only sell in the catalog departments recorded for its organisation. When a seller asks for another one

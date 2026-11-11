@@ -1741,6 +1741,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/delivery-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My quote requests, newest first */
+        get: operations["listMyDeliveryQuotes"];
+        put?: never;
+        /**
+         * Ask for a delivery quote for my cart and a saved address
+         * @description Snapshots the cart lines and packages and the address (city, state and ZIP are kept for customer care; the street
+         *     only as a hash), and opens a case in the staff queue. Idempotent: the same cart and address returns the same
+         *     request while it is open or within a short window, so a double click or a retry never makes two. A signed-out
+         *     shopper gets 401 and signs in first. Over the hourly limit the answer is 429 `RATE_LIMITED` with `Retry-After`.
+         */
+        post: operations["requestDeliveryQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/delivery-quotes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my quote requests (404 for anyone else's) */
+        get: operations["getMyDeliveryQuote"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/checkout/summary": {
         parameters: {
             query?: never;
@@ -4839,6 +4880,13 @@ export interface components {
                 /** @enum {string} */
                 option: "carrier" | "express" | "afrotransact_delivery" | "pickup";
                 pickupPointId?: string;
+                /**
+                 * @description An agreed delivery quote (`POST /v1/me/delivery-quotes`) to use as this package's shipping charge. It must be
+                 *     the shopper's own, for exactly this cart and address, ready and not expired, and is used once. Not for pickup.
+                 *     422 `DELIVERY_QUOTE_VOID` (`extra.reason` changed, expired, used, not_ready or not_found) when it can't be used;
+                 *     the checkout then offers to ask for a new quote.
+                 */
+                quoteId?: string;
                 preferences?: {
                     /** @enum {string} */
                     handover?: "hand" | "door" | "desk";
@@ -4848,6 +4896,76 @@ export interface components {
                     contact?: "text" | "call" | "none";
                 };
             }[];
+        };
+        DeliveryQuoteRequestBody: {
+            /** @description A saved address */
+            addressId: string;
+            /** @description Part of the cart to quote (default every line) */
+            lines?: {
+                variantAtin: string;
+                quantity: number;
+            }[];
+            /**
+             * @description How customer care may reach the shopper (default EMAIL)
+             * @enum {string}
+             */
+            contact?: "EMAIL" | "PHONE" | "SMS";
+            note?: string;
+        };
+        /**
+         * @description A shopper's quote request and its answer. `statusLabel` is the plain word to show: Requested, Being quoted,
+         *     Quote ready, Expired, Declined (or Used). The amount shows once agreed; who agreed it and why never does.
+         */
+        DeliveryQuoteRequest: {
+            /** Format: uuid */
+            id: string;
+            /** @example DQ-2026-K7M2XQ */
+            reference: string;
+            /** @enum {string} */
+            status: "REQUESTED" | "IN_PROGRESS" | "READY" | "EXPIRED" | "DECLINED" | "USED";
+            /** @enum {string} */
+            statusLabel: "Requested" | "Being quoted" | "Quote ready" | "Expired" | "Declined" | "Used";
+            /**
+             * Format: int64
+             * @description The agreed delivery charge; null until the quote is ready
+             */
+            amountMinor: number | null;
+            currency: string;
+            /**
+             * Format: date-time
+             * @description When a ready quote stops being usable
+             */
+            expiresAt: string | null;
+            /** @description The quote can be applied at checkout right now */
+            usable: boolean;
+            /**
+             * @description City, state and ZIP of the address
+             * @example Marfa, TX 79843
+             */
+            place: string;
+            packages: {
+                packageId: string;
+                sellerName: string | null;
+                fulfilment: string;
+                itemCount: number;
+            }[];
+            lines: {
+                variantAtin: string;
+                title: string | null;
+                packageId: string;
+                quantity: number;
+                /** Format: int64 */
+                unitPriceMinor: number;
+            }[];
+            /** @enum {string} */
+            contact: "EMAIL" | "PHONE" | "SMS";
+            note: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description Where it stands and what to do next */
+            message: string;
         };
         /** @description One line of the credit history; the balance is the sum of the lines. The storefront words it from kind and source. */
         CreditEntry: {
@@ -8489,6 +8607,83 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listMyDeliveryQuotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description My requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["DeliveryQuoteRequest"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    requestDeliveryQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryQuoteRequestBody"];
+            };
+        };
+        responses: {
+            /** @description The request (new or the existing one) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryQuoteRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getMyDeliveryQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryQuoteRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

@@ -27,6 +27,7 @@ import { mockCheckoutTax } from './checkout-tax';
 import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
 import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf, miles } from './delivery';
+import { redeemMockQuote } from './delivery-quotes';
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
@@ -597,6 +598,8 @@ export const shopperHandlers = [
       }
     });
     if (Object.keys(errors).length) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { errors });
+    // An agreed delivery quote (listing rules D20) is used once and becomes the order's shipping.
+    const quotedMinor = redeemMockQuote(a, req.deliverySelections, req.addressId, ctx.now);
     // A line without a definite tax decision can't be sold: the shopper removes it (the summary lists it with Remove).
     const priced = summary(ctx, req.addressId, req.deliverySelections.map((x) => `${x.packageId}:${x.option}`).join(','));
     const heldLine = priced.blockedLines[0];
@@ -609,7 +612,7 @@ export const shopperHandlers = [
     }, 0);
     // The membership's waiver by the options chosen, recorded on each shipment with the tier and the benefit (S323).
     const savings = membershipQuote(membershipState(a), s.packages, req.deliverySelections.map((x) => `${x.packageId}:${x.option}`).join(','));
-    const shipping = fees - savings.totalWaivedMinor;
+    const shipping = quotedMinor ?? fees - savings.totalWaivedMinor;
     const tax = priced.taxMinor;
     const shipments = s.packages.map((p, i): ShipmentDetail => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);

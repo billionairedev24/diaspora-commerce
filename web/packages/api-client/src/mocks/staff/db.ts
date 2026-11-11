@@ -5,10 +5,11 @@ import { legalGroupTitle } from '../../schemas/legal';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { COOKIE_CATEGORIES, COOKIE_TABLE } from '../fixtures/legal';
+import { seedReviewSettings, seedWorkflow } from './application-flow';
 import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './content-pages';
+import { seedQuotes,seedQuoteSettings } from './delivery-quotes';
 import { MOCK_DEPARTMENT_ORGS, type MockDepartmentsState, seedDepartments } from './departments';
 import { type MockDispatch, seedDispatch } from './dispatch';
-import { seedReviewSettings, seedWorkflow } from './application-flow';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
@@ -684,7 +685,7 @@ function seed(now: Date): MockStaffDb {
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements, 'home-layout': homeLayout,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
-      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now), 'service-area-rules': seedServiceAreaRules(now), 'service-zones': seedServiceZones(now),
+      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now), 'delivery-quotes': seedQuotes(now), 'delivery-quote-settings': seedQuoteSettings(now), 'service-area-rules': seedServiceAreaRules(now), 'service-zones': seedServiceZones(now),
       ...seedIdentityAdmin(now)
     },
     notifications,

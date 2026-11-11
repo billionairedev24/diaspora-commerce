@@ -2,6 +2,7 @@ import { type z } from 'zod';
 
 import { type AddressSearchOptions } from './address-lookup';
 import { creditMethods } from './credit-client';
+import { deliveryQuoteMethods } from './delivery-quotes-client';
 import { deliveryRunMethods } from './delivery-runs';
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { membershipMethods } from './membership-client';
@@ -122,6 +123,7 @@ export function createApiClient(options: ApiClientOptions) {
     ...preorderMethods(request),
     ...deliveryRunMethods(request),
     ...creditMethods(request),
+    ...deliveryQuoteMethods(request),
     ...membershipMethods(request),
     ...referralMethods(request),
     ...reviewMethods(request),

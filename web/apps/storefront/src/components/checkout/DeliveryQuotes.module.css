@@ -1,0 +1,17 @@
+/* Delivery quotes: the ask box in checkout, the applied-quote notice and the "My quote requests" cards. Tokens only. */
+.box { display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface-muted); min-width: 0; }
+.boxTitle { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
+.text { margin: 0; color: var(--at-color-text-muted); font-size: var(--at-text-sm); line-height: var(--at-leading-normal); }
+.form { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--at-space-3); align-items: center; }
+
+.notice { display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-3) var(--at-space-4); border: 1px solid var(--at-color-action-secondary); border-radius: var(--at-radius-md); background: var(--at-color-success-bg); }
+.noticeVoid { border-color: var(--at-color-danger); background: var(--at-color-surface); }
+.noticeTitle { margin: 0; font-weight: var(--at-weight-bold); }
+
+.list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); }
+.card { display: flex; flex-direction: column; gap: var(--at-space-2); padding: var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface); min-width: 0; }
+.cardHead { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-3); align-items: baseline; justify-content: space-between; }
+.cardTitle { margin: 0; font-size: var(--at-text-md); font-weight: var(--at-weight-semibold); }
+.meta { color: var(--at-color-text-muted); font-size: var(--at-text-sm); }
+.amount { font-size: var(--at-text-xl); font-weight: var(--at-weight-bold); }

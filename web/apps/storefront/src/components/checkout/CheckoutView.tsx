@@ -8,6 +8,7 @@ type Cart,  cartKeys,
   type CheckoutPackage,
   creditSplit,
   definitiveFailure,
+  deliveryQuoteKeys,
   type DeliverySelection,
   isApiError,
   isCartMismatch,
@@ -28,6 +29,8 @@ import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
 
+import { AppliedQuoteNotice, quotedPackage, quotedShipping, useAppliedQuote } from './AppliedQuote';
+import { AskForQuote } from './AskForQuote';
 import { BlockedLines } from './BlockedLines';
 import styles from './Checkout.module.css';
 import { CheckoutOrderPanel } from './CheckoutOrderPanel';
@@ -94,6 +97,8 @@ export function CheckoutView() {
   const [appliedCoupon, setAppliedCoupon] = useState('');
   /** Sent to the BFF so shipping, tax and coupons match the selected delivery option per package. */
   const [packageDeliveryKey, setPackageDeliveryKey] = useState<string | undefined>();
+  /** The delivery quote the shopper came back with (/checkout?quote=<id>, the pay link in the email). */
+  const applied = useAppliedQuote();
   const summary = useQuery(shopperQueries.checkoutSummary(api, addressId, packageDeliveryKey, appliedCoupon || undefined));
   const s = summary.data;
   const [addrDialog, setAddrDialog] = useState<{ open: boolean; address: Address | null }>({ open: false, address: null });
@@ -145,7 +150,13 @@ export function CheckoutView() {
 
   const address = s?.addresses.find((a) => a.id === addressId) ?? null;
   const pm = s?.paymentMethods.find((p) => p.id === pmId) ?? null;
-  const selectedShipping = useMemo(() => (s ? s.packages.reduce((sum, p) => sum + feeOf(p, choices[p.packageId]), 0) : 0), [s, choices]);
+  const selectedShipping = useMemo(() => {
+    if (!s) return 0;
+    // An agreed delivery quote replaces the fee of the delivered packages (orders charges it once, taxed like any shipping).
+    if (applied.usable?.amountMinor != null)
+      return quotedShipping(s.packages, (p) => choices[p.packageId]?.option, (p) => feeOf(p, choices[p.packageId]), applied.usable.amountMinor);
+    return s.packages.reduce((sum, p) => sum + feeOf(p, choices[p.packageId]), 0);
+  }, [s, choices, applied.usable]);
   const pickups = s ? s.packages.filter((p) => choices[p.packageId]?.option === 'pickup').length : 0;
   /** Optimistic total: shipping follows UI choices immediately; tax and coupon discounts follow the BFF summary. */
   const total = useMemo(() => {
@@ -214,6 +225,7 @@ export function CheckoutView() {
         packageId: p.packageId,
         option: c.option,
         pickupPointId: c.option === 'pickup' ? (c.pickupPointId ?? p.pickupPoints?.[0]?.id) : undefined,
+        quoteId: applied.usable && quotedPackage(p, c.option) ? applied.usable.id : undefined,
         preferences: c.option === 'afrotransact_delivery' ? { ...c.preferences, handover: perishable ? 'hand' : c.preferences.handover, safePlace: c.preferences.safePlace || undefined, instructions: c.preferences.instructions?.trim() || undefined } : undefined
       };
     });
@@ -283,6 +295,8 @@ export function CheckoutView() {
           : t('auth.genericError')
     );
     void qc.invalidateQueries({ queryKey: checkoutKeys.all });
+    // A void quote (changed, expired, used) is shown as such; the shopper asks for a new one.
+    if (isApiError(e) && e.code === 'DELIVERY_QUOTE_VOID') void qc.invalidateQueries({ queryKey: deliveryQuoteKeys.all });
   };
 
   /** Places (or, with the same key, replays) the order. Call after begin(). */
@@ -400,6 +414,10 @@ export function CheckoutView() {
       </header>
 
       <div className={styles.mainCol}>
+        <AppliedQuoteNotice applied={applied} />
+        {address && !applied.usable && s.packages.some((p) => p.deliveryOptions.some((o) => (o.key as string) === 'quote_required')) && (
+          <AskForQuote addressId={address.id} place={`${address.city}, ${address.state} ${address.zip}`} />
+        )}
         <BlockedLines lines={blockedLines} removing={removingLine} onRemove={(l) => void removeBlocked(l)} />
         <Section
           n={1}

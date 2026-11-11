@@ -20,6 +20,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
     label: 'Applications',
     description: 'Seller and service-provider onboarding queue. Every application goes through two people: a reviewer, then a different approver.'
   },
+  deliveryQuotes: { label: 'Delivery quotes', description: 'Shoppers outside the delivery zones ask for a delivery price. Customer care agrees an amount, with a reason, and the shopper pays it at checkout.' },
   deptRequests: { label: 'Department requests', description: 'Sellers ask to sell in another catalog department. Approve or reject each request, with the reason the seller reads.' },
   support: { label: 'Customer support', description: 'Lola hand-offs, customer lookup, refunds within your limit, notifications and shipments.' },
   rbac: { label: 'Users & roles', description: 'Who can do what in every back office. Role changes are audited.' },
@@ -51,7 +52,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
 
 export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKey[] }[] = [
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
-  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'preorders'] },
+  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'deliveryQuotes', 'preorders'] },
   { key: 'partners', label: 'Partners', modules: ['apps', 'deptRequests', 'support', 'rbac'] },
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
@@ -68,7 +69,7 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', recoveries: 'payouts', 'credit-adjustments': 'payouts', 'gift-cards': 'payouts', 'credit-liabilities': 'payouts', 'money-settings': 'payouts', 'membership-tiers': 'payouts', memberships: 'payouts', 'membership-settings': 'payouts', 'membership-report': 'payouts', referrals: 'payouts', 'referral-settings': 'payouts', 'stripe-lookup': 'payouts',
   'payment-settings': 'payouts', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees',
   'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity', 'session-policy': 'identity',
-  'exchange-rates': 'inventory', 'application-review-settings': 'apps', 'service-area-rules': 'markets', 'service-zones': 'markets'
+  'exchange-rates': 'inventory', 'application-review-settings': 'apps', 'delivery-quotes': 'deliveryQuotes', 'delivery-quote-settings': 'deliveryQuotes', 'service-area-rules': 'markets', 'service-zones': 'markets'
 };
 
 /** Refund ceiling per platform role in minor units (null = no limit). Roles not listed may not refund. */
@@ -166,6 +167,11 @@ export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | 
     // Derived from the seller service's permissions, as the BFF does (identity's matrix has no Plans & billing column).
     const perms = permissionsOf(roles);
     return perms.includes('plans:manage') || perms.includes('billing:adjust') ? 'EDIT' : perms.includes('seller:billing') || perms.includes('billing:usage') ? 'VIEW' : null;
+  }
+  if (module === 'deliveryQuotes') {
+    // Derived from orders' delivery-quotes permissions, as the BFF does (identity V41; the matrix has no column for it).
+    const perms = permissionsOf(roles);
+    return perms.includes('delivery-quotes:agree') || perms.includes('delivery-quotes:assign') ? 'EDIT' : perms.includes('delivery-quotes:view') ? 'VIEW' : null;
   }
   if (module === 'deptRequests') {
     // Derived from the seller service's permissions, as the BFF does (identity's matrix has no column for it).

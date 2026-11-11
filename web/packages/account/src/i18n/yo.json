@@ -297,5 +297,7 @@
   "email.send": "Fi kóòdù ránṣẹ́ sí mi",
   "email.sent": "A fi kóòdù ránṣẹ́ sí {email}. Ó parí ní ìṣẹ́jú 10.",
   "email.resend": "Fi kóòdù tuntun ránṣẹ́",
-  "email.done": "Kóòdù ímeèlì ti wà ní títan"
+  "email.done": "Kóòdù ímeèlì ti wà ní títan",
+  "hub.deliveryQuotes": "Àwọn ìdíyelé ìfijíṣẹ́",
+  "hub.deliveryQuotesSub": "Béèrè iye ìfijíṣẹ́ kí o sì tẹ̀lé àwọn ìbéèrè rẹ"
 }

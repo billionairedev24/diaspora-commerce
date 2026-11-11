@@ -15,6 +15,7 @@ import { mockAddressSuggestions, mockResolveAddress } from './addresses';
 import { creditHandlers } from './credit';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
+import { deliveryQuoteHandlers } from './delivery-quotes';
 import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
@@ -293,6 +294,7 @@ export const handlers = [
   ...shopperHandlers,
   ...helpRequestHandlers,
   ...creditHandlers,
+  ...deliveryQuoteHandlers,
   ...membershipHandlers,
   ...referralHandlers,
   ...reviewHandlers,

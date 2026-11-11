@@ -16,9 +16,10 @@ import {
   type ResourceKey,
   type StaffForm
 } from '../../schemas/staff';
+import { APPLICATION_QUEUES, ASSIGNMENT_ACTIONS, inQueue, reviewSettingsDef, stageLine } from './application-flow';
 import { MOCK_STOREFRONT_URL } from './content-pages';
 import { type MockRecord, type Scalar } from './db';
-import { APPLICATION_QUEUES, ASSIGNMENT_ACTIONS, inQueue, reviewSettingsDef, stageLine } from './application-flow';
+import { inQuoteQueue, QUOTE_ACTIONS, QUOTE_QUEUES, quoteSettingsDef, quoteSheetSections, quoteStageLine } from './delivery-quotes';
 import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 import { MOCK_DRIVERS } from './lookups';
@@ -1641,6 +1642,21 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'exchange-rates': exchangeRatesDef,
   'application-review-settings': reviewSettingsDef,
+  'delivery-quote-settings': quoteSettingsDef,
+  'delivery-quotes': {
+    title: 'Delivery quotes',
+    columns: [col('reference', 'Reference', 'mono', 12), col('customerName', 'Customer', 'strong', 14), col('place', 'Deliver to', 'text', 16), col('itemCount', 'Items', 'number', 5), col('with', 'With', 'text', 12), col('waiting', 'Waiting', 'duration', 8), col('sla', 'SLA', 'text', 8), col('escalation', 'Escalation', 'text', 9), col('amountMinor', 'Charge', 'money', 8), col('createdAt', 'Asked', 'datetime', 14), col('statusLabel', 'Status', 'status', 12)],
+    statusKey: 'status',
+    facets: QUOTE_QUEUES,
+    queue: inQuoteQueue,
+    search: ['reference', 'place', 'assigneeName'],
+    searchPlaceholder: 'Reference, place or who has it',
+    exportable: false,
+    titleOf: (r) => `${str(r.fields.reference)} · ${str(r.fields.place)}`,
+    subtitleOf: (r) => `${str(r.fields.customerName)} · ${quoteStageLine(r)}`,
+    sheetSections: quoteSheetSections,
+    actions: QUOTE_ACTIONS
+  },
   'service-area-rules': serviceAreaRulesDef,
   'service-zones': serviceZonesDef,
   'category-requests': categoryRequestsDef,

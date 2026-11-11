@@ -5,6 +5,7 @@ export { CORRELATION_HEADER, EDGE_GEO_HEADERS, newCorrelationId, withCorrelation
 export * from './credit-client';
 export { creditSplit, MIN_CARD_MINOR } from './credit-split';
 export * from './custom-values';
+export * from './delivery-quotes-client';
 export * from './delivery-runs';
 export { ApiError, isApiError } from './errors';
 export * from './fact-rules';
@@ -20,6 +21,7 @@ export { countSmsSegments, MAX_SMS_SEGMENTS, missingPlaceholders, templatePlaceh
 export * from './preorders';
 export { bffProblemType, PROBLEM_TYPE_BASE } from './problem-types';
 export { creditKeys, creditQueries } from './query/credit';
+export { deliveryQuoteKeys, deliveryQuoteQueries } from './query/delivery-quotes';
 export { accountKeys, careersKeys, cartKeys, helpKeys, legalKeys, productKeys, searchKeys, siteKeys } from './query/keys';
 export { membershipKeys, membershipQueries } from './query/membership';
 export { accountQueries, careersQueries, cartQueries, helpQueries, legalQueries, productQueries, searchQueries, siteQueries } from './query/options';
@@ -40,6 +42,7 @@ export * from './schemas/cart';
 export * from './schemas/catalog';
 export * from './schemas/common';
 export * from './schemas/credit';
+export * from './schemas/delivery-quotes';
 export * from './schemas/exports';
 export * from './schemas/help';
 export * from './schemas/help-requests';

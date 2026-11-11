@@ -297,5 +297,7 @@
   "email.send": "M'envoyer un code",
   "email.sent": "Nous avons envoyé un code à {email}. Il expire dans 10 minutes.",
   "email.resend": "Envoyer un nouveau code",
-  "email.done": "Les codes par e-mail sont activés"
+  "email.done": "Les codes par e-mail sont activés",
+  "hub.deliveryQuotes": "Devis de livraison",
+  "hub.deliveryQuotesSub": "Demandez un prix de livraison et suivez vos demandes"
 }

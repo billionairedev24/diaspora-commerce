@@ -8,6 +8,7 @@ import {
   CreditCard,
   DownloadSimple,
   GlobeHemisphereWest,
+  Handshake,
   Headset,
   IdentificationCard,
   Key,
@@ -30,7 +31,7 @@ import { type MessageKey } from '@/i18n/t';
 /** Sidebar icon of each module (the Backoffice prototype's Phosphor icons). */
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
   dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
-  orgs: UsersThree, apps: IdentificationCard, deptRequests: Storefront, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
+  orgs: UsersThree, apps: IdentificationCard, deptRequests: Storefront, deliveryQuotes: Handshake, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
   audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, identity: Key, notifications: BellRinging, preorders: CalendarCheck,
   plans: CreditCard
 };
@@ -38,7 +39,7 @@ export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
 /** URL path of each module. */
 export const MODULE_PATHS: Record<StaffModuleKey, string> = {
   dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
-  orgs: '/organisations', apps: '/applications', deptRequests: '/department-requests', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
+  orgs: '/organisations', apps: '/applications', deptRequests: '/department-requests', deliveryQuotes: '/delivery-quotes', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
   audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', identity: '/identity', notifications: '/notifications', preorders: '/preorders',
   plans: '/plans'
 };
@@ -86,6 +87,10 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'connect-accounts', label: 'Stripe Connect' }
   ],
   apps: [{ resource: 'applications', label: 'Applications', statusFilter: true, defaultStatus: 'MY' }],
+  deliveryQuotes: [
+    { resource: 'delivery-quotes', label: 'Delivery quotes', statusFilter: true, defaultStatus: 'MY' },
+    { resource: 'delivery-quote-settings', label: 'SLA, escalation and amounts' }
+  ],
   rbac: [
     { resource: 'users', label: 'People' },
     { resource: 'roles', label: 'Roles' }

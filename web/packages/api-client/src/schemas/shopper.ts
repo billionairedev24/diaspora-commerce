@@ -325,7 +325,9 @@ export const DeliverySelectionSchema = z.object({
   packageId: z.string(),
   option: DeliveryMethodSchema,
   pickupPointId: z.string().optional(),
-  preferences: DeliveryPreferencesSchema.optional()
+  preferences: DeliveryPreferencesSchema.optional(),
+  /** An agreed delivery quote used as this package's shipping charge (never for pickup); one use, this cart and address. */
+  quoteId: z.string().max(64).optional()
 });
 export type DeliverySelection = z.infer<typeof DeliverySelectionSchema>;
 

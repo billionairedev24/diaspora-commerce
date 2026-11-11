@@ -290,5 +290,7 @@
   "email.send": "Email me a code",
   "email.sent": "We emailed a code to {email}. It expires in 10 minutes.",
   "email.resend": "Send a new code",
-  "email.done": "Email codes are on"
+  "email.done": "Email codes are on",
+  "hub.deliveryQuotes": "Delivery quotes",
+  "hub.deliveryQuotesSub": "Ask for a delivery price and follow your requests"
 }

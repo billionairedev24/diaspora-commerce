@@ -55,6 +55,16 @@ a provider starts serving you.
 Choose the provider, a time slot, and any options. You can reschedule or cancel from **Your orders** within the
 provider's cancellation policy, which is shown before you pay.
 
+## Delivery to an address that is too far
+
+If checkout says **Too far for standard delivery**, choose **Ask for a delivery quote**. Tell us how to reach you and, if you like,
+add a note. Our team prices the delivery (usually within one business day) and emails you; you can follow the request under
+**Your account > Delivery quotes**. The status reads Requested, Being quoted, Quote ready, Expired or Declined.
+
+When it is ready, use the link in the email (or **Use at checkout**): checkout shows the delivery charge we agreed. The quote is for
+the cart and address you asked about, can be used once, and ends after 48 hours. If you change your cart or address, ask again.
+You can always choose pickup instead.
+
 ## Something went wrong
 
 - **Not delivered / wrong item:** open the order and start a return or claim.

@@ -12,7 +12,7 @@ const nullableString = z.string().nullable();
 /* ── Shell ─────────────────────────────────────────────── */
 
 export const StaffModuleKeySchema = z.enum([
-  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'deptRequests', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
+  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'deptRequests', 'deliveryQuotes', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
   'audit', 'markets', 'siteCfg', 'dev', 'identity', 'notifications', 'preorders', 'plans'
 ]);
 export type StaffModuleKey = z.infer<typeof StaffModuleKeySchema>;
@@ -88,7 +88,7 @@ export const ResourceKeySchema = z.enum([
   'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'careers-jobs', 'cookie-definitions', 'privacy-requests', 'announcements', 'placements', 'home-layout', 'identity-providers', 'fee-schedules', 'tax-rates',
   'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons',
   'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'recoveries', 'credit-adjustments', 'gift-cards', 'credit-liabilities', 'money-settings', 'membership-tiers', 'memberships', 'membership-settings', 'membership-report', 'referrals', 'referral-settings', 'stripe-lookup', 'payment-settings', 'maintenance', 'tax-filings', 'tax-nexus',
-  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'session-policy', 'exchange-rates', 'application-review-settings', 'service-area-rules', 'service-zones'
+  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'session-policy', 'exchange-rates', 'application-review-settings', 'delivery-quotes', 'delivery-quote-settings', 'service-area-rules', 'service-zones'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
 

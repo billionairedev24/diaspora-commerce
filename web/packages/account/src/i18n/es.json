@@ -297,5 +297,7 @@
   "email.send": "Enviarme un código",
   "email.sent": "Enviamos un código a {email}. Caduca en 10 minutos.",
   "email.resend": "Enviar un código nuevo",
-  "email.done": "Los códigos por correo están activados"
+  "email.done": "Los códigos por correo están activados",
+  "hub.deliveryQuotes": "Cotizaciones de envío",
+  "hub.deliveryQuotesSub": "Pida un precio de envío y siga sus solicitudes"
 }
