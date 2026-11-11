@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.afrotransact.catalog.testsupport.RulesFixtures;
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.CategoryLevel;
@@ -69,7 +70,7 @@ class ProductWriterSizingTest {
         when(brands.resolve(any(), any(), any(), any(), any())).thenAnswer(i -> i.getArgument(3));
         writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
-                charts, mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(), new TaxGateEvaluator(readyResolver(), false), Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"),
+                charts, mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(), new TaxGateEvaluator(readyResolver(), false), RulesFixtures.permissiveService(), Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"),
                         ZoneOffset.UTC));
     }
 

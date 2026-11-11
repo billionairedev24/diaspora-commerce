@@ -10,13 +10,17 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.rules.CategoryRules;
+import com.afrotransact.catalog.domain.rules.ListingRuleChecker;
+import com.afrotransact.catalog.domain.rules.ListingSubmission;
+import com.afrotransact.catalog.domain.rules.RuleField;
 import com.afrotransact.catalog.domain.tax.SellerSkus;
 
 /** The catalog rules from the product builder design, applied server-side so no client can skip them. */
 public class DefaultProductDraftPolicy implements ProductDraftPolicy {
 
     @Override
-    public void validate(ProductDraft draft) {
+    public void validate(ProductDraft draft, CategoryRules rules) {
         Map<String, String> errors = new LinkedHashMap<>();
         ProductType type = draft.productType();
 
@@ -38,15 +42,32 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
 
         checkImages(draft.images(), errors);
-        checkVariants(draft, type, errors);
-        checkDetails(draft.details(), errors);
+        checkVariants(draft, type, rules, errors);
+        checkDetails(draft.details(), rules, errors);
+        if (rules != null) {
+            ListingRuleChecker.check(rules, submission(draft, type)).forEach(errors::putIfAbsent);
+        }
 
         if (!errors.isEmpty()) {
             throw new CatalogRuleViolation("The product has " + errors.size() + " problem(s)", errors);
         }
     }
 
-    private static void checkImages(List<ProductImage> images, Map<String, String> errors) {
+    /** The draft as the rule checks read it (shared with the bulk upload). */
+    static ListingSubmission submission(ProductDraft draft, ProductType type) {
+        long labels = draft.images().stream().filter(ProductImage::isLabel).count();
+        List<ListingSubmission.VariantFacts> variants = draft.variants().stream()
+                .map(v -> new ListingSubmission.VariantFacts(v.gtin(), v.gtinExempt(), v.packaging())).toList();
+        return new ListingSubmission(draft.attributes(), draft.details().description(), draft.images().size() - (int) labels,
+                (int) labels, draft.details().dangerousGoods(), draft.details().exemptions(), type.sizing().isPresent(),
+                draft.details().sizeChartId() != null, type.identifierRule(), variants);
+    }
+
+    private static void checkImages(List<ProductImage> all, Map<String, String> errors) {
+        List<ProductImage> images = all.stream().filter(i -> !i.isLabel()).toList();
+        if (all.stream().filter(ProductImage::isLabel).count() > 1) {
+            errors.put("labelPhoto", "Add one label photo");
+        }
         if (images.isEmpty()) {
             errors.put("images", "Add at least one image");
             return;
@@ -64,7 +85,7 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
     }
 
-    private static void checkDetails(ListingDetails d, Map<String, String> errors) {
+    private static void checkDetails(ListingDetails d, CategoryRules rules, Map<String, String> errors) {
         if (d.description() != null && d.description().length() > ListingDetails.MAX_DESCRIPTION) {
             errors.put("description", "At most " + ListingDetails.MAX_DESCRIPTION + " characters");
         }
@@ -73,19 +94,23 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         } else if (d.keywords().stream().anyMatch(k -> k.length() > ListingDetails.MAX_KEYWORD)) {
             errors.put("keywords", "Each keyword at most " + ListingDetails.MAX_KEYWORD + " characters");
         }
-        if (d.handlingDays() < 1 || d.handlingDays() > ListingDetails.MAX_HANDLING_DAYS) {
+        boolean asksHandling = rules == null || rules.shown(RuleField.HANDLING_DAYS);
+        if (asksHandling && (d.handlingDays() < 1 || d.handlingDays() > ListingDetails.MAX_HANDLING_DAYS)) {
             errors.put("handlingDays", "Between 1 and " + ListingDetails.MAX_HANDLING_DAYS + " days");
         }
-        if (d.packaging() == null) {
-            if (d.fulfilment() == FulfilmentMode.AFROTRANSACT) {
-                errors.put("packaging", "Package size and weight are required for Fulfilled by AfroTransact");
+        if (rules == null) {
+            if (d.packaging() == null) {
+                if (d.fulfilment() == FulfilmentMode.AFROTRANSACT) {
+                    errors.put("packaging", "Package size and weight are required for Fulfilled by AfroTransact");
+                }
+            } else if (d.packaging().problem() != null) {
+                errors.put("packaging", d.packaging().problem());
             }
-        } else if (d.packaging().problem() != null) {
-            errors.put("packaging", d.packaging().problem());
         }
     }
 
-    private static void checkVariants(ProductDraft draft, ProductType type, Map<String, String> errors) {
+    private static void checkVariants(ProductDraft draft, ProductType type, CategoryRules rules,
+                                      Map<String, String> errors) {
         VariationTheme theme = draft.variationTheme().isEmpty() ? null : type.theme(draft.variationTheme()).orElse(null);
         if (theme == null && !draft.variationTheme().isEmpty()) {
             errors.put("variationTheme", "Choose a variation type for this product");
@@ -125,7 +150,9 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
             } else if (!sku.isEmpty() && !skus.add(sku)) {
                 errors.put(p + "sellerSku", "SKU must be unique");
             }
-            checkIdentifier(v, type.identifierRule(), p, errors);
+            if (rules == null) {
+                checkIdentifier(v, type.identifierRule(), p, errors);
+            }
             if (v.priceMinor() <= 0) {
                 errors.put(p + "price", "Enter a price above zero");
             }

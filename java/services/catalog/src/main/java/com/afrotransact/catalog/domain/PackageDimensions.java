@@ -1,6 +1,9 @@
 package com.afrotransact.catalog.domain;
 
-/** Shipping package size (inches) and weight (pounds). Required for Fulfilled by AfroTransact. */
+/**
+ * Shipping package size (inches) and weight (pounds) of the box as shipped. Required for every physical variant, stored
+ * per variant; the listing-level value is the default for variants without their own.
+ */
 public record PackageDimensions(double lengthIn, double widthIn, double heightIn, double weightLb) {
 
     public static final double MAX_EDGE_IN = 108;

@@ -1,6 +1,7 @@
 package com.afrotransact.catalog.adapter.in.web;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import com.afrotransact.catalog.domain.FlagSource;
 import com.afrotransact.catalog.domain.FulfilmentMode;
 import com.afrotransact.catalog.domain.ItemCondition;
 import com.afrotransact.catalog.domain.ListingDetails;
+import com.afrotransact.catalog.domain.ListingDocument;
 import com.afrotransact.catalog.domain.ListingReasonCode;
 import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.Product;
@@ -133,18 +135,48 @@ final class ProductDtos {
                       @Schema(description = "How this seller sells the item, answering the category's behaviour "
                               + "questions (sold_heated, heated_by_seller, utensils_provided): fact id to answer. "
                               + "Part of \"Your listing\"; never a tax code.")
-                      Map<String, Object> sellerBehaviour) {
+                      Map<String, Object> sellerBehaviour,
+                      @Schema(description = "The dangerous goods answer (aerosol, flammable, battery, candle, cleaner). "
+                              + "Required where the category's rules ask the question, ignored elsewhere. true marks "
+                              + "the listing: fulfilment by AfroTransact and carrier-gated flows read it.")
+                      Boolean dangerousGoods,
+                      @Schema(description = "Documents uploaded on the form (permit, brand authorization, safety "
+                              + "certificate, insurance, invoice). Kept and marked PENDING_REVIEW for the approval "
+                              + "engine; they never block the listing here.")
+                      @Size(max = 20) List<@Valid DocumentDto> documents,
+                      @Schema(description = "Rule field id to the reason the seller cannot provide a field the rules "
+                              + "mark required_or_exemption (material, model_number, age_grade, shelf_life, "
+                              + "label_photo ...)")
+                      Map<String, @Size(max = 300) String> exemptions) {
 
         ListingDetails toDomain() {
             return new ListingDetails(description, condition, keywords, fulfilment,
                     packaging == null ? null : packaging.toDomain(), handlingDays == null ? 0 : handlingDays,
-                    shipFrom == null ? null : shipFrom.toDomain(), sizeChartId, fitNote, sellerBehaviour);
+                    shipFrom == null ? null : shipFrom.toDomain(), sizeChartId, fitNote, sellerBehaviour,
+                    dangerousGoods, documents == null ? null : documents.stream().map(DocumentDto::toDomain).toList(),
+                    exemptions);
         }
 
         static ListingDto of(ListingDetails d) {
             return new ListingDto(d.description(), d.condition(), d.keywords(), d.fulfilment(),
                     PackageDto.of(d.packaging()), d.handlingDays(), ShipFromDto.of(d.shipFrom()), d.sizeChartId(),
-                    d.fitNote(), d.sellerBehaviour());
+                    d.fitNote(), d.sellerBehaviour(), d.dangerousGoods(),
+                    d.documents().stream().map(DocumentDto::of).toList(), d.exemptions());
+        }
+    }
+
+    @Schema(name = "ListingDocument", description = "A document uploaded on the product form, reviewed by the approval engine")
+    record DocumentDto(@NotBlank @Size(max = 40) String kind, @NotBlank String url, @Size(max = 200) String fileName,
+                       @NotBlank String contentType, @PositiveOrZero long bytes, LocalDate expiresOn,
+                       @Schema(description = "PENDING_REVIEW until the approval engine decides; set by the server")
+                       String status) {
+
+        ListingDocument toDomain() {
+            return new ListingDocument(kind, url, fileName, contentType, bytes, expiresOn);
+        }
+
+        static DocumentDto of(ListingDocument d) {
+            return new DocumentDto(d.kind(), d.url(), d.fileName(), d.contentType(), d.bytes(), d.expiresOn(), d.status());
         }
     }
 
@@ -156,14 +188,18 @@ final class ProductDtos {
     record ImageDto(@NotBlank String url, @PositiveOrZero int width, @PositiveOrZero int height,
                     @PositiveOrZero long bytes, @NotBlank String contentType,
                     @Schema(description = "Optional alternative text (what the picture shows), stored with the image")
-                    @Size(max = 200) String alt) {
+                    @Size(max = 200) String alt,
+                    @Schema(description = "LABEL for the label photo (ingredients and nutrition panel, Supplement "
+                            + "Facts, Drug Facts); absent for a product picture")
+                    @Size(max = 20) String role) {
 
         ProductImage toDomain() {
-            return new ProductImage(url, width, height, bytes, contentType, alt == null || alt.isBlank() ? null : alt.trim());
+            return new ProductImage(url, width, height, bytes, contentType, alt == null || alt.isBlank() ? null : alt.trim(),
+                    role);
         }
 
         static ImageDto of(ProductImage i) {
-            return new ImageDto(i.url(), i.width(), i.height(), i.bytes(), i.contentType(), i.alt());
+            return new ImageDto(i.url(), i.width(), i.height(), i.bytes(), i.contentType(), i.alt(), i.role());
         }
     }
 
@@ -181,11 +217,15 @@ final class ProductDtos {
                           String atin,
                           @Schema(description = "Product facts of this variant by fact id (net_weight_oz, "
                                   + "servings_per_package, ...): the category's tax questions in plain words")
-                          Map<String, Object> taxFacts) {
+                          Map<String, Object> taxFacts,
+                          @Schema(description = "The package of this variant as shipped (inches, pounds). Required for "
+                                  + "every physical variant; when absent the listing's package is the default")
+                          @Valid PackageDto packaging) {
 
         VariantDraft toDomain() {
             return new VariantDraft(options, sellerSku, gtin, gtinExempt, priceMinor, quantity, compareAtMinor,
-                    images == null ? List.of() : images.stream().map(ImageDto::toDomain).toList(), atin, taxFacts);
+                    images == null ? List.of() : images.stream().map(ImageDto::toDomain).toList(), atin, taxFacts,
+                    packaging == null ? null : packaging.toDomain());
         }
     }
 
@@ -193,13 +233,14 @@ final class ProductDtos {
     record VariantResponse(UUID id, String atin, String sellerSku, String gtin, boolean gtinExempt,
                            Map<String, String> options, long priceMinor, String currency, int quantity,
                            Long compareAtMinor, List<ImageDto> images, boolean sellerSkuGenerated,
-                           Map<String, Object> taxFacts, String taxStatus, List<MissingTaxFact> missingTaxFacts) {
+                           Map<String, Object> taxFacts, String taxStatus, List<MissingTaxFact> missingTaxFacts,
+                           PackageDto packaging) {
 
         static VariantResponse of(Variant v) {
             return new VariantResponse(v.id(), v.atin().value(), v.sellerSku(), v.gtin(), v.gtinExempt(),
                     v.options(), v.priceMinor(), v.currency(), v.quantity(), v.compareAtMinor(),
                     v.images().stream().map(ImageDto::of).toList(), v.sellerSkuGenerated(), v.tax().facts(),
-                    v.tax().status().name(), v.tax().missing());
+                    v.tax().status().name(), v.tax().missing(), PackageDto.of(v.packaging()));
         }
     }
 

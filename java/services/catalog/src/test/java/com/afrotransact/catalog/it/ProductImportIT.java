@@ -28,6 +28,7 @@ import com.afrotransact.catalog.domain.imports.RowStatus;
 import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
 import com.afrotransact.catalog.domain.imports.StoredRow;
 import com.afrotransact.catalog.port.ImageImporter;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.test.PostgresTestContainer;
@@ -57,7 +58,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "at.catalog.imports.resume-interval=1h"})
 @ActiveProfiles("local")
 @Testcontainers
-@Import({TestActors.class, ProductImportIT.FakeMedia.class})
+@Import({TestActors.class, ProductImportIT.FakeMedia.class, PermissiveRulesConfiguration.class})
 class ProductImportIT {
 
     @Container

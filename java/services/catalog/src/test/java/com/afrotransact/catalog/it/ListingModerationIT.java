@@ -27,6 +27,7 @@ import com.afrotransact.catalog.domain.ProductFlag;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.VariantDraft;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
@@ -54,7 +55,7 @@ import tools.jackson.databind.json.JsonMapper;
     "spring.kafka.bootstrap-servers=localhost:1"})
 @ActiveProfiles("local")
 @Testcontainers
-@Import(ListingModerationIT.Actors.class)
+@Import({ListingModerationIT.Actors.class, PermissiveRulesConfiguration.class})
 class ListingModerationIT {
 
     @Container

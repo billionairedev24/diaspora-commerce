@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ShipFromRef;
 
@@ -26,6 +27,9 @@ import com.afrotransact.catalog.domain.ShipFromRef;
  * @param shipFrom     the seller's ship-from location; null = the seller's default
  * @param description  the shopper description (searched); null when none
  * @param keywords     the seller's search keywords (searched, as well as the title and description)
+ * @param dangerousGoods true when the seller answered yes to the dangerous goods question: fulfilment by AfroTransact
+ *                     and carrier-gated flows must treat the listing as restricted; false when answered no or not
+ *                     asked
  */
 public record ProductEventPayload(UUID productId, String atin, String ownerKind, String ownerOrgId, String status,
                                   String title, UUID categoryId, String productTypeCode,
@@ -33,11 +37,23 @@ public record ProductEventPayload(UUID productId, String atin, String ownerKind,
                                   String reasonCode, boolean preorderEligible, boolean shipsNow, String imageUrl,
                                   String brand, List<String> communities, String condition, String fulfilment,
                                   int handlingDays, ShipFromRef shipFrom, String description,
-                                  List<String> keywords) {
+                                  List<String> keywords, boolean dangerousGoods) {
 
-    /** Variant part of the payload; {@code compareAtMinor} is the offer's list price ("was" price), may be null. */
+    /**
+     * Variant part of the payload; {@code compareAtMinor} is the offer's list price ("was" price), may be null.
+     * {@code packaging} is the box of this variant as shipped (inches, pounds); null for items that ship nothing and
+     * for listings saved before packages were per variant and not yet edited.
+     */
     public record VariantPayload(String atin, String sellerSku, String gtin, long priceMinor, String currency,
-                                 int quantity, Long compareAtMinor) {
+                                 int quantity, Long compareAtMinor, PackagePayload packaging) {
+    }
+
+    /** Package size (inches) and weight (pounds). */
+    public record PackagePayload(double lengthIn, double widthIn, double heightIn, double weightLb) {
+
+        static PackagePayload of(PackageDimensions p) {
+            return p == null ? null : new PackagePayload(p.lengthIn(), p.widthIn(), p.heightIn(), p.weightLb());
+        }
     }
 
     static ProductEventPayload of(Product p, boolean sellerHidden) {
@@ -49,13 +65,15 @@ public record ProductEventPayload(UUID productId, String atin, String ownerKind,
                 p.status().name(), p.title(), p.categoryId(), p.productTypeCode(),
                 p.variants().stream()
                         .map(v -> new VariantPayload(v.atin().value(), v.sellerSku(), v.gtin(), v.priceMinor(),
-                                v.currency(), v.quantity(), v.compareAtMinor()))
+                                v.currency(), v.quantity(), v.compareAtMinor(),
+                                PackagePayload.of(v.packaging() != null ? v.packaging() : p.details().packaging())))
                         .toList(),
                 p.moderationNote(), sellerHidden, reasonCode, p.preorderEligible(), p.shipsNow(),
                 p.images() == null || p.images().isEmpty() ? null : p.images().getFirst().url(),
                 blankToNull(attribute(p.attributes(), "brand")), communities(p.attributes()),
                 p.details().condition().name(), p.details().fulfilment().name(), p.details().handlingDays(),
-                p.details().shipFrom(), p.details().description(), p.details().keywords());
+                p.details().shipFrom(), p.details().description(), p.details().keywords(),
+                Boolean.TRUE.equals(p.details().dangerousGoods()));
     }
 
     private static List<String> communities(Map<String, String> attributes) {

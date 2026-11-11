@@ -64,6 +64,6 @@ public record ImportContext(ImportMode mode, ProductType fixedType, Map<String, 
     /** The columns the uploaded file is read with. */
     public List<ImportColumn> columns() {
         List<String> paths = categories.stream().map(ImportCategory::path).toList();
-        return fixedType == null ? ImportColumns.generic(paths) : ImportColumns.forType(fixedType, paths);
+        return fixedType == null ? ImportColumns.generic(paths) : ImportColumns.forCategories(fixedType, categories);
     }
 }

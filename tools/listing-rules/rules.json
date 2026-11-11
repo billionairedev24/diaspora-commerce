@@ -1,5 +1,5 @@
 {
- "_comment": "Listing rules source of truth (owner-approved 2026-11). Kinds, field rules per kind, and category -> kind + approval level. Generated from the reviewed rule matrix.",
+ "_comment": "Listing rules source of truth (owner-approved 2026-11). Kinds, field rules per kind, and category -> kind + approval level. Generated from the reviewed rule matrix. Field ids are stable keys used by catalog, the product form and the bulk upload template. Entries with provisional=true are catalog categories outside the approved 73; consumers must not count them as approved. A category may carry overrides (field id to status) where one category differs from its kind, for example car seats are New only.",
  "kinds": [
   {
    "code": "PKG",
@@ -68,6 +68,7 @@
  ],
  "fields": [
   {
+   "id": "title",
    "group": "Identity",
    "name": "Title",
    "note": "Plain words; at least 10 characters.",
@@ -91,6 +92,7 @@
    }
   },
   {
+   "id": "brand",
    "group": "Identity",
    "name": "Brand",
    "note": "\"Unbranded\" or \"Handmade\" allowed with a reason. Gated brands need approval.",
@@ -114,6 +116,7 @@
    }
   },
   {
+   "id": "product_id",
    "group": "Identity",
    "name": "Product ID (barcode or ISBN)",
    "note": "Required, or an exemption with a reason (handmade, generic). Books need the ISBN.",
@@ -137,6 +140,7 @@
    }
   },
   {
+   "id": "description",
    "group": "Content",
    "name": "Description",
    "note": "Shopper text. Services describe what is done.",
@@ -160,6 +164,7 @@
    }
   },
   {
+   "id": "keywords",
    "group": "Content",
    "name": "Search keywords",
    "note": "Up to the existing limit.",
@@ -183,6 +188,7 @@
    }
   },
   {
+   "id": "images",
    "group": "Content",
    "name": "At least one image",
    "note": "Main image size rule is relaxed. First image is the main one.",
@@ -206,6 +212,7 @@
    }
   },
   {
+   "id": "label_photo",
    "group": "Content",
    "name": "Label photo",
    "note": "Ingredients and nutrition panel, Supplement Facts, Drug Facts, or ingredient list. Replaces typing ingredients for packaged food.",
@@ -229,6 +236,7 @@
    }
   },
   {
+   "id": "condition",
    "group": "Offer",
    "name": "Condition",
    "note": "Fixed to New and hidden where used is not allowed (food, beauty, health, baby feeding, pet food). Choice of New, Renewed or Used where allowed.",
@@ -252,6 +260,7 @@
    }
   },
   {
+   "id": "price",
    "group": "Offer",
    "name": "Price",
    "note": "",
@@ -275,6 +284,7 @@
    }
   },
   {
+   "id": "quantity",
    "group": "Offer",
    "name": "Quantity",
    "note": "Digital, gift cards and services have no stock count. Services use the calendar.",
@@ -298,6 +308,7 @@
    }
   },
   {
+   "id": "handling_days",
    "group": "Offer",
    "name": "Handling time (days)",
    "note": "Perishable food: 1 to 2 days.",
@@ -321,6 +332,7 @@
    }
   },
   {
+   "id": "ship_from",
    "group": "Offer",
    "name": "Ship-from location",
    "note": "Services use their base location and service area.",
@@ -344,6 +356,7 @@
    }
   },
   {
+   "id": "package_size",
    "group": "Shipping and compliance basics",
    "name": "Package length, width, height",
    "note": "Of the box as shipped, per variant. Maximums stay at 108 in.",
@@ -367,6 +380,7 @@
    }
   },
   {
+   "id": "package_weight",
    "group": "Shipping and compliance basics",
    "name": "Package weight",
    "note": "Of the box as shipped, per variant. Maximum stays at 150 lb.",
@@ -390,6 +404,7 @@
    }
   },
   {
+   "id": "country_of_origin",
    "group": "Shipping and compliance basics",
    "name": "Country of origin",
    "note": "Needed for customs labels and shopper trust.",
@@ -413,6 +428,7 @@
    }
   },
   {
+   "id": "dangerous_goods",
    "group": "Shipping and compliance basics",
    "name": "Dangerous goods question",
    "note": "Aerosols, flammables, batteries, candles, cleaners. Controls which carriers and fulfilment can handle it.",
@@ -436,6 +452,7 @@
    }
   },
   {
+   "id": "net_weight",
    "group": "Product facts",
    "name": "Net weight or volume",
    "note": "What is inside, not the box.",
@@ -459,6 +476,7 @@
    }
   },
   {
+   "id": "servings",
    "group": "Product facts",
    "name": "Servings or unit count",
    "note": "Also feeds the tax questions for snacks and drink mixes.",
@@ -482,6 +500,7 @@
    }
   },
   {
+   "id": "shelf_life",
    "group": "Product facts",
    "name": "Shelf life or expiry",
    "note": "Days of shelf life, or the expiry date for supplements and medicines.",
@@ -505,6 +524,7 @@
    }
   },
   {
+   "id": "storage",
    "group": "Product facts",
    "name": "Storage",
    "note": "Ambient, chilled or frozen.",
@@ -528,6 +548,7 @@
    }
   },
   {
+   "id": "ingredients",
    "group": "Product facts",
    "name": "Ingredients (typed)",
    "note": "Not asked for packaged groceries, the label photo covers it.",
@@ -551,6 +572,7 @@
    }
   },
   {
+   "id": "allergens",
    "group": "Product facts",
    "name": "Allergens (\"contains\")",
    "note": "Optional tick list for packaged food. Required for food service.",
@@ -574,6 +596,7 @@
    }
   },
   {
+   "id": "material",
    "group": "Product facts",
    "name": "Material",
    "note": "Metal and stones for jewelry; fabric for clothing.",
@@ -597,6 +620,7 @@
    }
   },
   {
+   "id": "model_number",
    "group": "Product facts",
    "name": "Model number",
    "note": "Required for electronics and appliances.",
@@ -620,6 +644,7 @@
    }
   },
   {
+   "id": "age_grade",
    "group": "Product facts",
    "name": "Age grade and safety standard",
    "note": "Toys, car seats, children's items, bottles.",
@@ -643,6 +668,7 @@
    }
   },
   {
+   "id": "sizes",
    "group": "Product facts",
    "name": "Sizes and size chart",
    "note": "The seller writes their own sizes and chart.",
@@ -666,6 +692,7 @@
    }
   },
   {
+   "id": "permit",
    "group": "Documents (reviewed at approval)",
    "name": "Permit or licence",
    "note": "Food permit for food service; FDA listing or NDC for medicines and devices; trade licence for services.",
@@ -689,6 +716,7 @@
    }
   },
   {
+   "id": "brand_authorization",
    "group": "Documents (reviewed at approval)",
    "name": "Brand authorization",
    "note": "Only when the brand is gated.",
@@ -712,6 +740,7 @@
    }
   },
   {
+   "id": "safety_certificate",
    "group": "Documents (reviewed at approval)",
    "name": "Safety or lab certificate",
    "note": "Child safety (CPSIA, ASTM F963, FMVSS 213), electrical marks, formula notification.",
@@ -735,6 +764,7 @@
    }
   },
   {
+   "id": "liability_insurance",
    "group": "Documents (reviewed at approval)",
    "name": "Liability insurance",
    "note": "Naming AfroTransact as additional insured, with an expiry date.",
@@ -758,6 +788,7 @@
    }
   },
   {
+   "id": "authenticity_invoice",
    "group": "Documents (reviewed at approval)",
    "name": "Authenticity or purchase invoice",
    "note": "Dated within 180 days for gated brands, fine jewelry and fragrance.",
@@ -1239,7 +1270,10 @@
    "taxStatus": "ACTIVE",
    "kind": "KID",
    "approval": "approval",
-   "note": "FMVSS 213 certificate and insurance. New only."
+   "note": "FMVSS 213 certificate and insurance. New only.",
+   "overrides": {
+    "condition": "hidden"
+   }
   },
   {
    "code": "diapers-wipes",
@@ -1438,6 +1472,16 @@
    "kind": "HOM",
    "approval": "open",
    "note": ""
+  },
+  {
+   "code": "fabrics-textiles",
+   "department": "Fashion & Accessories",
+   "name": "Fabrics & textiles",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "FSH",
+   "approval": "open",
+   "provisional": true,
+   "note": "Provisional catalog category, not in the approved matrix: treated as Clothing, shoes, bags (FSH) and open until the owner decides."
   }
  ]
 }

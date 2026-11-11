@@ -18,6 +18,7 @@ import java.util.UUID;
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ListingOwnerKind;
+import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
@@ -122,7 +123,9 @@ class JdbcProductRepository implements ProductRepository {
                                images = cast(:images as jsonb), seller_sku_generated = :skuGenerated,
                                tax_facts = cast(:taxFacts as jsonb), tax_status = :taxStatus,
                                missing_tax_facts = cast(:missingTaxFacts as jsonb),
-                               tax_decision = cast(:taxDecision as jsonb)
+                               tax_decision = cast(:taxDecision as jsonb),
+                               package_length_in = :pkgLength, package_width_in = :pkgWidth,
+                               package_height_in = :pkgHeight, package_weight_lb = :pkgWeight
                         where id = :id
                         """)
                         .params(variantParams(p, v, position++))
@@ -401,11 +404,12 @@ class JdbcProductRepository implements ProductRepository {
                 insert into product_variant (id, product_id, atin, owner_org, seller_sku, gtin, gtin_exempt,
                                              options, price_minor, currency, quantity, position, compare_at_minor,
                                              images, seller_sku_generated, tax_facts, tax_status, missing_tax_facts,
-                                             tax_decision)
+                                             tax_decision, package_length_in, package_width_in, package_height_in,
+                                             package_weight_lb)
                 values (:id, :productId, :atin, :org, :sku, :gtin, :exempt, cast(:options as jsonb),
                         :price, :currency, :quantity, :position, :compareAt, cast(:images as jsonb), :skuGenerated,
                         cast(:taxFacts as jsonb), :taxStatus, cast(:missingTaxFacts as jsonb),
-                        cast(:taxDecision as jsonb))
+                        cast(:taxDecision as jsonb), :pkgLength, :pkgWidth, :pkgHeight, :pkgWeight)
                 """)
                 .params(variantParams(p, v, position))
                 .update();
@@ -432,6 +436,11 @@ class JdbcProductRepository implements ProductRepository {
         m.put("taxStatus", v.tax().status().name());
         m.put("missingTaxFacts", json.write(v.tax().missing()));
         m.put("taxDecision", v.tax().decision() == null ? null : json.write(v.tax().decision()));
+        PackageDimensions pkg = v.packaging();
+        m.put("pkgLength", pkg == null ? null : pkg.lengthIn());
+        m.put("pkgWidth", pkg == null ? null : pkg.widthIn());
+        m.put("pkgHeight", pkg == null ? null : pkg.heightIn());
+        m.put("pkgWeight", pkg == null ? null : pkg.weightLb());
         return m;
     }
 
@@ -444,7 +453,8 @@ class JdbcProductRepository implements ProductRepository {
                 select id, product_id, atin, seller_sku, gtin, gtin_exempt, options::text as options, price_minor,
                        currency, quantity, compare_at_minor, images::text as images, seller_sku_generated,
                        tax_facts::text as tax_facts, tax_status, missing_tax_facts::text as missing_tax_facts,
-                       tax_decision::text as tax_decision
+                       tax_decision::text as tax_decision, package_length_in, package_width_in, package_height_in,
+                       package_weight_lb
                 from product_variant where product_id in (:ids) order by position
                 """)
                 .param("ids", products.stream().map(Product::id).toList())
@@ -455,7 +465,8 @@ class JdbcProductRepository implements ProductRepository {
                             rs.getString("currency"), rs.getInt("quantity"),
                             rs.getObject("compare_at_minor", Long.class), json.images(rs.getString("images")),
                             rs.getBoolean("seller_sku_generated"), json.variantTax(rs.getString("tax_facts"),
-                            rs.getString("tax_status"), rs.getString("missing_tax_facts"), rs.getString("tax_decision")));
+                            rs.getString("tax_status"), rs.getString("missing_tax_facts"), rs.getString("tax_decision")),
+                            packageOf(rs));
                     byProduct.computeIfAbsent(rs.getObject("product_id", UUID.class), k -> new ArrayList<>()).add(v);
                     return v;
                 })
@@ -463,6 +474,16 @@ class JdbcProductRepository implements ProductRepository {
         return products.stream()
                 .map(p -> p.withVariants(byProduct.getOrDefault(p.id(), List.of())))
                 .toList();
+    }
+
+    /** The variant's own package; null when none is stored. */
+    private static PackageDimensions packageOf(ResultSet rs) throws SQLException {
+        Double length = rs.getObject("package_length_in", Double.class);
+        if (length == null) {
+            return null;
+        }
+        return new PackageDimensions(length, rs.getDouble("package_width_in"), rs.getDouble("package_height_in"),
+                rs.getDouble("package_weight_lb"));
     }
 
     private Product mapProduct(ResultSet rs, int rowNum) throws SQLException {

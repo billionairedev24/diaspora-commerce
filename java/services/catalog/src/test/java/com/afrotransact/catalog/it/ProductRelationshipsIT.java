@@ -26,6 +26,7 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.VariantDraft;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
@@ -58,7 +59,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false", "at.consumers.enabled=false", "spring.kafka.bootstrap-servers=localhost:1"})
 @ActiveProfiles("local")
-@Import(TestActors.class)
+@Import({TestActors.class, PermissiveRulesConfiguration.class})
 class ProductRelationshipsIT {
 
     /** LAGOS sells in the US, MAMATEE in Great Britain (see the seeded tuples). */
