@@ -143,6 +143,67 @@ describe('Tax review', () => {
     expect(within(sheet).queryByRole('button', { name: 'Approve…' })).not.toBeInTheDocument();
   });
 
+  it('has an Audit sample tab of live items the system approved, by name and with what to do', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<TaxReviewPanel />);
+    await user.click(await screen.findByRole('button', { name: 'Audit sample' }));
+    const table = await screen.findByRole('table', { name: 'Tax audit sample' });
+    const row = (await within(table).findByText('Shea butter body cream, 8 oz')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Accra Crafts Collective')).toBeInTheDocument();
+    expect(within(row).getByText('Skincare & cosmetics')).toBeInTheDocument();
+    expect(within(row).getByText('Automatic approval (risk-based rule)')).toBeInTheDocument();
+    expect(within(row).getByText(/confirm it or move it to the right category/)).toBeInTheDocument();
+    expect(table).not.toHaveTextContent(/org-|AT2000|auto$/);
+    // The audit item is live, so it is not in the queue.
+    await user.click(screen.getByRole('button', { name: 'Waiting for review' }));
+    const queue = await screen.findByRole('table', { name: 'Tax review queue' });
+    await within(queue).findByText('Roasted cashews, 6 oz bag');
+    expect(within(queue).queryByText('Shea butter body cream, 8 oz')).not.toBeInTheDocument();
+  });
+
+  it('confirms an audit item with a reason and takes it out of the sample', async () => {
+    const user = userEvent.setup();
+    nav.set('/fees?tab=tax-review&review.view=audit&variant=AT20000109');
+    await renderScreen(<TaxReviewPanel />);
+    const sheet = await screen.findByRole('dialog', { name: 'Shea butter body cream, 8 oz' });
+    expect(await within(sheet).findByText('Why it is in the audit sample')).toBeInTheDocument();
+    expect(within(sheet).queryByRole('button', { name: 'Approve…' })).not.toBeInTheDocument();
+    expect(within(sheet).getByText(/Put in the audit sample/)).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: 'Confirm…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm the tax for Shea butter body cream, 8 oz?' });
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm' });
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Reason'), 'Label and category checked');
+    await user.click(confirm);
+    expect(await screen.findByText('Shea butter body cream, 8 oz is confirmed and leaves the audit sample.')).toBeInTheDocument();
+    expect(await within(sheet).findByText(/Audit sample confirmed/)).toBeInTheDocument();
+    expect(within(sheet).queryByRole('button', { name: 'Confirm…' })).not.toBeInTheDocument();
+  });
+
+  it('moves an audit item to another category, which takes it out of the sample and back into review', async () => {
+    const user = userEvent.setup();
+    nav.set('/fees?tab=tax-review&review.view=audit&variant=AT20000109');
+    await renderScreen(<TaxReviewPanel />);
+    const sheet = await screen.findByRole('dialog', { name: 'Shea butter body cream, 8 oz' });
+    await user.click(await within(sheet).findByRole('button', { name: 'Move to another category…' }));
+    const dialog = await screen.findByRole('dialog', { name: /Move Shea butter body cream/ });
+    expect(within(dialog).getByText(/stops being live until it is approved again/)).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Reason'), 'This is a medicated balm');
+    await user.selectOptions(await within(dialog).findByLabelText('New category'), 'medicated-skincare');
+    await user.click(within(dialog).getByRole('button', { name: 'Move to category' }));
+    expect(await screen.findByText(/moved to another category and is back in review/)).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+  });
+
+  it('cannot confirm an audit item without tax:classify-admin', async () => {
+    asRoles('platform.auditor');
+    nav.set('/fees?tab=tax-review&review.view=audit&variant=AT20000109');
+    await renderScreen(<TaxReviewPanel />);
+    const sheet = await screen.findByRole('dialog', { name: 'Shea butter body cream, 8 oz' });
+    expect(await within(sheet).findByText(/Deciding needs the tax:classify-admin permission/)).toBeInTheDocument();
+    expect(within(sheet).queryByRole('button', { name: 'Confirm…' })).not.toBeInTheDocument();
+  });
+
   it('shows an empty queue as a sentence, and an unavailable service with a retry', async () => {
     const user = userEvent.setup();
     let mode: 'empty' | 'down' | 'ok' = 'empty';

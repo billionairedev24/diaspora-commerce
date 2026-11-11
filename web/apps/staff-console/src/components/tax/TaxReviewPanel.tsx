@@ -1,6 +1,6 @@
 'use client';
 
-import { staffTaxQueries, type TaxReviewRow } from '@afrotransact/api-client';
+import { staffTaxQueries, TAX_AUDIT_SAMPLE, type TaxReviewRow } from '@afrotransact/api-client';
 import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { ChipGroup, Select } from '@afrotransact/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -15,7 +15,7 @@ import { shortDate } from '@/lib/format';
 import { RecordPill } from './shared';
 import { TaxReviewSheet } from './TaxReviewSheet';
 
-type View = 'queue' | 'decisions';
+type View = 'queue' | 'audit' | 'decisions';
 const DECISION_STATUSES = [
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Sent back to the seller' },
@@ -31,9 +31,10 @@ export function TaxReviewPanel() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const view: View = params.get('review.view') === 'decisions' ? 'decisions' : 'queue';
+  const view: View = params.get('review.view') === 'decisions' ? 'decisions' : params.get('review.view') === 'audit' ? 'audit' : 'queue';
   const decided = view === 'decisions';
-  const status = decided ? (params.get('review.status') ?? 'APPROVED') : 'PENDING_REVIEW';
+  const audit = view === 'audit';
+  const status = decided ? (params.get('review.status') ?? 'APPROVED') : audit ? TAX_AUDIT_SAMPLE : 'PENDING_REVIEW';
   const openAtin = params.get('variant');
   const action = params.get('do');
   const state = useTableState({ searchParams: params, prefix: `review-${view}` });
@@ -66,6 +67,13 @@ export function TaxReviewPanel() {
             { id: 'reviewedAt', header: 'When', size: 120, enableSorting: false, accessorFn: (r) => r.reviewedAt, cell: ({ row }) => (row.original.reviewedAt ? shortDate(row.original.reviewedAt) : '—'), meta: { label: 'When', kind: 'text' } },
             { id: 'ruleVersion', header: 'Rule version', size: 190, enableSorting: false, accessorFn: (r) => r.ruleVersion, cell: ({ row }) => <span className="font-mono text-xs">{row.original.ruleVersion}</span>, meta: { label: 'Rule version', kind: 'text' } }
           ] satisfies ColumnDef<TaxReviewRow>[])
+        : audit
+          ? ([
+              { id: 'proposed', header: 'Tax in force', size: 190, enableSorting: false, accessorFn: (r) => r.proposed.outcomeLabel || r.proposed.statusLabel, meta: { label: 'Tax in force', kind: 'text' } },
+              { id: 'reviewedByName', header: 'Approved by', size: 230, enableSorting: false, accessorFn: (r) => r.reviewedByName, cell: ({ row }) => row.original.reviewedByName || '—', meta: { label: 'Approved by', kind: 'text' } },
+              { id: 'reviewedAt', header: 'Approved', size: 120, enableSorting: false, accessorFn: (r) => r.reviewedAt, cell: ({ row }) => (row.original.reviewedAt ? shortDate(row.original.reviewedAt) : '—'), meta: { label: 'Approved', kind: 'text' } },
+              { id: 'why', header: 'What to do', size: 330, enableSorting: false, accessorFn: (r) => r.why, meta: { label: 'What to do', kind: 'text' } }
+            ] satisfies ColumnDef<TaxReviewRow>[])
         : ([
             { id: 'proposed', header: 'Proposed tax', size: 190, enableSorting: false, accessorFn: (r) => r.proposed.outcomeLabel || r.proposed.statusLabel, meta: { label: 'Proposed tax', kind: 'text' } },
             { id: 'why', header: 'Why it needs review', size: 330, enableSorting: false, accessorFn: (r) => r.why, meta: { label: 'Why it needs review', kind: 'text' } },
@@ -76,8 +84,11 @@ export function TaxReviewPanel() {
         name: (r) => r.title,
         items: (r) => {
           const decidable = data?.canDecide && (r.status === 'PENDING_REVIEW' || r.status === 'STALE');
+          const checkable = data?.canDecide && r.auditSample;
           return [
             { label: 'Open', onSelect: () => open(r.atin) },
+            checkable ? { label: 'Confirm…', onSelect: () => open(r.atin, 'confirm') } : null,
+            checkable ? { label: 'Move to another category…', onSelect: () => open(r.atin, 'reclassify') } : null,
             decidable ? { label: 'Approve…', onSelect: () => open(r.atin, 'approve') } : null,
             decidable ? { label: 'Move to another category…', onSelect: () => open(r.atin, 'reclassify') } : null,
             decidable ? { label: 'Ask the seller for more information…', onSelect: () => open(r.atin, 'info') } : null
@@ -86,13 +97,15 @@ export function TaxReviewPanel() {
       })
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open only reads the current URL when a menu entry is chosen
-    [decided, data?.canDecide]
+    [decided, audit, data?.canDecide]
   );
 
   return (
     <div className="flex flex-col gap-3">
       <p className="m-0 max-w-[80ch] text-sm text-muted">
-        {decided
+        {audit
+          ? 'Items the system approved under the risk-based rule. They are live. Check the category and the answers, then confirm each one, or move it to the right category, which closes it until it is reviewed again.'
+          : decided
           ? 'Every decision on a product’s tax: who made it, when, and under which rule version. A decision is used at checkout until the product changes.'
           : 'Products whose tax waits for a person. The seller supplied the facts; you check the category, the answers and the proof, then approve, move it to another category, or ask the seller for more. A product goes live only after it is approved.'}
       </p>
@@ -101,6 +114,7 @@ export function TaxReviewPanel() {
           label="Show"
           options={[
             { value: 'queue', label: 'Waiting for review' },
+            { value: 'audit', label: 'Audit sample' },
             { value: 'decisions', label: 'Decisions' }
           ]}
           value={view}
@@ -118,7 +132,7 @@ export function TaxReviewPanel() {
       </div>
       <DataTable<TaxReviewRow>
         id={`staff.tax.review.${view}`}
-        label={decided ? 'Tax decisions' : 'Tax review queue'}
+        label={decided ? 'Tax decisions' : audit ? 'Tax audit sample' : 'Tax review queue'}
         columns={columns}
         data={data?.items ?? []}
         getRowId={(r) => r.atin}
@@ -133,7 +147,7 @@ export function TaxReviewPanel() {
         enableSelection={false}
         onRowClick={(r) => open(r.atin)}
         activeRowId={openAtin}
-        empty={decided ? 'No decisions of this kind yet.' : 'Nothing is waiting for tax review.'}
+        empty={decided ? 'No decisions of this kind yet.' : audit ? 'No items are in the audit sample.' : 'Nothing is waiting for tax review.'}
       />
       <TaxReviewSheet atin={openAtin} action={action} onClose={() => go((p) => (p.delete('variant'), p.delete('do')))} onAction={(a) => go((p) => (a ? p.set('do', a) : p.delete('do')))} />
     </div>

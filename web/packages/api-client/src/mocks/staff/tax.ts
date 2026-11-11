@@ -16,7 +16,9 @@ import {
   type TaxReview,
   type TaxReviewPage,
   type TaxReviewRow,
-  type TaxShadow
+  type TaxReviewSettings,
+  type TaxShadow,
+  TAX_AUDIT_SAMPLE
 } from '../../staff-tax';
 import fixture from './fixtures/category-tax-map.json';
 import { allows } from './model';
@@ -101,6 +103,8 @@ interface MockVariant {
   reviewedByName: string;
   reviewedAt: string;
   ordersAffected?: number;
+  /** Approved by the system under the risk-based rule and waiting in the Audit sample. */
+  auditSample?: boolean;
   audit: { at: string; actorName: string; action: string; reason: string }[];
 }
 interface MockCode {
@@ -117,9 +121,14 @@ export interface MockTaxState {
   codes: Record<'STRIPE' | 'AVALARA', Record<string, MockCode>>;
   method: { method: 'RULES' | 'STRIPE_TAX' | 'AVALARA'; shadowProvider: '' | 'STRIPE' | 'AVALARA'; stripeAvailable: boolean; avalaraAvailable: boolean; changedByName: string; changedAt: string };
   history: { at: string; changedByName: string; fromLabel: string; toLabel: string; reason: string }[];
+  /** How tax review works (docs/engineering/listing-rules.md D7): ALL until staff change it. */
+  review: { mode: 'ALL' | 'RISK_BASED'; alwaysReview: string[]; auditPercent: number; changedByName: string; changedAt: string; history: TaxReviewSettings['history'] };
   /** When false the mock answers request-information like a tax-returns that has no such route yet (503). */
   requestInformation: boolean;
 }
+
+const DEFAULT_ALWAYS_REVIEW = ['baby-food-formula', 'dietary-supplements', 'gift-cards', 'medical-devices', 'medicated-skincare', 'otc-medicines'];
+const AUTO_APPROVAL = 'Automatic approval (risk-based rule)';
 
 const ago = (days: number, hours = 0) => new Date(Date.now() - days * 86_400_000 - hours * 3_600_000).toISOString();
 const rows = (c: Category) => c.decisionTable;
@@ -233,6 +242,23 @@ function seedVariants(): MockVariant[] {
       ]
     }),
     v({
+      atin: 'AT20000109',
+      title: 'Shea butter body cream, 8 oz',
+      sellers: ['Accra Crafts Collective'],
+      categoryCode: 'skincare-cosmetics',
+      status: 'APPROVED',
+      auditSample: true,
+      rowId: rows(categoryOf('skincare-cosmetics') ?? DATA.categories[0]!)[0]?.id ?? '',
+      classifiedByName: AUTO_APPROVAL,
+      reviewedByName: AUTO_APPROVAL,
+      reviewedAt: ago(1, 0),
+      audit: [
+        { at: ago(1, 1), actorName: 'Accra Crafts Collective', action: 'SUBMITTED', reason: '' },
+        { at: ago(1, 0), actorName: AUTO_APPROVAL, action: 'APPROVED', reason: 'Risk-based review: the category Skincare & cosmetics is ACTIVE, the rules resolved cleanly (TAXABLE), no required evidence is missing and the category is not on the always-review list.' },
+        { at: ago(1, 0), actorName: AUTO_APPROVAL, action: 'AUDIT_SAMPLED', reason: 'Placed in the audit sample (5% of auto-approved items, picked by a fixed hash of the variant ATIN). It stays live until a reviewer confirms or reclassifies it.' }
+      ]
+    }),
+    v({
       atin: 'AT20000108',
       title: 'Ankara print tote bag',
       sellers: ['Accra Crafts Collective'],
@@ -262,6 +288,7 @@ export function seedTax(): MockTaxState {
     variants: seedVariants(),
     codes,
     method: { method: 'RULES', shadowProvider: 'STRIPE', stripeAvailable: true, avalaraAvailable: false, changedByName: 'Ada Okafor', changedAt: ago(3) },
+    review: { mode: 'ALL', alwaysReview: [...DEFAULT_ALWAYS_REVIEW], auditPercent: 5, changedByName: '', changedAt: '', history: [] },
     history: [
       { at: ago(3), changedByName: 'Ada Okafor', fromLabel: 'Stripe Tax', toLabel: 'Our own rules', reason: 'Back to our own rules while the provider codes are mapped.' },
       { at: ago(20), changedByName: 'Platform Admin', fromLabel: 'Our own rules', toLabel: 'Stripe Tax', reason: 'Trying Stripe Tax in the test environment.' }
@@ -393,6 +420,7 @@ const proposedOf = (v: MockVariant) => {
 };
 
 function whyOf(v: MockVariant): string {
+  if (v.auditSample && v.status === 'APPROVED') return 'The system approved this under the risk-based rule and it is live. Check the category and the answers, then confirm it or move it to the right category.';
   switch (v.status) {
     case 'STALE':
       return 'The product’s facts or category changed after it was approved, so the old decision no longer holds.';
@@ -436,7 +464,9 @@ const reviewRow = (v: MockVariant): TaxReviewRow => ({
   classifiedByName: v.classifiedByName,
   reviewedAt: v.reviewedAt,
   reviewedByName: v.reviewedByName,
-  ruleVersion: DATA.ruleVersion
+  ruleVersion: DATA.ruleVersion,
+  auditSample: !!v.auditSample && v.status === 'APPROVED',
+  autoApproved: v.status === 'APPROVED' && v.reviewedByName === AUTO_APPROVAL
 });
 
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
@@ -468,6 +498,7 @@ function reviewView(state: MockTaxState, v: MockVariant, can: boolean): TaxRevie
     audit: [...v.audit].reverse().map((a) => ({ at: a.at, actorName: a.actorName, action: a.action, actionLabel: AUDIT_ACTION[a.action] ?? humanizeCode(a.action), reason: a.reason, ruleVersion: DATA.ruleVersion })),
     canDecide: can,
     canApprove: can && (v.status === 'PENDING_REVIEW' || v.status === 'STALE'),
+    canConfirm: can && v.status === 'APPROVED' && !!v.auditSample,
     approve: {
       staffFacts: (c?.facts ?? []).flatMap((ref) => {
         const def = FACT_DEFS.get(ref.fact);
@@ -686,6 +717,53 @@ const ReclassifyBody = z.object({ categoryCode: z.string().min(1, 'Choose the ca
 const InfoBody = z.object({ message: Reason('message') });
 const CodeBody = z.object({ provider: z.enum(['STRIPE', 'AVALARA']), providerCode: z.string().nullish(), verified: z.boolean().default(false), reason: Reason('reason') });
 const ImportBody = z.object({ provider: z.enum(['STRIPE', 'AVALARA']), csv: z.string().min(1, 'Choose a CSV file.'), dryRun: z.boolean().optional(), reason: z.string().optional() });
+const ReviewSettingsBody = z.object({
+  mode: z.enum(['ALL', 'RISK_BASED']),
+  alwaysReview: z.array(z.string()).optional(),
+  auditPercent: z.number().int().min(0, 'Use a whole number from 0 to 100.').max(100, 'Use a whole number from 0 to 100.').optional(),
+  reason: Reason('reason')
+});
+
+const REVIEW_MODE_TEXT: Record<'ALL' | 'RISK_BASED', { label: string; explain: string }> = {
+  ALL: { label: 'Review every item', explain: 'Every product variant waits for a tax reviewer before it can go live. This is the default and how tax review works today.' },
+  RISK_BASED: {
+    label: 'Review by risk',
+    explain:
+      'The system approves an item by itself only when its category is active, the tax rules give a clear answer, no required proof is missing and the category is not on the always-review list. Everything else waits for a tax reviewer. A share of the approved items is also put in the Audit sample to be checked by a person.'
+  }
+};
+const REVIEW_WARNING =
+  'Only switch to Review by risk after the Texas tax professional has agreed. It lets the system approve items without a person looking at them, and the tax rules are still a draft. Items in a category that needs sign-off, needs a specific code, waits on a decision or is a blocked bundle, items in the always-review list, and anything the rules can’t decide still wait for a tax reviewer. Checkout still blocks any item that has no clear stored tax decision.';
+
+function reviewSummary(mode: 'ALL' | 'RISK_BASED', always: string[], percent: number): string {
+  if (mode === 'ALL') return REVIEW_MODE_TEXT.ALL.label;
+  const names = always.map((c) => categoryOf(c)?.name ?? humanizeCode(c)).sort();
+  return `${REVIEW_MODE_TEXT.RISK_BASED.label}, ${percent}% audit sample${names.length ? `, always review: ${names.join(', ')}` : ', no always-review categories'}`;
+}
+
+function reviewSettingsView(state: MockTaxState, can: boolean): TaxReviewSettings {
+  const r = state.review;
+  return {
+    mode: r.mode,
+    modeLabel: REVIEW_MODE_TEXT[r.mode].label,
+    modeExplain: REVIEW_MODE_TEXT[r.mode].explain,
+    options: (['ALL', 'RISK_BASED'] as const).map((m) => ({ mode: m, label: REVIEW_MODE_TEXT[m].label, explain: REVIEW_MODE_TEXT[m].explain, current: m === r.mode })),
+    categories: DATA.categories.map((c) => {
+      const status = state.profiles[c.code]?.status ?? c.status;
+      return { code: c.code, name: c.name, departmentName: DEPARTMENT.get(c.department) ?? '', alwaysReview: r.alwaysReview.includes(c.code), gated: status !== 'ACTIVE', gateLabel: GATES[status]?.label ?? '' };
+    }),
+    alwaysReviewNames: DATA.categories.filter((c) => r.alwaysReview.includes(c.code)).map((c) => c.name).sort(),
+    alwaysReviewStatuses: ['NEEDS_APPROVAL', 'REFINE_CODE', 'CONFLICT_OPEN', 'BLOCKED_BUNDLE'].map((s) => ({ status: s, label: GATES[s]?.label ?? s })),
+    auditPercent: r.auditPercent,
+    auditExplain: `About ${r.auditPercent} in every 100 items the system approves are also put in the Audit sample. They stay live. A reviewer confirms each one or moves it to the right category, which closes it until it is reviewed again.`,
+    history: r.history,
+    changedByName: r.changedByName,
+    changedAt: r.changedAt,
+    canChange: can,
+    warning: REVIEW_WARNING
+  };
+}
+
 const MethodBody = z.object({ method: z.enum(['RULES', 'STRIPE_TAX', 'AVALARA']), shadowProvider: z.enum(['STRIPE', 'AVALARA', '']).nullish(), reason: Reason('reason') });
 
 function paged<T>(all: T[], q: URLSearchParams, def = 25): { items: T[]; page: number; size: number } {
@@ -808,11 +886,11 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         read(ctx);
         const q = new URL(ctx.request.url).searchParams;
         const status = (q.get('status') ?? 'PENDING_REVIEW').toUpperCase();
-        if (!(status in RECORD_STATUS)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { status: 'Choose a review status' });
+        if (status !== TAX_AUDIT_SAMPLE && !(status in RECORD_STATUS)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { status: 'Choose a review status' });
         const terms = (q.get('q') ?? '').toLowerCase();
-        const all = tax(ctx).variants.filter((v) => v.status === status && (!q.get('categoryCode') || v.categoryCode === q.get('categoryCode')) && (!terms || `${v.title} ${v.atin} ${v.gtin}`.toLowerCase().includes(terms)));
+        const all = tax(ctx).variants.filter((v) => (status === TAX_AUDIT_SAMPLE ? !!v.auditSample && v.status === 'APPROVED' : v.status === status) && (!q.get('categoryCode') || v.categoryCode === q.get('categoryCode')) && (!terms || `${v.title} ${v.atin} ${v.gtin}`.toLowerCase().includes(terms)));
         const { items, page, size } = paged(all.map(reviewRow), q);
-        return { items, total: all.length, page, size, status, statuses: ['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'STALE'].map((s) => ({ value: s, label: RECORD_STATUS[s]! })), canDecide: canAdmin(ctx) } satisfies TaxReviewPage;
+        return { items, total: all.length, page, size, status, statuses: ['PENDING_REVIEW', TAX_AUDIT_SAMPLE, 'APPROVED', 'REJECTED', 'STALE'].map((s) => ({ value: s, label: s === TAX_AUDIT_SAMPLE ? 'Audit sample' : RECORD_STATUS[s]! })), canDecide: canAdmin(ctx) } satisfies TaxReviewPage;
       })
     ),
     http.get(
@@ -828,6 +906,11 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         needs(ctx, 'tax:classify-admin');
         const v = variantOf(ctx, p.atin);
         const b = await json(ctx.request, ApproveBody);
+        if (v.status === 'APPROVED' && v.auditSample) {
+          Object.assign(v, { auditSample: false, reviewedByName: actor(ctx), reviewedAt: ctx.now.toISOString() });
+          logAudit(v, ctx, 'AUDIT_CONFIRMED', b.reason.trim());
+          return reviewView(tax(ctx), v, true);
+        }
         if (v.resolveStatus !== 'RESOLVED')
           throw problem(422, 'VALIDATION_FAILED', 'Can’t do that', `This can’t be approved yet: the answers don’t give a definite tax decision, or the category isn’t cleared for sale. ${RESOLVE_STATUS[v.resolveStatus] ?? ''}`.trim());
         Object.entries(b.refinedProviderCodes ?? {}).forEach(([provider, code]) => {
@@ -850,7 +933,7 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         const b = await json(ctx.request, ReclassifyBody);
         categoryNamed(b.categoryCode);
         v.categoryCode = b.categoryCode;
-        Object.assign(v, { status: 'PENDING_REVIEW', rowId: '', resolveStatus: 'MISSING_FACTS' });
+        Object.assign(v, { status: 'PENDING_REVIEW', rowId: '', resolveStatus: 'MISSING_FACTS', auditSample: false });
         logAudit(v, ctx, 'RECLASSIFIED', b.reason.trim());
         return reviewView(tax(ctx), v, true);
       })
@@ -983,6 +1066,36 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         st.history.unshift({ at: ctx.now.toISOString(), changedByName: actor(ctx), fromLabel: METHOD_TEXT[st.method.method]!.label, toLabel: METHOD_TEXT[b.method]!.label, reason: b.reason.trim() });
         Object.assign(st.method, { method: b.method, shadowProvider: shadow, changedByName: actor(ctx), changedAt: ctx.now.toISOString() });
         return methodView(st, true);
+      })
+    ),
+    http.get(
+      `${W}/tax/review-settings`,
+      route((ctx) => {
+        read(ctx);
+        return reviewSettingsView(tax(ctx), canAdmin(ctx));
+      })
+    ),
+    http.put(
+      `${W}/tax/review-settings`,
+      route(async (ctx) => {
+        needs(ctx, 'tax:classify-admin');
+        const b = await json(ctx.request, ReviewSettingsBody);
+        const st = tax(ctx);
+        const always = b.alwaysReview ? [...new Set(b.alwaysReview.map((c) => c.trim()).filter(Boolean))] : st.review.alwaysReview;
+        const unknown = always.filter((c) => !categoryOf(c));
+        if (unknown.length) throw problem(422, 'VALIDATION_FAILED', 'Can’t do that', 'One of the categories isn’t a known tax category. Choose categories from the list.', { alwaysReview: 'Choose categories from the list.' });
+        const percent = b.auditPercent ?? st.review.auditPercent;
+        const entry = {
+          at: ctx.now.toISOString(),
+          changedByName: actor(ctx),
+          fromLabel: reviewSummary(st.review.mode, st.review.alwaysReview, st.review.auditPercent),
+          toLabel: reviewSummary(b.mode, always, percent),
+          summary: reviewSummary(b.mode, always, percent),
+          reason: b.reason.trim()
+        };
+        if (b.mode !== st.review.mode || percent !== st.review.auditPercent || always.join() !== [...st.review.alwaysReview].join()) st.review.history.unshift(entry);
+        Object.assign(st.review, { mode: b.mode, alwaysReview: always, auditPercent: percent, changedByName: actor(ctx), changedAt: ctx.now.toISOString() });
+        return reviewSettingsView(st, true);
       })
     ),
     http.get(

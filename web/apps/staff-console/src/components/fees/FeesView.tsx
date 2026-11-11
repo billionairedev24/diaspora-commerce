@@ -11,6 +11,7 @@ import { TaxCodeMapPanel } from '../tax/TaxCodeMapPanel';
 import { TaxMethodPanel } from '../tax/TaxMethodPanel';
 import { TaxProfilesPanel } from '../tax/TaxProfilesPanel';
 import { TaxReviewPanel } from '../tax/TaxReviewPanel';
+import { TaxReviewSettingsPanel } from '../tax/TaxReviewSettingsPanel';
 import { TaxShadowPanel } from '../tax/TaxShadowPanel';
 import { FeeSchedulesPanel } from './FeeSchedulesPanel';
 import { NegotiatedRatesPanel } from './NegotiatedRatesPanel';
@@ -37,6 +38,7 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
           { value: 'tax-method', label: 'Who calculates tax', content: <TaxMethodPanel /> },
           { value: 'tax-profiles', label: 'Tax profiles', content: <TaxProfilesPanel /> },
           { value: 'tax-review', label: 'Tax review', content: <TaxReviewPanel /> },
+          { value: 'tax-review-settings', label: 'Review settings', content: <TaxReviewSettingsPanel /> },
           { value: 'tax-codes', label: 'Provider codes', content: <TaxCodeMapPanel /> },
           { value: 'tax-shadow', label: 'Shadow report', content: <TaxShadowPanel /> },
           {
@@ -74,7 +76,7 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
             )
           }
   ];
-  const taxTabs = ['tax-method', 'tax-profiles', 'tax-review', 'tax-codes', 'tax-shadow', 'tax-filings', 'tax-nexus', 'tax-rates'];
+  const taxTabs = ['tax-method', 'tax-profiles', 'tax-review', 'tax-review-settings', 'tax-codes', 'tax-shadow', 'tax-filings', 'tax-nexus', 'tax-rates'];
   const items = all.filter((it) => (scope === 'all' ? it.value !== 'tax-method' : scope === 'tax' ? taxTabs.includes(it.value) : !taxTabs.includes(it.value)));
   return (
     <ModulePage module="fees">

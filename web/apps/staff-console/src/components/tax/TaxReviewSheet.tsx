@@ -12,7 +12,7 @@ import { dateTime } from '@/lib/format';
 
 import { ActionDialog, Facts, mono, RecordPill, Section } from './shared';
 
-type Which = 'approve' | 'reclassify' | 'info';
+type Which = 'approve' | 'confirm' | 'reclassify' | 'info';
 
 /**
  * One variant in tax review: why it needs a person, the proposed decision in words, the facts as entered, the proof the
@@ -23,7 +23,7 @@ export function TaxReviewSheet({ atin, action, onClose, onAction }: { atin: stri
   const api = staffApi();
   const q = useQuery({ ...staffTaxQueries.review(api.tax, atin ?? ''), enabled: atin !== null });
   const r = q.data;
-  const which: Which | null = r?.canApprove && (action === 'approve' || action === 'reclassify' || action === 'info') ? action : null;
+  const which: Which | null = r?.canApprove && (action === 'approve' || action === 'reclassify' || action === 'info') ? action : r?.canConfirm && (action === 'confirm' || action === 'reclassify') ? action : null;
   return (
     <Sheet open={atin !== null} onOpenChange={(o) => !o && onClose()} title={r ? r.title : 'Tax review'} description={r ? `${r.sellers.join(', ') || 'No seller yet'} · ${r.categoryName}` : undefined} closeLabel="Close">
       {q.isPending && atin !== null ? <Spinner /> : null}
@@ -50,13 +50,22 @@ export function TaxReviewSheet({ atin, action, onClose, onAction }: { atin: stri
                   Ask the seller for more…
                 </Button>
               </div>
+            ) : r.canConfirm ? (
+              <div role="group" aria-label="Check" className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => onAction('confirm')}>
+                  Confirm…
+                </Button>
+                <Button size="sm" variant="neutral" onClick={() => onAction('reclassify')}>
+                  Move to another category…
+                </Button>
+              </div>
             ) : !r.canDecide ? (
               <Notice tone="info" icon="eye" title="Read only">
                 You can read this review. Deciding needs the tax:classify-admin permission.
               </Notice>
             ) : null}
           </div>
-          <Notice tone="info" title="Why it needs review">
+          <Notice tone="info" title={r.auditSample ? 'Why it is in the audit sample' : 'Why it needs review'}>
             {r.why}
           </Notice>
           <Proposed r={r} />
@@ -98,6 +107,7 @@ export function TaxReviewSheet({ atin, action, onClose, onAction }: { atin: stri
         </div>
       ) : null}
       {r && which === 'approve' ? <ApproveDialog r={r} onClose={() => onAction(null)} /> : null}
+      {r && which === 'confirm' ? <ConfirmDialog r={r} onClose={() => onAction(null)} /> : null}
       {r && which === 'reclassify' ? <ReclassifyDialog r={r} onClose={() => onAction(null)} /> : null}
       {r && which === 'info' ? <InfoDialog r={r} onClose={() => onAction(null)} /> : null}
     </Sheet>
@@ -222,6 +232,29 @@ function ApproveDialog({ r, onClose }: { r: TaxReview; onClose: () => void }) {
   );
 }
 
+/** An audit sample item: the system approved it and it is live; the reviewer says it is right. Nothing changes for checkout. */
+function ConfirmDialog({ r, onClose }: { r: TaxReview; onClose: () => void }) {
+  const api = staffApi();
+  const [reason, setReason] = useState('');
+  const { m, error } = useDecision(onClose, r.atin, () => api.tax.approve(r.atin, { reason: reason.trim() }), `${r.title} is confirmed and leaves the audit sample.`);
+  return (
+    <ActionDialog
+      open
+      title={`Confirm the tax for ${r.title}?`}
+      intro={<p className="m-0">The system approved this and it is live. Confirming says the category and the tax decision are right. It leaves the audit sample and nothing changes for customers.</p>}
+      submitLabel="Confirm"
+      reasonLabel="Reason"
+      reasonHelp="What you checked. Kept with your name and the rule version."
+      reason={reason}
+      onReason={setReason}
+      pending={m.isPending}
+      error={error}
+      onSubmit={() => m.mutate()}
+      onClose={onClose}
+    />
+  );
+}
+
 function ReclassifyDialog({ r, onClose }: { r: TaxReview; onClose: () => void }) {
   const api = staffApi();
   const profiles = useQuery(staffTaxQueries.profiles(api.tax, { size: 100, sort: ['name,asc'] }));
@@ -237,7 +270,7 @@ function ReclassifyDialog({ r, onClose }: { r: TaxReview; onClose: () => void })
           {r.ordersAffected != null
             ? `${r.ordersAffected} order${r.ordersAffected === 1 ? '' : 's'} include this product. `
             : ''}
-          The new category’s questions and rules apply. The product goes back into review, and the old decision stays in the history. Placed orders keep the tax they were charged.
+          The new category’s questions and rules apply. The product goes back into review{r.auditSample ? ' and stops being live until it is approved again' : ''}, and the old decision stays in the history. Placed orders keep the tax they were charged.
         </p>
       }
       submitLabel="Move to category"

@@ -174,7 +174,11 @@ export const TaxReviewRowSchema = z.object({
   classifiedByName: z.string().default(''),
   reviewedAt: z.string().default(''),
   reviewedByName: z.string().default(''),
-  ruleVersion: z.string().default('')
+  ruleVersion: z.string().default(''),
+  /** Approved by the system under the risk-based rule, live, waiting in the Audit sample for a person. */
+  auditSample: z.boolean().default(false),
+  /** Approved by the system, not by a person. */
+  autoApproved: z.boolean().default(false)
 });
 export type TaxReviewRow = z.infer<typeof TaxReviewRowSchema>;
 
@@ -229,6 +233,8 @@ export const TaxReviewSchema = TaxReviewRowSchema.extend({
   audit: z.array(TaxAuditEntrySchema),
   canDecide: z.boolean(),
   canApprove: z.boolean(),
+  /** An Audit sample item the signed-in person may confirm (approve with a reason) or move to another category. */
+  canConfirm: z.boolean().default(false),
   approve: TaxApproveFormSchema,
   refinedProviderCodes: z.record(z.string(), z.string()).default({}),
   /** Present only when tax-returns reports how many orders use this variant. */
@@ -359,6 +365,41 @@ export interface TaxMethodChange {
   reason: string;
 }
 
+/* ── Tax review mode, always-review categories and the Audit sample ──────────── */
+
+export const TaxReviewModeSchema = z.enum(['ALL', 'RISK_BASED']);
+export type TaxReviewMode = z.infer<typeof TaxReviewModeSchema>;
+
+export const TaxReviewSettingsSchema = z.object({
+  mode: TaxReviewModeSchema,
+  modeLabel: z.string(),
+  modeExplain: z.string(),
+  options: z.array(z.object({ mode: TaxReviewModeSchema, label: z.string(), explain: z.string(), current: z.boolean() })),
+  categories: z.array(z.object({ code: z.string(), name: z.string(), departmentName: z.string().default(''), alwaysReview: z.boolean(), gated: z.boolean(), gateLabel: z.string().default('') })),
+  alwaysReviewNames: z.array(z.string()).default([]),
+  alwaysReviewStatuses: z.array(z.object({ status: z.string(), label: z.string() })).default([]),
+  auditPercent: z.number().int(),
+  auditExplain: z.string().default(''),
+  history: z.array(z.object({ at: z.string().default(''), changedByName: z.string().default(''), fromLabel: z.string().default(''), toLabel: z.string().default(''), summary: z.string().default(''), reason: z.string().default('') })),
+  changedByName: z.string().default(''),
+  changedAt: z.string().default(''),
+  canChange: z.boolean(),
+  /** Plain-language warning: Review by risk must only be switched on after the Texas tax professional agrees. */
+  warning: z.string()
+});
+export type TaxReviewSettings = z.infer<typeof TaxReviewSettingsSchema>;
+
+export interface TaxReviewSettingsChange {
+  mode: TaxReviewMode;
+  /** Category codes; replaces the always-review list. */
+  alwaysReview: string[];
+  auditPercent: number;
+  reason: string;
+}
+
+/** The queue tab of items the system approved under the risk-based rule that are live and wait for a person. */
+export const TAX_AUDIT_SAMPLE = 'AUDIT_SAMPLE';
+
 /* ── Shadow report ────────────────────────────────────── */
 
 const ShadowGroupSchema = z.object({
@@ -476,6 +517,9 @@ export function createStaffTaxApi(request: Requester) {
       request(`${T}/code-map/import`, TaxCodeMapImportResultSchema, { method: 'POST', body }),
     method: (signal?: AbortSignal): Promise<TaxMethod> => request(`${T}/method`, TaxMethodSchema, { signal }),
     changeMethod: (body: TaxMethodChange): Promise<TaxMethod> => request(`${T}/method`, TaxMethodSchema, { method: 'PUT', body }),
+    reviewSettings: (signal?: AbortSignal): Promise<TaxReviewSettings> => request(`${T}/review-settings`, TaxReviewSettingsSchema, { signal }),
+    /** Needs tax:classify-admin and a reason (10+ characters). Applies to new classification events. */
+    changeReviewSettings: (body: TaxReviewSettingsChange): Promise<TaxReviewSettings> => request(`${T}/review-settings`, TaxReviewSettingsSchema, { method: 'PUT', body }),
     shadow: (q: TaxShadowQuery, signal?: AbortSignal): Promise<TaxShadow> =>
       request(`${T}/shadow`, TaxShadowSchema, { query: params({ from: q.from, to: q.to, provider: q.provider, page: q.page, size: q.size }), signal })
   };
@@ -493,6 +537,7 @@ export const staffTaxKeys = {
   review: (atin: string) => [...staffTaxKeys.all, 'review', atin] as const,
   codeMap: (q: TaxCodeMapQuery) => [...staffTaxKeys.all, 'code-map', q] as const,
   method: () => [...staffTaxKeys.all, 'method'] as const,
+  reviewSettings: () => [...staffTaxKeys.all, 'review-settings'] as const,
   shadow: (q: TaxShadowQuery) => [...staffTaxKeys.all, 'shadow', q] as const
 };
 
@@ -506,6 +551,7 @@ export const staffTaxQueries = {
   codeMap: (api: StaffTaxApi, q: TaxCodeMapQuery) =>
     queryOptions({ queryKey: staffTaxKeys.codeMap(q), queryFn: ({ signal }) => api.codeMap(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   method: (api: StaffTaxApi) => queryOptions({ queryKey: staffTaxKeys.method(), queryFn: ({ signal }) => api.method(signal), staleTime: 10_000 }),
+  reviewSettings: (api: StaffTaxApi) => queryOptions({ queryKey: staffTaxKeys.reviewSettings(), queryFn: ({ signal }) => api.reviewSettings(signal), staleTime: 10_000 }),
   shadow: (api: StaffTaxApi, q: TaxShadowQuery) =>
     queryOptions({ queryKey: staffTaxKeys.shadow(q), queryFn: ({ signal }) => api.shadow(q, signal), placeholderData: keepPreviousData, staleTime: 30_000 })
 };

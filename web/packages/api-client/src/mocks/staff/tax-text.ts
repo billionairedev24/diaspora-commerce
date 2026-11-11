@@ -57,7 +57,10 @@ export const AUDIT_ACTION: Record<string, string> = {
   REJECTED: 'Sent back',
   RECLASSIFIED: 'Moved to another category',
   MARKED_STALE: 'Marked out of date',
-  EVIDENCE_ADDED: 'Evidence added'
+  EVIDENCE_ADDED: 'Evidence added',
+  INFORMATION_REQUESTED: 'Asked the seller for more',
+  AUDIT_SAMPLED: 'Put in the audit sample',
+  AUDIT_CONFIRMED: 'Audit sample confirmed'
 };
 
 export const humanizeCode = (s: string): string => {
