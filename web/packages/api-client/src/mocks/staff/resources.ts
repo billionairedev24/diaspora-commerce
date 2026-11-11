@@ -783,6 +783,42 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   announcements: placementsDef('Announcements', true),
   placements: placementsDef('Placements & ads', false),
+  'home-layout': {
+    title: 'Home page layout',
+    columns: [col('name', 'Module', 'strong', 26), col('kind', 'Type', 'text', 22), col('advertiser', 'Advertiser', 'text', 16), col('shows', 'Shown to', 'text', 16), col('priority', 'Priority', 'number', 8), col('status', 'Status', 'status', 12)],
+    statusKey: 'status',
+    facets: [],
+    exportable: false,
+    // Page order: priority, highest first (the position the shopper sees).
+    sort: (a, b) => num(b.fields.priority) - num(a.fields.priority),
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => `${str(r.fields.kind)} · ${r.fields.paid ? `Labelled Sponsored · ${str(r.fields.advertiser)}` : 'Organic (no label)'} · ${str(r.fields.shows)}`,
+    sheetSections: (r) => [
+      {
+        title: 'Preview',
+        fields: [
+          { label: 'Type', value: str(r.fields.kind), kind: 'text' },
+          { label: 'Disclosure', value: r.fields.paid ? `Labelled Sponsored · ${str(r.fields.advertiser)}` : 'Organic (no label)', kind: 'text' },
+          { label: 'Shown to', value: str(r.fields.shows), kind: 'text' },
+          { label: 'Priority', value: `${num(r.fields.priority)} (higher shows first)`, kind: 'text' }
+        ]
+      }
+    ],
+    rowActions: ['move-up', 'move-down'],
+    actions: [
+      { key: 'move-up', label: 'Move up', tone: 'neutral', permission: 'content:placements.edit', when: () => null, apply: (r, _v, ctx) => { r.fields.priority = num(r.fields.priority) + 15; log(r, ctx, 'Moved up'); } },
+      { key: 'move-down', label: 'Move down', tone: 'neutral', permission: 'content:placements.edit', when: () => null, apply: (r, _v, ctx) => { r.fields.priority = num(r.fields.priority) - 15; log(r, ctx, 'Moved down'); } },
+      {
+        key: 'set-priority',
+        label: 'Set priority',
+        tone: 'neutral',
+        permission: 'content:placements.edit',
+        form: (r) => form('Position on the page', 'Save', [field('priority', 'Priority (higher shows first; -1000 to 1000)', 'number', true, { min: 0, max: 1000, value: num(r.fields.priority) })]),
+        when: () => null,
+        apply: (r, v, ctx) => { r.fields.priority = num(v.priority); log(r, ctx, `Priority set to ${num(v.priority)}`); }
+      }
+    ]
+  },
   'identity-providers': {
     title: 'Identity providers',
     columns: [col('displayName', 'Provider', 'strong', 30), col('configured', 'Configured', 'text', 20), col('updatedBy', 'Changed by', 'text', 25), col('status', 'Sign-in button', 'status', 25)],
@@ -1711,7 +1747,7 @@ function placementsDef(title: string, announcementsOnly: boolean): MockResource 
       permission: 'content:placements.edit',
       form: form(announcementsOnly ? 'New announcement' : 'New placement', 'Create draft', [
         field('name', 'Name', 'text', true, { maxLength: 120 }),
-        ...(announcementsOnly ? [] : [field('slot', 'Slot', 'select', true, { options: options('hero_carousel', 'display_banner', 'home_tiles', 'home_product_row') })]),
+        ...(announcementsOnly ? [] : [field('slot', 'Slot', 'select', true, { options: [...options('hero_carousel', 'display_banner', 'home_tiles', 'home_product_row'), ...options('home_brand_banner', 'home_sponsored_products', 'home_ad_row', 'home_advertorial', 'home_block:deals', 'home_block:occasions', 'home_block:community-spotlight', 'home_block:seller-spotlight', 'home_block:services-near-you', 'home_block:membership-promo', 'home_block:signin-promo')] })]),
         field('text', announcementsOnly ? 'Announcement text' : 'Headline', 'text', true, { maxLength: 140 }),
         field('href', 'Link', 'text', false, { pattern: '^/' }),
         field('startsAt', 'Starts', 'datetime', true),

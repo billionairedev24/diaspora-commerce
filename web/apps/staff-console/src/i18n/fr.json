@@ -2286,5 +2286,6 @@
   "st.col.with": "Chez",
   "st.col.waiting": "Attente",
   "st.col.sla": "Délai",
-  "st.col.escalation": "Escalade"
+  "st.col.escalation": "Escalade",
+  "st.marketing.tab.layout": "Disposition de l’accueil"
 }

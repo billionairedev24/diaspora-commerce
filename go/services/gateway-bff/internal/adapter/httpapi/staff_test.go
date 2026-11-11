@@ -875,7 +875,11 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case p == "/v1/placements" && r.Method == http.MethodPost:
 			writeJ(w, 201, pl)
 		case p == "/v1/placements":
-			writeJ(w, 200, []any{pl})
+			banner := map[string]any{"id": "plc-2", "slot": "home_brand_banner", "name": "Acme brand banner", "status": "LIVE", "priority": 40, "paid": true, "advertiser": "Acme Foods",
+				"payload": map[string]any{"advertiser": "Acme Foods", "headline": "Jollof week", "cta": "Shop", "href": "/s?q=jollof"}, "schedule": map[string]any{"startsAt": now}, "version": 1}
+			writeJ(w, 200, []any{pl, banner})
+		case strings.HasSuffix(p, "/priority") && r.Method == http.MethodPut:
+			writeJ(w, 200, pl)
 		default:
 			writeJ(w, 200, pl)
 		}

@@ -7,7 +7,7 @@ import { ModulePage } from '@/components/module/ModulePage';
 import { ResourceTable } from '@/components/resources/ResourceTable';
 import { useT } from '@/i18n/t';
 
-/** Growth → Marketing: announcements, placements & ads, and platform-funded checkout coupons. */
+/** Growth → Marketing: announcements, placements & ads, the home page layout (order of the modules) and platform-funded checkout coupons. */
 export function MarketingView() {
   const t = useT();
   const router = useRouter();
@@ -23,6 +23,7 @@ export function MarketingView() {
         items={[
           { value: 'announcements', label: t('st.marketing.tab.announcements'), content: <ResourceTable resource="announcements" urlPrefix="announcements" /> },
           { value: 'placements', label: t('st.marketing.tab.placements'), content: <ResourceTable resource="placements" urlPrefix="placements" /> },
+          { value: 'layout', label: t('st.marketing.tab.layout'), content: <ResourceTable resource="home-layout" urlPrefix="home-layout" /> },
           { value: 'coupons', label: t('st.marketing.tab.coupons'), content: <ResourceTable resource="coupons" urlPrefix="coupons" /> }
         ]}
       />

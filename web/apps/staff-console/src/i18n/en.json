@@ -2279,5 +2279,6 @@
   "st.col.with": "With",
   "st.col.waiting": "Waiting",
   "st.col.sla": "SLA",
-  "st.col.escalation": "Escalation"
+  "st.col.escalation": "Escalation",
+  "st.marketing.tab.layout": "Home page layout"
 }

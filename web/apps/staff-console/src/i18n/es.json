@@ -2286,5 +2286,6 @@
   "st.col.with": "Con",
   "st.col.waiting": "Espera",
   "st.col.sla": "Plazo",
-  "st.col.escalation": "Escalado"
+  "st.col.escalation": "Escalado",
+  "st.marketing.tab.layout": "Diseño de la página de inicio"
 }

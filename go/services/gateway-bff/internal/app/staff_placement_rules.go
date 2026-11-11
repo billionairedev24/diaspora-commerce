@@ -47,7 +47,9 @@ var tileDepartments = []domain.FieldOption{
 
 func cellKey(n int, field string) string { return fmt.Sprintf("cell%d_%s", n, field) }
 
-func tileSection(n int) string { return fmt.Sprintf("Tile cell %d (home tiles only)", n) }
+func tileSection(n int) string {
+	return fmt.Sprintf("Tile cell %d (home tiles and shop by occasion)", n)
+}
 
 const heroSection = "Hero slide schedule (hero carousel only)"
 
@@ -120,7 +122,7 @@ func tileFields(prev jobj, create bool) []domain.FormField {
 		}
 		sec := tileSection(n)
 		add := func(f domain.FormField) {
-			out = append(out, onlyFor(inSection(f, sec), slotHomeTiles, create))
+			out = append(out, showFor(inSection(f, sec), create, slotHomeTiles, blockPrefix+domain.BlockOccasions))
 		}
 		rule := withOptions(ff(cellKey(n, "rule"), "Product rule (leave empty for a fixed image)", "select", false), tileRuleOptions)
 		rule.Help = "A rule shows the best in-stock product with a real photo; its image, name and link are filled in for you."

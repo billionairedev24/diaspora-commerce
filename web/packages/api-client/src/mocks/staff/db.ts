@@ -498,6 +498,18 @@ function seed(now: Date): MockStaffDb {
     placement('plc-6', 'home_product_row', 'Kente Naturals — sponsored row', 'LIVE', true, 'Kente Naturals', 'Shea and black soap', 10)
   ];
 
+  // The home body in page order (priority, highest first): what the Home page layout list shows and reorders.
+  const layout = (id: string, slot: string, kind: string, name: string, priority: number, advertiser: string | null, shown: string, status = 'LIVE') =>
+    rec(id, { name, slot, kind, status, priority, paid: !!advertiser, advertiser, shows: shown, schedule: 'Always' }, [act(ago(2), 'Marketing', 'Draft created')]);
+  const homeLayout = [
+    layout('plc-b1', 'home_block', 'Deals of the day', 'Deals of the day', 90, null, 'Everywhere'),
+    layout('plc-b2', 'home_brand_banner', 'Sponsored brand banner', 'Kingston Kitchen brand banner', 80, 'Kingston Kitchen', 'TX, GA'),
+    layout('plc-b3', 'home_product_row', 'Product rail', 'Pantry staples rail', 70, null, 'Everywhere'),
+    layout('plc-b4', 'home_sponsored_products', 'Sponsored products rail', 'Sponsored products from sellers', 60, 'Marketplace sellers', 'Everywhere'),
+    layout('plc-b5', 'home_ad_row', 'Display ad row', 'Partner ad row', 50, 'Partners', 'ZIP 77'),
+    layout('plc-b6', 'home_advertorial', 'Advertorial', 'From our partners: Mama Put', 40, 'Mama Put Pantry', 'Everywhere', 'SCHEDULED')
+  ];
+
   const providers = [
     ['google', 'Google', true],
     ['apple', 'Apple', true],
@@ -668,7 +680,7 @@ function seed(now: Date): MockStaffDb {
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
       users, roles, applications, organisations: MOCK_DEPARTMENT_ORGS.map((o, i) => rec(o.id, { name: o.name, kind: 'SELLER', plan: o.exempt ? 'Platform' : pick(['STARTER', 'GROWTH', 'PRO']), createdAt: ago(60 + i * 20), status: 'APPROVED' })).concat([rec('org-lagos-spice', { name: 'Lagos Spice Co', kind: 'SELLER', plan: 'STARTER', createdAt: ago(120), status: 'SUSPENDED' })]), 'connect-accounts': [], orders, products, 'category-requests': seedCategoryRequests(now), moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
-      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements,
+      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements, 'home-layout': homeLayout,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now),

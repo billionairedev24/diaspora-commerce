@@ -344,7 +344,7 @@ func placementsResource(key string) *staffResource {
 		}
 		return p
 	}
-	slots := domain.StaffOptions("hero_carousel", "display_banner", "home_tiles", "home_product_row", "announcement_bar")
+	slots := slotChoices()
 	baseFields := func(o jobj, create bool) []domain.FormField {
 		fields := []domain.FormField{
 			withValue(withMax(ff("name", "Name", "text", true), 120), jstr(o, "name")),
@@ -353,14 +353,16 @@ func placementsResource(key string) *staffResource {
 			withValue(ff("startsAt", "Starts", "datetime", true), jstr(o, "schedule.startsAt")),
 			withValue(ff("endsAt", "Ends", "datetime", false), jstr(o, "schedule.endsAt")),
 		}
-		switch slot := jstr(o, "slot"); {
+		slot := jstr(o, "slot")
+		if create || slot != "announcement_bar" {
+			fields = append(fields, ctaField(o, create)...)
+			fields = append(fields, adFields(o, create)...)
+		}
+		switch {
 		case create:
-			cta := onlyFor(withValue(withMax(ff("cta", "Button text", "text", false), 40), ""), slotHomeTiles, true)
-			fields = append(fields, cta)
 			fields = append(fields, heroFields(o, true)...)
 			fields = append(fields, tileFields(o, true)...)
-		case slot == slotHomeTiles:
-			fields = append(fields, withValue(withMax(ff("cta", "Button text", "text", false), 40), jstr(o, "payload.cta")))
+		case slot == slotHomeTiles || slot == slotHomeBlock && jstr(o, "payload.type") == domain.BlockOccasions:
 			fields = append(fields, tileFields(o, false)...)
 		case slot == slotHeroCarousel:
 			fields = append(fields, heroFields(o, false)...)
@@ -405,15 +407,21 @@ func placementsResource(key string) *staffResource {
 			save: func(ctx context.Context, sc staffCtx, o jobj, v jobj, _ string) error {
 				schedule := omitEmpty(jobj{"startsAt": vs(v, "startsAt"), "endsAt": vs(v, "endsAt")})
 				payload := payloadOf(jstr(o, "slot"), v, o)
-				if errs := applySlotFields(jstr(o, "slot"), v, payload); len(errs) > 0 {
+				errs := applySlotFields(jstr(o, "slot"), v, payload)
+				for k, m := range applyAdFields(jstr(o, "slot"), jstr(o, "payload.type"), v, payload, jstr(o, "advertiser")) {
+					errs = mergeErr(errs, k, m)
+				}
+				targeting, zipErrs := targetingFrom(v, o["targeting"])
+				for k, m := range zipErrs {
+					errs = mergeErr(errs, k, m)
+				}
+				if len(errs) > 0 {
 					return domain.ValidationProblem(errs)
 				}
-				body := jobj{"slot": jstr(o, "slot"), "name": vs(v, "name"), "payload": payload, "schedule": schedule,
-					"priority": int(num(o, "priority")), "paid": boolean(o, "paid"), "expectedVersion": int64(num(o, "version"))}
-				for _, k := range []string{"targeting", "frequencyCap"} {
-					if val, ok := o[k]; ok && val != nil {
-						body[k] = val
-					}
+				body := jobj{"slot": jstr(o, "slot"), "name": vs(v, "name"), "payload": payload, "schedule": schedule, "targeting": targeting,
+					"priority": priorityFrom(v, int(num(o, "priority"))), "paid": boolean(o, "paid"), "expectedVersion": int64(num(o, "version"))}
+				if val, ok := o["frequencyCap"]; ok && val != nil {
+					body["frequencyCap"] = val
 				}
 				if a := jstr(o, "advertiser"); a != "" {
 					body["advertiser"] = a
@@ -434,17 +442,25 @@ func placementsResource(key string) *staffResource {
 				return domain.Form{Title: t, SubmitLabel: "Create draft", Fields: fields}
 			},
 			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {
-				slot := "announcement_bar"
+				slot, blockType := "announcement_bar", ""
 				if !announcements {
-					slot = vs(v, "slot")
+					slot, blockType = splitSlot(vs(v, "slot"))
 				}
 				payload := payloadOf(slot, v, nil)
-				if errs := applySlotFields(slot, v, payload); len(errs) > 0 {
+				errs := applySlotFields(slot, v, payload)
+				for k, m := range applyAdFields(slot, blockType, v, payload, vs(v, "advertiser")) {
+					errs = mergeErr(errs, k, m)
+				}
+				targeting, zipErrs := targetingFrom(v, nil)
+				for k, m := range zipErrs {
+					errs = mergeErr(errs, k, m)
+				}
+				if len(errs) > 0 {
 					return "", domain.ValidationProblem(errs)
 				}
 				body := jobj{"slot": slot, "name": vs(v, "name"), "payload": payload,
-					"schedule": omitEmpty(jobj{"startsAt": vs(v, "startsAt"), "endsAt": vs(v, "endsAt")}), "priority": 10,
-					"paid": vs(v, "advertiser") != "", "targeting": jobj{"markets": []string{"us"}}}
+					"schedule": omitEmpty(jobj{"startsAt": vs(v, "startsAt"), "endsAt": vs(v, "endsAt")}), "priority": priorityFrom(v, 10),
+					"paid": vs(v, "advertiser") != "", "targeting": targeting}
 				if a := vs(v, "advertiser"); a != "" {
 					body["advertiser"] = a
 				}
