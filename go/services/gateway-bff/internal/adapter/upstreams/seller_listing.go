@@ -55,6 +55,9 @@ func productBody(d domain.ProductDraft, shipFrom *port.CatalogShipFrom) map[stri
 		if len(v.Images) > 0 {
 			vb["images"] = v.Images
 		}
+		if v.Packaging != nil {
+			vb["packaging"] = v.Packaging
+		}
 		variants = append(variants, vb)
 	}
 	body := map[string]any{"title": strings.TrimSpace(d.Title), "attributes": d.Attributes, "images": d.Images,
@@ -90,6 +93,15 @@ func productBody(d domain.ProductDraft, shipFrom *port.CatalogShipFrom) map[stri
 		}
 		if l.FitNote != "" {
 			listing["fitNote"] = l.FitNote
+		}
+		if l.DangerousGoods != nil {
+			listing["dangerousGoods"] = *l.DangerousGoods
+		}
+		if len(l.Documents) > 0 {
+			listing["documents"] = l.Documents
+		}
+		if len(l.Exemptions) > 0 {
+			listing["exemptions"] = l.Exemptions
 		}
 		body["listing"] = listing
 	}

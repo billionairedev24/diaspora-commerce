@@ -394,7 +394,10 @@ type ListingPage struct {
 
 // CategoryNode is a node of the nested category tree.
 type CategoryNode struct {
-	ID          string  `json:"id"`
+	ID string `json:"id"`
+	// Code is the category's stable code ("dairy-eggs"); the listing rules are asked for by the code of the category
+	// above a product type.
+	Code        string  `json:"code"`
 	Name        string  `json:"name"`
 	Level       string  `json:"level"`
 	ProductType *string `json:"productType"`
@@ -501,6 +504,9 @@ type ProductImageInput struct {
 	ContentType string `json:"contentType"`
 	// Alt is the optional alternative text stored with the image.
 	Alt string `json:"alt,omitempty"`
+	// Role is LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); empty for a
+	// product picture.
+	Role string `json:"role,omitempty"`
 }
 
 // VariantInput is one variant row (the variant matrix, or the single row of a product without variations).
@@ -518,6 +524,9 @@ type VariantInput struct {
 	CompareAtMinor *int64              `json:"compareAtMinor,omitempty"`
 	Quantity       int                 `json:"quantity"`
 	Images         []ProductImageInput `json:"images,omitempty"`
+	// Packaging is the box of this variant as shipped; catalog requires it for every physical variant and starts a
+	// variant without one from the listing's package.
+	Packaging *PackageDimensions `json:"packaging,omitempty"`
 }
 
 // Item conditions and fulfilment modes of a listing.
@@ -532,6 +541,10 @@ type PackageDimensions struct {
 	WidthIn  float64 `json:"widthIn"`
 	HeightIn float64 `json:"heightIn"`
 	WeightLb float64 `json:"weightLb"`
+}
+
+func (p PackageDimensions) positive() bool {
+	return p.LengthIn > 0 && p.WidthIn > 0 && p.HeightIn > 0 && p.WeightLb > 0
 }
 
 // ListingDetailsInput is the form's description, condition, keywords, fulfilment, package, handling and ship-from.
@@ -549,6 +562,24 @@ type ListingDetailsInput struct {
 	FitNote     string `json:"fitNote,omitempty"`
 	// SellerBehaviour is "Your listing": how this seller sells the item (sold_heated, heated_by_seller, utensils_provided).
 	SellerBehaviour map[string]any `json:"sellerBehaviour,omitempty"`
+	// DangerousGoods answers the dangerous goods question where the category's listing rules ask it; a yes marks the
+	// listing for fulfilment and carrier checks. Documents are the files uploaded on the form (reviewed by the approval
+	// engine) and Exemptions the reasons for fields the rules let the seller leave out. Catalog decides what applies.
+	DangerousGoods *bool                  `json:"dangerousGoods,omitempty"`
+	Documents      []ListingDocumentInput `json:"documents,omitempty"`
+	Exemptions     map[string]string      `json:"exemptions,omitempty"`
+}
+
+// ListingDocumentInput is a document uploaded on the product form: permit, brand authorization, safety certificate,
+// liability insurance or purchase invoice (Kind is the rule field id). The approval engine reviews it.
+type ListingDocumentInput struct {
+	Kind        string  `json:"kind"`
+	URL         string  `json:"url"`
+	FileName    string  `json:"fileName,omitempty"`
+	ContentType string  `json:"contentType"`
+	Bytes       int64   `json:"bytes,omitempty"`
+	ExpiresOn   *string `json:"expiresOn,omitempty"`
+	Status      string  `json:"status,omitempty"`
 }
 
 // ProductDraft is the one-step product form's submission (POST /v1/seller/products, PUT /v1/seller/products/{id}).
@@ -567,7 +598,10 @@ type ProductDraft struct {
 	Version *int64 `json:"version,omitempty"`
 }
 
-// Validate applies the form's rules (the same ones catalog enforces) to a new product.
+// Validate checks the shape of a new product's submission: sizes and counts that do not depend on the category. What a
+// category requires (barcode, package, label photo, country of origin ...) comes from catalog's listing rules
+// (GET /v1/listing-rules), which validates every submission and answers field errors the form maps to its fields; the
+// gateway does not keep a second copy of those rules.
 func (d ProductDraft) Validate() map[string]string {
 	errs := d.validateContent()
 	if (d.CategoryID == "") == (d.CategoryRequestID == "") {
@@ -617,8 +651,8 @@ func (d ProductDraft) validateContent() map[string]string {
 			errs["variants"] = "Quantities go up to 100,000."
 		case v.CompareAtMinor != nil && *v.CompareAtMinor <= v.PriceMinor:
 			errs["variants"] = "A compare-at price must be higher than the price."
-		case !v.GTINExempt && v.GTIN == "":
-			errs["variants"] = "Enter a barcode for every variation, or say it has none."
+		case v.Packaging != nil && !v.Packaging.positive():
+			errs["variants"] = "Give each package length, width, height and weight above zero."
 		}
 		if sku != "" {
 			skus[sku] = true
@@ -640,11 +674,11 @@ func (d ProductDraft) validateContent() map[string]string {
 		if l.HandlingDays < 0 || l.HandlingDays > 30 {
 			errs["listing.handlingDays"] = "Between 1 and 30 days"
 		}
-		if p := l.Packaging; p != nil && (p.LengthIn <= 0 || p.WidthIn <= 0 || p.HeightIn <= 0 || p.WeightLb <= 0) {
+		if p := l.Packaging; p != nil && !p.positive() {
 			errs["listing.packaging"] = "Give the package length, width, height and weight"
 		}
-		if l.Fulfilment == "AFROTRANSACT" && l.Packaging == nil {
-			errs["listing.packaging"] = "Package size and weight are required for Fulfilled by AfroTransact"
+		if len(l.Documents) > 20 {
+			errs["listing.documents"] = "Up to 20 documents"
 		}
 	}
 	return errs

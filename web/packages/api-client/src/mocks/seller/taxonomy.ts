@@ -60,12 +60,12 @@ export const TAX_TREE: CategoryNode[] = (dataset.departments as { code: string; 
   const children: CategoryNode[] = all.filter((c) => c.department === d.code).map((c) => {
     const path = `${d.name} › ${c.name}`;
     return {
-      id: `cat-${c.code}`, name: c.name, level: 'CATEGORY', productType: null, path, taxStatus: c.status as CategoryNode['taxStatus'],
+      id: `cat-${c.code}`, code: c.code, name: c.name, level: 'CATEGORY', productType: null, path, taxStatus: c.status as CategoryNode['taxStatus'],
       children: c.productTypes.map((t) => {
         TAX_PRODUCT_TYPES[t.code] = typeOf(c, t.code, t.label);
-        return { id: `pt-${leafCode(c, t)}`, name: t.label, level: 'PRODUCT_TYPE', productType: t.code, path: `${path} › ${t.label}`, children: [] };
+        return { id: `pt-${leafCode(c, t)}`, code: leafCode(c, t), name: t.label, level: 'PRODUCT_TYPE', productType: t.code, path: `${path} › ${t.label}`, children: [] };
       })
     };
   });
-  return { id: `dep-${d.code}`, name: d.name, level: 'DEPARTMENT', productType: null, path: d.name, children };
+  return { id: `dep-${d.code}`, code: d.code, name: d.name, level: 'DEPARTMENT', productType: null, path: d.name, children };
 });

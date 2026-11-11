@@ -2,6 +2,7 @@ package upstreams
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -95,6 +96,17 @@ func (k *sellerCatalogImpl) ProductType(ctx context.Context, code string) (port.
 			return t, nil, err
 		}
 		return t, res.Header, nil
+	}, k.refTTL)
+}
+
+func (k *sellerCatalogImpl) ListingRules(ctx context.Context, categoryCode string) (json.RawMessage, error) {
+	return cached(k.cache, "catalog:listing-rules:"+categoryCode, func() (json.RawMessage, http.Header, error) {
+		var raw json.RawMessage
+		res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/listing-rules", Query: url.Values{"categoryCode": {categoryCode}}}, &raw)
+		if err != nil {
+			return nil, nil, err
+		}
+		return raw, res.Header, nil
 	}, k.refTTL)
 }
 

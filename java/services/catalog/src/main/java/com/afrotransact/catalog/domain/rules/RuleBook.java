@@ -15,6 +15,9 @@ import java.util.Optional;
  */
 public record RuleBook(Map<String, String> kinds, Map<String, CategoryRules> categories) {
 
+    /** The code the product form asks the rules for when a category has none (a requested category). */
+    public static final String GENERAL = "general";
+
     public RuleBook {
         kinds = Collections.unmodifiableMap(new LinkedHashMap<>(kinds));
         categories = Collections.unmodifiableMap(new LinkedHashMap<>(categories));
@@ -34,7 +37,7 @@ public record RuleBook(Map<String, String> kinds, Map<String, CategoryRules> cat
     public CategoryRules general(String code) {
         CategoryRules any = categories.values().stream().filter(c -> CategoryRules.FALLBACK_KIND.equals(c.kindCode()))
                 .findFirst().orElseThrow(() -> new IllegalStateException("The rules have no general goods kind"));
-        return new CategoryRules(code == null ? "custom" : code, any.name(), any.department(), any.kindCode(),
+        return new CategoryRules(code == null ? GENERAL : code, "General goods", "", any.kindCode(),
                 any.kindName(), "open", "", true, any.fields());
     }
 

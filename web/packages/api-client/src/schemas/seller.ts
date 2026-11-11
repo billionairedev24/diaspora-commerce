@@ -868,6 +868,8 @@ export const CategoryTaxStatusSchema = z.enum(['ACTIVE', 'NEEDS_APPROVAL', 'BLOC
 export type CategoryTaxStatus = z.infer<typeof CategoryTaxStatusSchema>;
 export interface CategoryNode {
   id: string;
+  /** The category's stable code (dairy-eggs); the listing rules are asked for by the code of the category above a product type. */
+  code: string;
   name: string;
   level: string;
   productType: string | null;
@@ -877,7 +879,7 @@ export interface CategoryNode {
   children: CategoryNode[];
 }
 export const CategoryNodeSchema: z.ZodType<CategoryNode> = z.lazy(() =>
-  z.object({ id: z.string(), name: z.string(), level: z.string(), productType: nullableString, path: z.string(), taxStatus: CategoryTaxStatusSchema.nullish(), children: z.array(CategoryNodeSchema) })
+  z.object({ id: z.string(), code: z.string().default(''), name: z.string(), level: z.string(), productType: nullableString, path: z.string(), taxStatus: CategoryTaxStatusSchema.nullish(), children: z.array(CategoryNodeSchema) })
 );
 
 /** BRAND: chosen from the brand registry of the category; its options are the no-brand choices (UNBRANDED, HANDMADE). */
@@ -968,6 +970,42 @@ export const ProductTypeSchemaSchema = z.object({
   traits: ProductTypeTraitsSchema
 });
 export type ProductTypeSchema = z.infer<typeof ProductTypeSchemaSchema>;
+
+/* ── Listing rules: what a category asks of a listing (GET /v1/seller/catalog/listing-rules), the one source for the product
+   form, the API validation and the bulk template. ── */
+export const FieldStatusSchema = z.enum(['required', 'required_or_exemption', 'document', 'optional', 'hidden']);
+export type FieldStatus = z.infer<typeof FieldStatusSchema>;
+export const ListingKindSchema = z.enum(['PKG', 'PER', 'SFD', 'BBY', 'BEA', 'HLT', 'FSH', 'JWL', 'ELC', 'HOM', 'KID', 'PET', 'BOK', 'DIG', 'GFT', 'SRV']);
+export type ListingKind = z.infer<typeof ListingKindSchema>;
+export const ListingRuleFieldSchema = z.object({
+  id: z.string(),
+  group: z.string(),
+  label: z.string(),
+  status: FieldStatusSchema,
+  note: z.string().default(''),
+  control: z.string(),
+  attributeKey: nullableString.optional(),
+  options: z.array(z.string()).default([]),
+  units: z.array(z.string()).default([]),
+  perVariant: z.boolean().default(false)
+});
+export type ListingRuleField = z.infer<typeof ListingRuleFieldSchema>;
+export const ApprovalLevelSchema = z.enum(['open', 'approval', 'brand_gated', 'conditional_approval', 'provider_application', 'blocked']);
+export type ApprovalLevel = z.infer<typeof ApprovalLevelSchema>;
+export const ListingRulesSchema = z.object({
+  categoryCode: z.string(),
+  categoryName: z.string(),
+  department: z.string(),
+  kind: ListingKindSchema,
+  kindName: z.string(),
+  approval: ApprovalLevelSchema,
+  note: z.string().default(''),
+  provisional: z.boolean().default(false),
+  fields: z.array(ListingRuleFieldSchema),
+  /** Product-type detail keys the rules own: the form shows the rule field instead and ignores these attributes. */
+  replacedAttributeKeys: z.array(z.string()).default([])
+});
+export type ListingRules = z.infer<typeof ListingRulesSchema>;
 
 export const GtinCheckSchema = z.object({ digits: z.string(), valid: z.boolean(), suggestion: nullableString, existingAtin: nullableString, message: z.string() });
 export type GtinCheck = z.infer<typeof GtinCheckSchema>;
@@ -1147,6 +1185,14 @@ export interface SellingFacts {
   gtin?: string;
 }
 
+/** The box as shipped: inches and pounds, within the carrier limits. */
+export const PackageDimensionsSchema = z.object({
+  lengthIn: z.number().positive().max(108),
+  widthIn: z.number().positive().max(108),
+  heightIn: z.number().positive().max(108),
+  weightLb: z.number().positive().max(150)
+});
+
 export const ProductImageInputSchema = z.object({
   url: z.string().min(1),
   width: z.number().int().min(0).optional(),
@@ -1154,7 +1200,9 @@ export const ProductImageInputSchema = z.object({
   bytes: z.number().int().min(0).optional(),
   contentType: z.string(),
   /** Optional alternative text, stored with the image. */
-  alt: z.string().max(200).nullable().optional()
+  alt: z.string().max(200).nullable().optional(),
+  /** LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); absent for a product picture. */
+  role: z.literal('LABEL').nullable().optional()
 });
 export type ProductImageInput = z.infer<typeof ProductImageInputSchema>;
 /** An answer to a tax question: yes/no, a number, or the chosen option value. */
@@ -1173,20 +1221,27 @@ export const VariantInputSchema = z.object({
   priceMinor: z.number().int().min(1),
   compareAtMinor: z.number().int().min(1).nullable().optional(),
   quantity: z.number().int().min(0).max(100_000),
-  images: z.array(ProductImageInputSchema).max(5).optional()
+  images: z.array(ProductImageInputSchema).max(5).optional(),
+  /** The box of this variant as shipped; required for every physical variant, a variant without one starts from the listing's. */
+  packaging: PackageDimensionsSchema.nullable().optional()
 });
 export type VariantInput = z.infer<typeof VariantInputSchema>;
 export const ItemConditionSchema = z.enum(['NEW', 'RENEWED', 'USED_LIKE_NEW', 'USED_VERY_GOOD', 'USED_GOOD', 'USED_ACCEPTABLE']);
 export type ItemCondition = z.infer<typeof ItemConditionSchema>;
 export const ListingFulfilmentSchema = z.enum(['SELLER', 'AFROTRANSACT']);
 export type ListingFulfilment = z.infer<typeof ListingFulfilmentSchema>;
-export const PackageDimensionsSchema = z.object({
-  lengthIn: z.number().positive().max(108),
-  widthIn: z.number().positive().max(108),
-  heightIn: z.number().positive().max(108),
-  weightLb: z.number().positive().max(150)
-});
 export type PackageDimensions = z.infer<typeof PackageDimensionsSchema>;
+/** A document uploaded on the product form; the approval engine reviews it (kind is the rule field id). */
+export const ListingDocumentSchema = z.object({
+  kind: z.enum(['permit', 'brand_authorization', 'safety_certificate', 'liability_insurance', 'authenticity_invoice']),
+  url: z.string().min(1),
+  fileName: nullableString.optional(),
+  contentType: z.string(),
+  bytes: z.number().int().min(0).optional(),
+  expiresOn: nullableString.optional(),
+  status: z.enum(['PENDING_REVIEW', 'APPROVED', 'REJECTED']).optional()
+});
+export type ListingDocument = z.infer<typeof ListingDocumentSchema>;
 export const ListingDetailsInputSchema = z.object({
   description: z.string().max(5000).optional(),
   condition: ItemConditionSchema.optional(),
@@ -1200,7 +1255,13 @@ export const ListingDetailsInputSchema = z.object({
   /** How the sizes fit; defaults to the chart's own. */
   fitNote: FitNoteSchema.nullable().optional(),
   /** "Your listing": how this seller sells the item (sold hot, heated by you, utensils included), by fact id. */
-  sellerBehaviour: z.record(z.string(), FactValueSchema).optional()
+  sellerBehaviour: z.record(z.string(), FactValueSchema).optional(),
+  /** The dangerous goods answer where the category asks it; a yes marks the listing for fulfilment and carrier checks. */
+  dangerousGoods: z.boolean().nullable().optional(),
+  /** Documents uploaded on the form, reviewed by the approval engine; they never block the listing. */
+  documents: z.array(ListingDocumentSchema).max(20).optional(),
+  /** Rule field id to the reason for a "required or exemption" field the seller cannot provide. */
+  exemptions: z.record(z.string(), z.string().max(300)).optional()
 });
 export type ListingDetailsInput = z.infer<typeof ListingDetailsInputSchema>;
 export const ProductDraftSchema = z.object({
@@ -1232,7 +1293,9 @@ export const ProductVariantSchema = z.object({
   sellerSkuGenerated: z.boolean().default(false),
   taxFacts: z.record(z.string(), FactValueSchema).default({}),
   taxStatus: z.enum(['READY', 'MISSING_FACTS', 'PENDING_REVIEW', 'BLOCKED', 'NEEDS_APPROVAL', 'REFINE_CODE', 'CONFLICT_OPEN', 'REJECTED']).default('MISSING_FACTS'),
-  missingTaxFacts: z.array(z.object({ factId: z.string(), label: nullableString.optional(), message: z.string() })).default([])
+  missingTaxFacts: z.array(z.object({ factId: z.string(), label: nullableString.optional(), message: z.string() })).default([]),
+  /** This variant's box as shipped; null for items that ship nothing and for listings saved before packages were per variant. */
+  packaging: PackageDimensionsSchema.nullish()
 });
 export type ProductVariant = z.infer<typeof ProductVariantSchema>;
 export const ListingDetailsSchema = z.object({
@@ -1245,7 +1308,10 @@ export const ListingDetailsSchema = z.object({
   shipFromId: nullableString,
   sizeChartId: nullableString.default(null),
   fitNote: FitNoteSchema.nullable().default(null),
-  sellerBehaviour: z.record(z.string(), FactValueSchema).default({})
+  sellerBehaviour: z.record(z.string(), FactValueSchema).default({}),
+  dangerousGoods: z.boolean().nullish(),
+  documents: z.array(ListingDocumentSchema).optional(),
+  exemptions: z.record(z.string(), z.string()).optional()
 });
 export type ListingDetails = z.infer<typeof ListingDetailsSchema>;
 

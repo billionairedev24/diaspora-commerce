@@ -29,6 +29,9 @@ class ListingRulesServiceImpl implements ListingRulesService {
 
     @Override
     public CategoryRules forCode(String categoryCode) {
+        if (RuleBook.GENERAL.equals(categoryCode)) {
+            return registry.book().general(RuleBook.GENERAL);
+        }
         return registry.book().forCategory(categoryCode)
                 .orElseThrow(() -> new NotFoundException("catalog.listing-rules-not-found",
                         "No listing rules for category " + categoryCode));

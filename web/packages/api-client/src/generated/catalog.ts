@@ -605,6 +605,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/listing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The listing rules of a category
+         * @description Kind of product, approval level and the status of every field (required, required_or_exemption, document, optional, hidden) for the category code (the category above the product type, such as dairy-eggs); the code general answers the general goods rules for a requested category. 404 for a code the rules do not know.
+         */
+        get: operations["getListingRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/product-types": {
         parameters: {
             query?: never;
@@ -1643,6 +1663,54 @@ export interface components {
              * @enum {string}
              */
             fitNote?: "RUNS_SMALL" | "TRUE_TO_SIZE" | "RUNS_LARGE";
+            /** @description The dangerous goods answer (aerosol, flammable, battery, candle, cleaner). Required where the category's rules ask the question, ignored elsewhere. true marks the listing; fulfilment by AfroTransact and carrier-gated flows read it. */
+            dangerousGoods?: boolean;
+            /** @description Documents uploaded on the form. Kept and marked PENDING_REVIEW for the approval engine; they never block the listing here. */
+            documents?: components["schemas"]["ListingDocument"][];
+            /** @description Rule field id to the reason the seller cannot provide a field the rules mark required_or_exemption */
+            exemptions?: {
+                [key: string]: string;
+            };
+        };
+        /** @description A document uploaded on the product form, reviewed by the approval engine */
+        ListingDocument: {
+            kind: string;
+            url: string;
+            fileName?: string;
+            contentType: string;
+            /** Format: int64 */
+            bytes?: number;
+            /** Format: date */
+            expiresOn?: string;
+            /** @description PENDING_REVIEW until the approval engine decides; set by the server */
+            status?: string;
+        };
+        /** @description One field of the matrix for this category. A hidden field is not shown and a submitted value is ignored. A required_or_exemption field may be left empty when listing.exemptions gives a reason. */
+        ListingRuleField: {
+            id?: string;
+            group?: string;
+            label?: string;
+            /** @enum {string} */
+            status?: "required" | "required_or_exemption" | "document" | "optional" | "hidden";
+            note?: string;
+            control?: string;
+            attributeKey?: string;
+            options?: string[];
+            units?: string[];
+            perVariant?: boolean;
+        };
+        /** @description The listing rules of one category, from the single rules source. replacedAttributeKeys are the per-product-type detail keys the rules own. */
+        ListingRules: {
+            categoryCode?: string;
+            categoryName?: string;
+            department?: string;
+            kind?: string;
+            kindName?: string;
+            approval?: string;
+            note?: string;
+            provisional?: boolean;
+            fields?: components["schemas"]["ListingRuleField"][];
+            replacedAttributeKeys?: string[];
         };
         /** @description Packed size (inches) and weight (pounds) */
         PackageDimensions: {
@@ -1666,6 +1734,8 @@ export interface components {
             contentType: string;
             /** @description Optional alternative text (what the picture shows), stored with the image */
             alt?: string;
+            /** @description LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); absent for a product picture */
+            role?: string;
         };
         /** @description The seller's ship-from location (snapshot) */
         ShipFrom: {
@@ -1724,6 +1794,7 @@ export interface components {
             compareAtMinor?: number;
             /** @description Images of this variant only (e.g. its colour) */
             images?: components["schemas"]["ProductImage"][];
+            packaging?: components["schemas"]["PackageDimensions"];
         };
         Product: {
             /** Format: uuid */
@@ -1782,6 +1853,7 @@ export interface components {
             /** Format: int64 */
             compareAtMinor?: number;
             images?: components["schemas"]["ProductImage"][];
+            packaging?: components["schemas"]["PackageDimensions"];
         };
         /** @description Pre-order flags of a product (S272) */
         PreorderFlagsRequest: {
@@ -4157,6 +4229,35 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["SellerCatalogScope"];
                 };
+            };
+        };
+    };
+    getListingRules: {
+        parameters: {
+            query: {
+                categoryCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ListingRules"];
+                };
+            };
+            /** @description No rules for that category code */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

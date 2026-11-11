@@ -264,6 +264,12 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/categories", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/product-types/grocery", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/product-types/nope", nil), 404)
+	// The listing rules are catalog's: the gateway passes them through and holds no copy.
+	if r := b.do("GET", "/v1/seller/catalog/listing-rules?categoryCode=rice-grains", nil); r.status != 200 || r.json(t)["kind"] != "PKG" {
+		t.Fatalf("listing rules = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/listing-rules?categoryCode=nope", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/listing-rules", nil), 422)
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/gtin/4006381333931", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/category-requests", nil), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/category-requests", map[string]any{"parentPath": "Fashion › Women", "name": "Bridal aso-ebi sets",

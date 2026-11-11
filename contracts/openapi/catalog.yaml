@@ -1188,6 +1188,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SellerCatalogScope'
+  /v1/listing-rules:
+    get:
+      tags:
+      - Listing rules
+      summary: The listing rules of a category
+      description: Kind of product, approval level and the status of every field (required, required_or_exemption, document, optional, hidden) for the category code (the category above the product type, such as dairy-eggs); the code general answers the general goods rules for a requested category. 404 for a code the rules do not know.
+      operationId: getListingRules
+      parameters:
+      - name: categoryCode
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ListingRules'
+        '404':
+          description: No rules for that category code
   /v1/product-types:
     get:
       tags:
@@ -2998,6 +3020,111 @@ components:
           - RUNS_SMALL
           - TRUE_TO_SIZE
           - RUNS_LARGE
+        dangerousGoods:
+          type: boolean
+          description: The dangerous goods answer (aerosol, flammable, battery, candle, cleaner). Required where the category's rules ask the question, ignored elsewhere. true marks the listing; fulfilment by AfroTransact and carrier-gated flows read it.
+        documents:
+          type: array
+          description: Documents uploaded on the form. Kept and marked PENDING_REVIEW for the approval engine; they never block the listing here.
+          items:
+            $ref: '#/components/schemas/ListingDocument'
+          maxItems: 20
+        exemptions:
+          type: object
+          description: Rule field id to the reason the seller cannot provide a field the rules mark required_or_exemption
+          additionalProperties:
+            type: string
+            maxLength: 300
+    ListingDocument:
+      type: object
+      description: A document uploaded on the product form, reviewed by the approval engine
+      properties:
+        kind:
+          type: string
+          maxLength: 40
+        url:
+          type: string
+        fileName:
+          type: string
+          maxLength: 200
+        contentType:
+          type: string
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        expiresOn:
+          type: string
+          format: date
+        status:
+          type: string
+          description: PENDING_REVIEW until the approval engine decides; set by the server
+      required:
+      - contentType
+      - kind
+      - url
+    ListingRuleField:
+      type: object
+      description: One field of the matrix for this category. A hidden field is not shown and a submitted value is ignored. A required_or_exemption field may be left empty when listing.exemptions gives a reason.
+      properties:
+        id:
+          type: string
+        group:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+          enum:
+          - required
+          - required_or_exemption
+          - document
+          - optional
+          - hidden
+        note:
+          type: string
+        control:
+          type: string
+        attributeKey:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        units:
+          type: array
+          items:
+            type: string
+        perVariant:
+          type: boolean
+    ListingRules:
+      type: object
+      description: The listing rules of one category, from the single rules source. replacedAttributeKeys are the per-product-type detail keys the rules own.
+      properties:
+        categoryCode:
+          type: string
+        categoryName:
+          type: string
+        department:
+          type: string
+        kind:
+          type: string
+        kindName:
+          type: string
+        approval:
+          type: string
+        note:
+          type: string
+        provisional:
+          type: boolean
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListingRuleField'
+        replacedAttributeKeys:
+          type: array
+          items:
+            type: string
     PackageDimensions:
       type: object
       description: Packed size (inches) and weight (pounds)
@@ -3043,6 +3170,10 @@ components:
           type: string
           maxLength: 200
           description: Optional alternative text (what the picture shows), stored with the image
+        role:
+          type: string
+          maxLength: 20
+          description: LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); absent for a product picture
       required:
       - contentType
       - url
@@ -3166,6 +3297,8 @@ components:
             $ref: '#/components/schemas/ProductImage'
           maxItems: 5
           minItems: 0
+        packaging:
+          $ref: '#/components/schemas/PackageDimensions'
       required:
       - options
     Product:
@@ -3271,6 +3404,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProductImage'
+        packaging:
+          $ref: '#/components/schemas/PackageDimensions'
     PreorderFlagsRequest:
       type: object
       description: Pre-order flags of a product (S272)

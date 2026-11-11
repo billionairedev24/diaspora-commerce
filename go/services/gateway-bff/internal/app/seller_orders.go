@@ -238,11 +238,16 @@ func (s *sellerOrdersImpl) suggestParcels(ctx context.Context, c *domain.Caller,
 		known := true
 		for _, l := range sh.Lines {
 			prod, err := s.r.d.Listing.ProductByATIN(ctx, c.BearerToken, l.VariantATIN)
-			if err != nil || prod.Listing == nil || prod.Listing.Packaging == nil || prod.Listing.Packaging.WeightLb <= 0 {
+			if err != nil {
 				known = false
 				break
 			}
-			pk := prod.Listing.Packaging
+			// The variant's own box (packages are per variant); older listings only have the listing's package.
+			pk := variantPackage(prod, l.VariantATIN)
+			if pk == nil || pk.WeightLb <= 0 {
+				known = false
+				break
+			}
 			q := float64(max(1, l.Quantity))
 			p.WeightLb += pk.WeightLb * q
 			p.LengthIn = max(p.LengthIn, pk.LengthIn)
@@ -255,6 +260,19 @@ func (s *sellerOrdersImpl) suggestParcels(ctx context.Context, c *domain.Caller,
 			sh.SuggestedParcel = &p
 		}
 	}
+}
+
+// variantPackage is the package of the variant with this ATIN: its own, else the listing's default; nil when none.
+func variantPackage(p port.CatalogOwnProduct, atin string) *domain.PackageDimensions {
+	for _, v := range p.Variants {
+		if strings.EqualFold(v.ATIN, atin) && v.Packaging != nil {
+			return v.Packaging
+		}
+	}
+	if p.Listing == nil {
+		return nil
+	}
+	return p.Listing.Packaging
 }
 
 func (s *sellerOrdersImpl) Label(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.FileDownload, error) {

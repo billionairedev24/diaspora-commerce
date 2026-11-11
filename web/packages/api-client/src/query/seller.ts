@@ -41,6 +41,7 @@ export const sellerKeys = {
   /** The catalog's departments onboarding offers. */
   departments: () => [...sellerKeys.all, 'catalog', 'departments'] as const,
   productType: (code: string) => [...sellerKeys.all, 'catalog', 'product-type', code] as const,
+  listingRules: (categoryCode: string) => [...sellerKeys.all, 'catalog', 'listing-rules', categoryCode] as const,
   product: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'product', productId] as const,
   productDrafts: (orgId: string) => [...sellerKeys.org(orgId), 'product-drafts'] as const,
   productDraftPage: (orgId: string, q: ProductDraftsQuery) => [...sellerKeys.productDrafts(orgId), 'page', q] as const,
@@ -144,6 +145,8 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.departments(), queryFn: ({ signal }) => api.listDepartments(signal), staleTime: 30 * MINUTE }),
   productType: (api: SellerApiClient, code: string) =>
     queryOptions({ queryKey: sellerKeys.productType(code), queryFn: ({ signal }) => api.getProductType(code, signal), staleTime: 30 * MINUTE, enabled: code !== '' }),
+  listingRules: (api: SellerApiClient, categoryCode: string) =>
+    queryOptions({ queryKey: sellerKeys.listingRules(categoryCode), queryFn: ({ signal }) => api.getListingRules(categoryCode, signal), staleTime: 30 * MINUTE, enabled: categoryCode !== '' }),
   product: (api: SellerApiClient, orgId: string, productId: string) =>
     queryOptions({ queryKey: sellerKeys.product(orgId, productId), queryFn: ({ signal }) => api.getProduct(productId, signal), staleTime: 0, enabled: productId !== '' }),
   productDrafts: (api: SellerApiClient, orgId: string) =>

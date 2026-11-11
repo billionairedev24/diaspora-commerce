@@ -7,7 +7,8 @@ import { type ClipboardEvent, type KeyboardEvent, useState } from 'react';
 
 import { type MessageKey, useT } from '@/i18n/t';
 
-import { addOwnValues, applyToAll, comboKey, combos, emptyRow, fieldId, fillSkus, type FormState, type Problems, type VariantRow } from '../form-model';
+import { addOwnValues, applyToAll, comboKey, combos, copyPackageDown, emptyRow, fieldId, fillSkus, firstPackage, type FormState, type Problems, type VariantRow } from '../form-model';
+import { PackageInputs } from './PackageFields';
 
 interface Props {
   s: FormState;
@@ -17,6 +18,10 @@ interface Props {
   shown: (id: string) => boolean;
   /** Variant combinations a live listing already sells: they can't be removed. */
   locked: Set<string>;
+  /** The category asks a package for every physical variant: each row gets its own, starting from the first variant's. */
+  physical?: boolean;
+  /** The category does not ask for a barcode or a stock count (digital goods, services): those columns are left out. */
+  hide?: { gtin?: boolean; qty?: boolean };
 }
 
 type Cell = 'sku' | 'gtin' | 'price' | 'compareAt' | 'qty';
@@ -92,7 +97,7 @@ function OwnValues({ dimension, suggestions, selected, isLocked, onSelected }: O
 }
 
 /** Variations: pick how the product varies (axes), the options of each axis, then fill the generated matrix (SKU, barcode, price, compare-at, stock, image per row). */
-export function VariantsSection({ s, type, set, problems, shown, locked }: Props) {
+export function VariantsSection({ s, type, set, problems, shown, locked, physical = false, hide = {} }: Props) {
   const t = useT();
   const theme = type.themes.find((th) => th.name === s.theme);
   const list = combos(type, s);
@@ -104,13 +109,15 @@ export function VariantsSection({ s, type, set, problems, shown, locked }: Props
   const idLabel = type.identifierRule === 'isbn' ? t('sc.pf.field.isbn') : t('sc.pf.field.gtin');
   const columns: { field: Cell; label: string; mode?: 'decimal' | 'numeric'; mono?: boolean }[] = [
     { field: 'sku', label: t('sc.pf.field.sku'), mono: true },
-    ...(s.noGtin ? [] : [{ field: 'gtin' as const, label: idLabel, mode: 'numeric' as const, mono: true }]),
+    ...(s.noGtin || hide.gtin ? [] : [{ field: 'gtin' as const, label: idLabel, mode: 'numeric' as const, mono: true }]),
     { field: 'price', label: t('sc.pf.field.priceUsd'), mode: 'decimal' },
     { field: 'compareAt', label: t('sc.pf.field.compareAtShort'), mode: 'decimal' },
-    { field: 'qty', label: t('sc.pf.field.qty'), mode: 'numeric' }
+    ...(hide.qty ? [] : [{ field: 'qty' as const, label: t('sc.pf.field.qty'), mode: 'numeric' as const }])
   ];
-  const grid = s.noGtin ? 'md:grid-cols-[minmax(84px,.9fr)_minmax(120px,1.4fr)_minmax(70px,.7fr)_minmax(70px,.7fr)_minmax(56px,.6fr)_minmax(96px,1fr)]'
-    : 'md:grid-cols-[minmax(84px,.9fr)_minmax(110px,1.3fr)_minmax(120px,1.2fr)_minmax(70px,.7fr)_minmax(70px,.7fr)_minmax(56px,.6fr)_minmax(96px,1fr)]';
+  const grid = columns.length === 5 ? 'md:grid-cols-[minmax(84px,.9fr)_minmax(110px,1.3fr)_minmax(120px,1.2fr)_minmax(70px,.7fr)_minmax(70px,.7fr)_minmax(56px,.6fr)_minmax(96px,1fr)]'
+    : columns.length === 4 ? 'md:grid-cols-[minmax(84px,.9fr)_minmax(120px,1.4fr)_minmax(70px,.7fr)_minmax(70px,.7fr)_minmax(56px,.6fr)_minmax(96px,1fr)]'
+      : 'md:grid-cols-[minmax(84px,.9fr)_minmax(120px,1.4fr)_minmax(70px,.7fr)_minmax(70px,.7fr)_minmax(96px,1fr)]';
+  const inherited = firstPackage(s, type);
   return (
     <div className="flex flex-col gap-4">
       <div id={fieldId.theme} tabIndex={-1} className="flex flex-col gap-2 outline-none">
@@ -158,6 +165,7 @@ export function VariantsSection({ s, type, set, problems, shown, locked }: Props
               className="h-8 w-24 rounded-sm border border-border-strong bg-surface px-2 text-sm" />
             <Button size="sm" variant="neutral" disabled={!all.qty.trim()} onClick={() => set((prev) => applyToAll(type, prev, 'qty', all.qty))}>{t('sc.pf.variants.apply')}</Button>
             <Button size="sm" variant="neutral" onClick={() => set((prev) => fillSkus(type, prev))}>{t('sc.pf.variants.generateSkus')}</Button>
+            {physical ? <Button size="sm" variant="neutral" onClick={() => set((prev) => copyPackageDown(type, prev))}>{t('sc.pf.pkg.sameAll')}</Button> : null}
           </div>
           <div role="table" aria-label={t('sc.pf.variants.matrix')} className="flex flex-col rounded-md border border-border">
             <div role="row" className={cx('hidden gap-2 border-b border-border bg-surface-muted px-3 py-2 md:grid', grid)}>
@@ -169,7 +177,8 @@ export function VariantsSection({ s, type, set, problems, shown, locked }: Props
               const k = comboKey(c);
               const r = row(k);
               return (
-                <div key={k} role="row" data-testid="variant-row" className={cx('grid grid-cols-2 gap-x-2 gap-y-1 border-b border-border px-3 py-2 last:border-b-0 md:items-start', grid)}>
+                <div key={k} className="border-b border-border last:border-b-0">
+                <div role="row" data-testid="variant-row" className={cx('grid grid-cols-2 gap-x-2 gap-y-1 px-3 py-2 md:items-start', grid)}>
                   <span role="rowheader" className="col-span-2 flex items-center gap-1 pt-1.5 text-sm font-semibold md:col-span-1">
                     {k}{locked.has(k) ? <span className="rounded-xs bg-surface-muted px-1 text-2xs font-normal text-muted">{t('sc.pf.variants.live')}</span> : null}
                   </span>
@@ -194,6 +203,14 @@ export function VariantsSection({ s, type, set, problems, shown, locked }: Props
                       {s.images.filter((i) => i.url).map((im, i) => <option key={im.id} value={im.id}>{t('sc.pf.images.alt', { n: i + 1 })}</option>)}
                     </select>
                   </span>
+                </div>
+                {physical ? (
+                  <div className="px-3 pb-2" data-testid="variant-package">
+                    <span className="text-2xs font-semibold text-muted">{t('sc.pf.pkg.forVariant', { name: k })}</span>
+                    <PackageInputs rowKey={k} name={k} value={r.pkg} inherited={k === comboKey(list[0] ?? []) ? undefined : inherited} error={err(fieldId.rowPkg(k))}
+                      onChange={(pkg) => setRow(k, { pkg })} />
+                  </div>
+                ) : null}
                 </div>
               );
             })}

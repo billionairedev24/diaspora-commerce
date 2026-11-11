@@ -9,7 +9,10 @@ import {
   type FactValue,
   type FitNote,
   type ItemCondition,
+  type ListingDocument,
   type ListingFulfilment,
+  type ListingRuleField,
+  type ListingRules,
   type ProductDraft,
   type ProductTypeSchema,
   type SellerProductDetail,
@@ -24,7 +27,9 @@ import { type MessageKey } from '@/i18n/t';
 
 /* Pure state and rules of the one-step product form (S307): which sections a product type shows, the variant matrix,
    validation with field ids (the readiness panel links to them), the catalog submission and the draft payload.
-   Rules mirror catalog's DefaultProductDraftPolicy and the BFF's ProductDraft checks. Messages are i18n keys. */
+   What a category asks (required, optional, hidden ...) is read from catalog's listing rules (GET /v1/seller/catalog/listing-rules):
+   this file only interprets the statuses, it holds no rule data of its own; catalog validates every submission again.
+   Without rules (not loaded yet) the form behaves as before. Messages are i18n keys. */
 
 export interface FormImage {
   id: string;
@@ -48,6 +53,8 @@ export interface VariantRow {
   qty: string;
   /** id of one of the product's images ('' = the product's main image). */
   image: string;
+  /** The box of this variant as shipped (typed in the form's units); empty = starts from the first variant's package. */
+  pkg: PackageInput;
 }
 
 export interface PackageInput {
@@ -64,6 +71,18 @@ export interface PackageUnits {
 }
 export const SIZE_UNITS: PackageUnits['size'][] = ['in', 'cm'];
 export const WEIGHT_UNITS: PackageUnits['weight'][] = ['lb', 'kg'];
+
+/** A document uploaded on the form (permit, brand authorization ...); the approval engine reviews it. */
+export interface FormDocument {
+  kind: ListingDocument['kind'];
+  url: string | null;
+  fileName: string;
+  contentType: string;
+  bytes: number;
+  /** The expiry date the document states (insurance, permits), yyyy-mm-dd; '' when none. */
+  expiresOn: string;
+  status: 'uploading' | 'ready' | 'error';
+}
 
 export interface FormState {
   categoryId: string | null;
@@ -87,8 +106,15 @@ export interface FormState {
   rows: Record<string, VariantRow>;
   single: VariantRow;
   fulfilment: ListingFulfilment;
-  pkg: PackageInput;
   pkgUnits: PackageUnits;
+  /** The dangerous goods answer where the category asks ('' = not answered). */
+  dangerousGoods: '' | 'yes' | 'no';
+  /** Rule field id to the reason the seller cannot provide a "required or exemption" field. */
+  exemptions: Record<string, string>;
+  /** The label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts): a typed image slot. */
+  labelImage: FormImage | null;
+  /** Documents by kind (rule field id). */
+  documents: Record<string, FormDocument>;
   shipFromId: string;
   handlingDays: string;
   preorder: boolean;
@@ -104,12 +130,13 @@ export interface FormState {
 
 export const FIT_NOTES: FitNote[] = ['RUNS_SMALL', 'TRUE_TO_SIZE', 'RUNS_LARGE'];
 
-export const emptyRow = (): VariantRow => ({ sku: '', gtin: '', price: '', compareAt: '', qty: '', image: '' });
+export const emptyPackage = (): PackageInput => ({ length: '', width: '', height: '', weight: '' });
+export const emptyRow = (): VariantRow => ({ sku: '', gtin: '', price: '', compareAt: '', qty: '', image: '', pkg: emptyPackage() });
 
 export const emptyForm = (): FormState => ({
   categoryId: null, categoryPath: '', productType: null, request: null, title: '', attrs: {}, units: {}, description: '', condition: 'NEW', keywords: '',
   images: [], noGtin: false, hasVariants: false, theme: '', selected: {}, rows: {}, single: emptyRow(), fulfilment: 'SELLER',
-  pkg: { length: '', width: '', height: '', weight: '' }, pkgUnits: { size: 'in', weight: 'lb' }, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: '', facts: {}, behaviour: {}
+  pkgUnits: { size: 'in', weight: 'lb' }, dangerousGoods: '', exemptions: {}, labelImage: null, documents: {}, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: '', facts: {}, behaviour: {}
 });
 
 export const MAX_IMAGES = 10;
@@ -126,6 +153,8 @@ export interface CategoryLeaf {
   id: string;
   name: string;
   path: string;
+  /** The code of the category above the product type (dairy-eggs): what the listing rules are asked for. */
+  categoryCode: string;
   productType: string;
   /** The tax gate of the category above (absent = open). */
   taxStatus?: CategoryTaxStatus | undefined;
@@ -139,7 +168,7 @@ export function leavesOf(tree: CategoryNode[]): CategoryLeaf[] {
       if (n.level === 'PRODUCT_TYPE' && n.productType) {
         // A category with one product type of its own name is chosen as the category (no repeated name in the path).
         const alone = parent && parent.children.length === 1 && parent.name === n.name;
-        out.push({ id: n.id, name: n.name, path: alone ? parent.path : n.path, productType: n.productType, ...(parent?.taxStatus ? { taxStatus: parent.taxStatus } : {}) });
+        out.push({ id: n.id, name: n.name, path: alone ? parent.path : n.path, categoryCode: parent?.code ?? n.code, productType: n.productType, ...(parent?.taxStatus ? { taxStatus: parent.taxStatus } : {}) });
       }
       walk(n.children, n);
     });
@@ -167,28 +196,56 @@ export function withCategory(s: FormState, leaf: { id: string; path: string; pro
     ...(s.productType === (request ? 'custom' : (leaf?.productType ?? null)) ? {} : { sizeChartId: '', fitNote: '' as const }) };
 }
 
+/* ── Listing rules (read from catalog, never copied here) ── */
+
+/** What the rules code asks for a category that has none of its own (a requested category): catalog answers the general goods rules. */
+export const GENERAL_RULES_CODE = 'general';
+
+/** The category code to ask the rules for: the category above the chosen product type; a requested category uses the general goods rules. */
+export const rulesCodeOf = (s: Pick<FormState, 'categoryId' | 'request'>, tree: CategoryNode[] | undefined): string => {
+  if (s.request || !tree || !s.categoryId) return s.request ? GENERAL_RULES_CODE : '';
+  return leavesOf(tree).find((l) => l.id === s.categoryId)?.categoryCode || GENERAL_RULES_CODE;
+};
+
+/** The status of a field in this category; undefined when the rules are not loaded (the form then keeps its earlier behaviour). */
+export const statusOf = (rules: ListingRules | undefined, id: string): ListingRuleField['status'] | undefined =>
+  rules ? (rules.fields.find((f) => f.id === id)?.status ?? 'hidden') : undefined;
+export const isHidden = (rules: ListingRules | undefined, id: string) => statusOf(rules, id) === 'hidden';
+export const isShown = (rules: ListingRules | undefined, id: string) => !rules || statusOf(rules, id) !== 'hidden';
+/** The rule field with this id. */
+export const ruleField = (rules: ListingRules | undefined, id: string): ListingRuleField | undefined => rules?.fields.find((f) => f.id === id);
+/** True for every physical product (all kinds except digital, gift cards and services): a package per variant is asked. */
+export const isPhysical = (rules: ListingRules | undefined) => isShown(rules, 'package_size') && Boolean(rules);
+/** The product details the rules own (net weight, servings, shelf life, storage, ingredients, allergens, material, model, age grade, country of origin) that this category asks. */
+export const ruleAttributeFields = (rules: ListingRules | undefined): ListingRuleField[] =>
+  rules ? rules.fields.filter((f) => f.attributeKey && f.id !== 'brand' && f.status !== 'hidden') : [];
+/** The document slots this category shows. */
+export const ruleDocuments = (rules: ListingRules | undefined): ListingRuleField[] => (rules ? rules.fields.filter((f) => f.control === 'document' && f.status !== 'hidden') : []);
+const replaced = (rules: ListingRules | undefined, key: string) => Boolean(rules?.replacedAttributeKeys.includes(key));
+
 /* ── Sections ── */
 
 export type SectionKey = 'basics' | 'images' | 'offer' | 'details' | 'facts' | 'variants' | 'sizeGuide' | 'fulfilment' | 'compliance';
 
 /** The sections the form shows for a product type, in page order: Basics, Photos, Price & stock, Details, Variants,
     Size guide (sized product types only), Shipping & fulfilment, Compliance (Variants, Size guide and Compliance only when the product type has them). */
-export function sectionsFor(type: ProductTypeSchema | undefined): SectionKey[] {
+export function sectionsFor(type: ProductTypeSchema | undefined, rules?: ListingRules): SectionKey[] {
   if (!type) return ['basics', 'images'];
-  const attrs = (section: AttributeDef['section']) => type.attributes.some((a) => a.section === section && a.key !== 'brand' && !a.taxFact);
+  const attrs = (section: AttributeDef['section']) => attributesIn(type, section, rules).length > 0;
   const out: SectionKey[] = ['basics', 'images', 'offer'];
-  if (attrs('DETAILS')) out.push('details');
+  if (attrs('DETAILS') || ruleAttributeFields(rules).length) out.push('details');
   if (variantQuestions(type).length) out.push('facts');
   if (type.themes.length) out.push('variants');
-  if (type.traits.sizing) out.push('sizeGuide');
+  if (type.traits.sizing && isShown(rules, 'sizes')) out.push('sizeGuide');
   out.push('fulfilment');
-  if (type.traits.food || attrs('FOOD') || type.traits.regulated || attrs('REGULATED')) out.push('compliance');
+  const legacyCompliance = rules ? attrs('FOOD') || attrs('REGULATED') : type.traits.food || attrs('FOOD') || type.traits.regulated || attrs('REGULATED');
+  if (legacyCompliance || ruleDocuments(rules).length) out.push('compliance');
   return out;
 }
 
-/** Attributes shown in a section (brand is a basic field). */
-export const attributesIn = (type: ProductTypeSchema | undefined, section: AttributeDef['section']) =>
-  (type?.attributes ?? []).filter((a) => a.section === section && a.key !== 'brand' && !a.taxFact);
+/** Attributes shown in a section (brand is a basic field); the ones the listing rules own are not asked twice. */
+export const attributesIn = (type: ProductTypeSchema | undefined, section: AttributeDef['section'], rules?: ListingRules) =>
+  (type?.attributes ?? []).filter((a) => a.section === section && a.key !== 'brand' && !a.taxFact && !replaced(rules, a.key));
 
 /** The category's tax questions about the product itself (answered per variant) and about how this seller sells it ("Your listing"). */
 export const variantQuestions = (type: ProductTypeSchema | undefined) => taxQuestionsOf(type?.attributes ?? []).filter((a) => a.owner !== 'OFFER');
@@ -198,7 +255,15 @@ export const behaviourQuestions = (type: ProductTypeSchema | undefined) => taxQu
 export const answersOf = (s: Pick<FormState, 'facts' | 'behaviour'>, index: number): Record<string, string> => ({ ...(s.facts[String(index)] ?? {}), ...s.behaviour });
 
 /** The brand attribute of a product type: the Brand field is shown only when the type defines it (a book has an author, not a brand). */
-export const brandOf = (type: ProductTypeSchema | undefined) => type?.attributes.find((a) => a.kind === 'BRAND') ?? type?.attributes.find((a) => a.key === 'brand');
+export function brandOf(type: ProductTypeSchema | undefined, rules?: ListingRules): AttributeDef | undefined {
+  const own = type?.attributes.find((a) => a.kind === 'BRAND') ?? type?.attributes.find((a) => a.key === 'brand');
+  if (!rules) return own;
+  const status = statusOf(rules, 'brand');
+  if (status === 'hidden') return undefined;
+  const base: AttributeDef = own ?? { key: 'brand', label: 'Brand', options: [], required: false, multiline: false, kind: 'BRAND', units: [], section: 'DETAILS', help: null, taxFact: false, evidence: false, optionLabels: {} };
+  // Where the rules show a brand, "No brand" and "Handmade" are always the ways to leave it out (with a reason).
+  return { ...base, kind: 'BRAND', required: status === 'required', options: ['UNBRANDED', 'HANDMADE'] };
+}
 
 /** Up to `limit` filled-in attributes for the shopper preview, brand / author first (what a search result line shows). */
 export function previewAttributes(type: ProductTypeSchema | undefined, s: FormState, limit = 4): { label: string; value: string }[] {
@@ -295,12 +360,35 @@ const positive = (v: string) => {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** The package in the catalog's inches and pounds, whatever units it was typed in; null unless all four are positive numbers. */
-export function packagingOf(s: Pick<FormState, 'pkg' | 'pkgUnits'>): { lengthIn: number; widthIn: number; heightIn: number; weightLb: number } | null {
-  const [l, w, h, wt] = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight].map(positive);
+/** A typed package in the catalog's inches and pounds, whatever units it was typed in; null unless all four are positive numbers. */
+export function packageOf(pkg: PackageInput, units: PackageUnits): { lengthIn: number; widthIn: number; heightIn: number; weightLb: number } | null {
+  const [l, w, h, wt] = [pkg.length, pkg.width, pkg.height, pkg.weight].map(positive);
   if (l == null || w == null || h == null || wt == null) return null;
-  const inch = (n: number) => round2(s.pkgUnits.size === 'cm' ? n / 2.54 : n);
-  return { lengthIn: inch(l), widthIn: inch(w), heightIn: inch(h), weightLb: round2(s.pkgUnits.weight === 'kg' ? wt * 2.2046226 : wt) };
+  const inch = (n: number) => round2(units.size === 'cm' ? n / 2.54 : n);
+  return { lengthIn: inch(l), widthIn: inch(w), heightIn: inch(h), weightLb: round2(units.weight === 'kg' ? wt * 2.2046226 : wt) };
+}
+
+export const packageFilled = (pkg: PackageInput) => Object.values(pkg).some((v) => v.trim() !== '');
+
+/** The rows the form submits, in order: the variants of the matrix, or the one row of a product without variations ('' key). */
+export function rowsOf(s: FormState, type: ProductTypeSchema | undefined): { key: string; row: VariantRow }[] {
+  if (s.hasVariants && type?.themes.length) return combos(type, s).slice(0, MAX_VARIANTS).map((c) => ({ key: comboKey(c), row: s.rows[comboKey(c)] ?? emptyRow() }));
+  return [{ key: '', row: s.single }];
+}
+
+/** The package a row starts from when it has none of its own: the first variant's (copy-down default). */
+export function firstPackage(s: FormState, type: ProductTypeSchema | undefined): PackageInput {
+  return rowsOf(s, type)[0]?.row.pkg ?? emptyPackage();
+}
+
+/** Copies the first variant's package to every variant (the form's "Same package for all" action). */
+export function copyPackageDown(type: ProductTypeSchema | undefined, s: FormState): FormState {
+  const first = firstPackage(s, type);
+  const rows = { ...s.rows };
+  combos(type, s).forEach((c) => {
+    rows[comboKey(c)] = { ...(rows[comboKey(c)] ?? emptyRow()), pkg: { ...first } };
+  });
+  return { ...s, rows };
 }
 
 export const keywordsOf = (v: string) => v.split(',').map((k) => k.trim()).filter(Boolean);
@@ -332,10 +420,16 @@ export const fieldId = {
   compareAt: 'pf-compare-at',
   qty: 'pf-qty',
   theme: 'pf-theme',
-  variant: (k: string, field: keyof VariantRow) => `pf-var-${slug(k).toLowerCase()}-${hash36(k)}-${field}`,
+  variant: (k: string, field: Exclude<keyof VariantRow, 'pkg'>) => `pf-var-${slug(k).toLowerCase()}-${hash36(k)}-${field}`,
   sizeChart: 'pf-size-chart',
   fitNote: 'pf-fit-note',
   pkg: 'pf-pkg',
+  /** The package of one variant row ('' = the single row of a product without variations). */
+  rowPkg: (k: string) => (k === '' ? 'pf-pkg' : `pf-pkg-${slug(k).toLowerCase()}-${hash36(k)}`),
+  labelPhoto: 'pf-label-photo',
+  dangerous: 'pf-dangerous',
+  document: (kind: string) => `pf-doc-${kind}`,
+  exemption: (id: string) => `pf-exempt-${id}`,
   shipFrom: 'pf-ship-from',
   handling: 'pf-handling'
 } as const;
@@ -350,6 +444,8 @@ export interface ValidateOptions {
   linkedSizeChartId?: string | null;
   /** The tax gate of the chosen category: a closed one cannot take a submission (the seller can still save a draft). */
   categoryStatus?: CategoryTaxStatus | null | undefined;
+  /** What the category asks of a listing (catalog's listing rules); absent while loading. */
+  rules?: ListingRules | undefined;
 }
 
 /** The size values the variants sell, in matrix order (empty when the product has no size axis). */
@@ -363,6 +459,7 @@ export function soldSizes(s: FormState, type: ProductTypeSchema | undefined): st
 
 export function validateForm(s: FormState, type: ProductTypeSchema | undefined, opts: ValidateOptions = {}): Problems {
   const p: Problems = {};
+  const rules = opts.rules;
   const add = (id: string, section: SectionKey, label: Problem['label'], key: MessageKey, vars?: Problem['vars']) => {
     if (!p[id]) p[id] = { key, vars, section, label };
   };
@@ -371,8 +468,9 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   const title = s.title.trim();
   if (title.length < 10) add(fieldId.title, 'basics', 'sc.pf.field.title', title ? 'sc.pf.err.titleShort' : 'sc.pf.err.required');
   else if (title.length > 200) add(fieldId.title, 'basics', 'sc.pf.field.title', 'sc.pf.err.titleLong');
-  const brandDef = brandOf(type);
+  const brandDef = brandOf(type, rules);
   if (brandDef?.required && !(s.attrs.brand ?? '').trim() && !(s.attrs.brand_reason ?? '').trim()) add(fieldId.brand, 'basics', 'sc.pf.field.brand', 'sc.pf.err.required');
+  if (rules && (statusOf(rules, 'description') === 'required' || statusOf(rules, 'description') === 'required_or_exemption') && !s.description.trim()) add(fieldId.description, 'basics', 'sc.pf.field.description', 'sc.pf.err.required');
   if (s.description.length > MAX_DESCRIPTION) add(fieldId.description, 'basics', 'sc.pf.field.description', 'sc.pf.err.descriptionLong');
   const kws = keywordsOf(s.keywords);
   if (kws.length > MAX_KEYWORDS) add(fieldId.keywords, 'basics', 'sc.pf.field.keywords', 'sc.pf.err.keywordsMany');
@@ -382,8 +480,18 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   else if (s.images.some((i) => i.status === 'uploading')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesUploading');
   else if (s.images.some((i) => i.status === 'error')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesFailed');
 
+  // The label photo is its own typed slot: product pictures never stand in for it.
+  const label = statusOf(rules, 'label_photo');
+  if (label && label !== 'hidden') {
+    if (s.labelImage?.status === 'uploading') add(fieldId.labelPhoto, 'images', 'sc.pf.field.labelPhoto', 'sc.pf.err.imagesUploading');
+    else if (s.labelImage?.status === 'error') add(fieldId.labelPhoto, 'images', 'sc.pf.field.labelPhoto', 'sc.pf.err.imagesFailed');
+    else if (!s.labelImage?.url && (label === 'required' || (label === 'required_or_exemption' && !(s.exemptions.label_photo ?? '').trim()))) {
+      add(fieldId.labelPhoto, 'images', 'sc.pf.field.labelPhoto', label === 'required' ? 'sc.pf.err.labelPhoto' : 'sc.pf.err.labelPhotoOrReason');
+    }
+  }
+
   type?.attributes.forEach((a) => {
-    if (a.key === 'brand' || a.taxFact) return;
+    if (a.key === 'brand' || a.taxFact || replaced(rules, a.key)) return;
     const v = (s.attrs[a.key] ?? '').trim();
     const section: SectionKey = a.section === 'DETAILS' ? 'details' : 'compliance';
     if (!v) {
@@ -393,17 +501,43 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
     if (a.kind === 'ENUM' && a.options.length && !a.options.includes(v)) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.chooseOption');
     if (a.kind === 'NUMBER' && positive(v) === null) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.number');
   });
+  // The questions the rules own (net weight, servings, shelf life, storage, ingredients, allergens, material, model, age grade, origin).
+  ruleAttributeFields(rules).forEach((f) => {
+    const key = f.attributeKey ?? f.id;
+    const id = fieldId.attr(key);
+    const v = (s.attrs[key] ?? '').trim();
+    if (!v) {
+      if (f.status === 'required') add(id, 'details', { text: f.label }, 'sc.pf.err.required');
+      else if (f.status === 'required_or_exemption' && !(s.exemptions[f.id] ?? '').trim()) add(id, 'details', { text: f.label }, 'sc.pf.err.requiredOrReason');
+      return;
+    }
+    if (f.control === 'measure' && positive(v) === null) add(id, 'details', { text: f.label }, 'sc.pf.err.number');
+    else if (f.control === 'whole_number' && !(/^\d+$/.test(v) && Number(v) > 0)) add(id, 'details', { text: f.label }, 'sc.pf.err.whole');
+    else if (f.control === 'choice' && f.options.length && !f.options.includes(v)) add(id, 'details', { text: f.label }, 'sc.pf.err.chooseOption');
+    else if (f.control === 'multi_choice' && v !== 'None' && !v.split(',').map((x) => x.trim()).every((x) => f.options.includes(x))) add(id, 'details', { text: f.label }, 'sc.pf.err.chooseOption');
+  });
+  if (statusOf(rules, 'dangerous_goods') === 'required' && s.dangerousGoods === '') add(fieldId.dangerous, 'fulfilment', 'sc.pf.field.dangerous', 'sc.pf.err.dangerous');
 
   // Price, stock, identifiers and fulfilment appear once the product type is known.
   if (!type) return p;
   const gtinRule = type?.identifierRule === 'isbn' ? 'sc.pf.err.isbn' : 'sc.pf.err.gtin';
-  const checkRow = (r: VariantRow, ids: Record<'sku' | 'gtin' | 'price' | 'compareAt' | 'qty', string>, section: SectionKey, name: string | null, skus: Set<string>) => {
+  const idStatus = statusOf(rules, 'product_id');
+  const barcodeAsked = idStatus !== 'hidden';
+  // A required barcode has no exemption; an optional one may stay empty but must be right when given.
+  const noGtin = s.noGtin && idStatus !== 'required';
+  const qtyAsked = !isHidden(rules, 'quantity');
+  const physical = isPhysical(rules);
+  const first = firstPackage(s, type);
+  const checkRow = (r: VariantRow, ids: Record<'sku' | 'gtin' | 'price' | 'compareAt' | 'qty', string>, key: string, section: SectionKey, name: string | null, skus: Set<string>) => {
     const lbl = (k: MessageKey): Problem['label'] => (name ? { text: name, key: k } : k);
     const sku = r.sku.trim().toUpperCase();
     if (sku && !/^[A-Z0-9][A-Z0-9._-]{1,39}$/.test(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuFormat');
     else if (sku && skus.has(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuDuplicate');
     if (sku) skus.add(sku);
-    if (!s.noGtin && !gtinOk(r.gtin.trim())) add(ids.gtin, section, lbl('sc.pf.field.gtin'), r.gtin.trim() ? gtinRule : 'sc.pf.err.gtinMissing');
+    const code = r.gtin.trim();
+    if (barcodeAsked && !noGtin) {
+      if (code ? !gtinOk(code) : idStatus !== 'optional') add(ids.gtin, section, lbl('sc.pf.field.gtin'), code ? gtinRule : 'sc.pf.err.gtinMissing');
+    }
     const price = priceMinor(r.price);
     if (price === null) add(ids.price, section, lbl('sc.pf.field.price'), r.price.trim() ? 'sc.pf.err.price' : 'sc.pf.err.priceRequired');
     if (r.compareAt.trim()) {
@@ -411,7 +545,15 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
       if (cmp === null) add(ids.compareAt, section, lbl('sc.pf.field.compareAt'), 'sc.pf.err.price');
       else if (price !== null && cmp <= price) add(ids.compareAt, section, lbl('sc.pf.field.compareAt'), 'sc.pf.err.compareAt');
     }
-    if (!/^\d+$/.test(r.qty.trim()) || Number(r.qty) > 100_000) add(ids.qty, section, lbl('sc.pf.field.qty'), 'sc.pf.err.qty');
+    if (qtyAsked && (!/^\d+$/.test(r.qty.trim()) || Number(r.qty) > 100_000)) add(ids.qty, section, lbl('sc.pf.field.qty'), 'sc.pf.err.qty');
+    if (physical || (!rules && (s.fulfilment === 'AFROTRANSACT' || packageFilled(r.pkg)))) {
+      // Every physical variant needs its package: its own, or the first variant's.
+      const own = packageFilled(r.pkg);
+      const pkg = packageOf(own ? r.pkg : first, s.pkgUnits);
+      const id = fieldId.rowPkg(key);
+      if (!pkg) add(id, 'fulfilment', name ? { text: name, key: 'sc.pf.field.package' } : 'sc.pf.field.package', own || packageFilled(first) ? 'sc.pf.err.package' : 'sc.pf.err.packageRequired');
+      else if (pkg.lengthIn > 108 || pkg.widthIn > 108 || pkg.heightIn > 108 || pkg.weightLb > 150) add(id, 'fulfilment', name ? { text: name, key: 'sc.pf.field.package' } : 'sc.pf.field.package', 'sc.pf.err.packageLimits');
+    }
   };
   const skus = new Set<string>();
   if (s.hasVariants && type?.themes.length) {
@@ -422,22 +564,23 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
     list.slice(0, MAX_VARIANTS).forEach((c) => {
       const k = comboKey(c);
       const ids = { sku: fieldId.variant(k, 'sku'), gtin: fieldId.variant(k, 'gtin'), price: fieldId.variant(k, 'price'), compareAt: fieldId.variant(k, 'compareAt'), qty: fieldId.variant(k, 'qty') };
-      checkRow(s.rows[k] ?? emptyRow(), ids, 'variants', k, skus);
+      checkRow(s.rows[k] ?? emptyRow(), ids, k, 'variants', k, skus);
     });
     const kept = new Set(list.map((c) => (s.rows[comboKey(c)]?.sku ?? '').trim().toUpperCase()));
     if ((opts.lockedSkus ?? []).some((sku) => !kept.has(sku.toUpperCase()))) add(fieldId.theme, 'variants', 'sc.pf.field.theme', 'sc.pf.err.liveVariants');
   } else {
-    checkRow(s.single, { sku: fieldId.sku, gtin: fieldId.gtin, price: fieldId.price, compareAt: fieldId.compareAt, qty: fieldId.qty }, 'offer', null, skus);
+    checkRow(s.single, { sku: fieldId.sku, gtin: fieldId.gtin, price: fieldId.price, compareAt: fieldId.compareAt, qty: fieldId.qty }, '', 'offer', null, skus);
     if ((opts.lockedSkus ?? []).length > 1) add(fieldId.theme, 'offer', 'sc.pf.field.theme', 'sc.pf.err.liveVariants');
   }
 
   validateFacts(s, type, add);
 
   const sizing = type.traits.sizing;
-  if (sizing) {
+  if (sizing && isShown(rules, 'sizes')) {
     const chart = opts.sizeChart;
+    const chartRequired = rules ? statusOf(rules, 'sizes') === 'required' : sizing.sizeChartRequired;
     if (!s.sizeChartId) {
-      if (sizing.sizeChartRequired) add(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart', 'sc.pf.err.sizeChartRequired');
+      if (chartRequired) add(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart', 'sc.pf.err.sizeChartRequired');
     } else if (chart && chart.id === s.sizeChartId) {
       if (chart.retired && opts.linkedSizeChartId !== chart.id) add(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart', 'sc.pf.err.sizeChartRetired', { name: chart.name });
       else {
@@ -447,16 +590,9 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
     }
   }
 
-  const dims = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight];
-  const anyDim = dims.some((d) => d.trim() !== '');
-  if (s.fulfilment === 'AFROTRANSACT' || anyDim) {
-    const pkg = packagingOf(s);
-    if (!pkg) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', s.fulfilment === 'AFROTRANSACT' ? 'sc.pf.err.packageFba' : 'sc.pf.err.package');
-    else if (pkg.lengthIn > 108 || pkg.widthIn > 108 || pkg.heightIn > 108 || pkg.weightLb > 150) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', 'sc.pf.err.packageLimits');
-  }
   if (s.fulfilment === 'SELLER') {
-    if (!/^\d+$/.test(s.handlingDays.trim()) || Number(s.handlingDays) < 1 || Number(s.handlingDays) > 30) add(fieldId.handling, 'fulfilment', 'sc.pf.field.handling', 'sc.pf.err.handling');
-    if (opts.requireShipFrom && !s.shipFromId) add(fieldId.shipFrom, 'fulfilment', 'sc.pf.field.shipFrom', 'sc.pf.err.shipFrom');
+    if (!isHidden(rules, 'handling_days') && (!/^\d+$/.test(s.handlingDays.trim()) || Number(s.handlingDays) < 1 || Number(s.handlingDays) > 30)) add(fieldId.handling, 'fulfilment', 'sc.pf.field.handling', 'sc.pf.err.handling');
+    if (opts.requireShipFrom && !isHidden(rules, 'ship_from') && !s.shipFromId) add(fieldId.shipFrom, 'fulfilment', 'sc.pf.field.shipFrom', 'sc.pf.err.shipFrom');
   }
   return p;
 }
@@ -530,35 +666,43 @@ export interface QualityItem {
 
 /** The checklist behind the quality score: every required field of the form (done = no problem) plus two recommendations
     (a description, three or more images). */
-export function qualityItems(s: FormState, type: ProductTypeSchema | undefined, problems: Problems): QualityItem[] {
+export function qualityItems(s: FormState, type: ProductTypeSchema | undefined, problems: Problems, rules?: ListingRules): QualityItem[] {
   const items: QualityItem[] = [];
   const req = (id: string, section: SectionKey, label: Problem['label'], done = !problems[id]) => items.push({ id, section, label, required: true, done });
   req(fieldId.category, 'basics', 'sc.pf.field.category');
   req(fieldId.title, 'basics', 'sc.pf.field.title');
-  const brand = brandOf(type);
+  const brand = brandOf(type, rules);
   if (brand?.required) req(fieldId.brand, 'basics', { text: brand.label });
+  if (rules && statusOf(rules, 'description') === 'required') req(fieldId.description, 'basics', 'sc.pf.field.description');
   req(fieldId.images, 'images', 'sc.pf.field.images');
+  if (statusOf(rules, 'label_photo') === 'required' || statusOf(rules, 'label_photo') === 'required_or_exemption') req(fieldId.labelPhoto, 'images', 'sc.pf.field.labelPhoto');
   type?.attributes.forEach((a) => {
-    if (a.key === 'brand' || !a.required || a.taxFact) return;
+    if (a.key === 'brand' || !a.required || a.taxFact || replaced(rules, a.key)) return;
     req(fieldId.attr(a.key), a.section === 'DETAILS' ? 'details' : 'compliance', { text: a.label });
+  });
+  ruleAttributeFields(rules).forEach((f) => {
+    if (f.status === 'required' || f.status === 'required_or_exemption') req(fieldId.attr(f.attributeKey ?? f.id), 'details', { text: f.label });
   });
   if (type) {
     if (s.hasVariants && type.themes.length) {
-      const bad = Object.keys(problems).some((id) => id === fieldId.theme || id.startsWith('pf-var-'));
+      const bad = Object.keys(problems).some((id) => id === fieldId.theme || id.startsWith('pf-var-') || id.startsWith('pf-pkg'));
       req(fieldId.theme, 'variants', 'sc.pf.field.theme', !bad);
     } else {
       req(fieldId.sku, 'offer', 'sc.pf.field.sku');
-      if (!s.noGtin) req(fieldId.gtin, 'offer', type.identifierRule === 'isbn' ? 'sc.pf.field.isbn' : 'sc.pf.field.gtin');
+      if (!s.noGtin && !isHidden(rules, 'product_id')) req(fieldId.gtin, 'offer', type.identifierRule === 'isbn' ? 'sc.pf.field.isbn' : 'sc.pf.field.gtin');
       req(fieldId.price, 'offer', 'sc.pf.field.price');
-      req(fieldId.qty, 'offer', 'sc.pf.field.qty');
+      if (!isHidden(rules, 'quantity')) req(fieldId.qty, 'offer', 'sc.pf.field.qty');
     }
-    if (type.traits.sizing?.sizeChartRequired) req(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart');
-    if (s.fulfilment === 'AFROTRANSACT') req(fieldId.pkg, 'fulfilment', 'sc.pf.field.package');
-    else req(fieldId.handling, 'fulfilment', 'sc.pf.field.handling');
+    const sizeRequired = rules ? statusOf(rules, 'sizes') === 'required' : type.traits.sizing?.sizeChartRequired;
+    if (type.traits.sizing && sizeRequired) req(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart');
+    if (statusOf(rules, 'dangerous_goods') === 'required') req(fieldId.dangerous, 'fulfilment', 'sc.pf.field.dangerous');
+    if (isPhysical(rules) && !(s.hasVariants && type.themes.length)) req(fieldId.rowPkg(''), 'fulfilment', 'sc.pf.field.package');
+    else if (!rules && s.fulfilment === 'AFROTRANSACT') req(fieldId.rowPkg(''), 'fulfilment', 'sc.pf.field.package');
+    if (s.fulfilment === 'SELLER' && !isHidden(rules, 'handling_days')) req(fieldId.handling, 'fulfilment', 'sc.pf.field.handling');
   }
   items.push({ id: fieldId.description, section: 'basics', label: 'sc.pf.field.description', required: false, done: s.description.trim().length >= 40, tip: 'sc.pf.tip.description' });
   items.push({ id: fieldId.images, section: 'images', label: 'sc.pf.field.images', required: false, done: s.images.filter((i) => i.url).length >= 3, tip: 'sc.pf.tip.images' });
-  if (type?.traits.sizing && !type.traits.sizing.sizeChartRequired) {
+  if (type?.traits.sizing && isShown(rules, 'sizes') && !(rules ? statusOf(rules, 'sizes') === 'required' : type.traits.sizing.sizeChartRequired)) {
     items.push({ id: fieldId.sizeChart, section: 'sizeGuide', label: 'sc.pf.field.sizeChart', required: false, done: Boolean(s.sizeChartId), tip: 'sc.pf.tip.sizeChart' });
   }
   return items;
@@ -584,20 +728,29 @@ export function groupQuality(problems: [string, Problem][], tips: QualityItem[],
 /** 0–100: the share of checklist items that are done. */
 export const qualityScore = (items: QualityItem[]) => (items.length ? Math.round((100 * items.filter((i) => i.done).length) / items.length) : 0);
 
-/** Server field errors ("title", "listing.packaging", "attributes.shelf", "variants") → form field ids. */
-export function serverFieldId(field: string): string {
+/** Server field errors ("title", "variants[1].packaging", "labelPhoto", "attributes.shelf", "variants") → form field ids.
+    `rowKeys` are the variant keys in submission order, so an error on variants[i] lands on that row's field. */
+export function serverFieldId(field: string, rowKeys: string[] = []): string {
   if (field.startsWith('attributes.')) return fieldId.attr(field.slice('attributes.'.length));
   const fact = /^variants\[(\d+)\]\.taxFacts\.(.+)$/.exec(field);
   if (fact) return fieldId.fact(Number(fact[1]), fact[2] ?? '');
   if (field.startsWith('sellerBehaviour.')) return fieldId.behaviour(field.slice('sellerBehaviour.'.length));
-  const sku = /^variants\[(\d+)\]\.sellerSku$/.exec(field);
-  if (sku) return fieldId.sku;
+  const row = /^variants\[(\d+)\]\.(sellerSku|gtin|packaging|price|quantity|compareAtPrice)$/.exec(field);
+  if (row) {
+    const key = rowKeys[Number(row[1])];
+    const kind = row[2];
+    if (kind === 'packaging') return fieldId.rowPkg(key ?? '');
+    if (key === undefined || key === '') return ({ sellerSku: fieldId.sku, gtin: fieldId.gtin, price: fieldId.price, quantity: fieldId.qty, compareAtPrice: fieldId.compareAt } as Record<string, string>)[kind ?? ''] ?? fieldId.sku;
+    const col = ({ sellerSku: 'sku', gtin: 'gtin', price: 'price', quantity: 'qty', compareAtPrice: 'compareAt' } as const)[kind as 'sellerSku'];
+    return fieldId.variant(key, col);
+  }
   // Catalog reports a size the chart has no row for as variants[i].options.Size: it is fixed in the size guide section.
   if (/^variants\[\d+\]\.options\.Size$/i.test(field)) return fieldId.sizeChart;
   const map: Record<string, string> = {
     title: fieldId.title, images: fieldId.images, categoryId: fieldId.category, category: fieldId.category, variationTheme: fieldId.theme, variants: fieldId.theme,
-    'listing.packaging': fieldId.pkg, 'listing.description': fieldId.description, 'listing.keywords': fieldId.keywords, 'listing.handlingDays': fieldId.handling,
-    'listing.shipFromId': fieldId.shipFrom, 'listing.sizeChartId': fieldId.sizeChart, 'listing.fitNote': fieldId.fitNote, sizeChartId: fieldId.sizeChart, description: fieldId.description, keywords: fieldId.keywords, handlingDays: fieldId.handling, packaging: fieldId.pkg
+    labelPhoto: fieldId.labelPhoto, dangerousGoods: fieldId.dangerous, 'listing.dangerousGoods': fieldId.dangerous,
+    'listing.packaging': fieldId.rowPkg(''), 'listing.description': fieldId.description, 'listing.keywords': fieldId.keywords, 'listing.handlingDays': fieldId.handling,
+    'listing.shipFromId': fieldId.shipFrom, 'listing.sizeChartId': fieldId.sizeChart, 'listing.fitNote': fieldId.fitNote, sizeChartId: fieldId.sizeChart, description: fieldId.description, keywords: fieldId.keywords, handlingDays: fieldId.handling, packaging: fieldId.rowPkg('')
   };
   return map[field] ?? fieldId.title;
 }
@@ -609,25 +762,32 @@ function attrValue(a: AttributeDef | undefined, v: string, unit: string | undefi
   return text && a?.kind === 'NUMBER' && a.units.length ? `${text} ${unit || a.units[0]}` : text;
 }
 
-/** The catalog submission (call when validateForm is empty). */
-export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null): ProductDraft {
+/** The catalog submission (call when validateForm is empty). Answers to questions the category does not ask are not sent. */
+export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null, rules?: ListingRules): ProductDraft {
   const image = (id: string) => s.images.find((i) => i.id === id && i.url);
   const imageInput = (i: FormImage) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType, ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) });
   const defs = taxQuestionsOf(type?.attributes ?? []);
   const factsOf = (index: number): Record<string, FactValue> => checkFacts(defs.filter((d) => d.owner !== 'OFFER'), answersOf(s, index)).facts;
   const behaviourOf = (): Record<string, FactValue> => checkFacts(defs, answersOf(s, 0)).facts;
+  const idStatus = statusOf(rules, 'product_id');
+  const physical = isPhysical(rules) || (!rules && s.fulfilment === 'AFROTRANSACT');
+  const first = firstPackage(s, type);
   const variant = (r: VariantRow, options: Record<string, string>, index: number): VariantInput => {
     const img = r.image ? image(r.image) : undefined;
     const compare = r.compareAt.trim() ? priceMinor(r.compareAt) : null;
+    const pkg = physical || packageFilled(r.pkg) ? packageOf(packageFilled(r.pkg) ? r.pkg : first, s.pkgUnits) : null;
+    // A hidden product id sends no barcode; a required one has no exemption.
+    const barcode = idStatus === 'hidden' ? { gtinExempt: true } : s.noGtin && idStatus !== 'required' ? { gtinExempt: true } : { gtin: r.gtin.trim(), gtinExempt: false };
     return {
       options,
       ...(r.sku.trim() ? { sellerSku: r.sku.trim().toUpperCase() } : {}),
       ...(Object.keys(factsOf(index)).length ? { taxFacts: factsOf(index) } : {}),
-      ...(s.noGtin ? { gtinExempt: true } : { gtin: r.gtin.trim(), gtinExempt: false }),
+      ...barcode,
       priceMinor: priceMinor(r.price) ?? 0,
       ...(compare ? { compareAtMinor: compare } : {}),
       quantity: Number(r.qty || '0'),
-      ...(img?.url ? { images: [imageInput(img)] } : {})
+      ...(img?.url ? { images: [imageInput(img)] } : {}),
+      ...(pkg ? { packaging: pkg } : {})
     };
   };
   const theme = type?.themes.find((t) => t.name === s.theme);
@@ -635,29 +795,52 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
     s.hasVariants && theme
       ? combos(type, s).map((c, index) => variant(s.rows[comboKey(c)] ?? emptyRow(), Object.fromEntries(theme.dimensions.map((d, i) => [d.name, c[i] ?? ''])), index))
       : [variant(s.single, {}, 0)];
-  const packaging = packagingOf(s);
+  const packaging = variants[0]?.packaging ?? null;
+  const ruleFields = ruleAttributeFields(rules);
+  const keep = (k: string) => {
+    if (!type) return true;
+    if (k === 'brand_id' || k === 'brand_reason') return Boolean(brandOf(type, rules));
+    if (ruleFields.some((f) => f.attributeKey === k)) return true;
+    if (k === 'brand') return Boolean(brandOf(type, rules));
+    return type.attributes.some((a) => a.key === k && !a.taxFact) && !replaced(rules, k);
+  };
+  const attrValueOf = (k: string, v: string) => {
+    const f = ruleFields.find((x) => x.attributeKey === k);
+    if (f) return f.control === 'measure' && f.units.length && v.trim() ? `${v.trim()} ${s.units[k] || f.units[0]}` : v.trim();
+    return attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k]);
+  };
+  const exemptions = Object.fromEntries(Object.entries(s.exemptions).filter(([id, why]) => why.trim() && statusOf(rules, id) === 'required_or_exemption').map(([id, why]) => [id, why.trim()]));
+  const documents = ruleDocuments(rules).flatMap((f) => {
+    const d = s.documents[f.id];
+    return d?.url && d.status === 'ready' ? [{ kind: d.kind, url: d.url, fileName: d.fileName, contentType: d.contentType, bytes: d.bytes, ...(d.expiresOn ? { expiresOn: d.expiresOn } : {}) }] : [];
+  });
+  const showLabel = !isHidden(rules, 'label_photo');
   return {
     ...(s.request ? { categoryRequestId: s.request.id } : { categoryId: s.categoryId ?? '' }),
     title: s.title.trim(),
     attributes: Object.fromEntries(
       Object.entries(s.attrs)
-        .filter(([k, v]) => v.trim() !== '' && (!type || type.attributes.some((a) => a.key === k && !a.taxFact) || (Boolean(brandOf(type)) && (k === 'brand_id' || k === 'brand_reason'))))
-        .map(([k, v]) => [k, attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k])])
+        .filter(([k, v]) => v.trim() !== '' && keep(k))
+        .map(([k, v]) => [k, attrValueOf(k, v)])
     ),
-    images: s.images.filter((i) => i.url).map(imageInput),
+    images: [...s.images.filter((i) => i.url).map(imageInput), ...(showLabel && s.labelImage?.url ? [{ ...imageInput(s.labelImage), role: 'LABEL' as const }] : [])],
     variationTheme: s.hasVariants && theme ? theme.name : '',
     variants,
     ...(type?.traits.preorder ? { preorderEligible: s.preorder } : {}),
     listing: {
       ...(s.description.trim() ? { description: s.description.trim() } : {}),
-      condition: s.condition,
+      // Condition is fixed to New where the category does not ask for it.
+      condition: isHidden(rules, 'condition') ? 'NEW' : s.condition,
       keywords: keywordsOf(s.keywords),
       fulfilment: s.fulfilment,
       packaging,
       ...(s.fulfilment === 'SELLER' ? { handlingDays: Number(s.handlingDays) || 2, shipFromId: s.shipFromId || null } : {}),
       // Only sized product types carry a chart: catalog refuses one on any other type.
-      ...(type?.traits.sizing ? { sizeChartId: s.sizeChartId || null, fitNote: s.fitNote || null } : {}),
-      ...(Object.keys(behaviourOf()).length && defs.some((d) => d.owner === 'OFFER') ? { sellerBehaviour: Object.fromEntries(Object.entries(behaviourOf()).filter(([k]) => defs.find((d) => d.key === k)?.owner === 'OFFER')) } : {})
+      ...(type?.traits.sizing && isShown(rules, 'sizes') ? { sizeChartId: s.sizeChartId || null, fitNote: s.fitNote || null } : {}),
+      ...(Object.keys(behaviourOf()).length && defs.some((d) => d.owner === 'OFFER') ? { sellerBehaviour: Object.fromEntries(Object.entries(behaviourOf()).filter(([k]) => defs.find((d) => d.key === k)?.owner === 'OFFER')) } : {}),
+      ...(statusOf(rules, 'dangerous_goods') && !isHidden(rules, 'dangerous_goods') && s.dangerousGoods ? { dangerousGoods: s.dangerousGoods === 'yes' } : {}),
+      ...(documents.length ? { documents } : {}),
+      ...(Object.keys(exemptions).length ? { exemptions } : {})
     },
     ...(draftId ? { draftId } : {})
   };
@@ -679,8 +862,13 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
       units[k] = m[2] ?? '';
     } else attrs[k] = v;
   });
-  const images: FormImage[] = d.images.map((im, i) => ({ id: `img-${i}`, previewUrl: im.url, url: im.url, width: im.width ?? 0, height: im.height ?? 0, bytes: im.bytes ?? 0,
-    contentType: im.contentType, status: 'ready', alt: im.alt ?? '' }));
+  const toImage = (im: SellerProductDetail['images'][number], i: number): FormImage => ({ id: `img-${i}`, previewUrl: im.url, url: im.url, width: im.width ?? 0, height: im.height ?? 0, bytes: im.bytes ?? 0,
+    contentType: im.contentType, status: 'ready', alt: im.alt ?? '' });
+  const labelOf = d.images.find((im) => im.role === 'LABEL');
+  const images: FormImage[] = d.images.filter((im) => im.role !== 'LABEL').map(toImage);
+  const listingPkg = d.listing.packaging;
+  const pkgText = (p: { lengthIn: number; widthIn: number; heightIn: number; weightLb: number } | null | undefined): PackageInput =>
+    p ? { length: String(p.lengthIn), width: String(p.widthIn), height: String(p.heightIn), weight: String(p.weightLb) } : emptyPackage();
   const rowOf = (v: SellerProductDetail['variants'][number]): VariantRow => {
     const img = v.images[0] ? images.find((i) => i.url === v.images[0]?.url) : undefined;
     let image = img?.id ?? '';
@@ -690,7 +878,8 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
       images.push(extra);
       image = extra.id;
     }
-    return { sku: v.sellerSku, gtin: v.gtin ?? '', price: money(v.priceMinor), compareAt: money(v.compareAtMinor), qty: String(v.quantity), image };
+    // A listing saved before packages were per variant starts every variant from the listing's package.
+    return { sku: v.sellerSku, gtin: v.gtin ?? '', price: money(v.priceMinor), compareAt: money(v.compareAtMinor), qty: String(v.quantity), image, pkg: pkgText(v.packaging ?? listingPkg) };
   };
   const theme = type?.themes.find((t) => t.name === d.variationTheme);
   const hasVariants = Boolean(d.variationTheme && theme);
@@ -709,15 +898,17 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
     });
   }
   const first = d.variants[0];
-  const pkg = d.listing.packaging;
   return {
     categoryId: d.categoryId, categoryPath: d.categoryPath, productType: d.productType,
     request: d.categoryRequestId ? { id: d.categoryRequestId, path: d.categoryPath, reference: '' } : null,
     title: d.title, attrs, units, description: d.listing.description ?? '', condition: d.listing.condition, keywords: d.listing.keywords.join(', '), images,
     noGtin: d.variants.every((v) => v.gtinExempt), hasVariants, theme: hasVariants ? d.variationTheme : '', selected, rows,
     single: !hasVariants && first ? rowOf(first) : emptyRow(), fulfilment: d.listing.fulfilment,
-    pkg: pkg ? { length: String(pkg.lengthIn), width: String(pkg.widthIn), height: String(pkg.heightIn), weight: String(pkg.weightLb) } : { length: '', width: '', height: '', weight: '' },
     pkgUnits: { size: 'in', weight: 'lb' },
+    dangerousGoods: d.listing.dangerousGoods == null ? '' : d.listing.dangerousGoods ? 'yes' : 'no',
+    exemptions: { ...(d.listing.exemptions ?? {}) },
+    labelImage: labelOf ? { ...toImage(labelOf, 0), id: 'img-label' } : null,
+    documents: Object.fromEntries((d.listing.documents ?? []).map((x) => [x.kind, { kind: x.kind, url: x.url, fileName: x.fileName ?? '', contentType: x.contentType, bytes: x.bytes ?? 0, expiresOn: x.expiresOn ?? '', status: 'ready' as const }])),
     shipFromId: d.listing.shipFromId ?? '', handlingDays: String(d.listing.handlingDays || 2), preorder: d.preorderEligible,
     sizeChartId: d.listing.sizeChartId ?? '', fitNote: d.listing.fitNote ?? '',
     facts: Object.fromEntries(d.variants.map((v, i) => [String(i), answerText(v.taxFacts)])),
@@ -731,7 +922,12 @@ const answerText = (facts: Record<string, FactValue> | undefined): Record<string
 
 /** What a draft stores: the form without upload state (images that never finished uploading are dropped). */
 export function toDraftPayload(s: FormState): Record<string, unknown> {
-  return { v: 1, ...s, images: s.images.filter((i) => i.url).map((i) => ({ ...i, previewUrl: i.url ?? '', status: i.status === 'low' ? 'low' : 'ready' })) };
+  return {
+    v: 1, ...s,
+    images: s.images.filter((i) => i.url).map((i) => ({ ...i, previewUrl: i.url ?? '', status: i.status === 'low' ? 'low' : 'ready' })),
+    labelImage: s.labelImage?.url ? { ...s.labelImage, previewUrl: s.labelImage.url, status: 'ready' } : null,
+    documents: Object.fromEntries(Object.entries(s.documents).filter(([, d]) => d.status === 'ready'))
+  };
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -739,28 +935,39 @@ const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
 const strMap = (v: unknown): Record<string, string> => (isRecord(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === 'string')) : {});
 const rowFrom = (v: unknown): VariantRow => {
   const r = isRecord(v) ? v : {};
-  return { sku: str(r.sku), gtin: str(r.gtin), price: str(r.price), compareAt: str(r.compareAt), qty: str(r.qty), image: str(r.image) };
+  const pkg = isRecord(r.pkg) ? r.pkg : {};
+  return { sku: str(r.sku), gtin: str(r.gtin), price: str(r.price), compareAt: str(r.compareAt), qty: str(r.qty), image: str(r.image), pkg: { length: str(pkg.length), width: str(pkg.width), height: str(pkg.height), weight: str(pkg.weight) } };
 };
+
+const imageFrom = (i: Record<string, unknown>, n: number): FormImage => ({
+  id: str(i.id, `img-${n}`), previewUrl: str(i.url), url: str(i.url), width: Number(i.width) || 0, height: Number(i.height) || 0, bytes: Number(i.bytes) || 0,
+  contentType: str(i.contentType, 'image/jpeg'), status: i.status === 'low' ? 'low' : 'ready', alt: str(i.alt)
+});
 
 /** A saved draft back into the form (unknown or damaged fields fall back to empty). */
 export function fromDraftPayload(payload: Record<string, unknown>): FormState {
   const e = emptyForm();
   const p = payload;
-  const images = Array.isArray(p.images)
-    ? p.images.filter(isRecord).filter((i) => typeof i.url === 'string').slice(0, MAX_IMAGES).map((i, n): FormImage => ({
-        id: str(i.id, `img-${n}`), previewUrl: str(i.url), url: str(i.url), width: Number(i.width) || 0, height: Number(i.height) || 0, bytes: Number(i.bytes) || 0,
-        contentType: str(i.contentType, 'image/jpeg'), status: i.status === 'low' ? 'low' : 'ready', alt: str(i.alt) }))
-    : [];
+  const images = Array.isArray(p.images) ? p.images.filter(isRecord).filter((i) => typeof i.url === 'string').slice(0, MAX_IMAGES).map(imageFrom) : [];
   const req = isRecord(p.request) ? { id: str(p.request.id), path: str(p.request.path), reference: str(p.request.reference) } : null;
-  const pkg = isRecord(p.pkg) ? p.pkg : {};
+  // A draft saved before packages were per variant keeps its one package as the starting package of every variant.
+  const legacyPkg = isRecord(p.pkg) ? { length: str(p.pkg.length), width: str(p.pkg.width), height: str(p.pkg.height), weight: str(p.pkg.weight) } : null;
   const units = isRecord(p.pkgUnits) ? p.pkgUnits : {};
   const selected: Record<string, string[]> = {};
   if (isRecord(p.selected)) Object.entries(p.selected).forEach(([k, v]) => {
     if (Array.isArray(v)) selected[k] = v.filter((x): x is string => typeof x === 'string');
   });
   const rows: Record<string, VariantRow> = {};
+  const withPkg = (r: VariantRow): VariantRow => (legacyPkg && !packageFilled(r.pkg) ? { ...r, pkg: { ...legacyPkg } } : r);
   if (isRecord(p.rows)) Object.entries(p.rows).forEach(([k, v]) => {
-    rows[k] = rowFrom(v);
+    rows[k] = withPkg(rowFrom(v));
+  });
+  const labelImage = isRecord(p.labelImage) && typeof p.labelImage.url === 'string' ? imageFrom(p.labelImage, 0) : null;
+  const documents: Record<string, FormDocument> = {};
+  if (isRecord(p.documents)) Object.entries(p.documents).forEach(([k, v]) => {
+    if (isRecord(v) && typeof v.url === 'string') {
+      documents[k] = { kind: str(v.kind, k) as FormDocument['kind'], url: v.url, fileName: str(v.fileName), contentType: str(v.contentType, 'application/pdf'), bytes: Number(v.bytes) || 0, expiresOn: str(v.expiresOn), status: 'ready' };
+    }
   });
   return {
     ...e,
@@ -780,9 +987,12 @@ export function fromDraftPayload(payload: Record<string, unknown>): FormState {
     theme: str(p.theme),
     selected,
     rows,
-    single: rowFrom(p.single),
+    single: withPkg(rowFrom(p.single)),
     fulfilment: p.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
-    pkg: { length: str(pkg.length), width: str(pkg.width), height: str(pkg.height), weight: str(pkg.weight) },
+    dangerousGoods: p.dangerousGoods === 'yes' || p.dangerousGoods === 'no' ? p.dangerousGoods : '',
+    exemptions: strMap(p.exemptions),
+    labelImage,
+    documents,
     pkgUnits: { size: units.size === 'cm' ? 'cm' : 'in', weight: units.weight === 'kg' ? 'kg' : 'lb' },
     shipFromId: str(p.shipFromId),
     handlingDays: str(p.handlingDays, '2'),
