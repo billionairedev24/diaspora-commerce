@@ -92,6 +92,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/home/ad-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count an impression or a click on a paid home module
+         * @description The storefront reports each paid module (`HomeBlock.sponsored`) once per view (impression, when at least half of
+         *     it was visible) and on click. Counted per placement and UTC day by content; nothing identifies the shopper.
+         *     Sponsored product cards are not reported here: they use `POST /v1/search/clicks`.
+         */
+        post: operations["recordHomeAdEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/newsletter/subscriptions": {
         parameters: {
             query?: never;
@@ -3674,12 +3696,56 @@ export interface components {
             href: string;
             items: components["schemas"]["ProductSummary"][];
         };
+        /**
+         * @description One module of the home page body, in the order staff set. `type` decides which fields are filled; clients ignore
+         *     types they do not know. Paid modules (`brand-banner`, `sponsored-products`, `ad-row`, `advertorial`, `banner`) always carry
+         *     `sponsored: true` and the `advertiser`; the placement `id` is what impressions and clicks are reported against
+         *     (`POST /v1/home/ad-events`). Sponsored products are reported with the existing search click endpoint (`searchId`,
+         *     the card's `sponsor.adToken`).
+         */
+        HomeBlock: {
+            id: string;
+            /** @description rail, banner, brand-banner, sponsored-products, ad-row, advertorial, deals, based-on-orders, recently-viewed, preorders, services-near-you, community-spotlight, seller-spotlight, membership-promo, signin-promo, occasions */
+            type: string;
+            sponsored: boolean;
+            advertiser?: string;
+            title?: string;
+            sub?: string;
+            body?: string;
+            cta?: string;
+            href?: string;
+            imageUrl?: string | null;
+            logoUrl?: string | null;
+            tone?: string;
+            rail?: components["schemas"]["Rail"];
+            products?: components["schemas"]["ProductSummary"][];
+            ads?: {
+                imageUrl: string;
+                alt: string;
+                href: string;
+                advertiser: string;
+            }[];
+            cells?: {
+                label: string;
+                href: string;
+                imageUrl: string | null;
+                sub?: string;
+            }[];
+            /**
+             * Format: date-time
+             * @description When a deals module ends (countdown)
+             */
+            endsAt?: string;
+            /** @description The search a sponsored products module came from; send it with each click */
+            searchId?: string;
+            /** @description Most times one browser session shows this paid module (0 = no cap) */
+            maxPerSession?: number;
+        };
         Home: {
             announcements: components["schemas"]["Announcement"][];
             hero: components["schemas"]["HeroSlide"][];
             tiles: components["schemas"]["Tile"][];
-            banners: components["schemas"]["Banner"][];
-            rails: components["schemas"]["Rail"][];
+            blocks: components["schemas"]["HomeBlock"][];
             deliverTo: components["schemas"]["DeliveryLocation"];
         };
         DeliveryLocation: {
@@ -5785,6 +5851,34 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    recordHomeAdEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @example plc_home_brand_demo */
+                    placementId: string;
+                    /** @enum {string} */
+                    event: "impression" | "click";
+                };
+            };
+        };
+        responses: {
+            /** @description Counted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
         };
     };
     subscribeNewsletter: {

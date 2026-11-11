@@ -48,7 +48,7 @@ export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile
     { id: 'r-fast', title: 'Get it by {day}', href: '/s?fulfilment=afrotransact', source: { kind: 'deliverable-fast', maxDays: 2, limit: 6 } },
     { id: 'r1', title: 'Fulfilled by AfroTransact — fast to {city}', href: '/s?fulfilment=afrotransact', source: { kind: 'fulfilled-fastest', limit: 6 } },
     { id: 'r2', title: 'Best sellers in Groceries', href: '/s?dept=Groceries', source: { kind: 'department-bestsellers', department: 'Groceries', limit: 6 } },
-    { id: 'r3', title: 'Discover other kitchens', href: '/s', source: { kind: 'curated', ids: ['p11', 'p9', 'p12', 'p22', 'p7', 'p10'] } }
+    { id: 'r3', title: 'Discover other kitchens', href: '/s', source: { kind: 'curated', ids: ['p11', 'p9', 'p12', 'p22', 'p7', 'p10', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'] } }
   ]
 };
 

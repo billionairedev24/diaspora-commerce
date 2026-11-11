@@ -8,6 +8,10 @@ const now = new Date('2026-11-04T12:00:00Z');
 
 beforeEach(() => resetDb());
 
+/** Every product a block shows (rails, sponsored rails, deals, spotlights, brand strips). */
+const productsOf = (h: Home) => h.blocks.flatMap((b) => [...(b.rail?.items ?? []), ...(b.products ?? [])]);
+const railsOf = (h: Home) => h.blocks.filter((b) => b.rail).map((b) => b.rail!);
+
 describe('mock home rule tiles', () => {
   it('fills rule cells with eligible products: real photo, title, product link, no repeats', () => {
     const h = home(hou, now);
@@ -38,7 +42,7 @@ describe('mock home rule tiles', () => {
       expect(eligibleForHome(card({ imageUrl }))).toBe(false);
     }
     expect(eligibleForHome(card({ inStock: false }))).toBe(false);
-    expect(home(hou, now).rails.every((r) => r.items.length > 0 && r.items.every(eligibleForHome))).toBe(true);
+    expect(productsOf(home(hou, now)).every(eligibleForHome)).toBe(true);
   });
 });
 
@@ -70,8 +74,8 @@ describe('mock home hero schedule', () => {
 
 describe('mock personalised rails', () => {
   it('shows "Based on your orders" to a shopper with orders, never to guests', () => {
-    expect(home(hou, now).rails.some((r) => r.id === 'based-on-orders')).toBe(false);
-    const mine = home(hou, now, 'u_adaeze').rails[0];
+    expect(railsOf(home(hou, now)).some((r) => r.id === 'based-on-orders')).toBe(false);
+    const mine = railsOf(home(hou, now, 'u_adaeze'))[0];
     expect(mine?.id).toBe('based-on-orders');
     expect(mine?.items.length).toBeGreaterThan(0);
     // Her past orders held p15, p1 and p17: they are not offered again.
@@ -91,8 +95,8 @@ describe('mock personalised rails', () => {
 describe('mock home follows the deliver-to ZIP', () => {
   const nj = { zip: '08817', city: 'Edison', state: 'NJ', label: 'Edison 08817', serviceable: true };
   const cells = (h: Home) => h.tiles.flatMap((t) => t.cells.map((c) => c.atin ?? c.label));
-  const near = (h: Home) => h.rails.find((r) => r.id === 'r-near');
-  const shownAtins = (h: Home) => [...h.tiles.flatMap((t) => t.cells.map((c) => c.atin)), ...h.rails.flatMap((r) => r.items.map((p) => p.atin))].filter(Boolean);
+  const near = (h: Home) => railsOf(h).find((r) => r.id === 'r-near');
+  const shownAtins = (h: Home) => [...h.tiles.flatMap((t) => t.cells.map((c) => c.atin)), ...productsOf(h).map((p) => p.atin)].filter(Boolean);
 
   it('targets hero slides by ZIP prefix', () => {
     const ids = (loc: typeof hou) => home(loc, now).hero.map((h) => h.id);
@@ -114,12 +118,48 @@ describe('mock home follows the deliver-to ZIP', () => {
   });
 
   it('is the same on every load of a visit, differs by day, and shows a product once', () => {
-    const visit = (d: Date) => JSON.stringify([cells(home(hou, d, 'u1')), home(hou, d, 'u1').rails.map((r) => r.items.map((p) => p.atin))]);
+    const visit = (d: Date) => JSON.stringify([cells(home(hou, d, 'u1')), railsOf(home(hou, d, 'u1')).map((r) => r.items.map((p) => p.atin))]);
     expect(visit(now)).toBe(visit(new Date('2026-11-04T20:00:00Z')));
     expect(cells(home(hou, now))).not.toEqual(cells(home(hou, new Date('2026-11-05T12:00:00Z'))));
     for (const loc of [hou, nj]) {
       const atins = shownAtins(home(loc, now));
       expect(new Set(atins).size).toBe(atins.length);
+    }
+  });
+});
+
+describe('mock home composition', () => {
+  const types = (h: Home) => h.blocks.map((b) => b.type);
+
+  it('carries every block type, parses against the schema and ends with the client-side recently viewed marker', () => {
+    const h = home(hou, now, 'u_adaeze');
+    HomeSchema.parse(h);
+    for (const t of ['rail', 'based-on-orders', 'sponsored-products', 'brand-banner', 'ad-row', 'advertorial', 'deals', 'community-spotlight', 'occasions', 'services-near-you', 'membership-promo', 'preorders']) {
+      expect(types(h), t).toContain(t);
+    }
+    expect(types(h).at(-1)).toBe('recently-viewed');
+  });
+
+  it('marks every paid module sponsored with its advertiser, and nothing else', () => {
+    const paid = ['banner', 'brand-banner', 'sponsored-products', 'ad-row', 'advertorial'];
+    for (const b of home(hou, now).blocks) {
+      expect(b.sponsored, b.type).toBe(paid.includes(b.type));
+      if (b.sponsored) expect(b.advertiser?.length, b.type).toBeGreaterThan(0);
+    }
+  });
+
+  it('shows the sign-in band to guests only, and discounted deals only', () => {
+    expect(types(home(hou, now))).toContain('signin-promo');
+    expect(types(home(hou, now, 'u_adaeze'))).not.toContain('signin-promo');
+    const deals = home(hou, now).blocks.find((b) => b.type === 'deals');
+    expect(deals?.rail?.items.every((p) => (p.listPriceMinor ?? 0) > p.priceMinor)).toBe(true);
+    expect(Date.parse(deals?.endsAt ?? '')).toBeGreaterThan(now.getTime());
+  });
+
+  it('hides rails with fewer than three products (the mock catalogue is small; the gateway uses four) and sponsored rails with fewer than two', () => {
+    for (const b of home(hou, now).blocks) {
+      if (b.type === 'rail') expect(b.rail?.items.length).toBeGreaterThanOrEqual(3);
+      if (b.type === 'sponsored-products') expect(b.rail?.items.length).toBeGreaterThanOrEqual(2);
     }
   });
 });

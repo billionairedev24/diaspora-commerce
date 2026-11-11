@@ -4,13 +4,14 @@
 import { type Cart, type CartPackage, MAX_LINE_QUANTITY } from '../schemas/cart';
 import { LOW_STOCK_THRESHOLD, type Offer, type ProductDetail, type ProductSummary, type StockStatus } from '../schemas/catalog';
 import { type FacetBucket } from '../schemas/common';
-import { type Home } from '../schemas/home';
+import { type Home, type Rail } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
 import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } from '../schemas/search';
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
 import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINOR, locationForZip, metroOf, nearestFc, SELLER_SHIPPING_MINOR } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
 import { PLACEMENTS, SPONSORED_SEARCH, type TileRule, ZIP_TARGETING } from './fixtures/content';
+import { composeBody } from './home-blocks';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
 import { publicSizeChart, seedSizeCharts,SIZE_CHART_IDS } from './seller/size-charts';
@@ -390,7 +391,7 @@ function resolveTiles(all: ProductSummary[], rank: (items: ProductSummary[]) => 
 }
 
 /** "Based on your orders": the best-rated eligible products in the departments the shopper bought from most, minus what they bought. */
-function basedOnOrders(all: ProductSummary[], userId: string): Home['rails'][number] | null {
+function basedOnOrders(all: ProductSummary[], userId: string): Rail | null {
   const bought = new Set<string>();
   const count = new Map<string, number>();
   for (const o of account(userId).orders) {
@@ -460,19 +461,12 @@ export function home(loc: DeliveryLocation, now: Date, userId: string | null = n
   });
   const personal = userId ? basedOnOrders(all, userId) : null;
   const tiles = resolveTiles(all, rank, near).filter((t) => targeted(t.id, loc.zip));
-  // A product is on the page once: tiles first, then the personal rail, then the rails in page order.
-  const used = new Set(tiles.flatMap((t) => t.cells.map((c) => ('atin' in c ? c.atin : undefined)).filter((a): a is string => !!a)));
-  const dedupe = (r: Home['rails'][number]) => {
-    const items = r.items.filter((x) => !used.has(x.atin));
-    for (const x of items) used.add(x.atin);
-    return { ...r, items };
-  };
+  const blocks = composeBody({ rails, personal, eligible: all.filter(eligibleForHome), loc, now, userId, rank, tiles });
   return {
     announcements: PLACEMENTS.announcements,
     hero: activeHero(PLACEMENTS.hero, now).filter((h) => targeted(h.id, loc.zip)),
     tiles,
-    banners: PLACEMENTS.banners,
-    rails: [...(personal ? [personal] : []), ...rails].map(dedupe).filter((r) => r.items.length > 0),
+    blocks,
     deliverTo: loc
   };
 }

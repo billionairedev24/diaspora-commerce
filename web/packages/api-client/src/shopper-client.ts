@@ -100,6 +100,10 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     recordSearchClick: (body: SearchClickRequest): Promise<SearchClickResult> =>
       request('/v1/search/clicks', SearchClickResultSchema, { method: 'POST', body }),
 
+    /** Counts an impression or click on a paid home module (`HomeBlock.sponsored`). Fire and forget; nothing identifies the shopper. */
+    recordHomeAdEvent: (placementId: string, event: 'impression' | 'click'): Promise<void> =>
+      request('/v1/home/ad-events', Void, { method: 'POST', body: { placementId, event } }),
+
     /* Addresses (identity, validated by geo) */
     createAddress: (input: AddressInput): Promise<Address> => request('/v1/account/addresses', AddressSchema, { method: 'POST', body: input }),
     updateAddress: (id: string, input: AddressInput): Promise<Address> => request(`/v1/account/addresses/${enc(id)}`, AddressSchema, { method: 'PATCH', body: input }),

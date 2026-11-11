@@ -107,6 +107,11 @@ export const handlers = [
     const atins = (new URL(ctx.request.url).searchParams.get('atins') ?? '').split(',').filter(Boolean);
     return json({ items: recentlyViewed(atins, sessionLocation(ctx.session), ctx.now) });
   })),
+  /* Paid home modules: impressions and clicks are counted per placement (nothing identifies the shopper). */
+  http.post('*/v1/home/ad-events', route(async (ctx) => {
+    await body(ctx.request, z.object({ placementId: z.string().regex(/^plc_/), event: z.enum(['impression', 'click']) }));
+    return new Response(null, { status: 204 });
+  })),
   http.post('*/v1/newsletter/subscriptions', route(async (ctx) => {
     await body(ctx.request, NewsletterRequestSchema);
     return json({ status: 'pending_confirmation' }, 202);

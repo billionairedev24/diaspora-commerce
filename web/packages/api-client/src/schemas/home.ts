@@ -64,5 +64,61 @@ export const PlacementsSchema = z.object({
 });
 export type Placements = z.infer<typeof PlacementsSchema>;
 
-export const HomeSchema = PlacementsSchema.extend({ deliverTo: DeliveryLocationSchema });
+/** The home block types the storefront renders; a type it does not know is ignored. Paid ones are always `sponsored`. */
+export const HOME_BLOCK_TYPES = [
+  'rail',
+  'banner',
+  'brand-banner',
+  'sponsored-products',
+  'ad-row',
+  'advertorial',
+  'deals',
+  'based-on-orders',
+  'recently-viewed',
+  'preorders',
+  'services-near-you',
+  'community-spotlight',
+  'seller-spotlight',
+  'membership-promo',
+  'signin-promo',
+  'occasions'
+] as const;
+export type HomeBlockType = (typeof HOME_BLOCK_TYPES)[number];
+
+/** One module of the home page body, in the order staff set. `type` decides which fields are filled. */
+export const HomeBlockSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  /** Paid module: always shown with a visible "Sponsored" / "Ad" label and the advertiser. */
+  sponsored: z.boolean(),
+  advertiser: z.string().optional(),
+  title: z.string().optional(),
+  sub: z.string().optional(),
+  body: z.string().optional(),
+  cta: z.string().optional(),
+  href: z.string().optional(),
+  imageUrl: z.string().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  tone: z.string().optional(),
+  rail: RailSchema.optional(),
+  /** The optional product strip of a brand banner. */
+  products: z.array(ProductSummarySchema).optional(),
+  ads: z.array(z.object({ imageUrl: z.string(), alt: z.string(), href: z.string(), advertiser: z.string() })).optional(),
+  cells: z.array(z.object({ label: z.string(), href: z.string(), imageUrl: z.string().nullable(), sub: z.string().optional() })).optional(),
+  /** Deals: when the countdown ends (RFC 3339). */
+  endsAt: z.string().optional(),
+  /** Sponsored products: the search the products came from; clicks are reported with it and each card's ad token. */
+  searchId: z.string().optional(),
+  /** Paid modules: most times one browser session shows it (0 or absent = no cap). */
+  maxPerSession: z.number().optional()
+});
+export type HomeBlock = z.infer<typeof HomeBlockSchema>;
+
+export const HomeSchema = z.object({
+  announcements: z.array(AnnouncementSchema),
+  hero: z.array(HeroSlideSchema),
+  tiles: z.array(TileSchema),
+  blocks: z.array(HomeBlockSchema),
+  deliverTo: DeliveryLocationSchema
+});
 export type Home = z.infer<typeof HomeSchema>;
