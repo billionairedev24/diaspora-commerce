@@ -57,7 +57,6 @@ export function LabelPhotoField({ image, onChange, error, optional }: Props) {
       <span className="text-xs text-muted">{t('sc.pf.labelPhoto.hint')}</span>
       <div className="flex flex-wrap items-center gap-3">
         {image && image.status !== 'error' && image.previewUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={image.previewUrl} alt={t('sc.pf.labelPhoto.alt')} className="size-20 rounded-sm border border-border object-cover" />
         ) : null}
         <input ref={input} type="file" accept={IMAGE_TYPES.join(',')} className="sr-only" tabIndex={-1} aria-label={t('sc.pf.field.labelPhoto')} data-testid="label-photo-input"

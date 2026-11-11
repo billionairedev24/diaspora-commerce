@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   behaviourQuestions,
   emptyForm,
+  emptyPackage,
   fieldId,
   type FormState,
   fromDetail,
@@ -27,7 +28,7 @@ const base = (type: ProductTypeSchema, extra: Partial<FormState> = {}): FormStat
   ...withCategory(emptyForm(), { id: 'x', path: 'x', productType: type.code }),
   title: 'Crispy plantain chips, 8 oz bag', images: [image], noGtin: true,
   attrs: { ingredients: 'Plantain, palm oil, salt', allergens: 'None' },
-  single: { sku: '', gtin: '', price: '6.50', compareAt: '', qty: '20', image: '' }, ...extra
+  single: { sku: '', gtin: '', price: '6.50', compareAt: '', qty: '20', image: '', pkg: emptyPackage() }, ...extra
 });
 
 describe('tax questions in the product form', () => {

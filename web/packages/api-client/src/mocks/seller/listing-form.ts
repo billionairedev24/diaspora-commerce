@@ -18,6 +18,7 @@ import {
   type SellerProductDetail
 } from '../../schemas/seller';
 import { CATEGORY_TREE, type MockSellerDb, PRODUCT_TYPES } from './db';
+import { listingRulesFor } from './listing-rules';
 
 /** The SKU the catalog generates for an empty one: stable and prefixed (the mock uses the title and row). */
 export const generatedSku = (typed: string | undefined, i: number, title: string): string =>
@@ -69,6 +70,32 @@ function guessLeaf(title: string): Leaf {
   return pick('pt-grains');
 }
 
+/** The code of the category above a product-type node (what the listing rules are asked for). */
+function categoryCodeOf(leafId: string): string {
+  let found = '';
+  const walk = (nodes: typeof CATEGORY_TREE, parent: (typeof CATEGORY_TREE)[number] | null) =>
+    nodes.forEach((n) => {
+      if (n.id === leafId) found = parent?.code ?? n.code;
+      walk(n.children, n);
+    });
+  walk(CATEGORY_TREE, null);
+  return found;
+}
+
+const SAMPLE_ANSWER: Record<string, string> = { net_weight: '12 oz', shelf_life: '12 months', servings: '4', storage: 'Room temperature', allergens: 'None', country_of_origin: 'Nigeria' };
+
+/** What a seeded listing already says to satisfy its category's listing rules (the seeded listings are good data). */
+function ruleAnswers(code: string): { attributes: Record<string, string>; label: boolean; package: boolean; dangerous: boolean; description: boolean } {
+  const rules = listingRulesFor(code) ?? listingRulesFor('general');
+  const attributes: Record<string, string> = {};
+  rules?.fields.forEach((f) => {
+    if (f.attributeKey && f.id !== 'brand' && (f.status === 'required' || f.status === 'required_or_exemption')) attributes[f.attributeKey] = SAMPLE_ANSWER[f.id] ?? 'See the pack';
+  });
+  const status = (id: string) => rules?.fields.find((f) => f.id === id)?.status;
+  if (status('brand') === 'required') attributes.brand = 'Ade’s Kitchen';
+  return { attributes, label: status('label_photo') === 'required' || status('label_photo') === 'required_or_exemption', package: status('package_size') === 'required', dangerous: status('dangerous_goods') === 'required', description: status('description') === 'required' };
+}
+
 /** The detail of a listing: stored by the form, or derived from a seeded listing row. */
 export function productDetail(db: MockSellerDb, l: MockListing): SellerProductDetail {
   const stored = db.productDetails[l.productId];
@@ -77,11 +104,14 @@ export function productDetail(db: MockSellerDb, l: MockListing): SellerProductDe
   const type = PRODUCT_TYPES[leaf.productType];
   const theme = l.variants.length > 1 ? (type?.themes[0] ?? null) : null;
   const dim = theme?.dimensions[0];
+  const answers = ruleAnswers(categoryCodeOf(leaf.id));
   const attributes: Record<string, string> = {};
+  const replaced = new Set(listingRulesFor('general')?.replacedAttributeKeys ?? []);
   type?.attributes.forEach((a) => {
-    if (!a.required) return;
-    attributes[a.key] = a.key === 'brand' ? 'Ade’s Kitchen' : a.kind === 'ENUM' ? (a.options[0] ?? '') : a.kind === 'NUMBER' ? `12 ${a.units[0] ?? ''}`.trim() : 'See the pack';
+    if (!a.required || a.key === 'brand' || replaced.has(a.key)) return;
+    attributes[a.key] = a.kind === 'ENUM' ? (a.options[0] ?? '') : a.kind === 'NUMBER' ? `12 ${a.units[0] ?? ''}`.trim() : 'See the pack';
   });
+  Object.assign(attributes, answers.attributes);
   return {
     productId: l.productId,
     atin: l.atin ?? '',
@@ -94,7 +124,8 @@ export function productDetail(db: MockSellerDb, l: MockListing): SellerProductDe
     productType: leaf.productType,
     title: l.title,
     attributes,
-    images: [{ url: l.imageUrl ?? `https://img.afrotransact.dev/${l.productId}.webp`, width: 1600, height: 1600, bytes: 180_000, contentType: 'image/webp' }],
+    images: [{ url: l.imageUrl ?? `https://img.afrotransact.dev/${l.productId}.webp`, width: 1600, height: 1600, bytes: 180_000, contentType: 'image/webp' },
+      ...(answers.label ? [{ url: `https://img.afrotransact.dev/${l.productId}-label.webp`, width: 1600, height: 1600, bytes: 180_000, contentType: 'image/webp', role: 'LABEL' as const }] : [])],
     variationTheme: theme?.name ?? '',
     variants: l.variants.map((v, i) => ({
       atin: l.atin ? `${l.atin}${i ? `-${i + 1}` : ''}` : '',
@@ -106,10 +137,11 @@ export function productDetail(db: MockSellerDb, l: MockListing): SellerProductDe
       compareAtMinor: null,
       quantity: v.quantity,
       images: [],
-      sellerSkuGenerated: false, taxFacts: {}, taxStatus: 'READY' as const, missingTaxFacts: []
+      sellerSkuGenerated: false, taxFacts: {}, taxStatus: 'READY' as const, missingTaxFacts: [],
+      packaging: answers.package ? { lengthIn: 8, widthIn: 6, heightIn: 3, weightLb: 1.2 } : null
     })),
     preorderEligible: type?.traits.preorder ?? false,
-    listing: { description: null, condition: 'NEW', keywords: [], fulfilment: l.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
+    listing: { description: answers.description ? 'A seeded listing description.' : null, dangerousGoods: answers.dangerous ? false : null, documents: [], exemptions: {}, condition: 'NEW', keywords: [], fulfilment: l.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
       packaging: l.fulfilment === 'AFROTRANSACT' ? { lengthIn: 8, widthIn: 6, heightIn: 3, weightLb: 1.2 } : null, handlingDays: 2, shipFromId: null, sizeChartId: null, fitNote: null, sellerBehaviour: {} },
     currency: 'USD',
     version: 1,
@@ -146,7 +178,8 @@ export function detailOf(productId: string, d: ProductDraft, row: ListingRow, ve
       sellerSkuGenerated: !v.sellerSku?.trim(),
       taxFacts: v.taxFacts ?? {},
       taxStatus: 'PENDING_REVIEW' as const,
-      missingTaxFacts: []
+      missingTaxFacts: [],
+      packaging: v.packaging ?? null
     })),
     preorderEligible: d.preorderEligible ?? false,
     listing: {
@@ -159,7 +192,10 @@ export function detailOf(productId: string, d: ProductDraft, row: ListingRow, ve
       handlingDays: d.listing?.handlingDays ?? 2,
       shipFromId: d.listing?.shipFromId ?? null,
       sizeChartId: d.listing?.sizeChartId ?? null,
-      fitNote: d.listing?.fitNote ?? null
+      fitNote: d.listing?.fitNote ?? null,
+      dangerousGoods: d.listing?.dangerousGoods ?? null,
+      documents: d.listing?.documents ?? [],
+      exemptions: d.listing?.exemptions ?? {}
     },
     currency: 'USD',
     version,
@@ -171,7 +207,7 @@ export function detailOf(productId: string, d: ProductDraft, row: ListingRow, ve
 export function listingProblems(d: ProductDraft): Record<string, string> {
   const errs: Record<string, string> = {};
   const l = d.listing;
-  if (l?.fulfilment === 'AFROTRANSACT' && !l.packaging) errs['listing.packaging'] = 'Package dimensions and weight are required for Fulfilled by AfroTransact';
+  if (l?.fulfilment === 'AFROTRANSACT' && !l.packaging && !d.variants.every((v) => v.packaging)) errs['listing.packaging'] = 'Package dimensions and weight are required for Fulfilled by AfroTransact';
   d.variants.forEach((v, i) => {
     if (v.compareAtMinor != null && v.compareAtMinor <= v.priceMinor) errs[`variants[${i}].compareAtMinor`] = 'The compare-at price must be higher than the price';
     if (v.gtin && !gtinCheck(v.gtin)) errs[`variants[${i}].gtin`] = 'The check digit doesn’t match';
