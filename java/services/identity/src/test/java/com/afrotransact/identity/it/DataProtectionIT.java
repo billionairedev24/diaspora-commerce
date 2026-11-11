@@ -302,12 +302,8 @@ class DataProtectionIT {
 
     private String adminToken() {
         BrowserSession admin = new BrowserSession(base());
-        AuthorizeResult first = admin.signIn(STAFF_CONSOLE, STAFF_REDIRECT, ADMIN_EMAIL, ADMIN_PASSWORD);
-        assertThat(first.mfaRequired()).isTrue();
-        admin.requestSmsCode();
-        String code = admin.completeMfa("SMS", latestCode(ADMIN_PHONE), false);
-        Tokens t = admin.exchangePublic(STAFF_CONSOLE, STAFF_REDIRECT, new AuthorizeResult(code, false,
-                first.verifier()));
+        AuthorizeResult staff = admin.signInStaff(STAFF_CONSOLE, STAFF_REDIRECT, ADMIN_EMAIL, ADMIN_PASSWORD);
+        Tokens t = admin.exchangePublic(STAFF_CONSOLE, STAFF_REDIRECT, staff);
         assertThat(t.accessClaims().get("roles").toString()).contains("platform.super_admin");
         return t.accessToken();
     }

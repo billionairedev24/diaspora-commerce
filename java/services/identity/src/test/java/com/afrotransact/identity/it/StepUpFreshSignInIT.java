@@ -60,12 +60,8 @@ class StepUpFreshSignInIT {
     void aSignInFromTheLastFiveMinutesNeedsNoPasswordForADangerousAction() {
         BrowserSession s = new BrowserSession("http://localhost:" + port);
         BrowserSession admin = new BrowserSession("http://localhost:" + port);
-        AuthorizeResult first = admin.signIn(STAFF_CONSOLE, STAFF_REDIRECT, ADMIN_EMAIL, ADMIN_PASSWORD);
-        assertThat(first.mfaRequired()).isTrue();
-        admin.requestSmsCode();
-        String code = admin.completeMfa("SMS", latestCode(ADMIN_PHONE), false);
-        Tokens t = admin.exchangePublic(STAFF_CONSOLE, STAFF_REDIRECT, new AuthorizeResult(code, false,
-                first.verifier()));
+        AuthorizeResult staff = admin.signInStaff(STAFF_CONSOLE, STAFF_REDIRECT, ADMIN_EMAIL, ADMIN_PASSWORD);
+        Tokens t = admin.exchangePublic(STAFF_CONSOLE, STAFF_REDIRECT, staff);
         String token = t.accessToken();
         long authTime = BrowserSession.json(new String(Base64.getUrlDecoder().decode(token.split("\\.")[1])))
                 .get("auth_time").asLong();

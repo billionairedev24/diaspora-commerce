@@ -566,7 +566,7 @@ class IdentityFlowIT {
     }
 
     @Test
-    void staffSwitchTwoStepMethodsButCannotTurnItOff() {
+    void mandatoryAccountsSwitchMethodsButCannotDropTheLastFactor() {
         BrowserSession user = new BrowserSession(base());
         String email = "yemi." + UUID.randomUUID() + "@example.com";
         String userId = registerAndVerify(user, email, "shop");
@@ -588,22 +588,31 @@ class IdentityFlowIT {
         status = BrowserSession.json(user.api("GET", "/v1/me/mfa", token, null).body());
         assertThat(status.get("totp").asBoolean()).isTrue();
         assertThat(status.get("mayRemoveTotp").asBoolean()).isFalse();
-        HttpResponse<String> refused = user.api("DELETE", "/v1/me/mfa/totp", token, null);
+        String pw = "{\"password\":\"" + PASSWORD + "\"}";
+        HttpResponse<String> refused = user.api("DELETE", "/v1/me/mfa/totp", token, pw);
         assertThat(refused.statusCode()).isEqualTo(403);
-        assertThat(problemCode(refused)).isEqualTo("identity.staff-mfa-required");
+        assertThat(problemCode(refused)).isEqualTo("identity.mfa-required");
 
-        // Switch to SMS: turn SMS codes on, then the authenticator app may go, but never the last factor.
-        assertThat(user.api("POST", "/v1/me/mfa/sms", token, null).statusCode()).isEqualTo(202);
-        assertThat(user.api("POST", "/v1/me/mfa/sms/confirm", token,
-                "{\"code\":\"" + latestCode(ADMIN_PHONE) + "\"}").statusCode()).isEqualTo(200);
+        // Switch to email codes: turn them on (a first code is emailed), then the authenticator may go, never the last.
+        assertThat(user.api("POST", "/v1/me/mfa/email", token, null).statusCode()).isEqualTo(202);
+        assertThat(user.api("POST", "/v1/me/mfa/email/confirm", token,
+                "{\"code\":\"" + latestCode(email) + "\"}").statusCode()).isEqualTo(200);
         status = BrowserSession.json(user.api("GET", "/v1/me/mfa", token, null).body());
+        assertThat(status.get("emailOtp").asBoolean()).isTrue();
+        assertThat(status.get("smsAvailable").asBoolean()).isFalse();
         assertThat(status.get("mayRemoveTotp").asBoolean()).isTrue();
-        assertThat(status.get("mayRemoveSms").asBoolean()).isTrue();
-        assertThat(user.api("DELETE", "/v1/me/mfa/totp", token, null).statusCode()).isEqualTo(204);
-        assertThat(user.api("DELETE", "/v1/me/mfa/sms", token, null).statusCode()).isEqualTo(403);
+        assertThat(status.get("mayRemoveEmailOtp").asBoolean()).isTrue();
+        // turning a factor off needs the password
+        HttpResponse<String> wrongPassword = user.api("DELETE", "/v1/me/mfa/totp", token,
+                "{\"password\":\"not-the-password-1\"}");
+        assertThat(wrongPassword.statusCode()).isEqualTo(422);
+        assertThat(user.api("DELETE", "/v1/me/mfa/totp", token, pw).statusCode()).isEqualTo(204);
+        assertThat(user.api("DELETE", "/v1/me/mfa/email", token, pw).statusCode()).isEqualTo(403);
         status = BrowserSession.json(user.api("GET", "/v1/me/mfa", token, null).body());
-        assertThat(status.get("sms").asBoolean()).isTrue();
+        assertThat(status.get("emailOtp").asBoolean()).isTrue();
         assertThat(status.get("totp").asBoolean()).isFalse();
+        // SMS stays off while its flag is off
+        assertThat(user.api("POST", "/v1/me/mfa/sms", token, null).statusCode()).isEqualTo(409);
     }
 
     @Test
@@ -706,12 +715,8 @@ class IdentityFlowIT {
             return adminAccessToken;
         }
         BrowserSession admin = new BrowserSession(base());
-        AuthorizeResult first = admin.signIn(STAFF_CONSOLE, STAFF_REDIRECT, ADMIN_EMAIL, ADMIN_PASSWORD);
-        assertThat(first.mfaRequired()).isTrue();
-        admin.requestSmsCode();
-        String code = admin.completeMfa("SMS", latestCode(ADMIN_PHONE), false);
-        Tokens t = admin.exchangePublic(STAFF_CONSOLE, STAFF_REDIRECT, new AuthorizeResult(code, false,
-                first.verifier()));
+        AuthorizeResult staff = admin.signInStaff(STAFF_CONSOLE, STAFF_REDIRECT, ADMIN_EMAIL, ADMIN_PASSWORD);
+        Tokens t = admin.exchangePublic(STAFF_CONSOLE, STAFF_REDIRECT, staff);
         assertThat(t.accessClaims().get("pt").asString()).isEqualTo("STAFF");
         assertThat(strings(t.accessClaims().get("perms"))).contains("access:admin", "delivery:operate");
         adminAccessToken = t.accessToken();

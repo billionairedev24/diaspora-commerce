@@ -128,6 +128,70 @@ final class BrowserSession {
         return code(location(resumed));
     }
 
+    /** Recovery codes of staff accounts enrolled by {@link #signInStaff}, per server and account (one JVM runs many contexts). */
+    private static final Map<String, java.util.Deque<String>> STAFF_RECOVERY = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Signs a staff account in on the hosted pages. Staff must have a second factor: the first time the forced "Set up
+     * your second step" page is completed with an authenticator (no code is ever sent), afterwards a saved recovery
+     * code answers the prompt. Returns the authorization code result.
+     */
+    AuthorizeResult signInStaff(String clientId, String redirectUri, String email, String password) {
+        AuthorizeResult first = signIn(clientId, redirectUri, email, password);
+        if (!first.mfaRequired()) {
+            return first;
+        }
+        String key = base + "|" + email;
+        HttpResponse<String> mfa = get(base + "/login/mfa");
+        if (mfa.statusCode() == 200) {
+            String recovery = STAFF_RECOVERY.get(key).poll();
+            return new AuthorizeResult(completeMfa("RECOVERY_CODE", recovery, false), false, first.verifier());
+        }
+        HttpResponse<String> choose = get(base + "/login/mfa/setup");
+        expect(choose, 200);
+        HttpResponse<String> qr = submit("/login/mfa/setup/totp", choose, Map.of());
+        expect(qr, 200);
+        Matcher secret = Pattern.compile("id=\"totp-secret\"[^>]*>([A-Z2-7]+)<").matcher(qr.body());
+        if (!secret.find()) {
+            throw new IllegalStateException("No authenticator key on the setup page");
+        }
+        String code = new com.afrotransact.identity.domain.DefaultTotpAuthenticator().codeAt(secret.group(1),
+                java.time.Instant.now().getEpochSecond() / 30);
+        HttpResponse<String> done = submit("/login/mfa/setup/totp/confirm", qr, Map.of("code", code));
+        expect(done, 200);
+        java.util.Deque<String> codes = new java.util.concurrent.ConcurrentLinkedDeque<>();
+        Matcher m = Pattern.compile("<code>([a-z2-9]{5}-[a-z2-9]{5})</code>").matcher(done.body());
+        while (m.find()) {
+            codes.add(m.group(1));
+        }
+        STAFF_RECOVERY.put(key, codes);
+        HttpResponse<String> finished = submit("/login/mfa/setup/finish", done, Map.of());
+        expect(finished, 302);
+        HttpResponse<String> resumed = get(absolute(location(finished)));
+        expect(resumed, 302);
+        return new AuthorizeResult(code(location(resumed)), false, first.verifier());
+    }
+
+    /** Page helpers for the hosted flows (sign-up, "Secure your account", forced setup). */
+    HttpResponse<String> page(String path) {
+        return get(absolute(path));
+    }
+
+    /** POSTs a hosted form with the CSRF token of {@code from} (a page this session already loaded). */
+    HttpResponse<String> submit(String path, HttpResponse<String> from, Map<String, String> fields) {
+        Map<String, String> form = new LinkedHashMap<>(fields);
+        form.put("_csrf", csrf(from.body()));
+        return postForm(absolute(path), form);
+    }
+
+    /** Asks for an email sign-in code on the MFA page. */
+    void requestEmailCode() {
+        HttpResponse<String> page = get(base + "/login/mfa");
+        expect(page, 200);
+        HttpResponse<String> sent = postForm(base + "/login/mfa/email", Map.of("_csrf", csrf(page.body())));
+        expect(sent, 302);
+    }
+
     /** Asks for an SMS sign-in code on the MFA page. */
     void requestSmsCode() {
         HttpResponse<String> page = get(base + "/login/mfa");
