@@ -84,7 +84,7 @@ func TestMembershipRoutesConformAndApplyBenefits(t *testing.T) {
 		mem == nil || mem["member"] != true || mem["tierName"] != "Plus" || mem["upsell"] != nil {
 		t.Fatalf("checkout as a member = %s", r.body)
 	}
-	if w := mem["waivers"].([]any); len(w) != 1 || w[0].(map[string]any)["seller"] != "Kente Naturals" || w[0].(map[string]any)["benefit"] != "FREE_SHIPPING" {
+	if w := mem["waivers"].([]any); len(w) != 1 || w[0].(map[string]any)["seller"] != "Kente Naturals" || w[0].(map[string]any)["benefit"] != "FREE_DELIVERY" {
 		t.Fatalf("waivers = %v", w)
 	}
 	if pk := sum["packages"].([]any)[0].(map[string]any); num(pk, "membershipWaivedMinor") != 599 {

@@ -2036,7 +2036,7 @@ paths:
       summary: What membership does for my cart; if I am not a member, "Join Plus to save $X on this order"
       description: |
         Priced by payments with the delivery options the shopper would get. Delivery fees are waived by the tier's rules
-        (order minimum, per-order cap); pickup and express never are. Best effort: without an answer `waivers` is empty
+        (order minimum, per-order cap); pickup never is. Best effort: without an answer `waivers` is empty
         and there is no `upsell`.
       security: [{sessionCookie: []}, {bearer: []}]
       responses:
@@ -4024,14 +4024,13 @@ components:
       enum: [google, apple, facebook]
     DeliveryPromise:
       type: object
-      required: [days, label, prefix, free, feeMinor, expressLabel, cutoff]
+      required: [days, label, prefix, free, feeMinor, cutoff]
       properties:
         days: {type: integer, minimum: 0, description: Business days to the deliver-to ZIP (0 = today)}
         label: {type: string, examples: ['Tomorrow, Oct 11']}
-        prefix: {type: string, examples: [FREE delivery, Delivery]}
+        prefix: {type: string, examples: [Delivery by AfroTransact, AfroTransact collects from the store and delivers]}
         free: {type: boolean}
-        feeMinor: {type: integer}
-        expressLabel: {type: [string, 'null']}
+        feeMinor: {type: integer, description: 'The flat delivery fee staff set (orders shipping settings); no carrier is ever named'}
         cutoff: {type: [string, 'null'], examples: ['Order within 4 hrs 12 mins.']}
     Seller:
       type: object
@@ -4648,11 +4647,20 @@ components:
       type: object
       required: [key, label, eta, feeMinor, free]
       properties:
-        key: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+        key:
+          type: string
+          enum: [carrier, afrotransact_delivery, pickup, quote_required]
+          description: |
+            Launch shipping (listing rules section 3): `afrotransact_delivery` (Delivery by AfroTransact, or AfroTransact
+            collects from the store and delivers: one flat fee set by staff), `pickup` ($0), `quote_required` (the address
+            is outside every delivery zone: "Too far for standard delivery. Ask us for a quote"; disabled for payment,
+            the order cannot be placed with it) and `carrier` (seller-shipped, only while the staff switch
+            sellerCarrierShippingEnabled is on; off at launch). There is no express. No label ever names a carrier.
         label: {type: string}
         eta: {type: string}
         feeMinor: {type: integer}
         free: {type: boolean}
+        feeUnknown: {type: boolean, description: 'true when the staff delivery fee could not be read: feeMinor is not a price and the order cannot be placed until it is known'}
         earliestDate: {type: string, format: date, description: Checkout only — promise service date range}
         latestDate: {type: string, format: date}
         cutoffLabel: {type: string, examples: [Order within 3 h 12 min]}
@@ -5477,7 +5485,8 @@ components:
           type: array
           description: 'Cart lines that cannot be sold yet because their tax decision is not definite. Checkout cannot be placed while any remains; the shopper removes them (Remove). Never defaulted, estimated or dropped silently. Empty when nothing is blocked.'
           items: {$ref: '#/components/schemas/CheckoutBlockedLine'}
-        canPlaceOrder: {type: boolean, description: 'false while a blocked line remains (placing the order is refused with CHECKOUT_ITEM_BLOCKED)'}
+        canPlaceOrder: {type: boolean, description: 'false while a blocked line remains (placing the order is refused with CHECKOUT_ITEM_BLOCKED), a package is too far for standard delivery (quote_required) or the delivery fee is not known'}
+        deliveryBlockedReason: {type: string, description: 'Plain words for what delivery stops the order (a quote_required package, or an unknown fee); absent otherwise'}
         totalMinor: {type: integer}
         currency: {type: string}
         sellerCount: {type: integer}
@@ -5723,7 +5732,7 @@ components:
             required: [packageId, option]
             properties:
               packageId: {type: string}
-              option: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+              option: {type: string, enum: [carrier, afrotransact_delivery, pickup], description: 'quote_required is refused (422 deliverySelections); carrier only while the staff switch is on'}
               pickupPointId: {type: string}
               quoteId:
                 type: string

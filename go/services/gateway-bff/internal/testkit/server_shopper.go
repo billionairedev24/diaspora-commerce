@@ -7,6 +7,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/upstreams"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
@@ -18,7 +19,7 @@ const TestStorefrontOrigin = "https://shop.test"
 
 // shopperServices wires the storefront account/checkout/services/Lola use cases against the shopper fakes.
 func shopperServices(u *Upstreams, client func(name, url string) httpclient.Client, identity port.IdentityClient, store port.ReceiptStore, s httpapi.Services,
-	clock *Clock, log *slog.Logger) httpapi.ShopperServices {
+	estimator domain.Estimator, clock *Clock, log *slog.Logger) httpapi.ShopperServices {
 	base := u.URL() + ShopperPrefix
 	tokens := upstreams.NewServiceTokens(client("identity", u.URL()), upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now})
 	d := app.ShopperDeps{
@@ -29,7 +30,7 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		Delivery:   upstreams.NewDeliveryFacts(client("promise", base), client("carrier-gateway", base), client("geo", base), tokens),
 		Credit:     upstreams.NewCredit(client("payments", base)),
 		Membership: upstreams.NewMembership(client("payments", base)),
-		Identity:   identity, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
+		Identity:   identity, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location, Estimator: estimator,
 		PublishableKey: TestPublishableKey, IdentityPublicURL: u.URL(), Clock: clock.Now, Log: log,
 	}
 	help := app.NewHelpRequestsService(app.HelpRequestsDeps{Orders: d.Orders, Claims: upstreams.NewHelpRequests(client("trust-ops", base)),

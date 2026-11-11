@@ -41,9 +41,12 @@ type ShopperDeps struct {
 	// Membership prices the shopper's membership benefits on the checkout page (S323; optional).
 	Membership port.MembershipClient
 	Identity   port.IdentityClient
-	Checkout   CheckoutService
-	Carts      CartService
-	Location   LocationService
+	// Estimator carries the staff delivery fee (listing rules D16); ShippingSettings reads it when none was ever read.
+	Estimator        domain.Estimator
+	ShippingSettings ShippingSettingsEnsurer
+	Checkout         CheckoutService
+	Carts            CartService
+	Location         LocationService
 	// ShippingAllocation spreads a package's delivery charge over its lines for the tax estimate (TX-05 to TX-07);
 	// blank means PROPORTIONAL. Must match orders' at.orders.tax.shipping-allocation. The mixed-basket method is an
 	// OPEN LEGAL DECISION (open decision 5) the tax adviser must approve before production.

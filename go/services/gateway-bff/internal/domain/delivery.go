@@ -2,19 +2,16 @@ package domain
 
 import (
 	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 )
 
-// DeliveryPolicy holds the commercial delivery rules used when the promise service has no answer.
+// DeliveryPolicy holds the fallback delivery rules. The delivery fee itself is NOT configured here: it is the staff-edited
+// shipping settings record owned by orders (listing rules D16), read through ShippingSettingsSetter. Only the carrier fee
+// of seller-shipped packages (off at launch) and the time zone live here.
 type DeliveryPolicy struct {
 	SellerShippingMinor        int64
 	FreeShippingThresholdMinor int64
-	PlatformDeliveryMode       string // "FLAT", "PER_WEIGHT", or "DISTANCE"
-	PlatformDeliveryFlatMinor  int64
-	PlatformDeliveryBaseMinor  int64
-	PlatformDeliveryPerLbMinor int64
 	Location                   *time.Location
 }
 
@@ -22,13 +19,58 @@ type DeliveryPolicy struct {
 const (
 	DefaultAfroTransactDays = 2
 	DefaultSellerDays       = 4
-	// DefaultLocalDeliveryDays is AfroTransact Delivery from the seller's store (offers' buy box uses 1 day).
+	// DefaultLocalDeliveryDays is AfroTransact collecting from a seller's store and delivering (the buy box uses 1 day).
 	DefaultLocalDeliveryDays = 1
-	ExpressFeeMinor          = 799
 )
 
-// LocalDeliveryOptionLabel is the AfroTransact Delivery option of a seller-store package before checkout prices it.
-const LocalDeliveryOptionLabel = "AfroTransact Delivery · priced by distance at checkout"
+// Delivery option keys. Orders accepts exactly these (plus carrier only while the staff switch is on).
+const (
+	OptionDelivery      = "afrotransact_delivery"
+	OptionPickup        = "pickup"
+	OptionCarrier       = "carrier"
+	OptionQuoteRequired = "quote_required"
+)
+
+// Shopper-facing option labels (launch shipping, listing rules section 3). No carrier is ever named.
+const (
+	LabelDeliveryByAfroTransact = "Delivery by AfroTransact"
+	LabelStoreDelivery          = "AfroTransact collects from the store and delivers"
+	LabelPickupPoint            = "Pickup at an AfroTransact point"
+	LabelStorePickup            = "Collect from the store"
+	LabelSellerShipping         = "Standard shipping from the seller"
+	LabelQuoteRequired          = "Too far for standard delivery. Ask us for a quote"
+	// LabelFeeUnknown replaces a fee that cannot be read right now: never $0.
+	LabelFeeUnknown = "Delivery fee shown at checkout"
+)
+
+// LocalDeliveryOptionLabel is the AfroTransact option of a seller-store package.
+const LocalDeliveryOptionLabel = LabelStoreDelivery
+
+// ShippingSettings is the staff-set shipping charge (orders' shipping_settings record, listing rules D16). DeliveryFee is
+// the one formula; orders' ShippingSettings.deliveryFee is the same and tools/checkout/shipping-fee-vectors.json proves it.
+type ShippingSettings struct {
+	Currency                     string
+	Version                      int64
+	FlatFeeMinor                 int64
+	FreeAboveMinor               *int64 // nil = never free
+	SellerCarrierShippingEnabled bool
+}
+
+// DeliveryFee is the delivery charge of one package whose items cost itemsMinor.
+func (s ShippingSettings) DeliveryFee(itemsMinor int64) int64 {
+	if s.FreeAboveMinor != nil && itemsMinor >= *s.FreeAboveMinor {
+		return 0
+	}
+	return s.FlatFeeMinor
+}
+
+// ShippingSettingsSetter is implemented by estimators whose delivery fee follows the staff shipping settings.
+type ShippingSettingsSetter interface {
+	// SetShippingSettings replaces the settings in force (nil is ignored: the last known value stays).
+	SetShippingSettings(s *ShippingSettings)
+	// ShippingSettings is the settings in force; false when none was ever read.
+	ShippingSettings() (ShippingSettings, bool)
+}
 
 // Estimator builds delivery promises and package delivery options from a business-day estimate.
 type Estimator interface {
@@ -58,18 +100,39 @@ type CarrierRuleSetter interface {
 }
 
 type estimatorImpl struct {
-	p    DeliveryPolicy
-	rule atomic.Pointer[CarrierRule]
+	p        DeliveryPolicy
+	rule     atomic.Pointer[CarrierRule]
+	settings atomic.Pointer[ShippingSettings]
 }
 
 var (
-	_ Estimator         = (*estimatorImpl)(nil)
-	_ CarrierRuleSetter = (*estimatorImpl)(nil)
+	_ Estimator              = (*estimatorImpl)(nil)
+	_ CarrierRuleSetter      = (*estimatorImpl)(nil)
+	_ ShippingSettingsSetter = (*estimatorImpl)(nil)
 )
 
 func (e *estimatorImpl) SetCarrierRule(r *CarrierRule) { e.rule.Store(r) }
 
-// shipping is the carrier estimate for a package: the staff rule's fee, else the configured flat fee.
+func (e *estimatorImpl) SetShippingSettings(s *ShippingSettings) {
+	if s != nil {
+		e.settings.Store(s)
+	}
+}
+
+func (e *estimatorImpl) ShippingSettings() (ShippingSettings, bool) {
+	if s := e.settings.Load(); s != nil {
+		return *s, true
+	}
+	return ShippingSettings{}, false
+}
+
+// carrierOn is the staff switch for seller-shipped carrier options (off at launch, and while unknown).
+func (e *estimatorImpl) carrierOn() bool {
+	s := e.settings.Load()
+	return s != nil && s.SellerCarrierShippingEnabled
+}
+
+// shipping is the carrier estimate for a package a seller ships (switch on): the staff rule's fee, else the configured fee.
 func (e *estimatorImpl) shipping() int64 {
 	if r := e.rule.Load(); r != nil {
 		return r.FallbackMinor
@@ -106,71 +169,83 @@ func (e *estimatorImpl) days(fulfilment string, days int) int {
 	return DefaultSellerDays
 }
 
-func (e *estimatorImpl) Promise(fulfilment string, days int, now time.Time) DeliveryPromise {
-	d := e.days(fulfilment, days)
-	if fulfilment == AfroTransactDelivery {
-		// Priced by road distance at checkout (payments' delivery pricing), so no fee is promised here.
-		return DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: "AfroTransact Delivery", Free: false, FeeMinor: 0}
-	}
-	if fulfilment == FulfilledByAfroTransact {
-		express := e.DayLabel(1, now)
-		cutoff := cutoffNote(now.In(e.p.Location))
-		return DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: "FREE delivery", Free: true, FeeMinor: 0,
-			ExpressLabel: &express, Cutoff: &cutoff}
-	}
-	return DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: "Delivery", Free: false, FeeMinor: e.shipping()}
+// sellerCarrier is true for a seller-shipped package offered the carrier option (staff switch on).
+func (e *estimatorImpl) sellerCarrier(fulfilment string) bool {
+	return fulfilment != FulfilledByAfroTransact && fulfilment != AfroTransactDelivery && e.carrierOn()
 }
 
-func (e *estimatorImpl) Options(fulfilment string, days int, subtotalMinor int64, now time.Time) []DeliveryOption {
+func deliveryLabel(fulfilment string) string {
+	if fulfilment == FulfilledByAfroTransact {
+		return LabelDeliveryByAfroTransact
+	}
+	return LabelStoreDelivery
+}
+
+func (e *estimatorImpl) Promise(fulfilment string, days int, now time.Time) DeliveryPromise {
 	d := e.days(fulfilment, days)
-	if fulfilment == AfroTransactDelivery {
-		label := LocalDeliveryOptionLabel
-		fee := int64(0)
-		free := false
-		if strings.EqualFold(e.p.PlatformDeliveryMode, TariffFlat) && e.p.PlatformDeliveryFlatMinor > 0 {
-			fee = e.p.PlatformDeliveryFlatMinor
-			label = fmt.Sprintf("AfroTransact Delivery · %s flat delivery", Money(fee))
-		} else if strings.EqualFold(e.p.PlatformDeliveryMode, TariffPerWeight) && (e.p.PlatformDeliveryBaseMinor > 0 || e.p.PlatformDeliveryPerLbMinor > 0) {
-			label = fmt.Sprintf("AfroTransact Delivery · %s + %s/lb", Money(e.p.PlatformDeliveryBaseMinor), Money(e.p.PlatformDeliveryPerLbMinor))
-		}
-		return []DeliveryOption{{Key: "afrotransact_delivery", Label: label, ETA: e.DayLabel(d, now), FeeMinor: fee, Free: free}}
+	if e.sellerCarrier(fulfilment) {
+		return DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: "Delivery", Free: false, FeeMinor: e.shipping()}
 	}
-	isAT := fulfilment == FulfilledByAfroTransact
-	free := isAT || (e.freeAbove() > 0 && subtotalMinor >= e.freeAbove())
-	carrier := DeliveryOption{Key: "carrier", ETA: e.DayLabel(d, now), Free: free}
-	if isAT {
-		carrier.Label = "UPS Ground or USPS Ground Advantage"
-	} else {
-		carrier.Label = "USPS Ground Advantage"
+	prefix := deliveryLabel(fulfilment)
+	out := DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: prefix}
+	if fulfilment == FulfilledByAfroTransact {
+		cutoff := cutoffNote(now.In(e.p.Location))
+		out.Cutoff = &cutoff
 	}
-	if !free {
-		carrier.FeeMinor = e.shipping()
-	}
-	if r := e.rule.Load(); r != nil && !isAT {
-		source := "CARRIER_FALLBACK"
-		if free {
-			source = "RULE"
-		}
-		carrier.FeeRule = &FeeRuleRef{Method: "CARRIER", RuleID: r.RuleID, RuleVersion: r.Version,
-			AmountMinor: carrier.FeeMinor, Source: source}
-	}
-	out := []DeliveryOption{carrier}
-	if isAT {
-		out = append(out, DeliveryOption{Key: "express", Label: "UPS Next Day Air", ETA: e.DayLabel(1, now), FeeMinor: ExpressFeeMinor})
-	}
-	for i := range out {
-		price := "FREE"
-		if !out[i].Free {
-			price = Money(out[i].FeeMinor)
-		}
-		out[i].Label = price + " · " + out[i].Label
+	if s := e.settings.Load(); s != nil {
+		// One flat fee (free above the optional threshold, which a single item cannot know): the page shows the flat fee.
+		out.FeeMinor, out.Free = s.FlatFeeMinor, s.FlatFeeMinor == 0
 	}
 	return out
 }
 
+func (e *estimatorImpl) Options(fulfilment string, days int, subtotalMinor int64, now time.Time) []DeliveryOption {
+	d := e.days(fulfilment, days)
+	if e.sellerCarrier(fulfilment) {
+		free := e.freeAbove() > 0 && subtotalMinor >= e.freeAbove()
+		carrier := DeliveryOption{Key: OptionCarrier, Label: LabelSellerShipping, ETA: e.DayLabel(d, now), Free: free}
+		if !free {
+			carrier.FeeMinor = e.shipping()
+		}
+		if r := e.rule.Load(); r != nil {
+			source := "CARRIER_FALLBACK"
+			if free {
+				source = "RULE"
+			}
+			carrier.FeeRule = &FeeRuleRef{Method: "CARRIER", RuleID: r.RuleID, RuleVersion: r.Version,
+				AmountMinor: carrier.FeeMinor, Source: source}
+		}
+		// A seller package can still be delivered by AfroTransact, at the flat fee.
+		return []DeliveryOption{carrier, e.deliveryOption(fulfilment, d, subtotalMinor, now)}
+	}
+	return []DeliveryOption{e.deliveryOption(fulfilment, d, subtotalMinor, now)}
+}
+
+// deliveryOption is Delivery by AfroTransact (or AfroTransact collecting from the store and delivering): the one flat
+// fee. When the settings were never read the fee is flagged unknown instead of showing 0.
+func (e *estimatorImpl) deliveryOption(fulfilment string, days int, subtotalMinor int64, now time.Time) DeliveryOption {
+	o := DeliveryOption{Key: OptionDelivery, Label: deliveryLabel(fulfilment), ETA: e.DayLabel(days, now)}
+	s := e.settings.Load()
+	if s == nil {
+		o.FeeUnknown, o.Label = true, LabelFeeUnknown
+		return o
+	}
+	o.FeeMinor = s.DeliveryFee(subtotalMinor)
+	o.Free = o.FeeMinor == 0
+	return o
+}
+
 func (e *estimatorImpl) Nudge(fulfilment string, subtotalMinor int64) *ShippingNudge {
-	t := e.freeAbove()
-	if fulfilment == FulfilledByAfroTransact || fulfilment == AfroTransactDelivery || t <= 0 || subtotalMinor <= 0 || subtotalMinor >= t {
+	if subtotalMinor <= 0 {
+		return nil
+	}
+	t := int64(0)
+	if e.sellerCarrier(fulfilment) {
+		t = e.freeAbove()
+	} else if s := e.settings.Load(); s != nil && s.FreeAboveMinor != nil {
+		t = *s.FreeAboveMinor
+	}
+	if t <= 0 || subtotalMinor >= t {
 		return nil
 	}
 	return &ShippingNudge{RemainingMinor: t - subtotalMinor, ThresholdMinor: t}

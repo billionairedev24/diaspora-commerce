@@ -17,13 +17,12 @@ const (
 
 // DeliveryPromise is the delivery estimate to the session's deliver-to ZIP.
 type DeliveryPromise struct {
-	Days         int     `json:"days"`
-	Label        string  `json:"label"`
-	Prefix       string  `json:"prefix"`
-	Free         bool    `json:"free"`
-	FeeMinor     int64   `json:"feeMinor"`
-	ExpressLabel *string `json:"expressLabel"`
-	Cutoff       *string `json:"cutoff"`
+	Days     int     `json:"days"`
+	Label    string  `json:"label"`
+	Prefix   string  `json:"prefix"`
+	Free     bool    `json:"free"`
+	FeeMinor int64   `json:"feeMinor"`
+	Cutoff   *string `json:"cutoff"`
 }
 
 // Seller is who sells an offer.
@@ -229,6 +228,9 @@ type DeliveryOption struct {
 	ETA      string `json:"eta"`
 	FeeMinor int64  `json:"feeMinor"`
 	Free     bool   `json:"free"`
+	// FeeUnknown is true when the staff delivery fee could not be read: feeMinor is then not a price (never shown as $0)
+	// and the order cannot be placed until it is known.
+	FeeUnknown bool `json:"feeUnknown,omitempty"`
 	// Checkout only: the promise service's dates for this option (empty in the cart).
 	EarliestDate string `json:"earliestDate,omitempty"`
 	LatestDate   string `json:"latestDate,omitempty"`
@@ -669,8 +671,11 @@ type CheckoutSummary struct {
 	// BlockedLines are the cart lines that can't be sold yet (no definite tax decision): checkout can't be placed
 	// while any remains; the shopper removes them. Empty when nothing is blocked.
 	BlockedLines []CheckoutBlockedLine `json:"blockedLines"`
-	// CanPlaceOrder is false while a blocked line remains.
-	CanPlaceOrder bool            `json:"canPlaceOrder"`
+	// CanPlaceOrder is false while a blocked line remains, a package is too far for standard delivery (quote_required) or
+	// the delivery fee is not known.
+	CanPlaceOrder bool `json:"canPlaceOrder"`
+	// DeliveryBlockedReason says in plain words why delivery stops the order (empty when it does not).
+	DeliveryBlockedReason string `json:"deliveryBlockedReason,omitempty"`
 	TotalMinor    int64           `json:"totalMinor"`
 	Currency      string          `json:"currency"`
 	SellerCount   int             `json:"sellerCount"`

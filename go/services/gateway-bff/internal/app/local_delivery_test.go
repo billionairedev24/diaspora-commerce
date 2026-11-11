@@ -72,18 +72,19 @@ func TestCheckoutQuotesLocalDelivery(t *testing.T) {
 	}
 
 	f := ok()
-	s := &checkoutPaymentServiceImpl{d: ShopperDeps{LocalDelivery: f, Offers: offers}}
+	s := &checkoutPaymentServiceImpl{d: ShopperDeps{LocalDelivery: f, Offers: offers, Estimator: est}}
 	sum := localSummary()
 	s.priceLocalDelivery(context.Background(), &sum, addr)
 	ld := sum.Packages[0].LocalDelivery
-	if ld == nil || !ld.Available || *ld.ChargeMinor != 1128 || *ld.RoadMiles != 7.4 || *ld.DurationMinutes != 18 || ld.FromCity != "Houston, TX" ||
+	// The charge is the staff flat fee (5.99), not the distance tariff's 11.28 payments quoted (listing rules D16).
+	if ld == nil || !ld.Available || *ld.ChargeMinor != 599 || *ld.RoadMiles != 7.4 || *ld.DurationMinutes != 18 || ld.FromCity != "Houston, TX" ||
 		len(ld.OfferIDs) != 1 || ld.UnavailableReason != nil {
 		t.Fatalf("quote = %+v", ld)
 	}
-	if o := sum.Packages[0].DeliveryOptions[0]; o.FeeMinor != 1128 || o.Label != "$11.28 · AfroTransact Delivery from Houston, TX" {
+	if o := sum.Packages[0].DeliveryOptions[0]; o.FeeMinor != 599 || o.Label != "AfroTransact collects from the store and delivers" || o.FeeUnknown {
 		t.Fatalf("option = %+v", o)
 	}
-	if sum.ShippingMinor != 1628 || sum.TotalMinor != 6128 || sum.Packages[1].LocalDelivery != nil {
+	if sum.ShippingMinor != 1099 || sum.TotalMinor != 5599 || sum.Packages[1].LocalDelivery != nil {
 		t.Fatalf("totals = %d / %d", sum.ShippingMinor, sum.TotalMinor)
 	}
 	if f.to.Lat == nil || *f.to.Lat != lat || f.to.Address != nil {
@@ -94,7 +95,7 @@ func TestCheckoutQuotesLocalDelivery(t *testing.T) {
 		t.Helper()
 		f := ok()
 		mut(f)
-		s := &checkoutPaymentServiceImpl{d: ShopperDeps{LocalDelivery: f, Offers: offers}}
+		s := &checkoutPaymentServiceImpl{d: ShopperDeps{LocalDelivery: f, Offers: offers, Estimator: est}}
 		sum := localSummary()
 		s.priceLocalDelivery(context.Background(), &sum, a)
 		return sum.Packages[0].LocalDelivery

@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"sort"
@@ -13,9 +15,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
-
-// AfroTransactDeliveryFeeMinor is the AfroTransact Delivery fee when the package does not ship free.
-const AfroTransactDeliveryFeeMinor = 399
 
 var weekdays = []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
 
@@ -133,14 +132,19 @@ func pickupPointsFor(p domain.CheckoutPackage, platform, own []port.PickupLocati
 	return points
 }
 
-// addPickupOption offers "Pick up" (no shipping charge) on a package with pickup points.
+// addPickupOption offers pickup (no shipping charge) on a package with pickup points: "Pickup at an AfroTransact point" for
+// platform-fulfilled packages, "Collect from the store" for a seller's own.
 func addPickupOption(p *domain.CheckoutPackage, points []domain.PickupPoint) {
 	if len(points) == 0 {
 		return
 	}
 	p.PickupPoints = points
-	if !hasOption(*p, "pickup") {
-		p.DeliveryOptions = append(p.DeliveryOptions, domain.DeliveryOption{Key: "pickup", Label: "Pick up", ETA: points[0].Ready, Free: true})
+	if !hasOption(*p, domain.OptionPickup) {
+		label := domain.LabelStorePickup
+		if p.Fulfilment == domain.FulfilledByAfroTransact {
+			label = domain.LabelPickupPoint
+		}
+		p.DeliveryOptions = append(p.DeliveryOptions, domain.DeliveryOption{Key: domain.OptionPickup, Label: label, ETA: points[0].Ready, Free: true})
 	}
 }
 
@@ -176,24 +180,21 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 			}
 		}
 	}
+	if s.d.ShippingSettings != nil {
+		s.d.ShippingSettings.Ensure(ctx)
+	}
 	s.priceLocalDelivery(ctx, &sum, addr)
 	if s.d.Delivery == nil || addr == nil || len(addr.PostalCode) < 5 {
+		applyCheckoutShipping(&sum, packageDelivery)
+		s.blockUndeliverable(&sum, packageDelivery)
+		recalcCheckoutTotal(&sum)
 		return sum, nil
 	}
 	zip := addr.PostalCode[:5]
 	fc := fcFor(zip)
 	log := s.d.log()
 
-	atd := false
-	if addr.Latitude != nil && addr.Longitude != nil {
-		zones, err := s.d.Delivery.ZonesCovering(ctx, *addr.Latitude, *addr.Longitude, "DELIVERY")
-		if err != nil {
-			log.WarnContext(ctx, "delivery zones unavailable; AfroTransact Delivery not offered", "error", err)
-		}
-		for _, z := range zones {
-			atd = atd || z.OwnerID == fc
-		}
-	}
+	outside := outsideDeliveryArea(ctx, s.d.Delivery, addr, log)
 	platformPoints, err := platformPickupLocations(ctx, s.d.Delivery, zip)
 	if err != nil {
 		log.WarnContext(ctx, "pickup locations unavailable", "error", err)
@@ -202,6 +203,9 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	var offers []port.PromiseOffer
 	for i := range sum.Packages {
 		p := &sum.Packages[i]
+		if len(p.Preorder) > 0 {
+			continue // a pre-order is its own package: the window's date and its own fee (see packageShippingFee)
+		}
 		isFC := p.Fulfilment == domain.FulfilledByAfroTransact
 		var own []port.PickupLocation
 		if !isFC {
@@ -210,35 +214,21 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 			}
 		}
 		addPickupOption(p, pickupPointsFor(*p, platformPoints, own, addr, zip))
-		if p.Fulfilment == domain.AfroTransactDelivery {
-			continue // priced by distance above; the driver collects at the store
+		if outside {
+			p.DeliveryOptions = quoteRequiredOptions(*p)
+			p.LocalDelivery = nil
+			continue
 		}
-		carrierFree := len(p.DeliveryOptions) > 0 && p.DeliveryOptions[0].Free
-		if isFC && atd && !hasOption(*p, "afrotransact_delivery") {
-			o := domain.DeliveryOption{Key: "afrotransact_delivery", Label: "AfroTransact Delivery", ETA: "Same or next day", FeeMinor: AfroTransactDeliveryFeeMinor}
-			if carrierFree {
-				o.FeeMinor, o.Free = 0, true
-			}
-			// Before pickup, which stays last.
-			n := len(p.DeliveryOptions)
-			if n > 0 && p.DeliveryOptions[n-1].Key == "pickup" {
-				p.DeliveryOptions = append(p.DeliveryOptions[:n-1], o, p.DeliveryOptions[n-1])
-			} else {
-				p.DeliveryOptions = append(p.DeliveryOptions, o)
-			}
-		}
-		if !isFC {
-			continue // seller ship-from ZIPs are not exposed to the BFF; the cart's estimate stays
+		if p.Fulfilment == domain.AfroTransactDelivery || !isFC {
+			continue // priced above (flat fee); the promise service only dates packages AfroTransact fulfils
 		}
 		origin := map[string]any{"type": "FC", "id": fc}
 		for _, o := range p.DeliveryOptions {
 			method := map[string]any{"type": "CARRIER", "serviceLevel": "GROUND"}
 			switch o.Key {
-			case "express":
-				method["serviceLevel"] = "OVERNIGHT"
-			case "afrotransact_delivery":
+			case domain.OptionDelivery:
 				method = map[string]any{"type": "AFROTRANSACT_DELIVERY"}
-			case "pickup":
+			case domain.OptionPickup:
 				method = map[string]any{"type": "PICKUP"}
 			}
 			offers = append(offers, port.PromiseOffer{OfferID: p.PackageID + "|" + o.Key, Origin: origin, Method: method})
@@ -255,21 +245,17 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		}
 		for i := range sum.Packages {
 			p := &sum.Packages[i]
-			kept := p.DeliveryOptions[:0]
-			for _, o := range p.DeliveryOptions {
-				q, ok := byID[p.PackageID+"|"+o.Key]
-				if ok && !q.Available && o.Key == "afrotransact_delivery" {
-					continue // promise says the driver service can't reach this address in time
-				}
-				if ok && q.Available {
+			for k := range p.DeliveryOptions {
+				o := &p.DeliveryOptions[k]
+				// The promise service only dates an option; it never removes one: the shopper always keeps delivery
+				// at the flat fee (and pickup), so there is no dead end.
+				if q, ok := byID[p.PackageID+"|"+o.Key]; ok && q.Available {
 					o.ETA = firstNonEmpty(q.Label, o.ETA)
 					o.EarliestDate, o.LatestDate, o.CutoffLabel = q.EarliestDate, q.LatestDate, q.CutoffLabel
 				}
-				kept = append(kept, o)
 			}
-			p.DeliveryOptions = kept
-			if len(kept) > 0 && kept[0].EarliestDate != "" {
-				p.Delivery.Label = kept[0].ETA
+			if len(p.DeliveryOptions) > 0 && p.DeliveryOptions[0].EarliestDate != "" {
+				p.Delivery.Label = p.DeliveryOptions[0].ETA
 			}
 		}
 	}
@@ -284,8 +270,61 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	s.priceMembership(ctx, c, &sum, packageDelivery)
 	s.priceCoupon(ctx, c, &sum, packageDelivery, couponCode)
 	s.priceTax(ctx, &sum, addr, packageDelivery)
+	s.blockUndeliverable(&sum, packageDelivery)
 	recalcCheckoutTotal(&sum)
 	return sum, nil
+}
+
+// outsideDeliveryArea is true when the address is outside every active DELIVERY zone (geo), so the shopper must ask for a
+// quote (listing rules D21: inside any zone the flat fee applies; there is no separate mile limit). When zones can't be
+// read, or the address has no position, the shopper is not turned away: the flat fee applies.
+func outsideDeliveryArea(ctx context.Context, d port.DeliveryFactsClient, addr *port.IdentityAddress, log *slog.Logger) bool {
+	if d == nil || addr == nil || addr.Latitude == nil || addr.Longitude == nil {
+		return false
+	}
+	zones, err := d.ZonesCovering(ctx, *addr.Latitude, *addr.Longitude, "DELIVERY")
+	if err != nil {
+		log.WarnContext(ctx, "delivery zones unavailable; treating the address as inside the delivery area", "error", err)
+		return false
+	}
+	return len(zones) == 0
+}
+
+// quoteRequiredOptions is what a package outside every delivery zone offers: the single delivery option
+// quote_required (disabled for payment; the storefront shows a button to ask for a quote), plus free pickup when a point is
+// near, so the shopper always has a way forward.
+func quoteRequiredOptions(p domain.CheckoutPackage) []domain.DeliveryOption {
+	out := []domain.DeliveryOption{{Key: domain.OptionQuoteRequired, Label: domain.LabelQuoteRequired}}
+	for _, o := range p.DeliveryOptions {
+		if o.Key == domain.OptionPickup {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// Plain words for what stops the order (the storefront shows them next to the button).
+const (
+	quoteRequiredMessage = "Part of your order is too far for standard delivery. Ask us for a quote, choose pickup, or choose another address."
+	feeUnknownMessage    = "We can't confirm the delivery fee right now. Please try again in a moment."
+)
+
+// blockUndeliverable stops the order while a package's chosen option is quote_required or its fee is unknown, and says why
+// in plain words. It never lifts a block another rule (a blocked line) set.
+func (s *checkoutPaymentServiceImpl) blockUndeliverable(sum *domain.CheckoutSummary, packageDelivery map[string]string) {
+	for _, p := range sum.Packages {
+		if len(p.Preorder) > 0 {
+			continue
+		}
+		o, ok := chosenOption(p, packageDelivery)
+		switch {
+		case ok && o.Key == domain.OptionQuoteRequired:
+			sum.CanPlaceOrder, sum.DeliveryBlockedReason = false, quoteRequiredMessage
+			return
+		case ok && o.FeeUnknown:
+			sum.CanPlaceOrder, sum.DeliveryBlockedReason = false, feeUnknownMessage
+		}
+	}
 }
 
 // ---------------------------------------------------------------- AfroTransact Delivery from the seller's store (S255)
@@ -296,10 +335,12 @@ type localTrip struct {
 	city       string
 }
 
-// priceLocalDelivery quotes every AFROTRANSACT_DELIVERY package for the chosen address the way orders prices it when
-// the order is placed: the offers' pickup location (seller), the road distance store → address (geo) and payments'
-// delivery pricing. A package beyond the radius is flagged (remove it or change the address); when a fact can't be
-// read the quote is left to orders (QUOTE_UNAVAILABLE). Shipping and the total follow the quoted charges.
+// priceLocalDelivery prices every AFROTRANSACT_DELIVERY package (AfroTransact collects from the seller's store and
+// delivers) for the chosen address the way orders prices it when the order is placed: the charge is the staff flat fee
+// (listing rules D16, free above the optional threshold), the same record orders reads. The road distance store →
+// address (geo) and payments' delivery pricing only decide whether the store can be served (its radius) and keep the
+// route; a package beyond the radius is flagged (remove it, change the address or collect from the store). When a fact
+// can't be read the package keeps the flat-fee option (orders re-checks at placement, QUOTE_UNAVAILABLE).
 func (s *checkoutPaymentServiceImpl) priceLocalDelivery(ctx context.Context, sum *domain.CheckoutSummary, addr *port.IdentityAddress) {
 	changed := false
 	for i := range sum.Packages {
@@ -310,23 +351,25 @@ func (s *checkoutPaymentServiceImpl) priceLocalDelivery(ctx context.Context, sum
 		changed = true
 		p.LocalDelivery = s.quotePackage(ctx, p, addr)
 		ld := p.LocalDelivery
-		opt := domain.DeliveryOption{Key: "afrotransact_delivery", ETA: "Same or next day"}
+		opt := domain.DeliveryOption{Key: domain.OptionDelivery, Label: domain.LabelStoreDelivery, ETA: "Same or next day"}
 		if len(p.DeliveryOptions) > 0 {
 			opt = p.DeliveryOptions[0]
 		}
-		from := domain.LocalDeliveryHeading(ld.FromCity)
 		switch {
 		case !ld.Available:
-			opt.FeeMinor, opt.Free, opt.Label = 0, false, "Not available to this address · "+from
+			opt.FeeMinor, opt.Free = 0, false
+			opt.Label = domain.LabelStoreDelivery + " · not available to this address"
 		case ld.ChargeMinor != nil:
-			opt.FeeMinor, opt.Free = *ld.ChargeMinor, *ld.ChargeMinor == 0
-			price := domain.Money(opt.FeeMinor)
-			if opt.Free {
-				price = "FREE"
-			}
-			opt.Label = price + " · " + from
+			opt.FeeMinor, opt.Free, opt.FeeUnknown = *ld.ChargeMinor, *ld.ChargeMinor == 0, false
+			opt.Label = domain.LabelStoreDelivery
 		default:
-			opt.FeeMinor, opt.Label = 0, from+" · priced when you place your order"
+			// The quote could not be read: the flat fee still applies (orders charges it), so price it from the settings.
+			if fee, ok := s.flatDeliveryFee(p); ok {
+				opt.FeeMinor, opt.Free, opt.FeeUnknown = fee, fee == 0, false
+				opt.Label = domain.LabelStoreDelivery
+			} else {
+				opt.FeeMinor, opt.Free, opt.FeeUnknown, opt.Label = 0, false, true, domain.LabelFeeUnknown
+			}
 		}
 		p.DeliveryOptions = []domain.DeliveryOption{opt}
 	}
@@ -342,8 +385,25 @@ func (s *checkoutPaymentServiceImpl) priceLocalDelivery(ctx context.Context, sum
 	sum.TotalMinor = sum.SubtotalMinor + sum.ShippingMinor + sum.TaxMinor
 }
 
+// shippingSettings is the staff shipping settings in force; false when none was ever read.
+func (s *checkoutPaymentServiceImpl) shippingSettings() (domain.ShippingSettings, bool) {
+	if setter, ok := s.d.Estimator.(domain.ShippingSettingsSetter); ok {
+		return setter.ShippingSettings()
+	}
+	return domain.ShippingSettings{}, false
+}
+
+// flatDeliveryFee is the delivery charge of the whole package's items under the staff settings.
+func (s *checkoutPaymentServiceImpl) flatDeliveryFee(p *domain.CheckoutPackage) (int64, bool) {
+	cfg, ok := s.shippingSettings()
+	if !ok {
+		return 0, false
+	}
+	return cfg.DeliveryFee(p.SubtotalMinor), true
+}
+
 // applyCheckoutShipping sets shippingMinor from the shopper's per-package delivery choices (or each package's first
-// option when a choice is omitted).
+// option when a choice is omitted) and each pre-order package's own window fee.
 func applyCheckoutShipping(sum *domain.CheckoutSummary, packageDelivery map[string]string) {
 	sum.ShippingMinor = 0
 	for _, p := range sum.Packages {
@@ -351,7 +411,12 @@ func applyCheckoutShipping(sum *domain.CheckoutSummary, packageDelivery map[stri
 	}
 }
 
+// packageShippingFee is what orders charges the package: a pre-order package pays the fee of its own window or run (the
+// door or pickup fee it was set with, never the flat fee), every other package the fee of its chosen option.
 func packageShippingFee(p domain.CheckoutPackage, packageDelivery map[string]string) int64 {
+	if fee, ok := preorderFee(p); ok {
+		return fee
+	}
 	key := packageDelivery[p.PackageID]
 	if key == "" && len(p.DeliveryOptions) > 0 {
 		key = p.DeliveryOptions[0].Key
@@ -365,6 +430,20 @@ func packageShippingFee(p domain.CheckoutPackage, packageDelivery map[string]str
 		return p.DeliveryOptions[0].FeeMinor
 	}
 	return 0
+}
+
+// preorderFee is the delivery fee of a pre-order package's chosen fulfilment (the cart service's preorder block).
+func preorderFee(p domain.CheckoutPackage) (int64, bool) {
+	if len(p.Preorder) == 0 {
+		return 0, false
+	}
+	var block struct {
+		FeeMinor int64 `json:"feeMinor"`
+	}
+	if err := json.Unmarshal(p.Preorder, &block); err != nil || block.FeeMinor < 0 {
+		return 0, false
+	}
+	return block.FeeMinor, true
 }
 
 func localUnavailable(ld *domain.CheckoutLocalDelivery, reason, message string) *domain.CheckoutLocalDelivery {
@@ -389,6 +468,7 @@ func (s *checkoutPaymentServiceImpl) quotePackage(ctx context.Context, p *domain
 	// The package's pickup locations (normally one per seller; orders splits a package per location).
 	trips := []localTrip{}
 	seen := map[string]bool{}
+	tripOffers := map[string]string{} // offer id → its pickup location
 	for _, l := range p.Lines {
 		o, err := s.d.Offers.Offer(ctx, l.OfferID)
 		if err != nil {
@@ -399,6 +479,7 @@ func (s *checkoutPaymentServiceImpl) quotePackage(ctx context.Context, p *domain
 		if id == "" {
 			return localUnavailable(ld, domain.LocalPickupUnavailable, p.Seller.Name+"'s store isn't set up for AfroTransact Delivery right now.")
 		}
+		tripOffers[l.OfferID] = id
 		if ld.FromCity == "" {
 			ld.FromCity = o.Offer.Seller.City
 		}
@@ -412,6 +493,7 @@ func (s *checkoutPaymentServiceImpl) quotePackage(ctx context.Context, p *domain
 	if addr.Latitude != nil && addr.Longitude != nil {
 		to = port.GeoPlace{Lat: addr.Latitude, Lng: addr.Longitude}
 	}
+	cfg, haveFee := s.shippingSettings()
 	var charge int64
 	var road, minutes float64
 	for _, t := range trips {
@@ -456,9 +538,22 @@ func (s *checkoutPaymentServiceImpl) quotePackage(ctx context.Context, p *domain
 			}
 			return localUnavailable(ld, domain.LocalUnavailable, "AfroTransact Delivery from sellers' stores isn't offered right now.")
 		}
-		charge += q.CustomerChargeMinor
+		// Listing rules D16: the same flat fee as every other delivery, on the items collected at this store (orders splits
+		// a package per pickup location and charges each); the distance tariff's customer charge is not used.
+		tripItems := int64(0)
+		for _, l := range p.Lines {
+			if l.OfferID != "" && tripOffers[l.OfferID] == t.locationID {
+				tripItems += l.LineTotalMinor
+			}
+		}
+		if haveFee {
+			charge += cfg.DeliveryFee(tripItems)
+		}
 		road, minutes = max(road, d.RoadMiles), max(minutes, d.DurationMinutes)
 	}
-	ld.Available, ld.ChargeMinor, ld.RoadMiles, ld.DurationMinutes = true, &charge, &road, &minutes
+	ld.Available, ld.RoadMiles, ld.DurationMinutes = true, &road, &minutes
+	if haveFee {
+		ld.ChargeMinor = &charge
+	}
 	return ld
 }

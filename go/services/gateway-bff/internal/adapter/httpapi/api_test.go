@@ -48,7 +48,7 @@ func TestCartFlowWithStockCapsAndSelection(t *testing.T) {
 		t.Fatalf("line enrichment = %v", ls[0])
 	}
 	pkg := cart["packages"].([]any)[0].(map[string]any)
-	if pkg["packageId"] != "org_kente:SELLER" || pkg["heading"] != "Shipped by Kente Naturals" || pkg["freeShippingNudge"] == nil {
+	if pkg["packageId"] != "org_kente:SELLER" || pkg["heading"] != "Shipped by Kente Naturals" || pkg["freeShippingNudge"] != nil {
 		t.Fatalf("package = %v", pkg)
 	}
 
@@ -234,7 +234,7 @@ func TestSearchAndSuggest(t *testing.T) {
 	}
 	h := hits[0].(map[string]any)
 	if h["offerId"] != "ATJOLLOF01" || h["stockStatus"] != "LOW_STOCK" || h["lowStock"] != true || h["department"] != "Groceries" ||
-		h["fulfilment"] != "AFROTRANSACT" || h["delivery"].(map[string]any)["prefix"] != "FREE delivery" {
+		h["fulfilment"] != "AFROTRANSACT" || h["delivery"].(map[string]any)["prefix"] != "Delivery by AfroTransact" {
 		t.Fatalf("hit = %v", h)
 	}
 	facets := page["facets"].(map[string]any)

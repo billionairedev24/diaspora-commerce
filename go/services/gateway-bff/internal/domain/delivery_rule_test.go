@@ -11,6 +11,8 @@ import (
 // policy applies until then (and again when the rule is removed).
 func TestEstimatorFollowsTheStaffCarrierRule(t *testing.T) {
 	e := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
+	// The carrier option exists only behind the staff switch (listing rules D16, off at launch).
+	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599, SellerCarrierShippingEnabled: true})
 	setter, ok := e.(domain.CarrierRuleSetter)
 	if !ok {
 		t.Fatal("the default estimator does not take a carrier rule")
@@ -40,9 +42,9 @@ func TestEstimatorFollowsTheStaffCarrierRule(t *testing.T) {
 		t.Fatalf("nudge follows the rule threshold: %+v", n)
 	}
 
-	atFree := e.Options(domain.FulfilledByAfroTransact, 2, 100, now)
-	if atFree[0].FeeRule != nil || !atFree[0].Free {
-		t.Fatalf("AfroTransact-fulfilled shipping is free and has no carrier rule: %+v", atFree[0])
+	atFlat := e.Options(domain.FulfilledByAfroTransact, 2, 100, now)
+	if len(atFlat) != 1 || atFlat[0].FeeRule != nil || atFlat[0].FeeMinor != 599 || atFlat[0].Key != "afrotransact_delivery" {
+		t.Fatalf("AfroTransact-fulfilled delivery is the flat fee and has no carrier rule: %+v", atFlat)
 	}
 
 	setter.SetCarrierRule(&domain.CarrierRule{RuleID: "r-1", Version: 5, FallbackMinor: 500})

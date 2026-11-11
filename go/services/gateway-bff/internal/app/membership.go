@@ -268,8 +268,6 @@ func membershipFeeKind(optionKey string) string {
 	switch optionKey {
 	case "afrotransact_delivery":
 		return "AFROTRANSACT_DELIVERY"
-	case "express":
-		return "EXPRESS"
 	case "pickup":
 		return "PICKUP"
 	default:

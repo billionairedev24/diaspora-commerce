@@ -53,6 +53,8 @@ type CartDeps struct {
 	// Location and Market supply the delivery place sent with cart calls (optional).
 	Location LocationService
 	Market   string
+	// ShippingSettings reads the staff delivery fee when none was ever read (optional).
+	ShippingSettings ShippingSettingsEnsurer
 }
 
 type cartServiceImpl struct{ d CartDeps }
@@ -494,6 +496,9 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 		}
 	}
 	info := s.enrich(ctx, atins)
+	if s.d.ShippingSettings != nil {
+		s.d.ShippingSettings.Ensure(ctx)
+	}
 	now := s.d.Clock.now()
 	cart := domain.Cart{CartID: cartID(c), Currency: firstNonEmpty(up.Currency, domain.Currency), Packages: []domain.CartPackage{}, Saved: []domain.SavedItem{}}
 	sellers := map[string]bool{}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -116,6 +117,15 @@ func (s *checkoutServiceImpl) PlaceOrder(ctx context.Context, c *domain.Caller, 
 	if len(req.DeliverySelections) == 0 {
 		errs["deliverySelections"] = "Choose delivery options"
 	}
+	for _, raw := range req.DeliverySelections {
+		var sel struct {
+			Option string `json:"option"`
+		}
+		if json.Unmarshal(raw, &sel) == nil && strings.EqualFold(strings.TrimSpace(sel.Option), domain.OptionQuoteRequired) {
+			// Orders refuses it too; saying it here keeps the shopper on the page with a way forward.
+			errs["deliverySelections"] = quoteRequiredMessage
+		}
+	}
 	if req.PaymentMethodID == "" && req.Wallet == "" {
 		errs["paymentMethodId"] = "Choose a payment method"
 	}
@@ -161,6 +171,10 @@ func orderErr(err error) error {
 		return pr.WithCause(err)
 	}
 	switch {
+	case p.Code == "orders.invalid-delivery-selection":
+		// Orders words it for the shopper ("The delivery options have changed. Reload the page and choose ...").
+		return domain.FieldProblem(domain.CodeValidationFailed, "Check your delivery choice", "deliverySelections",
+			firstNonEmpty(p.Detail, "Your delivery choice can't be used. Reload the page and choose Delivery by AfroTransact or pickup.")).WithCause(err)
 	case p.Code == "orders.tax-line-blocked":
 		// Orders names the item in plain words; the shopper removes it (the summary lists it with a Remove action).
 		return domain.FieldProblem(domain.CodeCheckoutItemBlocked, "We can't sell this item yet", "cart",

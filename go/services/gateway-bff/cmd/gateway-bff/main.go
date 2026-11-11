@@ -144,6 +144,14 @@ func run() error {
 	if setter, ok := estimator.(domain.CarrierRuleSetter); ok {
 		go app.NewCarrierRuleSync(upstreams.NewPublicDeliveryFees(deliveryRunsClient), setter, domain.Currency, 30*time.Second, log).Run(ctx)
 	}
+	// Listing rules D16: the delivery fee the shopper sees is orders' staff-set shipping settings, the record orders
+	// charges by (read every 15 s; the last known value stays when orders cannot be read, and with none the fee is shown
+	// as unknown and checkout is blocked, never $0).
+	var shippingSync app.ShippingSettingsSync
+	if setter, ok := estimator.(domain.ShippingSettingsSetter); ok {
+		shippingSync = app.NewShippingSettingsSync(upstreams.NewShippingSettings(ordersClient), setter, domain.Currency, 15*time.Second, log)
+		go shippingSync.Run(ctx)
+	}
 	sellers := app.SellerDirectory{RetailOrgID: cfg.Commerce.RetailOrgID, Names: cfg.Commerce.SellerNames}
 	// Sign-out policy per audience: read from identity (service token, scope sessions:policy.read), cached for 60 s,
 	// the stricter of the last value and the built-in defaults while identity cannot be read.
@@ -159,7 +167,7 @@ func run() error {
 		Country: cfg.Market, // market codes are ISO countries (us): address suggestions are restricted to it
 		Log:     log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
-		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market})
+		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market, ShippingSettings: shippingSync})
 	maintenance := app.NewMaintenanceService(valkey.NewMaintenance(rdb), nil, log)
 	services := httpapi.Services{
 		Sessions: sessions, Maintenance: maintenance,
@@ -215,7 +223,7 @@ func run() error {
 		Shell: services.SellerShell, Dashboard: services.SellerDashboard})
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
-		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store, limiter: store}, services, log)
+		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store, limiter: store, estimator: estimator, shippingSync: shippingSync}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,

@@ -13,6 +13,11 @@ import (
 
 var est = domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
 
+func init() {
+	// The staff shipping settings orders charges by (launch default: $5.99 flat, no free-above, carrier off).
+	est.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599})
+}
+
 func TestSummaryFromHit(t *testing.T) {
 	now := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
 	s := summaryFromHit(port.SearchHit{ATIN: "ATSHEA0001", Title: "Shea", CategoryPath: "Beauty › Skin", SellerKind: "SELLER",
@@ -22,7 +27,7 @@ func TestSummaryFromHit(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 	out := summaryFromHit(port.SearchHit{ATIN: "ATGARI0001", SellerKind: "PLATFORM", Fulfilment: "AFROTRANSACT", InStock: false, AvailableQty: 9}, est, now)
-	if out.StockStatus != domain.OutOfStock || out.InStock || out.AvailableQty != 0 || out.SellerName != PlatformSellerName || !out.Delivery.Free {
+	if out.StockStatus != domain.OutOfStock || out.InStock || out.AvailableQty != 0 || out.SellerName != PlatformSellerName || out.Delivery.Free || out.Delivery.FeeMinor != 599 {
 		t.Fatalf("%+v", out)
 	}
 	seller := summaryFromHit(port.SearchHit{ATIN: "ATX0000001", InStock: true}, est, now) // seller-managed stock without a count

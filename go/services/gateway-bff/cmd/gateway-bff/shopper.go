@@ -8,6 +8,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/upstreams"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/config"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
@@ -22,6 +23,8 @@ type shopperClients struct {
 	media                      port.MediaClient
 	receipts                   port.ReceiptStore
 	limiter                    port.RateLimiter
+	estimator                  domain.Estimator
+	shippingSync               app.ShippingSettingsEnsurer
 }
 
 // shopperServices wires the storefront's account, checkout payment, services & bookings and Lola use cases.
@@ -47,6 +50,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		Credit:        upstreams.NewCredit(sc.payments),
 		Membership:    upstreams.NewMembership(sc.payments),
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
+		Estimator: sc.estimator, ShippingSettings: sc.shippingSync,
 		ShippingAllocation: shippingAllocation,
 		PublishableKey:     cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
