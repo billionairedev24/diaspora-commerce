@@ -35,6 +35,32 @@ Reviews use **two steps** and the final approver must be a different person than
 - **Return to applicant** → use this for a flagged application that only needs a correction.
 - **Send back to review** → return to step 1 (internal).
 
+### Who has the application, and for how long
+
+Every row of **Applications** says **who has it** (With), **how long it has waited** (Waiting), whether it is **on
+time, due soon or overdue** (SLA) and whether it is **escalated**. You see this for every application, also the ones
+you cannot decide; what you may *do* still depends on your role, and the applicant's personal data stays masked
+without `applications:pii`. Names are shown, never ids.
+
+The tabs: **My queue** (assigned to you, plus unassigned cases you are allowed to claim), **Awaiting review**,
+**Awaiting approval**, **Escalated**, **Returned to applicant**, **All**, and the chips **Overdue** and **Unassigned**.
+Search finds a person's name or a stage; any column sorts.
+
+The case sheet starts with *Awaiting review · with Amina Bello · since 2 days* (or *any reviewer*, *any approver*).
+Actions: **Claim** (take an unassigned case you may hold), **Assign…** (a supervisor, the person an escalation went to,
+or an approver at the approval stage gives it to an eligible person: they hold the step's permission, are not the
+applicant and, at approval, did not do the first review), **Release to the pool**, **Escalate now** (with a reason: the
+person who has the case, or a supervisor). Every change is on the timeline with the person's name. The applicant is
+never told about these internal moves.
+
+When an approver uses **Send back**, the case returns to the review pool with a **Returned by approver** banner (who,
+when, why, how many times) at the top.
+
+Roles: **Application Reviewer** (step 1), **Application Approver** (step 2), **Application Supervisor** (sees all,
+assigns, takes over, manages escalation; cannot decide unless also given a step role). One person may hold both
+reviewer and approver roles; the two-person rule still applies per application. See the
+[runbook](../../../runbooks/application-review-workflow.md).
+
 :::tip Who sees what
 Notes on approve, flag and send-back are internal. Only the message on *Return to applicant* and on *Reject* is
 shown to the applicant. Staff names are never shown to applicants.

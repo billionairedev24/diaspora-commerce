@@ -295,7 +295,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   applications: {
     title: 'Applications',
-    columns: [col('reference', 'Reference', 'mono', 12), col('displayName', 'Business', 'strong', 20), col('kind', 'Kind', 'text', 8), col('with', 'With', 'text', 14), col('waiting', 'Waiting', 'duration', 10), col('sla', 'SLA', 'text', 9), col('escalation', 'Escalation', 'text', 10), col('planCode', 'Plan', 'text', 8), col('submittedAt', 'Submitted', 'date', 11), col('status', 'Status', 'status', 16)],
+    columns: [col('reference', 'Reference', 'mono', 11), col('displayName', 'Business', 'strong', 16), col('kind', 'Kind', 'text', 7), col('with', 'With', 'text', 12), col('waiting', 'Waiting', 'duration', 8), col('sla', 'SLA', 'text', 8), col('escalation', 'Escalation', 'text', 9), col('planCode', 'Plan', 'text', 7), col('submittedAt', 'Submitted', 'date', 10), col('status', 'Status', 'status', 12)],
     statusKey: 'status',
     facets: APPLICATION_QUEUES,
     queue: inQueue,

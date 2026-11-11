@@ -52,11 +52,11 @@ describe('the mock tables read like the real ones', () => {
     expect((await api.listResource('sos-alerts', { page: 0, size: 10, q: 'drv-1' })).rows.map((r) => r.id)).toEqual(['sos-1']);
     expect((await api.listResource('sos-alerts', { page: 0, size: 10, q: 'tunde' })).rows.map((r) => r.id)).toEqual(['sos-1']);
     const sheet = await api.getRecord('sos-alerts', 'sos-1');
-    const raw = sheet.sections.filter((s) => s.title !== 'IDs').flatMap((s) => s.fields.map((f) => f.value));
+    const raw = sheet.sections.filter((s) => s.title !== 'Technical details').flatMap((s) => s.fields.map((f) => f.value));
     expect(raw).not.toContain('drv-1');
     expect(raw).not.toContain('rte-1000');
     expect(sheet.subtitle).toBe('Driver Tunde Adeyemi · route HOU West AM');
-    const ids = sheet.sections.find((s) => s.title === 'IDs');
+    const ids = sheet.sections.find((s) => s.title === 'Technical details');
     expect(ids?.fields).toEqual(expect.arrayContaining([{ label: 'Driver ID', value: 'drv-1', kind: 'mono' }, { label: 'Route ID', value: 'rte-1000', kind: 'mono' }]));
   });
 
@@ -89,7 +89,7 @@ describe('the mock tables read like the real ones', () => {
     const sheet = await api.getRecord('applications', waiting?.id ?? '');
     const review = sheet.sections.find((s) => s.title === 'Review');
     expect(review?.fields.find((f) => f.label === 'Reviewer name')?.value).toBe('Sara Tesfaye');
-    expect(sheet.sections.find((s) => s.title === 'IDs')?.fields[0]).toEqual({ label: 'Reviewer ID', value: 'stf-2', kind: 'mono' });
+    expect(sheet.sections.find((s) => s.title === 'Technical details')?.fields[0]).toEqual({ label: 'Reviewer ID', value: 'stf-2', kind: 'mono' });
     expect(review?.fields.map((f) => f.value)).not.toContain('stf-2');
   });
 });

@@ -312,9 +312,9 @@ func applicationsResource() *staffResource {
 	decided := past("APPROVED", "REJECTED")
 	return &staffResource{
 		key: "applications", module: "apps", title: "Applications", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("reference", "Reference", "mono", 12), col("displayName", "Business", "strong", 20), col("kind", "Kind", "text", 8),
-			col("with", "With", "text", 14), col("waiting", "Waiting", "duration", 10), col("sla", "SLA", "text", 9), col("escalation", "Escalation", "text", 10),
-			col("planCode", "Plan", "text", 8), col("submittedAt", "Submitted", "date", 11), col("status", "Status", "status", 16)},
+		columns: []domain.Column{col("reference", "Reference", "mono", 11), col("displayName", "Business", "strong", 16), col("kind", "Kind", "text", 7),
+			col("with", "With", "text", 12), col("waiting", "Waiting", "duration", 8), col("sla", "SLA", "text", 8), col("escalation", "Escalation", "text", 9),
+			col("planCode", "Plan", "text", 7), col("submittedAt", "Submitted", "date", 10), col("status", "Status", "status", 12)},
 		facets: applicationQueues(),
 		list:   listPaged("/v1/applications", upSeller, func(q staffQuery, v url.Values) { applicationQueueParams(q.Status, v) }),
 		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
