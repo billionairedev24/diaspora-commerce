@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Build context: go/   (docker build -f services/search/Dockerfile go)
-FROM golang:1.27.2@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8 AS build
+FROM golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e AS build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOWORK=off GOFLAGS="-trimpath -buildvcs=false"
 COPY pkg/go.mod pkg/go.sum ./pkg/
