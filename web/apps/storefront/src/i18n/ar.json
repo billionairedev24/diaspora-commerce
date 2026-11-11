@@ -1812,5 +1812,16 @@
   "session.endedAbsolute": "وصلت جلستك إلى أقصى مدة لها، فسجّلنا خروجك حفاظًا على أمانك. سجّل الدخول مرة أخرى للمتابعة.",
   "session.endedSignedOut": "سجّلت الخروج في علامة تبويب أو نافذة أخرى. سجّل الدخول مرة أخرى للمتابعة.",
   "session.signInAgain": "تسجيل الدخول مرة أخرى",
-  "session.signingOut": "جارٍ إنهاء تسجيل الخروج…"
+  "session.signingOut": "جارٍ إنهاء تسجيل الخروج…",
+  "home.seeAll": "عرض الكل",
+  "home.railPrev": "التمرير للخلف: {title}",
+  "home.railNext": "التمرير للأمام: {title}",
+  "home.sponsoredTag": "برعاية",
+  "home.adTag": "إعلان",
+  "home.adBy": "إعلان · {advertiser}",
+  "home.adRowLabel": "إعلانات",
+  "home.partners": "من شركائنا",
+  "home.sponsoredProductsBy": "منتجات من {advertiser}",
+  "home.dealEnds": "ينتهي خلال",
+  "home.dealPct": "خصم {pct}%"
 }

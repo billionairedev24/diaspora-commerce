@@ -1812,5 +1812,16 @@
   "session.endedAbsolute": "Ìgbà ìjókòó rẹ ti dé òpin tó pọ̀ jù, nítorí náà a mú ọ jáde fún ààbò rẹ. Tún wọlé láti tẹ̀síwájú.",
   "session.endedSignedOut": "O ti jáde ní táàbù tàbí fèrèsé mìíràn. Tún wọlé láti tẹ̀síwájú.",
   "session.signInAgain": "Tún wọlé",
-  "session.signingOut": "À ń parí jíjáde…"
+  "session.signingOut": "À ń parí jíjáde…",
+  "home.seeAll": "Wo gbogbo rẹ̀",
+  "home.railPrev": "Yí padà sẹ́yìn: {title}",
+  "home.railNext": "Yí síwájú: {title}",
+  "home.sponsoredTag": "Onígbọ̀wọ́",
+  "home.adTag": "Ìpolówó",
+  "home.adBy": "Ìpolówó · {advertiser}",
+  "home.adRowLabel": "Àwọn ìpolówó",
+  "home.partners": "Láti ọ̀dọ̀ àwọn alábàáṣiṣẹ́pọ̀ wa",
+  "home.sponsoredProductsBy": "Àwọn ọjà láti ọ̀dọ̀ {advertiser}",
+  "home.dealEnds": "Yóò parí ní",
+  "home.dealPct": "Ẹ̀dínwó {pct}%"
 }

@@ -1805,5 +1805,16 @@
   "session.endedAbsolute": "Your session reached its maximum length, so we signed you out for your security. Sign in again to continue.",
   "session.endedSignedOut": "You signed out in another tab or window. Sign in again to continue.",
   "session.signInAgain": "Sign in again",
-  "session.signingOut": "Finishing sign-out…"
+  "session.signingOut": "Finishing sign-out…",
+  "home.seeAll": "See all",
+  "home.railPrev": "Scroll back through {title}",
+  "home.railNext": "Scroll forward through {title}",
+  "home.sponsoredTag": "Sponsored",
+  "home.adTag": "Ad",
+  "home.adBy": "Ad · {advertiser}",
+  "home.adRowLabel": "Advertisements",
+  "home.partners": "From our partners",
+  "home.sponsoredProductsBy": "Products from {advertiser}",
+  "home.dealEnds": "Ends in",
+  "home.dealPct": "{pct}% off"
 }

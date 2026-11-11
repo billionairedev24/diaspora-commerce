@@ -1812,5 +1812,16 @@
   "session.endedAbsolute": "Votre session a atteint sa durée maximale : nous vous avons déconnecté pour votre sécurité. Reconnectez-vous pour continuer.",
   "session.endedSignedOut": "Vous vous êtes déconnecté dans un autre onglet ou une autre fenêtre. Reconnectez-vous pour continuer.",
   "session.signInAgain": "Se reconnecter",
-  "session.signingOut": "Finalisation de la déconnexion…"
+  "session.signingOut": "Finalisation de la déconnexion…",
+  "home.seeAll": "Tout voir",
+  "home.railPrev": "Faire défiler vers l’arrière : {title}",
+  "home.railNext": "Faire défiler vers l’avant : {title}",
+  "home.sponsoredTag": "Sponsorisé",
+  "home.adTag": "Pub",
+  "home.adBy": "Publicité · {advertiser}",
+  "home.adRowLabel": "Publicités",
+  "home.partners": "De la part de nos partenaires",
+  "home.sponsoredProductsBy": "Produits de {advertiser}",
+  "home.dealEnds": "Se termine dans",
+  "home.dealPct": "{pct} % de réduction"
 }

@@ -1,0 +1,40 @@
+/* Product rails: one horizontally scrolling row, as many cards as fit. Cards have a fixed width so the row fills the
+   container at every width (a short row is left-aligned and simply ends; the gateway hides rows with fewer than four
+   products). Scroll-snap serves touch and trackpads; the arrows serve the mouse. */
+.carousel { position: relative; --rail-card: clamp(150px, 15.5vw, 204px); --rail-gap: var(--at-space-4); }
+.track {
+  display: grid; grid-auto-flow: column; grid-auto-columns: var(--rail-card); gap: var(--rail-gap);
+  margin: 0; padding: 0 0 var(--at-space-2); list-style: none;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: 0;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.track::-webkit-scrollbar { display: none; }
+.track > li { scroll-snap-align: start; min-width: 0; }
+.track:focus-visible { outline: 2px solid var(--at-color-focus, currentColor); outline-offset: 2px; }
+
+.arrow {
+  position: absolute; top: calc(var(--rail-card) * 0.5); transform: translateY(-50%); z-index: 2;
+  width: 40px; height: 80px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface); color: var(--at-color-text); box-shadow: var(--at-shadow-sm);
+}
+.arrow[hidden] { display: none; }
+.arrow:disabled { opacity: 0; pointer-events: none; }
+.arrowPrev { inset-inline-start: calc(-1 * var(--at-space-3)); }
+.arrowNext { inset-inline-end: calc(-1 * var(--at-space-3)); }
+[dir='rtl'] .arrow svg { transform: scaleX(-1); }
+@media (hover: hover) {
+  .arrow:hover { background: var(--at-color-surface-sunken, var(--at-sand-100)); }
+}
+/* Touch screens swipe; the arrows would only cover cards. */
+@media (pointer: coarse) {
+  .arrow { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .track { scroll-behavior: auto; }
+}
+@media (max-width: 599px) {
+  .carousel { --rail-card: 44vw; --rail-gap: var(--at-space-3); }
+  /* A card peeks at the edge so it is clear the row scrolls. */
+  .track { scroll-padding-inline: var(--at-space-3); }
+}

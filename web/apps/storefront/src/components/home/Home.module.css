@@ -46,7 +46,23 @@
 .dotOn::before { width: 28px; background: currentColor; }
 .pause { position: relative; width: 24px; height: 24px; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; display: grid; place-items: center; }
 
-.tiles { position: relative; margin-top: -120px; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: var(--at-space-5); }
+.tiles { position: relative; margin-top: -120px; display: grid; gap: var(--at-space-5); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* No dead space at the right: the columns follow the tile count (data-count), never an auto-fill that leaves empty tracks.
+   Phones one column, tablets two (an odd last tile spans the row), desktop as many as there are tiles up to four,
+   and five or six across on very wide screens. */
+.tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+@media (min-width: 1100px) {
+  .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tiles > :last-child:nth-child(odd) { grid-column: auto; }
+  .tiles[data-count='1'] { grid-template-columns: minmax(0, 1fr); }
+  .tiles[data-count='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tiles[data-count='5'], .tiles[data-count='6'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1400px) {
+  .tiles[data-count='5'] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .tiles[data-count='6'] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
 .tile { background: var(--at-color-surface); padding: var(--at-space-5); display: flex; flex-direction: column; gap: var(--at-space-3); box-shadow: var(--at-shadow-sm); }
 .tileTitle { margin: 0; font-size: var(--at-text-xl); font-weight: var(--at-weight-bold); }
 .cells { display: grid; grid-template-columns: 1fr 1fr; gap: var(--at-space-3); margin: 0; padding: 0; list-style: none; }
@@ -69,14 +85,13 @@
 .rail { margin-top: var(--at-space-5); background: var(--at-color-surface); padding: var(--at-space-5); box-shadow: var(--at-shadow-sm); }
 .railHead { display: flex; align-items: baseline; gap: var(--at-space-4); margin-bottom: var(--at-space-4); flex-wrap: wrap; }
 .railTitle { margin: 0; font-size: var(--at-text-xl); font-weight: var(--at-weight-bold); }
-.railMore { font-size: var(--at-text-sm); }
-.railGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--at-space-5); margin: 0; padding: 0; list-style: none; }
+.railMore { font-size: var(--at-text-sm); margin-inline-start: auto; }
 
 /* Phones: product rails reflow to two columns; tablets get three or four (auto-fill at 170px). */
 @media (max-width: 599px) {
   .rail { padding: var(--at-space-4) var(--at-space-3); }
-  .railGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--at-space-4) var(--at-space-3); }
   .tiles { grid-template-columns: minmax(0, 1fr); gap: var(--at-space-3); }
+  .tiles > :last-child:nth-child(odd) { grid-column: auto; }
   .tile { padding: var(--at-space-4); }
 }
 

@@ -1812,5 +1812,16 @@
   "session.endedAbsolute": "Tu sesión alcanzó su duración máxima y la cerramos por tu seguridad. Inicia sesión de nuevo para continuar.",
   "session.endedSignedOut": "Cerraste sesión en otra pestaña o ventana. Inicia sesión de nuevo para continuar.",
   "session.signInAgain": "Iniciar sesión de nuevo",
-  "session.signingOut": "Finalizando el cierre de sesión…"
+  "session.signingOut": "Finalizando el cierre de sesión…",
+  "home.seeAll": "Ver todo",
+  "home.railPrev": "Desplazar hacia atrás: {title}",
+  "home.railNext": "Desplazar hacia delante: {title}",
+  "home.sponsoredTag": "Patrocinado",
+  "home.adTag": "Anuncio",
+  "home.adBy": "Anuncio · {advertiser}",
+  "home.adRowLabel": "Anuncios",
+  "home.partners": "De nuestros socios",
+  "home.sponsoredProductsBy": "Productos de {advertiser}",
+  "home.dealEnds": "Termina en",
+  "home.dealPct": "{pct} % de descuento"
 }

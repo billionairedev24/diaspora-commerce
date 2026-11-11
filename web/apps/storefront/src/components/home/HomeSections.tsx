@@ -1,17 +1,20 @@
-import { type Banner, type Rail, type Tile } from '@afrotransact/api-client';
-import { buttonClassName, ImagePlaceholder } from '@afrotransact/ui';
+import { type Rail, type Tile } from '@afrotransact/api-client';
+import { ImagePlaceholder } from '@afrotransact/ui';
 import Link from 'next/link';
+import { type ReactNode } from 'react';
 
 import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
 import { getT } from '@/i18n/server';
 
 import styles from './Home.module.css';
+import { RailCarousel } from './RailCarousel';
 
-/** Server-rendered placement sections (tiles, sponsored banners, product rails) — indexable HTML. */
+/** Server-rendered tiles under the hero. The columns follow the tile count (see Home.module.css): no empty tracks. */
 export async function Tiles({ tiles }: { tiles: Tile[] }) {
   const t = await getT();
+  if (tiles.length === 0) return null;
   return (
-    <section className={styles.tiles} aria-label={t('home.featured')}>
+    <section className={styles.tiles} data-count={tiles.length} aria-label={t('home.featured')}>
       {tiles.map((tile) => (
         <div key={tile.id} className={styles.tile}>
           <h2 className={styles.tileTitle}>{tile.title}</h2>
@@ -34,51 +37,26 @@ export async function Tiles({ tiles }: { tiles: Tile[] }) {
   );
 }
 
-export async function Banners({ banners }: { banners: Banner[] }) {
+/** A product rail: heading, "See all" and a scrolling row of cards. `extra` is rendered in the header (countdown, label). */
+export async function RailSection({ rail, extra, wrap }: { rail: Rail; extra?: ReactNode; wrap?: (card: ReactNode, index: number) => ReactNode }) {
   const t = await getT();
   return (
-    <>
-      {banners.map((b) => (
-        <section key={b.id} className={styles.banner} aria-label={t('home.sponsored', { advertiser: b.advertiser })}>
-          <ImagePlaceholder className={styles.bannerImage} src={b.imageUrl} alt="" ratio="970 / 250" />
-          <div className={styles.bannerBody}>
-            <span className={styles.muted}>{t('home.sponsored', { advertiser: b.advertiser })}</span>
-            <h2 className={styles.bannerTitle}>{b.title}</h2>
-            <p className={styles.bannerSub}>{b.sub}</p>
-            <Link href={b.href} className={buttonClassName({ size: 'sm' }, styles.bannerCta)}>
-              {b.cta}
-            </Link>
-            <span className={styles.adNote}>{t('home.adNote')}</span>
-          </div>
-        </section>
-      ))}
-    </>
-  );
-}
-
-export async function Rails({ rails }: { rails: Rail[] }) {
-  const t = await getT();
-  return (
-    <>
-      {rails.map((r) => (
-        <section key={r.id} className={styles.rail} aria-labelledby={`rail-${r.id}`}>
-          <div className={styles.railHead}>
-            <h2 id={`rail-${r.id}`} className={styles.railTitle}>
-              {r.title}
-            </h2>
-            <Link href={r.href} className={styles.railMore}>
-              {t('home.seeMore')}
-            </Link>
-          </div>
-          <ul className={styles.railGrid}>
-            {r.items.map((p) => (
-              <li key={p.atin}>
-                <CartAwareProductCard product={p} variant="rail" />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-    </>
+    <section className={styles.rail} aria-labelledby={`rail-${rail.id}`}>
+      <div className={styles.railHead}>
+        <h2 id={`rail-${rail.id}`} className={styles.railTitle}>
+          {rail.title}
+        </h2>
+        {extra}
+        <Link href={rail.href} className={styles.railMore}>
+          {t('home.seeAll')}
+        </Link>
+      </div>
+      <RailCarousel label={rail.title}>
+        {rail.items.map((p, i) => {
+          const card = <CartAwareProductCard product={p} variant="rail" />;
+          return <li key={p.atin}>{wrap ? wrap(card, i) : card}</li>;
+        })}
+      </RailCarousel>
+    </section>
   );
 }

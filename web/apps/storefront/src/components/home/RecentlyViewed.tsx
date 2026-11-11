@@ -10,6 +10,7 @@ import { browserApi } from '@/lib/api/browser';
 import { readViewed } from '@/lib/recent/recentlyViewed';
 
 import styles from './Home.module.css';
+import { RailCarousel } from './RailCarousel';
 
 /** "Recently viewed": the products this browser opened last. Nothing renders (no heading, no empty state) until at
     least one remembered product is in stock with a real photo. */
@@ -26,13 +27,13 @@ export function RecentlyViewed() {
           {t('home.recentlyViewed')}
         </h2>
       </div>
-      <ul className={styles.railGrid}>
+      <RailCarousel label={t('home.recentlyViewed')}>
         {data.map((p) => (
           <li key={p.atin}>
             <CartAwareProductCard product={p} variant="rail" />
           </li>
         ))}
-      </ul>
+      </RailCarousel>
     </section>
   );
 }
