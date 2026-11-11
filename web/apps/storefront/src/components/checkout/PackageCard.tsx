@@ -13,9 +13,13 @@ import { onRequestQuote } from './quote';
 /** How one package reaches the shopper: a delivery option, or pickup at one of its pickup points. */
 export type Choice = { option: DeliveryOptionKey; pickupPointId?: string; preferences: DeliveryPreferences };
 
-/** The option an order is placed with. quote_required is never payable (the page blocks it), so it maps to pickup, which is always free. */
-export function placeable(option: DeliveryOptionKey): PlaceableOption {
-  return option === 'quote_required' ? 'pickup' : option;
+/**
+ * The option an order is placed with. quote_required is never payable on its own: with an agreed delivery quote
+ * (`quoted`, sent as quoteId) the package is delivered and the quote's amount replaces the fee; without one the page blocks
+ * the order, so the pickup fallback is never sent.
+ */
+export function placeable(option: DeliveryOptionKey, quoted = false): PlaceableOption {
+  return option === 'quote_required' ? (quoted ? 'afrotransact_delivery' : 'pickup') : option;
 }
 
 /** Default choice per package: its first delivery option (pickup only when that is all it has). */

@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CheckoutView } from '@/components/checkout/CheckoutView';
-import { initialChoice, PackageCard } from '@/components/checkout/PackageCard';
+import { initialChoice, PackageCard, placeable } from '@/components/checkout/PackageCard';
 import { onRequestQuote } from '@/components/checkout/quote';
 
 import { installMockBff, signInDemo } from './mockBff';
@@ -109,6 +109,15 @@ describe('an address outside every delivery zone', () => {
     expect(screen.getByTestId('fulfil-pickup')).toBeInTheDocument();
     await user.click(screen.getByTestId('fulfil-pickup'));
     expect(screen.getByText('Houston FC — Will Call')).toBeInTheDocument();
+  });
+});
+
+describe('what an order is placed with', () => {
+  it('quote_required is delivered only with an agreed quote (sent as its id); otherwise the page blocks it and pickup is the fallback', () => {
+    expect(placeable('quote_required', true)).toBe('afrotransact_delivery');
+    expect(placeable('quote_required')).toBe('pickup');
+    expect(placeable('afrotransact_delivery')).toBe('afrotransact_delivery');
+    expect(placeable('pickup', true)).toBe('pickup');
   });
 });
 

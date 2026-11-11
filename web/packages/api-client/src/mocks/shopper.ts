@@ -627,7 +627,10 @@ export const shopperHandlers = [
       throw new MockProblem(422, 'VALIDATION_FAILED', 'Ask us for a quote', QUOTE_REQUIRED_MESSAGE, { errors: { deliverySelections: QUOTE_REQUIRED_MESSAGE } });
     s.packages.forEach((p, i) => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
-      if (!sel || !p.deliveryOptions.some((o) => o.key === sel.option))
+      // A package outside every delivery zone is delivered once the shopper has an agreed quote: the selection names the delivery
+      // option with the quote's id, and the quote's amount is the shipping (redeemMockQuote below).
+      const quoted = !!sel?.quoteId && sel.option === 'afrotransact_delivery' && p.deliveryOptions.some((o) => o.key === 'quote_required');
+      if (!sel || (!quoted && !p.deliveryOptions.some((o) => o.key === sel.option)))
         errors[`deliverySelections.${i}.option`] = sel ? 'The delivery options have changed. Reload the page and choose again.' : 'Choose a delivery option';
       else if (sel.option === 'pickup' && !p.pickupPoints?.some((x) => x.id === sel.pickupPointId)) errors[`deliverySelections.${i}.pickupPointId`] = 'Choose a pickup location';
       else if (sel.option === 'afrotransact_delivery' && p.lines.some((l) => l.perishable) && sel.preferences?.handover && sel.preferences.handover !== 'hand') {

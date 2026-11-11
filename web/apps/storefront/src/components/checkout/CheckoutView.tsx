@@ -183,11 +183,14 @@ export function CheckoutView() {
   // Lines without a definite tax decision can't be sold yet: the order can't be placed until the shopper removes them.
   const blockedLines = s?.blockedLines ?? [];
   const taxBlocked = blockedLines.length > 0 || (s?.canPlaceOrder === false && !s.deliveryBlockedReason);
-  // A package outside every delivery zone (quote_required) or with an unknown delivery fee can't be paid for: the shopper
-  // asks for a quote, picks the package up, or changes the address (listing rules D20, D21).
-  const quoteBlocked = (s?.packages ?? []).some((p) => (choices[p.packageId]?.option ?? initialChoice(p).option) === 'quote_required');
-  const deliveryReason = quoteBlocked ? t('co.quote.blocked') : (s?.deliveryBlockedReason ?? null);
-  const blocked = undeliverable || preLocked || taxBlocked || quoteBlocked || !!s?.deliveryBlockedReason;
+  // A package outside every delivery zone (quote_required) can't be paid for until the shopper has an agreed delivery quote
+  // (/checkout?quote=<id>), picks the package up or changes the address; a delivery fee that could not be read blocks it too
+  // (listing rules D20, D21). Never a dead end: the quote box above the packages and pickup are always there.
+  const chosenOptions = (s?.packages ?? []).map((p) => p.deliveryOptions.find((o) => o.key === (choices[p.packageId]?.option ?? initialChoice(p).option)));
+  const quoteBlocked = chosenOptions.some((o) => o?.key === 'quote_required') && !applied.usable;
+  const feeUnknown = chosenOptions.some((o) => o?.feeUnknown);
+  const deliveryReason = quoteBlocked ? t('co.quote.blocked') : feeUnknown ? t('co.fee.unknownBlocked') : null;
+  const blocked = undeliverable || preLocked || taxBlocked || quoteBlocked || feeUnknown;
   const [removing, setRemoving] = useState<string | null>(null);
   const [removingLine, setRemovingLine] = useState<string | null>(null);
   /** Takes the line out of this order (it stays in the cart, as for an undeliverable package). */
@@ -227,7 +230,7 @@ export function CheckoutView() {
       const perishable = p.lines.some((l) => l.perishable);
       return {
         packageId: p.packageId,
-        option: placeable(c.option),
+        option: placeable(c.option, !!applied.usable),
         pickupPointId: c.option === 'pickup' ? (c.pickupPointId ?? p.pickupPoints?.[0]?.id) : undefined,
         quoteId: applied.usable && quotedPackage(p, c.option) ? applied.usable.id : undefined,
         preferences: c.option === 'afrotransact_delivery' ? { ...c.preferences, handover: perishable ? 'hand' : c.preferences.handover, safePlace: c.preferences.safePlace || undefined, instructions: c.preferences.instructions?.trim() || undefined } : undefined
