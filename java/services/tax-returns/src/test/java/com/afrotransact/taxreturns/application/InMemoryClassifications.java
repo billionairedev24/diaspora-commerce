@@ -51,7 +51,7 @@ final class InMemoryClassifications implements VariantClassificationRepository {
         VariantClassification next = new VariantClassification(v.atin(), v.gtin(), v.productId(), v.title(),
                 v.ownerOrgId(), v.categoryCode(), v.productTypeCode(), v.facts(), v.staffFacts(), v.sellerBehaviour(),
                 v.refinedProviderCodes(), v.status(), v.resolution(), v.ruleVersion(), v.classifiedBy(),
-                v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.decisionRef(), v.informationRequest(), v.version() + 1, v.createdAt(),
+                v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.decisionRef(), v.informationRequest(), v.auditSampledAt(), v.version() + 1, v.createdAt(),
                 v.updatedAt());
         records.put(v.atin(), next);
         return next;
@@ -61,7 +61,8 @@ final class InMemoryClassifications implements VariantClassificationRepository {
     public Page list(Filter filter, int page, int size) {
         List<VariantClassification> all = records.values().stream()
                 .filter(v -> filter.status() == null || v.status() == filter.status())
-                .filter(v -> filter.categoryCode() == null || v.categoryCode().equals(filter.categoryCode())).toList();
+                .filter(v -> filter.categoryCode() == null || v.categoryCode().equals(filter.categoryCode()))
+                .filter(v -> !filter.auditOnly() || v.auditItem() && v.approved()).toList();
         return new Page(all, all.size());
     }
 

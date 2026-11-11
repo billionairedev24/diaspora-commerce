@@ -109,15 +109,20 @@ class TaxClassificationApiController {
                 body.providerCode(), body.verified(), body.reason())));
     }
 
-    @Operation(summary = "Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)")
+    @Operation(summary = "Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)",
+            description = "auditSample=true lists the audit sample instead: items the system approved under the "
+                    + "risk-based review rule (taxReview.mode RISK_BASED) that are live and wait for a reviewer to "
+                    + "confirm (POST approve) or reclassify them. status is ignored then.")
     @GetMapping("/v1/tax/variant-classifications")
     VariantPage listVariants(@RequestParam(required = false) RecordStatus status,
                              @RequestParam(required = false) String categoryCode,
                              @RequestParam(required = false) String sellerOrgId, @RequestParam(required = false) String q,
+                             @RequestParam(defaultValue = "false") boolean auditSample,
                              @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "25") int size) {
         int s = Math.min(Math.max(size, 1), 200);
         int p = Math.max(page, 0);
-        VariantClassificationRepository.Page result = variants.list(status, categoryCode, sellerOrgId, q, p, s);
+        VariantClassificationRepository.Page result = variants.list(auditSample ? null : status, categoryCode, sellerOrgId, q,
+                auditSample, p, s);
         return new VariantPage(result.items().stream().map(VariantDto::light).toList(), p, s, result.total());
     }
 

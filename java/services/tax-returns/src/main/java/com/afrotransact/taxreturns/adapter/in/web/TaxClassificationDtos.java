@@ -221,7 +221,10 @@ final class TaxClassificationDtos {
                       List<EvidenceDto> evidence, Map<String, String> refinedProviderCodes, ResolveResponse resolution,
                       List<SellerDecisionDto> decisions, String ownerOrgId, String classifiedBy, Instant classifiedAt,
                       String reviewedBy, Instant reviewedAt, String ruleVersion, List<AuditDto> audit,
-                      InfoRequestDto informationRequest, Long ordersAffected) {
+                      InfoRequestDto informationRequest, Long ordersAffected,
+                      @Schema(description = "Approved by the system and waiting in the audit sample for a reviewer to "
+                              + "confirm or reclassify it; the item is live meanwhile") boolean auditSample,
+                      Instant auditSampledAt) {
 
         /** A list item: the record without its audit, evidence and stored decisions. */
         static VariantDto light(VariantClassification v) {
@@ -229,7 +232,7 @@ final class TaxClassificationDtos {
                     v.status().name(), v.facts(), v.staffFacts(), null, v.refinedProviderCodes(),
                     v.resolution() == null ? null : ResolveResponse.of(v.resolution()), null, v.ownerOrgId(),
                     v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.ruleVersion(), null,
-                    InfoRequestDto.of(v), null);
+                    InfoRequestDto.of(v), null, v.auditItem(), v.auditSampledAt());
         }
 
         static VariantDto of(VariantClassificationService.ClassificationView view) {
@@ -247,7 +250,7 @@ final class TaxClassificationDtos {
                     v.refinedProviderCodes(), view.resolution() == null ? null : ResolveResponse.of(view.resolution()),
                     decisions, v.ownerOrgId(), v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(),
                     v.ruleVersion(), view.audit().stream().map(AuditDto::of).toList(), InfoRequestDto.of(v),
-                    view.ordersAffected());
+                    view.ordersAffected(), v.auditItem(), v.auditSampledAt());
         }
     }
 

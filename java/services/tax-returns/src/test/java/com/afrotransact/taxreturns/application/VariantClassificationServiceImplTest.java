@@ -45,12 +45,13 @@ class VariantClassificationServiceImplTest {
     private final InMemoryClassifications records = new InMemoryClassifications();
     private final DomainEventPublisher publisher = mock(DomainEventPublisher.class);
     private final TaxTelemetry telemetry = mock(TaxTelemetry.class);
+    private final InMemoryReviewSettings reviewSettings = new InMemoryReviewSettings();
 
     private VariantClassificationService service(ApprovalPolicy policy) {
         TaxReturnsProperties props = TestRules.props(new TaxReturnsProperties.Classification(null, policy, false, null));
         return new VariantClassificationServiceImpl(records, rules.engine, new ListingDecisions(records),
-                new ClassificationEvents(publisher, telemetry), props, TestActors.staff("tax:classify-admin", "tax:read"),
-                TestRules.CLOCK);
+                new ClassificationEvents(publisher, telemetry), props,
+                reviewSettings, TestActors.staff("tax:classify-admin", "tax:read"), TestRules.CLOCK);
     }
 
     private static CatalogFactsChanged event(String category, String atin, Map<String, Object> facts,

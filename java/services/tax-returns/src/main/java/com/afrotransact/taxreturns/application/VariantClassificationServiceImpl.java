@@ -19,10 +19,14 @@ import com.afrotransact.taxreturns.domain.profile.ProfileFact;
 import com.afrotransact.taxreturns.domain.profile.RecordStatus;
 import com.afrotransact.taxreturns.domain.profile.Resolution;
 import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
+import com.afrotransact.taxreturns.domain.profile.ReviewSettings;
+import com.afrotransact.taxreturns.domain.profile.RiskReviewDecision;
+import com.afrotransact.taxreturns.domain.profile.RiskReviewPolicy;
 import com.afrotransact.taxreturns.domain.profile.TaxProfile;
 import com.afrotransact.taxreturns.domain.profile.VariantClassification;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
+import com.afrotransact.taxreturns.port.TaxReviewSettingsRepository;
 import com.afrotransact.taxreturns.port.VariantClassificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +39,8 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     private static final Logger LOG = LoggerFactory.getLogger(VariantClassificationServiceImpl.class);
     private static final String SYSTEM = "SYSTEM:catalog";
     private static final String AUTO = "SYSTEM:auto-approval";
+    /** Who classified and approved an item under the risk-based rule. */
+    static final String AUTO_RISK = "auto";
     private static final int MIN_REASON = 3;
     private static final int MIN_MESSAGE = 10;
     private static final int MAX_MESSAGE = 1000;
@@ -45,17 +51,20 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     private final ListingDecisions decisions;
     private final ClassificationEvents events;
     private final TaxReturnsProperties props;
+    private final TaxReviewSettingsRepository reviewSettings;
     private final Access access;
     private final Clock clock;
 
     VariantClassificationServiceImpl(VariantClassificationRepository records, DecisionEngine engine,
                                      ListingDecisions decisions, ClassificationEvents events,
-                                     TaxReturnsProperties props, Access access, Clock clock) {
+                                     TaxReturnsProperties props, TaxReviewSettingsRepository reviewSettings,
+                                     Access access, Clock clock) {
         this.records = records;
         this.engine = engine;
         this.decisions = decisions;
         this.events = events;
         this.props = props;
+        this.reviewSettings = reviewSettings;
         this.access = access;
         this.clock = clock;
     }
@@ -65,12 +74,13 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     public void onCatalogFactsChanged(CatalogFactsChanged e) {
         Instant now = clock.instant();
         String actor = e.changedBy() == null || e.changedBy().isBlank() ? SYSTEM : e.changedBy();
+        ReviewSettings review = reviewSettings.current();
         for (Variant v : e.variants()) {
-            apply(e, v, actor, now);
+            apply(e, v, actor, now, review);
         }
     }
 
-    private void apply(CatalogFactsChanged e, Variant v, String actor, Instant now) {
+    private void apply(CatalogFactsChanged e, Variant v, String actor, Instant now, ReviewSettings review) {
         String rules = engine.snapshot().ruleVersion();
         VariantClassification existing = records.find(v.atin()).orElse(null);
         if (existing == null) {
@@ -78,14 +88,14 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
                     e.ownerOrgId(), e.categoryCode(), e.productTypeCode(), v.facts(), Map.of(), e.sellerBehaviour(),
                     Map.of(), RecordStatus.DRAFT, null, rules, actor, now, null, null, null, 0L, now, now);
             Resolution r = resolve(fresh);
-            RecordStatus status = initialStatus(fresh, r);
-            VariantClassification saved = records.insert(withStatus(fresh, status, r, rules, now));
+            Review rv = r == null || r.status() == ResolveStatus.MISSING_FACTS ? null : review(fresh, r, review);
+            RecordStatus status = rv == null ? RecordStatus.MISSING_FACTS
+                    : rv.needsReview() ? RecordStatus.PENDING_REVIEW : RecordStatus.APPROVED;
+            VariantClassification saved = records.insert(markAutoApproved(withStatus(fresh, status, r, rules, now), rv, now));
             records.addAudit(saved.atin(), new AuditEntry(now, actor, AuditAction.SUBMITTED, "Facts reported by catalog",
                     rules, null, summary(saved, r)));
             if (saved.approved()) {
-                records.addAudit(saved.atin(), new AuditEntry(now, AUTO, AuditAction.APPROVED,
-                        "Approved by policy " + props.tax().classification().approvalPolicy(), rules, null,
-                        summary(saved, r)));
+                auditAutoApproval(saved, rv, r, rules, null, now);
             }
             if (r != null) {
                 remember(saved, r, e.ownerOrgId(), actor, now);
@@ -123,18 +133,21 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
                 why = "Facts completed or resubmitted";
             }
         }
-        if (next == RecordStatus.PENDING_REVIEW && r != null && !requiresReview(updated, r)) {
-            next = RecordStatus.APPROVED;
+        Review rv = null;
+        if (next == RecordStatus.PENDING_REVIEW && r != null) {
+            rv = review(updated, r, review);
+            if (!rv.needsReview()) {
+                next = RecordStatus.APPROVED;
+            }
         }
-        VariantClassification saved = records.update(withStatus(updated, next, r, rules, now));
+        VariantClassification saved = records.update(markAutoApproved(withStatus(updated, next, r, rules, now), rv, now));
         Map<String, Object> before = summary(existing, existing.resolution());
         before.put("facts", existing.facts());
         Map<String, Object> after = summary(saved, r);
         after.put("facts", saved.facts());
         records.addAudit(saved.atin(), new AuditEntry(now, actor, action, why, rules, before, after));
-        if (saved.approved() && !existing.approved()) {
-            records.addAudit(saved.atin(), new AuditEntry(now, AUTO, AuditAction.APPROVED,
-                    "Approved by policy " + props.tax().classification().approvalPolicy(), rules, before, after));
+        if (saved.approved() && rv != null && !rv.needsReview()) {
+            auditAutoApproval(saved, rv, r, rules, before, now);
         }
         if (r != null) {
             remember(saved, r, e.ownerOrgId(), actor, now);
@@ -145,9 +158,10 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     @Override
     @Transactional(readOnly = true)
     public VariantClassificationRepository.Page list(RecordStatus status, String categoryCode, String sellerOrgId,
-                                                     String q, int page, int size) {
+                                                     String q, boolean auditOnly, int page, int size) {
         access.staff(TaxReturnsPermissions.TAX_READ);
-        return records.list(new VariantClassificationRepository.Filter(status, categoryCode, sellerOrgId, q), page, size);
+        return records.list(new VariantClassificationRepository.Filter(status, categoryCode, sellerOrgId, q, auditOnly),
+                page, size);
     }
 
     @Override
@@ -183,11 +197,19 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
         if (!r.chargeable()) {
             throw notResolvable(r);
         }
-        if (rec.approved() && rec.staffFacts().equals(staff) && rec.refinedProviderCodes().equals(refined)) {
-            return view(rec);
-        }
         String rules = r.ruleVersion();
-        VariantClassification saved = records.update(withStatus(reviewed, RecordStatus.APPROVED, r, rules, now));
+        if (rec.approved() && rec.staffFacts().equals(staff) && rec.refinedProviderCodes().equals(refined)) {
+            if (!rec.auditItem()) {
+                return view(rec);
+            }
+            VariantClassification closed = records.update(reviewed.withAuditClosed(by, now));
+            records.addAudit(atin, new AuditEntry(now, by, AuditAction.AUDIT_CONFIRMED,
+                    c.reason() == null || c.reason().isBlank() ? "Audit sample confirmed: the classification is right"
+                            : c.reason().trim(), rules, summary(rec, rec.resolution()), summary(closed, r)));
+            return view(closed);
+        }
+        VariantClassification approved = withStatus(reviewed, RecordStatus.APPROVED, r, rules, now);
+        VariantClassification saved = records.update(rec.auditItem() ? approved.withAuditClosed(by, now) : approved);
         records.addAudit(atin, new AuditEntry(now, by, AuditAction.APPROVED,
                 c.reason() == null || c.reason().isBlank() ? "Approved after review" : c.reason().trim(), rules,
                 summary(rec, rec.resolution()), summary(saved, r)));
@@ -268,15 +290,59 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
         }
     }
 
-    private RecordStatus initialStatus(VariantClassification rec, Resolution r) {
-        if (r == null || r.status() == ResolveStatus.MISSING_FACTS) {
-            return RecordStatus.MISSING_FACTS;
+    /**
+     * Who looks at a classification: in RISK_BASED mode the risk rule decides (and may sample the item for audit); in ALL
+     * mode the configured approval policy does, and by default every record goes to a reviewer.
+     */
+    private Review review(VariantClassification rec, Resolution r, ReviewSettings settings) {
+        TaxProfile profile = engine.profile(rec.categoryCode());
+        if (settings.riskBased()) {
+            RiskReviewPolicy policy = new RiskReviewPolicy(settings);
+            RiskReviewDecision d = policy.decide(profile, r, rec.allFacts());
+            return new Review(!d.autoApprove(), d.rule(), true, d.autoApprove() && policy.sampledForAudit(rec.atin()),
+                    settings.auditPercent());
         }
-        return requiresReview(rec, r) ? RecordStatus.PENDING_REVIEW : RecordStatus.APPROVED;
+        boolean needs = props.tax().classification().approvalPolicy().requiresReview(profile, r);
+        return new Review(needs, "Approved by policy " + props.tax().classification().approvalPolicy(), false, false, 0);
     }
 
-    private boolean requiresReview(VariantClassification rec, Resolution r) {
-        return props.tax().classification().approvalPolicy().requiresReview(engine.profile(rec.categoryCode()), r);
+    /** Marks an APPROVED record as approved by the risk rule: classified and approved by {@code auto}, maybe sampled. */
+    private VariantClassification markAutoApproved(VariantClassification rec, Review rv, Instant now) {
+        if (rv == null || !rv.risk() || rv.needsReview() || !rec.approved()) {
+            return rec;
+        }
+        return rec.withAutoApproval(AUTO_RISK, now, rv.sampled() ? now : null);
+    }
+
+    private void auditAutoApproval(VariantClassification saved, Review rv, Resolution r, String rules,
+                                   Map<String, Object> before, Instant now) {
+        Map<String, Object> after = summary(saved, r);
+        if (rv != null && rv.risk()) {
+            after.put("facts", saved.allFacts());
+            after.put("classifiedBy", AUTO_RISK);
+            after.put("rule", rv.rule());
+            records.addAudit(saved.atin(), new AuditEntry(now, AUTO_RISK, AuditAction.APPROVED, rv.rule(), rules, before,
+                    after));
+            if (saved.auditItem()) {
+                records.addAudit(saved.atin(), new AuditEntry(now, AUTO_RISK, AuditAction.AUDIT_SAMPLED,
+                        "Placed in the audit sample (" + rv.auditPercent() + "% of auto-approved items, picked by a fixed "
+                                + "hash of the variant ATIN). It stays live until a reviewer confirms or reclassifies it.",
+                        rules, before, after));
+            }
+            return;
+        }
+        records.addAudit(saved.atin(), new AuditEntry(now, AUTO, AuditAction.APPROVED, rv == null
+                ? "Approved by policy " + props.tax().classification().approvalPolicy() : rv.rule(), rules, before, after));
+    }
+
+    /**
+     * @param needsReview  a person must review it
+     * @param rule         the rule that applied, in plain words
+     * @param risk         decided by the risk-based rule
+     * @param sampled      auto-approved and picked for the audit sample
+     * @param auditPercent the sampling percentage in force
+     */
+    private record Review(boolean needsReview, String rule, boolean risk, boolean sampled, int auditPercent) {
     }
 
     private VariantClassification withStatus(VariantClassification rec, RecordStatus status, Resolution r, String rules,

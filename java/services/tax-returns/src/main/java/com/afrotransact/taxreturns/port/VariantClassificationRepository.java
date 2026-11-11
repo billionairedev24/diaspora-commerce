@@ -47,8 +47,13 @@ public interface VariantClassificationRepository {
      * @param categoryCode category
      * @param sellerOrgId  owner organisation or a seller seen in a stored decision
      * @param q            ATIN, GTIN or title
+     * @param auditOnly    only the audit sample: approved by the system and waiting for a reviewer to confirm
      */
-    record Filter(RecordStatus status, String categoryCode, String sellerOrgId, String q) {
+    record Filter(RecordStatus status, String categoryCode, String sellerOrgId, String q, boolean auditOnly) {
+
+        public Filter(RecordStatus status, String categoryCode, String sellerOrgId, String q) {
+            this(status, categoryCode, sellerOrgId, q, false);
+        }
     }
 
     record Page(List<VariantClassification> items, long total) {

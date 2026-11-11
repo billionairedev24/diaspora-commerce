@@ -26,14 +26,24 @@ public interface VariantClassificationService {
     void onCatalogFactsChanged(CatalogFactsChanged event);
 
     /** Records, newest change first within the filter (tax:read). */
+    default VariantClassificationRepository.Page list(RecordStatus status, String categoryCode, String sellerOrgId,
+                                                      String q, int page, int size) {
+        return list(status, categoryCode, sellerOrgId, q, false, page, size);
+    }
+
+    /**
+     * Records within the filter; {@code auditOnly} lists the audit sample: items the system approved under the risk-based
+     * rule that are live and wait for a reviewer to confirm ({@link #approve}) or reclassify them (tax:read).
+     */
     VariantClassificationRepository.Page list(RecordStatus status, String categoryCode, String sellerOrgId, String q,
-                                              int page, int size);
+                                              boolean auditOnly, int page, int size);
 
     /** One record with its audit, evidence and stored decisions (tax:read); 404 tax.classification-not-found. */
     ClassificationView get(String atin);
 
     /**
-     * Approves after review (tax:classify-admin). 422 tax.classification-not-resolvable unless the profile resolves to a
+     * Approves after review (tax:classify-admin). On an audit sample item with nothing changed this confirms it: the item
+     * leaves the audit queue and AUDIT_CONFIRMED is recorded. 422 tax.classification-not-resolvable unless the profile resolves to a
      * chargeable decision; staff facts and refined provider codes are recorded here.
      */
     ClassificationView approve(String atin, ApproveCommand command);

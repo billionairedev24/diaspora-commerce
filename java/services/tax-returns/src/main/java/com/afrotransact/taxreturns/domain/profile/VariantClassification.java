@@ -31,6 +31,7 @@ import java.util.UUID;
  * @param reviewedAt           when
  * @param decisionRef          reference of the tax professional's sign-off, when given
  * @param informationRequest   what review asked the seller for, null when nothing is pending
+ * @param auditSampledAt       when the system approved it and put it in the audit sample, null when it is not an audit item
  * @param version              optimistic-lock version
  * @param createdAt            first seen
  * @param updatedAt            last change
@@ -41,8 +42,21 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
                                     Map<String, String> refinedProviderCodes,
                                     RecordStatus status, Resolution resolution, String ruleVersion,
                                     String classifiedBy, Instant classifiedAt, String reviewedBy, Instant reviewedAt,
-                                    String decisionRef, InformationRequest informationRequest, long version,
-                                    Instant createdAt, Instant updatedAt) {
+                                    String decisionRef, InformationRequest informationRequest, Instant auditSampledAt,
+                                    long version, Instant createdAt, Instant updatedAt) {
+
+    /** Without the audit sample marker (not an audit item). */
+    public VariantClassification(String atin, String gtin, UUID productId, String title, String ownerOrgId,
+                                 String categoryCode, String productTypeCode, Map<String, Object> facts,
+                                 Map<String, Object> staffFacts, Map<String, Object> sellerBehaviour,
+                                 Map<String, String> refinedProviderCodes, RecordStatus status, Resolution resolution,
+                                 String ruleVersion, String classifiedBy, Instant classifiedAt, String reviewedBy,
+                                 Instant reviewedAt, String decisionRef, InformationRequest informationRequest,
+                                 long version, Instant createdAt, Instant updatedAt) {
+        this(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts, staffFacts,
+                sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, classifiedBy, classifiedAt,
+                reviewedBy, reviewedAt, decisionRef, informationRequest, null, version, createdAt, updatedAt);
+    }
 
     public VariantClassification(String atin, String gtin, UUID productId, String title, String ownerOrgId,
                                  String categoryCode, String productTypeCode, Map<String, Object> facts,
@@ -53,7 +67,7 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
                                  Instant updatedAt) {
         this(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts, staffFacts,
                 sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, classifiedBy, classifiedAt,
-                reviewedBy, reviewedAt, decisionRef, null, version, createdAt, updatedAt);
+                reviewedBy, reviewedAt, decisionRef, null, null, version, createdAt, updatedAt);
     }
 
     public VariantClassification {
@@ -77,7 +91,7 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
     public VariantClassification with(RecordStatus next, Resolution res, String rules, Instant at) {
         return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
                 staffFacts, sellerBehaviour, refinedProviderCodes, next, res, rules, classifiedBy, classifiedAt, reviewedBy, reviewedAt,
-                decisionRef, informationRequest, version, createdAt, at);
+                decisionRef, informationRequest, next == RecordStatus.APPROVED ? auditSampledAt : null, version, createdAt, at);
     }
 
     public VariantClassification withFacts(String category, String type, Map<String, Object> newFacts,
@@ -87,19 +101,38 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
         return new VariantClassification(atin, gtinValue == null ? gtin : gtinValue, productId,
                 titleValue == null ? title : titleValue, ownerOrgId, category, type, newFacts,
                 sameCategory ? staffFacts : Map.of(), behaviour, sameCategory ? refinedProviderCodes : Map.of(), status, resolution, ruleVersion, by, at, reviewedBy, reviewedAt, decisionRef,
-                null, version, createdAt, at);
+                null, auditSampledAt, version, createdAt, at);
     }
 
     public VariantClassification withReview(Map<String, Object> newStaffFacts, Map<String, String> refined,
                                             String by, Instant at, String ref) {
         return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
                 newStaffFacts, sellerBehaviour, refined, status, resolution, ruleVersion, classifiedBy, classifiedAt, by, at,
-                ref == null ? decisionRef : ref, informationRequest, version, createdAt, at);
+                ref == null ? decisionRef : ref, informationRequest, auditSampledAt, version, createdAt, at);
     }
 
     public VariantClassification withInformationRequest(InformationRequest request, Instant at) {
         return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
                 staffFacts, sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, classifiedBy,
-                classifiedAt, reviewedBy, reviewedAt, decisionRef, request, version, createdAt, at);
+                classifiedAt, reviewedBy, reviewedAt, decisionRef, request, auditSampledAt, version, createdAt, at);
+    }
+
+    /** Approved by the system under the risk-based rule: who classified and reviewed it is {@code auto}. */
+    public VariantClassification withAutoApproval(String by, Instant at, Instant sampledAt) {
+        return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
+                staffFacts, sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, by, at, by, at,
+                decisionRef, informationRequest, sampledAt, version, createdAt, at);
+    }
+
+    /** A reviewer dealt with the audit item (confirmed it): it leaves the audit queue. */
+    public VariantClassification withAuditClosed(String by, Instant at) {
+        return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
+                staffFacts, sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, classifiedBy,
+                classifiedAt, by, at, decisionRef, informationRequest, null, version, createdAt, at);
+    }
+
+    /** In the audit sample: live, and waiting for a reviewer to confirm or reclassify. */
+    public boolean auditItem() {
+        return auditSampledAt != null;
     }
 }

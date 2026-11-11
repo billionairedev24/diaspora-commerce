@@ -59,10 +59,10 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 insert into variant_classification (atin, gtin, product_id, title, owner_org_id, category_code,
                     product_type_code, facts, staff_facts, seller_behaviour, refined_provider_codes, status, resolution,
                     rule_version, classified_by, classified_at, reviewed_by, reviewed_at, decision_ref, info_request, info_requested_by,
-                    info_requested_at, version, created_at, updated_at)
+                    info_requested_at, audit_sampled_at, version, created_at, updated_at)
                 values (:atin, :gtin, :product, :title, :owner, :category, :type, cast(:facts as jsonb),
                     cast(:staff as jsonb), cast(:behaviour as jsonb), cast(:refined as jsonb), :status,
-                    cast(:resolution as jsonb), :rules, :classifiedBy, :classifiedAt, :reviewedBy, :reviewedAt, :ref, :infoRequest, :infoBy, :infoAt, 0,
+                    cast(:resolution as jsonb), :rules, :classifiedBy, :classifiedAt, :reviewedBy, :reviewedAt, :ref, :infoRequest, :infoBy, :infoAt, :auditAt, 0,
                     :created, :updated)
                 """)
                 .param("atin", v.atin()).param("gtin", v.gtin()).param("product", v.productId())
@@ -75,7 +75,7 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 .param("reviewedBy", v.reviewedBy()).param("reviewedAt", Sql.ts(v.reviewedAt()))
                 .param("ref", v.decisionRef()).param("infoRequest", info(v, 0)).param("infoBy", info(v, 1))
                 .param("infoAt", Sql.ts(v.informationRequest() == null ? null : v.informationRequest().requestedAt()))
-                .param("created", Sql.ts(v.createdAt()))
+                .param("auditAt", Sql.ts(v.auditSampledAt())).param("created", Sql.ts(v.createdAt()))
                 .param("updated", Sql.ts(v.updatedAt())).update();
         return find(v.atin()).orElseThrow();
     }
@@ -90,7 +90,7 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                     resolution = cast(:resolution as jsonb), rule_version = :rules, classified_by = :classifiedBy,
                     classified_at = :classifiedAt, reviewed_by = :reviewedBy, reviewed_at = :reviewedAt,
                     decision_ref = :ref, info_request = :infoRequest, info_requested_by = :infoBy,
-                    info_requested_at = :infoAt, updated_at = :updated, version = version + 1
+                    info_requested_at = :infoAt, audit_sampled_at = :auditAt, updated_at = :updated, version = version + 1
                 where atin = :atin and version = :version
                 """)
                 .param("atin", v.atin()).param("version", v.version()).param("gtin", v.gtin())
@@ -103,7 +103,7 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 .param("reviewedBy", v.reviewedBy()).param("reviewedAt", Sql.ts(v.reviewedAt()))
                 .param("ref", v.decisionRef()).param("infoRequest", info(v, 0)).param("infoBy", info(v, 1))
                 .param("infoAt", Sql.ts(v.informationRequest() == null ? null : v.informationRequest().requestedAt()))
-                .param("updated", Sql.ts(v.updatedAt())).update();
+                .param("auditAt", Sql.ts(v.auditSampledAt())).param("updated", Sql.ts(v.updatedAt())).update();
         if (rows == 0) {
             throw new StaleRecordException(v.atin());
         }
@@ -117,6 +117,9 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
         if (f.status() != null) {
             where.append(" and v.status = :status");
             params.put("status", f.status().name());
+        }
+        if (f.auditOnly()) {
+            where.append(" and v.audit_sampled_at is not null and v.status = 'APPROVED'");
         }
         if (f.categoryCode() != null && !f.categoryCode().isBlank()) {
             where.append(" and v.category_code = :category");
@@ -134,7 +137,7 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
         }
         JdbcClient.StatementSpec count = jdbc.sql("select count(*) from variant_classification v" + where);
         JdbcClient.StatementSpec rows = jdbc.sql("select v.* from variant_classification v" + where
-                + (f.status() == RecordStatus.PENDING_REVIEW ? " order by v.updated_at asc, v.atin"
+                + (f.status() == RecordStatus.PENDING_REVIEW || f.auditOnly() ? " order by v.updated_at asc, v.atin"
                 : " order by v.updated_at desc, v.atin") + " limit :limit offset :offset");
         for (Map.Entry<String, Object> p : params.entrySet()) {
             count = count.param(p.getKey(), p.getValue());
@@ -266,6 +269,6 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 rs.getString("reviewed_by"), Sql.instant(rs, "reviewed_at"), rs.getString("decision_ref"),
                 rs.getString("info_request") == null ? null : new InformationRequest(rs.getString("info_request"),
                         rs.getString("info_requested_by"), Sql.instant(rs, "info_requested_at")),
-                rs.getLong("version"), Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"));
+                Sql.instant(rs, "audit_sampled_at"), rs.getLong("version"), Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"));
     }
 }

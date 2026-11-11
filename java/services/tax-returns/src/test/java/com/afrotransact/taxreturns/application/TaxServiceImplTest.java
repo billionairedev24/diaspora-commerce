@@ -67,7 +67,8 @@ class TaxServiceImplTest {
     TaxServiceImplTest() {
         TaxReturnsProperties props = props(false, false);
         classifications = new VariantClassificationServiceImpl(records, rules.engine, new ListingDecisions(records),
-                new ClassificationEvents(publisher, telemetry), props, TestActors.staff("*"), TestRules.CLOCK);
+                new ClassificationEvents(publisher, telemetry), props,
+                new InMemoryReviewSettings(), TestActors.staff("*"), TestRules.CLOCK);
         service = build(props);
         when(methods.shadowProvider()).thenReturn(Optional.empty());
         when(calculator.quote(any(), anyString(), any())).thenAnswer(i -> {
