@@ -823,6 +823,10 @@ channels:
         $ref: '#/components/messages/sellerApplicationApproved'
       sellerApplicationRejected:
         $ref: '#/components/messages/sellerApplicationRejected'
+      sellerApplicationAssigned:
+        $ref: '#/components/messages/sellerApplicationAssigned'
+      sellerApplicationEscalated:
+        $ref: '#/components/messages/sellerApplicationEscalated'
       sellerDepartmentRequestDecided:
         $ref: '#/components/messages/sellerDepartmentRequestDecided'
       sellerOrgDepartmentsChanged:
@@ -2761,6 +2765,25 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/SellerApplicationEvent'
+    sellerApplicationAssigned:
+      name: seller.application.assigned
+      title: Internal staff notification - a case was assigned to you, handed to the approval pool, or sent back to review
+      summary: 'Staff only, never the applicant. One event lists every recipient (recipientUserIds): the assignee, or the
+        people who can act on the case when it is unassigned (all holders of the stage permission, minus the applicant and,
+        at approval, the step 1 reviewer; a send-back also names the previous reviewer). reason is ASSIGNED, AUTO_ASSIGNED,
+        READY_FOR_APPROVAL or SENT_BACK.'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerApplicationAssignmentEvent'
+    sellerApplicationEscalated:
+      name: seller.application.escalated
+      title: Internal staff notification - a case reached escalation level 1 or 2
+      summary: Staff only. recipientUserIds are the people the level's role and named targets resolve to.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerApplicationAssignmentEvent'
     sellerOrgApproved:
       name: seller.org.approved
       title: Organisation approved — unlock the back office for its owners
@@ -10547,6 +10570,74 @@ components:
           - 'null'
         submissionCount:
           type: integer
+        occurredAt:
+          type: string
+          format: date-time
+    SellerApplicationAssignmentEvent:
+      type: object
+      required:
+      - applicationId
+      - reference
+      - kind
+      - reason
+      - recipientUserIds
+      - occurredAt
+      properties:
+        applicationId:
+          type: string
+        reference:
+          type: string
+          examples:
+          - APP-30201
+        displayName:
+          type:
+          - string
+          - 'null'
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        stage:
+          type:
+          - string
+          - 'null'
+          enum:
+          - REVIEW
+          - APPROVAL
+          - null
+        reason:
+          type: string
+          enum:
+          - ASSIGNED
+          - AUTO_ASSIGNED
+          - READY_FOR_APPROVAL
+          - SENT_BACK
+          - ESCALATED
+        assigneeId:
+          type:
+          - string
+          - 'null'
+        assigneeName:
+          type:
+          - string
+          - 'null'
+        actorName:
+          type:
+          - string
+          - 'null'
+          description: 'Who made the change: a name, Auto-assignment or Escalation'
+        recipientUserIds:
+          type: array
+          items:
+            type: string
+        level:
+          type: integer
+          description: Escalation level (0 for assignments)
+        note:
+          type:
+          - string
+          - 'null'
         occurredAt:
           type: string
           format: date-time

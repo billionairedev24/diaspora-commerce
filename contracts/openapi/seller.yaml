@@ -59,11 +59,46 @@ tags:
 - name: Rewards
   description: Reward rules (staff with plans:manage), the grants log, and the rewards an organisation can earn (owner / finance)
 paths:
+  /v1/application-review-settings:
+    get:
+      tags:
+      - Application review settings
+      summary: Current SLAs, escalation chains, assignment mode and the last changes
+      operationId: get_1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReviewSettings'
+    put:
+      tags:
+      - Application review settings
+      summary: Change them (reason required; levels in order; targets must exist)
+      operationId: put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSettingsChange'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReviewSettings'
   /v1/applications:
     get:
       tags:
       - Application review
       summary: 'Review queue (default: pending review, flagged and awaiting final approval)'
+      description: 'Visible to anyone who can view applications (applications:review, :approve or :assign), whether or not the
+        case is in their own purview. Every row says who holds it and for how long (workflow). queue: MY (assigned to me, plus
+        unassigned cases I may claim), AWAITING_REVIEW, AWAITING_APPROVAL, ESCALATED, RETURNED (with the applicant), ALL. Filters:
+        stage, assignee (a person id or me), unassigned, overdue, escalated.'
       operationId: reviewQueue
       parameters:
       - name: status
@@ -77,6 +112,42 @@ paths:
         required: false
         schema:
           type: string
+      - name: queue
+        in: query
+        description: MY, AWAITING_REVIEW, AWAITING_APPROVAL, ESCALATED, RETURNED or ALL
+        required: false
+        schema:
+          type: string
+      - name: stage
+        in: query
+        description: REVIEW or APPROVAL
+        required: false
+        schema:
+          type: string
+      - name: assignee
+        in: query
+        description: A person's id, or me
+        required: false
+        schema:
+          type: string
+      - name: unassigned
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: escalated
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
       - name: page
         in: query
         required: false
@@ -234,6 +305,57 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Application'
+  /v1/applications/{id}/assignment:
+    post:
+      tags:
+      - Application review
+      summary: 'Who has the case: CLAIM, ASSIGN (also reassign and take over), RELEASE or ESCALATE'
+      description: 'CLAIM: an eligible person takes an unassigned case. ASSIGN (assigneeId): a supervisor (applications:assign),
+        the person an escalation went to, or an approver at the approval stage gives it to an eligible person: they hold the
+        stage permission, are not the applicant and, for approval, are not the step 1 reviewer. RELEASE: back to the pool (the
+        holder, or a manager). ESCALATE (reason): raises the escalation one level now (the holder or a supervisor). Repeats
+        change nothing. Every change is on the timeline with names.'
+      operationId: assignment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+  /v1/applications/{id}/assignment/candidates:
+    get:
+      tags:
+      - Application review
+      summary: People the case can be assigned to now (hold the stage permission, may hold this application)
+      operationId: assignmentCandidates
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StaffPerson'
   /v1/applications/{id}/decision:
     post:
       tags:
@@ -4564,6 +4686,9 @@ components:
     Application:
       type: object
       properties:
+        workflow:
+          $ref: '#/components/schemas/ApplicationCaseView'
+          description: 'Staff only: who holds the application, for how long, the SLA state, escalation, and what the viewer may do'
         id:
           type: string
         reference:
@@ -5567,6 +5692,231 @@ components:
         updatedAt:
           type: string
           format: date-time
+        workflow:
+          $ref: '#/components/schemas/ApplicationCaseView'
+    ApplicationCaseView:
+      type: object
+      properties:
+        stage:
+          type: string
+        holder:
+          type: string
+        assigneeId:
+          type: string
+        assigneeName:
+          type: string
+        assignedAt:
+          type: string
+          format: date-time
+        assignedByName:
+          type: string
+        stageEnteredAt:
+          type: string
+          format: date-time
+        waitingSeconds:
+          type: integer
+          format: int64
+        slaState:
+          type: string
+        slaDueAt:
+          type: string
+          format: date-time
+        escalationLevel:
+          type: integer
+          format: int32
+        escalatedAt:
+          type: string
+          format: date-time
+        escalationReason:
+          type: string
+        escalatedTo:
+          type: array
+          items:
+            type: string
+        returnedByName:
+          type: string
+        returnedAt:
+          type: string
+          format: date-time
+        returnNote:
+          type: string
+        returnCount:
+          type: integer
+          format: int32
+        mine:
+          type: boolean
+        canClaim:
+          type: boolean
+        canAssign:
+          type: boolean
+        canRelease:
+          type: boolean
+        canEscalate:
+          type: boolean
+        canTakeOver:
+          type: boolean
+    AssignmentRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - CLAIM
+          - ASSIGN
+          - RELEASE
+          - ESCALATE
+          minLength: 1
+        assigneeId:
+          type: string
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          description: The staff member's display name, recorded on the timeline (display only)
+          maxLength: 200
+          minLength: 0
+      required:
+      - action
+    StaffPerson:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    ReviewSettings:
+      type: object
+      properties:
+        reviewSlaHours:
+          type: integer
+          format: int32
+        approvalSlaHours:
+          type: integer
+          format: int32
+        dueSoonPercent:
+          type: integer
+          format: int32
+        unassignedAfterHours:
+          type: integer
+          format: int32
+        level2AfterHours:
+          type: integer
+          format: int32
+        autoAssign:
+          type: string
+          enum:
+          - NONE
+          - ROUND_ROBIN
+          - LEAST_LOADED
+        enforceAssignee:
+          type: boolean
+        sendBackToReviewer:
+          type: boolean
+        reviewChain:
+          $ref: '#/components/schemas/EscalationChain'
+        approvalChain:
+          $ref: '#/components/schemas/EscalationChain'
+        reviewLevel1People:
+          type: array
+          items:
+            type: string
+        reviewLevel2People:
+          type: array
+          items:
+            type: string
+        approvalLevel1People:
+          type: array
+          items:
+            type: string
+        approvalLevel2People:
+          type: array
+          items:
+            type: string
+        updatedByName:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewSettingsAudit'
+    ReviewSettingsChange:
+      type: object
+      properties:
+        reviewSlaHours:
+          type: integer
+          format: int32
+        approvalSlaHours:
+          type: integer
+          format: int32
+        dueSoonPercent:
+          type: integer
+          format: int32
+        unassignedAfterHours:
+          type: integer
+          format: int32
+        level2AfterHours:
+          type: integer
+          format: int32
+        autoAssign:
+          type: string
+          enum:
+          - NONE
+          - ROUND_ROBIN
+          - LEAST_LOADED
+        enforceAssignee:
+          type: boolean
+        sendBackToReviewer:
+          type: boolean
+        reviewChain:
+          $ref: '#/components/schemas/EscalationChain'
+        approvalChain:
+          $ref: '#/components/schemas/EscalationChain'
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - reason
+    ReviewSettingsAudit:
+      type: object
+      properties:
+        actorName:
+          type: string
+        reason:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+    EscalationChain:
+      type: object
+      properties:
+        level1:
+          $ref: '#/components/schemas/EscalationTarget'
+        level2:
+          $ref: '#/components/schemas/EscalationTarget'
+    EscalationTarget:
+      type: object
+      properties:
+        roleKey:
+          type: string
+        userIds:
+          type: array
+          items:
+            type: string
+        empty:
+          type: boolean
     DocumentView:
       type: object
       properties:
