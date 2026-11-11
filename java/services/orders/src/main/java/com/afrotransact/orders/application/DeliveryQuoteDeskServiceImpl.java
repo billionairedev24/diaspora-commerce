@@ -23,9 +23,9 @@ import com.afrotransact.orders.domain.OrdersStateConflict;
 import com.afrotransact.orders.domain.QuoteAction;
 import com.afrotransact.orders.domain.QuoteSettings;
 import com.afrotransact.orders.domain.QuoteSettings.AutoAssign;
-import com.afrotransact.orders.domain.QuoteSettings.Target;
+import com.afrotransact.orders.domain.QuoteSettings.QuoteTarget;
 import com.afrotransact.orders.domain.QuoteSla;
-import com.afrotransact.orders.domain.QuoteSnapshot.Line;
+import com.afrotransact.orders.domain.QuoteSnapshot.QuoteLine;
 import com.afrotransact.orders.domain.QuoteStatus;
 import com.afrotransact.orders.port.DeliveryQuoteRepository;
 import com.afrotransact.orders.port.DeliveryQuoteRepository.QuoteEvent;
@@ -81,7 +81,7 @@ class DeliveryQuoteDeskServiceImpl implements DeliveryQuoteDeskService {
 
     @Override
     @Transactional(readOnly = true)
-    public QuoteCaseView.Page queue(String queue, String assigneeId, boolean unassigned, boolean overdue,
+    public QuoteCaseView.QuoteCasePage queue(String queue, String assigneeId, boolean unassigned, boolean overdue,
                                     boolean escalated, String text, int page, int size) {
         Actor actor = viewer();
         int p = Math.max(0, page);
@@ -95,11 +95,11 @@ class DeliveryQuoteDeskServiceImpl implements DeliveryQuoteDeskService {
                     .filter(c -> c.status().awaitingStaff() && due(c, settings).isBefore(now.plusMillis(1)))
                     .map(c -> caseView(c, actor, settings, now, false)).toList();
             int from = Math.min(all.size(), p * n);
-            return new QuoteCaseView.Page(all.subList(from, Math.min(all.size(), from + n)), p, n, all.size());
+            return new QuoteCaseView.QuoteCasePage(all.subList(from, Math.min(all.size(), from + n)), p, n, all.size());
         }
         Page<DeliveryQuote> found = quotes.search(new Search(q, actor.subject(), blank(assigneeId), unassigned,
                 escalated, text, p * n, n));
-        return new QuoteCaseView.Page(found.items().stream().map(c -> caseView(c, actor, settings, now, false))
+        return new QuoteCaseView.QuoteCasePage(found.items().stream().map(c -> caseView(c, actor, settings, now, false))
                 .toList(), p, n, found.total());
     }
 
@@ -381,7 +381,7 @@ class DeliveryQuoteDeskServiceImpl implements DeliveryQuoteDeskService {
 
     private QuoteEvents.Lifecycle lifecycle(DeliveryQuote q, Instant now) {
         return new QuoteEvents.Lifecycle(q.id(), q.reference(), q.customerId(), q.snapshot().place().summary(),
-                q.snapshot().lines().stream().mapToInt(Line::quantity).sum(), now);
+                q.snapshot().lines().stream().mapToInt(QuoteLine::quantity).sum(), now);
     }
 
     private void record(DeliveryQuote q, QuoteAction action, QuoteStatus from, String actorId, String actorName,
@@ -392,7 +392,7 @@ class DeliveryQuoteDeskServiceImpl implements DeliveryQuoteDeskService {
     }
 
     /** The people a level goes to: holders of its role plus the named people. */
-    private List<StaffPerson> resolveTargets(Target target) {
+    private List<StaffPerson> resolveTargets(QuoteTarget target) {
         Map<String, StaffPerson> out = new LinkedHashMap<>();
         if (target.roleKey() != null) {
             safe(() -> directory.withRole(target.roleKey())).orElse(List.of()).forEach(p -> out.put(p.id(), p));
@@ -421,7 +421,7 @@ class DeliveryQuoteDeskServiceImpl implements DeliveryQuoteDeskService {
         long waited = waiting ? Math.max(0, Duration.between(q.stageEnteredAt(), now).getSeconds()) : 0;
         String holder = !waiting ? null : q.assigned() ? "with " + q.holder().assigneeName() : "any customer care agent";
         boolean decide = waiting && agree && (mine || !q.assigned() || canManage(actor, q));
-        QuoteCaseView.Workflow w = new QuoteCaseView.Workflow(waiting ? "QUOTE" : null, holder,
+        QuoteCaseView.QuoteWorkflowView w = new QuoteCaseView.QuoteWorkflowView(waiting ? "QUOTE" : null, holder,
                 q.holder().assigneeId(), q.holder().assigneeName(), q.holder().assignedAt(),
                 q.holder().assignedByName(), waiting ? q.stageEnteredAt() : null, waited, sla, due,
                 waiting ? q.escalation().level() : 0, q.escalation().at(), q.escalation().reason(),
@@ -429,8 +429,8 @@ class DeliveryQuoteDeskServiceImpl implements DeliveryQuoteDeskService {
                 waiting && q.assigned() && (mine || manage),
                 waiting && q.escalation().level() < 2 && (mine || actor.can(OrdersPermissions.QUOTES_ASSIGN)),
                 decide);
-        List<QuoteCaseView.Entry> entries = timeline ? quotes.events(q.id()).stream()
-                .map(e -> new QuoteCaseView.Entry(e.action().name(), e.actorName() == null ? UNKNOWN : e.actorName(),
+        List<QuoteCaseView.QuoteTimelineEntry> entries = timeline ? quotes.events(q.id()).stream()
+                .map(e -> new QuoteCaseView.QuoteTimelineEntry(e.action().name(), e.actorName() == null ? UNKNOWN : e.actorName(),
                         e.note(), e.amountMinor(), e.from() == null ? null : e.from().name(), e.to().name(), e.at()))
                 .toList() : List.of();
         Answer a = q.answer();
@@ -438,7 +438,7 @@ class DeliveryQuoteDeskServiceImpl implements DeliveryQuoteDeskService {
         QuoteStatus shown = q.status();
         return new QuoteCaseView(q.id(), q.reference(), shown.name(), shown.label(), q.snapshot().customerName(),
                 q.snapshot().place().summary(), q.snapshot().currency(), q.snapshot().packages(),
-                q.snapshot().lines(), q.snapshot().lines().stream().mapToInt(Line::quantity).sum(),
+                q.snapshot().lines(), q.snapshot().lines().stream().mapToInt(QuoteLine::quantity).sum(),
                 q.snapshot().contact().name(), q.snapshot().note(), a == null ? null : a.amountMinor(),
                 a == null ? null : a.reason(), a == null ? null : a.byName(), a == null ? null : a.at(),
                 a == null ? null : a.expiresAt(), d == null ? null : d.reason(), d == null ? null : d.byName(),

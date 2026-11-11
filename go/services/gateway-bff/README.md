@@ -162,6 +162,14 @@ shipments carry no pickup location id and routed pickups are not listed; orders'
 delivery-fee total (the BFF falls back to the snapshot); payments' payout balance has no delivery-fee total; catalog
 has no fulfilment field (listings stay `SELLER` until the offer is changed).
 
+## Delivery quotes (listing rules D20)
+
+Shopper: `POST /v1/me/delivery-quotes`, `GET /v1/me/delivery-quotes[/{id}]` relay to orders with the shopper's token (signed-in only,
+validated here, per-address rate limit; orders also limits per shopper). Checkout's `deliverySelections[].quoteId` is relayed; a quote
+orders refuses (changed, expired, used, not ready, not found) is one 422 `DELIVERY_QUOTE_VOID` with `extra.reason` and the plain
+message. Staff: resources `delivery-quotes` (queue tabs, sheet, actions claim, assign, release, escalate, agree, decline) and
+`delivery-quote-settings` under the derived module `deliveryQuotes` (`staff_resources_quotes.go`), names not ids.
+
 ## Notification templates in the staff console (S268)
 
 Contract: `contracts/openapi/gateway-bff-staff.yaml`, tag Notifications. The `notifications` module is derived from

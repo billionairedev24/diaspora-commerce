@@ -15,7 +15,7 @@ public interface DeliveryQuoteDeskService {
      * The queue. {@code queue}: MY, UNASSIGNED, WAITING (with the customer), CLOSED or ALL. Filters: {@code overdue},
      * {@code unassigned}, {@code escalated}, {@code assigneeId}, free text (reference, assignee, place).
      */
-    QuoteCaseView.Page queue(String queue, String assigneeId, boolean unassigned, boolean overdue, boolean escalated,
+    QuoteCaseView.QuoteCasePage queue(String queue, String assigneeId, boolean unassigned, boolean overdue, boolean escalated,
                              String text, int page, int size);
 
     QuoteCaseView detail(String id);

@@ -17,7 +17,7 @@ import java.util.Locale;
  * @param shipToKey hash of the normalised address; a quote is void for any other address
  * @param customerName the name on the address, so staff address the shopper by name
  */
-public record QuoteSnapshot(String cartHash, String shipToKey, String currency, List<Pack> packages, List<Line> lines,
+public record QuoteSnapshot(String cartHash, String shipToKey, String currency, List<QuotePack> packages, List<QuoteLine> lines,
                             Place place, String customerName, QuoteContact contact, String note) {
 
     public QuoteSnapshot {
@@ -26,11 +26,11 @@ public record QuoteSnapshot(String cartHash, String shipToKey, String currency, 
     }
 
     /** One package of the cart: a seller and how it is fulfilled. */
-    public record Pack(String packageId, String sellerName, String fulfilment, int itemCount) {
+    public record QuotePack(String packageId, String sellerName, String fulfilment, int itemCount) {
     }
 
     /** One cart line. */
-    public record Line(String variantAtin, String title, String packageId, int quantity, long unitPriceMinor) {
+    public record QuoteLine(String variantAtin, String title, String packageId, int quantity, long unitPriceMinor) {
     }
 
     /** Where the delivery goes, as far as staff need. */

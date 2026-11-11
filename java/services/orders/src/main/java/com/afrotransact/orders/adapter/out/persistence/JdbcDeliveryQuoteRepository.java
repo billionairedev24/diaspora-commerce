@@ -20,8 +20,8 @@ import com.afrotransact.orders.domain.DeliveryQuote.Holder;
 import com.afrotransact.orders.domain.QuoteAction;
 import com.afrotransact.orders.domain.QuoteContact;
 import com.afrotransact.orders.domain.QuoteSnapshot;
-import com.afrotransact.orders.domain.QuoteSnapshot.Line;
-import com.afrotransact.orders.domain.QuoteSnapshot.Pack;
+import com.afrotransact.orders.domain.QuoteSnapshot.QuoteLine;
+import com.afrotransact.orders.domain.QuoteSnapshot.QuotePack;
 import com.afrotransact.orders.domain.QuoteSnapshot.Place;
 import com.afrotransact.orders.domain.QuoteStatus;
 import com.afrotransact.orders.port.DeliveryQuoteRepository;
@@ -286,8 +286,8 @@ class JdbcDeliveryQuoteRepository implements DeliveryQuoteRepository {
 
     private DeliveryQuote map(ResultSet rs, int n) throws SQLException {
         ShipToDoc to = json.read(rs.getString("ship_to"), ShipToDoc.class);
-        List<Pack> packs = json.read(rs.getString("packages"), new TypeReference<List<Pack>>() { });
-        List<Line> lines = json.read(rs.getString("lines"), new TypeReference<List<Line>>() { });
+        List<QuotePack> packs = json.read(rs.getString("packages"), new TypeReference<List<QuotePack>>() { });
+        List<QuoteLine> lines = json.read(rs.getString("lines"), new TypeReference<List<QuoteLine>>() { });
         QuoteSnapshot snapshot = new QuoteSnapshot(rs.getString("cart_hash"), rs.getString("ship_to_key"),
                 rs.getString("currency"), packs, lines, to.place(), to.customerName(),
                 QuoteContact.valueOf(rs.getString("contact_preference")), rs.getString("note"));

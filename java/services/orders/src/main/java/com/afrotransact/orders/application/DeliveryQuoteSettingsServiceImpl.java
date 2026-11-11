@@ -9,7 +9,7 @@ import java.util.Map;
 
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.QuoteSettings;
-import com.afrotransact.orders.domain.QuoteSettings.Target;
+import com.afrotransact.orders.domain.QuoteSettings.QuoteTarget;
 import com.afrotransact.orders.port.DeliveryQuoteSettingsRepository;
 import com.afrotransact.orders.port.StaffDirectory;
 import com.afrotransact.orders.port.StaffDirectory.StaffPerson;
@@ -68,7 +68,7 @@ class DeliveryQuoteSettingsServiceImpl implements DeliveryQuoteSettingsService {
         return describe(repo.load());
     }
 
-    private void checkTarget(String field, Target target, Map<String, String> problems) {
+    private void checkTarget(String field, QuoteTarget target, Map<String, String> problems) {
         if (target.roleKey() != null && directory.withRole(target.roleKey()).isEmpty()) {
             problems.put(field, "Nobody active holds the role " + target.roleKey());
         }
@@ -84,7 +84,7 @@ class DeliveryQuoteSettingsServiceImpl implements DeliveryQuoteSettingsService {
         return new Current(s, people(s.level1()), people(s.level2()), repo.changes(AUDIT_ROWS));
     }
 
-    private List<String> people(Target t) {
+    private List<String> people(QuoteTarget t) {
         List<String> names = new ArrayList<>();
         try {
             if (!t.userIds().isEmpty()) {

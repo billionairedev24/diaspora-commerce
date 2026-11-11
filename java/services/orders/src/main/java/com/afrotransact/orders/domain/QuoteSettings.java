@@ -22,14 +22,14 @@ import java.util.Map;
  * @param duplicateWindowMinutes a repeat of the same cart and address inside this window returns the same request
  */
 public record QuoteSettings(int slaBusinessDays, int dueSoonPercent, int unassignedAfterHours, int level2AfterHours,
-                            AutoAssign autoAssign, String roundRobinCursor, Target level1, Target level2,
+                            AutoAssign autoAssign, String roundRobinCursor, QuoteTarget level1, QuoteTarget level2,
                             long minAmountMinor, long maxAmountMinor, int validityHours, int requestsPerHour,
                             int duplicateWindowMinutes, String updatedByName, Instant updatedAt) {
 
     public QuoteSettings {
         autoAssign = autoAssign == null ? AutoAssign.NONE : autoAssign;
-        level1 = level1 == null ? Target.NOBODY : level1;
-        level2 = level2 == null ? Target.NOBODY : level2;
+        level1 = level1 == null ? QuoteTarget.NOBODY : level1;
+        level2 = level2 == null ? QuoteTarget.NOBODY : level2;
     }
 
     /** How a new request is handed out. */
@@ -40,11 +40,11 @@ public record QuoteSettings(int slaBusinessDays, int dueSoonPercent, int unassig
     }
 
     /** One escalation level: everyone holding a role plus named people. */
-    public record Target(String roleKey, List<String> userIds) {
+    public record QuoteTarget(String roleKey, List<String> userIds) {
 
-        public static final Target NOBODY = new Target(null, List.of());
+        public static final QuoteTarget NOBODY = new QuoteTarget(null, List.of());
 
-        public Target {
+        public QuoteTarget {
             roleKey = roleKey == null || roleKey.isBlank() ? null : roleKey.trim();
             userIds = userIds == null ? List.of() : List.copyOf(userIds);
         }
@@ -54,7 +54,7 @@ public record QuoteSettings(int slaBusinessDays, int dueSoonPercent, int unassig
         }
     }
 
-    public Target at(int level) {
+    public QuoteTarget at(int level) {
         return level == 1 ? level1 : level2;
     }
 

@@ -10,7 +10,7 @@ import java.util.UUID;
 
 import com.afrotransact.orders.domain.QuoteSettings;
 import com.afrotransact.orders.domain.QuoteSettings.AutoAssign;
-import com.afrotransact.orders.domain.QuoteSettings.Target;
+import com.afrotransact.orders.domain.QuoteSettings.QuoteTarget;
 import com.afrotransact.orders.port.DeliveryQuoteSettingsRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -92,8 +92,8 @@ class JdbcDeliveryQuoteSettingsRepository implements DeliveryQuoteSettingsReposi
         return new QuoteSettings(rs.getInt("sla_business_days"), rs.getInt("due_soon_percent"),
                 rs.getInt("unassigned_after_hours"), rs.getInt("level2_after_hours"),
                 AutoAssign.valueOf(rs.getString("auto_assign")), rs.getString("round_robin_cursor"),
-                new Target(rs.getString("level1_role"), array(rs, "level1_user_ids")),
-                new Target(rs.getString("level2_role"), array(rs, "level2_user_ids")), rs.getLong("min_amount_minor"),
+                new QuoteTarget(rs.getString("level1_role"), array(rs, "level1_user_ids")),
+                new QuoteTarget(rs.getString("level2_role"), array(rs, "level2_user_ids")), rs.getLong("min_amount_minor"),
                 rs.getLong("max_amount_minor"), rs.getInt("validity_hours"), rs.getInt("requests_per_hour"),
                 rs.getInt("duplicate_window_minutes"), rs.getString("updated_by_name"), Sql.instant(rs, "updated_at"));
     }

@@ -34,6 +34,13 @@ tags:
   description: Seller Center dashboard figures (orders:read)
 - name: Pre-orders
   description: 'Community pre-orders (S272): late adds on a customer''s behalf, missed deliveries'
+- name: Delivery quotes (staff)
+  description: 'The customer care queue for delivery quote requests: who has each case, SLA and escalation, agree an amount
+    or decline, with a reason. View: delivery-quotes:view; claim, agree, decline: delivery-quotes:agree; assign, take over
+    and settings: delivery-quotes:assign.'
+- name: Delivery quotes (shopper)
+  description: Ask for a delivery quote when the address is outside the delivery zones (listing rules D20). Signed-in shoppers
+    only; each shopper sees only their own requests.
 paths:
   /v1/admin/orders:
     get:
@@ -782,6 +789,274 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ShipmentActionResult'
+  /v1/delivery-quotes:
+    get:
+      tags:
+      - Delivery quotes (shopper)
+      summary: My delivery quote requests, newest first
+      operationId: mine
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeliveryQuoteView'
+    post:
+      tags:
+      - Delivery quotes (shopper)
+      summary: Ask for a delivery quote for my cart and a saved address
+      description: 'Snapshots the cart lines, packages and the address (city, state, ZIP kept; the street is only hashed) and
+        opens a case for customer care. Idempotent: the same cart and address returns the same request while it is open or inside
+        the duplicate window. Limited per shopper per hour (429 orders.quote-rate-limited).'
+      operationId: request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryQuoteRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryQuoteView'
+  /v1/delivery-quotes/{id}:
+    get:
+      tags:
+      - Delivery quotes (shopper)
+      summary: One of my delivery quote requests
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryQuoteView'
+  /v1/staff/delivery-quote-settings:
+    get:
+      tags:
+      - Delivery quotes (staff)
+      summary: SLA, escalation, hand-out, amount bounds and validity, with the last changes
+      operationId: settings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryQuoteSettings'
+    put:
+      tags:
+      - Delivery quotes (staff)
+      summary: Change them (delivery-quotes:assign; reason required; audited)
+      operationId: updateSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryQuoteSettingsChange'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryQuoteSettings'
+  /v1/staff/delivery-quotes:
+    get:
+      tags:
+      - Delivery quotes (staff)
+      summary: 'The queue: my queue, unassigned, waiting on the customer, closed, all'
+      description: queue = MY | UNASSIGNED | WAITING | CLOSED | ALL; chips overdue, unassigned, escalated; q searches the reference,
+        the assignee's name and the place.
+      operationId: queue
+      parameters:
+      - name: queue
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ALL
+      - name: assignee
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: unassigned
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: escalated
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/QuoteCasePage'
+  /v1/staff/delivery-quotes/{id}:
+    get:
+      tags:
+      - Delivery quotes (staff)
+      summary: One case with its timeline
+      operationId: detail
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/QuoteCaseView'
+  /v1/staff/delivery-quotes/{id}/agree:
+    post:
+      tags:
+      - Delivery quotes (staff)
+      summary: Agree an amount (reason required, within the settings' bounds)
+      description: The quote is then ready for the shopper for the configured validity (default 48 hours). Repeating the same
+        call by the same person changes nothing.
+      operationId: agree
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteAgreeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/QuoteCaseView'
+  /v1/staff/delivery-quotes/{id}/assignment:
+    post:
+      tags:
+      - Delivery quotes (staff)
+      summary: Claim, assign, release or escalate a case
+      operationId: assignment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteAssignmentRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/QuoteCaseView'
+  /v1/staff/delivery-quotes/{id}/assignment/candidates:
+    get:
+      tags:
+      - Delivery quotes (staff)
+      summary: People the case can be assigned to now
+      operationId: candidates
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuoteStaffPerson'
+  /v1/staff/delivery-quotes/{id}/decline:
+    post:
+      tags:
+      - Delivery quotes (staff)
+      summary: Decline to quote (reason required)
+      operationId: decline
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteDeclineRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/QuoteCaseView'
+
 components:
   schemas:
     PayLinkToken:
@@ -1712,6 +1987,13 @@ components:
             else is refused with 422 orders.invalid-selection. A pickup package has no shipping charge.'
         preferences:
           $ref: '#/components/schemas/DeliveryPreferences'
+        quoteId:
+          type: string
+          description: An agreed delivery quote (POST /v1/delivery-quotes) to use as this package's shipping charge. It must be the
+            shopper's own, for this exact cart and address, ready and not expired, and is used once. Not for pickup or pre-order packages.
+            422 orders.quote-changed, orders.quote-expired, orders.quote-used, orders.quote-not-ready or orders.quote-not-found otherwise.
+          maxLength: 64
+          minLength: 0
       required:
       - packageId
     ProblemDetail:
@@ -2002,6 +2284,456 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Shipment'
+    DeliveryQuoteLine:
+      type: object
+      properties:
+        variantAtin:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          format: int32
+      required:
+      - variantAtin
+    DeliveryQuoteRequest:
+      type: object
+      properties:
+        addressId:
+          type: string
+          maxLength: 100
+          minLength: 0
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryQuoteLine'
+          maxItems: 100
+          minItems: 0
+        contact:
+          type: string
+          enum:
+          - EMAIL
+          - PHONE
+          - SMS
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - addressId
+    DeliveryQuoteSettings:
+      type: object
+      properties:
+        slaBusinessDays:
+          type: integer
+          format: int32
+        dueSoonPercent:
+          type: integer
+          format: int32
+        unassignedAfterHours:
+          type: integer
+          format: int32
+        level2AfterHours:
+          type: integer
+          format: int32
+        autoAssign:
+          type: string
+          enum:
+          - NONE
+          - ROUND_ROBIN
+          - LEAST_LOADED
+        level1:
+          $ref: '#/components/schemas/QuoteTarget'
+        level2:
+          $ref: '#/components/schemas/QuoteTarget'
+        level1People:
+          type: array
+          items:
+            type: string
+        level2People:
+          type: array
+          items:
+            type: string
+        minAmountMinor:
+          type: integer
+          format: int64
+        maxAmountMinor:
+          type: integer
+          format: int64
+        validityHours:
+          type: integer
+          format: int32
+        requestsPerHour:
+          type: integer
+          format: int32
+        duplicateWindowMinutes:
+          type: integer
+          format: int32
+        updatedByName:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryQuoteSettingsAudit'
+    DeliveryQuoteSettingsAudit:
+      type: object
+      properties:
+        actorName:
+          type: string
+        reason:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+    DeliveryQuoteSettingsChange:
+      type: object
+      properties:
+        slaBusinessDays:
+          type: integer
+          format: int32
+        dueSoonPercent:
+          type: integer
+          format: int32
+        unassignedAfterHours:
+          type: integer
+          format: int32
+        level2AfterHours:
+          type: integer
+          format: int32
+        autoAssign:
+          type: string
+          enum:
+          - NONE
+          - ROUND_ROBIN
+          - LEAST_LOADED
+        level1:
+          $ref: '#/components/schemas/QuoteTarget'
+        level2:
+          $ref: '#/components/schemas/QuoteTarget'
+        minAmountMinor:
+          type: integer
+          format: int64
+        maxAmountMinor:
+          type: integer
+          format: int64
+        validityHours:
+          type: integer
+          format: int32
+        requestsPerHour:
+          type: integer
+          format: int32
+        duplicateWindowMinutes:
+          type: integer
+          format: int32
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - reason
+    DeliveryQuoteView:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        status:
+          type: string
+        statusLabel:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        usable:
+          type: boolean
+        place:
+          type: string
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotePack'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteLine'
+        contact:
+          type: string
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+    QuoteAgreeRequest:
+      type: object
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - reason
+    QuoteAssignmentRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - CLAIM
+          - ASSIGN
+          - RELEASE
+          - ESCALATE
+          minLength: 1
+        assigneeId:
+          type: string
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          description: The staff member's display name, recorded on the timeline (display only)
+          maxLength: 200
+          minLength: 0
+      required:
+      - action
+    QuoteCasePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteCaseView'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    QuoteCaseView:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        status:
+          type: string
+        statusLabel:
+          type: string
+        customerName:
+          type: string
+        place:
+          type: string
+        currency:
+          type: string
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotePack'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteLine'
+        itemCount:
+          type: integer
+          format: int32
+        contact:
+          type: string
+        note:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        agreedReason:
+          type: string
+        agreedByName:
+          type: string
+        agreedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        declinedReason:
+          type: string
+        declinedByName:
+          type: string
+        declinedAt:
+          type: string
+          format: date-time
+        usedOnOrder:
+          type: boolean
+        usedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        workflow:
+          $ref: '#/components/schemas/QuoteWorkflowView'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteTimelineEntry'
+    QuoteDeclineRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - reason
+    QuoteLine:
+      type: object
+      properties:
+        variantAtin:
+          type: string
+        title:
+          type: string
+        packageId:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        unitPriceMinor:
+          type: integer
+          format: int64
+    QuotePack:
+      type: object
+      properties:
+        packageId:
+          type: string
+        sellerName:
+          type: string
+        fulfilment:
+          type: string
+        itemCount:
+          type: integer
+          format: int32
+    QuoteStaffPerson:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    QuoteTarget:
+      type: object
+      properties:
+        roleKey:
+          type: string
+        userIds:
+          type: array
+          items:
+            type: string
+    QuoteTimelineEntry:
+      type: object
+      properties:
+        action:
+          type: string
+        actorName:
+          type: string
+        note:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        at:
+          type: string
+          format: date-time
+    QuoteWorkflowView:
+      type: object
+      properties:
+        stage:
+          type: string
+        holder:
+          type: string
+        assigneeId:
+          type: string
+        assigneeName:
+          type: string
+        assignedAt:
+          type: string
+          format: date-time
+        assignedByName:
+          type: string
+        stageEnteredAt:
+          type: string
+          format: date-time
+        waitingSeconds:
+          type: integer
+          format: int64
+        slaState:
+          type: string
+        slaDueAt:
+          type: string
+          format: date-time
+        escalationLevel:
+          type: integer
+          format: int32
+        escalatedAt:
+          type: string
+          format: date-time
+        escalationReason:
+          type: string
+        escalatedTo:
+          type: array
+          items:
+            type: string
+        mine:
+          type: boolean
+        canClaim:
+          type: boolean
+        canAssign:
+          type: boolean
+        canRelease:
+          type: boolean
+        canEscalate:
+          type: boolean
+        canDecide:
+          type: boolean
+
   securitySchemes:
     bearer:
       type: http

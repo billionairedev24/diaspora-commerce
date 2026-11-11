@@ -11,7 +11,7 @@ import com.afrotransact.orders.application.QuoteCaseView;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.QuoteSettings;
 import com.afrotransact.orders.domain.QuoteSettings.AutoAssign;
-import com.afrotransact.orders.domain.QuoteSettings.Target;
+import com.afrotransact.orders.domain.QuoteSettings.QuoteTarget;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,7 +45,7 @@ class DeliveryQuoteStaffController {
             description = "queue = MY | UNASSIGNED | WAITING | CLOSED | ALL; chips overdue, unassigned, escalated; "
                     + "q searches the reference, the assignee's name and the place.")
     @GetMapping("/v1/staff/delivery-quotes")
-    QuoteCaseView.Page queue(@RequestParam(defaultValue = "ALL") String queue,
+    QuoteCaseView.QuoteCasePage queue(@RequestParam(defaultValue = "ALL") String queue,
                              @RequestParam(required = false) String assignee,
                              @RequestParam(defaultValue = "false") boolean unassigned,
                              @RequestParam(defaultValue = "false") boolean overdue,
@@ -134,14 +134,14 @@ class DeliveryQuoteStaffController {
 
     @Schema(name = "DeliveryQuoteSettingsChange")
     record SettingsRequest(int slaBusinessDays, int dueSoonPercent, int unassignedAfterHours, int level2AfterHours,
-                           AutoAssign autoAssign, Target level1, Target level2, long minAmountMinor,
+                           AutoAssign autoAssign, QuoteTarget level1, QuoteTarget level2, long minAmountMinor,
                            long maxAmountMinor, int validityHours, int requestsPerHour, int duplicateWindowMinutes,
                            @NotBlank @Size(max = 500) String reason, @Size(max = 200) String actorName) {
     }
 
     @Schema(name = "DeliveryQuoteSettings")
     record SettingsResponse(int slaBusinessDays, int dueSoonPercent, int unassignedAfterHours, int level2AfterHours,
-                            AutoAssign autoAssign, Target level1, Target level2, List<String> level1People,
+                            AutoAssign autoAssign, QuoteTarget level1, QuoteTarget level2, List<String> level1People,
                             List<String> level2People, long minAmountMinor, long maxAmountMinor, int validityHours,
                             int requestsPerHour, int duplicateWindowMinutes, String updatedByName, Instant updatedAt,
                             List<Change> changes) {

@@ -19,7 +19,7 @@ import com.afrotransact.orders.domain.QuoteStatus;
  */
 public record DeliveryQuoteView(String id, String reference, String status, String statusLabel, Long amountMinor,
                                 String currency, Instant expiresAt, boolean usable, String place,
-                                List<QuoteSnapshot.Pack> packages, List<QuoteSnapshot.Line> lines, String contact,
+                                List<QuoteSnapshot.QuotePack> packages, List<QuoteSnapshot.QuoteLine> lines, String contact,
                                 String note, Instant createdAt, Instant updatedAt, String message) {
 
     static DeliveryQuoteView of(DeliveryQuote q, Instant now) {

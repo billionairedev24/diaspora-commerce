@@ -19,8 +19,8 @@ import com.afrotransact.orders.domain.QuoteAction;
 import com.afrotransact.orders.domain.QuoteContact;
 import com.afrotransact.orders.domain.QuoteSettings;
 import com.afrotransact.orders.domain.QuoteSnapshot;
-import com.afrotransact.orders.domain.QuoteSnapshot.Line;
-import com.afrotransact.orders.domain.QuoteSnapshot.Pack;
+import com.afrotransact.orders.domain.QuoteSnapshot.QuoteLine;
+import com.afrotransact.orders.domain.QuoteSnapshot.QuotePack;
 import com.afrotransact.orders.domain.QuoteSnapshot.Place;
 import com.afrotransact.orders.domain.QuoteStatus;
 import com.afrotransact.orders.domain.ShipTo;
@@ -151,7 +151,7 @@ class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                         null, QuoteStatus.REQUESTED, customerId, what.customerName(), what.note(), null, now));
                 events.publish(QuoteEvents.REQUESTED, OrdersEvents.AGGREGATE, fresh.id(),
                         new QuoteEvents.Lifecycle(fresh.id(), fresh.reference(), customerId, what.place().summary(),
-                                what.lines().stream().mapToInt(Line::quantity).sum(), now));
+                                what.lines().stream().mapToInt(QuoteLine::quantity).sum(), now));
                 desk.handOut(fresh.id());
                 return quotes.findById(fresh.id()).orElse(fresh);
             }
@@ -176,15 +176,15 @@ class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
     private static QuoteSnapshot snapshot(List<CartClient.Item> items, ShipTo to, String currency,
                                           QuoteContact contact, String note) {
         Map<String, int[]> counts = new LinkedHashMap<>();
-        Map<String, Pack> packs = new LinkedHashMap<>();
-        List<Line> lines = items.stream().map(i -> {
+        Map<String, QuotePack> packs = new LinkedHashMap<>();
+        List<QuoteLine> lines = items.stream().map(i -> {
             String pack = packageId(i);
             counts.computeIfAbsent(pack, k -> new int[1])[0] += i.quantity();
-            packs.putIfAbsent(pack, new Pack(pack, i.sellerName(), fulfilment(i), 0));
-            return new Line(i.variantAtin(), i.title(), pack, i.quantity(), i.priceMinor());
+            packs.putIfAbsent(pack, new QuotePack(pack, i.sellerName(), fulfilment(i), 0));
+            return new QuoteLine(i.variantAtin(), i.title(), pack, i.quantity(), i.priceMinor());
         }).toList();
-        List<Pack> packages = packs.values().stream()
-                .map(p -> new Pack(p.packageId(), p.sellerName(), p.fulfilment(), counts.get(p.packageId())[0]))
+        List<QuotePack> packages = packs.values().stream()
+                .map(p -> new QuotePack(p.packageId(), p.sellerName(), p.fulfilment(), counts.get(p.packageId())[0]))
                 .toList();
         return new QuoteSnapshot(QuoteHashes.cart(items), QuoteSnapshot.hashAddress(to), currency, packages, lines,
                 new Place(to.city(), to.state(), to.postalCode(), to.country() == null ? "US" : to.country()),

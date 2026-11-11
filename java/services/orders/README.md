@@ -132,6 +132,24 @@ backoff, parked as FAILED after 12 attempts):
 - **Cancel**: captured ⇒ line refund `POST /v1/payments/{id}/refunds`; nothing left ⇒ `POST /v1/payments/{id}/cancel`;
   no AfroTransact shipment left and nothing shipped ⇒ `POST /v1/reservations/{orderId}/release`.
 
+## Delivery quotes (listing rules D20, `docs/runbooks/delivery-quotes.md`, ADR 0007)
+
+An address outside the delivery zones asks for a negotiated delivery price instead of dead-ending. orders owns the case
+(`delivery_quote`, `delivery_quote_event` timeline and audit, `delivery_quote_settings` and its audit):
+
+- Shopper: `POST/GET /v1/delivery-quotes`, `GET /v1/delivery-quotes/{id}` (own requests only; idempotent per cart and address,
+  rate limited per hour).
+- Staff (`delivery-quotes:view|agree|assign`): `GET /v1/staff/delivery-quotes` (queues MY, UNASSIGNED, WAITING, CLOSED, ALL; chips
+  overdue, unassigned, escalated), `/{id}`, `/{id}/assignment` (CLAIM, ASSIGN, RELEASE, ESCALATE), `/{id}/assignment/candidates`,
+  `/{id}/agree` (amount, reason required), `/{id}/decline` (reason required), `GET/PUT /v1/staff/delivery-quote-settings`.
+- Checkout: `deliverySelections[].quoteId`. `DeliveryQuoteRedemptionService.redeem` validates (shopper, cart hash, ship-to hash,
+  ready, not expired, not used) and uses the quote in one SQL statement when the checkout request arrives; the amount becomes the
+  first delivered shipment's shipping (once) with `delivery_fee_rule.source = DELIVERY_QUOTE`; `OrderPlacementService.abandon`
+  restores the quote when the order does not complete. Shipping tax follows the existing per-line allocation.
+- Jobs: `DeliveryQuoteJobs` escalates late requests (5 min) and expires unused quotes (1 min); safe on every replica (row locks).
+- Events on `at.order.events`: `orders.delivery-quote.requested|ready|declined|expired|assigned|escalated`.
+- Staff roster from identity (`GET /v1/internal/staff`, scope `users:read`).
+
 ## Delivery preferences, handover codes, courier events (S061)
 
 Checkout takes per package: option (`carrier | express | afrotransact_delivery | pickup`), pickup point, preferences

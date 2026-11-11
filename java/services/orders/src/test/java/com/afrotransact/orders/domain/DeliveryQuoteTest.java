@@ -123,7 +123,7 @@ class DeliveryQuoteTest {
     void settingsAreValidatedFieldByField() {
         QuoteSettings ok = new QuoteSettings(1, 75, 4, 24, null, null, null, null, 500, 50000, 48, 5, 15, null, null);
         assertThat(ok.problems()).isEmpty();
-        QuoteSettings bad = new QuoteSettings(0, 100, 0, 721, null, null, null, new QuoteSettings.Target("r", null),
+        QuoteSettings bad = new QuoteSettings(0, 100, 0, 721, null, null, null, new QuoteSettings.QuoteTarget("r", null),
                 600, 500, 0, 0, 0, null, null);
         assertThat(bad.problems()).containsKeys("slaBusinessDays", "dueSoonPercent", "unassignedAfterHours",
                 "level2AfterHours", "maxAmountMinor", "validityHours", "requestsPerHour", "duplicateWindowMinutes",

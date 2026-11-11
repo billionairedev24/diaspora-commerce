@@ -11,18 +11,18 @@ import com.afrotransact.orders.domain.QuoteSnapshot;
  * the rules.
  */
 public record QuoteCaseView(String id, String reference, String status, String statusLabel, String customerName,
-                            String place, String currency, List<QuoteSnapshot.Pack> packages,
-                            List<QuoteSnapshot.Line> lines, int itemCount, String contact, String note,
+                            String place, String currency, List<QuoteSnapshot.QuotePack> packages,
+                            List<QuoteSnapshot.QuoteLine> lines, int itemCount, String contact, String note,
                             Long amountMinor, String agreedReason, String agreedByName, Instant agreedAt,
                             Instant expiresAt, String declinedReason, String declinedByName, Instant declinedAt,
-                            boolean usedOnOrder, Instant usedAt, Instant createdAt, Workflow workflow,
-                            List<Entry> timeline) {
+                            boolean usedOnOrder, Instant usedAt, Instant createdAt, QuoteWorkflowView workflow,
+                            List<QuoteTimelineEntry> timeline) {
 
     /**
      * Who has the case and how long it has waited. {@code stage} is QUOTE while it waits for staff, else null (with
      * the shopper, or closed).
      */
-    public record Workflow(String stage, String holder, String assigneeId, String assigneeName, Instant assignedAt,
+    public record QuoteWorkflowView(String stage, String holder, String assigneeId, String assigneeName, Instant assignedAt,
                            String assignedByName, Instant stageEnteredAt, long waitingSeconds, String slaState,
                            Instant slaDueAt, int escalationLevel, Instant escalatedAt, String escalationReason,
                            List<String> escalatedTo, boolean mine, boolean canClaim, boolean canAssign,
@@ -30,11 +30,11 @@ public record QuoteCaseView(String id, String reference, String status, String s
     }
 
     /** One timeline row. */
-    public record Entry(String action, String actorName, String note, Long amountMinor, String fromStatus,
+    public record QuoteTimelineEntry(String action, String actorName, String note, Long amountMinor, String fromStatus,
                         String toStatus, Instant at) {
     }
 
     /** One page of the staff queue. */
-    public record Page(List<QuoteCaseView> items, int page, int size, long total) {
+    public record QuoteCasePage(List<QuoteCaseView> items, int page, int size, long total) {
     }
 }
