@@ -32,6 +32,9 @@ public final class SellerPermissions {
     /** Staff: manual credits, free days, waived invoices and trial overrides for an organisation (audited). */
     public static final String BILLING_ADJUST = "billing:adjust";
 
+    /** Staff: edit selling rules (scope rules, gated brands, required documents); every change has a reason and is audited. */
+    public static final String SELLING_RULES_MANAGE = "selling-rules:manage";
+
     private SellerPermissions() {
     }
 }

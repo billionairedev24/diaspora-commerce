@@ -19,6 +19,10 @@ final class Ids {
         return "app_" + random(20);
     }
 
+    static String sellingApplication() {
+        return "sap_" + random(20);
+    }
+
     private static String random(int length) {
         StringBuilder sb = new StringBuilder(length);
         for (int i = 0; i < length; i++) {
