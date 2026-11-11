@@ -2278,5 +2278,13 @@
   "st.catalog.taxStatus.BLOCKED_BUNDLE": "محظورة: الحزم",
   "st.catalog.taxStatus.REFINE_CODE": "تحتاج رمزًا مدققًا لكل منتج",
   "st.catalog.taxStatus.CONFLICT_OPEN": "معلّقة: قرار مفتوح",
-  "st.catalog.preview.tax": "عن المنتج (أسئلة ضريبية يديرها الملف الضريبي)"
+  "st.catalog.preview.tax": "عن المنتج (أسئلة ضريبية يديرها الملف الضريبي)",
+  "st.settings.appReview.label": "مراجعة الطلبات: المهل والتصعيد",
+  "st.settings.appReview.description": "المدة التي يمكن أن ينتظرها طلب بائع أو مزوّد في كل خطوة، ومن يُبلَّغ عند التأخر، وكيف تُوزَّع الحالات. يُحفظ كل تغيير مع سببه.",
+  "st.settings.appReview.intro": "تمر الطلبات بخطوتين: مراجع ثم معتمد مختلف. حدّد المدة المسموحة لكل خطوة، ومن يُبلَّغ عندما تتأخر الحالة أو لا يتولاها أحد (المستوى 1 ثم المستوى 2)، وهل تُوزَّع الحالات تلقائيًا.",
+  "st.sheet.technicalDetails": "تفاصيل تقنية",
+  "st.col.with": "لدى",
+  "st.col.waiting": "الانتظار",
+  "st.col.sla": "المهلة",
+  "st.col.escalation": "التصعيد"
 }

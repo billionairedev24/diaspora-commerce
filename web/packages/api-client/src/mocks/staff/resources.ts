@@ -18,6 +18,7 @@ import {
 } from '../../schemas/staff';
 import { MOCK_STOREFRONT_URL } from './content-pages';
 import { type MockRecord, type Scalar } from './db';
+import { APPLICATION_QUEUES, ASSIGNMENT_ACTIONS, inQueue, reviewSettingsDef, stageLine } from './application-flow';
 import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 import { MOCK_DRIVERS } from './lookups';
@@ -63,6 +64,10 @@ export interface MockResource {
   facets: ResourceFacet[];
   search?: string[];
   searchPlaceholder?: string;
+  /** Tabs that are not statuses (application queues): whether the record belongs to the one chosen, for the caller. */
+  queue?: (r: MockRecord, queue: string, me: string) => boolean;
+  /** A notice above the sheet's sections. */
+  banner?: (r: MockRecord) => { tone: RecordTone; title: string; text: string } | null;
   /** Default row order (records keep their seed order otherwise). */
   sort?: (a: MockRecord, b: MockRecord) => number;
   cursor?: boolean;
@@ -290,18 +295,22 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   applications: {
     title: 'Applications',
-    columns: [col('reference', 'Reference', 'mono', 13), col('displayName', 'Business', 'strong', 25), col('kind', 'Kind', 'text', 10), col('state', 'State', 'text', 8), col('planCode', 'Plan', 'text', 10), col('submittedAt', 'Submitted', 'date', 14), col('status', 'Status', 'status', 20)],
+    columns: [col('reference', 'Reference', 'mono', 12), col('displayName', 'Business', 'strong', 20), col('kind', 'Kind', 'text', 8), col('with', 'With', 'text', 14), col('waiting', 'Waiting', 'duration', 10), col('sla', 'SLA', 'text', 9), col('escalation', 'Escalation', 'text', 10), col('planCode', 'Plan', 'text', 8), col('submittedAt', 'Submitted', 'date', 11), col('status', 'Status', 'status', 16)],
     statusKey: 'status',
-    facets: facets('PENDING_REVIEW', 'FLAGGED', 'AWAITING_FINAL_APPROVAL', 'INFO_REQUESTED', 'APPROVED', 'REJECTED'),
+    facets: APPLICATION_QUEUES,
+    queue: inQueue,
+    banner: (r) => (r.fields.returnedByName && r.fields.stage === 'REVIEW' ? { tone: 'warn', title: 'Returned by approver', text: `Sent back by ${str(r.fields.returnedByName)}: ${str(r.fields.returnNote)}${num(r.fields.returnCount) > 1 ? ` (sent back ${num(r.fields.returnCount)} times)` : ''}` } : null),
     exportable: true,
     titleOf: (r) => str(r.fields.displayName),
-    subtitleOf: (r) => `${str(r.fields.reference)} · ${humanize(str(r.fields.kind))}`,
+    subtitleOf: (r) => `${str(r.fields.reference)} · ${humanize(str(r.fields.kind))} · ${stageLine(r)}`,
     ids: { reviewerId: 'Reviewer' },
     sections: [
+      ['Who has it', ['with', 'sla', 'escalation']],
       ['Business', ['displayName', 'legalName', 'kind', 'entityType', 'state', 'planCode', 'contactEmail']],
       ['Review', ['status', 'reviewStep', 'reviewerName', 'failedChecks', 'taxIdMasked', 'submittedAt']]
     ],
     actions: [
+      ...ASSIGNMENT_ACTIONS,
       { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewerName = ctx.actor; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
       { key: 'review-flag', label: 'Flag for senior review', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag for senior review', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.reviewerId = ctx.actorId; r.fields.reviewerName = ctx.actor; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
       { key: 'review-request-info', label: 'Return to applicant', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Return to the applicant', 'Return to applicant', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' }), field('note', 'Message to the applicant', 'textarea', true)]), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('INFO_REQUESTED', 'Returned to the applicant') },
@@ -1594,6 +1603,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     }
   },
   'exchange-rates': exchangeRatesDef,
+  'application-review-settings': reviewSettingsDef,
   'category-requests': categoryRequestsDef,
   // Identity & access (S291)
   ...IDENTITY_RESOURCES

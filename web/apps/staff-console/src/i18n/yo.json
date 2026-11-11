@@ -2278,5 +2278,13 @@
   "st.catalog.taxStatus.BLOCKED_BUNDLE": "A dá dúró: àkójọpọ̀",
   "st.catalog.taxStatus.REFINE_CODE": "Ó nílò kóòdù tó péye fún ọjà kọ̀ọ̀kan",
   "st.catalog.taxStatus.CONFLICT_OPEN": "Ó dúró: ìpinnu ṣì ṣí",
-  "st.catalog.preview.tax": "Nípa ọjà (ìbéèrè owó orí, àkọsílẹ̀ owó orí ló ń ṣàkóso)"
+  "st.catalog.preview.tax": "Nípa ọjà (ìbéèrè owó orí, àkọsílẹ̀ owó orí ló ń ṣàkóso)",
+  "st.settings.appReview.label": "Àyẹ̀wò ìbéèrè: àkókò àti ìgbéga ọ̀rọ̀",
+  "st.settings.appReview.description": "Ìgbà tí ìbéèrè olùtajà tàbí olùpèsè lè dúró ní ìpele kọ̀ọ̀kan, ẹni tí a máa sọ fún nígbà tí ó bá pẹ́, àti bí a ṣe ń pín àwọn ọ̀ràn. A ń pa gbogbo àyípadà mọ́ pẹ̀lú ìdí rẹ̀.",
+  "st.settings.appReview.intro": "Àwọn ìbéèrè ń gba ìpele méjì: olùyẹ̀wò, lẹ́yìn náà olùfọwọ́sí mìíràn. Ṣètò ìgbà tí ìpele kọ̀ọ̀kan lè gbà, ẹni tí a máa sọ fún nígbà tí ọ̀ràn bá pẹ́ tàbí tí ẹnikẹ́ni kò gbà á (ìpele 1, lẹ́yìn náà ìpele 2), àti bóyá a ń pín àwọn ọ̀ràn fúnra rẹ̀.",
+  "st.sheet.technicalDetails": "Àlàyé ìmọ̀-ẹ̀rọ",
+  "st.col.with": "Lọ́dọ̀",
+  "st.col.waiting": "Dídúró",
+  "st.col.sla": "Àkókò",
+  "st.col.escalation": "Ìgbéga"
 }

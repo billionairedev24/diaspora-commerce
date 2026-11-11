@@ -2278,5 +2278,13 @@
   "st.catalog.taxStatus.BLOCKED_BUNDLE": "Bloquée : lots",
   "st.catalog.taxStatus.REFINE_CODE": "Code à préciser par article",
   "st.catalog.taxStatus.CONFLICT_OPEN": "En attente : décision ouverte",
-  "st.catalog.preview.tax": "À propos de l'article (questions fiscales, gérées par le profil fiscal)"
+  "st.catalog.preview.tax": "À propos de l'article (questions fiscales, gérées par le profil fiscal)",
+  "st.settings.appReview.label": "Examen des demandes : délais et escalade",
+  "st.settings.appReview.description": "Combien de temps une demande de vendeur ou de prestataire peut attendre à chaque étape, qui est prévenu en cas de retard et comment les dossiers sont répartis. Chaque modification est conservée avec son motif.",
+  "st.settings.appReview.intro": "Les demandes passent par deux étapes : un examinateur, puis un approbateur différent. Définissez la durée de chaque étape, qui est prévenu lorsqu’un dossier est en retard ou que personne ne le prend (niveau 1, puis niveau 2) et si les dossiers sont répartis automatiquement.",
+  "st.sheet.technicalDetails": "Détails techniques",
+  "st.col.with": "Chez",
+  "st.col.waiting": "Attente",
+  "st.col.sla": "Délai",
+  "st.col.escalation": "Escalade"
 }

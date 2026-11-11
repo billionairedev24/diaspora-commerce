@@ -10,6 +10,7 @@ import { bffProblemType } from '../../problem-types';
 import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import { type AccessLevel, type ChartSpec } from '../../schemas/seller';
 import {
+  type DetailSection,
   type Customer360,
   DeliveryTariffSchema,
   type DriverSuggestions,
@@ -57,7 +58,7 @@ import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, FEE_ORGS, feeRecords, feesOverview, feeView, MOCK_RETAIL_ORG_ID, quoteDelivery, searchFeeOrgs } from './fees';
 import { staffHomeModules } from './home-modules';
 import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop, stepUpErrors } from './identity';
-import { MOCK_DRIVERS } from './lookups';
+import { MOCK_DRIVERS, MOCK_STAFF } from './lookups';
 import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
@@ -216,7 +217,7 @@ const rowOf = (resource: ResourceKey, r: MockRecord) => ({
 /** One search over every column the table shows, then the sort (or the resource's default order), as the BFF does. */
 function filtered(ctx: Ctx, resource: ResourceKey, q: string, status: string, sort: SortKey[] = [], ids?: string[]): MockRecord[] {
   const def = RESOURCES[resource];
-  const base = records(ctx, resource).filter((r) => !status || !def.statusKey || r.fields[def.statusKey] === status);
+  const base = records(ctx, resource).filter((r) => (def.queue ? def.queue(r, status, ctx.action.actorId) : !status || !def.statusKey || r.fields[def.statusKey] === status));
   const ordered = def.sort ? [...base].sort(def.sort) : base;
   return queryRows(ordered.map((r) => rowOf(resource, r)), def.columns, q, sort, ids).map((r) => r.record);
 }
@@ -246,7 +247,7 @@ function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
   const grouped = def.sections ?? [['Details', keys.filter((k) => !(k in idLabels))]];
   const used = new Set(grouped.flatMap(([, ks]) => ks));
   const rest = keys.filter((k) => !used.has(k) && !(k in idLabels));
-  const sections = [...grouped, ...(def.sections && rest.length ? ([['More', rest]] as [string, string[]][]) : [])].map(([title, ks]) => ({
+  const sections: DetailSection[] = [...grouped, ...(def.sections && rest.length ? ([['More', rest]] as [string, string[]][]) : [])].map(([title, ks]) => ({
     title,
     fields: ks.filter((k) => k in r.fields).map((k) => ({ label: humanize(k), value: display(r.fields[k] ?? null), kind: detailKind(k, def.statusKey) }))
   }));
@@ -267,6 +268,7 @@ function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
     sections: def.sheetSections ? def.sheetSections(r) : sections,
     tables: r.lines && def.lineColumns ? [{ title: def.linesTitle ?? 'Items', columns: def.lineColumns, rows: r.lines.map((l, i) => ({ id: String(l.id ?? i), cells: Object.fromEntries(Object.entries(l).map(([k, v]) => [k, cellOf(v)])), tone: toneOf(typeof l.status === 'string' ? l.status : null) })) }] : [],
     activity: r.activity,
+    ...(def.banner?.(r) ? { banner: def.banner(r) ?? undefined } : {}),
     notes: [],
     notesEnabled: false,
     actions: def.actions.map((a) => actionView(ctx, resource, r, a)),
@@ -1072,13 +1074,15 @@ export const staffHandlers = [
     `${W}/lookups/:kind`,
     route((ctx, p) => {
       const kind = p.kind;
-      if (kind !== 'drivers' && kind !== 'sellers') throw notFound('There is nothing to search for there.');
-      requireModule(ctx, kind === 'drivers' ? 'routes' : 'stripe-lookup');
+      if (kind !== 'drivers' && kind !== 'sellers' && kind !== 'staff') throw notFound('There is nothing to search for there.');
+      requireModule(ctx, kind === 'drivers' ? 'routes' : kind === 'staff' ? 'applications' : 'stripe-lookup');
       const q = (query(ctx).get('q') ?? '').trim();
       if (q.length === 1 || q.length > 120) throw invalid({ q: 'Type 2 to 120 characters' });
       const needle = q.toLowerCase();
       const items =
-        kind === 'drivers'
+        kind === 'staff'
+          ? MOCK_STAFF.filter((d) => !needle || d.name.toLowerCase().includes(needle))
+          : kind === 'drivers'
           ? MOCK_DRIVERS.filter((d) => !needle || d.name.toLowerCase().includes(needle))
           : FEE_ORGS.filter((o) => o.id !== MOCK_RETAIL_ORG_ID && (!needle || o.name.toLowerCase().includes(needle))).map((o) => ({ id: o.id, name: o.name, detail: o.kind.toLowerCase() }));
       return { kind, items: items.slice(0, 20) };

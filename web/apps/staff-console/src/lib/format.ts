@@ -98,3 +98,11 @@ export function toLocalInput(iso: string): string {
 export function idempotencyKey(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `k-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
+
+/** How long a case has waited, from seconds: "12 min", "3 h", "2 days". */
+export function duration(seconds: number): string {
+  if (seconds < 60) return '<1 min';
+  if (seconds < 3_600) return `${Math.floor(seconds / 60)} min`;
+  if (seconds < 48 * 3_600) return `${Math.floor(seconds / 3_600)} h`;
+  return `${Math.floor(seconds / 86_400)} days`;
+}

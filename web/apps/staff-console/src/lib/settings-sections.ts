@@ -73,6 +73,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     module: 'inventory',
     group: 'money'
   },
+  {
+    key: 'application-review',
+    label: 'Application review: SLAs and escalation',
+    description: 'How long a seller or provider application may wait at each step, who is told when it is late, and how cases are handed out. Every change is kept with its reason.',
+    labelKey: 'st.settings.appReview.label',
+    descriptionKey: 'st.settings.appReview.description',
+    module: 'apps',
+    group: 'platform'
+  },
   { key: 'plans', label: 'Plans & billing', description: 'How sellers pay their plan fee.', module: 'plans', group: 'money' }
 ];
 

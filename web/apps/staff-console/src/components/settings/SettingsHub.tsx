@@ -94,6 +94,13 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
           <ResourceTable resource="exchange-rates" urlPrefix="exchange-rates" />
         </div>
       );
+    case 'application-review':
+      return (
+        <div className="flex flex-col gap-3">
+          <p className="m-0 max-w-[80ch] text-sm text-muted">{t('st.settings.appReview.intro')}</p>
+          <ResourceTable resource="application-review-settings" urlPrefix="application-review-settings" />
+        </div>
+      );
     case 'plans':
       return (
         <div className="flex flex-col gap-4">

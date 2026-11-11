@@ -25,7 +25,7 @@ export function ModuleView({ module }: { module: StaffModuleKey }) {
   return (
     <ModulePage module={module}>
       {only ? (
-        <ResourceTable resource={only.resource} />
+        <ResourceTable resource={only.resource} statusFilter={only.statusFilter} defaultStatus={only.defaultStatus} />
       ) : (
         <Tabs
           label={t('st.moduleView.tables')}

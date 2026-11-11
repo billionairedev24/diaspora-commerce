@@ -2271,5 +2271,13 @@
   "st.catalog.taxStatus.BLOCKED_BUNDLE": "Blocked: bundles",
   "st.catalog.taxStatus.REFINE_CODE": "Needs a refined code per item",
   "st.catalog.taxStatus.CONFLICT_OPEN": "On hold: open decision",
-  "st.catalog.preview.tax": "About your item (tax questions, managed by the category's tax profile)"
+  "st.catalog.preview.tax": "About your item (tax questions, managed by the category's tax profile)",
+  "st.settings.appReview.label": "Application review: SLAs and escalation",
+  "st.settings.appReview.description": "How long a seller or provider application may wait at each step, who is told when it is late, and how cases are handed out. Every change is kept with its reason.",
+  "st.settings.appReview.intro": "Applications go through two steps: a reviewer, then a different approver. Set how long each step may take, who is told when a case is late or untaken (level 1, then level 2), and whether cases are handed out automatically.",
+  "st.sheet.technicalDetails": "Technical details",
+  "st.col.with": "With",
+  "st.col.waiting": "Waiting",
+  "st.col.sla": "SLA",
+  "st.col.escalation": "Escalation"
 }

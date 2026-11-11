@@ -54,14 +54,21 @@ export function CopyId({ value, label }: { value: string; label: string }) {
 }
 
 export function Details({ record }: { record: RecordDetail }) {
+  const t = useT();
   return (
     <>
+      {record.banner ? (
+        <div role="status" data-testid="record-banner" className="rounded-md border border-border bg-surface-hover p-3 text-sm">
+          <strong>{record.banner.title}</strong>
+          <p className="m-0 mt-1">{record.banner.text}</p>
+        </div>
+      ) : null}
       {record.sections.map((s) => (
         <section key={s.title} aria-label={s.title} className="flex flex-col gap-2">
           {s.collapsed ? null : <h3 className="m-0 text-sm font-bold">{s.title}</h3>}
           {s.collapsed ? (
             <details className="text-sm" data-testid="technical-details">
-              <summary className="cursor-pointer font-bold">{s.title}</summary>
+              <summary className="cursor-pointer font-bold">{s.title === 'Technical details' ? t('st.sheet.technicalDetails') : s.title}</summary>
               <dl className="m-0 mt-2 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1.5">
                 {s.fields.map((f) => (
                   <div key={f.label} className="contents">

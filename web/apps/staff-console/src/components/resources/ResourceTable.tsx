@@ -30,7 +30,7 @@ import { RevealDialog } from './RevealDialog';
  * several resource tables (tabs) give each a URL prefix. `statusFilter` adds one chip per status the BFF names (the
  * review queue of referrals is one tap away); it is off for tables that do not need it.
  */
-export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { resource: ResourceKey; urlPrefix?: string; statusFilter?: boolean }) {
+export function ResourceTable({ resource, urlPrefix, statusFilter = false, defaultStatus = '' }: { resource: ResourceKey; urlPrefix?: string; statusFilter?: boolean; defaultStatus?: string }) {
   const t = useT();
   const api = staffApi();
   const qc = useQueryClient();
@@ -47,10 +47,11 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
   const [reveal, setReveal] = useState<{ recordId: string; secret: OneTimeSecret } | null>(null);
 
   const statusParam = urlPrefix ? `${urlPrefix}.status` : 'status';
-  const status = statusFilter ? (params.get(statusParam) ?? '') : '';
+  const status = statusFilter ? (params.get(statusParam) ?? defaultStatus) : '';
   const setStatus = (value: string) => {
     const next = new URLSearchParams(params.toString());
-    if (value) next.set(statusParam, value);
+    // A table with a default tab keeps an explicit choice in the URL ("All" must not fall back to the default).
+    if (value || defaultStatus) next.set(statusParam, value || 'ALL');
     else next.delete(statusParam);
     next.delete(urlPrefix ? `${urlPrefix}.page` : 'page');
     next.delete('open');
@@ -114,7 +115,7 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
         // The BFF sends widths as shares of the table; ~12px per percent fills a 1,200px table.
         size: Math.max(72, c.width * 12),
         enableSorting: c.sortable !== false,
-        meta: { label: columnLabel(t, c), kind: c.kind, align: c.kind === 'money' || c.kind === 'number' || c.kind === 'percent' ? 'end' : 'start' },
+        meta: { label: columnLabel(t, c), kind: c.kind === 'duration' ? 'number' : c.kind, align: c.kind === 'money' || c.kind === 'number' || c.kind === 'percent' ? 'end' : 'start' },
         cell: ({ row }) =>
           c.key === 'device' ? <DeviceCell value={row.original.cells[c.key]} /> : <Cell kind={c.kind} value={row.original.cells[c.key]} tone={row.original.tone} />
       })),
@@ -169,7 +170,7 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
           <>
             {statusFilter && data && data.facets.length > 0 ? (
               <div role="group" aria-label={t('st.resourceTable.status')} className="flex flex-wrap gap-1">
-                {[{ value: '', label: t('st.resourceTable.allStatuses') }, ...data.facets].map((f) => (
+                {(data.facets.some((f) => f.value === 'ALL') ? data.facets : [{ value: '', label: t('st.resourceTable.allStatuses') }, ...data.facets]).map((f) => (
                   <Button key={f.value} size="sm" variant={status === f.value ? 'secondary' : 'neutral'} aria-pressed={status === f.value} onClick={() => setStatus(f.value)}>
                     {f.label}
                   </Button>

@@ -2278,5 +2278,13 @@
   "st.catalog.taxStatus.BLOCKED_BUNDLE": "Bloqueada: lotes",
   "st.catalog.taxStatus.REFINE_CODE": "Requiere un código afinado por artículo",
   "st.catalog.taxStatus.CONFLICT_OPEN": "En pausa: decisión abierta",
-  "st.catalog.preview.tax": "Sobre el artículo (preguntas fiscales, gestionadas por el perfil fiscal)"
+  "st.catalog.preview.tax": "Sobre el artículo (preguntas fiscales, gestionadas por el perfil fiscal)",
+  "st.settings.appReview.label": "Revisión de solicitudes: plazos y escalado",
+  "st.settings.appReview.description": "Cuánto tiempo puede esperar una solicitud de vendedor o proveedor en cada paso, a quién se avisa cuando se retrasa y cómo se reparten los casos. Cada cambio se guarda con su motivo.",
+  "st.settings.appReview.intro": "Las solicitudes pasan por dos pasos: un revisor y, después, un aprobador distinto. Defina cuánto puede tardar cada paso, a quién se avisa cuando un caso se retrasa o nadie lo toma (nivel 1 y nivel 2) y si los casos se reparten automáticamente.",
+  "st.sheet.technicalDetails": "Detalles técnicos",
+  "st.col.with": "Con",
+  "st.col.waiting": "Espera",
+  "st.col.sla": "Plazo",
+  "st.col.escalation": "Escalado"
 }

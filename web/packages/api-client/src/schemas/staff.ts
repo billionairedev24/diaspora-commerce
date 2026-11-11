@@ -88,7 +88,7 @@ export const ResourceKeySchema = z.enum([
   'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'careers-jobs', 'cookie-definitions', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates',
   'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons',
   'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'recoveries', 'credit-adjustments', 'gift-cards', 'credit-liabilities', 'money-settings', 'membership-tiers', 'memberships', 'membership-settings', 'membership-report', 'referrals', 'referral-settings', 'stripe-lookup', 'payment-settings', 'maintenance', 'tax-filings', 'tax-nexus',
-  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'session-policy', 'exchange-rates'
+  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'session-policy', 'exchange-rates', 'application-review-settings'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
 
@@ -96,7 +96,7 @@ export const RecordToneSchema = z.enum(['good', 'warn', 'bad', 'info', 'brand'])
 export type RecordTone = z.infer<typeof RecordToneSchema>;
 export const CellValueSchema = z.union([z.string(), z.number(), z.null()]);
 export type CellValue = z.infer<typeof CellValueSchema>;
-export const ColumnKindSchema = z.enum(['text', 'strong', 'mono', 'money', 'number', 'date', 'datetime', 'status', 'percent']);
+export const ColumnKindSchema = z.enum(['text', 'strong', 'mono', 'money', 'number', 'date', 'datetime', 'status', 'percent', 'duration']);
 export type ColumnKind = z.infer<typeof ColumnKindSchema>;
 export const ResourceColumnSchema = z.object({ key: z.string(), label: z.string(), kind: ColumnKindSchema, width: z.number().int().min(1).max(100), sortable: z.boolean().optional() });
 export type ResourceColumn = z.infer<typeof ResourceColumnSchema>;
@@ -113,7 +113,7 @@ export type FieldValue = z.infer<typeof FieldValueSchema>;
 export const FieldTypeSchema = z.enum(['text', 'textarea', 'number', 'money', 'select', 'multiselect', 'toggle', 'date', 'datetime', 'email', 'password']);
 export type FieldType = z.infer<typeof FieldTypeSchema>;
 /** The searchable pickers of forms: staff choose a driver or a seller by name, the form sends the id. */
-export const LOOKUP_KINDS = ['drivers', 'sellers'] as const;
+export const LOOKUP_KINDS = ['drivers', 'sellers', 'staff'] as const;
 export const LookupKindSchema = z.enum(LOOKUP_KINDS);
 export type LookupKind = z.infer<typeof LookupKindSchema>;
 export const LookupResultSchema = z.object({ kind: LookupKindSchema, items: z.array(z.object({ id: z.string(), name: z.string(), detail: z.string().optional() })) });
@@ -238,7 +238,11 @@ export const RecordShipmentSchema = z.object({
 });
 export type RecordShipment = z.infer<typeof RecordShipmentSchema>;
 
+export const RecordBannerSchema = z.object({ tone: RecordToneSchema, title: z.string(), text: z.string() });
+export type RecordBanner = z.infer<typeof RecordBannerSchema>;
+
 export const RecordDetailSchema = z.object({
+  banner: RecordBannerSchema.optional(),
   resource: ResourceKeySchema,
   id: z.string(),
   title: z.string(),

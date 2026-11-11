@@ -70,7 +70,7 @@ export function moduleOf(pathname: string): StaffModuleKey | null {
 }
 
 /** The server-driven tables each module shows (one tab per table). */
-export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceKey; label: string; labelKey?: MessageKey; statusFilter?: boolean }[]>> = {
+export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceKey; label: string; labelKey?: MessageKey; statusFilter?: boolean; defaultStatus?: string }[]>> = {
   orders: [{ resource: 'orders', label: 'Orders' }],
   catalog: [
     { resource: 'moderation', label: 'Moderation queue' },
@@ -85,7 +85,7 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'organisations', label: 'Organisations' },
     { resource: 'connect-accounts', label: 'Stripe Connect' }
   ],
-  apps: [{ resource: 'applications', label: 'Applications' }],
+  apps: [{ resource: 'applications', label: 'Applications', statusFilter: true, defaultStatus: 'MY' }],
   rbac: [
     { resource: 'users', label: 'People' },
     { resource: 'roles', label: 'Roles' }

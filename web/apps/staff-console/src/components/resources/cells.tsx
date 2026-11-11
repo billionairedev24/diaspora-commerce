@@ -2,7 +2,7 @@ import { type CellValue, type ColumnKind, type RecordTone } from '@afrotransact/
 
 import { StatusPill } from '@/components/ui/StatusPill';
 import { EN_MESSAGES, type MessageKey, type Translator, useT } from '@/i18n/t';
-import { dateTime, humanize, money, percent, shortDate } from '@/lib/format';
+import { dateTime, duration, humanize, money, percent, shortDate } from '@/lib/format';
 
 /** Renders one server-driven cell by its column kind (money in minor units, ISO dates, status chips…). */
 export function Cell({ kind, value, tone }: { kind: ColumnKind; value: CellValue | undefined; tone?: RecordTone | null }) {
@@ -22,6 +22,8 @@ export function Cell({ kind, value, tone }: { kind: ColumnKind; value: CellValue
       return <span>{shortDate(String(value))}</span>;
     case 'datetime':
       return <span>{dateTime(String(value))}</span>;
+    case 'duration':
+      return <span className="tabular-nums">{typeof value === 'number' ? duration(value) : String(value)}</span>;
     case 'status':
       return <StatusPill tone={tone ?? null}>{humanize(String(value))}</StatusPill>;
     case 'text':

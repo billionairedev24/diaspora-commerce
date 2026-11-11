@@ -379,7 +379,8 @@ func reviewSettingsForm(o jobj) domain.Form {
 	fields = append(fields, levelFields("review", "reviewChain")...)
 	fields = append(fields, levelFields("approval", "approvalChain")...)
 	fields = append(fields, reasonField())
-	keys := []string{"reviewSlaHours", "approvalSlaHours", "dueSoonPercent", "unassignedAfterHours", "level2AfterHours", "autoAssign", "enforceAssignee", "sendBackToReviewer"}
+	keys := []string{"reviewSlaHours", "approvalSlaHours", "dueSoonPercent", "unassignedAfterHours", "level2AfterHours", "autoAssign", "enforceAssignee", "sendBackToReviewer",
+		"reviewLevel1Role", "reviewLevel1Person", "reviewLevel2Role", "reviewLevel2Person", "approvalLevel1Role", "approvalLevel1Person", "approvalLevel2Role", "approvalLevel2Person"}
 	return domain.Form{Title: "Application review: SLAs and escalation", SubmitLabel: "Save",
 		Intro:  "Levels are in order: set level 1 before level 2. Every role and person must exist and be active. The change is recorded with your reason and what it was before.",
 		Fields: fields, ChangeKeys: keys}

@@ -7278,12 +7278,12 @@ export interface components {
             empty?: components["schemas"]["ModuleEmpty"] | null;
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "category-requests" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "careers-jobs" | "cookie-definitions" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "recoveries" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "session-policy" | "exchange-rates";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "category-requests" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "careers-jobs" | "cookie-definitions" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "recoveries" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "session-policy" | "exchange-rates" | "application-review-settings";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
         /** @enum {string} */
-        ColumnKind: "text" | "strong" | "mono" | "money" | "number" | "date" | "datetime" | "status" | "percent";
+        ColumnKind: "text" | "strong" | "mono" | "money" | "number" | "date" | "datetime" | "status" | "percent" | "duration";
         Column: {
             key: string;
             label: string;
@@ -7319,7 +7319,7 @@ export interface components {
         FieldValue: string | number | boolean | string[] | null;
         StaffLookupResult: {
             /** @enum {string} */
-            kind: "drivers" | "sellers";
+            kind: "drivers" | "sellers" | "staff";
             items: {
                 id: string;
                 name: string;
@@ -7336,7 +7336,7 @@ export interface components {
              * @description A text field that is a searchable picker: staff choose by name (GET /v1/staff/lookups/{kind}), the form sends the id
              * @enum {string}
              */
-            lookup?: "drivers" | "sellers";
+            lookup?: "drivers" | "sellers" | "staff";
             options?: components["schemas"]["FieldOption"][];
             min?: number;
             max?: number;
@@ -7398,6 +7398,13 @@ export interface components {
         DetailSection: {
             title: string;
             fields: components["schemas"]["DetailField"][];
+            /** @description Shown closed (Technical details: the raw ids, copyable); staff UIs show names first */
+            collapsed?: boolean;
+        };
+        RecordBanner: {
+            tone: components["schemas"]["Tone"];
+            title: string;
+            text: string;
         };
         DetailTable: {
             title: string;
@@ -7450,6 +7457,8 @@ export interface components {
             activity: components["schemas"]["ActivityEntry"][];
             notes: components["schemas"]["Note"][];
             notesEnabled: boolean;
+            /** @description A notice above the sections (an application the approver sent back) */
+            banner?: components["schemas"]["RecordBanner"];
             actions: components["schemas"]["RecordAction"][];
             editForm: components["schemas"]["Form"] | null;
             links: components["schemas"]["RecordLink"][];
@@ -10617,7 +10626,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                kind: "drivers" | "sellers";
+                kind: "drivers" | "sellers" | "staff";
             };
             cookie?: never;
         };

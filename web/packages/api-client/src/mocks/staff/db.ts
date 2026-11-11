@@ -8,6 +8,7 @@ import { COOKIE_CATEGORIES, COOKIE_TABLE } from '../fixtures/legal';
 import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './content-pages';
 import { MOCK_DEPARTMENT_ORGS, type MockDepartmentsState, seedDepartments } from './departments';
 import { type MockDispatch, seedDispatch } from './dispatch';
+import { seedReviewSettings, seedWorkflow } from './application-flow';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
@@ -145,7 +146,8 @@ function seed(now: Date): MockStaffDb {
         failedChecks: status === 'FLAGGED' ? 'TIN_MISMATCH' : null,
         taxIdMasked: `***-**-${String(1000 + i * 37).slice(-4)}`,
         contactEmail: `owner${i}@example.com`,
-        submittedAt: ago(9 - i, 3)
+        submittedAt: ago(9 - i, 3),
+        ...seedWorkflow(status, i)
       },
       [act(ago(9 - i, 3), name, 'Application submitted'), ...(status === 'AWAITING_FINAL_APPROVAL' ? [act(ago(1), 'Sara Tesfaye', 'Step 1 approved — awaiting final approval')] : [])]
     );
@@ -669,7 +671,7 @@ function seed(now: Date): MockStaffDb {
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
-      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
+      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now),
       ...seedIdentityAdmin(now)
     },
     notifications,

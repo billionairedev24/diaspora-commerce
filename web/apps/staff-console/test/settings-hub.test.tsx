@@ -25,7 +25,7 @@ describe('Settings', () => {
     );
     const platform = await screen.findByRole('region', { name: 'Platform' });
     const labels = within(platform).getAllByRole('link').map((a) => a.querySelector('span span')?.textContent);
-    expect(labels).toEqual(['Published pages', 'General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access']);
+    expect(labels).toEqual(['Published pages', 'General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access', 'Application review: SLAs and escalation']);
     expect(within(await screen.findByRole('region', { name: 'Money' })).getAllByRole('link')).toHaveLength(10);
     expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
   });
@@ -66,18 +66,19 @@ describe('Settings', () => {
   it('hides the sections a role has no access to, and a group with nothing left', async () => {
     asRoles('platform.finance');
     hub();
-    // Finance runs the money sections; none of the platform ones (pages, markets, notifications, sign-in, identity) are theirs.
+    // Finance runs the money sections; none of the other platform ones (pages, markets, notifications, sign-in, identity) are theirs.
     const money = await screen.findByRole('region', { name: 'Money' });
     expect(cardLabels(money)).toEqual([
       'Payments & payouts', 'Credit & gift cards', 'Membership', 'Referral program', 'Fees & commissions', 'Delivery fees', 'Run economics', 'Sales tax', 'Exchange rates', 'Plans & billing'
     ]);
-    expect(screen.queryByRole('region', { name: 'Platform' })).not.toBeInTheDocument();
+    // Finance can view Applications, so the review SLAs are theirs to read; the other platform sections are not.
+    expect(cardLabels(await screen.findByRole('region', { name: 'Platform' }))).toEqual(['Application review: SLAs and escalation']);
   });
 
   it('shows a developer the platform sections they can reach, without identity, delivery fees or run economics', async () => {
     asRoles('platform.developer');
     hub();
-    expect(cardLabels(await screen.findByRole('region', { name: 'Platform' }))).toEqual(['Published pages', 'General', 'Markets & locations', 'Notifications', 'Sign-in & integrations']);
+    expect(cardLabels(await screen.findByRole('region', { name: 'Platform' }))).toEqual(['Published pages', 'General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Application review: SLAs and escalation']);
     const money = cardLabels(await screen.findByRole('region', { name: 'Money' }));
     expect(money).not.toContain('Delivery fees');
     expect(money).not.toContain('Run economics');
@@ -87,7 +88,7 @@ describe('Settings', () => {
   it('an auditor sees only the sections their view-only access reaches', async () => {
     asRoles('platform.auditor');
     hub();
-    expect(cardLabels(await screen.findByRole('region', { name: 'Platform' }))).toEqual(['Markets & locations', 'Sign-in & integrations']);
+    expect(cardLabels(await screen.findByRole('region', { name: 'Platform' }))).toEqual(['Markets & locations', 'Sign-in & integrations', 'Application review: SLAs and escalation']);
   });
 
   it('does not open a section the role cannot see, even from the address', async () => {
