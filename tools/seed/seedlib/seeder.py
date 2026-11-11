@@ -17,6 +17,7 @@ from . import dataset as D
 from .auth import TokenProvider
 from .http import ApiError, Http
 from .images.library import ImageLibrary
+from .images.review import ImageReview
 from .images.model import ImageFile
 from .images.sources import PexelsSource, UnsplashSource, WikimediaSource
 from .media import MediaUploader
@@ -72,6 +73,7 @@ class Report:
     image_sources: Counter = field(default_factory=Counter)
     problems: list[str] = field(default_factory=list)
     usage: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
+    review: ImageReview = field(default_factory=ImageReview)  # every product with the photo it got (image-review.md)
 
     def add(self, what: str, outcome: str, n: int = 1) -> None:
         self.counts[(what, outcome)] += n
@@ -217,6 +219,8 @@ class Seeder:
             usage = {sha: e.get("usedBy", []) for sha, e in self.state.images.items()}
             self.library.write_attribution(self.state_dir / "ATTRIBUTION.md", self.state_dir / "attribution.json",
                                            usage, images)
+            if self.report.review.rows:
+                self.report.review.write(self.state_dir / "image-review.md", self.state_dir / "image-review.csv")
         self._summary()
         return 1 if self.report.problems else 0
 
@@ -412,9 +416,13 @@ class Seeder:
             line = f"  · {p.title} (exists, {product['atin']})"
             product = self._link_existing_chart(product, p, cats) or product
             product = self._heal_images(product, p) or product
-            self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE, network=False)
+            kept = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
+                                network=False, require=p.queries)
+            self.report.review.add(p.key, p.title, kept, self.library.rejected.get(p.key), "already in the catalog")
         else:
-            imgs = self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE)
+            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
+                                require=p.queries)
+            self.report.review.add(p.key, p.title, imgs, self.library.rejected.get(p.key))
             if not imgs:
                 self.report.add("products", "skipped: no image")
                 self._problem(f"{p.title}: no usable image (needs a main image of at least {MAIN_MIN_EDGE}px; "
@@ -605,7 +613,8 @@ class Seeder:
             stored = full.get("images") or []
             if not stored or all(self.uploader.head(i.get("url") or "") is not False for i in stored):
                 return None
-            imgs = self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE)
+            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
+                                require=p.queries)
             if not imgs:
                 self._problem(f"{p.title}: its images no longer serve and no replacement image was found")
                 return None
@@ -1061,6 +1070,12 @@ class Seeder:
         sources = ", ".join(f"{n} from {s}" for s, n in self.report.image_sources.most_common()) or "none"
         self.log(f"  {'images':<20} {sources} · uploads: {self.uploader.uploaded} new, {self.uploader.reused} reused")
         self.log(f"  attribution: {self.state_dir / 'ATTRIBUTION.md'}")
+        if self.report.review.rows:
+            self.log(f"  image review: {self.report.review.summary()}")
+            self.log(f"    {self.state_dir / 'image-review.md'} (also .csv): the chosen photo of every product; replace wrong ones "
+                     "via SEED_IMAGES_DIR")
+            for r in self.report.review.flagged()[:12]:
+                self.log(f"    ! {r.status}: {r.title} ({r.key})")
         if self.report.problems:
             self.log(f"  {len(self.report.problems)} problem(s):")
             for p in self.report.problems:

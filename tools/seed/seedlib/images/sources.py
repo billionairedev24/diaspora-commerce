@@ -105,7 +105,9 @@ def parse_wikimedia(payload: dict[str, Any]) -> list[Candidate]:
             source="wikimedia", download_url=url, page_url=info.get("descriptionurl", ""), title=name,
             author=_strip_html(artist) or _strip_html(mv("Credit")) or "Unknown author",
             author_url=_first_href(artist), license=lic, license_url=licenses.license_url(lic, mv("LicenseUrl")),
-            width=width, height=height, mime=mime))
+            width=width, height=height, mime=mime,
+            extra={"categories": [c.replace("_", " ") for c in mv("Categories").split("|") if c],
+                   "description": _strip_html(mv("ImageDescription"))[:300]}))
     return out
 
 

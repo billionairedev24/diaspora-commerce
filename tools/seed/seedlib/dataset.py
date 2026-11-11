@@ -492,6 +492,22 @@ def _placed(p: Product) -> Product:
     return replace(p, path=path, facts=p.facts or variant, behaviour=p.behaviour or behaviour)
 
 
+def demo_title(name: str) -> str:
+    """A product name for a generated category-demo item: the category's product type under the house brand, never a
+    "(demo item)" label ("Perfumes & fragrances" -> "AfroTransact Brand Perfumes & Fragrances")."""
+    words = " ".join(w if w in ("&", "and", "of", "for") else w[:1].upper() + w[1:] for w in name.split())
+    return f"AfroTransact Brand {words}"
+
+
+FOOD_DEPARTMENTS = (FOOD, BEV)
+
+
+def image_queries(p: Product) -> list[str]:
+    """Search phrases for a product's photos, strictest first: product + cuisine + food, product + food, product."""
+    from seedlib.images.relevance import strict_queries
+    return strict_queries(p.queries, p.community, food=p.path.split(" › ")[0] in FOOD_DEPARTMENTS)
+
+
 def _coverage() -> list[Product]:
     """A demo product in every category that can be published and has none yet (sold by AfroTransact Retail)."""
     have = {p.path for p in PRODUCTS}
@@ -504,10 +520,12 @@ def _coverage() -> list[Product]:
         except ValueError:
             continue  # needs a proof file (a label photo) the seeder cannot upload: see category_demo.needs_proof()
         name = path.split(" › ")[-1]
-        out.append(P(f"demo-{cat['code']}-{CD.slug(path)}", f"{name} (AfroTransact demo item)", path, "retail", "AfroTransact Brand",
-                     "West African", "United States", [f"Demo listing for the {name} category", "Seeded to try the category's form and checks",
-                                                        "Sold and fulfilled by AfroTransact"],
-                     [("", 1299)], [name.lower(), "african market", "demo product"], unit="1 each", stock=100, images=2,
+        subject = name.lower()
+        out.append(P(f"demo-{cat['code']}-{CD.slug(path)}", demo_title(name), path, "retail", "AfroTransact Brand",
+                     "West African", "United States",
+                     [f"{name}, chosen and quality checked by AfroTransact", "Sold and fulfilled by AfroTransact",
+                      "Free delivery on Fulfilled by AfroTransact orders"],
+                     [("", 1299)], [subject, f"{subject} product"], unit="1 each", stock=100, images=2,
                      facts=variant, behaviour=behaviour))
     return out
 

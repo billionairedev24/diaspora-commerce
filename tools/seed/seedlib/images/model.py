@@ -48,6 +48,9 @@ class ImageFile:
     height: int
     mime: str
     sha256: str
+    # Relevance: the words of the product's query that the photo's title or categories contain, and the query that found it.
+    keywords_matched: str = ""
+    query: str = ""
 
     @property
     def min_edge(self) -> int:

@@ -20,6 +20,7 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
 from .model import MIME_EXT, Candidate, ImageFile, sniff
+from . import relevance
 from .sources import USER_AGENT, Source
 
 MAX_BYTES = 8 * 1024 * 1024
@@ -69,6 +70,7 @@ class ImageLibrary:
         self.used: dict[str, str] = {}  # sha256 -> key that uses it (one photo, one product)
         self.attribution: dict[str, ImageFile] = {}
         self.failed_sources: set[str] = set()
+        self.rejected: dict[str, list[tuple[str, str]]] = {}  # key -> (photo title, why) the relevance filter turned away
 
     # ------------------------------------------------------------------------------------------- manifest
     def _load(self) -> dict:
@@ -90,14 +92,18 @@ class ImageLibrary:
 
     # ------------------------------------------------------------------------------------------- public
     def images_for(self, key: str, queries: Iterable[str], count: int, *, orientation: str = "any",
-                   min_edge: int = 0, main_min_edge: int = 0, network: bool = True) -> list[ImageFile]:
+                   min_edge: int = 0, main_min_edge: int = 0, network: bool = True,
+                   require: Sequence[str] = ()) -> list[ImageFile]:
         """Up to `count` photos for `key`; the first has at least `main_min_edge` pixels on its shorter side.
-        `network=False` only looks at SEED_IMAGES_DIR and the cache (attribution of records made earlier)."""
+        `network=False` only looks at SEED_IMAGES_DIR and the cache (attribution of records made earlier).
+        `require` are the product's own queries: a downloaded or cached photo is kept only when its title or categories
+        contain all words of one of them and nothing off topic (see relevance.py). Your own files are never filtered."""
         queries = [q for q in queries if q]
+        groups = relevance.groups_for(require)
         picked = self._local(key, queries, count, main_min_edge)
         if picked:
             return self._claim(key, picked)
-        cached = self._cached(key, count, main_min_edge)
+        cached = self._cached(key, count, main_min_edge, groups)
         if cached:
             return self._claim(key, cached)
         picked = []
@@ -111,11 +117,16 @@ class ImageLibrary:
                     need = main_min_edge if not picked else min_edge
                     if not _wants(cand, orientation, need):
                         continue
+                    verdict = relevance.judge(relevance.candidate_text(cand.title, cand.extra), groups)
+                    if not verdict:
+                        self.rejected.setdefault(key, []).append((cand.title, verdict.reason))
+                        continue
                     img = self._fetch(cand)
                     if img is None or img.sha256 in self.used or any(p.sha256 == img.sha256 for p in picked):
                         continue
                     if min(img.width, img.height) < need:
                         continue
+                    img.keywords_matched, img.query = " ".join(verdict.matched), q
                     picked.append(img)
                 if len(picked) >= count or source.name in self.failed_sources:
                     break
@@ -153,10 +164,20 @@ class ImageLibrary:
             self.attribution[img.sha256] = img
         return imgs
 
-    def _cached(self, key: str, count: int, main_min_edge: int) -> list[ImageFile]:
+    def _cached(self, key: str, count: int, main_min_edge: int, groups: Sequence[frozenset[str]] = ()) -> list[ImageFile]:
         entries = self.manifest["keys"].get(key) or []
         files = [ImageFile.from_json(e) for e in entries]
         files = [f for f in files if Path(f.path).is_file() and f.source != "local"]
+        if groups:  # photos chosen by an earlier, looser run are checked again
+            kept = []
+            for f in files:
+                v = relevance.judge(f.title, groups)
+                if v:
+                    f.keywords_matched = f.keywords_matched or " ".join(v.matched)
+                    kept.append(f)
+                else:
+                    self.rejected.setdefault(key, []).append((f.title, "cached: " + v.reason))
+            files = kept
         if not files or files[0].min_edge < main_min_edge:
             return []
         return files[:count]
