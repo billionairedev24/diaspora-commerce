@@ -260,3 +260,22 @@ see a page with your message and the time you expect to be back; staff keep work
 
 Lola can look up applications, payouts, orders and settlements for you, read-only. Ask in plain language, for
 example "why is payout po_… still in transit?". Lola cannot approve, pay or change anything.
+
+
+## Home page layout and adverts (Marketing)
+
+**Marketing** has three lists for the storefront home page: *Announcements*, *Placements & ads* and *Home page layout*.
+
+- **Placements & ads** creates and reviews each module. In **New placement or ad**, the *Slot* list offers the hero, tiles, rails
+  and banners, four paid modules (**Sponsored brand banner**, **Sponsored products rail**, **Display ad row**, **Advertorial:
+  From our partners**) and the **Home modules** (deals of the day, shop by occasion, community and seller spotlights, services
+  near you, pre-order band, membership band, sign-in band). Fields appear for the slot you choose. Every page module also has
+  *Position on the page*, *US states* and *ZIP prefixes* (empty means everywhere) besides *Starts / Ends*.
+- **Paid modules** always show "Sponsored" or "Ad" with the advertiser's name on the storefront. Give the **Advertiser**; a
+  second person must approve a paid creative (the author cannot). Upload creatives to the media service and paste the image
+  address; use an image with alt text for each ad in an ad row.
+- **Home page layout** shows the modules in the order shoppers see them. Open a row to preview what it shows, who sees it and
+  how it is labelled. **Move up** and **Move down** (also in the row's menu) reorder it, **Set priority** sets an exact
+  position (higher shows first). Reordering needs no new review. A module that has nothing to show for a shopper (no deals
+  today, no providers in their area, too few products) is simply not shown.
+- The seller's **sponsored products** are not created here: sellers run campaigns in Seller Center; staff place the rail.

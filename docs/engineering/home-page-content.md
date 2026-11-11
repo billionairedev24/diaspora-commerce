@@ -5,12 +5,13 @@ the staff console (Marketing > Placements & ads); the gateway turns it into prod
 
 | Section | Source | Product rules |
 |---|---|---|
-| Announcement bar, banners | content placements (`announcement_bar`, `display_banner`) | none (fixed copy and images) |
+| Announcement bar | content placements (`announcement_bar`) | none (fixed copy) |
 | Hero carousel | `hero_carousel` placements | optional per-slide schedule |
 | Tiles | `home_tiles` placements | each cell is a fixed image or a **rule** |
-| Product rails | `home_product_row` placements | resolved live from search or catalog |
-| Based on your orders | gateway, signed-in shoppers only | past orders' departments |
-| Recently viewed | the browser (local storage), cards from the gateway | the shopper's own views |
+| **Body** (everything under the tiles) | the **home composition**, see below: rails, banners, sponsored modules and rule-based modules, in priority order | per module |
+
+The body is the part of the page staff arrange. `GET /v1/home` returns it as `blocks`, a typed list (see
+[Home composition](#home-composition)); the older `banners` and `rails` lists are gone from the response.
 
 ## Eligibility: in stock, real photo
 
@@ -145,3 +146,139 @@ on a database seeded earlier either wipe and seed again, or switch those offers 
 Deploying the rule schema needs the content-service migrations `V16__home_tile_rules_and_hero_schedule.sql` (slot payload
 schemas accept `source` on tile cells and `startsAt`/`endsAt` on hero slides) and `V17__home_location_rules.sql` (the
 location kinds above on rails and tile cells); existing placements stay valid.
+
+
+## Home composition
+
+Everything under the tiles is a **block**. The gateway (`go/services/gateway-bff/internal/app/site_compose.go`) takes the
+placements of the body slots, orders them by **priority** (highest first; ties keep content's order), drops what does not
+apply to this shopper, resolves each module, and returns `blocks`. The storefront renders by `type` and ignores a type it does
+not know (`web/apps/storefront/src/components/home/HomeBlocks.tsx`). Staff change the page by changing placements, never code.
+
+| Slot | Block `type` | Paid | What it is |
+|---|---|---|---|
+| `home_product_row` | `rail` | no | product carousel (search, ATINs, location rules); hidden under **4** products (`minItems` per rail) |
+| `display_banner` | `banner` | yes | the older single banner, always labelled Sponsored |
+| `home_brand_banner` | `brand-banner` | yes | full-width **sponsored brand banner**: logo, headline, image, button, optional strip of up to 3 products |
+| `home_sponsored_products` | `sponsored-products` | yes | **sponsored products rail** from the sponsored-search auction |
+| `home_ad_row` | `ad-row` | yes | **2 or 3 image ads** side by side, each tagged "Ad" |
+| `home_advertorial` | `advertorial` | yes | "**From our partners**": image, headline, two lines, link |
+| `home_block` `deals` | `deals` | no | **deals of the day**: in-stock, real-photo items with at least 10% off compare-at price, biggest first, countdown to the end of the UTC day (or `endsAt`) |
+| `home_block` `based-on-orders` | `based-on-orders` | no | the personal rail (implicit first when staff do not place it) |
+| `home_block` `recently-viewed` | `recently-viewed` | no | client-side marker; the browser decides (implicit last) |
+| `home_block` `preorders` | `preorders` | no | the pre-order hero where the shopper's city has a live pre-order; without this block it opens the page as before |
+| `home_block` `services-near-you` | `services-near-you` | no | a band linking to `/services`, **hidden when no provider lists for the shopper's ZIP** (only a link: the services page is another team's) |
+| `home_block` `community-spotlight` | `community-spotlight` | no | one community's products; the community is staff-chosen or, by rule, one of the communities with enough stock, rotating by day and ZIP (search facet) |
+| `home_block` `seller-spotlight` | `seller-spotlight` | no | the best review-weighted marketplace seller among products shipping near the shopper (at least 3 products, sellers without reviews cannot win, AfroTransact's own catalogue is not a "seller") |
+| `home_block` `membership-promo` | `membership-promo` | no | membership / gift cards band |
+| `home_block` `signin-promo` | `signin-promo` | no | sign-in band for signed-out visitors (`audience: signed-out`) |
+| `home_block` `occasions` | `occasions` | no | **shop by occasion**: cells with a label and link; a cell with a product rule borrows the photo of that rule's best eligible product |
+
+Not built, on purpose: a **right-hand promo column** at wide widths. The page uses one centred content width (1500 px, the
+`--at-page-max` token) for hero, tiles, banners and rails; a side column would narrow every carousel for the sake of one ad
+slot, so wide screens get the full-width brand banner and the 3-up ad row instead. "Because you viewed X" is a follow-up
+(it needs a related-products read keyed by the browser's viewed ATINs).
+
+### Priority is the position
+
+A placement's **priority** is its place on the page: the "Home page layout" list in the staff console (Marketing, tab *Home
+page layout*) shows the modules in order and moves one up or down, or sets an exact priority, without a new review (content
+endpoint `PUT /v1/placements/{id}/priority`; only the position changes, never the creative). The seed spreads priorities so
+there is room to insert: see `HOME_MODULES` in `tools/seed/seedlib/dataset.py`.
+
+### Targeting and schedule
+
+Every module carries what any placement has: market, **ZIP prefixes** (content filters before the gateway sees it), and a
+schedule (`startsAt`, `endsAt`; content serves only live placements). The home slots add two payload fields, applied by the
+gateway: `states` (two-letter codes, e.g. `["TX","GA"]`) against the shopper's delivery state, and for `home_block`
+`audience` (`all`, `signed-in`, `signed-out`). Paid modules also take `maxPerSession`.
+
+### Rules every module follows
+
+- **One product, once per page.** Tiles claim first; **paid products claim next** (sponsored products and a brand banner's
+  strip), so an advertised product is not repeated further down as an organic card; then the body in page order. A module
+  that ends up with fewer products than its minimum (rails 4, deals 3, sponsored 2, spotlights 3 to 4) is hidden and does
+  not use up products another module could show.
+- **Eligibility** is unchanged: in stock with a real photo, "never show 0 reviews" (cards hide a zero-review rating), and the
+  delivery-location-aware ranking of the rail rules.
+- **Hide when empty**: a module with nothing to show renders nothing, and a failing upstream (search, bookings, the ad
+  auction) omits that block, never the page.
+
+### Ads: disclosure, counting, caps
+
+- **Disclosure.** Every paid block has `sponsored: true` and names its advertiser; the storefront draws a visible
+  "Sponsored" tag with the advertiser on banners, brand banners, advertorials and the sponsored rail (and each sponsored card
+  keeps its own label), a compact "Ad" tag on every image ad whose accessible name starts "Ad · advertiser". Links are
+  `rel="sponsored"`. A paid module without an advertiser is dropped by the gateway. A paid module never takes the organic look:
+  hairline border and a gold rule on its left edge.
+- **Counting.** Image/brand/advertorial/banner modules report to `POST /v1/home/ad-events` (`{placementId, event:
+  impression|click}`), which the gateway forwards to content (`POST /v1/placements/{id}/events`) and content adds to
+  `placement_stat` per placement and UTC day. An impression is one per page view, when at least half the module has been on
+  screen; a click is a click on its links. Nothing identifies the shopper (no cookie, ID or IP is sent or stored). Reading
+  the counts in the staff console is a follow-up (see below).
+- **Sponsored products reuse the sponsored-search pipeline**: the gateway runs the same ad auction as search results
+  (`ads=true`, not logged as a search), one auction per term of the module's `query` ("rice OR shea OR kente", at most four,
+  in parallel, because one auction places only two ads), keeps the sponsored hits that are eligible, and gives each card its
+  `sponsor.adToken` and the `sponsor.searchId` of the search it came from. The auction records the impression
+  (`ads.impression.recorded`); a click is reported with `POST /v1/search/clicks` exactly like a sponsored search result, so the
+  seller's campaign is charged once per token and budgets, pausing and attribution work unchanged.
+- **Frequency cap.** `maxPerSession` (defaults: brand banner 3, advertorial 3, ad row 5) is enforced in the browser with
+  `sessionStorage` (per tab session, nothing leaves the browser): a module seen that many times is not rendered again and not
+  counted again. It is a courtesy cap, not a billing control.
+- **Failure is quiet.** A counter request that fails is ignored; a storage error means "no cap".
+
+### Layout
+
+- One content width for everything: hero, tiles, bands and carousels all sit in `.page` (`--at-page-max` 1500 px, centred,
+  side gutters from `--at-page-gutter`).
+- **Tiles** take their columns from the number of tiles (`data-count`), so there is never an empty column: two across on
+  tablets, up to four across from 1100 px, five or six across from 1400 px for five or six tiles, one on phones.
+- **Rails** are carousels (`RailCarousel.tsx`): fixed-width cards (`clamp(150px, 15.5vw, 204px)`, 44 vw on phones) in a
+  scrolling row with scroll-snap, "See all", labelled previous/next buttons that appear only while there is more to see and
+  not on touch screens, Left/Right keys when the row has focus, and `prefers-reduced-motion` honoured. The gateway sends up
+  to 24 products per rail. A row with few products simply ends (rails under four are not shown at all).
+- Images below the fold are `loading="lazy"` inside fixed-aspect boxes (no layout shift); the body streams behind a skeleton
+  (`HomeSkeleton`); images come from the media CDN only (the CSP's `img-src`), so advertisers upload creatives to the media
+  service and paste the media address.
+
+### How adverts and placements are created today
+
+1. **Staff** open Marketing > *Placements & ads* > **New placement or ad**, choose the slot (the paid slots and the home
+   modules are choices of the Slot list), fill the fields that appear (headline, text, image address, link, the product
+   strip, up to three image ads, states, ZIP prefixes, position), and set **Advertiser** for a paid module.
+2. A paid creative is a placement with `paid: true`: content's existing **four-eyes** rule applies (the approver must differ
+   from the author and the submitter) before it goes live. The seed's demo advertisers are house-run placements marked unpaid.
+3. **Sponsored products** come from sellers: Seller Center > Advertising campaigns (keywords, categories, ATINs, bid,
+   budget). Staff only place the *rail* that shows what those campaigns win.
+4. The schedule (Starts / Ends) and targeting apply as for any placement.
+
+**Not built yet (follow-up, proposed design).** There is no self-serve advertiser (non-seller brand) tooling: no advertiser
+account, no creative upload by the advertiser, no booking or billing for brand banners, advertorials and image ads (CPM or
+flat fee), and no reporting screen. Proposed: an `advertiser` aggregate in content (org, billing contact, payment method) with
+`ad_order` (slot, dates, targeting, price model, budget), creatives uploaded to the media service and checked by staff (the
+existing review workflow), impressions and clicks from `placement_stat` charged against the order (flat fee invoiced, CPM
+metered), a viewability and invalid-click filter, staff reporting (impressions, clicks, CTR per placement) on the Home page
+layout list, and an advertiser report page. Until then every paid module is created by staff on the advertiser's behalf.
+
+## Demo data for the composition
+
+`make seed` (step `content`) now also places the modules of `HOME_MODULES`: sign-in band (95), deals of the day (90),
+sponsored products (85), a Kingston Kitchen brand banner (75), the pre-order band (62), community spotlight (58), a partner
+ad row (52), shop by occasion (47), seller spotlight (42), a Mama Put Pantry advertorial (40), services near you (38) and a
+membership band (36), among the rails (60 to 35) and banners (45, 20). The step needs the content migration
+`V18__home_ads_and_blocks.sql` first: `tools/dev/local.sh restart content`, then `tools/dev/local.sh restart gateway-bff`.
+`make seed ARGS="--only content"` is idempotent: a module whose payload and priority are unchanged is left alone, a changed
+one is replaced.
+
+### Demo photos
+
+The seeder picks a photo for a product only when its **title or categories contain the words of the product's own query** and
+nothing about something else (a basketball player, a mosque, seashells): `tools/seed/seedlib/images/relevance.py`. Queries run
+strictest first (`garri Nigerian food`, `garri food`, `garri`). A product with no relevant photo is skipped and reported, never
+given a wrong one. `SEED_IMAGES_DIR` still comes first and is never filtered: name a file after the product key
+(`ijebu-garri.jpg`, `ijebu-garri-2.jpg`). Each run writes `.local/seed/image-review.md` and `.csv` (every product, the photo
+chosen, its source and licence, what was turned away) and prints a summary with the products to check. Wikimedia (CC BY, CC BY-SA,
+CC0, public domain), Pexels and Unsplash photos keep their credit in `ATTRIBUTION.md`. The seeder never replaces the photos of a
+product that already exists: to fix an earlier run, put your files in `SEED_IMAGES_DIR` and seed a fresh database, or replace the
+photos in Seller Center. Generated category items are now named `AfroTransact Brand <Category>` instead of
+`<Category> (AfroTransact demo item)`.
