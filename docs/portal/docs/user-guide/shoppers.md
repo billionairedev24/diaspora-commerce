@@ -35,7 +35,17 @@ received the item can review it. Your review is shown as **Verified purchase** w
 
 Most items can be returned within 30 days. Food is refundable if damaged or wrong.
 
-## Book a service
+## Find and book a service
+
+All services are in person. **Services** shows providers near the location in the header ("Services near Georgetown"; use
+**Change** to pick another place). A provider is listed when they serve you: they come to you within their service radius,
+you can reach their shop within about 30 miles, or they named your city or area. Providers in a nearby town (a Round Rock
+provider for someone in Georgetown) match, and results are sorted nearest first (or by soonest, price or rating). Each row
+shows how far they are, the cities they serve, price and deposit, and the next free time in your time zone.
+
+If nobody serves your place for a service, we say so and show what is available there. Providers outside their usual
+area appear only as a clearly labelled "nearest" suggestion, and only when they are fairly close. Leave your email on
+**Tell me when one joins** (no account needed) and we will write once when a provider starts serving you.
 
 Choose the provider, a time slot, and any options. You can reschedule or cancel from **Your orders** within the
 provider's cancellation policy, which is shown before you pay.

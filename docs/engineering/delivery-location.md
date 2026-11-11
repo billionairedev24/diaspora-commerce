@@ -51,3 +51,9 @@ After applying, the storefront invalidates home, search, product, cart and pre-o
 Every rail, tile and cross-sell passes `eligibleCard` (in stock and a real photo) in one place (`railItems`), whatever
 the source kind (search, department, brand, atins, near-you, community, deliverable-fast). Cards with no reviews show no
 rating row at all (never "0 reviews").
+
+## Services near you
+
+The Services page (`/services`) uses this same location: "Services near Georgetown" with a small **Change** link that opens the
+header popover. There is no ZIP box. A provider matches by distance from its base to the ZIP's centroid, so a Round Rock
+provider can serve Georgetown; see [service-areas.md](service-areas.md).

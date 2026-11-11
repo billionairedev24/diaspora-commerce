@@ -16,7 +16,7 @@ bookings S220; design source `design/AfroTransact Provider Hub.dc.html` and `des
   public lists show averages and counts of approved reviews only.
 - **Team** (S110): members with role Owner, Manager, Practitioner or Finance, linked to their identity user id, each
   with their own **weekly hours** (several ranges a day = breaks) and **date overrides** (time off or special hours).
-- **Services & prices** (S106): duration, price, deposit, modes (`IN_PERSON`, `AT_HOME`, `VIRTUAL`), add-ons (price and
+- **Services & prices** (S106): duration, price, deposit, modes (`IN_PERSON`, `AT_HOME`; in person only, `VIRTUAL`/online is refused with `422 bookings.in-person-only`), add-ons (price and
   extra time), who performs them, and the provider's **take-home** (price − commission − card fee on the deposit
   charge and on the balance charge) under the fees payments applies to the provider (see *Fees*). Bookings copy the
   service, so later price changes don't affect them.
@@ -171,13 +171,18 @@ Practitioner scoping: an org member with role `provider.practitioner` and withou
 the team member whose `userId` equals their token subject (`403 bookings.own-calendar-only`). Staff (STAFF / SERVICE)
 may act for any organisation.
 
-### Search by ZIP and ratings (S221)
+### Search by place, service areas and zones
 
-`zip` (5 digits) goes through the `GeoClient` port (`HttpGeoClient`, `GEO_URL`): `GET /v1/zip/{zip}` for the ZIP's
-coordinates, then `GET /v1/zones/covering?lat&lon&type=SERVICE_AREA`; zone owners are provider organisations. Search
-keeps services of providers whose active service area covers the ZIP, plus `VIRTUAL` services (no travel); an unknown
-ZIP finds only virtual services. `422 bookings.invalid-zip`, `502 bookings.geo-unavailable`. Each hit carries `rating`
-(average, one decimal; 0 without reviews) and `ratingCount` from `booking_review`.
+`GET /v1/public/services/search?zip&q&category&sort` matches providers by their **service area** (base ZIP, radius, named
+areas, metro zones): within the radius for services that come to the customer, within min(radius, travel limit) for shops,
+or a named area; `coverage` says LOCAL / NEAREST / NONE / ANY and `nearest` lists labelled providers outside their usual
+coverage when nobody serves the place. Providers manage the area at `GET/PUT /v1/providers/{orgId}/service-area` (radius
+within staff-set bounds); staff manage the radius policy and metro zones at `/v1/staff/service-areas/…` (permission
+`content:markets.edit`, reason required, audited). `POST /v1/public/services/alerts` is "tell me when one joins".
+geo-service (`GEO_URL`) supplies ZIP centroids (`GET /v1/zip/{zip}`) and the cities around a point
+(`GET /v1/zips/nearby`). `422 bookings.invalid-zip`, `502 bookings.geo-unavailable`. Full design:
+[docs/engineering/service-areas.md](../../../docs/engineering/service-areas.md). Each hit carries `rating` (average, one
+decimal; 0 without reviews) and `ratingCount` from `booking_review`.
 
 ## Events
 

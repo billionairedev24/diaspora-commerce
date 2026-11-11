@@ -70,6 +70,14 @@ and, when it is approved, the department is added to your store at once. The ans
 needs, for example confirming full ingredient labelling for Beauty. Groceries needs no food permit; a permit is only asked
 of food services such as catering. Listings you already have stay live and you can keep editing their price, stock and text.
 
+### Service providers: your service area
+
+Services are in person only. In **Services**, set your **service area** first: your base address, how far you go (a
+radius within the limits for your service categories) and, if you want, extra cities, ZIP codes or whole metro zones such
+as Greater Austin. The preview shows the cities your radius covers. Customers only see you when your area covers them.
+For each service choose where it happens: **Comes to you** (home visits, catering), **You go to them** (your salon or
+shop), or both, add a category, and add a photo of your work (without one, customers see your initials).
+
 ## 3. Fulfil orders
 
 New orders appear in **Orders**. Ship with USPS, UPS or FedEx, add tracking, and mark as shipped. Customers are
