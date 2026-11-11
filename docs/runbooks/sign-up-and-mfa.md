@@ -80,9 +80,7 @@ the reminder state.
 ## Recovering an account
 
 1. Lost the authenticator or no email access to codes: sign in with a **recovery code**.
-2. No recovery codes: a staff member with `identity:admin` can reset the person's second factor (sessions admin and
-   access admin in the staff console; the change is audited). The person then signs in with the password and sets a new
-   factor (forced setup if MFA is mandatory for them).
+2. No recovery codes: there is **no admin reset of a second factor yet** (owner decision: add `identity:admin` "reset second factor", step-up protected and audited). Until then support removes the row (`mfa_totp` / `mfa_email_otp` / `mfa_recovery_code` of the user) after identity checks; the person then signs in with the password and sets a new factor (forced setup if MFA is mandatory for them).
 3. Locked out by too many wrong codes: wait for the lockout window (`Retry-After`), or use "Forgot password".
 4. Last resort for local/dev: delete the row from `mfa_totp` / `mfa_email_otp` for the user.
 

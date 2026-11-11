@@ -13,13 +13,18 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.afrotransact.identity.domain.DefaultTotpAuthenticator;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -129,7 +134,7 @@ final class BrowserSession {
     }
 
     /** Recovery codes of staff accounts enrolled by {@link #signInStaff}, per server and account (one JVM runs many contexts). */
-    private static final Map<String, java.util.Deque<String>> STAFF_RECOVERY = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<String, Deque<String>> STAFF_RECOVERY = new ConcurrentHashMap<>();
 
     /**
      * Signs a staff account in on the hosted pages. Staff must have a second factor: the first time the forced "Set up
@@ -155,11 +160,11 @@ final class BrowserSession {
         if (!secret.find()) {
             throw new IllegalStateException("No authenticator key on the setup page");
         }
-        String code = new com.afrotransact.identity.domain.DefaultTotpAuthenticator().codeAt(secret.group(1),
-                java.time.Instant.now().getEpochSecond() / 30);
+        String code = new DefaultTotpAuthenticator().codeAt(secret.group(1),
+                Instant.now().getEpochSecond() / 30);
         HttpResponse<String> done = submit("/login/mfa/setup/totp/confirm", qr, Map.of("code", code));
         expect(done, 200);
-        java.util.Deque<String> codes = new java.util.concurrent.ConcurrentLinkedDeque<>();
+        Deque<String> codes = new ConcurrentLinkedDeque<>();
         Matcher m = Pattern.compile("<code>([a-z2-9]{5}-[a-z2-9]{5})</code>").matcher(done.body());
         while (m.find()) {
             codes.add(m.group(1));
