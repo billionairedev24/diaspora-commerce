@@ -1,0 +1,1487 @@
+{
+ "_comment": "Listing rules source of truth (owner-approved 2026-11). Kinds, field rules per kind, and category -> kind + approval level. Generated from the reviewed rule matrix. Field ids are stable keys used by catalog, the product form and the bulk upload template. Entries with provisional=true are catalog categories outside the approved 73; consumers must not count them as approved. A category may carry overrides (field id to status) where one category differs from its kind, for example car seats are New only.",
+ "kinds": [
+  {
+   "code": "PKG",
+   "name": "Packaged food and drink"
+  },
+  {
+   "code": "PER",
+   "name": "Perishable food"
+  },
+  {
+   "code": "SFD",
+   "name": "Food service (prepared)"
+  },
+  {
+   "code": "BBY",
+   "name": "Baby feeding"
+  },
+  {
+   "code": "BEA",
+   "name": "Beauty and personal care"
+  },
+  {
+   "code": "HLT",
+   "name": "Health products"
+  },
+  {
+   "code": "FSH",
+   "name": "Clothing, shoes, bags"
+  },
+  {
+   "code": "JWL",
+   "name": "Jewelry"
+  },
+  {
+   "code": "ELC",
+   "name": "Electronics"
+  },
+  {
+   "code": "HOM",
+   "name": "General goods"
+  },
+  {
+   "code": "KID",
+   "name": "Toys and car seats"
+  },
+  {
+   "code": "PET",
+   "name": "Pet food"
+  },
+  {
+   "code": "BOK",
+   "name": "Books and magazines"
+  },
+  {
+   "code": "DIG",
+   "name": "Digital products"
+  },
+  {
+   "code": "GFT",
+   "name": "Gift cards"
+  },
+  {
+   "code": "SRV",
+   "name": "Services (in person)"
+  }
+ ],
+ "fields": [
+  {
+   "id": "title",
+   "group": "Identity",
+   "name": "Title",
+   "note": "Plain words; at least 10 characters.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "required",
+    "GFT": "required",
+    "SRV": "required"
+   }
+  },
+  {
+   "id": "brand",
+   "group": "Identity",
+   "name": "Brand",
+   "note": "\"Unbranded\" or \"Handmade\" allowed with a reason. Gated brands need approval.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "hidden",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "hidden",
+    "DIG": "required",
+    "GFT": "required",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "product_id",
+   "group": "Identity",
+   "name": "Product ID (barcode or ISBN)",
+   "note": "Required, or an exemption with a reason (handmade, generic). Books need the ISBN.",
+   "byKind": {
+    "PKG": "required_or_exemption",
+    "PER": "optional",
+    "SFD": "hidden",
+    "BBY": "required_or_exemption",
+    "BEA": "required_or_exemption",
+    "HLT": "required",
+    "FSH": "required_or_exemption",
+    "JWL": "required_or_exemption",
+    "ELC": "required",
+    "HOM": "required_or_exemption",
+    "KID": "required_or_exemption",
+    "PET": "required_or_exemption",
+    "BOK": "required",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "description",
+   "group": "Content",
+   "name": "Description",
+   "note": "Shopper text. Services describe what is done.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "required",
+    "GFT": "required",
+    "SRV": "required"
+   }
+  },
+  {
+   "id": "keywords",
+   "group": "Content",
+   "name": "Search keywords",
+   "note": "Up to the existing limit.",
+   "byKind": {
+    "PKG": "optional",
+    "PER": "optional",
+    "SFD": "optional",
+    "BBY": "optional",
+    "BEA": "optional",
+    "HLT": "optional",
+    "FSH": "optional",
+    "JWL": "optional",
+    "ELC": "optional",
+    "HOM": "optional",
+    "KID": "optional",
+    "PET": "optional",
+    "BOK": "optional",
+    "DIG": "optional",
+    "GFT": "optional",
+    "SRV": "optional"
+   }
+  },
+  {
+   "id": "images",
+   "group": "Content",
+   "name": "At least one image",
+   "note": "Main image size rule is relaxed. First image is the main one.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "required",
+    "GFT": "required",
+    "SRV": "required"
+   }
+  },
+  {
+   "id": "label_photo",
+   "group": "Content",
+   "name": "Label photo",
+   "note": "Ingredients and nutrition panel, Supplement Facts, Drug Facts, or ingredient list. Replaces typing ingredients for packaged food.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required_or_exemption",
+    "SFD": "optional",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "required",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "condition",
+   "group": "Offer",
+   "name": "Condition",
+   "note": "Fixed to New and hidden where used is not allowed (food, beauty, health, baby feeding, pet food). Choice of New, Renewed or Used where allowed.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "hidden",
+    "BEA": "hidden",
+    "HLT": "hidden",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "optional",
+    "HOM": "optional",
+    "KID": "required_or_exemption",
+    "PET": "hidden",
+    "BOK": "optional",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "price",
+   "group": "Offer",
+   "name": "Price",
+   "note": "",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "required",
+    "GFT": "required",
+    "SRV": "required"
+   }
+  },
+  {
+   "id": "quantity",
+   "group": "Offer",
+   "name": "Quantity",
+   "note": "Digital, gift cards and services have no stock count. Services use the calendar.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "handling_days",
+   "group": "Offer",
+   "name": "Handling time (days)",
+   "note": "Perishable food: 1 to 2 days.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "ship_from",
+   "group": "Offer",
+   "name": "Ship-from location",
+   "note": "Services use their base location and service area.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "required"
+   }
+  },
+  {
+   "id": "package_size",
+   "group": "Shipping and compliance basics",
+   "name": "Package length, width, height",
+   "note": "Of the box as shipped, per variant. Maximums stay at 108 in.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "package_weight",
+   "group": "Shipping and compliance basics",
+   "name": "Package weight",
+   "note": "Of the box as shipped, per variant. Maximum stays at 150 lb.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "country_of_origin",
+   "group": "Shipping and compliance basics",
+   "name": "Country of origin",
+   "note": "Needed for customs labels and shopper trust.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "hidden",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "required",
+    "BOK": "required",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "dangerous_goods",
+   "group": "Shipping and compliance basics",
+   "name": "Dangerous goods question",
+   "note": "Aerosols, flammables, batteries, candles, cleaners. Controls which carriers and fulfilment can handle it.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "hidden",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "required",
+    "HOM": "required",
+    "KID": "required",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "net_weight",
+   "group": "Product facts",
+   "name": "Net weight or volume",
+   "note": "What is inside, not the box.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required",
+    "HLT": "required",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "required",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "servings",
+   "group": "Product facts",
+   "name": "Servings or unit count",
+   "note": "Also feeds the tax questions for snacks and drink mixes.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "optional",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "hidden",
+    "HLT": "required",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "shelf_life",
+   "group": "Product facts",
+   "name": "Shelf life or expiry",
+   "note": "Days of shelf life, or the expiry date for supplements and medicines.",
+   "byKind": {
+    "PKG": "required",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "required",
+    "BEA": "required_or_exemption",
+    "HLT": "required",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "required",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "storage",
+   "group": "Product facts",
+   "name": "Storage",
+   "note": "Ambient, chilled or frozen.",
+   "byKind": {
+    "PKG": "optional",
+    "PER": "required",
+    "SFD": "required",
+    "BBY": "optional",
+    "BEA": "hidden",
+    "HLT": "optional",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "optional",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "ingredients",
+   "group": "Product facts",
+   "name": "Ingredients (typed)",
+   "note": "Not asked for packaged groceries, the label photo covers it.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "required",
+    "BBY": "hidden",
+    "BEA": "required",
+    "HLT": "hidden",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "allergens",
+   "group": "Product facts",
+   "name": "Allergens (\"contains\")",
+   "note": "Optional tick list for packaged food. Required for food service.",
+   "byKind": {
+    "PKG": "optional",
+    "PER": "optional",
+    "SFD": "required",
+    "BBY": "optional",
+    "BEA": "hidden",
+    "HLT": "hidden",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "material",
+   "group": "Product facts",
+   "name": "Material",
+   "note": "Metal and stones for jewelry; fabric for clothing.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "hidden",
+    "BEA": "hidden",
+    "HLT": "hidden",
+    "FSH": "required",
+    "JWL": "required",
+    "ELC": "hidden",
+    "HOM": "required_or_exemption",
+    "KID": "optional",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "model_number",
+   "group": "Product facts",
+   "name": "Model number",
+   "note": "Required for electronics and appliances.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "hidden",
+    "BEA": "hidden",
+    "HLT": "hidden",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "required",
+    "HOM": "required_or_exemption",
+    "KID": "hidden",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "age_grade",
+   "group": "Product facts",
+   "name": "Age grade and safety standard",
+   "note": "Toys, car seats, children's items, bottles.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "required_or_exemption",
+    "BEA": "hidden",
+    "HLT": "hidden",
+    "FSH": "required_or_exemption",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "required",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "sizes",
+   "group": "Product facts",
+   "name": "Sizes and size chart",
+   "note": "The seller writes their own sizes and chart.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "hidden",
+    "BEA": "hidden",
+    "HLT": "hidden",
+    "FSH": "required",
+    "JWL": "required_or_exemption",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "permit",
+   "group": "Documents (reviewed at approval)",
+   "name": "Permit or licence",
+   "note": "Food permit for food service; FDA listing or NDC for medicines and devices; trade licence for services.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "required_or_exemption",
+    "SFD": "document",
+    "BBY": "hidden",
+    "BEA": "hidden",
+    "HLT": "document",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "required_or_exemption"
+   }
+  },
+  {
+   "id": "brand_authorization",
+   "group": "Documents (reviewed at approval)",
+   "name": "Brand authorization",
+   "note": "Only when the brand is gated.",
+   "byKind": {
+    "PKG": "required_or_exemption",
+    "PER": "required_or_exemption",
+    "SFD": "hidden",
+    "BBY": "required_or_exemption",
+    "BEA": "required_or_exemption",
+    "HLT": "required_or_exemption",
+    "FSH": "required_or_exemption",
+    "JWL": "required_or_exemption",
+    "ELC": "required_or_exemption",
+    "HOM": "required_or_exemption",
+    "KID": "required_or_exemption",
+    "PET": "required_or_exemption",
+    "BOK": "required_or_exemption",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "safety_certificate",
+   "group": "Documents (reviewed at approval)",
+   "name": "Safety or lab certificate",
+   "note": "Child safety (CPSIA, ASTM F963, FMVSS 213), electrical marks, formula notification.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "document",
+    "BEA": "hidden",
+    "HLT": "required_or_exemption",
+    "FSH": "required_or_exemption",
+    "JWL": "hidden",
+    "ELC": "required_or_exemption",
+    "HOM": "hidden",
+    "KID": "document",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  },
+  {
+   "id": "liability_insurance",
+   "group": "Documents (reviewed at approval)",
+   "name": "Liability insurance",
+   "note": "Naming AfroTransact as additional insured, with an expiry date.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "required_or_exemption",
+    "SFD": "document",
+    "BBY": "hidden",
+    "BEA": "hidden",
+    "HLT": "document",
+    "FSH": "hidden",
+    "JWL": "hidden",
+    "ELC": "hidden",
+    "HOM": "hidden",
+    "KID": "required_or_exemption",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "required_or_exemption"
+   }
+  },
+  {
+   "id": "authenticity_invoice",
+   "group": "Documents (reviewed at approval)",
+   "name": "Authenticity or purchase invoice",
+   "note": "Dated within 180 days for gated brands, fine jewelry and fragrance.",
+   "byKind": {
+    "PKG": "hidden",
+    "PER": "hidden",
+    "SFD": "hidden",
+    "BBY": "hidden",
+    "BEA": "required_or_exemption",
+    "HLT": "hidden",
+    "FSH": "required_or_exemption",
+    "JWL": "document",
+    "ELC": "required_or_exemption",
+    "HOM": "hidden",
+    "KID": "hidden",
+    "PET": "hidden",
+    "BOK": "hidden",
+    "DIG": "hidden",
+    "GFT": "hidden",
+    "SRV": "hidden"
+   }
+  }
+ ],
+ "categories": [
+  {
+   "code": "baby-food-formula",
+   "department": "Groceries & Food",
+   "name": "Baby food & formula",
+   "taxStatus": "ACTIVE",
+   "kind": "BBY",
+   "approval": "approval",
+   "note": "Formula needs the FDA infant formula notification and a purchase invoice."
+  },
+  {
+   "code": "bakery-products",
+   "department": "Groceries & Food",
+   "name": "Bakery products",
+   "taxStatus": "ACTIVE",
+   "kind": "SFD",
+   "approval": "approval",
+   "note": "Seller-baked is food service. A resold factory product is packaged food."
+  },
+  {
+   "code": "beans-pantry-sauces",
+   "department": "Groceries & Food",
+   "name": "Beans, pantry foods & sauces",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "candy-gum",
+   "department": "Groceries & Food",
+   "name": "Candy & gum",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "cooking-oils",
+   "department": "Groceries & Food",
+   "name": "Cooking oils",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "dairy-eggs",
+   "department": "Groceries & Food",
+   "name": "Dairy & eggs",
+   "taxStatus": "ACTIVE",
+   "kind": "PER",
+   "approval": "approval",
+   "note": "Cold chain documents. Ships express or local only."
+  },
+  {
+   "code": "flours-starches",
+   "department": "Groceries & Food",
+   "name": "Flours & starches",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "fresh-produce",
+   "department": "Groceries & Food",
+   "name": "Fresh produce",
+   "taxStatus": "ACTIVE",
+   "kind": "PER",
+   "approval": "approval",
+   "note": "Cold chain documents. Ships express or local only."
+  },
+  {
+   "code": "frozen-meals",
+   "department": "Groceries & Food",
+   "name": "Frozen meals",
+   "taxStatus": "ACTIVE",
+   "kind": "PER",
+   "approval": "approval",
+   "note": "Made by the seller means food service rules apply."
+  },
+  {
+   "code": "meat-poultry-fish",
+   "department": "Groceries & Food",
+   "name": "Meat, poultry & fish",
+   "taxStatus": "ACTIVE",
+   "kind": "PER",
+   "approval": "approval",
+   "note": "Cold chain documents and supplier invoice."
+  },
+  {
+   "code": "nuts-seeds",
+   "department": "Groceries & Food",
+   "name": "Nuts & seeds",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": "Servings and weight decide the tax outcome."
+  },
+  {
+   "code": "packaged-snacks",
+   "department": "Groceries & Food",
+   "name": "Packaged snacks",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "pasta-noodles",
+   "department": "Groceries & Food",
+   "name": "Pasta & noodles",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "prepared-meals",
+   "department": "Groceries & Food",
+   "name": "Prepared meals",
+   "taxStatus": "ACTIVE",
+   "kind": "SFD",
+   "approval": "approval",
+   "note": "Needs the verified Food service capability and permit."
+  },
+  {
+   "code": "rice-grains",
+   "department": "Groceries & Food",
+   "name": "Rice & grains",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "spices-seasonings",
+   "department": "Groceries & Food",
+   "name": "Spices & seasonings",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "coffee-tea-dry",
+   "department": "Beverages",
+   "name": "Coffee & tea, dry",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "energy-protein-drink-mixes",
+   "department": "Beverages",
+   "name": "Energy, protein & drink mixes",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": "If it makes health claims it moves to Dietary supplements."
+  },
+  {
+   "code": "flavored-water-soda",
+   "department": "Beverages",
+   "name": "Flavored water & soda",
+   "taxStatus": "CONFLICT_OPEN",
+   "kind": "PKG",
+   "approval": "open",
+   "note": "Tax decision still open."
+  },
+  {
+   "code": "fruit-vegetable-juice",
+   "department": "Beverages",
+   "name": "Fruit & vegetable juice",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "plain-water",
+   "department": "Beverages",
+   "name": "Plain water",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "ready-to-drink-coffee-tea",
+   "department": "Beverages",
+   "name": "Ready-to-drink coffee & tea",
+   "taxStatus": "ACTIVE",
+   "kind": "PKG",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "hair-accessories",
+   "department": "Beauty & Personal Care",
+   "name": "Hair accessories",
+   "taxStatus": "ACTIVE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "haircare",
+   "department": "Beauty & Personal Care",
+   "name": "Haircare",
+   "taxStatus": "ACTIVE",
+   "kind": "BEA",
+   "approval": "open",
+   "note": "Typed ingredient list required."
+  },
+  {
+   "code": "medicated-skincare",
+   "department": "Beauty & Personal Care",
+   "name": "Medicated skincare",
+   "taxStatus": "ACTIVE",
+   "kind": "HLT",
+   "approval": "approval",
+   "note": "Amazon gates topicals. Drug Facts photo and documents."
+  },
+  {
+   "code": "perfumes-fragrances",
+   "department": "Beauty & Personal Care",
+   "name": "Perfumes & fragrances",
+   "taxStatus": "ACTIVE",
+   "kind": "BEA",
+   "approval": "brand_gated",
+   "note": "Flammable, so the dangerous goods answer applies. Brand authenticity invoice."
+  },
+  {
+   "code": "skincare-cosmetics",
+   "department": "Beauty & Personal Care",
+   "name": "Skincare & cosmetics",
+   "taxStatus": "ACTIVE",
+   "kind": "BEA",
+   "approval": "open",
+   "note": "Typed ingredient list required."
+  },
+  {
+   "code": "wigs-extensions",
+   "department": "Beauty & Personal Care",
+   "name": "Wigs & extensions",
+   "taxStatus": "ACTIVE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "adult-clothing-footwear",
+   "department": "Fashion & Accessories",
+   "name": "Adult clothing & footwear",
+   "taxStatus": "ACTIVE",
+   "kind": "FSH",
+   "approval": "brand_gated",
+   "note": "Amazon gates Clothing and Accessories. We gate known brands and keep the category open."
+  },
+  {
+   "code": "bags-purses",
+   "department": "Fashion & Accessories",
+   "name": "Bags & purses",
+   "taxStatus": "ACTIVE",
+   "kind": "FSH",
+   "approval": "brand_gated",
+   "note": ""
+  },
+  {
+   "code": "childrens-clothing",
+   "department": "Fashion & Accessories",
+   "name": "Children’s clothing",
+   "taxStatus": "ACTIVE",
+   "kind": "FSH",
+   "approval": "brand_gated",
+   "note": "Children's product certificate and tracking label."
+  },
+  {
+   "code": "jewelry-accessories",
+   "department": "Fashion & Accessories",
+   "name": "Jewelry & accessories",
+   "taxStatus": "ACTIVE",
+   "kind": "JWL",
+   "approval": "conditional_approval",
+   "note": "Fashion and beaded jewelry are open. Gold, silver, gemstones and watches need approval."
+  },
+  {
+   "code": "bedding-linens",
+   "department": "Home & Household",
+   "name": "Bedding & linens",
+   "taxStatus": "ACTIVE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "cleaning-paper-products",
+   "department": "Home & Household",
+   "name": "Cleaning & paper products",
+   "taxStatus": "REFINE_CODE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": "Dangerous goods answer applies to cleaners."
+  },
+  {
+   "code": "decor-candles",
+   "department": "Home & Household",
+   "name": "Decor & candles",
+   "taxStatus": "ACTIVE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": "Candles ask the dangerous goods question."
+  },
+  {
+   "code": "furniture-small-appliances",
+   "department": "Home & Household",
+   "name": "Furniture & small appliances",
+   "taxStatus": "REFINE_CODE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": "Model number and electrical certificate for appliances."
+  },
+  {
+   "code": "kitchenware-cookware",
+   "department": "Home & Household",
+   "name": "Kitchenware & cookware",
+   "taxStatus": "REFINE_CODE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "computers-laptops",
+   "department": "Electronics",
+   "name": "Computers & laptops",
+   "taxStatus": "ACTIVE",
+   "kind": "ELC",
+   "approval": "brand_gated",
+   "note": "New, Renewed or Used allowed."
+  },
+  {
+   "code": "gaming",
+   "department": "Electronics",
+   "name": "Gaming",
+   "taxStatus": "ACTIVE",
+   "kind": "ELC",
+   "approval": "brand_gated",
+   "note": ""
+  },
+  {
+   "code": "phones",
+   "department": "Electronics",
+   "name": "Phones",
+   "taxStatus": "ACTIVE",
+   "kind": "ELC",
+   "approval": "brand_gated",
+   "note": "Renewed phones need a grade and warranty."
+  },
+  {
+   "code": "tvs-audio-accessories",
+   "department": "Electronics",
+   "name": "TVs, audio & accessories",
+   "taxStatus": "ACTIVE",
+   "kind": "ELC",
+   "approval": "brand_gated",
+   "note": ""
+  },
+  {
+   "code": "magazines",
+   "department": "Books & Media",
+   "name": "Magazines",
+   "taxStatus": "ACTIVE",
+   "kind": "BOK",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "printed-books",
+   "department": "Books & Media",
+   "name": "Printed books",
+   "taxStatus": "ACTIVE",
+   "kind": "BOK",
+   "approval": "open",
+   "note": "ISBN required. New or Used."
+  },
+  {
+   "code": "dietary-supplements",
+   "department": "Health & Wellness",
+   "name": "Dietary supplements",
+   "taxStatus": "ACTIVE",
+   "kind": "HLT",
+   "approval": "approval",
+   "note": "Supplement Facts photo, insurance, and a certificate of analysis."
+  },
+  {
+   "code": "feminine-hygiene",
+   "department": "Health & Wellness",
+   "name": "Feminine hygiene",
+   "taxStatus": "ACTIVE",
+   "kind": "BEA",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "first-aid-wound-care",
+   "department": "Health & Wellness",
+   "name": "First aid & wound care",
+   "taxStatus": "ACTIVE",
+   "kind": "HLT",
+   "approval": "open",
+   "note": "Low risk items such as plasters and gauze. Staff can gate a product."
+  },
+  {
+   "code": "medical-devices",
+   "department": "Health & Wellness",
+   "name": "Medical devices",
+   "taxStatus": "ACTIVE",
+   "kind": "HLT",
+   "approval": "approval",
+   "note": "FDA listing for the device class."
+  },
+  {
+   "code": "otc-medicines",
+   "department": "Health & Wellness",
+   "name": "OTC medicines",
+   "taxStatus": "ACTIVE",
+   "kind": "HLT",
+   "approval": "approval",
+   "note": "Drug Facts photo and NDC or FDA listing."
+  },
+  {
+   "code": "personal-hygiene",
+   "department": "Health & Wellness",
+   "name": "Personal hygiene",
+   "taxStatus": "ACTIVE",
+   "kind": "BEA",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "baby-bottles",
+   "department": "Baby & Kids",
+   "name": "Baby bottles",
+   "taxStatus": "ACTIVE",
+   "kind": "BBY",
+   "approval": "open",
+   "note": "Safety certificate required."
+  },
+  {
+   "code": "car-seats",
+   "department": "Baby & Kids",
+   "name": "Car seats",
+   "taxStatus": "ACTIVE",
+   "kind": "KID",
+   "approval": "approval",
+   "note": "FMVSS 213 certificate and insurance. New only.",
+   "overrides": {
+    "condition": "hidden"
+   }
+  },
+  {
+   "code": "diapers-wipes",
+   "department": "Baby & Kids",
+   "name": "Diapers & wipes",
+   "taxStatus": "ACTIVE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "toys-games",
+   "department": "Baby & Kids",
+   "name": "Toys & games",
+   "taxStatus": "REFINE_CODE",
+   "kind": "KID",
+   "approval": "open",
+   "note": "Age grade and CPSIA or ASTM F963 certificate. Amazon tightens this in the holiday season."
+  },
+  {
+   "code": "pet-grooming-accessories",
+   "department": "Pets",
+   "name": "Grooming & accessories",
+   "taxStatus": "REFINE_CODE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "pet-food",
+   "department": "Pets",
+   "name": "Pet food",
+   "taxStatus": "ACTIVE",
+   "kind": "PET",
+   "approval": "open",
+   "note": "Species and life stage. Label photo."
+  },
+  {
+   "code": "audiobooks",
+   "department": "Digital Products",
+   "name": "Audiobooks",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "DIG",
+   "approval": "approval",
+   "note": "Rights holder confirmation."
+  },
+  {
+   "code": "digital-art-downloads",
+   "department": "Digital Products",
+   "name": "Digital art & downloads",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "DIG",
+   "approval": "approval",
+   "note": "Rights holder confirmation."
+  },
+  {
+   "code": "downloadable-ebooks",
+   "department": "Digital Products",
+   "name": "Downloadable e-books",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "DIG",
+   "approval": "approval",
+   "note": "Rights holder confirmation."
+  },
+  {
+   "code": "downloadable-software",
+   "department": "Digital Products",
+   "name": "Downloadable software",
+   "taxStatus": "ACTIVE",
+   "kind": "DIG",
+   "approval": "approval",
+   "note": "Malware scan and publisher identity."
+  },
+  {
+   "code": "online-courses",
+   "department": "Digital Products",
+   "name": "Online courses",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "DIG",
+   "approval": "approval",
+   "note": "Instructor credentials."
+  },
+  {
+   "code": "event-tickets",
+   "department": "Services",
+   "name": "Event tickets",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "SRV",
+   "approval": "approval",
+   "note": "Organizer verification."
+  },
+  {
+   "code": "fitness-classes",
+   "department": "Services",
+   "name": "Fitness classes",
+   "taxStatus": "ACTIVE",
+   "kind": "SRV",
+   "approval": "provider_application",
+   "note": "Insurance document."
+  },
+  {
+   "code": "hair-beauty-appointments",
+   "department": "Services",
+   "name": "Hair & beauty appointments",
+   "taxStatus": "ACTIVE",
+   "kind": "SRV",
+   "approval": "provider_application",
+   "note": "Cosmetology licence where the state requires one."
+  },
+  {
+   "code": "laundry-dry-cleaning",
+   "department": "Services",
+   "name": "Laundry & dry cleaning",
+   "taxStatus": "ACTIVE",
+   "kind": "SRV",
+   "approval": "provider_application",
+   "note": ""
+  },
+  {
+   "code": "photography-media",
+   "department": "Services",
+   "name": "Photography & media",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "SRV",
+   "approval": "approval",
+   "note": "Portfolio and licence terms."
+  },
+  {
+   "code": "repairs",
+   "department": "Services",
+   "name": "Repairs",
+   "taxStatus": "ACTIVE",
+   "kind": "SRV",
+   "approval": "provider_application",
+   "note": "Trade licence where required."
+  },
+  {
+   "code": "residential-cleaning",
+   "department": "Services",
+   "name": "Residential cleaning",
+   "taxStatus": "ACTIVE",
+   "kind": "SRV",
+   "approval": "provider_application",
+   "note": "Insurance document."
+  },
+  {
+   "code": "tutoring-consulting",
+   "department": "Services",
+   "name": "Tutoring & consulting",
+   "taxStatus": "CONFLICT_OPEN",
+   "kind": "SRV",
+   "approval": "approval",
+   "note": "Tax decision still open."
+  },
+  {
+   "code": "gift-baskets-bundles",
+   "department": "Other & Specialty",
+   "name": "Gift baskets / bundles",
+   "taxStatus": "BLOCKED_BUNDLE",
+   "kind": "GFT",
+   "approval": "blocked",
+   "note": "Blocked until bundles can be itemised for tax."
+  },
+  {
+   "code": "gift-cards",
+   "department": "Other & Specialty",
+   "name": "Gift cards",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "GFT",
+   "approval": "approval",
+   "note": "Fraud controls and tax approval first."
+  },
+  {
+   "code": "handmade-products",
+   "department": "Other & Specialty",
+   "name": "Handmade products",
+   "taxStatus": "REFINE_CODE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": "Barcode exemption allowed. Brand \"Handmade\"."
+  },
+  {
+   "code": "school-office-supplies",
+   "department": "Other & Specialty",
+   "name": "School & office supplies",
+   "taxStatus": "ACTIVE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "sports-goods",
+   "department": "Other & Specialty",
+   "name": "Sports goods",
+   "taxStatus": "ACTIVE",
+   "kind": "HOM",
+   "approval": "open",
+   "note": ""
+  },
+  {
+   "code": "fabrics-textiles",
+   "department": "Fashion & Accessories",
+   "name": "Fabrics & textiles",
+   "taxStatus": "NEEDS_APPROVAL",
+   "kind": "FSH",
+   "approval": "open",
+   "provisional": true,
+   "note": "Provisional catalog category, not in the approved matrix: treated as Clothing, shoes, bags (FSH) and open until the owner decides."
+  }
+ ]
+}

@@ -33,6 +33,9 @@ import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.VariantOptions;
+import com.afrotransact.catalog.domain.rules.CategoryRules;
+import com.afrotransact.catalog.domain.rules.ListingNormaliser;
+import com.afrotransact.catalog.domain.rules.RuleAwareType;
 import com.afrotransact.catalog.domain.sizing.SizeChart;
 import com.afrotransact.catalog.domain.sizing.SizeChartPolicy;
 import com.afrotransact.catalog.domain.tax.SellerSkus;
@@ -62,12 +65,13 @@ class ProductWriterImpl implements ProductWriter {
     private final BrandResolver brands;
     private final SellerScopeGuard scopeGuard;
     private final TaxGateEvaluator taxGate;
+    private final ListingRulesService rulesService;
     private final Clock clock;
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
                       SizeChartPolicy sizePolicy, SizeChartRepository charts, ProductEvents events, BrandResolver brands, SellerScopeGuard scopeGuard,
-                      TaxGateEvaluator taxGate, Clock clock) {
+                      TaxGateEvaluator taxGate, ListingRulesService rulesService, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
@@ -80,6 +84,7 @@ class ProductWriterImpl implements ProductWriter {
         this.brands = brands;
         this.scopeGuard = scopeGuard;
         this.taxGate = taxGate;
+        this.rulesService = rulesService;
         this.clock = clock;
     }
 
@@ -87,16 +92,20 @@ class ProductWriterImpl implements ProductWriter {
     public Product create(ListingOwner owner, CreateProductCommand cmd) {
         Placement placement = placement(cmd.categoryId(), cmd.categoryRequestId(), owner);
         CategoryNode categoryNode = node(placement.categoryId());
-        Map<String, String> attributes = brands.resolve(owner, categoryNode, placement.type(),
-                normalised(placement.type(), cmd.attributes()), Map.of());
-        List<VariantDraft> submitted = VariantOptions.canonical(placement.type(), cmd.variationTheme(),
-                spelledLikeChart(placement.type(), cmd.details(), owner.orgId(), cmd.variants()));
-        TaxGateEvaluator.Evaluation tax = taxGate.evaluate(placement.type(), categoryNode, factsOf(submitted),
-                Collections.nCopies(submitted.size(), null), cmd.details().sellerBehaviour());
-        ListingDetails details = cmd.details().withSellerBehaviour(tax.behaviour());
-        ProductDraft draft = new ProductDraft(placement.type(), cmd.title(), attributes, cmd.images(),
+        CategoryRules rules = rulesService.forNode(categoryNode);
+        ProductType type = RuleAwareType.apply(placement.type(), rules);
+        ListingNormaliser.Result ruled = ListingNormaliser.apply(rules, cmd.attributes(), cmd.images(),
+                cmd.variants(), cmd.details());
+        Map<String, String> attributes = brands.resolve(owner, categoryNode, type,
+                normalised(type, ruled.attributes()), Map.of());
+        List<VariantDraft> submitted = VariantOptions.canonical(type, cmd.variationTheme(),
+                spelledLikeChart(type, ruled.details(), owner.orgId(), ruled.variants()));
+        TaxGateEvaluator.Evaluation tax = taxGate.evaluate(type, categoryNode, factsOf(submitted),
+                Collections.nCopies(submitted.size(), null), ruled.details().sellerBehaviour());
+        ListingDetails details = ruled.details().withSellerBehaviour(tax.behaviour());
+        ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, ruled.images(),
                 cmd.variationTheme(), submitted, details);
-        validate(draft, owner.orgId(), null, tax.errors());
+        validate(draft, rules, owner.orgId(), null, tax.errors());
         for (VariantDraft v : submitted) {
             if (!sku(v).isEmpty() && products.sellerSkuTaken(owner.orgId(), sku(v))) {
                 throw new ConflictException("catalog.sku-taken",
@@ -118,7 +127,7 @@ class ProductWriterImpl implements ProductWriter {
                 : placement.type().traits().preorder() || Product.preorderDefault(placement.type().code());
         Product product = products.insert(new Product(UUID.randomUUID(), ids.nextAtin(), owner,
                 placement.categoryId(), placement.request() == null ? null : placement.request().id(),
-                placement.type().code(), cmd.title().trim(), attributes, cmd.images(), draft.variationTheme(),
+                placement.type().code(), cmd.title().trim(), attributes, ruled.images(), draft.variationTheme(),
                 variants, status, null, now, now, 0, preorderEligible, Boolean.TRUE.equals(cmd.shipsNow()),
                 details));
         dropDraft(cmd.draftId(), owner.orgId());
@@ -148,22 +157,27 @@ class ProductWriterImpl implements ProductWriter {
             categoryId = placement.categoryId();
             typeCode = placement.type().code();
         }
-        ProductType type = type(typeCode);
         boolean moved = !Objects.equals(categoryId, current.categoryId());
         CategoryNode categoryNode = node(categoryId);
+        CategoryRules rules = rulesService.forNode(categoryNode);
+        ProductType type = RuleAwareType.apply(type(typeCode), rules);
+        List<Variant> matchedFirst = matchExisting(current.variants(), cmd.variants());
+        List<VariantDraft> asked = keepStoredPackages(cmd.variants(), matchedFirst, cmd.details());
+        ListingNormaliser.Result ruled = ListingNormaliser.apply(rules, cmd.attributes(), cmd.images(), asked,
+                cmd.details());
         Map<String, String> attributes = brands.resolve(current.owner(), categoryNode, type,
-                normalised(type, cmd.attributes()), moved ? Map.of() : current.attributes());
+                normalised(type, ruled.attributes()), moved ? Map.of() : current.attributes());
         List<VariantDraft> submitted = VariantOptions.canonical(type, cmd.variationTheme(),
-                spelledLikeChart(type, cmd.details(), current.owner().orgId(), cmd.variants()));
+                spelledLikeChart(type, ruled.details(), current.owner().orgId(), ruled.variants()));
         List<Variant> matched = matchExisting(current.variants(), submitted);
         List<VariantTax> previous = new ArrayList<>();
         matched.forEach(m -> previous.add(m == null || moved ? null : m.tax()));
         TaxGateEvaluator.Evaluation tax = taxGate.evaluate(type, categoryNode, factsOf(submitted), previous,
-                cmd.details().sellerBehaviour());
-        ListingDetails details = cmd.details().withSellerBehaviour(tax.behaviour());
-        ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, cmd.images(), cmd.variationTheme(),
+                ruled.details().sellerBehaviour());
+        ListingDetails details = ruled.details().withSellerBehaviour(tax.behaviour());
+        ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, ruled.images(), cmd.variationTheme(),
                 submitted, details);
-        validate(draft, current.owner().orgId(), current.details().sizeChartId(), tax.errors());
+        validate(draft, rules, current.owner().orgId(), current.details().sizeChartId(), tax.errors());
 
         List<Variant> next = new ArrayList<>();
         List<String> keptIds = new ArrayList<>();
@@ -191,7 +205,7 @@ class ProductWriterImpl implements ProductWriter {
             }
             Variant updated = new Variant(old.id(), old.atin(), sku, gtin, v.gtinExempt(), v.options(), v.priceMinor(),
                     old.currency(), v.quantity(), v.compareAtMinor(), v.images(),
-                    old.sellerSkuGenerated() && sku(v).isEmpty(), tax.variants().get(i));
+                    old.sellerSkuGenerated() && sku(v).isEmpty(), tax.variants().get(i), v.packaging());
             termsChanged |= updated.priceMinor() != old.priceMinor() || updated.quantity() != old.quantity()
                     || !Objects.equals(updated.compareAtMinor(), old.compareAtMinor());
             next.add(updated);
@@ -205,7 +219,7 @@ class ProductWriterImpl implements ProductWriter {
         boolean preorder = cmd.preorderEligible() != null ? cmd.preorderEligible() : current.preorderEligible();
         boolean shipsNow = cmd.shipsNow() != null ? cmd.shipsNow() : current.shipsNow();
         ProductStatus before = current.status();
-        Product edited = current.edited(categoryId, typeCode, cmd.title().trim(), attributes, cmd.images(),
+        Product edited = current.edited(categoryId, typeCode, cmd.title().trim(), attributes, ruled.images(),
                 draft.variationTheme(), next, details, preorder, shipsNow, Instant.now(clock));
         Product saved = products.updateWithVariants(edited);
         dropDraft(cmd.draftId(), current.owner().orgId());
@@ -308,10 +322,11 @@ class ProductWriterImpl implements ProductWriter {
      *
      * @param linkedChartId the size chart the stored product already links (it may stay linked once retired)
      */
-    private void validate(ProductDraft draft, String ownerOrg, UUID linkedChartId, Map<String, String> taxErrors) {
+    private void validate(ProductDraft draft, CategoryRules rules, String ownerOrg, UUID linkedChartId,
+                          Map<String, String> taxErrors) {
         Map<String, String> errors = new LinkedHashMap<>();
         try {
-            policy.validate(draft);
+            policy.validate(draft, rules);
         } catch (CatalogRuleViolation ex) {
             errors.putAll(ex.fieldErrors());
         }
@@ -338,7 +353,25 @@ class ProductWriterImpl implements ProductWriter {
             }
         }
         return new Variant(UUID.randomUUID(), atin, sku, gtin, v.gtinExempt(), v.options(), v.priceMinor(), currency,
-                v.quantity(), v.compareAtMinor(), v.images(), generated, tax);
+                v.quantity(), v.compareAtMinor(), v.images(), generated, tax, v.packaging());
+    }
+
+    /**
+     * Rows that carry no package of their own keep the package their stored variant has, unless the request sets a
+     * listing-level package (then every row without its own starts from that one).
+     */
+    private static List<VariantDraft> keepStoredPackages(List<VariantDraft> drafts, List<Variant> matched,
+                                                         ListingDetails details) {
+        if (details.packaging() != null) {
+            return drafts;
+        }
+        List<VariantDraft> out = new ArrayList<>();
+        for (int i = 0; i < drafts.size(); i++) {
+            VariantDraft d = drafts.get(i);
+            Variant old = matched.get(i);
+            out.add(d.packaging() == null && old != null && old.packaging() != null ? d.withPackaging(old.packaging()) : d);
+        }
+        return out;
     }
 
     private static boolean sameTerms(ListingDetails a, ListingDetails b) {

@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.catalog.testsupport.RulesFixtures;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.DefaultProductDraftPolicy;
@@ -87,7 +88,8 @@ class ScopedOperationsTest {
         ProductWriterImpl writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), mock(IdentifierIssuer.class), new DefaultProductDraftPolicy(),
                 new DefaultSizeChartPolicy(), mock(SizeChartRepository.class), mock(ProductEvents.class),
-                mock(BrandResolver.class), guard, new TaxGateEvaluator(request -> new TaxResolver.Resolution("RESOLVED", "EXEMPT", "AT.X", "S001", "0%", null, "v", "r"), false), clock);
+                mock(BrandResolver.class), guard, new TaxGateEvaluator(request -> new TaxResolver.Resolution("RESOLVED", "EXEMPT", "AT.X", "S001", "0%", null, "v", "r"), false),
+                RulesFixtures.permissiveService(), clock);
         assertThatThrownBy(() -> writer.create(OWNER, create(DRESSES))).isInstanceOfSatisfying(
                 DepartmentNotAllowed.class, e -> assertThat(e.getMessage())
                         .contains("not set up to sell in Fashion"));

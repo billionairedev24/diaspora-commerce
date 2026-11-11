@@ -49,7 +49,7 @@ public final class ImportTemplates {
     /** The template of a product type, with its categories in the Category dropdown. */
     public static TemplateSpec forType(ProductType type, List<ImportCategory> categories) {
         List<String> paths = categories.stream().map(ImportCategory::path).toList();
-        List<ImportColumn> columns = ImportColumns.forType(type, paths);
+        List<ImportColumn> columns = ImportColumns.forCategories(type, categories);
         List<String> instructions = new ArrayList<>(INSTRUCTIONS);
         if (type.sizing().isPresent()) {
             instructions.addAll(SIZING_INSTRUCTIONS);

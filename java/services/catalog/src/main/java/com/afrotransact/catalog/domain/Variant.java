@@ -18,11 +18,21 @@ import com.afrotransact.catalog.domain.tax.VariantTax;
  * @param images         images of this variant only
  * @param sellerSkuGenerated true when the service generated {@code sellerSku} because the seller left it empty
  * @param tax            the variant's tax facts, gate status and decision summary
+ * @param packaging      the package of this variant as shipped (size and weight); null only for items that ship
+ *                       nothing (digital, gift cards, services) or listings saved before packages were per variant
  */
 public record Variant(UUID id, Atin atin, String sellerSku, String gtin, boolean gtinExempt,
                       Map<String, String> options, long priceMinor, String currency, int quantity,
                       Long compareAtMinor, List<ProductImage> images, boolean sellerSkuGenerated,
-                      VariantTax tax) {
+                      VariantTax tax, PackageDimensions packaging) {
+
+    /** A variant without a package of its own. */
+    public Variant(UUID id, Atin atin, String sellerSku, String gtin, boolean gtinExempt,
+                   Map<String, String> options, long priceMinor, String currency, int quantity,
+                   Long compareAtMinor, List<ProductImage> images, boolean sellerSkuGenerated, VariantTax tax) {
+        this(id, atin, sellerSku, gtin, gtinExempt, options, priceMinor, currency, quantity, compareAtMinor, images,
+                sellerSkuGenerated, tax, null);
+    }
 
     public Variant {
         Objects.requireNonNull(id, "id");
@@ -44,7 +54,13 @@ public record Variant(UUID id, Atin atin, String sellerSku, String gtin, boolean
     /** The same variant with another tax state. */
     public Variant withTax(VariantTax next) {
         return new Variant(id, atin, sellerSku, gtin, gtinExempt, options, priceMinor, currency, quantity,
-                compareAtMinor, images, sellerSkuGenerated, next);
+                compareAtMinor, images, sellerSkuGenerated, next, packaging);
+    }
+
+    /** The same variant with its own package. */
+    public Variant withPackaging(PackageDimensions next) {
+        return new Variant(id, atin, sellerSku, gtin, gtinExempt, options, priceMinor, currency, quantity,
+                compareAtMinor, images, sellerSkuGenerated, tax, next);
     }
 
     /** A variant without compare-at price or images. */

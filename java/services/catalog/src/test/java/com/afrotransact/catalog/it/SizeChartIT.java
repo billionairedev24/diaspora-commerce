@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.afrotransact.catalog.application.ProductImportService;
 import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
@@ -50,7 +51,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false", "at.consumers.enabled=false", "spring.kafka.bootstrap-servers=localhost:1"})
 @ActiveProfiles("local")
-@Import(SizeChartIT.Fakes.class)
+@Import({SizeChartIT.Fakes.class, PermissiveRulesConfiguration.class})
 class SizeChartIT {
 
     static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");

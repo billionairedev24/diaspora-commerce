@@ -10,15 +10,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
-import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.DepartmentNotAllowed;
 import com.afrotransact.catalog.domain.DepartmentScope;
 import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
@@ -86,10 +87,13 @@ class ImportJobImpl implements ImportJob {
     private final SellerScopeGuard scopeGuard;
     private final TransactionTemplate tx;
     private final TransactionTemplate savepoint;
+    private final ListingRulesService rules;
 
     ImportJobImpl(ProductImportRepository imports, ProductRepository products, SizeChartRepository sizeCharts,
                   CategoryRepository categories, ProductWriter writer, ImageImporter images, ImageLibraryLookup library,
-                  SellerScopeGuard scopeGuard, DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions) {
+                  SellerScopeGuard scopeGuard, DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions,
+                  ListingRulesService rules) {
+        this.rules = rules;
         this.imports = imports;
         this.products = products;
         this.sizeCharts = sizeCharts;
@@ -163,7 +167,10 @@ class ImportJobImpl implements ImportJob {
             ImportedProduct p = r.product();
             if (u.mode() == ImportMode.CREATE) {
                 List<String> notes = new ArrayList<>();
-                List<ProductImage> imgs = fetchImages(u, p.imageUrls(), r.library(), notes);
+                List<ProductImage> imgs = new ArrayList<>(fetchImages(u, p.imageUrls(), r.library(), notes));
+                if (p.labelPhotoUrl() != null) {
+                    fetchLabel(u, p.labelPhotoUrl(), r.library(), notes).ifPresent(imgs::add);
+                }
                 return new Prepared(numbers, toCreate(p, imgs), null, null, null, String.join("; ", notes));
             }
             Product current = products.findById(p.productId())
@@ -195,11 +202,8 @@ class ImportJobImpl implements ImportJob {
             throw new ImportRefused("The template's product type is no longer available");
         }
         DepartmentScope scope = scopeGuard.scopeOf(u.owner());
-        List<ImportCategory> every = categories.findAllActive().stream()
-                .filter(n -> n.level() == CategoryLevel.PRODUCT_TYPE && n.productTypeCode() != null)
-                .filter(n -> fixed == null || fixed.code().equals(n.productTypeCode()))
-                .map(n -> new ImportCategory(n.id(), n.path(), n.productTypeCode(), n.taxStatus()))
-                .toList();
+        List<ImportCategory> every = ImportCategories.leaves(categories.findAllActive(),
+                fixed == null ? null : fixed.code(), rules.book());
         List<ImportCategory> cats = every.stream().filter(c -> scope.allowsPath(c.path())).toList();
         List<ImportCategory> blocked = every.stream().filter(c -> !scope.allowsPath(c.path())).toList();
         Map<String, ExistingListing> existing = new LinkedHashMap<>();
@@ -244,6 +248,7 @@ class ImportJobImpl implements ImportJob {
         ImportContext probe = new ImportContext(u.mode(), fixed, types, cats, Set.of(), Set.of(), Map.of());
         Map<String, Integer> index = ImportColumns.resolve(u.header(), probe.columns());
         Integer imageCol = index.get(ImportColumns.IMAGES);
+        Integer labelCol = index.get(ImportColumns.LABEL_PHOTO);
         Integer parentCol = index.get(ImportColumns.PARENT_SKU);
         Set<String> skus = new LinkedHashSet<>();
         Set<String> fileNames = new LinkedHashSet<>();
@@ -256,12 +261,24 @@ class ImportJobImpl implements ImportJob {
                 skus.add(parent.strip().toUpperCase(Locale.ROOT));
             }
             fileNames.addAll(RowImages.fileNames(cell(r, imageCol)));
+            fileNames.addAll(RowImages.fileNames(cell(r, labelCol)));
         }
         return library.lookup(u.owner().orgId(), skus, fileNames);
     }
 
     private static String cell(StoredRow r, Integer col) {
         return col == null || col >= r.cells().size() || r.cells().get(col) == null ? "" : r.cells().get(col);
+    }
+
+    /** The label photo as a typed image; a label that cannot be copied refuses the product (the rules may require it). */
+    private Optional<ProductImage> fetchLabel(ProductImport u, String url, ImageLibrary lib, List<String> notes) {
+        List<ProductImage> got;
+        try {
+            got = fetchImages(u, List.of(url), lib, notes);
+        } catch (ImportRefused ex) {
+            throw new ImportRefused("Label photo: " + ex.getMessage().replaceFirst("^Main image ", ""));
+        }
+        return got.stream().findFirst().map(ProductImage::asLabel);
     }
 
     private List<ProductImage> fetchImages(ProductImport u, List<String> urls, ImageLibrary lib, List<String> notes) {
@@ -296,10 +313,10 @@ class ImportJobImpl implements ImportJob {
     private static CreateProductCommand toCreate(ImportedProduct p, List<ProductImage> imgs) {
         List<VariantDraft> variants = p.variants().stream().map(v -> new VariantDraft(v.options(), v.sku(), v.gtin(),
                 v.gtinExempt(), v.priceMinor() == null ? 0 : v.priceMinor(), v.quantity() == null ? 0 : v.quantity(),
-                v.compareAtMinor(), List.of(), null, v.taxFacts())).toList();
+                v.compareAtMinor(), List.of(), null, v.taxFacts(), v.packaging())).toList();
         ListingDetails details = new ListingDetails(p.description(), p.condition(), p.keywords(), p.fulfilment(),
                 p.packaging(), p.handlingDays() == null ? 0 : p.handlingDays(), null, p.sizeChartId(), p.fitNote(),
-                p.sellerBehaviour());
+                p.sellerBehaviour(), p.dangerousGoods(), null, p.exemptions());
         return new CreateProductCommand(p.category().id(), null, p.title(), p.attributes(), imgs, p.variationTheme(),
                 variants, "USD", p.preorderEligible(), null, details, null);
     }
@@ -318,8 +335,10 @@ class ImportJobImpl implements ImportJob {
             if (compareAt != null && compareAt <= price) {
                 compareAt = null;
             }
+            PackageDimensions pkg = change != null && change.packaging() != null ? change.packaging()
+                    : p.packaging() != null ? p.packaging() : v.packaging();
             variants.add(new VariantDraft(v.options(), v.sellerSku(), v.gtin(), v.gtinExempt(), price, qty, compareAt,
-                    v.images(), v.atin().value(), v.tax().facts()));
+                    v.images(), v.atin().value(), v.tax().facts(), pkg));
         }
         Map<String, String> attributes = new LinkedHashMap<>(current.attributes());
         attributes.putAll(p.attributes());
@@ -330,7 +349,8 @@ class ImportJobImpl implements ImportJob {
                 p.packaging() != null ? p.packaging() : d.packaging(),
                 p.handlingDays() != null ? p.handlingDays() : d.handlingDays(), d.shipFrom(),
                 p.sizeChartId() != null ? p.sizeChartId() : d.sizeChartId(),
-                p.fitNote() != null ? p.fitNote() : d.fitNote(), d.sellerBehaviour());
+                p.fitNote() != null ? p.fitNote() : d.fitNote(), d.sellerBehaviour(), d.dangerousGoods(),
+                d.documents(), d.exemptions());
         return new UpdateProductCommand(null, p.title() != null ? p.title() : current.title(), attributes, imgs,
                 current.variationTheme(), variants, p.preorderEligible(), null, details, null, null);
     }

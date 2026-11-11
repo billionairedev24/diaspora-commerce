@@ -41,6 +41,7 @@ import com.afrotransact.catalog.domain.ReviewStateConflict;
 import com.afrotransact.catalog.domain.ReviewStatus;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.port.PurchaseVerifier;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
@@ -74,7 +75,7 @@ import tools.jackson.databind.json.JsonMapper;
     "at.events.relay-enabled=false", "at.consumers.enabled=false", "spring.kafka.bootstrap-servers=localhost:1",
     "at.catalog.reviews.photo-hosts=utfs.io,media.example"})
 @ActiveProfiles("local")
-@Import(ProductReviewIT.Fakes.class)
+@Import({ProductReviewIT.Fakes.class, PermissiveRulesConfiguration.class})
 class ProductReviewIT {
 
     static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");

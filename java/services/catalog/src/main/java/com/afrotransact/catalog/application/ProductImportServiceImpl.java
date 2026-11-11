@@ -11,7 +11,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
-import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.DepartmentScope;
 import com.afrotransact.catalog.domain.Atin;
@@ -73,6 +72,7 @@ class ProductImportServiceImpl implements ProductImportService {
     private final ProductRepository products;
     private final SizeChartRepository sizeCharts;
     private final CategoryRepository categories;
+    private final ListingRulesService rules;
     private final SpreadsheetReader reader;
     private final SpreadsheetWriter writer;
     private final ImportJob job;
@@ -91,7 +91,8 @@ class ProductImportServiceImpl implements ProductImportService {
                              ImportJob job, PermissionChecker permissions, ResourceAccessChecker access,
                              OwnerResolver owners, ImportSettings settings, ImageLibraryLookup library,
                              @Qualifier("importExecutor") Executor executor, SellerScopeGuard scopeGuard, Clock clock,
-                             PlatformTransactionManager transactions) {
+                             PlatformTransactionManager transactions, ListingRulesService rules) {
+        this.rules = rules;
         this.imports = imports;
         this.products = products;
         this.sizeCharts = sizeCharts;
@@ -118,8 +119,11 @@ class ProductImportServiceImpl implements ProductImportService {
         if (type != null) {
             scope.requireProductType(type.code());
         }
-        TemplateSpec spec = type == null ? ImportTemplates.generic(allowed(leaves(null), scope))
-                : ImportTemplates.forType(type, allowed(leaves(type.code()), scope));
+        List<ImportCategory> cats = allowed(leaves(type == null ? null : type.code()), scope);
+        if (categoryId != null) {
+            cats = cats.stream().filter(c -> c.id().equals(categoryId)).toList();
+        }
+        TemplateSpec spec = type == null ? ImportTemplates.generic(cats) : ImportTemplates.forType(type, cats);
         return new FileContent(spec.fileStem() + "." + format.extension(), format.contentType(),
                 writer.template(spec, format));
     }
@@ -206,6 +210,7 @@ class ProductImportServiceImpl implements ProductImportService {
         Integer skuCol = index.get(ImportColumns.SKU);
         Integer parentCol = index.get(ImportColumns.PARENT_SKU);
         Integer imageCol = index.get(ImportColumns.IMAGES);
+        Integer labelCol = index.get(ImportColumns.LABEL_PHOTO);
         Integer gtinCol = index.get(ImportColumns.GTIN);
         Integer chartCol = index.get(ImportColumns.SIZE_CHART);
         Set<String> chartNames = new LinkedHashSet<>();
@@ -221,6 +226,9 @@ class ProductImportServiceImpl implements ProductImportService {
             }
             if (imageCol != null) {
                 fileNames.addAll(RowImages.fileNames(r.cell(imageCol)));
+            }
+            if (labelCol != null) {
+                fileNames.addAll(RowImages.fileNames(r.cell(labelCol)));
             }
             if (gtinCol != null && !r.cell(gtinCol).isBlank()) {
                 gtins.add(Gtin.digits(r.cell(gtinCol)));
@@ -396,11 +404,7 @@ class ProductImportServiceImpl implements ProductImportService {
 
     /** Product-type categories (the Category dropdown), optionally of one product type. */
     private List<ImportCategory> leaves(String typeCode) {
-        return categories.findAllActive().stream()
-                .filter(n -> n.level() == CategoryLevel.PRODUCT_TYPE && n.productTypeCode() != null)
-                .filter(n -> typeCode == null || typeCode.equals(n.productTypeCode()))
-                .map(n -> new ImportCategory(n.id(), n.path(), n.productTypeCode(), n.taxStatus()))
-                .toList();
+        return ImportCategories.leaves(categories.findAllActive(), typeCode, rules.book());
     }
 
     private ListingOwner owner() {

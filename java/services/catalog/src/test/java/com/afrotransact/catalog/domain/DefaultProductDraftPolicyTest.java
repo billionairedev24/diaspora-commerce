@@ -37,7 +37,7 @@ class DefaultProductDraftPolicyTest {
                         new VariantDraft(Map.of("Format", "Hardcover"), "SKU-1", "4006381333931", false, 0, 1),
                         new VariantDraft(Map.of("Format", "Paperback"), "sku-1", "", false, 999, 1)))))
                 .isInstanceOfSatisfying(CatalogRuleViolation.class, ex -> assertThat(ex.fieldErrors()).containsKeys(
-                        "title", "attributes.author", "attributes.language", "images[0]",
+                        "title", "attributes.author", "attributes.language",
                         "variants[0].gtin", "variants[0].price", "variants[1].sellerSku", "variants[1].gtin"));
     }
 

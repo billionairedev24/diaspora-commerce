@@ -32,12 +32,14 @@ import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.tax.TaxNotReady;
 import com.afrotransact.catalog.domain.tax.TaxReadiness;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.test.PostgresTestContainer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.context.annotation.Import;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -59,6 +61,7 @@ import tools.jackson.databind.json.JsonMapper;
     "spring.kafka.bootstrap-servers=localhost:1", "at.catalog.tax.review-required=true"})
 @ActiveProfiles("local")
 @Testcontainers
+@Import(PermissiveRulesConfiguration.class)
 class CategoryTaxMatrixIT {
 
     @Container

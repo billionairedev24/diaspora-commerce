@@ -32,6 +32,7 @@ import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.barcode.LabelFormat;
 import com.afrotransact.catalog.testsupport.BarcodeScanner;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
@@ -81,7 +82,7 @@ import tools.jackson.databind.json.JsonMapper;
     "at.catalog.product-data.gs1.timeout=30s", "at.catalog.product-data.open-food-facts.timeout=30s"})
 @ActiveProfiles("local")
 @Testcontainers
-@Import(BarcodeIT.Actors.class)
+@Import({BarcodeIT.Actors.class, PermissiveRulesConfiguration.class})
 class BarcodeIT {
 
     @Container

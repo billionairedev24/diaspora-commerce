@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.afrotransact.catalog.adapter.out.tax.LocalDatasetTaxResolver;
 import com.afrotransact.catalog.adapter.out.taxonomy.ClasspathTaxonomySource;
+import com.afrotransact.catalog.testsupport.RulesFixtures;
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.CategoryLevel;
@@ -76,7 +77,7 @@ class ProductWriterTaxGateTest {
         writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
                 mock(SizeChartRepository.class), events, brands, new UnrestrictedScopeGuard(),
-                new TaxGateEvaluator(new LocalDatasetTaxResolver(SOURCE), true),
+                new TaxGateEvaluator(new LocalDatasetTaxResolver(SOURCE), true), RulesFixtures.permissiveService(),
                 Clock.fixed(Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
     }
 

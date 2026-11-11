@@ -26,6 +26,13 @@ import com.afrotransact.catalog.domain.IdentifierRule;
 import com.afrotransact.catalog.domain.ItemCondition;
 import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.PackageDimensions;
+import com.afrotransact.catalog.domain.rules.CategoryRules;
+import com.afrotransact.catalog.domain.rules.FieldRule;
+import com.afrotransact.catalog.domain.rules.FieldStatus;
+import com.afrotransact.catalog.domain.rules.ListingRuleChecker;
+import com.afrotransact.catalog.domain.rules.ListingSubmission;
+import com.afrotransact.catalog.domain.rules.RuleAwareType;
+import com.afrotransact.catalog.domain.rules.RuleField;
 import com.afrotransact.catalog.domain.ProductDraftPolicy;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.VariantDraft;
@@ -58,6 +65,7 @@ public final class ImportValidator {
     private static final Set<String> FALSE = Set.of("no", "n", "false", "0", "non", "rara");
 
     private static final SizeChartPolicy SIZE_POLICY = new DefaultSizeChartPolicy();
+    private static final Pattern VARIANT_ROW = Pattern.compile("^variants\\[(\\d+)\\]\\.(gtin|packaging)$");
     private static final Pattern VARIANT_FIELD = Pattern.compile("^variants\\[(\\d+)\\]\\.options\\.(.+)$");
 
     private final ImportContext ctx;
@@ -261,11 +269,13 @@ public final class ImportValidator {
             return null;
         }
         ImportCategory category = category(first, true);
-        ProductType type = category == null ? ctx.fixedType()
+        ProductType declared = category == null ? ctx.fixedType()
                 : Optional.ofNullable(ctx.types().get(category.productTypeCode())).orElse(ctx.fixedType());
-        if (type == null) {
+        if (declared == null) {
             return null;
         }
+        CategoryRules rules = category == null ? null : category.rules();
+        ProductType type = rules == null ? declared : RuleAwareType.apply(declared, rules);
         warnIfDifferent(rows, ImportColumns.CATEGORY);
         String title = productText(rows, ImportColumns.TITLE);
         if (title.isEmpty()) {
@@ -276,7 +286,7 @@ public final class ImportValidator {
         }
         Map<String, String> attributes = attributes(rows, type, true);
         List<String> images = images(rows, true);
-        ProductDetails d = details(rows, type);
+        ProductDetails d = details(rows, type, rules);
         String theme = productText(rows, ImportColumns.THEME);
         VariationTheme vt = null;
         if (!theme.isEmpty()) {
@@ -298,15 +308,161 @@ public final class ImportValidator {
                 add(r, err(optionColumn(vt.dimensions().getLast().name()), "Same options as another variant of "
                         + "this product"));
             }
-            variants.add(variant(r, skus.get(r.rowNumber()), options, type, d.fulfilment(), true));
+            variants.add(variant(r, skus.get(r.rowNumber()), options, type, d.fulfilment(), true, rules));
         }
         checkCustomCount(rows, vt);
         Sizing sizing = sizing(rows, type, vt, variants, true);
         Map<String, Object> behaviour = new LinkedHashMap<>();
         variants = taxFacts(rows, type, category, variants, behaviour);
-        return new ImportedProduct(key, null, category, type.code(), title, d.description(), attributes, images,
-                d.keywords(), d.condition(), d.fulfilment(), d.handlingDays(), d.packaging(), d.preorder(),
-                vt == null ? "" : vt.name(), variants, sizing.chartId(), sizing.chartName(), sizing.fit(), behaviour);
+        PackageDimensions packaging = d.packaging();
+        Boolean dangerous = null;
+        String label = null;
+        Map<String, String> reasons = Map.of();
+        if (rules != null) {
+            packaging = variants.getFirst().packaging();
+            dangerous = dangerousGoods(rows, rules);
+            label = labelPhoto(rows, rules);
+            reasons = exemptions(rows, rules);
+            warnHidden(rows, rules);
+            ruleChecks(rows, rules, type, attributes, d.description(), images, label, dangerous, reasons, sizing,
+                    variants, packaging);
+        }
+        return new ImportedProduct(key, null, category, declared.code(), title, d.description(), attributes, images,
+                d.keywords(), d.condition(), d.fulfilment(), d.handlingDays(), packaging, d.preorder(),
+                vt == null ? "" : vt.name(), variants, sizing.chartId(), sizing.chartName(), sizing.fit(), behaviour,
+                dangerous, label, reasons);
+    }
+
+    // ------------------------------------------------------------------ the listing rules
+
+    /** The dangerous goods answer; null when blank or when the category does not ask. */
+    private Boolean dangerousGoods(List<SheetRow> rows, CategoryRules rules) {
+        String raw = productText(rows, ImportColumns.DANGEROUS);
+        if (raw.isEmpty()) {
+            return null;
+        }
+        if (!rules.shown(RuleField.DANGEROUS_GOODS)) {
+            return null;
+        }
+        Boolean b = bool(raw);
+        if (b == null) {
+            add(rows.getFirst(), err(ImportColumns.DANGEROUS, "Yes or No"));
+        }
+        return b;
+    }
+
+    /** The label photo link or library file name; null when blank or when the category does not ask. */
+    private String labelPhoto(List<SheetRow> rows, CategoryRules rules) {
+        String raw = productText(rows, ImportColumns.LABEL_PHOTO);
+        if (raw.isEmpty() || !rules.shown(RuleField.LABEL_PHOTO)) {
+            return null;
+        }
+        String problem = raw.contains("://") ? urlProblem(raw) : null;
+        if (problem != null) {
+            add(rows.getFirst(), err(ImportColumns.LABEL_PHOTO, problem));
+            return null;
+        }
+        return raw;
+    }
+
+    /** "Question: reason" pairs of the Why not provided column, by rule field id. */
+    private Map<String, String> exemptions(List<SheetRow> rows, CategoryRules rules) {
+        String raw = productText(rows, ImportColumns.EXEMPTIONS);
+        Map<String, String> out = new LinkedHashMap<>();
+        if (raw.isEmpty()) {
+            return out;
+        }
+        for (String part : raw.split(";")) {
+            int colon = part.indexOf(':');
+            String name = colon < 0 ? part.strip() : part.substring(0, colon).strip();
+            String why = colon < 0 ? "" : part.substring(colon + 1).strip();
+            if (name.isEmpty()) {
+                continue;
+            }
+            Optional<FieldRule> hit = rules.fields().stream().filter(f -> ListingRuleChecker.names(f.field(),
+                    f.field().plainLabel(f.label()), name) || ListingRuleChecker.names(f.field(), f.label(), name)).findFirst();
+            if (hit.isEmpty()) {
+                add(rows.getFirst(), RowMessage.warning(ImportColumns.EXEMPTIONS, idx(ImportColumns.EXEMPTIONS),
+                        "Ignored: \"" + name + "\" is not a question of this category"));
+            } else if (why.isEmpty()) {
+                add(rows.getFirst(), err(ImportColumns.EXEMPTIONS, "Say why " + name + " does not apply"));
+            } else if (hit.get().status() != FieldStatus.REQUIRED_OR_EXEMPTION) {
+                add(rows.getFirst(), RowMessage.warning(ImportColumns.EXEMPTIONS, idx(ImportColumns.EXEMPTIONS),
+                        "Ignored: " + name + " cannot be left out for this category"));
+            } else {
+                out.put(hit.get().field().id(), why);
+            }
+        }
+        return out;
+    }
+
+    /** A cell of a question the category does not ask is ignored, with a note, never stored. */
+    private void warnHidden(List<SheetRow> rows, CategoryRules rules) {
+        SheetRow first = rows.getFirst();
+        Map<String, RuleField> columns = new LinkedHashMap<>();
+        columns.put(ImportColumns.CONDITION, RuleField.CONDITION);
+        columns.put(ImportColumns.DANGEROUS, RuleField.DANGEROUS_GOODS);
+        columns.put(ImportColumns.LABEL_PHOTO, RuleField.LABEL_PHOTO);
+        columns.put(ImportColumns.HANDLING, RuleField.HANDLING_DAYS);
+        for (RuleField f : RuleField.values()) {
+            if (f.attributeKey() != null && f != RuleField.BRAND) {
+                columns.put(ImportColumns.ATTR_PREFIX + f.attributeKey(), f);
+            }
+        }
+        columns.put(ImportColumns.BRAND, RuleField.BRAND);
+        columns.forEach((col, field) -> {
+            if (!rules.shown(field) && !productText(rows, col).isEmpty()) {
+                add(first, RowMessage.warning(col, idx(col), "Ignored: " + field.plainLabel(rules.label(field))
+                        + " is not asked for " + rules.name()));
+            }
+        });
+        if (!rules.shown(RuleField.PRODUCT_ID)) {
+            for (SheetRow r : rows) {
+                if (!text(r, ImportColumns.GTIN).isEmpty()) {
+                    add(r, RowMessage.warning(ImportColumns.GTIN, idx(ImportColumns.GTIN),
+                            "Ignored: no barcode is asked for " + rules.name()));
+                }
+            }
+        }
+        if (!rules.physical()) {
+            for (SheetRow r : rows) {
+                if (!text(r, ImportColumns.LENGTH).isEmpty() || !text(r, ImportColumns.WEIGHT).isEmpty()) {
+                    add(r, RowMessage.warning(ImportColumns.LENGTH, idx(ImportColumns.LENGTH),
+                            "Ignored: no package is asked for " + rules.name()));
+                }
+            }
+        }
+    }
+
+    /** Applies the shared rule checks and puts each message on its column and row. */
+    private void ruleChecks(List<SheetRow> rows, CategoryRules rules, ProductType type, Map<String, String> attributes,
+                            String description, List<String> images, String label, Boolean dangerous,
+                            Map<String, String> reasons, Sizing sizing, List<ImportedVariant> variants,
+                            PackageDimensions packaging) {
+        List<ListingSubmission.VariantFacts> facts = variants.stream().map(v -> new ListingSubmission.VariantFacts(
+                v.gtin(), v.gtinExempt(), v.packaging() != null ? v.packaging() : packaging)).toList();
+        ListingSubmission submission = new ListingSubmission(attributes, description, images.size(),
+                label == null ? 0 : 1, dangerous, reasons, type.sizing().isPresent(), sizing.chartId() != null
+                || sizing.chartName() != null, type.identifierRule(), facts);
+        ListingRuleChecker.check(rules, submission).forEach((path, message) -> {
+            Matcher m = VARIANT_ROW.matcher(path);
+            if (m.matches()) {
+                int i = Integer.parseInt(m.group(1));
+                String column = "gtin".equals(m.group(2)) ? ImportColumns.GTIN : ImportColumns.LENGTH;
+                add(rows.get(Math.min(i, rows.size() - 1)), err(column, message));
+                return;
+            }
+            String column = path.startsWith("attributes.") ? ImportColumns.ATTR_PREFIX + path.substring("attributes.".length())
+                    : switch (path) {
+                        case "description" -> ImportColumns.DESCRIPTION;
+                        case "labelPhoto" -> ImportColumns.LABEL_PHOTO;
+                        case "dangerousGoods" -> ImportColumns.DANGEROUS;
+                        case "sizeChartId" -> ImportColumns.SIZE_CHART;
+                        default -> ImportColumns.TITLE;
+                    };
+            add(rows.getFirst(), err(ctx.fixedType() == null && path.startsWith("attributes.") ? ImportColumns.ATTRIBUTES
+                    : column, message));
+        });
     }
 
     /**
@@ -353,7 +509,7 @@ public final class ImportValidator {
             behaviour.putAll(split.get(1));
             ImportedVariant v = variants.get(i);
             out.add(new ImportedVariant(v.rowNumber(), v.sku(), v.options(), v.gtin(), v.gtinExempt(), v.priceMinor(),
-                    v.compareAtMinor(), v.quantity(), split.get(0)));
+                    v.compareAtMinor(), v.quantity(), split.get(0), v.packaging()));
         }
         return out;
     }
@@ -429,7 +585,8 @@ public final class ImportValidator {
             return null;
         }
         for (String ignored : List.of(ImportColumns.CATEGORY, ImportColumns.PARENT_SKU, ImportColumns.THEME,
-                ImportColumns.GTIN_EXEMPT, ImportColumns.FULFILMENT)) {
+                ImportColumns.GTIN_EXEMPT, ImportColumns.FULFILMENT, ImportColumns.LABEL_PHOTO, ImportColumns.DANGEROUS,
+                ImportColumns.EXEMPTIONS)) {
             for (SheetRow r : rows) {
                 if (!text(r, ignored).isEmpty()) {
                     add(r, RowMessage.warning(ignored, idx(ignored), "Ignored in Update mode"));
@@ -452,10 +609,10 @@ public final class ImportValidator {
         }
         Map<String, String> attributes = attributes(rows, type, false);
         List<String> images = images(rows, false);
-        ProductDetails d = details(rows, type);
+        ProductDetails d = details(rows, type, null);
         List<ImportedVariant> variants = new ArrayList<>();
         for (SheetRow r : rows) {
-            variants.add(variant(r, skus.get(r.rowNumber()), Map.of(), type, d.fulfilment(), false));
+            variants.add(variant(r, skus.get(r.rowNumber()), Map.of(), type, d.fulfilment(), false, null));
         }
         Sizing sizing = sizing(rows, type, null, List.of(), false);
         return new ImportedProduct(key, existing.productId(), null, type.code(), title.isEmpty() ? null : title,
@@ -647,12 +804,12 @@ public final class ImportValidator {
                                   Boolean preorder) {
     }
 
-    private ProductDetails details(List<SheetRow> rows, ProductType type) {
+    private ProductDetails details(List<SheetRow> rows, ProductType type, CategoryRules rules) {
         SheetRow first = rows.getFirst();
         String description = productText(rows, ImportColumns.DESCRIPTION);
         if (description.length() > ListingDetails.MAX_DESCRIPTION) {
             add(first, err(ImportColumns.DESCRIPTION, "At most " + ListingDetails.MAX_DESCRIPTION + " characters"));
-        } else if (description.isEmpty() && ctx.mode() == ImportMode.CREATE) {
+        } else if (description.isEmpty() && ctx.mode() == ImportMode.CREATE && rules == null) {
             add(first, RowMessage.warning(ImportColumns.DESCRIPTION, idx(ImportColumns.DESCRIPTION),
                     "No description: listings with one convert better"));
         }
@@ -667,7 +824,7 @@ public final class ImportValidator {
         }
         ItemCondition condition = null;
         String c = productText(rows, ImportColumns.CONDITION);
-        if (!c.isEmpty()) {
+        if (!c.isEmpty() && (rules == null || rules.shown(RuleField.CONDITION))) {
             condition = lookup(ImportColumns.CONDITIONS, c, ItemCondition.class);
             if (condition == null) {
                 add(first, err(ImportColumns.CONDITION, "Choose one of " + ImportColumns.conditionLabels()));
@@ -683,7 +840,7 @@ public final class ImportValidator {
         }
         Integer handling = null;
         String h = productText(rows, ImportColumns.HANDLING);
-        if (!h.isEmpty()) {
+        if (!h.isEmpty() && (rules == null || rules.shown(RuleField.HANDLING_DAYS))) {
             handling = integer(h);
             if (handling == null || handling < 1 || handling > ListingDetails.MAX_HANDLING_DAYS) {
                 add(first, err(ImportColumns.HANDLING, "A whole number of days from 1 to "
@@ -691,7 +848,7 @@ public final class ImportValidator {
                 handling = null;
             }
         }
-        PackageDimensions packaging = packaging(rows, fulfilment == FulfilmentMode.AFROTRANSACT);
+        PackageDimensions packaging = rules != null ? null : packaging(rows, fulfilment == FulfilmentMode.AFROTRANSACT);
         Boolean preorder = null;
         String p = productText(rows, ImportColumns.PREORDER);
         if (!p.isEmpty()) {
@@ -895,7 +1052,7 @@ public final class ImportValidator {
     }
 
     private ImportedVariant variant(SheetRow r, String sku, Map<String, String> options, ProductType type,
-                                    FulfilmentMode fulfilment, boolean create) {
+                                    FulfilmentMode fulfilment, boolean create, CategoryRules rules) {
         Long price = null;
         String p = text(r, ImportColumns.PRICE);
         if (p.isEmpty()) {
@@ -925,7 +1082,7 @@ public final class ImportValidator {
         Integer quantity = null;
         String q = text(r, ImportColumns.QUANTITY);
         if (q.isEmpty()) {
-            if (create && fulfilment != FulfilmentMode.AFROTRANSACT) {
+            if (create && fulfilment != FulfilmentMode.AFROTRANSACT && (rules == null || rules.shown(RuleField.QUANTITY))) {
                 add(r, err(ImportColumns.QUANTITY, "Required"));
             } else if (create) {
                 quantity = 0;
@@ -948,7 +1105,12 @@ public final class ImportValidator {
                 ex = false;
             }
             gtin = Gtin.digits(rawGtin);
-            if (type.identifierRule() == IdentifierRule.ISBN) {
+            if (rules != null) {
+                if (!gtin.isEmpty() && !rawGtin.strip().matches("[\\d\\s-]+")) {
+                    add(r, err(ImportColumns.GTIN, "Digits only"));
+                }
+                exempt = ex && gtin.isEmpty();
+            } else if (type.identifierRule() == IdentifierRule.ISBN) {
                 if (!Gtin.isValid(gtin) || gtin.length() != 13 || !(gtin.startsWith("978") || gtin.startsWith("979"))) {
                     add(r, err(ImportColumns.GTIN, gtin.isEmpty() ? "ISBN-13 required for books"
                             : "Not a valid ISBN-13 (978/979 prefix, check digit)"));
@@ -975,7 +1137,51 @@ public final class ImportValidator {
                 add(r, err(ImportColumns.GTIN, "Required, or answer Yes in \"No barcode\""));
             }
         }
-        return new ImportedVariant(r.rowNumber(), sku, options, gtin, exempt, price, compareAt, quantity);
+        return new ImportedVariant(r.rowNumber(), sku, options, gtin, exempt, price, compareAt, quantity, null,
+                rules == null ? null : rowPackaging(r, create));
+    }
+
+    /**
+     * The package of one row (the box as shipped). All four cells empty means the row starts from the product's first
+     * row; some filled means all four are needed.
+     */
+    private PackageDimensions rowPackaging(SheetRow r, boolean create) {
+        String[] cols = {ImportColumns.LENGTH, ImportColumns.WIDTH, ImportColumns.HEIGHT, ImportColumns.WEIGHT};
+        double[] v = new double[4];
+        int filled = 0;
+        boolean bad = false;
+        for (int i = 0; i < cols.length; i++) {
+            String s = text(r, cols[i]);
+            if (s.isEmpty()) {
+                continue;
+            }
+            filled++;
+            BigDecimal n = decimal(s);
+            if (n == null || n.signum() <= 0) {
+                add(r, err(cols[i], "A number above zero"));
+                bad = true;
+            } else {
+                v[i] = n.doubleValue();
+            }
+        }
+        if (filled == 0 || bad) {
+            return null;
+        }
+        if (filled < cols.length) {
+            for (String col : cols) {
+                if (text(r, col).isEmpty()) {
+                    add(r, err(col, "Give the package length, width, height and weight"));
+                    break;
+                }
+            }
+            return null;
+        }
+        PackageDimensions p = new PackageDimensions(v[0], v[1], v[2], v[3]);
+        if (p.problem() != null) {
+            add(r, err(ImportColumns.LENGTH, p.problem()));
+            return null;
+        }
+        return p;
     }
 
     private void checkGtinsAcrossFile(Iterable<ImportedProduct> products) {

@@ -34,6 +34,7 @@ import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
 import com.afrotransact.catalog.domain.imports.StoredRow;
 import com.afrotransact.catalog.port.ImageImporter;
 import com.afrotransact.catalog.port.ImageLibraryLookup;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.test.PostgresTestContainer;
@@ -60,7 +61,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest(properties = {"at.events.relay-enabled=false", "at.consumers.enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1", "at.catalog.imports.resume-interval=1h"})
 @ActiveProfiles("local")
-@Import({TestActors.class, ImageLibraryAttachIT.FakeMedia.class})
+@Import({TestActors.class, ImageLibraryAttachIT.FakeMedia.class, PermissiveRulesConfiguration.class})
 class ImageLibraryAttachIT {
 
     static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");

@@ -30,6 +30,7 @@ import com.afrotransact.catalog.domain.DraftSortField;
 import com.afrotransact.catalog.domain.SavedDraft;
 import com.afrotransact.catalog.domain.ShipFromRef;
 import com.afrotransact.catalog.domain.VariantDraft;
+import com.afrotransact.catalog.testsupport.PermissiveRulesConfiguration;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.test.PostgresTestContainer;
@@ -52,7 +53,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "spring.kafka.bootstrap-servers=localhost:1"})
 @ActiveProfiles("local")
 @Testcontainers
-@Import(TestActors.class)
+@Import({TestActors.class, PermissiveRulesConfiguration.class})
 class ProductFormIT {
 
     @Container
