@@ -1,11 +1,15 @@
 package com.afrotransact.seller.it;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.afrotransact.seller.port.CallerProfile;
 import com.afrotransact.seller.port.CallerProfileProvider;
+import com.afrotransact.seller.port.StaffDirectory;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
@@ -23,8 +27,19 @@ class TestActors {
     private static final AtomicReference<Actor> CURRENT = new AtomicReference<>(SUPER_ADMIN);
     private static final AtomicReference<CallerProfile> PROFILE = new AtomicReference<>(CallerProfile.empty());
 
+    private static final Map<String, List<StaffDirectory.StaffPerson>> ROSTER = new ConcurrentHashMap<>();
+
+    /** The staff the directory returns for a permission (or a role key). */
+    static void roster(String permissionOrRole, StaffDirectory.StaffPerson... people) {
+        ROSTER.put(permissionOrRole, List.of(people));
+    }
+
     static void as(Actor actor) {
         CURRENT.set(actor);
+    }
+
+    static Actor current() {
+        return CURRENT.get();
     }
 
     static void profile(CallerProfile profile) {
@@ -65,5 +80,27 @@ class TestActors {
     @Primary
     CallerProfileProvider switchableCallerProfile() {
         return PROFILE::get;
+    }
+
+    @Bean
+    @Primary
+    StaffDirectory testStaffDirectory() {
+        return new StaffDirectory() {
+            @Override
+            public List<StaffPerson> withPermission(String permission) {
+                return ROSTER.getOrDefault(permission, List.of());
+            }
+
+            @Override
+            public List<StaffPerson> withRole(String roleKey) {
+                return ROSTER.getOrDefault(roleKey, List.of());
+            }
+
+            @Override
+            public List<StaffPerson> people(List<String> userIds) {
+                return ROSTER.values().stream().flatMap(List::stream).filter(p -> userIds.contains(p.id()))
+                        .distinct().toList();
+            }
+        };
     }
 }
