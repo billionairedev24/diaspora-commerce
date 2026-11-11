@@ -52,6 +52,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"inventory", "inventory", "Inventory", "AfroTransact-owned and FBA stock by fulfilment centre, lot by lot."},
 		{"retail", "retail", "AfroTransact Retail (1P)", "Purchase orders for AfroTransact-owned and AfroTransact Brand inventory."},
 		{"dispatch", "dispatch", "Delivery dispatch", "AfroTransact Delivery routes, drivers and internal delivery."},
+		{DeliveryQuotesModule, "", "Delivery quotes", "Shoppers outside the delivery zones ask for a delivery price. Customer care agrees an amount, with a reason, and the shopper pays it at checkout."},
 		{"preorders", "preorders", "Pre-orders", "Open pre-order windows by city with opening, closing and delivery dates. Upload advertorials, watch every pre-order live, export and add late orders."},
 	}},
 	{"partners", "Partners", []StaffModule{
@@ -125,6 +126,16 @@ func (a StaffAccess) Level(module string) string {
 		case a.CanAny(PermPlansManage, PermBillingAdjust):
 			return LevelEdit
 		case a.CanAny(PermSellerBilling, "billing:usage"):
+			return LevelView
+		default:
+			return LevelNone
+		}
+	case DeliveryQuotesModule:
+		// Derived from orders-service's own permissions (identity's matrix has no column for it, identity V41).
+		switch {
+		case a.CanAny(PermQuotesAgree, PermQuotesAssign):
+			return LevelEdit
+		case a.Can(PermQuotesView):
 			return LevelView
 		default:
 			return LevelNone
@@ -296,7 +307,7 @@ var ResourceKeys = []string{"users", "roles", "applications", "organisations", "
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "service-area-rules", "service-zones", "site-settings", "legal-documents", "help-articles", "careers-jobs", "cookie-definitions", "privacy-requests", "announcements",
 	"placements", "home-layout", "identity-providers", "fee-schedules", "tax-rates", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
 	"reconciliation", "reconciliation-runs", "ledger-adjustments", "recoveries", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "maintenance", "tax-filings", "tax-nexus",
-	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy", "exchange-rates", "application-review-settings"}
+	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy", "exchange-rates", "application-review-settings", "delivery-quotes", "delivery-quote-settings"}
 
 // Column is one table column; Width is its share of the table in percent.
 type Column struct {
@@ -581,6 +592,7 @@ var statusTones = map[string]string{
 	"COMING_SOON": "brand", "SCHEDULED": "brand", "ENDED": "info", "ENABLED": "good", "DISABLED": "bad", "ACTIVE": "good", "IN_TRANSIT": "info",
 	"REFUNDED": "good", "DELIVERED": "good", "PLACED": "brand", "DELIVERY_FAILED": "bad", "OUT_FOR_DELIVERY": "info", "PACKED": "info",
 	"STATE": "info", "LOCAL": "brand", "SUBMITTED": "brand",
+	"READY": "good", "DECLINED": "bad", "USED": "good",
 	"ALERT": "bad", "BLOCKED": "bad", "SUSPENDED": "bad", "AWAITING_ROUTE": "warn", "APPLIED": "good", "DUPLICATE": "info",
 }
 

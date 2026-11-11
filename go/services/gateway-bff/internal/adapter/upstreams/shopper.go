@@ -569,3 +569,33 @@ func (d *deliveryFactsImpl) Tracking(ctx context.Context, _, carrier, number str
 	_, err = call(ctx, d.carrier, httpclient.Request{Path: "/v1/tracking/" + esc(strings.ToLower(carrier)) + "/" + esc(number), Bearer: token}, &out)
 	return out.Events, err
 }
+
+// ---------------------------------------------------------------- delivery quotes (customer)
+
+type customerQuotesImpl struct{ c httpclient.Client }
+
+var _ port.CustomerQuotesClient = (*customerQuotesImpl)(nil)
+
+// NewCustomerQuotes returns the orders client for the shopper's own delivery quote requests.
+func NewCustomerQuotes(c httpclient.Client) port.CustomerQuotesClient {
+	return &customerQuotesImpl{c: c}
+}
+
+func (q *customerQuotesImpl) Request(ctx context.Context, bearer string, req port.UpQuoteRequest) (domain.DeliveryQuote, error) {
+	var out domain.DeliveryQuote
+	// A repeat of the same cart and address returns the same request, so a retry is safe.
+	_, err := call(ctx, q.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/delivery-quotes", Bearer: bearer, JSON: req, RetryUnsafe: true}, &out)
+	return out, err
+}
+
+func (q *customerQuotesImpl) List(ctx context.Context, bearer string) ([]domain.DeliveryQuote, error) {
+	var out []domain.DeliveryQuote
+	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes", Bearer: bearer}, &out)
+	return out, err
+}
+
+func (q *customerQuotesImpl) Get(ctx context.Context, bearer, id string) (domain.DeliveryQuote, error) {
+	var out domain.DeliveryQuote
+	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes/" + esc(id), Bearer: bearer}, &out)
+	return out, err
+}

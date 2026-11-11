@@ -535,6 +535,15 @@ func selections(raw []domain.PlaceOrderRequestSelection) ([]port.UpDeliverySelec
 			errs[f+".pickupPointId"] = "Choose a pickup location"
 		}
 		sel := port.UpDeliverySelection{PackageID: s.PackageID, Option: s.Option, PickupPointID: s.PickupPointID}
+		if q := strings.TrimSpace(s.QuoteID); q != "" {
+			if s.Option == "pickup" {
+				errs[f+".quoteId"] = "A delivery quote is for delivery, not pickup"
+			}
+			if len(q) > 64 {
+				errs[f+".quoteId"] = "Unknown delivery quote"
+			}
+			sel.QuoteID = q
+		}
 		if p := s.Preferences; p != nil {
 			if p.Handover != "" && !handovers[p.Handover] {
 				errs[f+".preferences.handover"] = "Choose hand, door or desk"

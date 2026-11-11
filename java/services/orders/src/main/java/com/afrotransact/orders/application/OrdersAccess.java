@@ -1,5 +1,7 @@
 package com.afrotransact.orders.application;
 
+import java.util.Arrays;
+
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderStatus;
@@ -267,6 +269,19 @@ class OrdersAccess {
         if (!superAdmin(customer) && !customer.subject().equals(order.customerId())) {
             throw notFound(order.number());
         }
+    }
+
+    /** A staff member (never a service) holding at least one of {@code anyOf}: the delivery quote desk. */
+    Actor quoteStaff(String... anyOf) {
+        Actor actor = actors.current();
+        if (actor.type() != PrincipalType.STAFF && !superAdmin(actor)) {
+            throw new ForbiddenActionException("orders.staff-only", "Delivery quotes are handled by staff");
+        }
+        if (Arrays.stream(anyOf).noneMatch(actor::can)) {
+            throw new ForbiddenActionException("auth.missing-permission",
+                    "Missing one of the permissions " + String.join(", ", anyOf));
+        }
+        return actor;
     }
 
     static boolean staff(Actor actor) {

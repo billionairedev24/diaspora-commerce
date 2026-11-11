@@ -199,6 +199,7 @@ type UpDeliverySelection struct {
 	Option        string         `json:"option"`
 	PickupPointID string         `json:"pickupPointId,omitempty"`
 	Preferences   *UpPreferences `json:"preferences,omitempty"`
+	QuoteID       string         `json:"quoteId,omitempty"`
 }
 
 // UpCheckoutRequest is orders' CheckoutRequest.
@@ -824,4 +825,28 @@ type LocalDeliveryClient interface {
 	Location(ctx context.Context, locationID string) (PickupLocationFacts, error)
 	Distance(ctx context.Context, from, to GeoPlace) (RoadDistance, error)
 	Quote(ctx context.Context, sellerOrgID string, miles float64, packages int) (LocalDeliveryQuote, error)
+}
+
+// ---------------------------------------------------------------- delivery quotes (orders, listing rules D20)
+
+// UpQuoteRequest is orders' DeliveryQuoteRequest.
+type UpQuoteRequest struct {
+	AddressID string               `json:"addressId"`
+	Lines     []UpQuoteRequestLine `json:"lines,omitempty"`
+	Contact   string               `json:"contact,omitempty"`
+	Note      string               `json:"note,omitempty"`
+}
+
+// UpQuoteRequestLine is one cart line of a quote request.
+type UpQuoteRequestLine struct {
+	VariantAtin string `json:"variantAtin"`
+	Quantity    int    `json:"quantity"`
+}
+
+// CustomerQuotesClient calls orders with the customer's token: ask for a delivery quote, list mine, read one.
+type CustomerQuotesClient interface {
+	// Request is POST /v1/delivery-quotes; orders answers the same request for the same cart and address.
+	Request(ctx context.Context, bearer string, req UpQuoteRequest) (domain.DeliveryQuote, error)
+	List(ctx context.Context, bearer string) ([]domain.DeliveryQuote, error)
+	Get(ctx context.Context, bearer, id string) (domain.DeliveryQuote, error)
 }
