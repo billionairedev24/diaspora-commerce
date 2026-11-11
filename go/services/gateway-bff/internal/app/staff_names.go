@@ -86,7 +86,9 @@ func customerRef(idKey string) nameRef {
 
 func driverRef(idKey string) nameRef { return newRef(nameUser, idKey, "Driver", "Unknown driver") }
 
-func personRef(idKey, label string) nameRef { return newRef(nameUser, idKey, label, "Unknown user") }
+func personRef(idKey, label string) nameRef {
+	return newRef(nameUser, idKey, label, "Unknown user")
+}
 
 func routeRef(idKey string) nameRef { return newRef(nameRoute, idKey, "Route", "Unknown route") }
 
@@ -562,6 +564,9 @@ func (r *staffResource) nameSections(o jobj, sections []domain.DetailSection) []
 		id, name := jstr(o, ref.idKey), jstr(o, ref.nameKey)
 		if id == "" || name == "" {
 			continue
+		}
+		if name == "Unknown user" { // a person identity cannot name: say so, never show the uuid
+			name = "Unknown user (account not found or no longer active)"
 		}
 		shown := false
 		for si := range sections {

@@ -29,7 +29,7 @@ func staffResources() map[string]*staffResource {
 		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(), pickupLocationsResource(),
 		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(),
 		marketsResource(), siteSettingsResource(), maintenanceResource(), taxFilingsResource(), taxNexusResource(), taxNexusResource(), legalResource(), helpArticlesResource(), careersJobsResource(), cookieDefinitionsResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"), couponsResource(),
-		identityProvidersResource(), exchangeRatesResource(),
+		identityProvidersResource(), exchangeRatesResource(), applicationReviewSettingsResource(),
 	)
 	out := make(map[string]*staffResource, len(all))
 	for _, r := range all {
@@ -312,14 +312,29 @@ func applicationsResource() *staffResource {
 	decided := past("APPROVED", "REJECTED")
 	return &staffResource{
 		key: "applications", module: "apps", title: "Applications", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("reference", "Reference", "mono", 13), col("displayName", "Business", "strong", 25), col("kind", "Kind", "text", 10),
-			col("state", "State", "text", 8), col("planCode", "Plan", "text", 10), col("submittedAt", "Submitted", "date", 14), col("status", "Status", "status", 20)},
-		facets: domain.StaffFacets("PENDING_REVIEW", "FLAGGED", "AWAITING_FINAL_APPROVAL", "INFO_REQUESTED", "APPROVED", "REJECTED"),
-		list:   listPaged("/v1/applications", upSeller, nil),
-		get:    getByPath("/v1/applications/", upSeller),
-		names:  []nameRef{personRef("reviewerId", "Reviewer"), personRef("finalApproverId", "Final approver"), orgRef("orgId")},
+		columns: []domain.Column{col("reference", "Reference", "mono", 12), col("displayName", "Business", "strong", 20), col("kind", "Kind", "text", 8),
+			col("with", "With", "text", 14), col("waiting", "Waiting", "duration", 10), col("sla", "SLA", "text", 9), col("escalation", "Escalation", "text", 10),
+			col("planCode", "Plan", "text", 8), col("submittedAt", "Submitted", "date", 11), col("status", "Status", "status", 16)},
+		facets: applicationQueues(),
+		list:   listPaged("/v1/applications", upSeller, func(q staffQuery, v url.Values) { applicationQueueParams(q.Status, v) }),
+		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
+			o, err := getByPath("/v1/applications/", upSeller)(ctx, sc, id)
+			if err == nil && o != nil {
+				nameFromTimeline(o)
+			}
+			return o, err
+		},
+		names: []nameRef{personRef("reviewerId", "Reviewer"), personRef("finalApproverId", "Final approver"), orgRef("orgId")},
 		cells: func(o jobj) map[string]any {
-			return map[string]any{"displayName": cellValue(firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "businessDetails.legalName")))}
+			cells := workflowCells(o)
+			cells["displayName"] = cellValue(firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "businessDetails.legalName")))
+			return cells
+		},
+		banner:   returnedBanner,
+		activity: func(_ context.Context, _ staffCtx, o jobj) []domain.ActivityEntry { return timelineActivity(o) },
+		sections: func(o jobj) []domain.DetailSection {
+			skip := []string{"workflow", "timeline", "accessLog", "reviewerId", "reviewerName", "finalApproverId", "finalApproverName"}
+			return append(workflowSections(o), autoSections(o, "status", skip...)...)
 		},
 		// The documents the applicant uploaded open in a new tab for the reviewer; seller logs each opening.
 		file: func(ctx context.Context, sc staffCtx, id, assetID string) (string, error) {
@@ -350,9 +365,9 @@ func applicationsResource() *staffResource {
 			return firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "reference"))
 		},
 		subtitleOf: func(o jobj) string {
-			return strings.TrimSpace(jstr(o, "reference") + " · " + domain.Humanize(jstr(o, "kind")))
+			return strings.TrimSpace(jstr(o, "reference") + " · " + domain.Humanize(jstr(o, "kind")) + " · " + stageLine(o))
 		},
-		actions: []staffAction{
+		actions: append(applicationAssignmentActions(), []staffAction{
 			{key: "review-approve", label: "Approve (step 1)", tone: "primary", permission: "applications:review", level: domain.LevelApprove, form: approveForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: approveRun},
 			{key: "review-flag", label: "Flag for senior review", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: flagRun},
 			{key: "review-request-info", label: "Return to applicant", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW", "FLAGGED"), settled: past("INFO_REQUESTED", "AWAITING_FINAL_APPROVAL", "APPROVED", "REJECTED"), run: infoRun},
@@ -360,7 +375,7 @@ func applicationsResource() *staffResource {
 			{key: "final-request-info", label: "Return to applicant (step 2)", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: finalInfoForm, when: finalStep, settled: past("INFO_REQUESTED", "APPROVED", "REJECTED"), run: finalInfoRun},
 			{key: "send-back", label: "Send back", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: backForm, when: finalStep, settled: decided, run: backRun},
 			{key: "reject", label: "Reject", tone: "danger", permission: "applications:approve", level: domain.LevelApprove, form: rejectForm, when: finalStep, settled: decided, run: rejectRun},
-		},
+		}...),
 	}
 }
 

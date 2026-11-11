@@ -233,6 +233,9 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 			d.Links = liveLinks(sc, l)
 		}
 	}
+	if r.banner != nil {
+		d.Banner = r.banner(o)
+	}
 	if r.version != nil {
 		if v := r.version(o); v != "" {
 			d.Version = &v

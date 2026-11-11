@@ -14,6 +14,7 @@ import (
 const (
 	lookupDrivers = "drivers"
 	lookupSellers = "sellers"
+	lookupStaff   = "staff"
 	// lookupMaxHits is how many matches a picker lists at once.
 	lookupMaxHits = 20
 	// lookupDriverPages caps how many pages of people are read to find drivers (50 per page).
@@ -21,7 +22,7 @@ const (
 )
 
 // lookupModules is the module each kind of lookup is part of.
-var lookupModules = map[string]string{lookupDrivers: dispatchModule, lookupSellers: "payouts"}
+var lookupModules = map[string]string{lookupDrivers: dispatchModule, lookupSellers: "payouts", lookupStaff: "apps"}
 
 // LookupModule is the module a lookup kind belongs to; false for a kind there is no such lookup for.
 func LookupModule(kind string) (string, bool) {
@@ -64,6 +65,20 @@ func (s *staffRecordsImpl) Lookup(ctx context.Context, c *domain.Caller, kind, q
 				}
 			}
 			if len(items) < 50 {
+				break
+			}
+		}
+	case lookupStaff:
+		var p jobj
+		if err := sc.get(ctx, sc.up.Identity, "/v1/admin/users", url.Values{"q": {q}, "size": {"50"}}, &p); err != nil {
+			return out, err
+		}
+		for _, u := range objs(p, "items") {
+			if !strings.EqualFold(jstr(u, "principalType"), "STAFF") || jstr(u, "id") == "" {
+				continue
+			}
+			out.Items = append(out.Items, domain.LookupHit{ID: jstr(u, "id"), Name: firstNonEmpty(jstr(u, "name"), jstr(u, "email"), "Unknown user"), Detail: jstr(u, "email")})
+			if len(out.Items) >= lookupMaxHits {
 				break
 			}
 		}

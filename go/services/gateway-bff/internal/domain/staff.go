@@ -296,7 +296,7 @@ var ResourceKeys = []string{"users", "roles", "applications", "organisations", "
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "careers-jobs", "cookie-definitions", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
 	"reconciliation", "reconciliation-runs", "ledger-adjustments", "recoveries", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "maintenance", "tax-filings", "tax-nexus",
-	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy", "exchange-rates"}
+	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy", "exchange-rates", "application-review-settings"}
 
 // Column is one table column; Width is its share of the table in percent.
 type Column struct {
@@ -444,6 +444,13 @@ type DetailSection struct {
 	Collapsed bool `json:"collapsed,omitempty"`
 }
 
+// RecordBanner is a notice at the top of a sheet (an application the approver sent back).
+type RecordBanner struct {
+	Tone  string `json:"tone"`
+	Title string `json:"title"`
+	Text  string `json:"text"`
+}
+
 // TechnicalDetails is the title of the collapsed section that keeps the raw ids behind the names.
 const TechnicalDetails = "Technical details"
 
@@ -554,6 +561,8 @@ type RecordDetail struct {
 	EditForm     *Form           `json:"editForm"`
 	Links        []RecordLink    `json:"links"`
 	Version      *string         `json:"version"`
+	// Banner is a notice shown above the sections (omitted when there is none).
+	Banner *RecordBanner `json:"banner,omitempty"`
 	// Shipments lists an order's packages with the statuses staff may set on each (orders only).
 	Shipments []RecordShipment `json:"shipments,omitempty"`
 	// Removed is set when an action deleted the record; the console closes the sheet and refreshes the table.

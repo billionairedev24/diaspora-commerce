@@ -238,7 +238,7 @@ func datasetPlan(ds *ExportDataset, keyPrefix string) (exportPlan, error) {
 		}}, nil
 }
 
-var columnKinds = []string{"text", "strong", "mono", "money", "number", "percent", "date", "datetime", "status"}
+var columnKinds = []string{"text", "strong", "mono", "money", "number", "percent", "duration", "date", "datetime", "status"}
 
 func safeKey(s string) bool {
 	if s == "" || len(s) > 60 {

@@ -351,12 +351,19 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// seller
 	case p == "/v1/applications":
 		writeJ(w, 200, page(map[string]any{"id": "app-1", "reference": "APP-1", "displayName": "Kente Naturals", "kind": "SELLER", "status": "AWAITING_FINAL_APPROVAL",
-			"reviewerId": "stf-1", "submittedAt": now}))
+			"reviewerId": "stf-1", "submittedAt": now, "workflow": appWorkflow(now)}))
+	case p == "/v1/application-review-settings":
+		writeJ(w, 200, map[string]any{"reviewSlaHours": 24, "approvalSlaHours": 24, "dueSoonPercent": 75, "unassignedAfterHours": 4, "level2AfterHours": 24,
+			"autoAssign": "NONE", "enforceAssignee": false, "sendBackToReviewer": false, "reviewChain": map[string]any{"level1": map[string]any{"userIds": []string{"stf-2"}}, "level2": map[string]any{}},
+			"approvalChain": map[string]any{"level1": map[string]any{}, "level2": map[string]any{}}, "reviewLevel1People": []string{"Sue Supervisor"}, "reviewLevel2People": []string{},
+			"approvalLevel1People": []string{}, "approvalLevel2People": []string{}, "updatedByName": "Sue Supervisor", "updatedAt": now,
+			"changes": []any{map[string]any{"actorName": "Sue Supervisor", "reason": "Faster reviews for the launch", "changedAt": now}}})
 	case p == "/v1/review-reason-codes":
 		writeJ(w, 200, []any{map[string]any{"code": "DOCUMENTS_VERIFIED", "label": "Documents verified"}})
 	case strings.HasPrefix(p, "/v1/applications/"):
 		writeJ(w, 200, map[string]any{"id": "app-1", "reference": "APP-1", "kind": "SELLER", "status": "AWAITING_FINAL_APPROVAL", "reviewerId": "stf-1",
-			"business": map[string]any{"storeName": "Kente Naturals", "entityType": "SINGLE_MEMBER_LLC"}, "steps": []string{"business", "bank"}})
+			"business": map[string]any{"storeName": "Kente Naturals", "entityType": "SINGLE_MEMBER_LLC"}, "steps": []string{"business", "bank"},
+			"workflow": appWorkflow(now), "timeline": []any{map[string]any{"action": "APPROVE", "actorId": "stf-1", "actorName": "Rita Okoro", "occurredAt": now, "note": "ok"}}})
 	// seller: the organisation directory mirror and Stripe Connect compliance
 	case p == "/v1/orgs/mirror":
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"orgId": "org-1", "displayName": "Kente Naturals", "legalName": "Kente Naturals LLC", "kind": "SELLER", "offering": "PRODUCTS", "country": "US", "status": "APPROVED"}}, "total": 1})
@@ -1073,7 +1080,7 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("recovery sheet = %v / %v", rec["title"], rec["subtitle"])
 	}
 	for _, sec := range rec["sections"].([]any) { // the "IDs" section is where ids live; everything else names things
-		if m := sec.(map[string]any); m["title"] != "IDs" && (strings.Contains(fmt.Sprint(m), "org-1") || strings.Contains(fmt.Sprint(m), "stf-") || strings.Contains(fmt.Sprint(m), "ord-1")) {
+		if m := sec.(map[string]any); m["title"] != domain.TechnicalDetails && (strings.Contains(fmt.Sprint(m), "org-1") || strings.Contains(fmt.Sprint(m), "stf-") || strings.Contains(fmt.Sprint(m), "ord-1")) {
 			t.Fatalf("recovery sheet shows ids in %v", m)
 		}
 	}
@@ -1303,7 +1310,7 @@ func TestStaffContractConformance(t *testing.T) {
 		for _, f := range sec.(map[string]any)["fields"].([]any) {
 			fm := f.(map[string]any)
 			if fm["value"] == "org-1" {
-				idsShown = sec.(map[string]any)["title"] == "IDs" && fm["label"] == "Seller ID" && fm["kind"] == "mono"
+				idsShown = sec.(map[string]any)["title"] == domain.TechnicalDetails && sec.(map[string]any)["collapsed"] == true && fm["label"] == "Seller ID" && fm["kind"] == "mono"
 				if !idsShown {
 					t.Fatalf("the raw id appears outside the IDs section: %v", fm)
 				}
@@ -1848,4 +1855,12 @@ func TestStaffAccessLevels(t *testing.T) {
 	if l := domain.RefundLimit([]string{"platform.marketing"}); l == nil || *l != 0 {
 		t.Fatal("marketing may not refund")
 	}
+}
+
+
+// appWorkflow is seller's view of who holds the fake application: with Amina Bello at approval, overdue, escalated once.
+func appWorkflow(now string) map[string]any {
+	return map[string]any{"stage": "APPROVAL", "holder": "with Amina Bello", "assigneeId": "stf-3", "assigneeName": "Amina Bello", "assignedAt": now, "assignedByName": "Sue Supervisor",
+		"stageEnteredAt": now, "waitingSeconds": 90000, "slaState": "OVERDUE", "slaDueAt": now, "escalationLevel": 1, "escalatedAt": now, "escalationReason": "Overdue: waiting 25 h",
+		"escalatedTo": []string{"Sue Supervisor"}, "returnCount": 0, "mine": false, "canClaim": false, "canAssign": true, "canRelease": true, "canEscalate": true, "canTakeOver": false}
 }

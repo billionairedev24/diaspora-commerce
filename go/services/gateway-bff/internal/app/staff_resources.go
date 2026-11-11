@@ -88,6 +88,8 @@ type staffResource struct {
 	tables            func(o jobj) []domain.DetailTable
 	activity          func(ctx context.Context, sc staffCtx, o jobj) []domain.ActivityEntry
 	links             func(o jobj) []domain.RecordLink
+	// banner is a notice above the sheet's sections (nil: none).
+	banner func(o jobj) *domain.RecordBanner
 	// file returns the URL of one file attached to the record (an application's uploaded document); the BFF sends the
 	// reviewer there (GET /v1/staff/resources/{resource}/{id}/files/{fileId}).
 	file    func(ctx context.Context, sc staffCtx, id, fileID string) (string, error)
