@@ -120,7 +120,7 @@ Every row is one sign-in of one person in one app (an OAuth authorization with i
 | Edit again: access token lifetime ceiling **1** minute (reason, password) | after about 5 seconds new tokens have `expires_in` of at most 60, whatever the client allows |
 | Set both values back to the defaults (type the default, or empty the ceiling) | "(default)" again |
 
-Be careful with the second-factor switches on a shared environment: they apply to everyone of that portal who has a factor or a phone on file.
+Be careful with the second-factor switches on a shared environment: they force everyone of that portal without a factor to enrol one at their next sign-in (nobody is sent a code before enrolling).
 
 ## 7. Audit trail
 

@@ -17,7 +17,7 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | Email verification | 6-digit code (hashed), 10-minute expiry, 5 wrong attempts, resend ≤ 1 per 30 s and ≤ 5 per hour (HTTP 429 + `Retry-After`). Signing up again with an unconfirmed email restarts the registration. |
 | Landing | `GET /v1/me` → `landing` = `shop` / `seller-onboarding` / `seller-center` / `provider-onboarding` / `provider-hub` / `staff-console` / `driver-app`, from roles and org approval status. |
 | RBAC | Permissions, roles per portal (account, platform, seller, provider), multiple roles + direct grants per user, enable/disable, module access matrix (none/view/edit/approve/full), append-only change log (DB trigger rejects UPDATE/DELETE). |
-| MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected; secrets encrypted at rest, see [Data protection](#data-protection-s202)), SMS codes (outbox event), 10 hashed recovery codes, "trust this browser" for 30 days. Staff always need a second factor (SMS to the phone on file if nothing is enrolled) and cannot turn MFA off. Passkey sign-ins skip the prompt (phishing-resistant). |
+| MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected; secrets encrypted at rest, see [Data protection](#data-protection-s202)), **email codes** (emailed to the verified account email through the outbox), 10 hashed recovery codes, "trust this browser" for 30 days. SMS codes exist behind `at.identity.mfa.sms-enabled` (off). **A code is only asked of someone who enrolled a factor**: no SMS or email fallback. Staff and portal switches (`mfaRequired*`) make MFA mandatory, which forces enrolment right after the password (`MFA_ENROLMENT_REQUIRED` / `/login/mfa/setup`) instead of sending a code; a new account is offered an optional "Secure your account" step after its email is verified. Turning a factor off needs the password. Passkey sign-ins skip the prompt (phishing-resistant). See [Sign-up and MFA](../../../docs/runbooks/sign-up-and-mfa.md). |
 | Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. The first-party apps and the mobile apps register over the API with the user's bearer token (S016, see [Passkeys over the API](#passkeys-over-the-api-s016)). `PasskeyService` lists, renames and removes them and refuses to remove the last sign-in method. The signature counter is enforced (a counter that does not increase is rejected as a cloned authenticator). |
 | Hosted pages (SSO) | The only place credentials are entered, for every app: `/login` (email + password, passkey, configured social providers), `/signup` (+ `/signup/verify` email code, then the pending authorization continues signed in), `/login/mfa`, `/login/forgot` (+ `/login/forgot/code`: password reset with an emailed or texted code, S300), branded `error` page. Server-rendered Thymeleaf with the AfroTransact design tokens (`static/assets/tokens.css` + self-hosted Figtree, copies of `@afrotransact/tokens`, checked by `DesignTokensSyncTest`). Branded per app from the saved authorization request (client id, or for `gateway-bff` the origin of its validated redirect URI: storefront, Seller Center, staff console, following `PUBLIC_WEB_URL` / `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL`; no self sign-up for staff/drivers); without a request, or for an unknown client or origin, the pages are neutral AfroTransact pages (never another app's branding). OIDC `prompt=create` opens sign-up, `prompt=login` asks again despite the SSO session, `login_hint` prefills the email, `idp_hint` goes straight to an enabled provider, `invitation` joins an organisation on sign-up. `/connect/logout` (RP-initiated logout) ends the identity session, also for a stale ID token (then only registered post-logout URIs are honoured), and returns each web app to its own landing (`<app>/api/bff/v1/auth/signed-out/<app>`, see [Sign-out and password reset](#sign-out-and-password-reset-s300)). |
 | Social login | Google (OIDC) via its own consent page; Apple (OIDC, form_post) and Facebook registrations exist but are disabled by default. A provider is offered only when it has client credentials **and** is enabled in `identity_provider` (`PUT /v1/admin/identity-providers/{id}`). Accounts created from provider-verified emails skip email verification; a verified email matching an existing account links to it; signing in with a provider while already signed in links it. |
@@ -127,7 +127,7 @@ backup, or replica) without the key cannot generate codes.
 | TOTP secret (authenticator-app seed) | `mfa_totp.secret_ciphertext` + `secret_key_id` | **Envelope-encrypted** (below). The legacy `mfa_totp.secret` column is never written and is emptied at start-up. |
 | Recovery codes | `mfa_recovery_code.code_hash` | SHA-256 hash only (codes are shown once; nothing to decrypt) |
 | Trusted-browser tokens | `trusted_browser.token_hash` | SHA-256 of a 256-bit random token |
-| SMS sign-in / enrolment codes | `verification_code.code_hash` | SHA-256 hash, 10-minute expiry, 5 attempts |
+| Email / SMS sign-in and enrolment codes | `verification_code.code_hash` | SHA-256 hash, 10-minute expiry, 5 attempts |
 | SMS factor | `mfa_sms.phone_e164` | Phone number only (also on `user_account`); no secret material |
 | Passkeys | `user_credentials.public_key` | Public keys only |
 | Login tickets, invitation tokens | `login_ticket`, `org_invitation` | SHA-256 only |
@@ -200,7 +200,7 @@ Other callers get 403 `identity.super-admin-required` (staff without the role, s
 ## Sign-in flow (browser)
 
 ```
-app ──/oauth2/authorize (PKCE)──▶ /login ──password──▶ [/login/mfa: TOTP | SMS | recovery code, trust browser] ──▶ code ──▶ /oauth2/token
+app ──/oauth2/authorize (PKCE)──▶ /login ──password──▶ [/login/mfa (only if a factor is enrolled): TOTP | email code | recovery code, trust browser; or /login/mfa/setup when MFA is mandatory and nothing is enrolled] ──▶ code ──▶ /oauth2/token
                                      ├─ Sign in with a passkey (WebAuthn)        (no second factor)
                                      └─ /oauth2/authorization/google ─▶ Google consent ─▶ /login/oauth2/code/google ─▶ [MFA if enrolled]
 ```
@@ -283,7 +283,7 @@ sequenceDiagram
     B->>F: POST /v1/auth/sign-in {email, password}
     F->>I: POST /v1/auth/password {email, password, clientIp, userAgent, trustedDeviceToken?}
     alt second factor required
-        I-->>F: 200 {status: MFA_REQUIRED, challengeId, factors{totp, sms, smsHint, recoveryCode}}
+        I-->>F: 200 {status: MFA_REQUIRED, challengeId, factors{totp, emailOtp, emailHint, sms, smsHint, recoveryCode}; or MFA_ENROLMENT_REQUIRED + challengeId, no code sent}
         F-->>B: MFA form (challengeId)
         opt text me a code
             B->>F: resend / choose SMS
@@ -317,7 +317,7 @@ sequenceDiagram
      (the BFF contract already uses `challengeId`).
    * `AUTHENTICATED`: `loginTicket` → step 5.
 3. **Second factor.** Optional `POST /v1/auth/mfa/sms {challengeId, clientIp}` (202 `{sentTo, expiresAt}`; 429 when
-   asked too often), then `POST /v1/auth/mfa/verify {challengeId, factor: TOTP|SMS|RECOVERY_CODE, code, trustDevice,
+   asked too often), then `POST /v1/auth/mfa/verify {challengeId, factor: TOTP|EMAIL_OTP|SMS|RECOVERY_CODE, code, trustDevice,
    clientIp, userAgent}` → `AUTHENTICATED` with `loginTicket` and, when `trustDevice`, `trustedDeviceToken` +
    `trustedDeviceExpiresAt` to store in the cookie.
 4. **Passkey.** `POST /v1/auth/passkey/options {clientIp, userAgent}` → `{challengeId, expiresAt, publicKey}`. The

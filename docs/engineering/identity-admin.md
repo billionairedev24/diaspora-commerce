@@ -138,7 +138,7 @@ Stored in `auth_settings` (one row; a null column means "use the configured defa
 | Setting | Default | Range | Applies to |
 |---|---|---|---|
 | Shortest password | 12 | 8 to 64 | sign-up, password change and reset (`DefaultPasswordPolicy`) |
-| Second factor for customers / seller members / provider members | off | on/off | sign-in, for people who have a factor or a phone on file (staff always need one) |
+| Second factor for customers / seller members / provider members | off | on/off | "must set up a second step at next sign-in": after their password they enrol an authenticator app or email codes before they get a session; no code is sent before they enrol (staff always need one). See [Sign-up and MFA](../runbooks/sign-up-and-mfa.md) |
 | Sign-in session idle timeout | 30 min | 5 min to 24 h | the hosted sign-in (single sign-on) session, at its next request |
 | Sign-in session absolute timeout | 24 h | 1 h to 30 days | the same session, however active |
 | Access / refresh token lifetime ceiling | none | 1 to 60 min / 5 min to 90 days | caps every client's own lifetime for tokens issued from now on |
