@@ -28,7 +28,7 @@ public final class RulesFixtures {
     public static CategoryRules permissive() {
         CategoryRules any = BOOK.forCategory("beans-pantry-sauces").orElseThrow();
         List<FieldRule> fields = Arrays.stream(RuleField.values())
-                .map(f -> new FieldRule(f, "", f.id(), f == RuleField.PACKAGE_SIZE || f == RuleField.PACKAGE_WEIGHT
+                .map(f -> new FieldRule(f, "", any.label(f), f == RuleField.PACKAGE_SIZE || f == RuleField.PACKAGE_WEIGHT
                         ? FieldStatus.HIDDEN : FieldStatus.OPTIONAL, "")).toList();
         return new CategoryRules("permissive", "Permissive", "Test", any.kindCode(), any.kindName(), "open", "", false,
                 fields);

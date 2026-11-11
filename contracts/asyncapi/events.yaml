@@ -4038,9 +4038,9 @@ components:
           description: Business days from order to dispatch
         dangerousGoods:
           type: boolean
-          description: True when the seller answered yes to the dangerous goods question (aerosol, flammable, battery,
-            candle, cleaner). Fulfilment by AfroTransact and carrier-gated flows must treat the listing as restricted until
-            staff review. False when answered no or not asked for the category.
+          description: True when the seller answered yes to the dangerous goods question (aerosol, flammable, battery, candle,
+            cleaner). Fulfilment by AfroTransact and carrier-gated flows must treat the listing as restricted until staff
+            review. False when answered no or not asked for the category.
         shipFrom:
           type:
           - object
