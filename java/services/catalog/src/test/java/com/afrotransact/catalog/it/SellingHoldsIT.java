@@ -49,12 +49,16 @@ class SellingHoldsIT {
     @MockitoBean
     SellingApprovals approvals;
 
+    private final SellingHoldService holds;
+    private final JdbcClient jdbc;
+    private final BakeryClaimRepository bakeryClaims;
+
     @Autowired
-    SellingHoldService holds;
-    @Autowired
-    JdbcClient jdbc;
-    @Autowired
-    BakeryClaimRepository bakeryClaims;
+    SellingHoldsIT(SellingHoldService holds, JdbcClient jdbc, BakeryClaimRepository bakeryClaims) {
+        this.holds = holds;
+        this.jdbc = jdbc;
+        this.bakeryClaims = bakeryClaims;
+    }
 
     /** Live products of an organisation in a category (by code), with a brand and optionally a barcode. */
     private List<UUID> seed(String org, String categoryCode, String brand, int count, String status) {
