@@ -199,6 +199,7 @@ type UpDeliverySelection struct {
 	Option        string         `json:"option"`
 	PickupPointID string         `json:"pickupPointId,omitempty"`
 	Preferences   *UpPreferences `json:"preferences,omitempty"`
+	QuoteID       string         `json:"quoteId,omitempty"`
 }
 
 // UpCheckoutRequest is orders' CheckoutRequest.

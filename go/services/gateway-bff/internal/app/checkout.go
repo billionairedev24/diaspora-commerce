@@ -157,6 +157,9 @@ func orderErr(err error) error {
 	if pr := deliveryProblem(p); pr != nil {
 		return pr.WithCause(err)
 	}
+	if pr := quoteProblem(p); pr != nil {
+		return pr.WithCause(err)
+	}
 	switch {
 	case p.Code == "orders.tax-line-blocked":
 		// Orders names the item in plain words; the shopper removes it (the summary lists it with a Remove action).
@@ -207,4 +210,18 @@ func deliveryProblem(p *port.UpstreamProblem) *domain.Problem {
 		return nil
 	}
 	return domain.FieldProblem(code, title, "deliverySelections", firstNonEmpty(p.Detail, detail))
+}
+
+// quoteProblem maps orders' delivery quote refusals (listing rules D20): a quote that is void for this cart, address or
+// moment is one problem with a plain message, so the checkout asks for a new quote. Nil for any other problem.
+func quoteProblem(p *port.UpstreamProblem) *domain.Problem {
+	reason := map[string]string{"orders.quote-changed": "changed", "orders.quote-expired": "expired", "orders.quote-used": "used",
+		"orders.quote-not-ready": "not_ready", "orders.quote-not-found": "not_found"}[p.Code]
+	if reason == "" {
+		return nil
+	}
+	pr := domain.NewProblem(http.StatusUnprocessableEntity, domain.CodeDeliveryQuoteVoid, "Delivery quote can't be used",
+		firstNonEmpty(p.Detail, "This delivery quote can't be used. Ask for a new one."))
+	pr.Extra = map[string]any{"reason": reason}
+	return pr
 }

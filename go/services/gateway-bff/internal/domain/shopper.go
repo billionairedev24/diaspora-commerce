@@ -547,6 +547,8 @@ type PlaceOrderRequestSelection struct {
 	Option        string               `json:"option"`
 	PickupPointID string               `json:"pickupPointId"`
 	Preferences   *DeliveryPreferences `json:"preferences"`
+	// QuoteID is an agreed delivery quote (POST /v1/me/delivery-quotes) used as this package's shipping charge.
+	QuoteID string `json:"quoteId"`
 }
 
 // Selections decodes the delivery selections; entries that do not decode come back empty (and fail validation).

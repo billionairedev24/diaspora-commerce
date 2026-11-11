@@ -42,6 +42,9 @@ const (
 	// CodePreviousCheckoutPaid: the customer's previous open checkout was paid; it is being placed.
 	CodePreviousCheckoutPaid = "PREVIOUS_CHECKOUT_PAID"
 	CodeStockChanged         = "STOCK_CHANGED"
+	// CodeDeliveryQuoteVoid (422): the delivery quote can't be used (the cart or address changed, it expired or was used,
+	// or it is not ready); the detail says which in plain words and extra.reason is changed, expired, used or not_ready.
+	CodeDeliveryQuoteVoid = "DELIVERY_QUOTE_VOID"
 	CodeConflict             = "CONFLICT"
 	// CodeMaintenance is the 503 sent to customers and sellers while the platform is in maintenance.
 	CodeMaintenance = "MAINTENANCE"
