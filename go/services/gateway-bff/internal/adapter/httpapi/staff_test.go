@@ -52,11 +52,11 @@ func TestEmbeddedStaffContractIsIdentical(t *testing.T) {
 // ---------------------------------------------------------------- fake platform (every staff upstream on one server)
 
 var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispatch", "disputes:manage", "inventory:read", "notifications:read", "orders:read",
-	"orders:update-status", "orgs:read", "payments:read", "refunds:issue", "reports:read", "returns:manage", "support:respond", "users:read"}
+	"orders:update-status", "orgs:read", "payments:read", "delivery-quotes:view", "delivery-quotes:agree", "delivery-quotes:assign", "refunds:issue", "reports:read", "returns:manage", "support:respond", "users:read"}
 
 var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "identity:admin", "content:legal.edit",
 	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "content:careers.edit", "delivery:dispatch", "disputes:manage",
-	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read",
+	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read", "delivery-quotes:view", "delivery-quotes:agree", "delivery-quotes:assign",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
 
 type fakePlatform struct {
@@ -358,6 +358,19 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"approvalChain": map[string]any{"level1": map[string]any{}, "level2": map[string]any{}}, "reviewLevel1People": []string{"Sue Supervisor"}, "reviewLevel2People": []string{},
 			"approvalLevel1People": []string{}, "approvalLevel2People": []string{}, "updatedByName": "Sue Supervisor", "updatedAt": now,
 			"changes": []any{map[string]any{"actorName": "Sue Supervisor", "reason": "Faster reviews for the launch", "changedAt": now}}})
+	// orders: delivery quotes (customer care)
+	case p == "/v1/staff/delivery-quotes":
+		writeJ(w, 200, page(map[string]any{"id": "dq-1", "reference": "DQ-2026-AB12CD", "status": "IN_PROGRESS", "statusLabel": "Being quoted", "customerName": "Ada Obi",
+			"place": "Marfa, TX 79843", "itemCount": 2, "createdAt": now, "workflow": map[string]any{"stage": "QUOTE", "holder": "with Amina Bello", "assigneeName": "Amina Bello",
+				"waitingSeconds": 3600, "slaState": "ON_TIME", "canDecide": true}}))
+	case p == "/v1/staff/delivery-quotes/dq-1":
+		writeJ(w, 200, map[string]any{"id": "dq-1", "reference": "DQ-2026-AB12CD", "status": "IN_PROGRESS", "statusLabel": "Being quoted", "customerName": "Ada Obi", "place": "Marfa, TX 79843",
+			"itemCount": 2, "contact": "EMAIL", "lines": []any{}, "createdAt": now, "workflow": map[string]any{"stage": "QUOTE", "holder": "with Amina Bello", "assigneeName": "Amina Bello",
+				"waitingSeconds": 3600, "slaState": "ON_TIME", "canDecide": true}, "timeline": []any{map[string]any{"action": "REQUESTED", "actorName": "Ada Obi", "at": now}}})
+	case p == "/v1/staff/delivery-quote-settings":
+		writeJ(w, 200, map[string]any{"slaBusinessDays": 1, "dueSoonPercent": 75, "unassignedAfterHours": 4, "level2AfterHours": 24, "autoAssign": "NONE",
+			"level1": map[string]any{"userIds": []string{}}, "level2": map[string]any{"userIds": []string{}}, "level1People": []string{}, "level2People": []string{},
+			"minAmountMinor": 500, "maxAmountMinor": 50000, "validityHours": 48, "requestsPerHour": 5, "duplicateWindowMinutes": 15, "changes": []any{}})
 	case p == "/v1/review-reason-codes":
 		writeJ(w, 200, []any{map[string]any{"code": "DOCUMENTS_VERIFIED", "label": "Documents verified"}})
 	case strings.HasPrefix(p, "/v1/applications/"):

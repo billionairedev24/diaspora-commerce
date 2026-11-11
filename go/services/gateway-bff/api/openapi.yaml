@@ -88,6 +88,12 @@ tags:
       Refer a friend (S322, ADR 0006). Every customer has a code and a share link. When a friend signs up with it and
       their first order is delivered (and its return window has passed), AfroTransact rewards both, as credit or free
       membership days, as configured by staff. AfroTransact pays; nothing here is cash.
+  - name: Delivery quotes
+    description: |
+      Ask for a delivery quote (listing rules D20, D21). When the address is outside the delivery zones, checkout never
+      dead-ends: the shopper asks, customer care agrees an amount (with a reason), the shopper gets an email and checks
+      out with the quote (`deliverySelections[].quoteId`), valid for 48 hours by default, for this cart and address only,
+      once. Signed-in shoppers only; each sees only their own requests. The delivery charge is taxed like any other.
   - name: Credit
     description: |
       AfroTransact credit and gift cards (S320, S321, ADR 0006). Credit is a balance the shopper spends at checkout
@@ -2145,6 +2151,66 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/me/delivery-quotes:
+    post:
+      tags: [Delivery quotes]
+      operationId: requestDeliveryQuote
+      summary: Ask for a delivery quote for my cart and a saved address
+      description: |
+        Snapshots the cart lines and packages and the address (city, state and ZIP are kept for customer care; the street
+        only as a hash), and opens a case in the staff queue. Idempotent: the same cart and address returns the same
+        request while it is open or within a short window, so a double click or a retry never makes two. A signed-out
+        shopper gets 401 and signs in first. Over the hourly limit the answer is 429 `RATE_LIMITED` with `Retry-After`.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeliveryQuoteRequestBody'}
+      responses:
+        '200':
+          description: The request (new or the existing one)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeliveryQuoteRequest'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    get:
+      tags: [Delivery quotes]
+      operationId: listMyDeliveryQuotes
+      summary: My quote requests, newest first
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: My requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/DeliveryQuoteRequest'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/me/delivery-quotes/{id}:
+    get:
+      tags: [Delivery quotes]
+      operationId: getMyDeliveryQuote
+      summary: One of my quote requests (404 for anyone else's)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: The request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeliveryQuoteRequest'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/checkout/summary:
     get:
@@ -5659,6 +5725,14 @@ components:
               packageId: {type: string}
               option: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
               pickupPointId: {type: string}
+              quoteId:
+                type: string
+                maxLength: 64
+                description: |
+                  An agreed delivery quote (`POST /v1/me/delivery-quotes`) to use as this package's shipping charge. It must be
+                  the shopper's own, for exactly this cart and address, ready and not expired, and is used once. Not for pickup.
+                  422 `DELIVERY_QUOTE_VOID` (`extra.reason` changed, expired, used, not_ready or not_found) when it can't be used;
+                  the checkout then offers to ask for a new quote.
               preferences:
                 type: object
                 properties:
@@ -5666,6 +5740,64 @@ components:
                   safePlace: {type: string}
                   instructions: {type: string, maxLength: 240}
                   contact: {type: string, enum: [text, call, none]}
+    DeliveryQuoteRequestBody:
+      type: object
+      required: [addressId]
+      properties:
+        addressId: {type: string, description: A saved address}
+        lines:
+          type: array
+          description: Part of the cart to quote (default every line)
+          items:
+            type: object
+            required: [variantAtin, quantity]
+            properties:
+              variantAtin: {type: string}
+              quantity: {type: integer, minimum: 1}
+        contact: {type: string, enum: [EMAIL, PHONE, SMS], description: How customer care may reach the shopper (default EMAIL)}
+        note: {type: string, maxLength: 500}
+    DeliveryQuoteRequest:
+      type: object
+      description: |
+        A shopper's quote request and its answer. `statusLabel` is the plain word to show: Requested, Being quoted,
+        Quote ready, Expired, Declined (or Used). The amount shows once agreed; who agreed it and why never does.
+      required: [id, reference, status, statusLabel, amountMinor, currency, expiresAt, usable, place, packages, lines, contact, note, createdAt, updatedAt, message]
+      properties:
+        id: {type: string, format: uuid}
+        reference: {type: string, examples: [DQ-2026-K7M2XQ]}
+        status: {type: string, enum: [REQUESTED, IN_PROGRESS, READY, EXPIRED, DECLINED, USED]}
+        statusLabel: {type: string, enum: [Requested, Being quoted, Quote ready, Expired, Declined, Used]}
+        amountMinor: {type: [integer, 'null'], format: int64, description: The agreed delivery charge; null until the quote is ready}
+        currency: {type: string}
+        expiresAt: {type: [string, 'null'], format: date-time, description: When a ready quote stops being usable}
+        usable: {type: boolean, description: The quote can be applied at checkout right now}
+        place: {type: string, description: 'City, state and ZIP of the address', examples: ['Marfa, TX 79843']}
+        packages:
+          type: array
+          items:
+            type: object
+            required: [packageId, sellerName, fulfilment, itemCount]
+            properties:
+              packageId: {type: string}
+              sellerName: {type: [string, 'null']}
+              fulfilment: {type: string}
+              itemCount: {type: integer}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [variantAtin, title, packageId, quantity, unitPriceMinor]
+            properties:
+              variantAtin: {type: string}
+              title: {type: [string, 'null']}
+              packageId: {type: string}
+              quantity: {type: integer}
+              unitPriceMinor: {type: integer, format: int64}
+        contact: {type: string, enum: [EMAIL, PHONE, SMS]}
+        note: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        message: {type: string, description: Where it stands and what to do next, in plain words}
     CreditEntry:
       type: object
       description: One line of the credit history; the balance is the sum of the lines. The storefront words it from kind and source.

@@ -581,21 +581,21 @@ func NewCustomerQuotes(c httpclient.Client) port.CustomerQuotesClient {
 	return &customerQuotesImpl{c: c}
 }
 
-func (q *customerQuotesImpl) Request(ctx context.Context, bearer string, req port.UpQuoteRequest) (domain.DeliveryQuote, error) {
-	var out domain.DeliveryQuote
+func (q *customerQuotesImpl) Request(ctx context.Context, bearer string, req port.UpQuoteRequest) (domain.QuoteRequest, error) {
+	var out domain.QuoteRequest
 	// A repeat of the same cart and address returns the same request, so a retry is safe.
 	_, err := call(ctx, q.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/delivery-quotes", Bearer: bearer, JSON: req, RetryUnsafe: true}, &out)
 	return out, err
 }
 
-func (q *customerQuotesImpl) List(ctx context.Context, bearer string) ([]domain.DeliveryQuote, error) {
-	var out []domain.DeliveryQuote
+func (q *customerQuotesImpl) List(ctx context.Context, bearer string) ([]domain.QuoteRequest, error) {
+	var out []domain.QuoteRequest
 	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes", Bearer: bearer}, &out)
 	return out, err
 }
 
-func (q *customerQuotesImpl) Get(ctx context.Context, bearer, id string) (domain.DeliveryQuote, error) {
-	var out domain.DeliveryQuote
+func (q *customerQuotesImpl) Get(ctx context.Context, bearer, id string) (domain.QuoteRequest, error) {
+	var out domain.QuoteRequest
 	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes/" + esc(id), Bearer: bearer}, &out)
 	return out, err
 }

@@ -145,6 +145,16 @@ tags:
       `deptRequests` is derived from the seller service's permissions: VIEW with `applications:review`, EDIT with
       `applications:approve`. Approving or rejecting is one person's decision (not maker-checker). The seller service audits
       every decision and override (who, what, why) through trust-ops. The queue is joined to names; ids are never shown.
+  - name: Delivery quotes
+    description: |
+      The Customer care queue for delivery quote requests (listing rules D20), under the resources `delivery-quotes` (tabs My
+      queue, Unassigned, Waiting on customer, Closed, with the chips Escalated and Overdue; the sheet shows the request, who
+      has it, the SLA, the escalation and the timeline with names) and `delivery-quote-settings` (SLA in business days,
+      escalation chain, hand-out, amount bounds, validity; every change carries a reason and is audited). orders-service owns the
+      case and the rules: claim, assign, release and escalate copy the application review workflow; an agent agrees an
+      amount (reason required, within the bounds) or declines (reason required); no second person is needed. Module
+      `deliveryQuotes` is derived from the permissions `delivery-quotes:view`, `delivery-quotes:agree` and
+      `delivery-quotes:assign` (identity migration V41).
   - name: Inventory hub
     description: |
       Inventory hub (S281): mirrors inventory-service 1:1 with the staff member's token — inbound shipments (ASNs with
@@ -7805,8 +7815,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests and identity are derived; deptRequests follows applications:review / applications:approve; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, deptRequests, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
+      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, deptRequests, deliveryQuotes, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -8003,7 +8013,7 @@ components:
         routes, support-cases, audit, markets, service-area-rules, service-zones, site-settings, legal-documents, help-articles, careers-jobs, cookie-definitions, privacy-requests, announcements,
         placements, home-layout, identity-providers, fee-schedules, tax-rates, dispatch-shipments, sos-alerts, vehicle-defects,
         driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, recoveries, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, referrals, referral-settings, stripe-lookup, payment-settings, maintenance, tax-filings, tax-nexus,
-        oauth-clients, identity-sessions, signing-keys, auth-settings, session-policy, exchange-rates, application-review-settings]
+        oauth-clients, identity-sessions, signing-keys, auth-settings, session-policy, exchange-rates, application-review-settings, delivery-quotes, delivery-quote-settings]
     Tone: {type: string, enum: [good, warn, bad, info, brand]}
     CellValue:
       type: [string, number, 'null']

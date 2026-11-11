@@ -846,7 +846,7 @@ type UpQuoteRequestLine struct {
 // CustomerQuotesClient calls orders with the customer's token: ask for a delivery quote, list mine, read one.
 type CustomerQuotesClient interface {
 	// Request is POST /v1/delivery-quotes; orders answers the same request for the same cart and address.
-	Request(ctx context.Context, bearer string, req UpQuoteRequest) (domain.DeliveryQuote, error)
-	List(ctx context.Context, bearer string) ([]domain.DeliveryQuote, error)
-	Get(ctx context.Context, bearer, id string) (domain.DeliveryQuote, error)
+	Request(ctx context.Context, bearer string, req UpQuoteRequest) (domain.QuoteRequest, error)
+	List(ctx context.Context, bearer string) ([]domain.QuoteRequest, error)
+	Get(ctx context.Context, bearer, id string) (domain.QuoteRequest, error)
 }

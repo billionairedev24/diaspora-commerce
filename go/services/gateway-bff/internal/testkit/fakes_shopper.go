@@ -233,6 +233,56 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		}
 		writeJSON(w, 201, view)
 	}))
+	// ---- orders: delivery quote requests (listing rules D20), kept per shopper; the same cart and address returns the
+	// same request, like orders does.
+	quotes := map[string]map[string]any{}
+	quoteOwner := map[string]string{}
+	mux.HandleFunc("POST /v1/delivery-quotes", customerOnly("orders.customer-only", func(w http.ResponseWriter, r *http.Request) {
+		body := readJSON(r)
+		who := actorOf(r).Subject
+		if body["addressId"] == "addr-too-far-rate-limited" {
+			w.Header().Set("Retry-After", "3600")
+			problem(w, 429, "orders.quote-rate-limited", "You have asked for several quotes in the last hour.", nil)
+			return
+		}
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		key := who + "|" + fmt.Sprint(body["addressId"]) + "|" + fmt.Sprint(body["lines"])
+		for id, q := range quotes {
+			if quoteOwner[id] == who && q["key"] == key {
+				writeJSON(w, 200, q["view"])
+				return
+			}
+		}
+		id := fmt.Sprintf("0e5a6c2c-0000-4000-8000-%012d", len(quotes)+1)
+		view := map[string]any{"id": id, "reference": fmt.Sprintf("DQ-2026-TEST%02d", len(quotes)+1), "status": "REQUESTED", "statusLabel": "Requested", "amountMinor": nil,
+			"currency": "USD", "expiresAt": nil, "usable": false, "place": "Marfa, TX 79843", "packages": []any{}, "lines": []any{}, "contact": fmt.Sprint(orDefault(body["contact"], "EMAIL")),
+			"note": body["note"], "createdAt": "2026-11-10T09:00:00Z", "updatedAt": "2026-11-10T09:00:00Z", "message": "We have your request. A member of our team will price the delivery and let you know."}
+		quotes[id] = map[string]any{"key": key, "view": view}
+		quoteOwner[id] = who
+		writeJSON(w, 200, view)
+	}))
+	mux.HandleFunc("GET /v1/delivery-quotes", customerOnly("orders.customer-only", func(w http.ResponseWriter, r *http.Request) {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		out := []any{}
+		for id, q := range quotes {
+			if quoteOwner[id] == actorOf(r).Subject {
+				out = append(out, q["view"])
+			}
+		}
+		writeJSON(w, 200, out)
+	}))
+	mux.HandleFunc("GET /v1/delivery-quotes/{id}", customerOnly("orders.customer-only", func(w http.ResponseWriter, r *http.Request) {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		id := r.PathValue("id")
+		if q, ok := quotes[id]; ok && quoteOwner[id] == actorOf(r).Subject {
+			writeJSON(w, 200, q["view"])
+			return
+		}
+		problem(w, 404, "orders.quote-not-found", "Quote request not found", nil)
+	}))
 	mux.HandleFunc("GET /v1/checkout/{number}", authed(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, checkoutView(r.PathValue("number"), "awaiting_payment"))
 	}))
@@ -662,4 +712,11 @@ func (u *Upstreams) LastCheckout() map[string]any {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.lastCheckout
+}
+
+func orDefault(v any, fallback string) any {
+	if v == nil || v == "" {
+		return fallback
+	}
+	return v
 }

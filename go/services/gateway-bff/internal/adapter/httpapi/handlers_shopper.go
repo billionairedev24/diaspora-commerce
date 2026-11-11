@@ -38,6 +38,8 @@ type ShopperServices struct {
 	Membership app.MembershipService
 	// Referral is "Refer a friend" (S322; optional).
 	Referral app.ReferralService
+	// DeliveryQuotes is "Ask for a delivery quote" for addresses outside the delivery zones (listing rules D20; optional).
+	DeliveryQuotes app.DeliveryQuotesService
 	// Reviews is verified-purchase product reviews and ratings (S324; optional).
 	Reviews app.ProductReviewService
 }
@@ -75,6 +77,9 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	}
 	if h.s.Shopper.Membership != nil {
 		h.registerMembership(route)
+	}
+	if h.s.Shopper.DeliveryQuotes != nil {
+		h.registerDeliveryQuotes(route)
 	}
 	if h.s.Shopper.Referral != nil {
 		h.registerReferral(route)
