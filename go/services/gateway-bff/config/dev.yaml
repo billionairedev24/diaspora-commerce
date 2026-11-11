@@ -161,8 +161,10 @@ commerce:
   trustEdgeGeo: true
   detectOverrideZip: ""
   timeZone: America/Chicago
+  # Seller-shipped carrier fee, used ONLY while the staff switch sellerCarrierShippingEnabled is on (off at launch); same as
+  # orders at.orders.shipping.carrier-standard-minor / free-carrier-above-minor. The delivery fee itself is orders' shipping settings.
   sellerShippingMinor: 599
-  freeShippingThresholdMinor: 4900
+  freeShippingThresholdMinor: 3500
   retailOrgId: org_afrotransact_retail
   sellerNames: {}
 checkout:

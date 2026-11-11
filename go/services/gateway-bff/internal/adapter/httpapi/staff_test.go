@@ -56,7 +56,7 @@ var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispa
 
 var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "identity:admin", "content:legal.edit",
 	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "content:careers.edit", "delivery:dispatch", "disputes:manage",
-	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read", "delivery-quotes:view", "delivery-quotes:agree", "delivery-quotes:assign",
+	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "orders:shipping.edit", "orders:shipping.view", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read", "delivery-quotes:view", "delivery-quotes:agree", "delivery-quotes:assign",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
 
 type fakePlatform struct {
@@ -652,6 +652,16 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/referral-settings/history":
 		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000d1", "changedBy": "stf-1", "changedAt": now, "reason": "Launch offer for the autumn",
 			"before": "{}", "after": "{}"}})
+	case p == "/v1/public/shipping-settings":
+		writeJ(w, 200, map[string]any{"currency": "USD", "version": 2, "flatFeeMinor": 599, "freeAboveMinor": 5000, "sellerCarrierShippingEnabled": false,
+			"updatedAt": now, "updatedBy": "stf-1", "reason": "Free delivery over $50 for the launch"})
+	case p == "/v1/shipping-settings/USD/changes":
+		writeJ(w, 200, map[string]any{"items": []any{
+			map[string]any{"currency": "USD", "version": 2, "changedBy": "stf-1", "changedAt": now, "reason": "Free delivery over $50 for the launch",
+				"before": map[string]any{"flatFeeMinor": 599}, "after": map[string]any{"flatFeeMinor": 599, "freeAboveMinor": 5000}},
+			map[string]any{"currency": "USD", "version": 1, "changedBy": "system", "changedAt": now, "reason": "Launch default (listing rules D16)", "after": map[string]any{"flatFeeMinor": 599}}}})
+	case p == "/v1/shipping-settings/USD" && r.Method == http.MethodPut:
+		writeJ(w, 200, map[string]any{"currency": "USD", "version": 3})
 	case p == "/v1/settings/summary":
 		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
 			map[string]any{"key": "payout.minimum", "label": "Smallest payout a seller can request", "value": "$25.00", "help": "Requests below it are refused.", "source": "PAYOUT_MINIMUM_MINOR"}})
@@ -1301,6 +1311,20 @@ func TestStaffContractConformance(t *testing.T) {
 	if rr["type"] != "MEMBERSHIP_DAYS" || rr["membershipDays"] != float64(14) || rr["creditMinor"] != float64(0) || rd["type"] != "CREDIT" || rd["creditMinor"] != float64(1250) ||
 		refSent["minOrderMinor"] != float64(3000) || refSent["maxCreditPerCustomerMinor"] != float64(50000) || refSent["version"] != float64(3) || refSent["reason"] != "Membership for sharers, 12.50 for friends" {
 		t.Fatalf("referral settings body = %v", refSent)
+	}
+	// Delivery fee (orders' shipping settings): names not ids, history with reasons, edit needs a reason and the version seen.
+	shipSheet := do("admin", "GET", "/v1/staff/resources/shipping-settings/shipping", nil, 200)
+	if !strings.Contains(fmt.Sprint(shipSheet["sections"]), "$5.99") || !strings.Contains(fmt.Sprint(shipSheet["sections"]), "Free from $50.00") ||
+		!strings.Contains(fmt.Sprint(shipSheet["tables"]), "Free delivery over $50 for the launch") || !strings.Contains(fmt.Sprint(shipSheet["tables"]), "Amara Nwosu") || shipSheet["editForm"] == nil {
+		t.Fatalf("the delivery fee sheet = %v", shipSheet)
+	}
+	do("admin", "PATCH", "/v1/staff/resources/shipping-settings/shipping", map[string]any{"values": map[string]any{"flatFee": 6.99, "freeAbove": 50, "sellerCarrierShipping": false, "reason": "short"}}, 422)
+	do("support", "PATCH", "/v1/staff/resources/shipping-settings/shipping", map[string]any{"values": map[string]any{"flatFee": 6.99, "freeAbove": 50, "sellerCarrierShipping": false, "reason": "Fuel went up this month"}}, 403)
+	do("admin", "PATCH", "/v1/staff/resources/shipping-settings/shipping", map[string]any{"values": map[string]any{"flatFee": 6.99, "freeAbove": "", "sellerCarrierShipping": false, "reason": "Fuel went up this month"}}, 200)
+	shipSent := f.bodies["PUT /v1/shipping-settings/USD"]
+	if shipSent["flatFeeMinor"] != float64(699) || shipSent["freeAboveMinor"] != nil || shipSent["sellerCarrierShippingEnabled"] != false ||
+		shipSent["expectedVersion"] != float64(2) || shipSent["reason"] != "Fuel went up this month" {
+		t.Fatalf("shipping settings body = %v", shipSent)
 	}
 	made := do("admin", "POST", "/v1/staff/resources/stripe-lookup", map[string]any{"values": map[string]any{"ref": "po_123456", "orgId": "org-1"}}, 201)
 	if made["id"] != "po_123456 org-1" {

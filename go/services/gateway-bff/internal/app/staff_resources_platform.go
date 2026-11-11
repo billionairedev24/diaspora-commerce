@@ -10,7 +10,7 @@ import (
 // deployment). Who calculates sales tax lives with the other tax tools (staff_tax*.go).
 
 func platformSettingsResources() []*staffResource {
-	return []*staffResource{paymentSettingsResource()}
+	return []*staffResource{paymentSettingsResource(), shippingSettingsResource()}
 }
 
 // ---------------------------------------------------------------- payments (read-only)
