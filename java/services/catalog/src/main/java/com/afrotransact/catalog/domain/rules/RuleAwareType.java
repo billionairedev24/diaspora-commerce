@@ -33,7 +33,7 @@ public final class RuleAwareType {
         List<AttributeDefinition> attrs = new ArrayList<>();
         FieldRule brand = rules.rule(RuleField.BRAND);
         if (brand.status().shown()) {
-            attrs.add(brandDefinition(brand, legacyBrand.map(AttributeDefinition::help).orElse(null)));
+            attrs.add(brandDefinition(brand, legacyBrand.orElse(null)));
         }
         for (FieldRule rule : rules.fields()) {
             AttributeDefinition def = rule.field().definition(rule.field().plainLabel(rule.label()),
@@ -66,9 +66,10 @@ public final class RuleAwareType {
                 sizing.suggestedMeasurements()));
     }
 
-    private static AttributeDefinition brandDefinition(FieldRule rule, String legacyHelp) {
-        String help = legacyHelp != null ? legacyHelp : rule.note();
-        return new AttributeDefinition("brand", "Brand", List.of(UnbrandedReason.UNBRANDED.name(),
+    private static AttributeDefinition brandDefinition(FieldRule rule, AttributeDefinition legacy) {
+        String help = legacy != null && legacy.help() != null ? legacy.help() : rule.note();
+        String label = legacy != null ? legacy.label() : "Brand";
+        return new AttributeDefinition("brand", label, List.of(UnbrandedReason.UNBRANDED.name(),
                 UnbrandedReason.HANDMADE.name()), rule.status() == FieldStatus.REQUIRED, false, AttributeKind.BRAND,
                 List.of(), AttributeSection.DETAILS, help);
     }

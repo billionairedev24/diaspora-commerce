@@ -449,7 +449,11 @@ public final class ImportValidator {
             if (m.matches()) {
                 int i = Integer.parseInt(m.group(1));
                 String column = "gtin".equals(m.group(2)) ? ImportColumns.GTIN : ImportColumns.LENGTH;
-                add(rows.get(Math.min(i, rows.size() - 1)), err(column, message));
+                SheetRow row = rows.get(Math.min(i, rows.size() - 1));
+                if (!hasErrorOn(row, "gtin".equals(m.group(2)) ? List.of(ImportColumns.GTIN, ImportColumns.GTIN_EXEMPT)
+                        : List.of(ImportColumns.LENGTH, ImportColumns.WIDTH, ImportColumns.HEIGHT, ImportColumns.WEIGHT))) {
+                    add(row, err(column, message));
+                }
                 return;
             }
             String column = path.startsWith("attributes.") ? ImportColumns.ATTR_PREFIX + path.substring("attributes.".length())
@@ -1286,6 +1290,12 @@ public final class ImportValidator {
 
     private void add(SheetRow r, RowMessage m) {
         messages.get(r.rowNumber()).add(m);
+    }
+
+    /** True when the row already has an error on one of these columns (a cell that is wrong is not also "missing"). */
+    private boolean hasErrorOn(SheetRow r, List<String> columns) {
+        return messages.get(r.rowNumber()).stream().anyMatch(m -> m.severity() == Severity.ERROR
+                && columns.contains(m.column()));
     }
 
     private boolean hasError(SheetRow r) {

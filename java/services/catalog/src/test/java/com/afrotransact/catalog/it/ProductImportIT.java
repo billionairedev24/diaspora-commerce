@@ -158,7 +158,7 @@ class ProductImportIT {
                 "Brand or label *=Adire Lagos", "Description=Hand-finished wax print.",
                 "Price (USD) *=49.00", "Quantity *=5", "No barcode=Yes", "Variation=" + (size.isEmpty() ? "" : "Size"),
                 "Size=" + size, "Material=Lace", "Fit=Regular", "Length=Midi",
-                "Occasion=Everyday", "Care=Cold wash", "Made in=Nigeria"));
+                "Occasion=Everyday", "Care=Cold wash", "Country of origin=Nigeria"));
         String[] urls = image.isBlank() ? new String[0] : image.trim().split("\\s+");
         for (int i = 0; i < urls.length; i++) {
             pairs.add((i == 0 ? "Main image URL=" : "Other image URL " + i + "=") + urls[i]);

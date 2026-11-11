@@ -6,8 +6,12 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.Atin;
+import com.afrotransact.catalog.domain.FulfilmentMode;
+import com.afrotransact.catalog.domain.ItemCondition;
+import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ListingOwnerKind;
+import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
@@ -43,6 +47,29 @@ class ProductEventPayloadTest {
         assertThat(payload.imageUrl()).isNull();
         assertThat(payload.brand()).isNull();
         assertThat(payload.communities()).isEmpty();
+    }
+
+    @Test
+    void carriesThePackageOfEachVariantAndTheDangerousGoodsMark() {
+        PackageDimensions own = new PackageDimensions(20, 12, 6, 3);
+        PackageDimensions fallback = new PackageDimensions(10, 8, 4, 2);
+        Variant withOwn = new Variant(UUID.randomUUID(), new Atin("AT0000VAR1"), "SKU-1", null, true,
+                Map.of("Size", "M"), 899, "USD", 1, null, List.of(), false, null, own);
+        Variant legacy = new Variant(UUID.randomUUID(), new Atin("AT0000VAR2"), "SKU-2", null, true,
+                Map.of("Size", "L"), 899, "USD", 1);
+        ListingDetails details = new ListingDetails("d", ItemCondition.NEW, List.of(), FulfilmentMode.SELLER, fallback, 2,
+                null).withRuleAnswers(true, List.of(), Map.of());
+        Product p = new Product(UUID.randomUUID(), new Atin("AT0000PRD1"),
+                new ListingOwner(ListingOwnerKind.PLATFORM, "org_afrotransact_retail"), UUID.randomUUID(), null,
+                "grocery", "Ofada Rice, Destoned, 5 lb", Map.of(), List.of(), "Size", List.of(withOwn, legacy),
+                ProductStatus.LIVE, null, NOW, NOW, 0, false, false, details);
+
+        ProductEventPayload payload = ProductEventPayload.of(p, false);
+
+        assertThat(payload.dangerousGoods()).isTrue();
+        assertThat(payload.variants().get(0).packaging()).isEqualTo(new ProductEventPayload.PackagePayload(20, 12, 6, 3));
+        assertThat(payload.variants().get(1).packaging()).isEqualTo(new ProductEventPayload.PackagePayload(10, 8, 4, 2));
+        assertThat(ProductEventPayload.of(product(Map.of(), List.of()), false).dangerousGoods()).isFalse();
     }
 
     private static ProductImage image(String url) {
