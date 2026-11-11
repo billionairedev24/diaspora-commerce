@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,6 +18,7 @@ import com.afrotransact.bookings.application.ServiceView;
 import com.afrotransact.bookings.application.TeamService.MemberCommand;
 import com.afrotransact.bookings.domain.AddOn;
 import com.afrotransact.bookings.domain.BookingRules;
+import com.afrotransact.bookings.domain.BookingsRuleViolation;
 import com.afrotransact.bookings.domain.CancellationPolicy;
 import com.afrotransact.bookings.domain.CustomPolicySettings;
 import com.afrotransact.bookings.domain.DayOverride;
@@ -134,19 +136,34 @@ final class ProviderDtos {
         }
     }
 
-    @Schema(name = "ServiceRequest", description = "Services & prices form")
+    @Schema(name = "ServiceRequest", description = "Services & prices form. Services are in person only: modes are "
+            + "IN_PERSON (the customer goes to the provider) and AT_HOME (the provider comes to the customer). "
+            + "VIRTUAL, ONLINE and REMOTE modes, and virtual/online/remote flags, are refused with "
+            + "422 bookings.in-person-only.")
     record ServiceRequest(@NotBlank @Size(min = 3, max = 120) String name,
                           @Size(max = 2000) String description,
                           @Size(max = 60) @Schema(example = "hair & beauty") String category,
                           @Min(5) @Max(1440) int durationMinutes,
                           @Positive long priceMinor,
                           @PositiveOrZero long depositMinor,
-                          @NotEmpty Set<ServiceMode> modes,
-                          @Size(max = 20) List<@Valid AddOnDto> addOns) {
+                          @NotEmpty @Schema(allowableValues = {"IN_PERSON", "AT_HOME"}) Set<String> modes,
+                          @Size(max = 20) List<@Valid AddOnDto> addOns,
+                          @Size(max = 500) @Schema(description = "Photo of the service (a media-service URL)")
+                          String imageUrl,
+                          @Schema(hidden = true) Boolean virtual,
+                          @Schema(hidden = true) Boolean online,
+                          @Schema(hidden = true) Boolean remote) {
 
         ServiceCommand toCommand() {
-            return new ServiceCommand(name, description, category, durationMinutes, priceMinor, depositMinor, modes,
-                    addOns == null ? List.of() : addOns.stream().map(AddOnDto::toDomain).toList());
+            if (Boolean.TRUE.equals(virtual) || Boolean.TRUE.equals(online) || Boolean.TRUE.equals(remote)) {
+                throw new BookingsRuleViolation("bookings.in-person-only",
+                        "Services are in person only: online, virtual and remote services are not offered",
+                        Map.of("modes", "AfroTransact services are in person only"));
+            }
+            Set<ServiceMode> parsed = new LinkedHashSet<>();
+            modes.forEach(m -> parsed.add(ServiceMode.parse(m)));
+            return new ServiceCommand(name, description, category, durationMinutes, priceMinor, depositMinor, parsed,
+                    addOns == null ? List.of() : addOns.stream().map(AddOnDto::toDomain).toList(), imageUrl);
         }
     }
 
@@ -172,14 +189,14 @@ final class ProviderDtos {
     @Schema(name = "Service")
     record ServiceResponse(UUID id, String orgId, String name, String description, String category,
                            int durationMinutes, long priceMinor, long depositMinor, long balanceMinor, String currency,
-                           Set<ServiceMode> modes, List<AddOnDto> addOns, Set<UUID> memberIds, boolean active,
-                           TakeHomeDto takeHome, Instant updatedAt, long version) {
+                           Set<ServiceMode> modes, List<AddOnDto> addOns, Set<UUID> memberIds, String imageUrl,
+                           boolean active, TakeHomeDto takeHome, Instant updatedAt, long version) {
 
         static ServiceResponse of(ServiceView v) {
             ServiceOffering o = v.offering();
             return new ServiceResponse(o.id(), o.orgId(), o.name(), o.description(), o.category(),
                     o.durationMinutes(), o.priceMinor(), o.depositMinor(), o.balanceMinor(), o.currency(), o.modes(),
-                    o.addOns().stream().map(AddOnDto::of).toList(), o.memberIds(), o.active(),
+                    o.addOns().stream().map(AddOnDto::of).toList(), o.memberIds(), o.imageUrl(), o.active(),
                     v.takeHome() == null ? null : TakeHomeDto.of(v.takeHome()), o.updatedAt(), o.version());
         }
     }

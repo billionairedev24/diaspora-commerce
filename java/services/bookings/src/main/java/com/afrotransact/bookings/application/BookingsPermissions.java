@@ -21,6 +21,11 @@ public final class BookingsPermissions {
      * (principal type STAFF or SERVICE); provider members are refused even if granted it.
      */
     public static final String REVIEWS_MODERATE = "bookings:reviews:moderate";
+    /**
+     * Staff edit the service-area policy (radius defaults, minimums, maximums, customer-travel and nearest-fallback
+     * distances) and the metro zones, always with a reason. Staff principals only.
+     */
+    public static final String SERVICE_AREAS_MANAGE = "bookings:service-areas:manage";
 
     /** Identity role keys used to scope practitioners to their own calendar. */
     public static final String ROLE_OWNER = "provider.owner";

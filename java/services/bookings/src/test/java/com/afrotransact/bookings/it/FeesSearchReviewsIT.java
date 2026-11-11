@@ -15,8 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Fees from payments' effective fee schedule (with the configured fallback), service search by ZIP through geo's
- * provider service areas, and ratings from customers' reviews.
+ * Fees from payments' effective fee schedule (with the configured fallback), and ratings from customers' reviews.
  */
 class FeesSearchReviewsIT extends BookingsIntegrationTest {
 
@@ -73,48 +72,6 @@ class FeesSearchReviewsIT extends BookingsIntegrationTest {
         assertThat(takeHome.path("commissionBps").asInt()).isEqualTo(1000);
         assertThat(takeHome.path("feeSource").asString()).isEqualTo("CONFIG");
         assertThat(takeHome.path("feeVersion").isNull()).isTrue();
-    }
-
-    @Test
-    void zipSearchKeepsProvidersWhoseServiceAreaCoversIt() {
-        Setup near = provider(false);
-        Setup far = provider(false);
-        String token = "zipcheck" + UUID.randomUUID().toString().substring(0, 8);
-        UUID nearService = service(near, "Braids " + token, List.of("IN_PERSON"));
-        service(far, "Braids " + token, List.of("AT_HOME"));
-        UUID virtualService = service(far, "Consultation " + token, List.of("VIRTUAL"));
-
-        GEO.stubFor(WireMock.get(WireMock.urlEqualTo("/v1/zip/77002"))
-                .willReturn(WireMock.okJson("{\"city\":\"Houston\",\"state\":\"TX\",\"postalCode\":\"77002\","
-                        + "\"country\":\"US\",\"lat\":29.7543,\"lon\":-95.3577}")));
-        GEO.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/zones/covering"))
-                .withQueryParam("type", WireMock.equalTo("SERVICE_AREA"))
-                .willReturn(WireMock.okJson("{\"zones\":[{\"id\":\"" + UUID.randomUUID() + "\",\"type\":"
-                        + "\"SERVICE_AREA\",\"ownerId\":\"" + near.org() + "\",\"name\":\"15 miles\",\"active\":true},"
-                        + "{\"type\":\"SERVICE_AREA\",\"ownerId\":\"" + far.org() + "\",\"name\":\"old\","
-                        + "\"active\":false}]}")));
-        GEO.stubFor(WireMock.get(WireMock.urlEqualTo("/v1/zip/99999"))
-                .willReturn(WireMock.aResponse().withStatus(404)));
-
-        JsonNode all = ok(send("GET", "/v1/public/services/search?q=" + token + "&size=10", null, null));
-        assertThat(all.path("services").size()).isEqualTo(3);
-
-        JsonNode inArea = ok(send("GET", "/v1/public/services/search?q=" + token + "&zip=77002&size=10", null, null));
-        assertThat(inArea.path("services").valueStream().map(n -> n.path("serviceId").asString()).toList())
-                .containsExactlyInAnyOrder(nearService.toString(), virtualService.toString());
-        GEO.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/zones/covering"))
-                .withQueryParam("lat", WireMock.equalTo("29.7543"))
-                .withQueryParam("lon", WireMock.equalTo("-95.3577")));
-
-        JsonNode unknown = ok(send("GET", "/v1/services/search?q=" + token + "&zip=99999", null, null));
-        assertThat(unknown.path("services").valueStream().map(n -> n.path("serviceId").asString()).toList())
-                .containsExactly(virtualService.toString());
-        problem(send("GET", "/v1/public/services/search?q=" + token + "&zip=7700", null, null), 422,
-                "bookings.invalid-zip");
-
-        GEO.stubFor(WireMock.get(WireMock.urlEqualTo("/v1/zip/10001")).willReturn(WireMock.serverError()));
-        problem(send("GET", "/v1/public/services/search?q=" + token + "&zip=10001", null, null), 502,
-                "bookings.geo-unavailable");
     }
 
     @Test

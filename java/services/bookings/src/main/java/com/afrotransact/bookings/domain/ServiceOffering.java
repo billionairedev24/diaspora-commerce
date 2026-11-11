@@ -20,8 +20,8 @@ import java.util.UUID;
  */
 public record ServiceOffering(UUID id, String orgId, String name, String description, String category,
                               int durationMinutes, long priceMinor, long depositMinor, String currency,
-                              Set<ServiceMode> modes, List<AddOn> addOns, Set<UUID> memberIds, boolean active,
-                              Instant createdAt, Instant updatedAt, long version) {
+                              Set<ServiceMode> modes, List<AddOn> addOns, Set<UUID> memberIds, String imageUrl,
+                              boolean active, Instant createdAt, Instant updatedAt, long version) {
 
     public ServiceOffering {
         Objects.requireNonNull(id, "id");
@@ -40,7 +40,7 @@ public record ServiceOffering(UUID id, String orgId, String name, String descrip
             errors.put("depositMinor", "Deposit must be between 0 and the price");
         }
         if (modes == null || modes.isEmpty()) {
-            errors.put("modes", "Choose at least one: in person, at home or virtual");
+            errors.put("modes", "Choose at least one: you go to them (in person) or comes to you (at home)");
         }
         List<AddOn> extras = addOns == null ? List.of() : addOns;
         Set<String> ids = new HashSet<>();
@@ -59,6 +59,7 @@ public record ServiceOffering(UUID id, String orgId, String name, String descrip
         modes = Set.copyOf(EnumSet.copyOf(modes));
         addOns = List.copyOf(extras);
         memberIds = memberIds == null ? Set.of() : Set.copyOf(memberIds);
+        imageUrl = imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim();
     }
 
     public long balanceMinor() {
@@ -89,18 +90,18 @@ public record ServiceOffering(UUID id, String orgId, String name, String descrip
 
     public ServiceOffering update(String newName, String newDescription, String newCategory, int newDuration,
                                   long newPrice, long newDeposit, Set<ServiceMode> newModes, List<AddOn> newAddOns,
-                                  Instant now) {
+                                  String newImageUrl, Instant now) {
         return new ServiceOffering(id, orgId, newName, newDescription, newCategory, newDuration, newPrice, newDeposit,
-                currency, newModes, newAddOns, memberIds, active, createdAt, now, version);
+                currency, newModes, newAddOns, memberIds, newImageUrl, active, createdAt, now, version);
     }
 
     public ServiceOffering withMembers(Set<UUID> members, Instant now) {
         return new ServiceOffering(id, orgId, name, description, category, durationMinutes, priceMinor,
-                depositMinor, currency, modes, addOns, members, active, createdAt, now, version);
+                depositMinor, currency, modes, addOns, members, imageUrl, active, createdAt, now, version);
     }
 
     public ServiceOffering withActive(boolean value, Instant now) {
         return new ServiceOffering(id, orgId, name, description, category, durationMinutes, priceMinor,
-                depositMinor, currency, modes, addOns, memberIds, value, createdAt, now, version);
+                depositMinor, currency, modes, addOns, memberIds, imageUrl, value, createdAt, now, version);
     }
 }

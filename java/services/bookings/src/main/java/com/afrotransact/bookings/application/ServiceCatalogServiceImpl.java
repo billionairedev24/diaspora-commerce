@@ -52,7 +52,7 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
         Instant now = Instant.now(clock);
         ServiceOffering created = offerings.insert(new ServiceOffering(UUID.randomUUID(), orgId, c.name(),
                 c.description(), c.category(), c.durationMinutes(), c.priceMinor(), c.depositMinor(), p.currency(),
-                c.modes(), c.addOns(), Set.of(), true, now, now, 0));
+                c.modes(), c.addOns(), Set.of(), c.imageUrl(), true, now, now, 0));
         return publish(created);
     }
 
@@ -62,7 +62,7 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
         access.providerWide(orgId, BookingsPermissions.SERVICES_WRITE);
         ServiceOffering current = require(orgId, serviceId);
         return publish(offerings.update(current.update(c.name(), c.description(), c.category(), c.durationMinutes(),
-                c.priceMinor(), c.depositMinor(), c.modes(), c.addOns(), Instant.now(clock))));
+                c.priceMinor(), c.depositMinor(), c.modes(), c.addOns(), c.imageUrl(), Instant.now(clock))));
     }
 
     @Override

@@ -26,6 +26,6 @@ public interface ServiceCatalogService {
 
     /** Service fields as entered on Services &amp; prices. */
     record ServiceCommand(String name, String description, String category, int durationMinutes, long priceMinor,
-                          long depositMinor, Set<ServiceMode> modes, List<AddOn> addOns) {
+                          long depositMinor, Set<ServiceMode> modes, List<AddOn> addOns, String imageUrl) {
     }
 }

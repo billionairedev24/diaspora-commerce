@@ -18,13 +18,13 @@ final class Fixtures {
     static ServiceOffering braids() {
         return new ServiceOffering(UUID.randomUUID(), "org_aminata", "Knotless box braids · medium", "Hair included",
                 "hair & beauty", 300, 18_000, 4_000, "USD", Set.of(ServiceMode.IN_PERSON, ServiceMode.AT_HOME),
-                List.of(new AddOn("hair", "Extra length", 2_000, 30)), Set.of(), true, NOW, NOW, 0);
+                List.of(new AddOn("hair", "Extra length", 2_000, 30)), Set.of(), null, true, NOW, NOW, 0);
     }
 
     /** Same service without a deposit: the whole price is the balance. */
     static ServiceOffering braidsNoDeposit() {
         return new ServiceOffering(UUID.randomUUID(), "org_aminata", "Silk press", "No deposit", "hair & beauty", 90,
-                12_000, 0, "USD", Set.of(ServiceMode.IN_PERSON), List.of(), Set.of(), true, NOW, NOW, 0);
+                12_000, 0, "USD", Set.of(ServiceMode.IN_PERSON), List.of(), Set.of(), null, true, NOW, NOW, 0);
     }
 
     /** A confirmed booking of {@link #braidsNoDeposit()} starting at {@code start}, card authorised. */

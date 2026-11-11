@@ -30,7 +30,6 @@ public record BookingEventPayload(Recipient recipient, String firstName, String 
     static BookingEventPayload of(Booking b, Provider p, String previousStatus, String manageUrlBase) {
         String where = b.location() != null ? b.location()
                 : switch (b.service().mode()) {
-                    case VIRTUAL -> "Online / video";
                     case AT_HOME -> "Home visit";
                     case IN_PERSON -> p.location() == null ? p.displayName() : p.location();
                 };

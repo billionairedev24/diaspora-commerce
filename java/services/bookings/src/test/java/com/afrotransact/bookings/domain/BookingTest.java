@@ -222,8 +222,6 @@ class BookingTest {
         assertThat(s.priceMinor()).isEqualTo(20_000);
         assertThat(s.durationMinutes()).isEqualTo(330);
         assertThat(s.balanceMinor()).isEqualTo(16_000);
-        assertThatThrownBy(() -> BookedService.of(o, List.of(), ServiceMode.VIRTUAL, "x", "y"))
-                .isInstanceOf(BookingsRuleViolation.class);
         assertThatThrownBy(() -> o.pick(List.of("nope"))).isInstanceOf(BookingsRuleViolation.class);
     }
 }

@@ -4,8 +4,10 @@ import java.util.List;
 import java.util.Set;
 
 import com.afrotransact.bookings.domain.AddOn;
+import com.afrotransact.bookings.domain.NamedArea;
 import com.afrotransact.bookings.domain.ServiceMode;
 import com.afrotransact.bookings.domain.TimeRange;
+import com.afrotransact.bookings.domain.ZoneCity;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -17,6 +19,9 @@ class JsonCodec {
     private static final TypeReference<List<TimeRange>> RANGES = new TypeReference<>() { };
     private static final TypeReference<Set<ServiceMode>> MODES = new TypeReference<>() { };
     private static final TypeReference<List<AddOn>> ADD_ONS = new TypeReference<>() { };
+
+    private static final TypeReference<List<NamedArea>> AREAS = new TypeReference<>() { };
+    private static final TypeReference<List<ZoneCity>> CITIES = new TypeReference<>() { };
 
     private final JsonMapper mapper;
 
@@ -42,5 +47,13 @@ class JsonCodec {
 
     List<AddOn> addOns(String json) {
         return json == null ? List.of() : mapper.readValue(json, ADD_ONS);
+    }
+
+    List<NamedArea> namedAreas(String json) {
+        return json == null ? List.of() : mapper.readValue(json, AREAS);
+    }
+
+    List<ZoneCity> zoneCities(String json) {
+        return json == null ? List.of() : mapper.readValue(json, CITIES);
     }
 }

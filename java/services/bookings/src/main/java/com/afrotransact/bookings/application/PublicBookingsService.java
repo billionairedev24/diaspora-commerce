@@ -21,7 +21,10 @@ public interface PublicBookingsService {
      * @param zip 5-digit US ZIP: only providers whose service area (geo zones) covers it, plus virtual services
      *            (null = anywhere)
      */
-    List<Listing> search(String text, String category, String zip, int size);
+    SearchResult search(SearchQuery query);
+
+    /** Search-box suggestions: service types and provider names containing the text. */
+    List<String> suggestions(String text, int limit);
 
     ProviderPage provider(String orgId);
 
@@ -37,7 +40,46 @@ public interface PublicBookingsService {
     Summary summary(UUID serviceId, List<String> addOnIds, ServiceMode mode);
 
     /** A search hit. */
-    record Listing(ServiceOffering service, Provider provider, Instant nextAvailable, RatingSummary rating) {
+    record Listing(ServiceOffering service, Provider provider, Instant nextAvailable, RatingSummary rating,
+                   AreaView area) {
+    }
+
+    /**
+     * Where the provider is relative to the customer.
+     *
+     * @param baseCity      provider base city
+     * @param baseState     provider base state
+     * @param distanceMiles base to the customer's ZIP centroid, one decimal
+     * @param zone          the metro zone of the base city, or null
+     * @param serves        cities served (the customer's first), for "Serves Georgetown, Hutto, Pflugerville"
+     * @param nearest       true when outside the provider's usual coverage (a suggestion, not a match)
+     */
+    record AreaView(String baseCity, String baseState, double distanceMiles, String zone, List<String> serves,
+                    boolean nearest) {
+    }
+
+    /** Sort orders of the result list. */
+    enum Sort { NEAREST, SOONEST, PRICE, RATING }
+
+    /** A search request. {@code zip} null = no location (every provider, no distance). */
+    record SearchQuery(String text, String category, String zip, Sort sort, int size) {
+    }
+
+    /** The customer's place and its metro zone. */
+    record Place(String zip, String city, String state, String zone) {
+    }
+
+    /** Services per category among the providers that serve the place. */
+    record CategoryCount(String category, int count) {
+    }
+
+    /**
+     * A location search. {@code coverage}: LOCAL (services serve the place), NEAREST (none do, {@code nearest} has
+     * providers outside their usual coverage, within the staff-set maximum), NONE (nothing, not even nearby), ANY (no
+     * location was given).
+     */
+    record SearchResult(Place place, String coverage, List<Listing> services, List<Listing> nearest,
+                        List<CategoryCount> categories) {
     }
 
     /** A provider's public booking page. */

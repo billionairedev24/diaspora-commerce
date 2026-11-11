@@ -9,7 +9,11 @@ import java.util.UUID;
 
 import com.afrotransact.bookings.adapter.in.web.ProviderDtos.AddOnDto;
 import com.afrotransact.bookings.application.PublicBookingsService;
+import com.afrotransact.bookings.application.PublicBookingsService.AreaView;
 import com.afrotransact.bookings.application.PublicBookingsService.Listing;
+import com.afrotransact.bookings.application.PublicBookingsService.SearchQuery;
+import com.afrotransact.bookings.application.PublicBookingsService.SearchResult;
+import com.afrotransact.bookings.application.PublicBookingsService.Sort;
 import com.afrotransact.bookings.application.PublicBookingsService.Summary;
 import com.afrotransact.bookings.domain.Provider;
 import com.afrotransact.bookings.domain.ServiceMode;
@@ -39,14 +43,30 @@ class PublicBookingsController {
         this.catalog = catalog;
     }
 
+    @Schema(name = "PublicServiceArea", description = "Where the provider is, relative to the searched ZIP")
+    record AreaDto(String baseCity, String baseState,
+                   @Schema(description = "Straight-line miles from the provider's base to the ZIP") double distanceMiles,
+                   @Schema(description = "Metro zone of the base city, or null") String zone,
+                   @Schema(description = "Cities served, the searched city first") List<String> serves,
+                   @Schema(description = "true = outside the provider's usual coverage (a nearest suggestion)")
+                   boolean nearest) {
+
+        static AreaDto of(AreaView a) {
+            return a == null ? null : new AreaDto(a.baseCity(), a.baseState(), a.distanceMiles(), a.zone(),
+                    a.serves(), a.nearest());
+        }
+    }
+
     @Schema(name = "PublicServiceListing")
     record ListingDto(UUID serviceId, String orgId, String name, String providerName, String description,
                       String category, int durationMinutes, long priceFromMinor, long depositMinor, String currency,
+                      @Schema(description = "IN_PERSON = you go to them, AT_HOME = comes to you; never online")
                       Set<ServiceMode> modes,
                       @Schema(description = "Average customer rating (1–5, one decimal); 0 without reviews")
                       double rating,
                       @Schema(description = "Number of reviews") int ratingCount,
-                      String nextAvailable, String location) {
+                      String nextAvailable, String location, @Schema(description = "Photo of the service, or null")
+                      String imageUrl, AreaDto area) {
 
         static ListingDto of(Listing l) {
             ServiceOffering o = l.service();
@@ -54,12 +74,32 @@ class PublicBookingsController {
             return new ListingDto(o.id(), o.orgId(), o.name(), p.displayName(), o.description(), o.category(),
                     o.durationMinutes(), o.priceMinor(), o.depositMinor(), o.currency(), o.modes(),
                     l.rating().average(), l.rating().count(),
-                    l.nextAvailable() == null ? null : l.nextAvailable().toString(), p.location());
+                    l.nextAvailable() == null ? null : l.nextAvailable().toString(), p.location(), o.imageUrl(),
+                    AreaDto.of(l.area()));
         }
     }
 
-    @Schema(name = "PublicServiceSearch")
-    record SearchResponse(List<ListingDto> services) {
+    @Schema(name = "PublicSearchPlace")
+    record PlaceDto(String zip, String city, String state, String zone) {
+    }
+
+    @Schema(name = "PublicCategoryCount")
+    record CategoryCountDto(String category, int count) {
+    }
+
+    @Schema(name = "PublicServiceSearch", description = "services = providers that serve the place; nearest = only "
+            + "when none do, providers outside their usual coverage within the staff-set maximum (coverage NEAREST); "
+            + "categories = services per category that serve the place (hide a category with no services)")
+    record SearchResponse(PlaceDto place, @Schema(allowableValues = {"LOCAL", "NEAREST", "NONE", "ANY"}) String coverage,
+                          List<ListingDto> services, List<ListingDto> nearest, List<CategoryCountDto> categories) {
+
+        static SearchResponse of(SearchResult r) {
+            return new SearchResponse(r.place() == null ? null : new PlaceDto(r.place().zip(), r.place().city(),
+                    r.place().state(), r.place().zone()), r.coverage(),
+                    r.services().stream().map(ListingDto::of).toList(),
+                    r.nearest().stream().map(ListingDto::of).toList(),
+                    r.categories().stream().map(c -> new CategoryCountDto(c.category(), c.count())).toList());
+        }
     }
 
     @Schema(name = "PublicTeamMember")
@@ -82,13 +122,13 @@ class PublicBookingsController {
     record ServiceDto(UUID id, String orgId, String providerName, String name, String description, String category,
                       int durationMinutes, long priceMinor, long depositMinor, long balanceMinor, String currency,
                       Set<ServiceMode> modes, List<AddOnDto> addOns, PolicyDto policy, boolean instantBooking,
-                      List<MemberDto> team) {
+                      List<MemberDto> team, String imageUrl) {
 
         static ServiceDto of(ServiceOffering o, Provider p, List<TeamMember> team) {
             return new ServiceDto(o.id(), o.orgId(), p.displayName(), o.name(), o.description(), o.category(),
                     o.durationMinutes(), o.priceMinor(), o.depositMinor(), o.balanceMinor(), o.currency(), o.modes(),
                     o.addOns().stream().map(AddOnDto::of).toList(), PolicyDto.of(p), p.rules().instantBooking(),
-                    MemberDto.of(team));
+                    MemberDto.of(team), o.imageUrl());
         }
     }
 
@@ -117,19 +157,29 @@ class PublicBookingsController {
         }
     }
 
-    @Operation(summary = "Search services (name, description, category, provider) with the next free time",
-            description = "zip (5 digits) keeps providers whose service area (geo-service SERVICE_AREA zones) covers "
-                    + "the ZIP, plus virtual services; an unknown ZIP finds nothing. rating / ratingCount come from "
-                    + "customers' reviews of completed bookings. 422 bookings.invalid-zip, 502 "
-                    + "bookings.geo-unavailable.")
+    @Operation(summary = "Search in-person services near a ZIP, with the next free time",
+            description = "zip (5 digits) keeps providers that serve it: within the provider's radius (comes to "
+                    + "you), within min(radius, the customer-travel limit) (you go to them) or a named area/zone. "
+                    + "Nobody from another region is shown as local. When nothing serves the ZIP, nearest lists "
+                    + "providers outside their usual coverage within the staff-set maximum. sort: NEAREST "
+                    + "(default), SOONEST, PRICE, RATING. Without zip every provider is listed, no distance. "
+                    + "rating / ratingCount come from reviews of completed bookings. 422 bookings.invalid-zip, "
+                    + "502 bookings.geo-unavailable.")
     @GetMapping("/v1/public/services/search")
     ResponseEntity<SearchResponse> search(@RequestParam(required = false) String q,
                                           @RequestParam(required = false) String category,
                                           @RequestParam(required = false) String zip,
+                                          @RequestParam(required = false) Sort sort,
                                           @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)).cachePublic())
-                .body(new SearchResponse(catalog.search(q, category, zip, size).stream().map(ListingDto::of)
-                        .toList()));
+                .body(SearchResponse.of(catalog.search(new SearchQuery(q, category, zip, sort, size))));
+    }
+
+    @Operation(summary = "Search-box suggestions: service names and provider names containing q")
+    @GetMapping("/v1/public/services/suggest")
+    ResponseEntity<List<String>> suggest(@RequestParam String q, @RequestParam(defaultValue = "8") int limit) {
+        return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(60)).cachePublic())
+                .body(catalog.suggestions(q, limit));
     }
 
     @Operation(summary = "Search services (alias used by ai-gateway and mcp-server)", deprecated = true)
@@ -138,7 +188,7 @@ class PublicBookingsController {
                                                @RequestParam(required = false) String category,
                                                @RequestParam(required = false) String zip,
                                                @RequestParam(defaultValue = "10") int size) {
-        return search(q, category, zip, size);
+        return search(q, category, zip, null, size);
     }
 
     @Operation(summary = "A provider's booking page: services, policy and bookable team")

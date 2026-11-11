@@ -5,7 +5,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -36,9 +35,9 @@ class JdbcOfferingRepository implements OfferingRepository {
     public ServiceOffering insert(ServiceOffering o) {
         jdbc.sql("""
                 insert into offering (id, org_id, name, description, category, duration_minutes, price_minor,
-                                      deposit_minor, currency, modes, add_ons, active, created_at, updated_at, version)
+                                      deposit_minor, currency, modes, add_ons, image_url, active, created_at, updated_at, version)
                 values (:id, :org, :name, :description, :category, :duration, :price, :deposit, :currency,
-                        cast(:modes as jsonb), cast(:addOns as jsonb), :active, :createdAt, :updatedAt, 0)
+                        cast(:modes as jsonb), cast(:addOns as jsonb), :imageUrl, :active, :createdAt, :updatedAt, 0)
                 """)
                 .param("id", o.id())
                 .param("org", o.orgId())
@@ -51,6 +50,7 @@ class JdbcOfferingRepository implements OfferingRepository {
                 .param("currency", o.currency())
                 .param("modes", json.write(o.modes()))
                 .param("addOns", json.write(o.addOns()))
+                .param("imageUrl", o.imageUrl())
                 .param("active", o.active())
                 .param("createdAt", Sql.ts(o.createdAt()))
                 .param("updatedAt", Sql.ts(o.updatedAt()))
@@ -64,7 +64,7 @@ class JdbcOfferingRepository implements OfferingRepository {
         int rows = jdbc.sql("""
                 update offering set name = :name, description = :description, category = :category,
                        duration_minutes = :duration, price_minor = :price, deposit_minor = :deposit,
-                       modes = cast(:modes as jsonb), add_ons = cast(:addOns as jsonb), active = :active,
+                       modes = cast(:modes as jsonb), add_ons = cast(:addOns as jsonb), image_url = :imageUrl, active = :active,
                        updated_at = :updatedAt, version = version + 1
                 where id = :id and version = :version
                 """)
@@ -76,6 +76,7 @@ class JdbcOfferingRepository implements OfferingRepository {
                 .param("deposit", o.depositMinor())
                 .param("modes", json.write(o.modes()))
                 .param("addOns", json.write(o.addOns()))
+                .param("imageUrl", o.imageUrl())
                 .param("active", o.active())
                 .param("updatedAt", Sql.ts(o.updatedAt()))
                 .param("id", o.id())
@@ -108,39 +109,48 @@ class JdbcOfferingRepository implements OfferingRepository {
                 .param("org", orgId).query(this::map).list();
     }
 
+    private static final String LIVE = " join provider p on p.org_id = o.org_id where o.active and not exists "
+            + "(select 1 from org_visibility v where v.org_id = o.org_id and v.hidden)";
+    private static final String TEXT = " and (o.name ilike :q or o.description ilike :q or o.category ilike :q"
+            + " or p.display_name ilike :q)";
+
     @Override
-    public List<ServiceOffering> search(String text, String category, Set<String> orgIds, int limit) {
-        StringBuilder sql = new StringBuilder(SELECT)
-                .append(" join provider p on p.org_id = o.org_id where o.active and not exists (select 1 from "
-                        + "org_visibility v where v.org_id = o.org_id and v.hidden)");
+    public List<ServiceOffering> search(String text, int limit) {
         boolean hasText = text != null && !text.isBlank();
-        boolean hasCategory = category != null && !category.isBlank();
+        JdbcClient.StatementSpec spec = jdbc.sql(SELECT + LIVE + (hasText ? TEXT : "")
+                + " order by o.name, o.id limit :limit").param("limit", limit);
         if (hasText) {
-            sql.append(" and (o.name ilike :q or o.description ilike :q or o.category ilike :q"
-                    + " or p.display_name ilike :q)");
-        }
-        if (hasCategory) {
-            sql.append(" and o.category = :category");
-        }
-        if (orgIds != null) {
-            sql.append(orgIds.isEmpty() ? " and o.modes @> cast(:virtual as jsonb)"
-                    : " and (o.org_id in (:orgs) or o.modes @> cast(:virtual as jsonb))");
-        }
-        sql.append(" order by o.name, o.id limit :limit");
-        JdbcClient.StatementSpec spec = jdbc.sql(sql.toString()).param("limit", limit);
-        if (hasText) {
-            spec = spec.param("q", "%" + text.trim().replace("%", "") + "%");
-        }
-        if (hasCategory) {
-            spec = spec.param("category", category.trim().toLowerCase(Locale.ROOT));
-        }
-        if (orgIds != null) {
-            spec = spec.param("virtual", "[\"VIRTUAL\"]");
-            if (!orgIds.isEmpty()) {
-                spec = spec.param("orgs", List.copyOf(orgIds));
-            }
+            spec = spec.param("q", like(text));
         }
         return spec.query(this::map).list();
+    }
+
+    @Override
+    public List<ServiceOffering> searchNear(String text, double lat, double lon, int travelMiles, int nearestMiles,
+                                            int limit) {
+        boolean hasText = text != null && !text.isBlank();
+        JdbcClient.StatementSpec spec = jdbc.sql(SELECT + LIVE + " and exists (select 1 from provider_service_area a"
+                + " where a.org_id = o.org_id and (" + Sql.HAVERSINE_MILES + " <= greatest(a.radius_miles, :travel,"
+                + " :nearest) or a.extra_areas <> cast('[]' as jsonb)))" + (hasText ? TEXT : "")
+                + " order by o.name, o.id limit :limit")
+                .param("lat", lat).param("lon", lon).param("travel", travelMiles).param("nearest", nearestMiles)
+                .param("limit", limit);
+        if (hasText) {
+            spec = spec.param("q", like(text));
+        }
+        return spec.query(this::map).list();
+    }
+
+    @Override
+    public List<String> suggestions(String text, int limit) {
+        return jdbc.sql("select s from (select o.name as s from offering o join provider p on p.org_id = o.org_id"
+                        + " where o.active and o.name ilike :q union select p.display_name from provider p"
+                        + " where p.display_name ilike :q) x order by s limit :limit")
+                .param("q", like(text)).param("limit", limit).query(String.class).list();
+    }
+
+    private static String like(String text) {
+        return "%" + text.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
     }
 
     private ServiceOffering map(ResultSet rs, int rowNum) throws SQLException {
@@ -155,7 +165,7 @@ class JdbcOfferingRepository implements OfferingRepository {
                 rs.getString("description"), rs.getString("category"), rs.getInt("duration_minutes"),
                 rs.getLong("price_minor"), rs.getLong("deposit_minor"), rs.getString("currency"),
                 json.modes(rs.getString("modes")), json.addOns(rs.getString("add_ons")), members,
-                rs.getBoolean("active"), rs.getTimestamp("created_at").toInstant(),
+                rs.getString("image_url"), rs.getBoolean("active"), rs.getTimestamp("created_at").toInstant(),
                 rs.getTimestamp("updated_at").toInstant(), rs.getLong("version"));
     }
 }
