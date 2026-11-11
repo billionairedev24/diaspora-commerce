@@ -28,6 +28,9 @@ tags:
   description: Trust and safety staff and the trust-ops service client (bookings:reviews:moderate, principal type STAFF or
     SERVICE) approve or reject customer reviews before they are public. Decisions are idempotent, so a retried queue decision
     is safe.
+- name: Service areas
+  description: Where providers work (base, radius, extra areas) and the staff settings behind it (radius policy, metro zones).
+    Services are in person only.
 - name: Bookings
   description: Booking flow for customers (CUSTOMER token) and providers (bookings:manage). Every write takes an Idempotency-Key
     and is safe to retry.
@@ -723,6 +726,82 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Review'
+  /v1/providers/{orgId}/service-area:
+    get:
+      tags:
+      - Service areas
+      summary: The provider's service area with radius bounds and zones (bookings:read)
+      operationId: serviceArea
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ServiceAreaView'
+    put:
+      tags:
+      - Service areas
+      summary: Save the service area (bookings:services:write)
+      description: The base ZIP is placed through geo-service; the radius must be within the staff-set bounds of the provider's
+        categories (422 bookings.invalid-service-area).
+      operationId: saveServiceArea
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAreaRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ServiceAreaView'
+  /v1/providers/{orgId}/service-area/preview:
+    get:
+      tags:
+      - Service areas
+      summary: Cities a base ZIP and radius would cover, without saving (bookings:read)
+      operationId: previewServiceArea
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: zip
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: radiusMiles
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ServiceAreaPreview'
   /v1/providers/{orgId}/services:
     get:
       tags:
@@ -1211,10 +1290,12 @@ paths:
     get:
       tags:
       - Public bookings
-      summary: Search services (name, description, category, provider) with the next free time
-      description: zip (5 digits) keeps providers whose service area (geo-service SERVICE_AREA zones) covers the ZIP, plus
-        virtual services; an unknown ZIP finds nothing. rating / ratingCount come from customers' reviews of completed bookings.
-        422 bookings.invalid-zip, 502 bookings.geo-unavailable.
+      summary: Search in-person services near a ZIP, with the next free time
+      description: 'zip (5 digits) keeps providers that serve it: within the provider''s radius (comes to you), within min(radius,
+        the customer-travel limit) (you go to them) or a named area/zone. Nobody from another region is shown as local. When
+        nothing serves the ZIP, nearest lists providers outside their usual coverage within the staff-set maximum. sort: NEAREST
+        (default), SOONEST, PRICE, RATING. Without zip every provider is listed, no distance. rating / ratingCount come from
+        reviews of completed bookings. 422 bookings.invalid-zip, 502 bookings.geo-unavailable.'
       operationId: search
       parameters:
       - name: q
@@ -1232,6 +1313,16 @@ paths:
         required: false
         schema:
           type: string
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - NEAREST
+          - SOONEST
+          - PRICE
+          - RATING
       - name: size
         in: query
         required: false
@@ -1246,6 +1337,35 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PublicServiceSearch'
+      security: []
+  /v1/public/services/suggest:
+    get:
+      tags:
+      - Public bookings
+      summary: 'Search-box suggestions: service names and provider names containing q'
+      operationId: suggest
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 8
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: string
       security: []
   /v1/public/services/{serviceId}:
     get:
@@ -1422,7 +1542,6 @@ paths:
           enum:
           - IN_PERSON
           - AT_HOME
-          - VIRTUAL
       responses:
         '200':
           description: OK
@@ -1581,8 +1700,215 @@ paths:
                 $ref: '#/components/schemas/PublicServiceSearch'
       deprecated: true
       security: []
+  /v1/staff/service-areas/audit:
+    get:
+      tags:
+      - Service areas
+      summary: 'Staff: who changed policy and zones, and why (bookings:service-areas:manage)'
+      operationId: serviceAreaAudit
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceAreaAuditEntry'
+  /v1/staff/service-areas/policy:
+    get:
+      tags:
+      - Service areas
+      summary: 'Staff: radius policy (bookings:service-areas:manage)'
+      operationId: serviceAreaPolicy
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AreaPolicy'
+    put:
+      tags:
+      - Service areas
+      summary: 'Staff: change the radius policy with a reason (bookings:service-areas:manage)'
+      operationId: saveServiceAreaPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonedPolicy'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AreaPolicy'
+  /v1/staff/service-areas/zones:
+    get:
+      tags:
+      - Service areas
+      summary: 'Staff: metro zones (bookings:service-areas:manage)'
+      operationId: serviceZones
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceZone'
+  /v1/staff/service-areas/zones/{key}:
+    put:
+      tags:
+      - Service areas
+      summary: 'Staff: create or replace a metro zone with a reason (bookings:service-areas:manage)'
+      operationId: saveServiceZone
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonedZone'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ServiceZone'
+    delete:
+      tags:
+      - Service areas
+      summary: 'Staff: delete a metro zone with a reason (bookings:service-areas:manage)'
+      operationId: deleteServiceZone
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
 components:
   schemas:
+    CityRef:
+      type: object
+      properties:
+        city:
+          type: string
+        state:
+          type: string
+    ReasonedZone:
+      type: object
+      properties:
+        zone:
+          $ref: '#/components/schemas/ServiceZone'
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+      required:
+      - reason
+      - zone
+    ServiceZone:
+      type: object
+      properties:
+        key:
+          type: string
+          minLength: 1
+          pattern: ^[a-z0-9][a-z0-9-]{1,39}$
+        name:
+          type: string
+          maxLength: 80
+          minLength: 0
+        cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/CityRef'
+          maxItems: 200
+          minItems: 0
+      required:
+      - cities
+      - key
+      - name
+    AreaPolicy:
+      type: object
+      description: Staff-set service-area rules
+      properties:
+        byCategory:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/RadiusRule'
+          minProperties: 1
+        fallback:
+          $ref: '#/components/schemas/RadiusRule'
+        customerTravelMiles:
+          type: integer
+          format: int32
+          maximum: 150
+          minimum: 1
+        nearestMaxMiles:
+          type: integer
+          format: int32
+          maximum: 300
+          minimum: 0
+      required:
+      - byCategory
+      - fallback
+    RadiusRule:
+      type: object
+      properties:
+        defaultMiles:
+          type: integer
+          format: int32
+          maximum: 150
+          minimum: 1
+        minMiles:
+          type: integer
+          format: int32
+          maximum: 150
+          minimum: 1
+        maxMiles:
+          type: integer
+          format: int32
+          maximum: 150
+          minimum: 1
+    ReasonedPolicy:
+      type: object
+      properties:
+        policy:
+          $ref: '#/components/schemas/AreaPolicy'
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+      required:
+      - policy
+      - reason
     TeamMemberRequest:
       type: object
       properties:
@@ -1831,7 +2157,9 @@ components:
       - name
     ServiceRequest:
       type: object
-      description: Services & prices form
+      description: 'Services & prices form. Services are in person only: modes are IN_PERSON (the customer goes to the provider)
+        and AT_HOME (the provider comes to the customer). VIRTUAL, ONLINE and REMOTE modes, and virtual/online/remote flags,
+        are refused with 422 bookings.in-person-only.'
       properties:
         name:
           type: string
@@ -1861,12 +2189,11 @@ components:
           minimum: 0
         modes:
           type: array
+          enum:
+          - IN_PERSON
+          - AT_HOME
           items:
             type: string
-            enum:
-            - IN_PERSON
-            - AT_HOME
-            - VIRTUAL
           minItems: 1
           uniqueItems: true
         addOns:
@@ -1875,6 +2202,11 @@ components:
             $ref: '#/components/schemas/AddOn'
           maxItems: 20
           minItems: 0
+        imageUrl:
+          type: string
+          description: Photo of the service (a media-service URL)
+          maxLength: 500
+          minLength: 0
       required:
       - modes
       - name
@@ -1913,7 +2245,6 @@ components:
             enum:
             - IN_PERSON
             - AT_HOME
-            - VIRTUAL
           uniqueItems: true
         addOns:
           type: array
@@ -1925,6 +2256,8 @@ components:
             type: string
             format: uuid
           uniqueItems: true
+        imageUrl:
+          type: string
         active:
           type: boolean
         takeHome:
@@ -1982,6 +2315,84 @@ components:
           uniqueItems: true
       required:
       - memberIds
+    NamedArea:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - CITY
+          - ZIP
+          - ZONE
+        value:
+          type: string
+          maxLength: 80
+          minLength: 0
+        state:
+          type: string
+          description: 2-letter state, required for CITY
+      required:
+      - kind
+      - value
+    ServiceAreaRequest:
+      type: object
+      properties:
+        baseZip:
+          type: string
+          minLength: 1
+          pattern: ^\d{5}$
+        radiusMiles:
+          type: integer
+          format: int32
+          description: Miles; omit for the default of the provider's categories
+          maximum: 150
+          minimum: 1
+        extraAreas:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedArea'
+          maxItems: 20
+          minItems: 0
+      required:
+      - baseZip
+    ServiceArea:
+      type: object
+      properties:
+        baseZip:
+          type: string
+        baseCity:
+          type: string
+        baseState:
+          type: string
+        radiusMiles:
+          type: integer
+          format: int32
+        extraAreas:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedArea'
+        servedCities:
+          type: array
+          items:
+            $ref: '#/components/schemas/CityRef'
+        zone:
+          type: string
+    ServiceAreaView:
+      type: object
+      description: The saved area (null before the first save), the radius bounds for this provider's services, the platform's
+        customer-travel limit and the zones to choose from
+      properties:
+        area:
+          $ref: '#/components/schemas/ServiceArea'
+        bounds:
+          $ref: '#/components/schemas/RadiusRule'
+        customerTravelMiles:
+          type: integer
+          format: int32
+        zones:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceZone'
     CancellationPolicyRequest:
       type: object
       properties:
@@ -2144,7 +2555,6 @@ components:
           enum:
           - IN_PERSON
           - AT_HOME
-          - VIRTUAL
         addOnIds:
           type: array
           items:
@@ -2435,6 +2845,59 @@ components:
           type: string
         currency:
           type: string
+    ServiceAreaAuditEntry:
+      type: object
+      properties:
+        at:
+          type: string
+        actor:
+          type: string
+        subject:
+          type: string
+        reason:
+          type: string
+    PublicCategoryCount:
+      type: object
+      properties:
+        category:
+          type: string
+        count:
+          type: integer
+          format: int32
+    PublicSearchPlace:
+      type: object
+      properties:
+        zip:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zone:
+          type: string
+    PublicServiceArea:
+      type: object
+      description: Where the provider is, relative to the searched ZIP
+      properties:
+        baseCity:
+          type: string
+        baseState:
+          type: string
+        distanceMiles:
+          type: number
+          format: double
+          description: Straight-line miles from the provider's base to the ZIP
+        zone:
+          type: string
+          description: Metro zone of the base city, or null
+        serves:
+          type: array
+          description: Cities served, the searched city first
+          items:
+            type: string
+        nearest:
+          type: boolean
+          description: true = outside the provider's usual coverage (a nearest suggestion)
     PublicServiceListing:
       type: object
       properties:
@@ -2464,12 +2927,12 @@ components:
           type: string
         modes:
           type: array
+          description: IN_PERSON = you go to them, AT_HOME = comes to you; never online
           items:
             type: string
             enum:
             - IN_PERSON
             - AT_HOME
-            - VIRTUAL
           uniqueItems: true
         rating:
           type: number
@@ -2483,13 +2946,38 @@ components:
           type: string
         location:
           type: string
+        imageUrl:
+          type: string
+          description: Photo of the service, or null
+        area:
+          $ref: '#/components/schemas/PublicServiceArea'
     PublicServiceSearch:
       type: object
+      description: services = providers that serve the place; nearest = only when none do, providers outside their usual coverage
+        within the staff-set maximum (coverage NEAREST); categories = services per category that serve the place (hide a category
+        with no services)
       properties:
+        place:
+          $ref: '#/components/schemas/PublicSearchPlace'
+        coverage:
+          type: string
+          enum:
+          - LOCAL
+          - NEAREST
+          - NONE
+          - ANY
         services:
           type: array
           items:
             $ref: '#/components/schemas/PublicServiceListing'
+        nearest:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicServiceListing'
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicCategoryCount'
     ReviewPage:
       type: object
       properties:
@@ -2552,7 +3040,6 @@ components:
             enum:
             - IN_PERSON
             - AT_HOME
-            - VIRTUAL
           uniqueItems: true
         addOns:
           type: array
@@ -2566,6 +3053,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PublicTeamMember'
+        imageUrl:
+          type: string
     PublicTeamMember:
       type: object
       properties:
@@ -2709,6 +3198,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PublicTeamMember'
+    ServiceAreaPreview:
+      type: object
+      properties:
+        baseCity:
+          type: string
+        baseState:
+          type: string
+        zone:
+          type: string
+        cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/CityRef'
     BookingEarnings:
       type: object
       properties:

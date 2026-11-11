@@ -39,7 +39,7 @@ class ServiceAreaController {
 
     @Operation(summary = "The provider's service area with radius bounds and zones (bookings:read)")
     @GetMapping("/v1/providers/{orgId}/service-area")
-    AreaViewResponse area(@PathVariable String orgId) {
+    AreaViewResponse serviceArea(@PathVariable String orgId) {
         return AreaViewResponse.of(areas.get(orgId));
     }
 
@@ -47,51 +47,51 @@ class ServiceAreaController {
             + "through geo-service; the radius must be within the staff-set bounds of the provider's categories "
             + "(422 bookings.invalid-service-area).")
     @PutMapping("/v1/providers/{orgId}/service-area")
-    AreaViewResponse saveArea(@PathVariable String orgId, @Valid @RequestBody AreaRequest body) {
+    AreaViewResponse saveServiceArea(@PathVariable String orgId, @Valid @RequestBody AreaRequest body) {
         return AreaViewResponse.of(areas.save(orgId, body.toCommand()));
     }
 
     @Operation(summary = "Cities a base ZIP and radius would cover, without saving (bookings:read)")
     @GetMapping("/v1/providers/{orgId}/service-area/preview")
-    PreviewResponse preview(@PathVariable String orgId, @RequestParam String zip,
+    PreviewResponse previewServiceArea(@PathVariable String orgId, @RequestParam String zip,
                             @RequestParam(defaultValue = "20") int radiusMiles) {
         return PreviewResponse.of(areas.preview(orgId, zip, radiusMiles));
     }
 
     @Operation(summary = "Staff: radius policy (bookings:service-areas:manage)")
     @GetMapping("/v1/staff/service-areas/policy")
-    PolicyDto policy() {
+    PolicyDto serviceAreaPolicy() {
         return PolicyDto.of(admin.policy());
     }
 
     @Operation(summary = "Staff: change the radius policy with a reason (bookings:service-areas:manage)")
     @PutMapping("/v1/staff/service-areas/policy")
-    PolicyDto savePolicy(@Valid @RequestBody PolicyChange body) {
+    PolicyDto saveServiceAreaPolicy(@Valid @RequestBody PolicyChange body) {
         return PolicyDto.of(admin.savePolicy(body.policy().toDomain(), body.reason()));
     }
 
     @Operation(summary = "Staff: metro zones (bookings:service-areas:manage)")
     @GetMapping("/v1/staff/service-areas/zones")
-    List<ZoneDto> zones() {
+    List<ZoneDto> serviceZones() {
         return admin.zones().stream().map(ZoneDto::of).toList();
     }
 
     @Operation(summary = "Staff: create or replace a metro zone with a reason (bookings:service-areas:manage)")
     @PutMapping("/v1/staff/service-areas/zones/{key}")
-    ZoneDto saveZone(@PathVariable String key, @Valid @RequestBody ZoneChange body) {
+    ZoneDto saveServiceZone(@PathVariable String key, @Valid @RequestBody ZoneChange body) {
         ServiceZone z = new ZoneDto(key, body.zone().name(), body.zone().cities()).toDomain();
         return ZoneDto.of(admin.saveZone(z, body.reason()));
     }
 
     @Operation(summary = "Staff: delete a metro zone with a reason (bookings:service-areas:manage)")
     @DeleteMapping("/v1/staff/service-areas/zones/{key}")
-    void deleteZone(@PathVariable String key, @RequestParam String reason) {
+    void deleteServiceZone(@PathVariable String key, @RequestParam String reason) {
         admin.deleteZone(key, reason);
     }
 
     @Operation(summary = "Staff: who changed policy and zones, and why (bookings:service-areas:manage)")
     @GetMapping("/v1/staff/service-areas/audit")
-    List<AuditDto> audit(@RequestParam(defaultValue = "50") int limit) {
+    List<AuditDto> serviceAreaAudit(@RequestParam(defaultValue = "50") int limit) {
         return admin.audit(limit).stream().map(a -> new AuditDto(a.at(), a.actor(), a.subject(), a.reason())).toList();
     }
 }
