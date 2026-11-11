@@ -2981,7 +2981,7 @@ export interface paths {
         };
         /**
          * Variants waiting for tax review, or the decisions already made
-         * @description tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. Sellers and people by name.
+         * @description tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. `status=AUDIT_SAMPLE` is the "Audit sample" tab (tax-returns `auditSample=true`): items the system approved under the risk-based review rule (setting `taxReview.mode` RISK_BASED) that are live and wait for a reviewer to confirm or reclassify them. Sellers and people by name; the system's own approvals read "Automatic approval (risk-based rule)".
          */
         get: operations["listStaffTaxReviews"];
         put?: never;
@@ -3179,6 +3179,30 @@ export interface paths {
          * @description tax-returns `PUT /v1/tax/settings` (`tax:configure`). A reason of 10+ characters is required. Applies to new quotes; placed orders keep the tax they were charged. 422 for a provider that is not set up, an incomplete code map, or a shadow provider equal to the charging one.
          */
         put: operations["changeStaffTaxMethod"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/review-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How tax review works: every classification, or by risk, with the always-review list and the audit sample
+         * @description tax-returns `GET /v1/tax/review-settings` with category names. Mode ALL (the default) sends every classification to a tax reviewer. RISK_BASED must only be switched on after the Texas tax professional agrees.
+         */
+        get: operations["getStaffTaxReviewSettings"];
+        /**
+         * Change the tax review mode, the always-review categories and the audit sample percentage
+         * @description tax-returns `PUT /v1/tax/review-settings` (`tax:classify-admin`). A reason of 10+ characters is required and the change is recorded. The categories are sent as codes (the console shows names). It applies to new classification events; records already decided keep their status. 422 for an unknown category or a percentage outside 0 to 100.
+         */
+        put: operations["changeStaffTaxReviewSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -10219,8 +10243,14 @@ export interface components {
             reviewedAt?: string;
             reviewedByName?: string;
             ruleVersion?: string;
+            /** @description Approved by the system and live; waits in the Audit sample for a reviewer to confirm or reclassify it */
+            auditSample?: boolean;
+            /** @description Approved by the system under the risk-based rule, not by a person */
+            autoApproved?: boolean;
         };
         StaffTaxReview: components["schemas"]["StaffTaxReviewRow"] & {
+            /** @description An audit sample item the signed-in person may confirm (POST approve with a reason) or reclassify */
+            canConfirm?: boolean;
             departmentName?: string;
             profileStatus?: string;
             profileStatusLabel?: string;
@@ -10378,6 +10408,41 @@ export interface components {
             method: "RULES" | "STRIPE_TAX" | "AVALARA";
             /** @enum {string|null} */
             shadowProvider?: "STRIPE" | "AVALARA" | null | "";
+            reason: string;
+        };
+        StaffTaxReviewSettings: {
+            /** @enum {string} */
+            mode: "ALL" | "RISK_BASED";
+            modeLabel: string;
+            modeExplain: string;
+            options: {
+                [key: string]: unknown;
+            }[];
+            categories: {
+                [key: string]: unknown;
+            }[];
+            /** @description Names of the categories on the always-review list */
+            alwaysReviewNames?: string[];
+            alwaysReviewStatuses: {
+                [key: string]: unknown;
+            }[];
+            auditPercent: number;
+            auditExplain?: string;
+            history: {
+                [key: string]: unknown;
+            }[];
+            changedByName?: string;
+            changedAt?: string;
+            canChange: boolean;
+            /** @description Plain-language warning: RISK_BASED must only be switched on after the Texas tax professional agrees */
+            warning: string;
+        };
+        StaffTaxReviewSettingsChange: {
+            /** @enum {string} */
+            mode: "ALL" | "RISK_BASED";
+            /** @description Category codes; replaces the list, absent keeps it */
+            alwaysReview?: string[];
+            auditPercent?: number;
             reason: string;
         };
         StaffTaxShadow: {
@@ -15292,6 +15357,7 @@ export interface operations {
     listStaffTaxReviews: {
         parameters: {
             query?: {
+                /** @description PENDING_REVIEW (default), AUDIT_SAMPLE, APPROVED, REJECTED, STALE, MISSING_FACTS or DRAFT */
                 status?: string;
                 categoryCode?: string;
                 sellerOrgId?: string;
@@ -15602,6 +15668,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffTaxMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffTaxReviewSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReviewSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    changeStaffTaxReviewSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxReviewSettingsChange"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReviewSettings"];
                 };
             };
             401: components["responses"]["Problem"];

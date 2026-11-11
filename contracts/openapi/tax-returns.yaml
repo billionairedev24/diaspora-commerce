@@ -1097,10 +1097,10 @@ paths:
       tags:
       - Tax classification
       summary: Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)
-      description: auditSample=true lists the audit sample instead (status is ignored): items the system approved under the risk-based review rule that are live and wait for a reviewer to confirm (POST approve) or reclassify them.
+      description: 'auditSample=true lists the audit sample instead (status is ignored): items the system approved under the risk-based review rule that are live and wait for a reviewer to confirm (POST approve) or reclassify them.'
       operationId: listVariantClassifications
       parameters:
-      - {name: auditSample, in: query, required: false, description: Only the audit sample, oldest first, schema: {type: boolean, default: false}}
+      - {name: auditSample, in: query, required: false, description: 'Only the audit sample, oldest first', schema: {type: boolean, default: false}}
       - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/ClassificationRecordStatus'}}
       - {name: categoryCode, in: query, required: false, schema: {type: string}}
       - {name: sellerOrgId, in: query, required: false, schema: {type: string}}

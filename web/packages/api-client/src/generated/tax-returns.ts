@@ -451,6 +451,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tax/review-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The tax review mode, always-review list, audit sample percentage and their history (tax:read) */
+        get: operations["taxReviewSettings"];
+        /**
+         * Set the tax review mode, always-review list and audit sample percentage (tax:classify-admin)
+         * @description taxReview.mode is ALL until staff change it (every classification waits for a tax reviewer). RISK_BASED lets the system approve a classification only when the category is ACTIVE, the rules resolve cleanly (RESOLVED), no required evidence is missing and the category is not on the always-review list; everything else, and every category whose status is NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN or BLOCKED_BUNDLE, stays in the review queue. Never switch it on before the Texas tax professional agrees (docs/engineering/listing-rules.md D7). A reason of 10+ characters is required (422 tax.reason-required) and the change is recorded. alwaysReview replaces the list, absent keeps it (422 tax.unknown-category); auditPercent 0 to 100, absent keeps it (422 tax.invalid-audit-percent). It applies to new classification events; records already decided keep their status. Needs tax:classify-admin only (403 otherwise).
+         */
+        put: operations["changeTaxReviewSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tax/remittances": {
         parameters: {
             query?: never;
@@ -743,7 +764,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Variant classification records; the review queue is status=PENDING_REVIEW (tax:read) */
+        /**
+         * Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)
+         * @description auditSample=true lists the audit sample instead (status is ignored): items the system approved under the risk-based review rule that are live and wait for a reviewer to confirm (POST approve) or reclassify them.
+         */
         get: operations["listVariantClassifications"];
         put?: never;
         post?: never;
@@ -1023,6 +1047,48 @@ export interface components {
              * @enum {string|null}
              */
             shadowProvider?: "STRIPE" | "AVALARA" | null;
+            reason: string;
+        };
+        TaxReviewSettingsValues: {
+            /** @enum {string} */
+            mode?: "ALL" | "RISK_BASED";
+            /** @description Category codes */
+            alwaysReview?: string[];
+            auditPercent?: number;
+        };
+        TaxReviewSettingsChange: {
+            from?: components["schemas"]["TaxReviewSettingsValues"] | null;
+            to?: components["schemas"]["TaxReviewSettingsValues"];
+            reason?: string;
+            changedBy?: string;
+            /** Format: date-time */
+            changedAt?: string;
+        };
+        /** @description ALL until staff change it. RISK_BASED must only be switched on after the Texas tax professional agrees. */
+        TaxReviewSettings: {
+            /**
+             * @description ALL: every classification waits for a tax reviewer (the default). RISK_BASED: only when the category is ACTIVE, the rules resolve, no required evidence is missing and the category is not on the always-review list.
+             * @enum {string}
+             */
+            mode?: "ALL" | "RISK_BASED";
+            /** @description Category codes that always go to review in RISK_BASED mode. Default: dietary-supplements, otc-medicines, medicated-skincare, medical-devices, baby-food-formula, gift-cards. */
+            alwaysReview?: string[];
+            /** @description Category statuses that always go to review whatever the list says: NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN, BLOCKED_BUNDLE. */
+            alwaysReviewStatuses?: string[];
+            /** @description Share of auto-approved items also queued as audit items (default 5). Deterministic: a hash of the variant ATIN. */
+            auditPercent?: number;
+            changedBy?: string | null;
+            /** Format: date-time */
+            changedAt?: string | null;
+            history?: components["schemas"]["TaxReviewSettingsChange"][];
+        };
+        TaxReviewSettingsChangeRequest: {
+            /** @enum {string} */
+            mode: "ALL" | "RISK_BASED";
+            /** @description Replaces the always-review list; absent or null keeps the current list */
+            alwaysReview?: string[] | null;
+            /** @description Absent or null keeps the current percentage */
+            auditPercent?: number | null;
             reason: string;
         };
         /** @description State rates are fractions (0.0625 = 6.25 %) */
@@ -1663,6 +1729,10 @@ export interface components {
              * @description Orders placed with this variant (detail only)
              */
             ordersAffected?: number;
+            /** @description Approved by the system under the risk-based rule and waiting in the audit sample for a reviewer to confirm or reclassify it. The item is live meanwhile. */
+            auditSample?: boolean;
+            /** Format: date-time */
+            auditSampledAt?: string | null;
             /** @description What tax review asked the seller to provide; cleared when the seller's facts change */
             informationRequest?: {
                 message?: string;
@@ -1704,7 +1774,7 @@ export interface components {
                 at?: string;
                 actor?: string;
                 /** @enum {string} */
-                action?: "FACTS_CHANGED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "RECLASSIFIED" | "MARKED_STALE" | "EVIDENCE_ADDED" | "INFORMATION_REQUESTED";
+                action?: "FACTS_CHANGED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "RECLASSIFIED" | "MARKED_STALE" | "EVIDENCE_ADDED" | "INFORMATION_REQUESTED" | "AUDIT_SAMPLED" | "AUDIT_CONFIRMED";
                 reason?: string;
                 ruleVersion?: string;
                 before?: {
@@ -2528,6 +2598,64 @@ export interface operations {
             };
         };
     };
+    taxReviewSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxReviewSettings"];
+                };
+            };
+        };
+    };
+    changeTaxReviewSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxReviewSettingsChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxReviewSettings"];
+                };
+            };
+            /** @description Needs tax:classify-admin */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description tax.reason-required, tax.unknown-category or tax.invalid-audit-percent */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     taxObligations: {
         parameters: {
             query?: {
@@ -2962,6 +3090,8 @@ export interface operations {
     listVariantClassifications: {
         parameters: {
             query?: {
+                /** @description Only the audit sample, oldest first */
+                auditSample?: boolean;
                 status?: components["schemas"]["ClassificationRecordStatus"];
                 categoryCode?: string;
                 sellerOrgId?: string;
