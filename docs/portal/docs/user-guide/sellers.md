@@ -72,9 +72,14 @@ of food services such as catering. Listings you already have stay live and you c
 
 ### Service providers: your service area
 
-Services are in person only. In **Services**, set your **service area** first: your base address, how far you go (a
-radius within the limits for your service categories) and, if you want, extra cities, ZIP codes or whole metro zones such
-as Greater Austin. The preview shows the cities your radius covers. Customers only see you when your area covers them.
+Services are in person only. In **Services**, set your **service area** first: your base address, **how far you travel to
+customers** (your radius, within the minimum and maximum for your service categories) and, if you want, extra cities, ZIP
+codes or whole metro zones such as Greater Austin. The preview shows the cities your radius covers.
+
+Your radius matters for services that **come to the customer** (home visits, catering): you are shown only to customers
+inside it, because you cannot travel past it. For services where the customer **goes to you** (your salon or shop), shoppers
+choose how far they are willing to go, so your radius never limits them: the closer your shop, the higher you appear (results
+are nearest first).
 For each service choose where it happens: **Comes to you** (home visits, catering), **You go to them** (your salon or
 shop), or both, add a category, and add a photo of your work (without one, customers see your initials).
 

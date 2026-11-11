@@ -27,8 +27,8 @@ public final class BookingsPermissions {
      */
     public static final String SERVICE_AREAS_VIEW = "content:markets.view";
     /**
-     * Staff change the service-area policy (radius defaults, minimums, maximums, customer-travel and nearest-fallback
-     * distances) and the metro zones, always with a reason: the Markets &amp; locations edit permission.
+     * Staff change the service-area policy (the default search radius per category and the minimum and maximum of a
+     * provider's radius) and the metro zones, always with a reason: the Markets &amp; locations edit permission.
      */
     public static final String SERVICE_AREAS_MANAGE = "content:markets.edit";
 

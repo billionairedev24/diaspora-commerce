@@ -173,10 +173,12 @@ may act for any organisation.
 
 ### Search by place, service areas and zones
 
-`GET /v1/public/services/search?zip&q&category&sort` matches providers by their **service area** (base ZIP, radius, named
-areas, metro zones): within the radius for services that come to the customer, within min(radius, travel limit) for shops,
-or a named area; `coverage` says LOCAL / NEAREST / NONE / ANY and `nearest` lists labelled providers outside their usual
-coverage when nobody serves the place. Providers manage the area at `GET/PUT /v1/providers/{orgId}/service-area` (radius
+`GET /v1/public/services/search?zip&q&category&sort&radiusMiles` matches providers by their **service area** (base ZIP,
+radius, named areas, metro zones): a service that comes to the customer (`AT_HOME`) within the provider's own radius, a shop
+the customer goes to (`IN_PERSON`) within `radiusMiles` (the shopper's choice, 1-1000, `0` = any distance; absent = the
+category's staff-set default radius), or a named area. There is no platform distance limit and no nearest suggestions;
+`coverage` says LOCAL / NONE / ANY and the response reports the `radiusMiles` searched and `radiusDefault`. Results are
+nearest first. Providers manage the area at `GET/PUT /v1/providers/{orgId}/service-area` (radius
 within staff-set bounds); staff manage the radius policy and metro zones at `/v1/staff/service-areas/…` (permission
 `content:markets.edit`, reason required, audited). `POST /v1/public/services/alerts` is "tell me when one joins".
 geo-service (`GEO_URL`) supplies ZIP centroids (`GET /v1/zip/{zip}`) and the cities around a point

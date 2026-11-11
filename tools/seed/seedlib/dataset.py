@@ -52,7 +52,8 @@ SELLER_BY_KEY = {s.key: s for s in SELLERS}
 class Provider:
     """A demo service provider. Services are in person only (docs/engineering/service-areas.md): a service's modes are
     IN_PERSON (the customer goes to the provider) and/or AT_HOME (the provider comes to the customer); there is no virtual
-    mode. `zip` is the base location, `radius` the miles served, `extra` named areas ("CITY:Taylor:TX", "ZIP:76574" or
+    mode. `zip` is the base location, `radius` how far the provider travels to customers (AT_HOME services; shoppers choose
+    their own distance to a shop), `extra` named areas ("CITY:Taylor:TX", "ZIP:76574" or
     "ZONE:greater-austin"), `tz` the provider's time zone."""
 
     key: str
@@ -95,8 +96,9 @@ PROVIDERS: list[Provider] = [
         ("Aso-ebi fitting", "Measurements and fitting for aso-ebi outfits.", "tailoring", 45, 9500, 3000, ("IN_PERSON",), TAILOR),
     ), zip="11211", radius=25, tz="America/New_York"),
     # Greater Austin: Georgetown sees these local matches (Round Rock 10 mi, Hutto 9 mi, Pflugerville 17 mi) and nothing from
-    # Brooklyn or Houston. Capital City Tailors is in Austin with a small radius: Georgetown shows it as the nearest
-    # suggestion ("does not usually travel to Georgetown"), and Dallas, which has no tailor, shows the empty state.
+    # Brooklyn or Houston. Capital City Tailors is a shop in Austin (about 28 mi from Georgetown): outside the tailoring
+    # default of 25 mi, so Georgetown shows the empty state with "Search wider", and it appears at 50 mi or any distance.
+    # Dallas, which has no tailor within reach at the default, shows the same empty state.
     Provider("hillcountry", "org_hill_country_braids", "Hill Country Braids", "Hill Country Braids LLC", "Round Rock, TX",
              "Nia Johnson", (
                  ("Box braids at your home", "Medium box braids, hair included. I come to you anywhere around Austin.",

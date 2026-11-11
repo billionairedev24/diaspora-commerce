@@ -38,14 +38,19 @@ Most items can be returned within 30 days. Food is refundable if damaged or wron
 ## Find and book a service
 
 All services are in person. **Services** shows providers near the location in the header ("Services near Georgetown"; use
-**Change** to pick another place). A provider is listed when they serve you: they come to you within their service radius,
-you can reach their shop within about 30 miles, or they named your city or area. Providers in a nearby town (a Round Rock
-provider for someone in Georgetown) match, and results are sorted nearest first (or by soonest, price or rating). Each row
-shows how far they are, the cities they serve, price and deposit, and the next free time in your time zone.
+**Change** to pick another place). **You choose how far to go.** Next to the title, **Within [25 miles]** sets the distance
+you are willing to travel to a provider's shop: 5, 10, 25, 50 or 100 miles, or **Any distance**. We start with a sensible
+default for the kind of service (for example 20 miles for hair and beauty, 40 for catering) and remember your choice in this
+browser; the address of the page carries it too (`?radius=50`), so you can share it. There is no limit on what you can pick.
 
-If nobody serves your place for a service, we say so and show what is available there. Providers outside their usual
-area appear only as a clearly labelled "nearest" suggestion, and only when they are fairly close. Leave your email on
-**Tell me when one joins** (no account needed) and we will write once when a provider starts serving you.
+A provider is listed when they serve you: a shop you go to appears when it is within your distance; a provider who comes to
+you appears when you are inside the area they travel to (they cannot go past it, whatever distance you pick); or they named
+your city or area. Results are sorted nearest first (or by soonest, price or rating). Each row shows how far they are, the
+cities they serve, price and deposit, and the next free time in your time zone.
+
+If nobody is within your distance, we say how many miles we searched and offer **Search wider** (the next distance step),
+plus what is available there. Leave your email on **Tell me when one joins** (no account needed) and we will write once when
+a provider starts serving you.
 
 Choose the provider, a time slot, and any options. You can reschedule or cancel from **Your orders** within the
 provider's cancellation policy, which is shown before you pay.

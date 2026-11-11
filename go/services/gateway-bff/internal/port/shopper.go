@@ -658,7 +658,7 @@ type SlotQuery struct {
 // CustomerBookingsClient calls bookings' public directory and the customer's own bookings.
 type CustomerBookingsClient interface {
 	// Search lists the services that serve a ZIP (no ZIP: every provider); SearchPlace is the same with the place, the
-	// coverage, the nearest suggestions and the category counts (the Services page).
+	// coverage, the radius searched and the category counts (the Services page).
 	Search(ctx context.Context, q, category, zip string) ([]UpBkListing, error)
 	SearchPlace(ctx context.Context, p ServiceSearchParams) (UpBkSearch, error)
 	// Suggest lists service and provider names containing the text (search-box suggestions).
