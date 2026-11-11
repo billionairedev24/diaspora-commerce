@@ -2437,6 +2437,44 @@ export interface paths {
         patch: operations["updateService"];
         trace?: never;
     };
+    "/v1/seller/provider/service-area": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where the provider works (base, radius, extra areas) with the staff-set bounds, zones and categories */
+        get: operations["getServiceArea"];
+        /**
+         * Save the service area
+         * @description The base ZIP is placed by geo; the radius must be within the bounds of the provider's service categories (422 on radiusMiles).
+         */
+        put: operations["saveServiceArea"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/provider/service-area/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cities and metro zone a base ZIP and radius would cover (live preview, nothing saved) */
+        get: operations["previewServiceArea"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/provider/cancellation-policy": {
         parameters: {
             query?: never;
@@ -5593,7 +5631,15 @@ export interface components {
             currency: string;
             active: boolean;
             takeHome: components["schemas"]["TakeHome"];
+            category?: string;
+            delivery?: components["schemas"]["ServiceDelivery"];
+            imageUrl?: string;
         };
+        /**
+         * @description Comes to you, you go to them, or both. Services are in person only: there is no online, virtual or remote option.
+         * @enum {string}
+         */
+        ServiceDelivery: "AT_CUSTOMER" | "AT_PROVIDER" | "BOTH";
         ServiceInput: {
             name: string;
             description?: string;
@@ -5601,6 +5647,61 @@ export interface components {
             priceMinor: number;
             depositMinor: number;
             active: boolean;
+            /** @description One of the staff-set service categories */
+            category?: string;
+            delivery?: components["schemas"]["ServiceDelivery"];
+            imageUrl?: string;
+        };
+        ServiceAreaCity: {
+            city: string;
+            state: string;
+        };
+        ServiceAreaNamed: {
+            /** @enum {string} */
+            kind: "CITY" | "ZIP" | "ZONE";
+            value: string;
+            /** @description Required for CITY */
+            state?: string;
+        };
+        ServiceAreaRadius: {
+            defaultMiles: number;
+            minMiles: number;
+            maxMiles: number;
+        };
+        ServiceAreaView: {
+            area: {
+                baseZip: string;
+                baseCity: string;
+                baseState: string;
+                radiusMiles: number;
+                extraAreas: components["schemas"]["ServiceAreaNamed"][];
+                servedCities: components["schemas"]["ServiceAreaCity"][];
+                zone?: string;
+            } | null;
+            bounds: components["schemas"]["ServiceAreaRadius"];
+            /** @description How far customers are assumed to travel to a shop ("You go to them") */
+            customerTravelMiles: number;
+            zones: {
+                key: string;
+                name: string;
+                cities: components["schemas"]["ServiceAreaCity"][];
+            }[];
+            categories: {
+                category: string;
+                rule: components["schemas"]["ServiceAreaRadius"];
+            }[];
+        };
+        ServiceAreaInput: {
+            baseZip: string;
+            /** @description Omit for the default of the provider's categories */
+            radiusMiles?: number | null;
+            extraAreas?: components["schemas"]["ServiceAreaNamed"][];
+        };
+        ServiceAreaPreview: {
+            baseCity: string;
+            baseState: string;
+            zone?: string;
+            cities: components["schemas"]["ServiceAreaCity"][];
         };
         /** @enum {string} */
         PolicyKind: "FLEXIBLE" | "MODERATE" | "STRICT" | "CUSTOM";
@@ -9826,6 +9927,87 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getServiceArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service area */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceAreaView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveServiceArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceAreaInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceAreaView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewServiceArea: {
+        parameters: {
+            query: {
+                zip: string;
+                radiusMiles?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceAreaPreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];

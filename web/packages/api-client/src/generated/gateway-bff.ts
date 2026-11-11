@@ -2595,10 +2595,55 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Services near a ZIP (bookings public search; the deliver-to ZIP when omitted) */
+        /**
+         * In-person services that serve the visitor's place (the deliver-to location; zip overrides)
+         * @description Services are in person only. A provider is listed when it serves the place: within its radius (comes to you),
+         *     within the customer-travel limit (you go to them) or a named area/zone. Results are ranked per `sort`.
+         *     `coverage` is LOCAL, NEAREST (nobody serves the place: `nearest` lists providers outside their usual coverage,
+         *     within the staff-set maximum, each flagged `area.nearest`), NONE, or ANY (no location). `categories` counts the
+         *     services per category at the place; categories with no services are not listed.
+         */
         get: operations["searchServices"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search-box suggestions (service types and provider names containing q) */
+        get: operations["suggestServices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tell me when a provider joins (email; works signed out)
+         * @description Opens an alert for the visitor's deliver-to place, optionally for one category. The address is emailed once,
+         *     when a provider starts serving the place. Always 202 for a valid request; a repeat reveals nothing.
+         */
+        post: operations["alertServices"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5663,26 +5708,60 @@ export interface components {
             displayName: string;
         };
         /** @enum {string} */
-        ServiceMode: "IN_PERSON" | "AT_HOME" | "VIRTUAL";
+        ServiceMode: "IN_PERSON" | "AT_HOME";
+        ServiceListingArea: {
+            baseCity: string;
+            baseState: string;
+            distanceMiles: number;
+            /** @description Metro zone of the base city */
+            zone?: string;
+            /** @description Cities served, the visitor's first */
+            serves: string[];
+            /** @description Outside the provider's usual coverage (a suggestion */
+            nearest: boolean;
+        };
+        ServiceListing: {
+            serviceId: string;
+            orgId: string;
+            name: string;
+            providerName: string;
+            description: string;
+            category: string;
+            durationMinutes: number;
+            priceFromMinor: number;
+            depositMinor: number;
+            currency: string;
+            modes: components["schemas"]["ServiceMode"][];
+            /** @description 0 without reviews (show no rating) */
+            rating: number;
+            ratingCount: number;
+            /**
+             * Format: date-time
+             * @description UTC instant; format in the visitor's time zone
+             */
+            nextAvailable: string | null;
+            location: string;
+            /**
+             * @description Comes to you, you go to them, or both. Never online.
+             * @enum {string}
+             */
+            delivery: "AT_CUSTOMER" | "AT_PROVIDER" | "BOTH";
+            /** @description The service photo; empty = show the provider monogram */
+            imageUrl: string;
+            area: components["schemas"]["ServiceListingArea"] | null;
+        };
         ServiceSearch: {
             zip: string;
             city: string;
-            services: {
-                serviceId: string;
-                orgId: string;
-                name: string;
-                providerName: string;
-                description: string;
+            state: string;
+            zone?: string;
+            /** @enum {string} */
+            coverage: "LOCAL" | "NEAREST" | "NONE" | "ANY";
+            services: components["schemas"]["ServiceListing"][];
+            nearest: components["schemas"]["ServiceListing"][];
+            categories: {
                 category: string;
-                durationMinutes: number;
-                priceFromMinor: number;
-                depositMinor: number;
-                currency: string;
-                modes: components["schemas"]["ServiceMode"][];
-                rating: number;
-                ratingCount: number;
-                nextAvailable: string | null;
-                location: string;
+                count: number;
             }[];
         };
         ServiceDetail: {
@@ -9858,6 +9937,7 @@ export interface operations {
                 q?: string;
                 category?: string;
                 zip?: string;
+                sort?: "NEAREST" | "SOONEST" | "PRICE" | "RATING";
             };
             header?: never;
             path?: never;
@@ -9875,6 +9955,62 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    suggestServices: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
+    alertServices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Optional when signed in */
+                    email?: string;
+                    category?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        accepted: boolean;
+                    };
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -9972,7 +10108,7 @@ export interface operations {
             query?: {
                 /** @description Comma-separated add-on ids */
                 addOnIds?: string;
-                mode?: "IN_PERSON" | "AT_HOME" | "VIRTUAL";
+                mode?: "IN_PERSON" | "AT_HOME";
             };
             header?: never;
             path: {

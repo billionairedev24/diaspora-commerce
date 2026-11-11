@@ -38,6 +38,8 @@ export interface MockSession {
   preorderPreview?: PreorderPreview;
   /** Pay-now links paid in this browser session (mock mode). */
   payLinksPaid?: string[];
+  /** "Tell me when a provider joins" alerts opened in this session (mock mode). */
+  serviceAlerts?: { email: string; zip: string; category: string | null }[];
 }
 
 export interface MockChallenge {

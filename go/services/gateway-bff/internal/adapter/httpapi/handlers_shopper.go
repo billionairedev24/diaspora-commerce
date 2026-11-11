@@ -482,7 +482,12 @@ func (h *handlersImpl) alertServices(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	h.reply(w, r, http.StatusAccepted, nil, h.s.Shopper.Services.AlertMe(r.Context(), callerFrom(r.Context()), b))
+	err := h.s.Shopper.Services.AlertMe(r.Context(), callerFrom(r.Context()), b)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.reply(w, r, http.StatusAccepted, map[string]bool{"accepted": true}, nil)
 }
 
 func (h *handlersImpl) providerPage(w http.ResponseWriter, r *http.Request) {

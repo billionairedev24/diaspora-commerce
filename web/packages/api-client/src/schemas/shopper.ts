@@ -385,13 +385,30 @@ export type PayLink = z.infer<typeof PayLinkSchema>;
 
 /* ── Services & bookings ───────────────────────────────────────── */
 
-export const ServiceModeSchema = z.enum(['IN_PERSON', 'AT_HOME', 'VIRTUAL']);
+/** Services are in person only: the customer goes to the provider (IN_PERSON) or the provider comes to the customer (AT_HOME). */
+export const ServiceModeSchema = z.enum(['IN_PERSON', 'AT_HOME']);
 export type ServiceMode = z.infer<typeof ServiceModeSchema>;
 
 export const ServicePolicySchema = z.object({ kind: z.string(), label: z.string(), text: z.string() });
 export type ServicePolicy = z.infer<typeof ServicePolicySchema>;
 
 export const ServiceMemberSchema = z.object({ id: z.string(), displayName: z.string() });
+
+/** Comes to you (AT_CUSTOMER), you go to them (AT_PROVIDER) or both. There is no online delivery. */
+export const ServiceDeliverySchema = z.enum(['AT_CUSTOMER', 'AT_PROVIDER', 'BOTH']);
+export type ServiceDelivery = z.infer<typeof ServiceDeliverySchema>;
+
+export const ServiceListingAreaSchema = z.object({
+  baseCity: z.string(),
+  baseState: z.string(),
+  distanceMiles: z.number(),
+  zone: z.string().optional(),
+  /** Cities served, the visitor's own first. */
+  serves: z.array(z.string()),
+  /** Outside the provider's usual coverage: a suggestion, never a local match. */
+  nearest: z.boolean()
+});
+export type ServiceListingArea = z.infer<typeof ServiceListingAreaSchema>;
 
 export const ServiceListingSchema = z.object({
   serviceId: z.string(),
@@ -405,15 +422,37 @@ export const ServiceListingSchema = z.object({
   depositMinor: MinorSchema,
   currency: z.string(),
   modes: z.array(ServiceModeSchema),
+  /** 0 without reviews: show no rating at all. */
   rating: z.number(),
   ratingCount: z.number().int(),
+  /** UTC instant; format it in the visitor's time zone. */
   nextAvailable: nullableString,
-  location: z.string()
+  location: z.string(),
+  delivery: ServiceDeliverySchema.default('AT_PROVIDER'),
+  imageUrl: z.string().default(''),
+  area: ServiceListingAreaSchema.nullable().default(null)
 });
 export type ServiceListing = z.infer<typeof ServiceListingSchema>;
 
-export const ServiceSearchSchema = z.object({ zip: z.string(), city: z.string(), services: z.array(ServiceListingSchema) });
+export const ServiceCoverageSchema = z.enum(['LOCAL', 'NEAREST', 'NONE', 'ANY']);
+export type ServiceCoverage = z.infer<typeof ServiceCoverageSchema>;
+
+export const ServiceSearchSchema = z.object({
+  zip: z.string(),
+  city: z.string(),
+  state: z.string().default(''),
+  zone: z.string().optional(),
+  coverage: ServiceCoverageSchema.default('ANY'),
+  services: z.array(ServiceListingSchema),
+  /** Providers outside their usual coverage, only when nobody serves the place and within the staff-set maximum. */
+  nearest: z.array(ServiceListingSchema).default([]),
+  /** Services per category at this place; categories without services are not listed. */
+  categories: z.array(z.object({ category: z.string(), count: z.number().int().min(1) })).default([])
+});
 export type ServiceSearch = z.infer<typeof ServiceSearchSchema>;
+
+export const SERVICE_SORTS = ['NEAREST', 'SOONEST', 'PRICE', 'RATING'] as const;
+export type ServiceSort = (typeof SERVICE_SORTS)[number];
 
 export const ServiceDetailSchema = z.object({
   id: z.string(),

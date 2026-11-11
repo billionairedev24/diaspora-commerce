@@ -64,6 +64,7 @@ import {
   ServiceDetailSchema,
   type ServiceSearch,
   ServiceSearchSchema,
+  type ServiceSort,
   type SetupIntent,
   SetupIntentSchema,
   type TotpSetup,
@@ -174,8 +175,13 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
       request(`/v1/pay-links/${enc(orderNumber)}/confirm`, PayLinkSchema, { method: 'POST', body: { token } }),
 
     /* Services & bookings (bookings) */
-    searchServices: (q: { q?: string; category?: string; zip?: string }, signal?: AbortSignal): Promise<ServiceSearch> =>
+    searchServices: (q: { q?: string; category?: string; zip?: string; sort?: ServiceSort }, signal?: AbortSignal): Promise<ServiceSearch> =>
       request('/v1/services/search', ServiceSearchSchema, { query: q, signal }),
+    /** Search-box suggestions: service types and provider names containing the text. */
+    suggestServices: (q: string, signal?: AbortSignal): Promise<string[]> => request('/v1/services/suggest', z.array(z.string()), { query: { q }, signal }),
+    /** "Tell me when a provider joins" for the deliver-to place; works signed out (the email is typed). */
+    alertServices: (body: { email?: string; category?: string }): Promise<{ accepted: boolean }> =>
+      request('/v1/services/alerts', z.object({ accepted: z.boolean() }), { method: 'POST', body }),
     getService: (id: string, signal?: AbortSignal): Promise<ServiceDetail> => request(`/v1/services/${enc(id)}`, ServiceDetailSchema, { signal }),
     getServiceDays: async (id: string, q: SlotQuery = {}, signal?: AbortSignal): Promise<AvailableDay[]> =>
       (await request(`/v1/services/${enc(id)}/days`, z.object({ days: z.array(AvailableDaySchema) }), { query: slotQuery(q), signal })).days,

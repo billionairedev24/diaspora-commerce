@@ -23,17 +23,17 @@ import {
   type ServiceDetail,
   type ShipmentDetail
 } from '../schemas/shopper';
+import { mockCheckoutTax } from './checkout-tax';
 import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
-import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf } from './delivery';
+import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf, miles } from './delivery';
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
 import { membershipQuote, membershipState, recordMembershipUse } from './membership';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
-import { mockCheckoutTax } from './checkout-tax';
 import { buildCart, MockProblem, sessionLocation } from './service';
-import { account, type AccountState, bookingFor, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
+import { account, type AccountState, bookingFor, type MockArea, type MockOrder, PROVIDER_AREAS, PROVIDERS, seq, SERVICE_PLACES, SERVICES } from './shopper-state';
 
 const DEMO_CODE = '246810';
 const MOCK_PUBLISHABLE_KEY = 'pk_test_mock';
@@ -696,19 +696,56 @@ export const shopperHandlers = [
   http.get('*/v1/services/search', route((ctx) => {
     const url = new URL(ctx.request.url);
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
-    const category = url.searchParams.get('category') ?? '';
+    const category = (url.searchParams.get('category') ?? '').toLowerCase();
+    const sort = url.searchParams.get('sort') ?? 'NEAREST';
+    if (!['NEAREST', 'SOONEST', 'PRICE', 'RATING'].includes(sort)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'Choose a sort.', { errors: { sort: 'Choose NEAREST, SOONEST, PRICE or RATING' } });
     const zip = url.searchParams.get('zip') ?? ctx.session.zip;
     if (!/^\d{5}$/.test(zip)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Check the ZIP code', 'Enter a 5-digit US ZIP code.', { errors: { zip: 'Enter a 5-digit US ZIP code.' } });
-    const local = zip.startsWith('77') ? 'TX' : zip.startsWith('30') ? 'GA' : null;
-    const services = SERVICES.filter((s) => {
-      const where = PROVIDERS[s.orgId]?.location ?? '';
-      const reach = s.modes.includes('VIRTUAL') || (local !== null && where.endsWith(local));
-      const text = `${s.name} ${s.providerName} ${s.category} ${s.description}`.toLowerCase();
-      return reach && (!q || q.split(/\s+/).every((w) => text.includes(w))) && (!category || s.category === category);
-    }).map((s) => ({ serviceId: s.id, orgId: s.orgId, name: s.name, providerName: s.providerName, description: s.description, category: s.category,
-      durationMinutes: s.durationMinutes, priceFromMinor: s.priceMinor, depositMinor: s.depositMinor, currency: s.currency, modes: s.modes,
-      rating: PROVIDERS[s.orgId]?.rating ?? 0, ratingCount: PROVIDERS[s.orgId]?.reviews ?? 0, nextAvailable: 'Tomorrow', location: PROVIDERS[s.orgId]?.location ?? '' }));
-    return json({ zip, city: zip.startsWith('77') ? 'Houston' : zip.startsWith('30') ? 'Atlanta' : zip.startsWith('10') ? 'Bronx' : '', services });
+    const loc = sessionLocation(ctx.session);
+    const known = SERVICE_PLACES[zip];
+    const place = { zip, city: known?.city ?? (zip === loc.zip ? loc.city : ''), state: known?.state ?? (zip === loc.zip ? loc.state : ''), zone: known?.zone ?? undefined };
+    const empty = (coverage: 'NONE') => json({ ...place, coverage, services: [], nearest: [], categories: [] });
+    if (!known) return empty('NONE');
+    const text = (s: ServiceDetail) => `${s.name} ${s.providerName} ${s.category} ${s.description}`.toLowerCase();
+    const hits = SERVICES.filter((s) => !q || q.split(/\s+/).every((w) => text(s).includes(w))).flatMap((s) => {
+      const area = PROVIDER_AREAS[s.orgId];
+      if (!area) return [];
+      return [{ s, area, ...matchService(s, area, known, zip) }];
+    });
+    const listing = (h: (typeof hits)[number], nearest: boolean) => {
+      const meta = PROVIDERS[h.s.orgId];
+      const base: [number, number] = [h.area.lat, h.area.lon];
+      const served = Object.values(SERVICE_PLACES).filter((p) => miles(base, [p.lat, p.lon]) <= h.area.radiusMiles).map((p) => p.city);
+      const serves = nearest ? [] : [...new Set([known.city, ...served])];
+      return { serviceId: h.s.id, orgId: h.s.orgId, name: h.s.name, providerName: h.s.providerName, description: h.s.description, category: h.s.category,
+        durationMinutes: h.s.durationMinutes, priceFromMinor: h.s.priceMinor, depositMinor: h.s.depositMinor, currency: h.s.currency, modes: h.s.modes,
+        rating: meta?.rating ?? 0, ratingCount: meta?.reviews ?? 0, nextAvailable: new Date(Date.UTC(ctx.now.getUTCFullYear(), ctx.now.getUTCMonth(), ctx.now.getUTCDate() + 1, 16)).toISOString(),
+        location: meta?.location ?? '', delivery: deliveryOf(h.s.modes), imageUrl: `https://img.afrotransact.dev/services/${h.s.id}.webp`,
+        area: { baseCity: h.area.city, baseState: h.area.state, distanceMiles: Math.round(h.miles * 10) / 10, ...(h.area.zone ? { zone: h.area.zone } : {}), serves, nearest } };
+    };
+    const local = hits.filter((h) => h.coverage === 'LOCAL');
+    const counts = new Map<string, number>();
+    for (const h of local) counts.set(h.s.category, (counts.get(h.s.category) ?? 0) + 1);
+    const categories = [...counts].map(([c, count]) => ({ category: c, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+    const rank = (a: ReturnType<typeof listing>, b: ReturnType<typeof listing>) =>
+      sort === 'PRICE' ? a.priceFromMinor - b.priceFromMinor : sort === 'RATING' ? b.rating - a.rating || b.ratingCount - a.ratingCount : sort === 'SOONEST' ? (a.nextAvailable ?? '').localeCompare(b.nextAvailable ?? '') : (a.area?.distanceMiles ?? 0) - (b.area?.distanceMiles ?? 0);
+    const shown = local.filter((h) => !category || h.s.category === category).map((h) => listing(h, false)).sort(rank);
+    const near = shown.length ? [] : hits.filter((h) => h.coverage === 'NEAREST' && (!category || h.s.category === category)).map((h) => listing(h, true)).sort((a, b) => (a.area?.distanceMiles ?? 0) - (b.area?.distanceMiles ?? 0)).slice(0, 6);
+    return json({ ...place, coverage: shown.length ? 'LOCAL' : near.length ? 'NEAREST' : 'NONE', services: shown, nearest: near, categories });
+  })),
+  http.get('*/v1/services/suggest', route((ctx) => {
+    const q = (new URL(ctx.request.url).searchParams.get('q') ?? '').trim().toLowerCase();
+    if (q.length < 2) return json([]);
+    const names = new Set<string>();
+    for (const s of SERVICES) for (const n of [s.name, s.providerName]) if (n.toLowerCase().includes(q)) names.add(n);
+    return json([...names].sort().slice(0, 8));
+  })),
+  http.post('*/v1/services/alerts', route(async (ctx) => {
+    const b = (await ctx.request.json()) as { email?: string; category?: string };
+    const email = (b.email ?? '').trim() || (ctx.session.userId ? (getDb().users.get(ctx.session.userId)?.email ?? '') : '');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'Enter a valid email address.', { errors: { email: 'Enter a valid email address, like name@example.com' } });
+    ctx.session.serviceAlerts = [...(ctx.session.serviceAlerts ?? []), { email, zip: ctx.session.zip, category: b.category ?? null }];
+    return json({ accepted: true }, 202);
   })),
   http.get('*/v1/services/:id/days', route((ctx, p) => {
     const svc = serviceOr404(p.id ?? '');
@@ -823,3 +860,25 @@ export const shopperHandlers = [
   http.get('*/v1/lola/sessions/:id/messages', route((ctx) => { requireUser(ctx); return json({ items: [] }); }))
 ];
 
+
+
+/** Comes to you (AT_CUSTOMER), you go to them (AT_PROVIDER) or both; mirrors the BFF. */
+function deliveryOf(modes: readonly string[]): 'AT_CUSTOMER' | 'AT_PROVIDER' | 'BOTH' {
+  const home = modes.includes('AT_HOME');
+  const shop = modes.includes('IN_PERSON');
+  return home && shop ? 'BOTH' : home ? 'AT_CUSTOMER' : 'AT_PROVIDER';
+}
+
+/** The platform's customer-travel limit and nearest-fallback maximum (staff-set; docs/engineering/service-areas.md). */
+const CUSTOMER_TRAVEL_MILES = 30;
+const NEAREST_MAX_MILES = 60;
+
+/** bookings' matching rule: radius when the provider comes to you, min(radius, travel limit) when you go to them, or a named area. */
+function matchService(s: ServiceDetail, area: MockArea, at: { city: string; state: string; lat: number; lon: number }, zip: string): { coverage: 'LOCAL' | 'NEAREST' | 'NONE'; miles: number } {
+  const d = miles([area.lat, area.lon], [at.lat, at.lon]);
+  const comes = s.modes.includes('AT_HOME') && d <= area.radiusMiles;
+  const goes = s.modes.includes('IN_PERSON') && d <= Math.min(area.radiusMiles, CUSTOMER_TRAVEL_MILES);
+  const named = area.extra.some((e) => e === `ZIP:${zip}` || e === `CITY:${at.city}:${at.state}`);
+  if (comes || goes || named) return { coverage: 'LOCAL', miles: d };
+  return { coverage: d <= NEAREST_MAX_MILES ? 'NEAREST' : 'NONE', miles: d };
+}

@@ -3275,7 +3275,11 @@ paths:
                 email: {type: string, description: 'Optional when signed in'}
                 category: {type: string, maxLength: 60}
       responses:
-        '202': {description: Accepted}
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: {type: object, required: [accepted], properties: {accepted: {type: boolean}}}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}

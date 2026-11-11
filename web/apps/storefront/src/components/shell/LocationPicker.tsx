@@ -1,6 +1,6 @@
 'use client';
 
-import { accountQueries, type AddressSuggestion, cartKeys, isApiError, preorderKeys, productKeys, searchKeys, shopperQueries, siteKeys, ZipSchema } from '@afrotransact/api-client';
+import { accountQueries, type AddressSuggestion, cartKeys, isApiError, preorderKeys, productKeys, searchKeys, serviceKeys, shopperQueries, siteKeys, ZipSchema } from '@afrotransact/api-client';
 import { Crosshair, MapPin, Popover, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -100,7 +100,7 @@ export function LocationPicker({ open, onOpenChange, anchorRef }: { open: boolea
       try {
         const loc = await api.setDeliveryLocation(input);
         qc.setQueryData(siteKeys.deliveryLocation(), loc);
-        await Promise.all([siteKeys.home(), searchKeys.all, productKeys.all, cartKeys.all, preorderKeys.all].map((queryKey) => qc.invalidateQueries({ queryKey })));
+        await Promise.all([siteKeys.home(), searchKeys.all, productKeys.all, cartKeys.all, preorderKeys.all, serviceKeys.all].map((queryKey) => qc.invalidateQueries({ queryKey })));
         onOpenChange(false);
         toast.show(t('location.delivering', { label: loc.label }));
         router.refresh();

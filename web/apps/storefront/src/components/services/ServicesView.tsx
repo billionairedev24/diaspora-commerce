@@ -1,94 +1,121 @@
 'use client';
 
-import { isApiError, ZipSchema } from '@afrotransact/api-client';
+import { isApiError } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CalendarCheck, Skeleton, Stars, TextField } from '@afrotransact/ui';
+import { buttonClassName, CalendarCheck, Skeleton } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { type FormEvent, useState } from 'react';
+import { useRef, useState } from 'react';
 
-import { useT } from '@/i18n/t';
+import { LocationPicker } from '@/components/shell/LocationPicker';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries, shopperQueries, siteQueries } from '@/lib/api/queries';
 
+import { categoryKey } from './format';
+import { ServiceEmpty } from './ServiceEmpty';
+import { ServiceRow } from './ServiceRow';
 import styles from './Services.module.css';
+import { ServiceSearchBox } from './ServiceSearchBox';
 
-const KINDS = ['Hair & beauty', 'Catering', 'Tailoring', 'Tax & legal'] as const;
+const SORTS = ['NEAREST', 'SOONEST', 'PRICE', 'RATING'] as const;
+type Sort = (typeof SORTS)[number];
 
-/** Services near you (S150): search by ZIP (deliver-to ZIP by default), category chips, provider listings. */
-export function ServicesView() {
-  const fmt = useFormatters();
+/**
+ * Services near you (S150): in-person services that serve the deliver-to place. The place comes from the navbar location
+ * ("Services near Georgetown", with a small Change link that opens the same location popover): there is no ZIP box. One
+ * search box with suggestions, category chips with counts for this place, sorting, flat rows, and designed empty states.
+ */
+export function ServicesView({ initialCategory = '', initialText = '' }: { initialCategory?: string; initialText?: string }) {
   const t = useT();
+  const fmt = useFormatters();
   const api = browserApi();
   const loc = useQuery(siteQueries.deliveryLocation(api));
   const me = useQuery(accountQueries.me(api));
-  const [q, setQ] = useState('');
-  const [zipInput, setZipInput] = useState('');
-  const [query, setQuery] = useState<{ q?: string; category?: string; zip?: string }>({});
-  const [zipError, setZipError] = useState<string | null>(null);
-  const results = useQuery(shopperQueries.serviceSearch(api, query));
+  const [text, setText] = useState(initialText);
+  const [category, setCategory] = useState(initialCategory);
+  const [sort, setSort] = useState<Sort>('NEAREST');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const results = useQuery(shopperQueries.serviceSearch(api, { ...(text ? { q: text } : {}), ...(category ? { category } : {}), sort }));
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const zip = zipInput.trim();
-    if (zip && !ZipSchema.safeParse(zip).success) return setZipError(t('location.invalidZip'));
-    setZipError(null);
-    setQuery((x) => ({ ...x, q: q.trim() || undefined, zip: zip || undefined }));
-  };
+  const data = results.data;
+  const city = data?.city || loc.data?.city || '';
+  const state = data?.state || loc.data?.state || '';
+  const accountEmail = me.data?.authenticated ? me.data.user?.email : undefined;
+  const total = data?.categories.reduce((n, c) => n + c.count, 0) ?? 0;
 
-  const city = results.data?.city || loc.data?.city || '';
   return (
     <div className={styles.page}>
-      <div className={styles.search}>
-        <h1 className={styles.h1}>{city ? t('svc.near', { city }) : t('svc.title')}</h1>
+      <div className={styles.head}>
+        <div>
+          <h1 className={styles.h1}>
+            {city ? t('svc.near', { city }) : t('svc.title')}
+            <button ref={changeRef} type="button" className={styles.change} onClick={() => setPickerOpen(true)} aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label={city ? t('svc.changeAria', { city }) : t('svc.setLocation')}>
+              {city ? t('svc.change') : t('svc.setLocation')}
+            </button>
+          </h1>
+          {data?.zone && <p className={styles.zone}>{t('svc.zoneLine', { zone: data.zone })}</p>}
+        </div>
         {me.data?.authenticated && (
           <Link href="/account/bookings" className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
             <CalendarCheck aria-hidden /> {t('svc.yourAppointments')}
           </Link>
         )}
       </div>
-      <form className={styles.search} onSubmit={submit} role="search" aria-label={t('svc.searchAria')}>
-        <TextField label={t('svc.what')} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('svc.whatPlaceholder')} />
-        <TextField label={t('svc.zip')} value={zipInput} onChange={(e) => setZipInput(e.target.value)} placeholder={loc.data?.zip ?? '77042'} inputMode="numeric" maxLength={5} error={zipError} />
-        <Button type="submit">{t('svc.search')}</Button>
-      </form>
-      <div className={styles.chips} role="group" aria-label={t('svc.kinds')}>
-        <button type="button" className={styles.chip} aria-pressed={!query.category} onClick={() => setQuery((x) => ({ ...x, category: undefined }))}>
-          {t('svc.all')}
-        </button>
-        {KINDS.map((k) => (
-          <button key={k} type="button" className={styles.chip} aria-pressed={query.category === k} onClick={() => setQuery((x) => ({ ...x, category: k }))}>
-            {k}
-          </button>
-        ))}
+      <LocationPicker open={pickerOpen} onOpenChange={setPickerOpen} anchorRef={changeRef} />
+
+      <div className={styles.controls}>
+        <ServiceSearchBox value={text} onSearch={setText} />
+        <label className={styles.sort}>
+          <span>{t('svc.sort')}</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t('svc.sort')}>
+            {SORTS.map((s) => (
+              <option key={s} value={s}>
+                {t(`svc.sort.${s}` as MessageKey)}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-      {results.isPending && <Skeleton height={120} />}
-      {results.isError && <p className={styles.error} role="alert">{isApiError(results.error) ? results.error.message : t('acct.loadError')}</p>}
-      {results.data && results.data.services.length === 0 && <p className={styles.muted}>{t('svc.none')}</p>}
-      <ul className={styles.list}>
-        {results.data?.services.map((s) => (
-          <li key={s.serviceId}>
-            <Link href={`/services/${encodeURIComponent(s.serviceId)}`} className={styles.listing} data-testid="service-listing">
-              <span className={styles.cover} aria-hidden />
-              <span className={styles.info}>
-                <span className={styles.kind}>{s.category}</span>
-                <span className={styles.name}>{s.name}</span>
-                <span>{s.providerName}</span>
-                <Stars rating={s.rating} reviewCount={s.ratingCount} size={12} />
-                <span className={styles.muted}>
-                  {s.location}
-                  {s.nextAvailable ? ` · ${t('svc.next', { when: s.nextAvailable })}` : ''}
-                </span>
-              </span>
-              <span className={styles.price}>
-                {t('svc.from')}
-                <strong>{fmt.money(s.priceFromMinor)}</strong>
-                {t('svc.deposit', { amount: fmt.money(s.depositMinor) })}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+
+      {data && data.categories.length > 0 && (
+        <div className={styles.chips} role="group" aria-label={t('svc.kinds')}>
+          <button type="button" className={styles.chip} aria-pressed={!category} onClick={() => setCategory('')}>
+            {t('svc.all')} ({fmt.number(total)})
+          </button>
+          {data.categories.map((c) => {
+            const key = categoryKey(c.category);
+            return (
+              <button key={c.category} type="button" className={styles.chip} aria-pressed={category === c.category} onClick={() => setCategory(c.category)}>
+                {key ? t(key) : c.category} ({fmt.number(c.count)})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {results.isPending && (
+        <div className={styles.skeletons} aria-busy="true">
+          <Skeleton height={120} />
+          <Skeleton height={120} />
+        </div>
+      )}
+      {results.isError && (
+        <p className={styles.error} role="alert">
+          {isApiError(results.error) ? results.error.message : t('acct.loadError')}
+        </p>
+      )}
+      {data && data.services.length > 0 && (
+        <ul className={styles.list} aria-label={t('svc.resultsAria', { city })}>
+          {data.services.map((s) => (
+            <ServiceRow key={s.serviceId} service={s} visitorCity={city} visitorState={state} />
+          ))}
+        </ul>
+      )}
+      {data && data.services.length === 0 && (
+        <ServiceEmpty search={data} city={city} state={state} category={category} text={text} accountEmail={accountEmail} onCategory={setCategory} onClearText={() => setText('')} />
+      )}
     </div>
   );
 }

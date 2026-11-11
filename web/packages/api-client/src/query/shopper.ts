@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type ApiClient } from '../client';
+import { type ServiceSort } from '../schemas/shopper';
 import { type SlotQuery } from '../shopper-client';
 import { accountKeys } from './keys';
 
@@ -35,7 +36,8 @@ export const checkoutKeys = {
 
 export const serviceKeys = {
   all: ['services'] as const,
-  search: (q: { q?: string; category?: string; zip?: string }) => [...serviceKeys.all, 'search', q] as const,
+  search: (q: { q?: string; category?: string; zip?: string; sort?: ServiceSort }) => [...serviceKeys.all, 'search', q] as const,
+  suggest: (q: string) => [...serviceKeys.all, 'suggest', q] as const,
   detail: (id: string) => [...serviceKeys.all, 'detail', id] as const,
   days: (id: string, q: SlotQuery) => [...serviceKeys.all, 'days', id, q] as const,
   slots: (id: string, q: SlotQuery) => [...serviceKeys.all, 'slots', id, q] as const,
@@ -99,7 +101,9 @@ export const shopperQueries = {
       staleTime: 0,
       placeholderData: keepPreviousData
     }),
-  serviceSearch: (api: ApiClient, q: { q?: string; category?: string; zip?: string }) =>
+  serviceSuggest: (api: ApiClient, q: string) =>
+    queryOptions({ queryKey: serviceKeys.suggest(q), queryFn: ({ signal }) => api.suggestServices(q, signal), staleTime: MINUTE, enabled: q.trim().length >= 2 }),
+  serviceSearch: (api: ApiClient, q: { q?: string; category?: string; zip?: string; sort?: ServiceSort }) =>
     queryOptions({ queryKey: serviceKeys.search(q), queryFn: ({ signal }) => api.searchServices(q, signal), staleTime: MINUTE }),
   service: (api: ApiClient, id: string) => queryOptions({ queryKey: serviceKeys.detail(id), queryFn: ({ signal }) => api.getService(id, signal), staleTime: 5 * MINUTE }),
   // Availability is live (bookings answers Cache-Control: no-store): always refetch.

@@ -120,7 +120,7 @@ function deliveredOrder(orderNumber: string, placed: Date, items: Array<{ id: st
 export const SERVICES: ServiceDetail[] = [
   {
     id: 'svc-braids-knotless', orgId: 'org_braids_ama', providerName: 'Braids by Ama', name: 'Knotless braids, mid-back',
-    description: 'Lightweight knotless braids with pre-stretched hair included. Bring clean, detangled hair.', category: 'Hair & beauty',
+    description: 'Lightweight knotless braids with pre-stretched hair included. Bring clean, detangled hair.', category: 'hair & beauty',
     durationMinutes: 300, priceMinor: 22000, depositMinor: 4000, balanceMinor: 18000, currency: 'USD', modes: ['IN_PERSON', 'AT_HOME'],
     addOns: [{ id: 'wash', name: 'Wash & blow-dry', priceMinor: 2500, extraMinutes: 30 }, { id: 'beads', name: 'Beads & cuffs', priceMinor: 1500, extraMinutes: 15 }],
     policy: { kind: 'MODERATE', label: 'Moderate', text: 'Free cancellation until 48 h before; half the deposit 24–48 h before.' }, instantBooking: false,
@@ -128,28 +128,58 @@ export const SERVICES: ServiceDetail[] = [
   },
   {
     id: 'svc-braids-cornrows', orgId: 'org_braids_ama', providerName: 'Braids by Ama', name: 'Cornrows (6–10 rows)',
-    description: 'Straight-back or design cornrows, natural hair.', category: 'Hair & beauty', durationMinutes: 90, priceMinor: 6500, depositMinor: 1500,
+    description: 'Straight-back or design cornrows, natural hair.', category: 'hair & beauty', durationMinutes: 90, priceMinor: 6500, depositMinor: 1500,
     balanceMinor: 5000, currency: 'USD', modes: ['IN_PERSON'], addOns: [],
     policy: { kind: 'MODERATE', label: 'Moderate', text: 'Free cancellation until 48 h before; half the deposit 24–48 h before.' }, instantBooking: true,
     team: [{ id: 'm-ama', displayName: 'Ama' }]
   },
   {
     id: 'svc-mama-put-catering', orgId: 'org_mama_put', providerName: 'Mama Put Catering', name: 'Party jollof & small chops (per 20 guests)',
-    description: 'Smoky party jollof, fried plantain, puff-puff and peppered chicken, delivered hot.', category: 'Catering', durationMinutes: 120,
+    description: 'Smoky party jollof, fried plantain, puff-puff and peppered chicken, delivered hot.', category: 'catering', durationMinutes: 120,
     priceMinor: 45000, depositMinor: 10000, balanceMinor: 35000, currency: 'USD', modes: ['AT_HOME'], addOns: [{ id: 'moimoi', name: 'Moi moi tray', priceMinor: 6000, extraMinutes: 0 }],
     policy: { kind: 'STRICT', label: 'Strict', text: 'Free cancellation until 7 days before.' }, instantBooking: false, team: [{ id: 'm-funke', displayName: 'Funke' }]
   },
   {
     id: 'svc-kente-tailor', orgId: 'org_kente_tailors', providerName: 'Kente Tailors', name: 'Agbada or kaftan fitting & sew',
-    description: 'Measurements, fabric consultation and a finished outfit in two weeks.', category: 'Tailoring', durationMinutes: 60, priceMinor: 18000,
+    description: 'Measurements, fabric consultation and a finished outfit in two weeks.', category: 'tailoring', durationMinutes: 60, priceMinor: 18000,
     depositMinor: 5000, balanceMinor: 13000, currency: 'USD', modes: ['IN_PERSON'], addOns: [],
     policy: { kind: 'FLEXIBLE', label: 'Flexible', text: 'Free cancellation until 24 h before.' }, instantBooking: true, team: [{ id: 'm-kojo', displayName: 'Kojo' }]
   },
   {
-    id: 'svc-diaspora-tax', orgId: 'org_diaspora_tax', providerName: 'Diaspora Tax Help', name: 'Tax return review (video call)',
-    description: 'A licensed preparer reviews your federal and state return, including foreign income.', category: 'Tax & legal', durationMinutes: 45,
-    priceMinor: 9000, depositMinor: 2000, balanceMinor: 7000, currency: 'USD', modes: ['VIRTUAL'], addOns: [],
+    id: 'svc-diaspora-tax', orgId: 'org_diaspora_tax', providerName: 'Diaspora Tax Help', name: 'Tax return review (at our office)',
+    description: 'A licensed preparer reviews your federal and state return, including foreign income.', category: 'tax & legal', durationMinutes: 45,
+    priceMinor: 9000, depositMinor: 2000, balanceMinor: 7000, currency: 'USD', modes: ['IN_PERSON'], addOns: [],
     policy: { kind: 'FLEXIBLE', label: 'Flexible', text: 'Free cancellation until 24 h before.' }, instantBooking: true, team: [{ id: 'm-ngozi', displayName: 'Ngozi' }]
+  },
+  {
+    id: 'svc-rr-braids', orgId: 'org_hillcountry_braids', providerName: 'Hill Country Braids', name: 'Box braids at your home',
+    description: 'Medium box braids, hair included. I come to you anywhere around Austin.', category: 'hair & beauty', durationMinutes: 240, priceMinor: 19500,
+    depositMinor: 4000, balanceMinor: 15500, currency: 'USD', modes: ['AT_HOME'], addOns: [],
+    policy: { kind: 'MODERATE', label: 'Moderate', text: 'Free cancellation until 48 h before; half the deposit 24–48 h before.' }, instantBooking: false, team: [{ id: 'm-nia', displayName: 'Nia' }]
+  },
+  {
+    id: 'svc-pf-studio', orgId: 'org_zuri_studio', providerName: 'Zuri Hair Studio', name: 'Silk press & trim',
+    description: 'Silk press, trim and treatment at our Pflugerville studio.', category: 'hair & beauty', durationMinutes: 120, priceMinor: 9500,
+    depositMinor: 2000, balanceMinor: 7500, currency: 'USD', modes: ['IN_PERSON'], addOns: [],
+    policy: { kind: 'FLEXIBLE', label: 'Flexible', text: 'Free cancellation until 24 h before.' }, instantBooking: true, team: [{ id: 'm-zuri', displayName: 'Zuri' }]
+  },
+  {
+    id: 'svc-hutto-catering', orgId: 'org_bolas_kitchen', providerName: 'Bola’s Kitchen', name: 'Party jollof for 30 guests',
+    description: 'Party jollof, fried plantain and peppered chicken, delivered and set up.', category: 'catering', durationMinutes: 180, priceMinor: 33000,
+    depositMinor: 8000, balanceMinor: 25000, currency: 'USD', modes: ['AT_HOME'], addOns: [],
+    policy: { kind: 'STRICT', label: 'Strict', text: 'Free cancellation until 7 days before.' }, instantBooking: false, team: [{ id: 'm-bola', displayName: 'Bola' }]
+  },
+  {
+    id: 'svc-bk-tailor', orgId: 'org_adire_tailors', providerName: 'Adire Tailors', name: 'Agbada sewn to measure',
+    description: 'Three-piece agbada from your fabric, fitted in our Brooklyn shop.', category: 'tailoring', durationMinutes: 60, priceMinor: 22000,
+    depositMinor: 3000, balanceMinor: 19000, currency: 'USD', modes: ['IN_PERSON'], addOns: [],
+    policy: { kind: 'FLEXIBLE', label: 'Flexible', text: 'Free cancellation until 24 h before.' }, instantBooking: true, team: [{ id: 'm-tunde', displayName: 'Tunde' }]
+  },
+  {
+    id: 'svc-austin-tailor', orgId: 'org_capital_tailors', providerName: 'Capital City Tailors', name: 'Alterations and made-to-measure',
+    description: 'Alterations, kaftans and suits, fitted in our Austin shop.', category: 'tailoring', durationMinutes: 45, priceMinor: 12000,
+    depositMinor: 0, balanceMinor: 12000, currency: 'USD', modes: ['IN_PERSON'], addOns: [],
+    policy: { kind: 'FLEXIBLE', label: 'Flexible', text: 'Free cancellation until 24 h before.' }, instantBooking: true, team: [{ id: 'm-kofi', displayName: 'Kofi' }]
   }
 ];
 
@@ -157,7 +187,42 @@ export const PROVIDERS: Record<string, { displayName: string; location: string; 
   org_braids_ama: { displayName: 'Braids by Ama', location: 'Houston, TX', slug: 'braids-by-ama', tagline: 'Protective styles that last', layout: 'GALLERY_FIRST', rating: 4.9, reviews: 212 },
   org_mama_put: { displayName: 'Mama Put Catering', location: 'Houston, TX', slug: 'mama-put', tagline: 'Owambe-ready food, delivered hot', layout: 'STORY', rating: 4.8, reviews: 96 },
   org_kente_tailors: { displayName: 'Kente Tailors', location: 'Atlanta, GA', slug: 'kente-tailors', tagline: 'Made to measure', layout: 'CLASSIC', rating: 4.7, reviews: 58 },
-  org_diaspora_tax: { displayName: 'Diaspora Tax Help', location: 'Online', slug: 'diaspora-tax', tagline: 'Taxes across borders, explained', layout: 'CLASSIC', rating: 4.9, reviews: 143 }
+  org_diaspora_tax: { displayName: 'Diaspora Tax Help', location: 'Houston, TX', slug: 'diaspora-tax', tagline: 'Taxes across borders, explained', layout: 'CLASSIC', rating: 4.9, reviews: 143 },
+  org_hillcountry_braids: { displayName: 'Hill Country Braids', location: 'Round Rock, TX', slug: 'hill-country-braids', tagline: 'Braids at your door', layout: 'CLASSIC', rating: 4.8, reviews: 31 },
+  org_zuri_studio: { displayName: 'Zuri Hair Studio', location: 'Pflugerville, TX', slug: 'zuri-hair-studio', tagline: 'Silk presses and care', layout: 'CLASSIC', rating: 0, reviews: 0 },
+  org_bolas_kitchen: { displayName: 'Bola’s Kitchen', location: 'Hutto, TX', slug: 'bolas-kitchen', tagline: 'Owambe food for Central Texas', layout: 'STORY', rating: 4.6, reviews: 12 },
+  org_adire_tailors: { displayName: 'Adire Tailors', location: 'Brooklyn, NY', slug: 'adire-tailors', tagline: 'Made to measure', layout: 'CLASSIC', rating: 4.7, reviews: 40 },
+  org_capital_tailors: { displayName: 'Capital City Tailors', location: 'Austin, TX', slug: 'capital-city-tailors', tagline: 'Fitted in Austin', layout: 'CLASSIC', rating: 0, reviews: 0 }
+};
+
+/** Where each mock provider works (mirrors bookings' provider service area; see docs/engineering/service-areas.md). */
+export interface MockArea { zip: string; city: string; state: string; lat: number; lon: number; radiusMiles: number; extra: string[]; zone: string | null }
+export const PROVIDER_AREAS: Record<string, MockArea> = {
+  org_braids_ama: { zip: '77002', city: 'Houston', state: 'TX', lat: 29.7543, lon: -95.3577, radiusMiles: 20, extra: [], zone: 'Houston' },
+  org_mama_put: { zip: '77002', city: 'Houston', state: 'TX', lat: 29.7543, lon: -95.3577, radiusMiles: 40, extra: [], zone: 'Houston' },
+  org_kente_tailors: { zip: '30303', city: 'Atlanta', state: 'GA', lat: 33.7525, lon: -84.3915, radiusMiles: 25, extra: [], zone: 'Atlanta' },
+  org_diaspora_tax: { zip: '77002', city: 'Houston', state: 'TX', lat: 29.7543, lon: -95.3577, radiusMiles: 30, extra: [], zone: 'Houston' },
+  org_hillcountry_braids: { zip: '78664', city: 'Round Rock', state: 'TX', lat: 30.5305, lon: -97.6351, radiusMiles: 20, extra: ['CITY:Taylor:TX'], zone: 'Greater Austin' },
+  org_zuri_studio: { zip: '78660', city: 'Pflugerville', state: 'TX', lat: 30.4427, lon: -97.5971, radiusMiles: 25, extra: [], zone: 'Greater Austin' },
+  org_bolas_kitchen: { zip: '78634', city: 'Hutto', state: 'TX', lat: 30.543, lon: -97.547, radiusMiles: 40, extra: [], zone: 'Greater Austin' },
+  org_adire_tailors: { zip: '11211', city: 'Brooklyn', state: 'NY', lat: 40.7078, lon: -73.9453, radiusMiles: 25, extra: [], zone: 'New York City' },
+  org_capital_tailors: { zip: '78701', city: 'Austin', state: 'TX', lat: 30.2711, lon: -97.7437, radiusMiles: 10, extra: [], zone: 'Greater Austin' }
+};
+
+/** Demo places (ZIP centroids) the mock search understands; geo-service knows every US ZIP. */
+export const SERVICE_PLACES: Record<string, { city: string; state: string; lat: number; lon: number; zone: string | null }> = {
+  '78626': { city: 'Georgetown', state: 'TX', lat: 30.668, lon: -97.5747, zone: 'Greater Austin' },
+  '78664': { city: 'Round Rock', state: 'TX', lat: 30.5305, lon: -97.6351, zone: 'Greater Austin' },
+  '78634': { city: 'Hutto', state: 'TX', lat: 30.543, lon: -97.547, zone: 'Greater Austin' },
+  '78660': { city: 'Pflugerville', state: 'TX', lat: 30.4427, lon: -97.5971, zone: 'Greater Austin' },
+  '78701': { city: 'Austin', state: 'TX', lat: 30.2711, lon: -97.7437, zone: 'Greater Austin' },
+  '77002': { city: 'Houston', state: 'TX', lat: 29.7543, lon: -95.3577, zone: 'Houston' },
+  '77042': { city: 'Houston', state: 'TX', lat: 29.7392, lon: -95.5614, zone: 'Houston' },
+  '75201': { city: 'Dallas', state: 'TX', lat: 32.7867, lon: -96.8003, zone: 'Dallas-Fort Worth' },
+  '30303': { city: 'Atlanta', state: 'GA', lat: 33.7525, lon: -84.3915, zone: 'Atlanta' },
+  '11211': { city: 'Brooklyn', state: 'NY', lat: 40.7078, lon: -73.9453, zone: 'New York City' },
+  '10456': { city: 'Bronx', state: 'NY', lat: 40.8309, lon: -73.9096, zone: 'New York City' },
+  '79401': { city: 'Lubbock', state: 'TX', lat: 33.5846, lon: -101.8456, zone: null }
 };
 
 export function bookingFor(svc: ServiceDetail, id: string, reference: string, status: string, start: Date, extra: Partial<CustomerBooking> = {}): CustomerBooking {
@@ -170,7 +235,7 @@ export function bookingFor(svc: ServiceDetail, id: string, reference: string, st
   const live = ['PENDING_PAYMENT', 'REQUESTED', 'CONFIRMED', 'RESCHEDULE_REQUESTED', 'RESCHEDULE_PROPOSED'].includes(status);
   return {
     id, reference, orgId: svc.orgId, status, statusLabel: labels[status] ?? status, startAt: iso(start), endAt: iso(end), proposedStartAt: null,
-    location: svc.modes.includes('VIRTUAL') ? 'Video call' : (PROVIDERS[svc.orgId]?.location ?? ''), notes: '',
+    location: PROVIDERS[svc.orgId]?.location ?? '', notes: '',
     service: { serviceId: svc.id, name: svc.name, durationMinutes: svc.durationMinutes, priceMinor: svc.priceMinor, depositMinor: svc.depositMinor,
       balanceMinor: svc.balanceMinor, currency: svc.currency, mode: svc.modes[0] ?? 'IN_PERSON', providerName: svc.providerName,
       memberName: svc.team[0]?.displayName ?? '', addOns: [] },
