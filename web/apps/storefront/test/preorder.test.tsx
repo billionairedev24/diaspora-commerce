@@ -208,7 +208,7 @@ describe('storefront pre-order states (mock BFF)', () => {
     const [pre, now] = await screen.findAllByTestId('card-availability');
     await waitFor(() => expect(pre).toHaveTextContent(/^Pre-order · delivered \w{3} \d+$/));
     expect(screen.getAllByTestId('preorder-badge')).toHaveLength(1);
-    expect(now).toHaveTextContent('Ships now · UPS Ground 3–5 days');
+    expect(now).toHaveTextContent('Ships now · Delivery by AfroTransact');
     expect(screen.getByRole('button', { name: `Add to cart: ${jollof.title}` })).toBeEnabled();
     unmount();
 
@@ -230,7 +230,7 @@ describe('storefront pre-order states (mock BFF)', () => {
     renderWithProviders(<CartView />);
     const head = await screen.findByTestId('cart-preorder-head');
     expect(head).toHaveTextContent(/Pre-order · delivered \w{3}, \w{3} \d+/);
-    expect(screen.getByTestId('cart-ships-now-head')).toHaveTextContent('Ships now · UPS Ground, 3–5 days');
+    expect(screen.getByTestId('cart-ships-now-head')).toHaveTextContent('Ships now · Delivery by AfroTransact');
     const door = screen.getByTestId('fulfil-door');
     const pickup = screen.getByTestId('fulfil-pickup');
     expect(door).toHaveAttribute('aria-pressed', 'true');
@@ -326,7 +326,7 @@ describe('storefront pre-order states (mock BFF)', () => {
     await api().setDeliveryLocation({ zip: '79401' });
     await preview({ enabled: false });
     homeAndPreorders();
-    expect(await screen.findByRole('heading', { name: 'Shipping by UPS Ground for now.' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Delivery by AfroTransact for now.' })).toBeVisible();
     expect(screen.getByTestId('home-slot')).toBeEmptyDOMElement();
     expect(screen.queryByTestId('preorder-waitlist')).toBeNull();
   });

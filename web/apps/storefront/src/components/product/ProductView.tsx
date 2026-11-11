@@ -219,13 +219,8 @@ export function ProductView({ atin }: { atin: string }) {
                     </p>
                   ) : (
                     <p className={styles.promise}>
-                      {bb.delivery.free ? 'FREE delivery' : `${fmt.money(bb.delivery.feeMinor)} delivery`} <strong>{bb.delivery.label}</strong>
+                      {bb.delivery.prefix} · {bb.delivery.free ? t('co.free') : fmt.money(bb.delivery.feeMinor)} <strong>{bb.delivery.label}</strong>
                       {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : '.'}
-                    </p>
-                  )}
-                  {bb.delivery.expressLabel && (
-                    <p className={styles.express}>
-                      {t('pdp.orFastest')} <strong>{bb.delivery.expressLabel}</strong>
                     </p>
                   )}
                 </>

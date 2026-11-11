@@ -76,7 +76,7 @@ export const defaultProductCardLabels: ProductCardLabels = {
 export interface ProductCardAvailability {
   /** Badge on the image, e.g. "Pre-order" (omit when the item is not a pre-order or the badge placement is off). */
   badge?: string;
-  /** Line under the price that replaces the delivery promise: "Pre-order · delivered Oct 25", "Ships now · UPS Ground 3–5 days". */
+  /** Line under the price that replaces the delivery promise: "Pre-order · delivered Oct 25", "Ships now · Delivery by AfroTransact". */
   tag: string;
   /** gold while a pre-order is open, muted otherwise. */
   tone?: 'gold' | 'muted';

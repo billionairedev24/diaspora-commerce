@@ -1,21 +1,27 @@
 'use client';
 
-import { type CheckoutPackage, type DeliveryMethod, type DeliveryPreferences } from '@afrotransact/api-client';
+import { type CheckoutPackage, type DeliveryOptionKey, type DeliveryPreferences, type PlaceableOption } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { AirplaneTilt, Button, ImagePlaceholder, Key, Lightning, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
+import { Button, ImagePlaceholder, Key, Lightning, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
 
 import { useT } from '@/i18n/t';
 import { feeRuleNote } from '@/lib/fee-rule';
 
 import styles from './Checkout.module.css';
+import { onRequestQuote } from './quote';
 
 /** How one package reaches the shopper: a delivery option, or pickup at one of its pickup points. */
-export type Choice = { option: DeliveryMethod; pickupPointId?: string; preferences: DeliveryPreferences };
+export type Choice = { option: DeliveryOptionKey; pickupPointId?: string; preferences: DeliveryPreferences };
+
+/** The option an order is placed with. quote_required is never payable (the page blocks it), so it maps to pickup, which is always free. */
+export function placeable(option: DeliveryOptionKey): PlaceableOption {
+  return option === 'quote_required' ? 'pickup' : option;
+}
 
 /** Default choice per package: its first delivery option (pickup only when that is all it has). */
 export function initialChoice(p: CheckoutPackage): Choice {
   const first = p.deliveryOptions.find((o) => o.key !== 'pickup') ?? p.deliveryOptions[0];
-  return { option: first?.key ?? 'carrier', pickupPointId: p.pickupPoints?.[0]?.id, preferences: { handover: 'door', contact: 'text' } };
+  return { option: first?.key ?? 'afrotransact_delivery', pickupPointId: p.pickupPoints?.[0]?.id, preferences: { handover: 'door', contact: 'text' } };
 }
 
 /** The package's fee for a choice (pickup is free). */
@@ -79,8 +85,9 @@ function LocalDeliveryQuote({ pkg, onRemove, onChangeAddress, removing }: { pkg:
  * Redesigned PackageCard:
  * - Package items with data-testid="checkout-item", title, thumbnail, quantity, price, and fresh tag.
  * - Delivery | Pickup mode toggle (pill segmented controls).
- * - Proper delivery method cards displayed directly (AfroTransact Delivery, Carrier Standard, Express)
- *   with carrier badges, arrival promise, pricing badges, and seamless selection.
+ * - A flat list of delivery options (Amazon style, no cards): Delivery by AfroTransact at the one flat fee staff set, with its
+ *   arrival promise and price. No carrier is ever named and there is no express. A package outside every delivery zone shows
+ *   one disabled option, "Too far for standard delivery. Ask us for a quote", with a button (onRequestQuote); pickup stays.
  * - AfroTransact Delivery preferences and safe-place choices when platform delivery is selected.
  * - Pickup points listed as selectable cards with distance, address, hours, and free badge.
  */
@@ -121,7 +128,7 @@ export function PackageCard({
   const setMode = (mode: 'delivery' | 'pickup') =>
     mode === 'pickup'
       ? onChoice({ ...choice, option: 'pickup', pickupPointId: choice.pickupPointId ?? points[0]?.id })
-      : onChoice({ ...choice, option: deliveryOptions[0]?.key ?? 'carrier' });
+      : onChoice({ ...choice, option: deliveryOptions[0]?.key ?? 'afrotransact_delivery' });
   const promise = pickup ? (point?.ready ?? selected?.eta ?? '') : (selected?.eta ?? pkg.delivery.label);
   const group = `pkg-${pkg.packageId}`;
 
@@ -204,62 +211,59 @@ export function PackageCard({
         {!pickup && <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />}
 
         {!pickup ? (
-          <fieldset className={styles.deliveryOptionsSection} disabled={undeliverable}>
+          <fieldset className={styles.optionList} disabled={undeliverable}>
             <legend className={styles.optionsSectionTitle}>{t('co.deliveryOption')}</legend>
-            <div className={styles.deliveryGrid}>
-              {deliveryOptions.map((o) => {
-                const isSelected = choice.option === o.key;
-                const isATD = o.key === 'afrotransact_delivery';
-                const isExpress = o.key === 'express';
-                const isFree = o.free || o.feeMinor === 0;
-
+            {deliveryOptions.map((o) => {
+              if (o.key === 'quote_required') {
+                // Outside every delivery zone: not payable. The shopper asks for a quote, picks up, or changes the address.
                 return (
-                  <label
-                    key={o.key}
-                    className={`${styles.deliveryOptionCard} ${isSelected ? styles.deliveryOptionCardActive : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name={`opt-${pkg.packageId}`}
-                      checked={isSelected}
-                      onChange={() => onChoice({ ...choice, option: o.key })}
-                      disabled={undeliverable}
-                      aria-label={`${o.label} ${o.eta}`}
-                    />
-                    <div className={styles.optionCardIcon}>
-                      {isATD ? (
-                        <Lightning weight="fill" className={styles.atdIcon} aria-hidden />
-                      ) : isExpress ? (
-                        <AirplaneTilt weight="fill" className={styles.expressIcon} aria-hidden />
-                      ) : (
-                        <Truck weight="fill" className={styles.carrierIcon} aria-hidden />
-                      )}
-                    </div>
-                    <div className={styles.optionCardContent}>
-                      <div className={styles.optionCardHeader}>
-                        <div className={styles.optionTitleRow}>
-                          <strong className={styles.optionCardTitle}>{o.eta}</strong>
-                          {isATD && <span className={styles.atdBadge}>⚡ AfroTransact Fast</span>}
-                          {isExpress && <span className={styles.expressBadge}>Express Air</span>}
-                        </div>
-                        <span className={isFree ? styles.optionFeeFree : styles.optionFee}>
-                          {isFree ? t('co.free') : fmt.money(o.feeMinor)}
-                        </span>
+                  <div key={o.key} className={styles.optionRow} role="group" aria-label={o.label} data-testid="quote-required">
+                    <Warning weight="fill" className={styles.flatIcon} aria-hidden />
+                    <div className={styles.flatText}>
+                      <strong className={styles.optionTitle}>{o.label}</strong>
+                      <p className={styles.optionDesc}>{t('co.quote.help')}</p>
+                      <div className={styles.optionActions}>
+                        <Button size="sm" variant="secondary" onClick={() => onRequestQuote(pkg)} data-testid="request-quote">
+                          {t('co.quote.cta')}
+                        </Button>
+                        <Button size="sm" variant="neutral" onClick={onChangeAddress}>
+                          {t('ld.changeAddress')}
+                        </Button>
                       </div>
-                      <p className={styles.optionCardDesc}>
-                        {undeliverable ? t('ld.notAvailableOption') : o.label}
-                        {o.cutoffLabel ? ` · ${o.cutoffLabel}` : ''}
-                      </p>
-                      {o.feeRule && !undeliverable ? (
-                        <p className={styles.optionCardDesc} data-testid={`fee-rule-${o.key}`}>
-                          {feeRuleNote(t, o.feeRule)}
-                        </p>
-                      ) : null}
                     </div>
-                  </label>
+                  </div>
                 );
-              })}
-            </div>
+              }
+              const isSelected = choice.option === o.key;
+              const isFree = !o.feeUnknown && (o.free || o.feeMinor === 0);
+              return (
+                <label key={o.key} className={`${styles.optionRow} ${isSelected ? styles.optionRowActive : ''}`} data-testid={`delivery-option-${o.key}`}>
+                  <input
+                    type="radio"
+                    name={`opt-${pkg.packageId}`}
+                    checked={isSelected}
+                    onChange={() => onChoice({ ...choice, option: o.key })}
+                    disabled={undeliverable}
+                    aria-label={`${o.label} ${o.eta}`}
+                  />
+                  <div className={styles.flatText}>
+                    <strong className={styles.optionTitle}>{undeliverable ? t('ld.notAvailableOption') : o.label}</strong>
+                    <span className={styles.optionDesc}>
+                      {o.eta}
+                      {o.cutoffLabel ? ` · ${o.cutoffLabel}` : ''}
+                    </span>
+                    {o.feeRule && !undeliverable ? (
+                      <span className={styles.optionDesc} data-testid={`fee-rule-${o.key}`}>
+                        {feeRuleNote(t, o.feeRule)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className={o.feeUnknown ? styles.optionFee : isFree ? styles.optionFeeFree : styles.optionFee} data-testid={`option-fee-${o.key}`}>
+                    {o.feeUnknown ? t('co.fee.unknown') : isFree ? t('co.free') : fmt.money(o.feeMinor)}
+                  </span>
+                </label>
+              );
+            })}
           </fieldset>
         ) : (
           <div className={styles.pickupSection}>

@@ -301,7 +301,7 @@ export function withPreorderPackage(cart: Cart, session: MockSession, now: Date)
     fulfilment: 'AFROTRANSACT',
     heading: `${w.name} · delivered ${deliversT}`,
     shipsFrom: `${r.place.city}, ${r.place.region}`,
-    delivery: { days: Math.max(0, Math.round((dateMs(w.deliversOn) - now.getTime()) / DAY)), label: deliversT, prefix: 'Pre-order · delivered', free: fee === 0, feeMinor: fee, expressLabel: null, cutoff: null },
+    delivery: { days: Math.max(0, Math.round((dateMs(w.deliversOn) - now.getTime()) / DAY)), label: deliversT, prefix: 'Pre-order · delivered', free: fee === 0, feeMinor: fee, cutoff: null },
     deliveryOptions: ordered.map(toOption),
     lines,
     itemCount: lines.reduce((a, l) => a + l.quantity, 0),

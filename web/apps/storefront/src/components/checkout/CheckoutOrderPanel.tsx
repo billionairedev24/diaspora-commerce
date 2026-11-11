@@ -40,6 +40,8 @@ type Props = {
   undeliverable: boolean;
   /** An item can't be sold yet (no definite tax decision): Remove it to place the order. */
   taxBlocked?: boolean;
+  /** Plain words for what delivery stops the order (a package to quote, or an unknown fee); null when nothing does. */
+  deliveryReason?: string | null;
   addressList: boolean;
   busy: boolean;
   placing: number;
@@ -75,6 +77,7 @@ export function CheckoutOrderPanel(props: Props) {
     preRun,
     undeliverable,
     taxBlocked = false,
+    deliveryReason = null,
     addressList,
     busy,
     placing,
@@ -139,6 +142,11 @@ export function CheckoutOrderPanel(props: Props) {
           {preLocked && preLockedText && (
             <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
               {preLockedText}
+            </p>
+          )}
+          {deliveryReason && (
+            <p className={styles.fine} role="status" data-testid="delivery-blocked-note">
+              {deliveryReason}
             </p>
           )}
           {taxBlocked && (

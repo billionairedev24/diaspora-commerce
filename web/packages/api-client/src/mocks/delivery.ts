@@ -3,7 +3,8 @@
 import { type DeliveryOption } from '../schemas/cart';
 import { type DeliveryPromise } from '../schemas/catalog';
 import { type DeliveryLocation } from '../schemas/location';
-import { ADDRESSES, FULFILMENT_CENTRES, GEO, PICKUP_POINTS, ZIP_PREFIXES, ZIP_PREFIXES_LONG } from './fixtures/geo';
+import { ADDRESSES, FULFILMENT_CENTRES, GEO, ZIP_PREFIXES, ZIP_PREFIXES_LONG } from './fixtures/geo';
+import { deliveryFee,getShippingSettings } from './shipping-settings';
 
 export const DEFAULT_ZIP = '77042';
 export const SELLER_SHIPPING_MINOR = 599;
@@ -140,46 +141,43 @@ function cutoffNote(now: Date): string {
 
 export function deliveryPromise(from: ShipFrom, metro: string, now: Date): DeliveryPromise {
   const days = etaDays(from, metro);
-  if (from.fulfilment === 'AFROTRANSACT_DELIVERY') return { days, label: dayLabel(days, now), prefix: 'AfroTransact Delivery', free: false, feeMinor: 0, expressLabel: null, cutoff: null };
   const isAT = from.fulfilment === 'AFROTRANSACT';
+  const settings = getShippingSettings();
+  // Launch shipping: Delivery by AfroTransact (or AfroTransact collects from the store and delivers), one flat fee.
+  // No carrier is ever named and there is no express.
   return {
     days,
     label: dayLabel(days, now),
-    prefix: isAT ? 'FREE delivery' : 'Delivery',
-    free: isAT,
-    feeMinor: isAT ? 0 : SELLER_SHIPPING_MINOR,
-    expressLabel: isAT ? dayLabel(etaDays(from, metro, true), now) : null,
+    prefix: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY,
+    free: settings.flatFeeMinor === 0,
+    feeMinor: settings.flatFeeMinor,
     cutoff: isAT ? cutoffNote(now) : null
   };
 }
 
-const money = (minor: number) => `$${(minor / 100).toFixed(2)}`;
+/** Shopper-facing option labels (launch shipping). No carrier is ever named. */
+export const LABEL_DELIVERY = 'Delivery by AfroTransact';
+export const LABEL_STORE_DELIVERY = 'AfroTransact collects from the store and delivers';
+export const LABEL_PICKUP_POINT = 'Pickup at an AfroTransact point';
+export const LABEL_STORE_PICKUP = 'Collect from the store';
+export const LABEL_SELLER_SHIPPING = 'Standard shipping from the seller';
+export const LABEL_QUOTE_REQUIRED = 'Too far for standard delivery. Ask us for a quote';
 
-/** Delivery options for one package (carrier, express, AfroTransact Delivery, pickup). */
-export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; slowestDays: number; subtotalMinor: number; expressDays: number }, metro: string, now: Date): DeliveryOption[] {
+/** Delivery options for one package: AfroTransact delivers at the staff flat fee (free pickup is added at checkout). */
+export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; slowestDays: number; subtotalMinor: number }, _metro: string, now: Date): DeliveryOption[] {
+  const settings = getShippingSettings();
   const isAT = pkg.from.fulfilment === 'AFROTRANSACT';
-  if (pkg.from.fulfilment === 'AFROTRANSACT_DELIVERY')
-    return [{ key: 'afrotransact_delivery', label: 'AfroTransact Delivery · priced by distance at checkout', eta: dayLabel(1, now), feeMinor: 0, free: false }];
+  const days = pkg.from.fulfilment === 'AFROTRANSACT_DELIVERY' ? 1 : pkg.slowestDays;
+  const fee = deliveryFee(pkg.subtotalMinor, settings);
+  const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY, eta: dayLabel(days, now), feeMinor: fee, free: fee === 0 };
+  const sellerShips = pkg.from.fulfilment === 'SELLER' && settings.sellerCarrierShippingEnabled;
+  if (!sellerShips) return [delivery];
+  const free = pkg.subtotalMinor >= FREE_SHIPPING_THRESHOLD_MINOR;
+  return [{ key: 'carrier', label: LABEL_SELLER_SHIPPING, eta: dayLabel(pkg.slowestDays, now), feeMinor: free ? 0 : SELLER_SHIPPING_MINOR, free }, delivery];
+}
+
+/** Whether an address is inside a delivery zone (the mock's zones: the metros AfroTransact delivers in). */
+export function insideDeliveryZone(metro: string): boolean {
   const here = geoOf(metro);
-  const near = (city: string) => !!GEO[city] && miles(here, geoOf(city)) < 60;
-  const out: DeliveryOption[] = [];
-  const freeCarrier = isAT || pkg.subtotalMinor >= FREE_SHIPPING_THRESHOLD_MINOR;
-  out.push({
-    key: 'carrier',
-    label: isAT ? 'UPS Ground or USPS Ground Advantage' : 'USPS Ground Advantage',
-    eta: dayLabel(pkg.slowestDays, now),
-    feeMinor: freeCarrier ? 0 : SELLER_SHIPPING_MINOR,
-    free: freeCarrier
-  });
-  if (isAT) out.push({ key: 'express', label: 'UPS Next Day Air', eta: dayLabel(pkg.expressDays, now), feeMinor: 799, free: false });
-  const zoneOk = ['Houston, TX', 'Edison, NJ', 'Newark, NJ', 'Atlanta, GA', 'Dallas, TX'].some(near);
-  const srcOk = isAT ? FULFILMENT_CENTRES.some(([, c]) => near(c)) : near(pkg.from.city);
-  if (zoneOk && srcOk) {
-    const free = isAT && pkg.subtotalMinor >= 3500;
-    out.push({ key: 'afrotransact_delivery', label: 'AfroTransact Delivery (our driver, photo + code on delivery)', eta: isAT ? 'Today by 9 pm' : dayLabel(1, now) + ' by 9 pm', feeMinor: free ? 0 : 499, free });
-  }
-  const points = PICKUP_POINTS.filter((p) => (isAT ? p.owner === 'AT' : p.owner === pkg.sellerName) && near(p.metro));
-  const first = points[0];
-  if (first) out.push({ key: 'pickup', label: `Pick up (${points.length} location${points.length > 1 ? 's' : ''})`, eta: first.ready, feeMinor: 0, free: true });
-  return out.map((o) => ({ ...o, label: `${o.free ? 'FREE' : money(o.feeMinor)} · ${o.label}` }));
+  return ['Houston, TX', 'Edison, NJ', 'Newark, NJ', 'Atlanta, GA', 'Dallas, TX'].some((c) => !!GEO[c] && miles(here, geoOf(c)) < 60);
 }

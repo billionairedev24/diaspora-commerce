@@ -22,7 +22,7 @@ export type PreorderFulfilment = z.infer<typeof PreorderFulfilmentSchema>;
 export const PreorderPaymentMethodSchema = z.enum(['CARD', 'WALLET', 'ACH']);
 export type PreorderPaymentMethod = z.infer<typeof PreorderPaymentMethodSchema>;
 
-/** What the storefront does where no pre-order is live: ship by UPS Ground (quoted) or collect waitlist emails only. */
+/** What the storefront does where no pre-order is live: deliver by AfroTransact at the flat fee or collect waitlist emails only. */
 export const PreorderFallbackSchema = z.enum(['SHIP', 'WAITLIST']);
 export type PreorderFallback = z.infer<typeof PreorderFallbackSchema>;
 

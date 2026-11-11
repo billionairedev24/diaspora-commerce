@@ -93,7 +93,7 @@ describe('mock BFF — credit and gift cards', () => {
     const sum = await api.getCheckoutSummary();
     expect(sum.credit?.availableMinor).toBe(2500);
     expect((sum.credit?.appliedMinor ?? 0) + (sum.credit?.cardDueMinor ?? 0)).toBe(sum.totalMinor);
-    const selection = [{ packageId: sum.packages[0]?.packageId ?? '', option: 'carrier' as const }];
+    const selection = [{ packageId: sum.packages[0]?.packageId ?? '', option: 'afrotransact_delivery' as const }];
     await expect(api.placeOrder({ addressId: 'ad1', deliverySelections: selection }, 'checkout-credit-0001')).rejects.toSatisfy(refusal(422));
 
     const conf = await api.placeOrder({ addressId: 'ad1', useCredit: true, paymentMethodId: 'pm_visa4242', deliverySelections: selection }, 'checkout-credit-0002');

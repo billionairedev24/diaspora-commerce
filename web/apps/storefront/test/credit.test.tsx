@@ -132,7 +132,7 @@ describe('credit on an order (S320)', () => {
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 12 });
     const sum = await api.getCheckoutSummary();
     const conf = await api.placeOrder(
-      { addressId: 'ad1', useCredit: true, paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: sum.packages[0]?.packageId ?? '', option: 'carrier' }] },
+      { addressId: 'ad1', useCredit: true, paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: sum.packages[0]?.packageId ?? '', option: 'afrotransact_delivery' }] },
       'checkout-credit-ui-0001'
     );
     await api.confirmCheckoutPayment(conf.orderNumber);

@@ -53,6 +53,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'money'
   },
   { key: 'fees', label: 'Fees & commissions', description: 'Fee schedule versions, commission by category and plan, connection fees, negotiated rates and delivery pricing.', module: 'fees', group: 'money' },
+  {
+    key: 'shipping',
+    label: 'Flat delivery fee',
+    description: 'The one flat fee shoppers pay for Delivery by AfroTransact and for AfroTransact collecting from a store, free above an optional amount, and the switch for seller-shipped carrier options (off at launch). The cart and checkout and the amount charged both read it. Every change is kept with its reason.',
+    module: 'fees',
+    group: 'money'
+  },
   { key: 'delivery-fees', label: 'Delivery fees', description: 'What customers pay for AfroTransact delivery by distance, carrier shipping beyond our coverage, and pickup, by currency, with a reason on every change.', module: 'preorders', group: 'money' },
   {
     key: 'run-economics',

@@ -79,7 +79,7 @@ describe('managing the membership (S323)', () => {
     expect(plan).toHaveTextContent('Plus · $9.99 every month');
     expect(screen.getByTestId('membership-status')).toHaveTextContent('Free trial');
     expect(plan).toHaveTextContent(/Your free trial ends on/);
-    expect(screen.getByText('Free standard shipping')).toBeInTheDocument();
+    expect(screen.getByText('Free AfroTransact delivery')).toBeInTheDocument();
 
     // Upgrade now.
     const upgrade = within(await screen.findByTestId('membership-plan-premium-MONTHLY')).getByRole('button', { name: 'Upgrade now' });
@@ -160,7 +160,7 @@ describe('membership at the cart and the checkout (S323)', () => {
     const row = await screen.findByTestId('checkout-membership-waived');
     expect(row).toHaveTextContent('Fee waived: membership');
     expect(row).toHaveTextContent('−$5.99');
-    expect(row).toHaveTextContent(/Plus · Free standard shipping: \$5\.99 off/);
+    expect(row).toHaveTextContent(/Plus · Free AfroTransact delivery: \$5\.99 off/);
     expect(screen.queryByTestId('membership-upsell')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('order-summary')).getByText('FREE')).toBeInTheDocument();
   });
@@ -183,7 +183,7 @@ describe('membership at the cart and the checkout (S323)', () => {
     await api.joinAccountMembership({ tierCode: 'plus', interval: 'MONTHLY' }, 'membership-ui-0000008');
     const { unmount } = renderWithProviders(<CartView />);
     const note = await screen.findByTestId('membership-savings');
-    expect(note).toHaveTextContent(/Fee waived: membership: Plus · Free standard shipping: \$5\.99 off/);
+    expect(note).toHaveTextContent(/Fee waived: membership: Plus · Free AfroTransact delivery: \$5\.99 off/);
     expect(within(note).getByTestId('membership-earn')).toHaveTextContent('You’ll earn $0.76 in AfroTransact credit when this order is delivered.');
     unmount();
     renderWithProviders(<CheckoutView />);
@@ -195,13 +195,13 @@ describe('membership at the cart and the checkout (S323)', () => {
     await api.joinAccountMembership({ tierCode: 'plus', interval: 'MONTHLY' }, 'membership-ui-0000007');
     const sum = await api.getCheckoutSummary();
     const conf = await api.placeOrder(
-      { addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: sum.packages[0]?.packageId ?? '', option: 'carrier' }] },
+      { addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: sum.packages[0]?.packageId ?? '', option: 'afrotransact_delivery' }] },
       'checkout-membership-ui-1'
     );
     await api.confirmCheckoutPayment(conf.orderNumber);
     renderWithProviders(<OrderDetailView orderNumber={conf.orderNumber} />);
     const line = await screen.findByTestId('order-membership-waiver');
-    expect(line).toHaveTextContent('Plus member: Free standard shipping saved you $5.99 on this shipment');
+    expect(line).toHaveTextContent('Plus member: Free AfroTransact delivery saved you $5.99 on this shipment');
   });
 });
 

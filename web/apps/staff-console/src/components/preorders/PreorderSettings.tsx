@@ -27,7 +27,7 @@ import { PreorderAreasTree } from './PreorderAreasTree';
 import { controlClass, labelClass, Toggle, usePreorderAccess, usePreordersApi } from './primitives';
 
 const FALLBACKS: [PreorderFallback, typeof Package, string, string][] = [
-  ['SHIP', Package, 'Ship by UPS Ground', 'Shoppers can still buy, at the quoted rate (3–5 days).'],
+  ['SHIP', Package, 'Deliver by AfroTransact', 'Shoppers can still buy, at the delivery fee shown at checkout.'],
   ['WAITLIST', ListChecks, 'Waitlist only', 'No checkout. Shoppers are told when the next pre-order opens.']
 ];
 const PLACEMENTS: [PlacementKey, string, string, string][] = [

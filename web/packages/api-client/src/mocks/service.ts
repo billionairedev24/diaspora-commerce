@@ -8,13 +8,14 @@ import { type Home, type Rail } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
 import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } from '../schemas/search';
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
-import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINOR, locationForZip, metroOf, nearestFc, SELLER_SHIPPING_MINOR } from './delivery';
+import { deliveryOptions, deliveryPromise, etaDays, locationForZip, metroOf, nearestFc } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
 import { PLACEMENTS, SPONSORED_SEARCH, type TileRule, ZIP_TARGETING } from './fixtures/content';
 import { composeBody } from './home-blocks';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
 import { publicSizeChart, seedSizeCharts,SIZE_CHART_IDS } from './seller/size-charts';
+import { getShippingSettings } from './shipping-settings';
 import { account, PROVIDERS, SERVICES } from './shopper-state';
 
 export class MockProblem extends Error {
@@ -71,11 +72,18 @@ export function sessionLocation(s: MockSession): DeliveryLocation {
   return { ...base, ...place, source: s.locChosen ? 'chosen' : 'detected' };
 }
 
+/** "Add $X for free delivery": only when staff set a free-above threshold. */
+function nudgeFor(subtotalMinor: number): { remainingMinor: number; thresholdMinor: number } | null {
+  const threshold = getShippingSettings().freeAboveMinor;
+  return threshold !== null && subtotalMinor > 0 && subtotalMinor < threshold ? { remainingMinor: threshold - subtotalMinor, thresholdMinor: threshold } : null;
+}
+
 /** Cheapest in-stock offer, counting seller shipping like the prototype; falls back to the first offer. */
 export function buyBox(offers: MockOffer[]): MockOffer {
   const ranked = offers
     .filter((o) => o.stock > 0)
-    .sort((a, b) => a.priceMinor + (a.fulfilment === 'AFROTRANSACT' ? 0 : SELLER_SHIPPING_MINOR) - (b.priceMinor + (b.fulfilment === 'AFROTRANSACT' ? 0 : SELLER_SHIPPING_MINOR)));
+    // One flat delivery fee for everyone (listing rules D16): shipping no longer separates offers.
+    .sort((a, b) => a.priceMinor - b.priceMinor);
   const first = ranked[0] ?? offers[0];
   if (!first) throw new Error('Product without offers');
   return first;
@@ -584,9 +592,8 @@ export function buildCart(s: MockSession, now: Date): Cart {
     const selected = lines.filter((l) => l.selected);
     const subtotalMinor = selected.reduce((a, l) => a + l.lineTotalMinor, 0);
     const slowest = Math.max(...items.map(({ offer }) => etaDays({ fulfilment: offer.fulfilment, city: offer.city }, metro)));
-    const express = Math.max(...items.map(({ offer }) => etaDays({ fulfilment: offer.fulfilment, city: offer.city }, metro, true)));
     const promise = deliveryPromise({ fulfilment: o.fulfilment, city: o.city }, metro, now);
-    const options = deliveryOptions({ from: { fulfilment: o.fulfilment, city: o.city }, sellerName: o.sellerName, slowestDays: slowest, subtotalMinor, expressDays: express }, metro, now);
+    const options = deliveryOptions({ from: { fulfilment: o.fulfilment, city: o.city }, sellerName: o.sellerName, slowestDays: slowest, subtotalMinor }, metro, now);
     return {
       packageId: key,
       seller: { id: o.sellerId, name: o.sellerName, kind: o.sellerName === PLATFORM_SELLER ? 'PLATFORM' : 'SELLER', city: o.city },
@@ -598,7 +605,7 @@ export function buildCart(s: MockSession, now: Date): Cart {
       lines,
       itemCount: lines.reduce((a, l) => a + l.quantity, 0),
       subtotalMinor,
-      freeShippingNudge: !isAT && !local && subtotalMinor > 0 && subtotalMinor < FREE_SHIPPING_THRESHOLD_MINOR ? { remainingMinor: FREE_SHIPPING_THRESHOLD_MINOR - subtotalMinor, thresholdMinor: FREE_SHIPPING_THRESHOLD_MINOR } : null
+      freeShippingNudge: nudgeFor(subtotalMinor)
     };
   });
   const allLines = packages.flatMap((p) => p.lines);

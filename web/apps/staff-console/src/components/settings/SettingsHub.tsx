@@ -81,6 +81,16 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
       );
     case 'fees':
       return <FeesView scope="fees" />;
+    case 'shipping':
+      return (
+        <div className="flex flex-col gap-3">
+          <p className="m-0 max-w-[80ch] text-sm text-muted">
+            AfroTransact sets all shipping at launch: one flat fee for Delivery by AfroTransact and for AfroTransact collecting from a store, free pickup, and the
+            fee each pre-order or run sets for itself. Where a delivery is too far, the shopper asks for a quote. Every change needs a reason.
+          </p>
+          <ResourceTable resource="shipping-settings" urlPrefix="shipping-settings" />
+        </div>
+      );
     case 'delivery-fees':
       return <DeliveryFeesView />;
     case 'run-economics':

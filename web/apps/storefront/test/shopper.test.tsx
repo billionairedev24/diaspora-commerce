@@ -118,13 +118,13 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(screen.queryByRole('radio', { name: /Use a new payment method/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: 'Powered by Stripe' }).length).toBeGreaterThan(0);
 
-    await user.click(within(pkg).getByRole('radio', { name: /AfroTransact Delivery/ }));
+    await user.click(within(pkg).getByRole('radio', { name: /Delivery by AfroTransact/ }));
     expect(within(pkg).getByText(/Delivery preferences/)).toBeInTheDocument();
     await user.click(within(pkg).getByTestId('fulfil-pickup'));
     expect(within(pkg).getByText('Houston FC — Will Call')).toBeInTheDocument();
     expect(within(pkg).getAllByText(/Mon–Sat 8 am–8 pm/).length).toBeGreaterThan(0);
     await user.click(within(pkg).getByTestId('fulfil-delivery'));
-    await user.click(within(pkg).getByRole('radio', { name: /AfroTransact Delivery/ }));
+    await user.click(within(pkg).getByRole('radio', { name: /Delivery by AfroTransact/ }));
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
@@ -192,7 +192,7 @@ describe('checkout with AfroTransact Delivery from the seller’s store (S255)',
     await user.click(screen.getByRole('button', { name: 'Deliver to this address' }));
     const quote = await screen.findByTestId('local-delivery-quote');
     expect(quote).toHaveTextContent('7.4 mi from Houston, TX · about 18 min drive');
-    expect(quote).toHaveTextContent('Delivery charge $11.28');
+    expect(quote).toHaveTextContent('Delivery charge $5.99'); // the staff flat fee, not a distance price (listing rules D16)
     expect(screen.getByRole('button', { name: 'Place your order' })).toBeEnabled();
   });
 

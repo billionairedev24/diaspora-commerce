@@ -23,12 +23,10 @@ export const DeliveryPromiseSchema = z.object({
   days: z.number().int().min(0),
   /** Human label, e.g. "Tomorrow, Oct 11" or "Wednesday, Oct 14". */
   label: z.string(),
-  /** "FREE delivery" or "Delivery". */
+  /** "Delivery by AfroTransact" or "AfroTransact collects from the store and delivers". */
   prefix: z.string(),
   free: z.boolean(),
   feeMinor: MinorSchema,
-  /** Fastest option for AfroTransact-fulfilled offers ("Or fastest delivery Today"). */
-  expressLabel: z.string().nullable(),
   /** Order-by cut-off note, e.g. "Order within 4 hrs 12 mins." */
   cutoff: z.string().nullable()
 });

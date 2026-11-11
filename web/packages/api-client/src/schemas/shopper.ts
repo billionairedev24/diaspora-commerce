@@ -39,8 +39,17 @@ export type PaymentSheetKeys = z.infer<typeof PaymentSheetKeysSchema>;
 
 /* ── Orders ────────────────────────────────────────────────────── */
 
+/** How a placed order's shipment reached the shopper (history keeps 'express' of any order placed before launch shipping). */
 export const DeliveryMethodSchema = z.enum(['carrier', 'express', 'afrotransact_delivery', 'pickup']);
 export type DeliveryMethod = z.infer<typeof DeliveryMethodSchema>;
+
+/** A delivery option the checkout page can show a package (launch shipping: no express, quote_required outside the zones). */
+export const DeliveryOptionKeySchema = z.enum(['carrier', 'afrotransact_delivery', 'pickup', 'quote_required']);
+export type DeliveryOptionKey = z.infer<typeof DeliveryOptionKeySchema>;
+
+/** An option an order can be placed with: quote_required is never payable. */
+export const PlaceableOptionSchema = z.enum(['carrier', 'afrotransact_delivery', 'pickup']);
+export type PlaceableOption = z.infer<typeof PlaceableOptionSchema>;
 
 export const TimelineEventSchema = z.object({ status: z.string(), label: z.string(), at: z.string() });
 export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
@@ -296,8 +305,10 @@ export const CheckoutSummarySchema = z.object({
   shippingTaxAllocation: ShippingTaxAllocationSchema.nullish(),
   /** Lines that can't be sold yet (no definite tax decision): each is offered Remove; the order can't be placed meanwhile. */
   blockedLines: z.array(CheckoutBlockedLineSchema).default([]),
-  /** False while a blocked line remains. */
+  /** False while a blocked line remains, a package is too far for standard delivery (quote_required) or the delivery fee is unknown. */
   canPlaceOrder: z.boolean().default(true),
+  /** Plain words for what delivery stops the order (a quote_required package, or an unknown fee); absent otherwise. */
+  deliveryBlockedReason: z.string().optional(),
   totalMinor: MinorSchema,
   currency: z.string(),
   sellerCount: z.number().int(),
@@ -323,7 +334,7 @@ export type DeliveryPreferences = z.infer<typeof DeliveryPreferencesSchema>;
 
 export const DeliverySelectionSchema = z.object({
   packageId: z.string(),
-  option: DeliveryMethodSchema,
+  option: PlaceableOptionSchema,
   pickupPointId: z.string().optional(),
   preferences: DeliveryPreferencesSchema.optional(),
   /** An agreed delivery quote used as this package's shipping charge (never for pickup); one use, this cart and address. */

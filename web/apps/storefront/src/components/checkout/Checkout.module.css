@@ -351,82 +351,41 @@
   color: var(--at-color-text-muted);
   margin-bottom: var(--at-space-1);
 }
-.deliveryGrid {
+/* Delivery options: a flat list, one hairline between rows, no cards (Amazon style). */
+.optionList {
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--at-space-2);
 }
-.deliveryOptionCard {
+.optionRow {
   display: flex;
   align-items: flex-start;
   gap: var(--at-space-3);
-  padding: var(--at-space-3) var(--at-space-4);
-  border: 1.5px solid var(--at-color-border);
-  border-radius: var(--at-radius-md);
-  background: var(--at-color-surface);
+  padding: var(--at-space-3) 0;
+  border-bottom: 1px solid var(--at-color-border);
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
 }
-.deliveryOptionCard:hover {
-  border-color: var(--at-color-border-strong);
-  background: var(--at-color-surface-hover, var(--at-color-surface-muted));
-}
-.deliveryOptionCard.deliveryOptionCardActive {
-  border-color: var(--at-color-action-secondary);
-  background: color-mix(in srgb, var(--at-color-action-secondary) 5%, var(--at-color-surface));
-  box-shadow: 0 0 0 1px var(--at-color-action-secondary);
-}
-.deliveryOptionCard input[type="radio"] {
+.optionRow:last-child { border-bottom: 0; }
+.optionRow[role="group"] { cursor: default; }
+.optionRow input[type="radio"] {
   margin-top: 3px;
   accent-color: var(--at-color-action-secondary);
   flex: none;
 }
-.optionCardIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--at-radius-sm);
-  background: var(--at-color-surface-muted);
-  flex: none;
-}
-.atdIcon { font-size: 18px; color: var(--at-color-warning); }
-.expressIcon { font-size: 18px; color: var(--at-color-info); }
-.carrierIcon { font-size: 18px; color: var(--at-color-text-muted); }
-.optionCardContent { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.optionCardHeader { display: flex; align-items: baseline; justify-content: space-between; gap: var(--at-space-2); }
-.optionTitleRow { display: flex; align-items: center; gap: var(--at-space-2); flex-wrap: wrap; }
-.optionCardTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); color: var(--at-color-text); }
-.atdBadge {
-  font-size: 11px;
-  font-weight: var(--at-weight-semibold);
-  padding: 1px 7px;
-  border-radius: var(--at-radius-pill);
-  background: var(--at-color-warning-bg);
-  color: var(--at-color-warning);
-}
-.expressBadge {
-  font-size: 11px;
-  font-weight: var(--at-weight-semibold);
-  padding: 1px 7px;
-  border-radius: var(--at-radius-pill);
-  background: var(--at-color-info-bg);
-  color: var(--at-color-info);
-}
+.optionRowActive .optionTitle { color: var(--at-color-text); }
+.flatIcon { flex: none; margin-top: 2px; font-size: 18px; color: var(--at-color-warning); }
+.flatText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.optionTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); color: var(--at-color-text); }
+.optionDesc { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); line-height: 1.4; }
+.optionActions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); margin-top: var(--at-space-2); }
 .optionFeeFree {
-  font-size: var(--at-text-xs);
+  flex: none;
+  font-size: var(--at-text-sm);
   font-weight: var(--at-weight-bold);
-  padding: 2px 8px;
-  border-radius: var(--at-radius-pill);
-  background: var(--at-color-success-bg);
   color: var(--at-color-success);
-}
-.optionCardDesc {
-  margin: 0;
-  font-size: var(--at-text-xs);
-  color: var(--at-color-text-muted);
-  line-height: 1.4;
+  white-space: nowrap;
 }
 
 /* Local Quote Header */

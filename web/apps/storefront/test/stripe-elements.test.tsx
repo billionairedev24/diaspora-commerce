@@ -134,7 +134,7 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     await chooseNewMethod(user);
     const before = total();
     const pkg = await screen.findByTestId('checkout-package');
-    await user.click(within(pkg).getByRole('radio', { name: /UPS Next Day Air/ }));
+    await user.click(within(pkg).getByTestId('fulfil-pickup')); // pickup is free: the amount drops by the delivery fee
     await waitFor(() => expect(total()).not.toBe(before));
     expect(stripe.payment()?.updates).toContainEqual({ amount: total() });
   });
@@ -230,7 +230,7 @@ describe('return from a Stripe redirect (3-D Secure, Cash App Pay, Affirm)', () 
     const summary = await api.getCheckoutSummary();
     const pkg = summary.packages[0];
     const conf = await api.placeOrder(
-      { addressId: summary.addresses[0]?.id ?? '', newPaymentMethod: true, deliverySelections: [{ packageId: pkg?.packageId ?? '', option: pkg?.deliveryOptions[0]?.key ?? 'carrier' }] },
+      { addressId: summary.addresses[0]?.id ?? '', newPaymentMethod: true, deliverySelections: [{ packageId: pkg?.packageId ?? '', option: 'afrotransact_delivery' }] },
       'return-test-key-000001'
     );
     expect(conf.status).toBe('awaiting_payment');

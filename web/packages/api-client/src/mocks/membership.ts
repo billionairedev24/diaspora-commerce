@@ -130,7 +130,7 @@ function packageDeliveryMap(raw: string | null | undefined): Map<string, string>
   return byPkg;
 }
 
-const benefitForOption = (key: string) => (key === 'afrotransact_delivery' ? 'FREE_DELIVERY' : key === 'express' || key === 'pickup' ? null : 'FREE_SHIPPING');
+const benefitForOption = (key: string) => (key === 'afrotransact_delivery' ? 'FREE_DELIVERY' : key === 'pickup' || key === 'quote_required' ? null : 'FREE_SHIPPING');
 
 /** Which delivery fees the membership waives (order minimum and per-order cap of the tier) and, for a shopper who is
     not a member, what joining the entry tier would save: the same rule payments applies when the order is placed. */

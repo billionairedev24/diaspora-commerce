@@ -13,9 +13,9 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ]
   },
   {
-    slug: 'shipping', topic: 'ORDERS_DELIVERY', topicTitle: 'Orders & delivery', title: 'Shipping & delivery', summary: 'Carrier shipping, AfroTransact Delivery and pickup.', updatedAt: UPDATED,
+    slug: 'shipping', topic: 'ORDERS_DELIVERY', topicTitle: 'Orders & delivery', title: 'Shipping & delivery', summary: 'Delivery by AfroTransact and pickup.', updatedAt: UPDATED,
     sections: [
-      { heading: 'Carrier shipping', body: 'Sellers and our warehouses ship with USPS, UPS and FedEx. Tracking updates arrive automatically.' },
+      { heading: 'Delivery fee', body: 'AfroTransact sets delivery for every order: delivery by AfroTransact at one flat fee, or pickup for free. Tracking updates arrive automatically.' },
       { heading: 'AfroTransact Delivery', body: 'Our own drivers deliver same-day or next-day in Houston, Edison/Iselin and Atlanta, with a photo and a one-time code.' },
       { heading: 'Pickup', body: 'Collect from an AfroTransact will-call counter, a locker, or a seller’s own shop where the seller offers pickup.' }
     ]
@@ -31,7 +31,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     slug: 'fulfilled-by-afrotransact', topic: 'SELLING', topicTitle: 'Selling & advertising', title: 'Fulfilled by AfroTransact', summary: 'Store your stock with us and we pick, pack and deliver.', updatedAt: UPDATED,
     sections: [
-      { heading: 'We ship for you', body: 'Send your stock to an AfroTransact fulfilment centre and we pick, pack and ship every order with USPS, UPS and FedEx.' },
+      { heading: 'We ship for you', body: 'Send your stock to an AfroTransact fulfilment centre and we pick, pack and deliver every order.' },
       { heading: 'Faster delivery', body: 'Fulfilled by AfroTransact items qualify for same-day or next-day AfroTransact Delivery in Houston, Edison/Iselin and Atlanta.' },
       { heading: 'Get started', body: '[Sell on AfroTransact](/sell), then send an inbound shipment from Seller Center → Inventory & FBA.' }
     ]

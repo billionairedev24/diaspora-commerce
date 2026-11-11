@@ -1643,7 +1643,7 @@ export interface paths {
         /**
          * What membership does for my cart; if I am not a member, "Join Plus to save $X on this order"
          * @description Priced by payments with the delivery options the shopper would get. Delivery fees are waived by the tier's rules
-         *     (order minimum, per-order cap); pickup and express never are. Best effort: without an answer `waivers` is empty
+         *     (order minimum, per-order cap); pickup never is. Best effort: without an answer `waivers` is empty
          *     and there is no `upsell`.
          */
         get: operations["getCartMembershipSavings"];
@@ -3205,13 +3205,13 @@ export interface components {
             /** @example Tomorrow, Oct 11 */
             label: string;
             /**
-             * @example FREE delivery
-             * @example Delivery
+             * @example Delivery by AfroTransact
+             * @example AfroTransact collects from the store and delivers
              */
             prefix: string;
             free: boolean;
+            /** @description The flat delivery fee staff set (orders shipping settings); no carrier is ever named */
             feeMinor: number;
-            expressLabel: string | null;
             /** @example Order within 4 hrs 12 mins. */
             cutoff: string | null;
         };
@@ -3828,12 +3828,21 @@ export interface components {
             productType?: string;
         };
         DeliveryOption: {
-            /** @enum {string} */
-            key: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+            /**
+             * @description Launch shipping (listing rules section 3): `afrotransact_delivery` (Delivery by AfroTransact, or AfroTransact
+             *     collects from the store and delivers: one flat fee set by staff), `pickup` ($0), `quote_required` (the address
+             *     is outside every delivery zone: "Too far for standard delivery. Ask us for a quote"; disabled for payment,
+             *     the order cannot be placed with it) and `carrier` (seller-shipped, only while the staff switch
+             *     sellerCarrierShippingEnabled is on; off at launch). There is no express. No label ever names a carrier.
+             * @enum {string}
+             */
+            key: "carrier" | "afrotransact_delivery" | "pickup" | "quote_required";
             label: string;
             eta: string;
             feeMinor: number;
             free: boolean;
+            /** @description true when the staff delivery fee could not be read: feeMinor is not a price and the order cannot be placed until it is known */
+            feeUnknown?: boolean;
             /**
              * Format: date
              * @description Checkout only — promise service date range
@@ -4605,8 +4614,10 @@ export interface components {
             shippingTaxAllocation?: components["schemas"]["ShippingTaxAllocation"];
             /** @description Cart lines that cannot be sold yet because their tax decision is not definite. Checkout cannot be placed while any remains; the shopper removes them (Remove). Never defaulted, estimated or dropped silently. Empty when nothing is blocked. */
             blockedLines?: components["schemas"]["CheckoutBlockedLine"][];
-            /** @description false while a blocked line remains (placing the order is refused with CHECKOUT_ITEM_BLOCKED) */
+            /** @description false while a blocked line remains (placing the order is refused with CHECKOUT_ITEM_BLOCKED), a package is too far for standard delivery (quote_required) or the delivery fee is not known */
             canPlaceOrder?: boolean;
+            /** @description Plain words for what delivery stops the order (a quote_required package, or an unknown fee); absent otherwise */
+            deliveryBlockedReason?: string;
             totalMinor: number;
             currency: string;
             sellerCount: number;
@@ -4877,8 +4888,11 @@ export interface components {
             couponCode?: string;
             deliverySelections: {
                 packageId: string;
-                /** @enum {string} */
-                option: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+                /**
+                 * @description quote_required is refused (422 deliverySelections); carrier only while the staff switch is on
+                 * @enum {string}
+                 */
+                option: "carrier" | "afrotransact_delivery" | "pickup";
                 pickupPointId?: string;
                 /**
                  * @description An agreed delivery quote (`POST /v1/me/delivery-quotes`) to use as this package's shipping charge. It must be

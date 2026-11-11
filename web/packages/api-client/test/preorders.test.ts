@@ -16,6 +16,11 @@ import {
 import { resetDb } from '../src/mocks';
 import { mockServer } from '../src/mocks/node';
 
+/** The delivery option a checkout selection can name: quote_required can't be placed, so a shopper picks pickup. */
+function placeable(key: string | undefined): 'carrier' | 'afrotransact_delivery' | 'pickup' {
+  return key === 'afrotransact_delivery' || key === 'pickup' || key === 'carrier' ? key : 'pickup';
+}
+
 function browserLikeClient() {
   let cookie = '';
   const fetchLike = async (req: Request) => {
@@ -156,7 +161,7 @@ describe('pre-orders (mock BFF) — every storefront state', () => {
     const summary = await api.getCheckoutSummary();
     const pkg = summary.packages.find((p) => p.preorder);
     const place = (key: string) =>
-      api.placeOrder({ addressId: summary.addresses[0]?.id ?? '', paymentMethodId: summary.paymentMethods[0]?.id, deliverySelections: summary.packages.map((p) => ({ packageId: p.packageId, option: p.deliveryOptions[0]?.key ?? 'carrier' })), attribution: { src: 'ribbon', po: 'LBK-7' } }, key);
+      api.placeOrder({ addressId: summary.addresses[0]?.id ?? '', paymentMethodId: summary.paymentMethods[0]?.id, deliverySelections: summary.packages.map((p) => ({ packageId: p.packageId, option: placeable(p.deliveryOptions[0]?.key) })), attribution: { src: 'ribbon', po: 'LBK-7' } }, key);
 
     await preview({ place: { country: 'US', region: 'TX', city: 'Lubbock' }, stage: 'UPCOMING' });
     const err = await place('k-locked-0000000001').catch((e: unknown) => e);

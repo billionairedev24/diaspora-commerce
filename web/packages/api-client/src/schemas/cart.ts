@@ -32,11 +32,18 @@ export const CartLineSchema = z.object({
 export type CartLine = z.infer<typeof CartLineSchema>;
 
 export const DeliveryOptionSchema = z.object({
-  key: z.enum(['carrier', 'express', 'afrotransact_delivery', 'pickup']),
+  /**
+   * Launch shipping: `afrotransact_delivery` (one flat fee set by staff), `pickup` ($0), `quote_required` (outside every
+   * delivery zone: disabled for payment, the shopper asks for a quote) and `carrier` (seller-shipped; only behind the staff
+   * switch, off at launch). There is no express and no label names a carrier.
+   */
+  key: z.enum(['carrier', 'afrotransact_delivery', 'pickup', 'quote_required']),
   label: z.string(),
   eta: z.string(),
   feeMinor: MinorSchema,
   free: z.boolean(),
+  /** True when the staff delivery fee could not be read: feeMinor is not a price and the order can't be placed yet. */
+  feeUnknown: z.boolean().optional(),
   /** Checkout only: promise dates for this option. */
   earliestDate: z.string().optional(),
   latestDate: z.string().optional(),

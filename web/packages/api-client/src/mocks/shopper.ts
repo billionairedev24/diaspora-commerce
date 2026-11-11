@@ -26,7 +26,7 @@ import {
 import { mockCheckoutTax } from './checkout-tax';
 import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
-import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf, miles } from './delivery';
+import { addBusinessDays, insideDeliveryZone, LABEL_PICKUP_POINT, LABEL_QUOTE_REQUIRED, LABEL_STORE_DELIVERY, LABEL_STORE_PICKUP, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf, miles } from './delivery';
 import { redeemMockQuote } from './delivery-quotes';
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
@@ -34,6 +34,7 @@ import { lolaStream } from './lola';
 import { membershipQuote, membershipState, recordMembershipUse } from './membership';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
 import { buildCart, MockProblem, sessionLocation } from './service';
+import { deliveryFee } from './shipping-settings';
 import { account, type AccountState, bookingFor, type MockArea, type MockOrder, PROVIDER_AREAS, PROVIDERS, seq, SERVICE_PLACES, SERVICES } from './shopper-state';
 
 const DEMO_CODE = '246810';
@@ -109,6 +110,12 @@ function perishableLine(atin: string): boolean {
   return getDb().products.get(atin)?.cat === 'Groceries';
 }
 
+/** A package outside every delivery zone: quote_required (disabled for payment) and, when a point is near, free pickup. */
+function outsideZonePackage(p: CartPackage, pickup: DeliveryOption | null, points: PickupPoint[]): CheckoutPackage {
+  const quote: DeliveryOption = { key: 'quote_required', label: LABEL_QUOTE_REQUIRED, eta: '', feeMinor: 0, free: false };
+  return { ...p, deliveryOptions: pickup ? [quote, pickup] : [quote], pickupPoints: points, delivery: { ...p.delivery, label: '' } };
+}
+
 function checkoutPackages(session: MockSession, zip: string, now: Date): CheckoutPackage[] {
   // Options as the cart computes them for the delivery address (zones, nearby origins, pickup points), with dates.
   const cart = buildCart({ ...session, zip }, now);
@@ -126,7 +133,9 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
       kind: x.owner === 'AT' ? (x.id.includes('lock') ? 'LOCKER' : 'PLATFORM_COUNTER') : 'SELLER',
       distanceMiles: here(x.metro) ? Math.round((2.4 + i * 3.7) * 10) / 10 : null
     }));
-  const pickupOption = (points: PickupPoint[], now: Date): DeliveryOption => withDates({ key: 'pickup', label: 'Pick up', eta: points[0]?.ready ?? '', feeMinor: 0, free: true }, now, 0);
+  const pickupOption = (points: PickupPoint[], now: Date, platform: boolean): DeliveryOption =>
+    withDates({ key: 'pickup', label: platform ? LABEL_PICKUP_POINT : LABEL_STORE_PICKUP, eta: points[0]?.ready ?? '', feeMinor: 0, free: true }, now, 0);
+  const outside = !insideDeliveryZone(metro);
   return cart.packages
     .map((p): CartPackage => {
       const lines = p.lines.filter((l) => l.selected).map((l) => ({ ...l, perishable: perishableLine(l.atin) }));
@@ -137,31 +146,53 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
       // Pre-order package (S273): delivered on the window's date, door or the window's pickup point.
       if (p.preorder) return preorderCheckoutPackage(p);
       const isAT = p.fulfilment === 'AFROTRANSACT';
-      const days = (o: DeliveryOption) => (o.key === 'express' || o.key === 'afrotransact_delivery' ? 1 : o.key === 'pickup' ? 0 : Math.max(1, p.delivery.days));
+      const days = (o: DeliveryOption) => (o.key === 'afrotransact_delivery' ? 1 : o.key === 'pickup' ? 0 : Math.max(1, p.delivery.days));
       if (p.fulfilment === 'AFROTRANSACT_DELIVERY') {
         // AfroTransact Delivery from the seller's store (S255): road distance store → address and payments' pricing.
         const q = localDeliveryQuote(p.seller.city, metro);
         const fromCity = p.seller.city;
+        // Listing rules D16: the staff flat fee, not the distance tariff; the distance only decides whether the store can be served.
+        const flat = deliveryFee(p.subtotalMinor);
         const localDelivery: CheckoutLocalDelivery = q.available
-          ? { available: true, chargeMinor: q.chargeMinor, roadMiles: q.roadMiles, durationMinutes: q.durationMinutes, fromCity, unavailableReason: null, message: null,
+          ? { available: true, chargeMinor: flat, roadMiles: q.roadMiles, durationMinutes: q.durationMinutes, fromCity, unavailableReason: null, message: null,
               maxRadiusMiles: LOCAL_DELIVERY.maxRadiusMiles, offerIds: p.lines.map((l) => l.offerId) }
           : { available: false, chargeMinor: null, roadMiles: q.roadMiles, durationMinutes: q.durationMinutes, fromCity, unavailableReason: 'OUT_OF_RANGE',
               message: `${p.seller.name} is ${Math.round(q.roadMiles)} miles from ${metro}: too far for AfroTransact Delivery (up to ${LOCAL_DELIVERY.maxRadiusMiles} miles). Remove it or choose another address.`,
               maxRadiusMiles: LOCAL_DELIVERY.maxRadiusMiles, offerIds: p.lines.map((l) => l.offerId) };
         const base = withDates({ key: 'afrotransact_delivery', label: '', eta: '', feeMinor: 0, free: false }, now, 1);
         const option: DeliveryOption = q.available
-          ? { ...base, feeMinor: q.chargeMinor, label: `$${(q.chargeMinor / 100).toFixed(2)} · AfroTransact Delivery from ${fromCity}` }
-          : { ...base, label: `Not available to this address · AfroTransact Delivery from ${fromCity}` };
+          ? { ...base, feeMinor: flat, free: flat === 0, label: LABEL_STORE_DELIVERY }
+          : { ...base, label: `${LABEL_STORE_DELIVERY} · not available to this address` };
         const own = pickupPointsOf(p.seller.name, false);
-        return { ...p, deliveryOptions: own.length ? [option, pickupOption(own, now)] : [option], pickupPoints: own, localDelivery, delivery: { ...p.delivery, label: option.eta } };
+        if (outside) return outsideZonePackage(p, own.length ? pickupOption(own, now, false) : null, own);
+        return { ...p, deliveryOptions: own.length ? [option, pickupOption(own, now, false)] : [option], pickupPoints: own, localDelivery, delivery: { ...p.delivery, label: option.eta } };
       }
       // Like gateway-bff: platform-fulfilled packages list AfroTransact counters and lockers near the address, seller
       // packages the seller's own pickup locations; any package with points can be picked up (free).
       const points = pickupPointsOf(p.seller.name, isAT);
       const options = p.deliveryOptions.filter((o) => o.key !== 'pickup' || points.length > 0).map((o) => withDates(o, now, days(o)));
-      if (points.length && !options.some((o) => o.key === 'pickup')) options.push(pickupOption(points, now));
+      if (points.length && !options.some((o) => o.key === 'pickup')) options.push(pickupOption(points, now, isAT));
+      // Outside every delivery zone the only delivery option is quote_required (pickup stays): the shopper never dead-ends.
+      if (outside) return outsideZonePackage(p, points.length ? pickupOption(points, now, isAT) : null, points);
       return { ...p, deliveryOptions: options, pickupPoints: points, delivery: { ...p.delivery, label: options[0]?.eta ?? p.delivery.label } };
     });
+}
+
+export const QUOTE_REQUIRED_MESSAGE = 'Part of your order is too far for standard delivery. Ask us for a quote, choose pickup, or choose another address.';
+
+function choiceMap(raw: string | null): Map<string, string> {
+  const byPkg = new Map<string, string>();
+  for (const part of (raw ?? '').split(',')) {
+    const i = part.lastIndexOf(':'); // package ids hold a colon ("seller:FULFILMENT"), option keys never
+    if (i > 0) byPkg.set(part.slice(0, i).trim(), part.slice(i + 1).trim());
+  }
+  return byPkg;
+}
+
+/** The option a package ships with: the shopper's choice, else the first one. */
+function packageChoice(p: CheckoutSummary['packages'][number], raw: string | null): DeliveryOption | undefined {
+  const key = choiceMap(raw).get(p.packageId) ?? p.deliveryOptions[0]?.key;
+  return p.deliveryOptions.find((o) => o.key === key) ?? p.deliveryOptions[0];
 }
 
 function packageDeliveryFees(packages: CheckoutSummary['packages'], raw: string | null): number {
@@ -240,6 +271,8 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
   }
   const tax = mockCheckoutTax({ packages, state: addr?.state, city: addr?.city, shippingByPackage, discountMinor, hasAddress: !!addr });
   const { taxMinor, taxRateLabel } = tax;
+  // A package whose chosen delivery is quote_required can't be paid for: the shopper asks for a quote or picks it up.
+  const quotePkg = packages.find((p) => (packageChoice(p, packageDelivery ?? null)?.key ?? '') === 'quote_required');
   return {
     packages: packages.map((p) => ({ ...p, membershipWaivedMinor: savings.waivers.filter((w) => w.packageId === p.packageId).reduce((n, w) => n + w.waivedMinor, 0) })),
     addresses: a.addresses,
@@ -255,7 +288,8 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     taxLines: tax.taxLines,
     shippingTaxAllocation: tax.shippingTaxAllocation,
     blockedLines: tax.blockedLines,
-    canPlaceOrder: tax.canPlaceOrder,
+    canPlaceOrder: tax.canPlaceOrder && !quotePkg,
+    ...(quotePkg ? { deliveryBlockedReason: QUOTE_REQUIRED_MESSAGE } : {}),
     totalMinor: subtotal - discountMinor + netShipping + taxMinor,
     currency: 'USD',
     sellerCount: new Set(packages.map((p) => p.seller.id)).size,
@@ -589,9 +623,12 @@ export const shopperHandlers = [
       throw new MockProblem(422, 'DELIVERY_OUT_OF_RANGE', 'Too far for AfroTransact Delivery', far.localDelivery.message ?? 'A seller’s store is too far from this address.', {
         errors: { deliverySelections: far.localDelivery.message ?? 'A seller’s store is too far from this address.' }
       });
+    if (req.deliverySelections.some((x) => (x.option as string) === 'quote_required'))
+      throw new MockProblem(422, 'VALIDATION_FAILED', 'Ask us for a quote', QUOTE_REQUIRED_MESSAGE, { errors: { deliverySelections: QUOTE_REQUIRED_MESSAGE } });
     s.packages.forEach((p, i) => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
-      if (!sel || !p.deliveryOptions.some((o) => o.key === sel.option)) errors[`deliverySelections.${i}.option`] = 'Choose a delivery option';
+      if (!sel || !p.deliveryOptions.some((o) => o.key === sel.option))
+        errors[`deliverySelections.${i}.option`] = sel ? 'The delivery options have changed. Reload the page and choose again.' : 'Choose a delivery option';
       else if (sel.option === 'pickup' && !p.pickupPoints?.some((x) => x.id === sel.pickupPointId)) errors[`deliverySelections.${i}.pickupPointId`] = 'Choose a pickup location';
       else if (sel.option === 'afrotransact_delivery' && p.lines.some((l) => l.perishable) && sel.preferences?.handover && sel.preferences.handover !== 'hand') {
         errors[`deliverySelections.${i}.preferences.handover`] = 'Perishable items are handed to you with a code';

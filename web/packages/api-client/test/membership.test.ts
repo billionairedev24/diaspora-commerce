@@ -124,21 +124,21 @@ describe('mock BFF — membership', () => {
     const pkg = (await api.getCheckoutSummary()).packages[0]?.packageId ?? '';
     const choose = `${pkg}:afrotransact_delivery`;
     const before = await api.getCheckoutSummary(undefined, choose);
-    expect(before.shippingMinor).toBe(499);
+    expect(before.shippingMinor).toBe(599);
     expect(before.membershipWaivedMinor).toBe(0);
     expect(before.membership?.member).toBe(false);
     const upsell = before.membership?.upsell;
-    expect(upsell).toMatchObject({ tierName: 'Plus', trialDays: 14, monthlyPriceMinor: 999, savingMinor: 499 });
+    expect(upsell).toMatchObject({ tierName: 'Plus', trialDays: 14, monthlyPriceMinor: 999, savingMinor: 599 });
 
     await api.joinAccountMembership({ tierCode: 'plus', interval: 'MONTHLY' }, 'membership-join-0040');
     const after = await api.getCheckoutSummary(undefined, choose);
-    expect(after.membershipWaivedMinor).toBe(499);
-    expect(after.shippingMinor).toBe(499); // priced as before: the waiver is shown apart
+    expect(after.membershipWaivedMinor).toBe(599);
+    expect(after.shippingMinor).toBe(599); // priced as before: the waiver is shown apart
     expect(after.totalMinor).toBe(after.subtotalMinor + after.shippingMinor - after.membershipWaivedMinor + after.taxMinor); // tax is on the fee actually charged
     expect(after.totalMinor).toBeLessThan(before.totalMinor);
-    expect(after.membership).toMatchObject({ member: true, tierName: 'Plus', totalWaivedMinor: 499, upsell: null });
-    expect(after.membership?.waivers[0]).toMatchObject({ benefit: 'FREE_DELIVERY', waivedMinor: 499, packageId: pkg });
-    expect(after.packages[0]?.membershipWaivedMinor).toBe(499);
+    expect(after.membership).toMatchObject({ member: true, tierName: 'Plus', totalWaivedMinor: 599, upsell: null });
+    expect(after.membership?.waivers[0]).toMatchObject({ benefit: 'FREE_DELIVERY', waivedMinor: 599, packageId: pkg });
+    expect(after.packages[0]?.membershipWaivedMinor).toBe(599);
     expect(await api.getCartMembershipSavings()).toMatchObject({ member: true, tierName: 'Plus', cashbackMinor: 0 }); // a trial earns no credit
 
     // The order records the waiver with the tier and the benefit, and the benefit is then used.
@@ -146,9 +146,9 @@ describe('mock BFF — membership', () => {
     await api.confirmCheckoutPayment(conf.orderNumber);
     const order = await api.getOrder(conf.orderNumber);
     expect(order.shippingMinor).toBe(0); // the fee the member was not charged
-    expect(order.shipments[0]?.membershipWaiver).toEqual({ tierName: 'Plus', benefit: 'FREE_DELIVERY', waivedMinor: 499 });
+    expect(order.shipments[0]?.membershipWaiver).toEqual({ tierName: 'Plus', benefit: 'FREE_DELIVERY', waivedMinor: 599 });
     const used = await api.listAccountMembershipBenefits();
-    expect(used.items[0]).toMatchObject({ benefit: 'FREE_DELIVERY', tierName: 'Plus', amountMinor: 499 });
+    expect(used.items[0]).toMatchObject({ benefit: 'FREE_DELIVERY', tierName: 'Plus', amountMinor: 599 });
     expect((await api.getAccountMembership()).refund.reason).not.toBe('OK'); // a benefit was used
   });
 

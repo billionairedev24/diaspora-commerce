@@ -32,7 +32,6 @@
 .offerAction { grid-row: span 2; }
 .box { border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); padding: var(--at-space-5); display: flex; flex-direction: column; gap: var(--at-space-3); position: sticky; top: var(--at-space-4); }
 .promise { font-size: var(--at-text-md); margin: 0; }
-.express { font-size: var(--at-text-sm); margin: 0; }
 .deliverTo { display: flex; align-items: center; gap: var(--at-space-1); font-size: var(--at-text-sm); }
 .stock { font-size: var(--at-text-lg); font-weight: var(--at-weight-semibold); margin: 0; }
 .inStock { color: var(--at-color-in-stock); }

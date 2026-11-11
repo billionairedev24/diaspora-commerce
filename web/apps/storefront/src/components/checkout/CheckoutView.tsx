@@ -34,7 +34,7 @@ import { AskForQuote } from './AskForQuote';
 import { BlockedLines } from './BlockedLines';
 import styles from './Checkout.module.css';
 import { CheckoutOrderPanel } from './CheckoutOrderPanel';
-import { type Choice, feeOf, initialChoice, PackageCard } from './PackageCard';
+import { type Choice, feeOf, initialChoice, PackageCard, placeable } from './PackageCard';
 import { newMethodName, PaymentStep } from './PaymentStep';
 
 /** How the order is paid: saved card or new details via the Payment Element. */
@@ -182,8 +182,12 @@ export function CheckoutView() {
   const undeliverable = (s?.packages ?? []).some((p) => p.localDelivery?.available === false && (choices[p.packageId]?.option ?? initialChoice(p).option) !== 'pickup');
   // Lines without a definite tax decision can't be sold yet: the order can't be placed until the shopper removes them.
   const blockedLines = s?.blockedLines ?? [];
-  const taxBlocked = blockedLines.length > 0 || s?.canPlaceOrder === false;
-  const blocked = undeliverable || preLocked || taxBlocked;
+  const taxBlocked = blockedLines.length > 0 || (s?.canPlaceOrder === false && !s.deliveryBlockedReason);
+  // A package outside every delivery zone (quote_required) or with an unknown delivery fee can't be paid for: the shopper
+  // asks for a quote, picks the package up, or changes the address (listing rules D20, D21).
+  const quoteBlocked = (s?.packages ?? []).some((p) => (choices[p.packageId]?.option ?? initialChoice(p).option) === 'quote_required');
+  const deliveryReason = quoteBlocked ? t('co.quote.blocked') : (s?.deliveryBlockedReason ?? null);
+  const blocked = undeliverable || preLocked || taxBlocked || quoteBlocked || !!s?.deliveryBlockedReason;
   const [removing, setRemoving] = useState<string | null>(null);
   const [removingLine, setRemovingLine] = useState<string | null>(null);
   /** Takes the line out of this order (it stays in the cart, as for an undeliverable package). */
@@ -223,7 +227,7 @@ export function CheckoutView() {
       const perishable = p.lines.some((l) => l.perishable);
       return {
         packageId: p.packageId,
-        option: c.option,
+        option: placeable(c.option),
         pickupPointId: c.option === 'pickup' ? (c.pickupPointId ?? p.pickupPoints?.[0]?.id) : undefined,
         quoteId: applied.usable && quotedPackage(p, c.option) ? applied.usable.id : undefined,
         preferences: c.option === 'afrotransact_delivery' ? { ...c.preferences, handover: perishable ? 'hand' : c.preferences.handover, safePlace: c.preferences.safePlace || undefined, instructions: c.preferences.instructions?.trim() || undefined } : undefined
@@ -547,6 +551,7 @@ export function CheckoutView() {
         preRun={preBlock?.kind === 'RUN' ? preBlock : null}
         undeliverable={undeliverable}
         taxBlocked={taxBlocked}
+        deliveryReason={deliveryReason}
         addressList={addressList}
         busy={busy}
         placing={placing}

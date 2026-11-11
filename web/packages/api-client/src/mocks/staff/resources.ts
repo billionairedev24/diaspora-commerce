@@ -26,6 +26,7 @@ import { MOCK_DRIVERS } from './lookups';
 import { tierBenefitDetails } from './membership-tiers';
 import { applyShipmentStep, noStepReason, orderSections, shipmentsOf, stepOptions } from './order-shipments';
 import { serviceAreaRulesDef, serviceZonesDef } from './service-areas';
+import { shippingSettingsDef } from './shipping-settings';
 import { categoryRequestsDef } from './taxonomy';
 
 export interface ActionCtx {
@@ -1659,6 +1660,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'service-area-rules': serviceAreaRulesDef,
   'service-zones': serviceZonesDef,
+  'shipping-settings': shippingSettingsDef,
   'category-requests': categoryRequestsDef,
   // Identity & access (S291)
   ...IDENTITY_RESOURCES

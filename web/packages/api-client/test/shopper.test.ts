@@ -100,7 +100,8 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     const sum = await api.getCheckoutSummary();
     expect(sum.publishableKey).toBe('pk_test_mock');
     const pkg = sum.packages[0];
-    expect(pkg?.deliveryOptions.map((o) => o.key)).toEqual(expect.arrayContaining(['carrier', 'afrotransact_delivery', 'pickup']));
+    expect(pkg?.deliveryOptions.map((o) => o.key)).toEqual(['afrotransact_delivery', 'pickup']);
+    expect(pkg?.deliveryOptions.map((o) => o.label)).toEqual(['Delivery by AfroTransact', 'Pickup at an AfroTransact point']);
     expect(pkg?.pickupPoints?.[0]?.hours).toBeTruthy();
     expect(pkg?.deliveryOptions[0]?.earliestDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const conf = await api.placeOrder(
@@ -142,9 +143,10 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     expect(pkg?.freeShippingNudge).toBeNull();
     const near = await api.getCheckoutSummary('ad1');
     const local = near.packages[0];
-    expect(local?.localDelivery).toMatchObject({ available: true, chargeMinor: 1128, roadMiles: 7.4, fromCity: 'Houston, TX', unavailableReason: null });
+    // The charge is the staff flat fee, not the distance tariff (listing rules D16).
+    expect(local?.localDelivery).toMatchObject({ available: true, chargeMinor: 599, roadMiles: 7.4, fromCity: 'Houston, TX', unavailableReason: null });
     expect(local?.deliveryOptions).toHaveLength(1);
-    expect(near.shippingMinor).toBe(1128);
+    expect(near.shippingMinor).toBe(599);
     const far = await api.getCheckoutSummary('ad2');
     expect(far.packages[0]?.localDelivery).toMatchObject({ available: false, chargeMinor: null, unavailableReason: 'OUT_OF_RANGE' });
     expect(far.packages[0]?.localDelivery?.message).toContain('too far for AfroTransact Delivery');
@@ -156,7 +158,7 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     const conf = await api.placeOrder({ addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: selection }, 'checkout-local-key-0002');
     await api.confirmCheckoutPayment(conf.orderNumber);
     const order = await api.getOrder(conf.orderNumber);
-    expect(order.shipments[0]?.localDelivery).toEqual({ roadMiles: 7.4, durationMinutes: 18, chargeMinor: 1128 });
+    expect(order.shipments[0]?.localDelivery).toEqual({ roadMiles: 7.4, durationMinutes: 18, chargeMinor: 599 });
   });
 
   it('reports a problem with photos, replays an Idempotency-Key and keeps requests private to the account', async () => {
