@@ -40,7 +40,7 @@ describe('help center routing', () => {
   it('renders a help page from content with the design’s title and sections, under a Help center breadcrumb', async () => {
     renderWithProviders(await article('shipping'));
     expect(screen.getByRole('heading', { level: 1, name: 'Shipping & delivery' })).toBeInTheDocument();
-    for (const h of ['Carrier shipping', 'AfroTransact Delivery', 'Pickup']) expect(screen.getByRole('heading', { level: 2, name: h })).toBeInTheDocument();
+    for (const h of ['Delivery fee', 'AfroTransact Delivery', 'Pickup']) expect(screen.getByRole('heading', { level: 2, name: h })).toBeInTheDocument();
     expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Help center' })).toHaveAttribute('href', '/help');
   });
 
