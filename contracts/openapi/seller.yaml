@@ -20,6 +20,15 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Selling rules
+  description: 'Staff: scope rules, gated brands and the documents each asks for (selling-rules:manage to change; every change
+    needs a reason and is audited), and the approvals sellers hold.'
+- name: Selling approvals
+  description: 'Amazon-style approvals to sell: SELL (live after validation), APPLY (apply once, documents reviewed by staff)
+    or NOT_AVAILABLE. docs/engineering/listing-rules.md section 2.'
+- name: Selling approval cases
+  description: 'Staff queue for selling approvals, next to seller applications: the same two-step review (applications:review,
+    then a different person with applications:approve), assignment, SLAs and escalation. Reason codes: GET /v1/review-reason-codes.'
 - name: Catalog scope
   description: The catalog departments an organisation may sell in. catalog-service reads and enforces them; staff change them and decide the requests sellers make.
 - name: Billing adjustments
@@ -2216,6 +2225,207 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgEnforcement'
+  /v1/orgs/{orgId}/selling-applications:
+    get:
+      tags:
+      - Selling approvals
+      summary: The organisation's selling applications, newest first
+      operationId: list_1
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SellingMyApplication'
+    post:
+      tags:
+      - Selling approvals
+      summary: Apply to sell in a scope (owner, admin or catalog role)
+      description: 'Upload each required file to media-service first and send its asset id with the dates read off it. 422
+        seller.selling-documents-invalid names the documents to fix (field errors documents.<KIND>): a purchase invoice must
+        be dated within 180 days, a permit or insurance policy needs a future expiry date, insurance must name AfroTransact
+        as additional insured. 409 seller.selling-not-available when the seller was disqualified and the reapply date has
+        not come. Repeating the call while an application is in progress returns it.'
+      operationId: apply
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyToSell'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingMyApplication'
+  /v1/orgs/{orgId}/selling-applications/{applicationId}:
+    get:
+      tags:
+      - Selling approvals
+      summary: One selling application
+      operationId: one_1
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: applicationId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingMyApplication'
+  /v1/orgs/{orgId}/selling-applications/{applicationId}/resubmit:
+    post:
+      tags:
+      - Selling approvals
+      summary: Answer a request for information with the documents asked for
+      description: Only while the application is INFO_REQUESTED. The review starts again at step 1.
+      operationId: resubmit
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: applicationId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResubmitSellingApplication'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingMyApplication'
+  /v1/orgs/{orgId}/selling-approvals:
+    get:
+      tags:
+      - Selling approvals
+      summary: 'Selling approvals page: every scope that needs approval, with this organisation''s state'
+      description: state is NOT_APPLIED, APPLIED, NEEDS_ATTENTION, APPROVED, EXPIRED or NOT_AVAILABLE; statusWords and message
+        are plain words for the seller. notices lists expiry warnings (30, 14, 7 days), paused listings and applications that
+        need an answer.
+      operationId: approvals_1
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingApprovals'
+  /v1/orgs/{orgId}/selling-capabilities:
+    get:
+      tags:
+      - Selling approvals
+      summary: 'Seller capabilities (food service): the product form shows food service fields only when approved'
+      operationId: capabilities
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingCapabilities'
+  /v1/orgs/{orgId}/selling-status:
+    get:
+      tags:
+      - Selling approvals
+      summary: Can this organisation sell this product? SELL, APPLY or NOT_AVAILABLE, with the reason and what is missing
+      description: 'Readable by the organisation''s members, staff, and catalog-service (service scope sellers:catalog-scope.read).
+        All parameters are optional while the product form is being filled; pendingFacts lists what the answer still depends
+        on (jewelry: material). material gold, silver or a gemstone, or a watch, makes the jewelry rule apply. AfroTransact
+        Retail always gets SELL.'
+      operationId: sellingStatus
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: categoryCode
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: brand
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: productTypeCode
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: material
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: gtin
+        in: query
+        description: Barcode, for a single product rule
+        required: false
+        schema:
+          type: string
+      - name: watch
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingStatus'
   /v1/orgs/{orgId}/business-page:
     get:
       tags:
@@ -2513,6 +2723,507 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ReasonCode'
+  /v1/selling-applications:
+    get:
+      tags:
+      - Selling approval cases
+      summary: 'Selling approval queue (default: pending review, flagged and awaiting final approval)'
+      description: 'Same queues and filters as GET /v1/applications: MY, AWAITING_REVIEW, AWAITING_APPROVAL, ESCALATED, RETURNED,
+        ALL; stage, assignee (a person id or me), unassigned, overdue, escalated.'
+      operationId: queue
+      parameters:
+      - name: status
+        in: query
+        description: Comma-separated statuses
+        required: false
+        schema:
+          type: string
+      - name: queue
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: stage
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: assignee
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: unassigned
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: escalated
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingApplicationQueue'
+  /v1/selling-applications/{id}:
+    get:
+      tags:
+      - Selling approval cases
+      summary: 'One selling approval case: documents, timeline, who has it, the seller''s current approval'
+      operationId: detail
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingCaseView'
+  /v1/selling-applications/{id}/assignment:
+    post:
+      tags:
+      - Selling approval cases
+      summary: 'Who has the case: CLAIM, ASSIGN, RELEASE or ESCALATE (same rules as applications)'
+      operationId: assignment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingAssignmentRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingCaseView'
+  /v1/selling-applications/{id}/assignment/candidates:
+    get:
+      tags:
+      - Selling approval cases
+      summary: People the case can be assigned to now
+      operationId: candidates
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StaffPerson'
+  /v1/selling-applications/{id}/decision:
+    post:
+      tags:
+      - Selling approval cases
+      summary: 'Step 2 — final decision, not by the reviewer: FINAL_APPROVE, SEND_BACK, REJECT, REQUEST_INFO or DISQUALIFY'
+      description: 'DISQUALIFY is "cannot apply": not appealable, needs a note the seller reads and reapplyAfter (a date after
+        today). FINAL_APPROVE gives the seller the approval until the earliest document expiry and restores listings that
+        were paused for it.'
+      operationId: decision
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingDecision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingCaseView'
+  /v1/selling-applications/{id}/documents/{assetId}:
+    get:
+      tags:
+      - Selling approval cases
+      summary: Open an uploaded document (logged in the access log)
+      operationId: document
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+  /v1/selling-applications/{id}/review:
+    post:
+      tags:
+      - Selling approval cases
+      summary: 'Step 1 — reviewer decision: APPROVE, FLAG (failedChecks) or REQUEST_INFO (requestedItems)'
+      description: 'Idempotent like application review: a retry with the same Idempotency-Key answers the current case and
+        changes nothing. REQUEST_INFO note is the message the seller reads.'
+      operationId: review
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingDecision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingCaseView'
+  /v1/selling-approvals:
+    get:
+      tags:
+      - Selling rules
+      summary: 'Staff: approvals sellers hold (applications:review, :approve or :assign)'
+      operationId: approvals
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: scopeType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingApprovalPage'
+  /v1/selling-approvals/{id}:
+    get:
+      tags:
+      - Selling rules
+      summary: 'Staff: one approval'
+      operationId: approval
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingApprovalView'
+  /v1/selling-approvals/{id}/pause:
+    post:
+      tags:
+      - Selling rules
+      summary: Pause the scope's listings (performance problem or a new rule); the approval is kept (applications:approve)
+      operationId: pause
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingApprovalAction'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingApprovalView'
+  /v1/selling-approvals/{id}/restore:
+    post:
+      tags:
+      - Selling rules
+      summary: 'Lift a staff pause: listings come back (applications:approve)'
+      operationId: restore
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingApprovalAction'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingApprovalView'
+  /v1/selling-approvals/{id}/revoke:
+    post:
+      tags:
+      - Selling rules
+      summary: 'Withdraw the approval: "cannot apply", not appealable, reapplyAfter required (applications:approve)'
+      operationId: revoke
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingApprovalAction'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingApprovalView'
+  /v1/selling-rules:
+    get:
+      tags:
+      - Selling rules
+      summary: Selling rules (scope rules, gated brands, capabilities)
+      description: 'scopeType: CATEGORY, PRODUCT_TYPE, BRAND, BRAND_IN_CATEGORY, PRODUCT or CAPABILITY. level: SELL, APPLY
+        or NOT_AVAILABLE. text matches the label or key.'
+      operationId: list
+      parameters:
+      - name: scopeType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: level
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: text
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: activeOnly
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingRulePage'
+    post:
+      tags:
+      - Selling rules
+      summary: Add a rule, typically a gated brand (selling-rules:manage, reason required)
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingRuleInput'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingRuleView'
+  /v1/selling-rules/{id}:
+    get:
+      tags:
+      - Selling rules
+      summary: One rule
+      operationId: one
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingRuleView'
+    put:
+      tags:
+      - Selling rules
+      summary: Edit a rule (selling-rules:manage, reason required; the scope never changes)
+      description: A change publishes seller.selling.rule.changed so catalog re-checks the scope's listings.
+      operationId: update
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellingRuleInput'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellingRuleView'
+  /v1/selling-rules/{id}/audit:
+    get:
+      tags:
+      - Selling rules
+      summary: 'The rule''s audit trail, newest first: who changed it, why, what it was and what it became'
+      operationId: audit
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SellingRuleAudit'
   /v1/ship-from-locations/{id}:
     get:
       tags:
@@ -2596,6 +3307,140 @@ paths:
                 $ref: '#/components/schemas/WebhookResult'
 components:
   schemas:
+    SellingRuleDocument:
+      type: object
+      properties:
+        kind:
+          type: string
+          minLength: 1
+        optional:
+          type: boolean
+      required:
+      - kind
+    SellingRuleInput:
+      type: object
+      properties:
+        scopeType:
+          type: string
+          minLength: 1
+        key:
+          type: string
+          maxLength: 200
+          minLength: 0
+        categoryCode:
+          type: string
+        label:
+          type: string
+          maxLength: 200
+          minLength: 0
+        level:
+          type: string
+          minLength: 1
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingRuleDocument'
+        sellerReason:
+          type: string
+          description: 'NOT_AVAILABLE: the reason sellers read'
+          maxLength: 500
+          minLength: 0
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+        capability:
+          type: string
+        materials:
+          type: array
+          items:
+            type: string
+        watch:
+          type: boolean
+        reapplyAfterDays:
+          type: integer
+          format: int32
+        active:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          description: Why this change (audited)
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - key
+      - level
+      - reason
+      - scopeType
+    SellingDocumentSlot:
+      type: object
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        optional:
+          type: boolean
+        expiryRequired:
+          type: boolean
+        dated:
+          type: boolean
+        namesAfroTransact:
+          type: boolean
+    SellingRuleView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scopeType:
+          type: string
+        scopeKey:
+          type: string
+        label:
+          type: string
+        level:
+          type: string
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentSlot'
+        reason:
+          type: string
+        note:
+          type: string
+        approvalLevel:
+          type: string
+        capability:
+          type: string
+        materials:
+          type: array
+          items:
+            type: string
+        watch:
+          type: boolean
+        reapplyAfterDays:
+          type: integer
+          format: int32
+        active:
+          type: boolean
+        source:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        updatedByName:
+          type: string
+        version:
+          type: integer
+          format: int64
     PaymentsSyncResult:
       type: object
       properties:
@@ -3737,6 +4582,130 @@ components:
           type: string
         retryLater:
           type: boolean
+    SellingApprovalAction:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        reapplyAfter:
+          type: string
+          format: date
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - reason
+    SellingApprovalView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        scopeType:
+          type: string
+        scopeKey:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+        reason:
+          type: string
+        reapplyAfter:
+          type: string
+          format: date
+        approvedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        daysToExpiry:
+          type: integer
+          format: int64
+        paused:
+          type: boolean
+        pauseReason:
+          type: string
+        listingsPaused:
+          type: boolean
+        applicationId:
+          type: string
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentOnFile'
+        updatedAt:
+          type: string
+          format: date-time
+    SellingDocumentOnFile:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        label:
+          type: string
+        assetId:
+          type: string
+        fileName:
+          type: string
+        issuedOn:
+          type: string
+          format: date
+        expiresOn:
+          type: string
+          format: date
+        namesAfroTransact:
+          type: boolean
+        note:
+          type: string
+    SellingDecision:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - APPROVE
+          - FLAG
+          - REQUEST_INFO
+          - FINAL_APPROVE
+          - SEND_BACK
+          - REJECT
+          - DISQUALIFY
+          minLength: 1
+        reasonCode:
+          type: string
+          minLength: 1
+        note:
+          type: string
+          maxLength: 2000
+          minLength: 0
+        failedChecks:
+          type: array
+          items:
+            type: string
+        requestedItems:
+          type: array
+          items:
+            type: string
+        reapplyAfter:
+          type: string
+          format: date
+          description: 'DISQUALIFY: the earliest day the seller may apply again'
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - action
+      - reasonCode
     ProvisionOrgRequest:
       type: object
       properties:
@@ -3913,6 +4882,121 @@ components:
           format: date-time
         localTest:
           type: boolean
+    ApplyToSell:
+      type: object
+      properties:
+        scopeType:
+          type: string
+          minLength: 1
+        scopeKey:
+          type: string
+          maxLength: 200
+          minLength: 0
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocument'
+      required:
+      - scopeKey
+      - scopeType
+    SellingDocument:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - PURCHASE_INVOICE
+          - PHOTOS_ALL_SIDES
+          - BRAND_AUTHORIZATION
+          - SAFETY_CERTIFICATE
+          - PERMIT_LICENCE
+          - LIABILITY_INSURANCE
+          minLength: 1
+        assetId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        fileName:
+          type: string
+          maxLength: 200
+          minLength: 0
+        issuedOn:
+          type: string
+          format: date
+          description: The date on an invoice
+        expiresOn:
+          type: string
+          format: date
+          description: Expiry of a permit, licence or policy
+        namesAfroTransact:
+          type: boolean
+          description: 'Insurance: the policy names AfroTransact as additional insured'
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - assetId
+      - kind
+    SellingMyApplication:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        scopeType:
+          type: string
+        scopeKey:
+          type: string
+        scopeLabel:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        statusWords:
+          type: string
+        message:
+          type: string
+        requestedItems:
+          type: array
+          items:
+            type: string
+        disqualified:
+          type: boolean
+        reapplyAfter:
+          type: string
+          format: date
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentOnFile'
+        required:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentSlot'
+        submittedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ResubmitSellingApplication:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocument'
     ReinstateOrgRequest:
       type: object
       properties:
@@ -4895,6 +5979,87 @@ components:
         accessedAt:
           type: string
           format: date-time
+    SellingCaseView:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        orgId:
+          type: string
+        applicantName:
+          type: string
+        scopeType:
+          type: string
+        scopeKey:
+          type: string
+        scopeLabel:
+          type: string
+        kind:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        note:
+          type: string
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentOnFile'
+        required:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentSlot'
+        reviewerId:
+          type: string
+        reviewedAt:
+          type: string
+          format: date-time
+        finalApproverId:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        failedChecks:
+          type: array
+          items:
+            type: string
+        requestedItems:
+          type: array
+          items:
+            type: string
+        reasonCode:
+          type: string
+        decisionNote:
+          type: string
+        disqualified:
+          type: boolean
+        reapplyAfter:
+          type: string
+          format: date
+        submissionCount:
+          type: integer
+          format: int32
+        submittedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEntry'
+        accessLog:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentAccess'
+        workflow:
+          $ref: '#/components/schemas/ApplicationCaseView'
+        approval:
+          $ref: '#/components/schemas/SellingApprovalView'
     DocumentRef:
       type: object
       properties:
@@ -5034,6 +6199,33 @@ components:
         actorName:
           type: string
           description: The staff member's display name (staff views only)
+    SellingAssignmentRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - CLAIM
+          - ASSIGN
+          - RELEASE
+          - ESCALATE
+          minLength: 1
+        assigneeId:
+          type: string
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        actorName:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - action
     ApplicationPrefill:
       type: object
       description: 'What the caller''s account already knows (sent by gateway-bff from identity''s profile and address book).
@@ -5083,6 +6275,116 @@ components:
           minLength: 1
       required:
       - displayName
+    SellingRulePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingRuleView'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    SellingRuleAudit:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+        action:
+          type: string
+        actorId:
+          type: string
+        actorName:
+          type: string
+        reason:
+          type: string
+        before: {}
+        after: {}
+        changedAt:
+          type: string
+          format: date-time
+    SellingApprovalPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingApprovalView'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    SellingApplicationQueue:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingCaseSummary'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    SellingCaseSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        orgId:
+          type: string
+        applicantName:
+          type: string
+        scopeType:
+          type: string
+        scopeKey:
+          type: string
+        scopeLabel:
+          type: string
+        kind:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        reviewStep:
+          type: integer
+          format: int32
+        reviewerId:
+          type: string
+        failedChecks:
+          type: array
+          items:
+            type: string
+        submittedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        workflow:
+          $ref: '#/components/schemas/ApplicationCaseView'
     ReasonCode:
       type: object
       properties:
@@ -5132,6 +6434,176 @@ components:
           type: object
           additionalProperties:
             type: string
+    SellingDocumentRequirement:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - PURCHASE_INVOICE
+          - PHOTOS_ALL_SIDES
+          - BRAND_AUTHORIZATION
+          - SAFETY_CERTIFICATE
+          - PERMIT_LICENCE
+          - LIABILITY_INSURANCE
+        optional:
+          type: boolean
+    SellingMissing:
+      type: object
+      properties:
+        scope:
+          $ref: '#/components/schemas/SellingScope'
+        label:
+          type: string
+        level:
+          type: string
+          enum:
+          - SELL
+          - APPLY
+          - NOT_AVAILABLE
+        state:
+          type: string
+          enum:
+          - NOT_APPLIED
+          - APPLIED
+          - NEEDS_ATTENTION
+          - APPROVED
+          - EXPIRED
+          - NOT_AVAILABLE
+        message:
+          type: string
+        canApply:
+          type: boolean
+        reapplyAfter:
+          type: string
+          format: date
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentRequirement'
+        applicationId:
+          type: string
+        applicationStatus:
+          type: string
+    SellingScope:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - CATEGORY
+          - PRODUCT_TYPE
+          - BRAND
+          - BRAND_IN_CATEGORY
+          - PRODUCT
+          - CAPABILITY
+        key:
+          type: string
+    SellingStatus:
+      type: object
+      properties:
+        level:
+          type: string
+          enum:
+          - SELL
+          - APPLY
+          - NOT_AVAILABLE
+        reason:
+          type: string
+        missing:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingMissing'
+        pendingFacts:
+          type: array
+          items:
+            type: string
+    SellingCapabilities:
+      type: object
+      properties:
+        foodService:
+          $ref: '#/components/schemas/SellingCapability'
+    SellingCapability:
+      type: object
+      properties:
+        approved:
+          type: boolean
+        state:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    SellingApprovalRow:
+      type: object
+      properties:
+        scopeType:
+          type: string
+        scopeKey:
+          type: string
+        label:
+          type: string
+        level:
+          type: string
+        state:
+          type: string
+        statusWords:
+          type: string
+        message:
+          type: string
+        canApply:
+          type: boolean
+        approvedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        daysToExpiry:
+          type: integer
+          format: int64
+        reapplyAfter:
+          type: string
+          format: date
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentSlot'
+        onFile:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingDocumentOnFile'
+        applicationId:
+          type: string
+        applicationStatus:
+          type: string
+        note:
+          type: string
+        listingsPaused:
+          type: boolean
+    SellingApprovals:
+      type: object
+      properties:
+        approvals:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingApprovalRow'
+        notices:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellingNotice'
+        capabilities:
+          $ref: '#/components/schemas/SellingCapabilities'
+    SellingNotice:
+      type: object
+      properties:
+        severity:
+          type: string
+        scopeKey:
+          type: string
+        scopeLabel:
+          type: string
+        message:
+          type: string
     UsageDayLine:
       type: object
       properties:

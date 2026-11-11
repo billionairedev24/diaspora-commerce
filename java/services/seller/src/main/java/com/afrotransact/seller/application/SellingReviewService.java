@@ -4,8 +4,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.afrotransact.seller.application.SellingViews.CaseView;
-import com.afrotransact.seller.application.SellingViews.Summary;
+import com.afrotransact.seller.application.SellingViews.SellingCaseView;
+import com.afrotransact.seller.application.SellingViews.SellingCaseSummary;
 import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.CaseQueue;
 import com.afrotransact.seller.domain.ReasonCode;
@@ -21,31 +21,31 @@ import com.afrotransact.seller.port.StaffDirectory.StaffPerson;
  */
 public interface SellingReviewService {
 
-    Page<Summary> queue(QueueRequest request);
+    Page<SellingCaseSummary> queue(QueueRequest request);
 
-    CaseView detail(String applicationId);
+    SellingCaseView detail(String applicationId);
 
     /** Opens a document (logged in the access log) and returns a short-lived URL. */
     DocumentView viewDocument(String applicationId, String assetId);
 
     /** Step 1 (applications:review): APPROVE, FLAG or REQUEST_INFO. */
-    CaseView review(String applicationId, ReviewCommand command);
+    SellingCaseView review(String applicationId, ReviewCommand command);
 
     /**
      * Step 2 (applications:approve, not the reviewer): FINAL_APPROVE, SEND_BACK, REJECT, REQUEST_INFO or DISQUALIFY
      * ("cannot apply": not appealable, {@code reapplyAfter} required).
      */
-    CaseView decide(String applicationId, ReviewCommand command, LocalDate reapplyAfter);
+    SellingCaseView decide(String applicationId, ReviewCommand command, LocalDate reapplyAfter);
 
     List<ReasonCode> reasonCodes();
 
-    CaseView claim(String applicationId, String actorName);
+    SellingCaseView claim(String applicationId, String actorName);
 
-    CaseView assign(String applicationId, String assigneeId, String note, String actorName);
+    SellingCaseView assign(String applicationId, String assigneeId, String note, String actorName);
 
-    CaseView release(String applicationId, String note, String actorName);
+    SellingCaseView release(String applicationId, String note, String actorName);
 
-    CaseView escalate(String applicationId, String reason, String actorName);
+    SellingCaseView escalate(String applicationId, String reason, String actorName);
 
     List<StaffPerson> candidates(String applicationId);
 

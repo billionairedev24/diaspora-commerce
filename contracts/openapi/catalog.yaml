@@ -18,6 +18,8 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Selling approvals (internal)
+  description: 'Service-to-service: seller-service migrates the old bakery answer.'
 - name: Seller scope
   description: The departments the signed-in seller's organisation may list in. Creating or changing anything in another department is refused with 403 catalog.department-not-allowed (or catalog.no-departments); 503 catalog.scope-unavailable when seller-service cannot be asked.
 - name: Public catalog
@@ -654,6 +656,20 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ProductImport'
+  /v1/internal/bakery-claims:
+    get:
+      tags:
+      - Selling approvals (internal)
+      summary: Organisations whose listings say the seller is a bakery (service scope catalog:bakery-claims.read)
+      description: seller-service opens a PENDING food service application for each; the answer is never auto-approved.
+      operationId: bakeryClaims
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BakeryClaims'
   /v1/labels:
     post:
       tags:
@@ -4710,6 +4726,13 @@ components:
           type: integer
           format: int32
           description: How many of the five basics (category, title, a photo, a price, a description) the draft still lacks; 0 = ready to review
+    BakeryClaims:
+      type: object
+      properties:
+        organisations:
+          type: array
+          items:
+            type: string
     ProductImportPage:
       type: object
       properties:

@@ -3,9 +3,9 @@ package com.afrotransact.seller.application;
 import java.util.List;
 import java.util.UUID;
 
-import com.afrotransact.seller.application.SellingViews.RuleView;
+import com.afrotransact.seller.application.SellingViews.SellingRuleView;
 import com.afrotransact.seller.port.Page;
-import com.afrotransact.seller.port.SellingRuleRepository.RuleAudit;
+import com.afrotransact.seller.port.SellingRuleRepository.SellingRuleAudit;
 
 /**
  * Staff manage the selling rules: scope rules (category, product type, brand, brand in a category, product,
@@ -14,17 +14,17 @@ import com.afrotransact.seller.port.SellingRuleRepository.RuleAudit;
  */
 public interface SellingRuleAdminService {
 
-    Page<RuleView> search(String scopeType, String level, String text, boolean activeOnly, int page, int size);
+    Page<SellingRuleView> search(String scopeType, String level, String text, boolean activeOnly, int page, int size);
 
-    RuleView get(UUID id);
+    SellingRuleView get(UUID id);
 
-    List<RuleAudit> audit(UUID id);
+    List<SellingRuleAudit> audit(UUID id);
 
     /** A new rule (typically a gated brand). 409 when the scope already has one. */
-    RuleView create(RuleInput input, String reason, String actorName);
+    SellingRuleView create(RuleInput input, String reason, String actorName);
 
     /** Edits a rule; the scope never changes. {@code input.version()} is the version the editor read. */
-    RuleView update(UUID id, RuleInput input, String reason, String actorName);
+    SellingRuleView update(UUID id, RuleInput input, String reason, String actorName);
 
     /**
      * @param key          category or product type code, brand name, barcode, or capability code (normalised here)

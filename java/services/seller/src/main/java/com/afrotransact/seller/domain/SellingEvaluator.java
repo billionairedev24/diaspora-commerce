@@ -40,7 +40,7 @@ public final class SellingEvaluator {
         LocalDate today = now.atZone(ZoneOffset.UTC).toLocalDate();
         Map<SellingScope, SellingRule> byScope = new HashMap<>();
         rules.forEach(r -> byScope.put(r.scope(), r));
-        List<SellingStatus.Missing> missing = new ArrayList<>();
+        List<SellingStatus.SellingMissing> missing = new ArrayList<>();
         Set<String> pending = new LinkedHashSet<>();
         Set<SellingScope> seen = new LinkedHashSet<>();
         rules.stream().filter(r -> r.active() && r.level() != SellingLevel.SELL
@@ -67,7 +67,7 @@ public final class SellingEvaluator {
         if (missing.isEmpty()) {
             return new SellingStatus(SellingLevel.SELL, null, List.of(), List.copyOf(pending));
         }
-        SellingStatus.Missing blocked = missing.stream().filter(m -> m.level() == SellingLevel.NOT_AVAILABLE)
+        SellingStatus.SellingMissing blocked = missing.stream().filter(m -> m.level() == SellingLevel.NOT_AVAILABLE)
                 .findFirst().orElse(null);
         if (blocked != null) {
             return new SellingStatus(SellingLevel.NOT_AVAILABLE, blocked.message(), missing, List.copyOf(pending));
@@ -75,14 +75,14 @@ public final class SellingEvaluator {
         return new SellingStatus(SellingLevel.APPLY, missing.getFirst().message(), missing, List.copyOf(pending));
     }
 
-    private static SellingStatus.Missing prohibited(SellingRule rule) {
+    private static SellingStatus.SellingMissing prohibited(SellingRule rule) {
         String why = rule.reason() == null || rule.reason().isBlank() ? rule.label() + " is not available on AfroTransact."
                 : rule.reason();
-        return new SellingStatus.Missing(rule.scope(), rule.label(), SellingLevel.NOT_AVAILABLE,
+        return new SellingStatus.SellingMissing(rule.scope(), rule.label(), SellingLevel.NOT_AVAILABLE,
                 SellingApprovalStatus.NOT_AVAILABLE, why, false, null, List.of(), null, null);
     }
 
-    private static Optional<SellingStatus.Missing> approvalNeed(SellingRule rule, SellingApproval a,
+    private static Optional<SellingStatus.SellingMissing> approvalNeed(SellingRule rule, SellingApproval a,
                                                                           Filed filed, Instant now, LocalDate today) {
         String label = rule.label();
         String appId = filed == null ? null : filed.id();
@@ -91,7 +91,7 @@ public final class SellingEvaluator {
             return Optional.empty();
         }
         if (a != null && a.status() == SellingApprovalStatus.APPROVED && a.paused()) {
-            return Optional.of(new SellingStatus.Missing(rule.scope(), label, SellingLevel.NOT_AVAILABLE,
+            return Optional.of(new SellingStatus.SellingMissing(rule.scope(), label, SellingLevel.NOT_AVAILABLE,
                     SellingApprovalStatus.NOT_AVAILABLE, "Your approval for " + label + " is paused: "
                     + orElse(a.pauseReason(), "our team is reviewing your account") + ".", false, null,
                     rule.documents(), appId, appStatus));
@@ -100,7 +100,7 @@ public final class SellingEvaluator {
                 && (a.reapplyAfter() == null || today.isBefore(a.reapplyAfter()))) {
             String when = a.reapplyAfter() == null ? "This cannot be appealed."
                     : "This cannot be appealed. You can apply again from " + DAY.format(a.reapplyAfter()) + ".";
-            return Optional.of(new SellingStatus.Missing(rule.scope(), label, SellingLevel.NOT_AVAILABLE,
+            return Optional.of(new SellingStatus.SellingMissing(rule.scope(), label, SellingLevel.NOT_AVAILABLE,
                     SellingApprovalStatus.NOT_AVAILABLE, label + " is not available to you: "
                     + orElse(a.reason(), "your account does not qualify") + ". " + when, false, a.reapplyAfter(),
                     rule.documents(), appId, appStatus));
@@ -127,7 +127,7 @@ public final class SellingEvaluator {
             state = SellingApprovalStatus.NOT_APPLIED;
             message = "You need approval to sell in " + label + ". Apply once; after that every listing here goes live.";
         }
-        return Optional.of(new SellingStatus.Missing(rule.scope(), label, SellingLevel.APPLY, state, message,
+        return Optional.of(new SellingStatus.SellingMissing(rule.scope(), label, SellingLevel.APPLY, state, message,
                 canApply, a == null ? null : a.reapplyAfter(), rule.documents(), appId, appStatus));
     }
 

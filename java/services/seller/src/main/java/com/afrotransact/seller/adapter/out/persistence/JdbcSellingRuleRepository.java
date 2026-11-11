@@ -145,7 +145,7 @@ class JdbcSellingRuleRepository implements SellingRuleRepository {
     }
 
     @Override
-    public void audit(RuleAudit a) {
+    public void audit(SellingRuleAudit a) {
         jdbc.sql("""
                 insert into selling_rule_audit (id, rule_id, action, actor_id, actor_name, reason, before_json,
                     after_json, changed_at)
@@ -158,9 +158,9 @@ class JdbcSellingRuleRepository implements SellingRuleRepository {
     }
 
     @Override
-    public List<RuleAudit> audits(UUID ruleId) {
+    public List<SellingRuleAudit> audits(UUID ruleId) {
         return jdbc.sql("select * from selling_rule_audit where rule_id = :r order by changed_at desc")
-                .param("r", ruleId).query((rs, n) -> new RuleAudit(rs.getObject("id", UUID.class),
+                .param("r", ruleId).query((rs, n) -> new SellingRuleAudit(rs.getObject("id", UUID.class),
                         rs.getObject("rule_id", UUID.class), rs.getString("action"), rs.getString("actor_id"),
                         rs.getString("actor_name"), rs.getString("reason"), rs.getString("before_json"),
                         rs.getString("after_json"), Sql.instant(rs, "changed_at"))).list();

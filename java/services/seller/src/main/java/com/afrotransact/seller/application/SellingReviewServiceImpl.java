@@ -17,11 +17,11 @@ import java.util.function.Supplier;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
-import com.afrotransact.seller.application.SellingViews.ApprovalView;
-import com.afrotransact.seller.application.SellingViews.CaseView;
-import com.afrotransact.seller.application.SellingViews.OnFile;
-import com.afrotransact.seller.application.SellingViews.Slot;
-import com.afrotransact.seller.application.SellingViews.Summary;
+import com.afrotransact.seller.application.SellingViews.SellingApprovalView;
+import com.afrotransact.seller.application.SellingViews.SellingCaseView;
+import com.afrotransact.seller.application.SellingViews.SellingDocumentOnFile;
+import com.afrotransact.seller.application.SellingViews.SellingDocumentSlot;
+import com.afrotransact.seller.application.SellingViews.SellingCaseSummary;
 import com.afrotransact.seller.domain.ApplicationCase;
 import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.AutoAssignMode;
@@ -109,7 +109,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Summary> queue(QueueRequest q) {
+    public Page<SellingCaseSummary> queue(QueueRequest q) {
         Actor actor = viewer();
         ReviewSettings settings = settingsRepo.load();
         Instant now = Instant.now(clock);
@@ -127,7 +127,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional(readOnly = true)
-    public CaseView detail(String id) {
+    public SellingCaseView detail(String id) {
         Actor actor = viewer();
         return caseView(find(id), actor);
     }
@@ -156,7 +156,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional
-    public CaseView review(String id, ReviewCommand cmd) {
+    public SellingCaseView review(String id, ReviewCommand cmd) {
         Actor actor = access.staff(SellerPermissions.APPLICATIONS_REVIEW);
         ReasonCode reason = reason(cmd);
         SellingApplication app = apps.lockById(id).orElseThrow(() -> notFound(id));
@@ -180,7 +180,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional
-    public CaseView decide(String id, ReviewCommand cmd, LocalDate reapplyAfter) {
+    public SellingCaseView decide(String id, ReviewCommand cmd, LocalDate reapplyAfter) {
         Actor actor = access.staff(SellerPermissions.APPLICATIONS_APPROVE);
         ReasonCode reason = reason(cmd);
         SellingApplication app = apps.lockById(id).orElseThrow(() -> notFound(id));
@@ -296,7 +296,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional
-    public CaseView claim(String id, String actorName) {
+    public SellingCaseView claim(String id, String actorName) {
         Actor actor = access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE);
         SellingApplication app = lock(id);
         ReviewStage stage = stageOf(app);
@@ -316,7 +316,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional
-    public CaseView assign(String id, String assigneeId, String note, String actorName) {
+    public SellingCaseView assign(String id, String assigneeId, String note, String actorName) {
         Actor actor = access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE,
                 SellerPermissions.APPLICATIONS_ASSIGN);
         if (assigneeId == null || assigneeId.isBlank()) {
@@ -343,7 +343,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional
-    public CaseView release(String id, String note, String actorName) {
+    public SellingCaseView release(String id, String note, String actorName) {
         Actor actor = access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE,
                 SellerPermissions.APPLICATIONS_ASSIGN);
         SellingApplication app = lock(id);
@@ -366,7 +366,7 @@ class SellingReviewServiceImpl implements SellingReviewService {
 
     @Override
     @Transactional
-    public CaseView escalate(String id, String reason, String actorName) {
+    public SellingCaseView escalate(String id, String reason, String actorName) {
         Actor actor = access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE,
                 SellerPermissions.APPLICATIONS_ASSIGN);
         if (reason == null || reason.isBlank()) {
@@ -612,27 +612,27 @@ class SellingReviewServiceImpl implements SellingReviewService {
                 any && shown.assigned() && !mine && manage && eligible);
     }
 
-    private CaseView caseView(SellingApplication app, Actor actor) {
-        List<Slot> required = rules.find(app.scope()).map(r -> r.documents().stream().map(Slot::of).toList())
+    private SellingCaseView caseView(SellingApplication app, Actor actor) {
+        List<SellingDocumentSlot> required = rules.find(app.scope()).map(r -> r.documents().stream().map(SellingDocumentSlot::of).toList())
                 .orElse(List.of());
-        ApprovalView approval = approvals.find(app.orgId(), app.scope())
-                .map(a -> ApprovalView.of(a, Instant.now(clock))).orElse(null);
-        return new CaseView(app.id(), app.reference(), app.orgId(), app.applicantName(), app.scope().type().name(),
+        SellingApprovalView approval = approvals.find(app.orgId(), app.scope())
+                .map(a -> SellingApprovalView.of(a, Instant.now(clock))).orElse(null);
+        return new SellingCaseView(app.id(), app.reference(), app.orgId(), app.applicantName(), app.scope().type().name(),
                 app.scope().key(), app.scopeLabel(), app.kind(), app.source(), app.status().name(), app.note(),
-                app.documents().stream().map(OnFile::of).toList(), required, app.reviewerId(), app.reviewedAt(),
+                app.documents().stream().map(SellingDocumentOnFile::of).toList(), required, app.reviewerId(), app.reviewedAt(),
                 app.finalApproverId(), app.decidedAt(), app.failedChecks(), app.requestedItems(), app.reasonCode(),
                 app.decisionNote(), app.disqualified(), app.reapplyAfter(), app.submissionCount(), app.submittedAt(),
                 app.updatedAt(), apps.timeline(app.id()), apps.accessLog(app.id()),
                 viewFor(app, cases.find(app.id()).orElse(null), actor, settingsRepo.load()), approval);
     }
 
-    private static Summary summary(SellingApplication a, ApplicationCaseView workflow) {
+    private static SellingCaseSummary summary(SellingApplication a, ApplicationCaseView workflow) {
         int step = switch (a.status()) {
             case PENDING_REVIEW -> 1;
             case FLAGGED, AWAITING_FINAL_APPROVAL -> 2;
             default -> 0;
         };
-        return new Summary(a.id(), a.reference(), a.orgId(), a.applicantName(), a.scope().type().name(),
+        return new SellingCaseSummary(a.id(), a.reference(), a.orgId(), a.applicantName(), a.scope().type().name(),
                 a.scope().key(), a.scopeLabel(), a.kind(), a.source(), a.status().name(), step, a.reviewerId(),
                 a.failedChecks(), a.submittedAt(), a.updatedAt(), workflow);
     }

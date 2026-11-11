@@ -13,13 +13,13 @@ import java.util.Set;
 
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
-import com.afrotransact.seller.application.SellingViews.ApprovalRow;
-import com.afrotransact.seller.application.SellingViews.Capabilities;
-import com.afrotransact.seller.application.SellingViews.Capability;
-import com.afrotransact.seller.application.SellingViews.Notice;
-import com.afrotransact.seller.application.SellingViews.OnFile;
+import com.afrotransact.seller.application.SellingViews.SellingApprovalRow;
+import com.afrotransact.seller.application.SellingViews.SellingCapabilities;
+import com.afrotransact.seller.application.SellingViews.SellingCapability;
+import com.afrotransact.seller.application.SellingViews.SellingNotice;
+import com.afrotransact.seller.application.SellingViews.SellingDocumentOnFile;
 import com.afrotransact.seller.application.SellingViews.SellingApprovals;
-import com.afrotransact.seller.application.SellingViews.Slot;
+import com.afrotransact.seller.application.SellingViews.SellingDocumentSlot;
 import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.SellingApproval;
 import com.afrotransact.seller.domain.SellingApprovalStatus;
@@ -31,7 +31,7 @@ import com.afrotransact.seller.domain.SellingRule;
 import com.afrotransact.seller.domain.SellingScope;
 import com.afrotransact.seller.domain.SellingScopeType;
 import com.afrotransact.seller.domain.SellingStatus;
-import com.afrotransact.seller.domain.SellingStatus.Missing;
+import com.afrotransact.seller.domain.SellingStatus.SellingMissing;
 import com.afrotransact.seller.port.SellingApplicationRepository;
 import com.afrotransact.seller.port.SellingApprovalRepository;
 import com.afrotransact.seller.port.SellingRuleRepository;
@@ -93,8 +93,8 @@ class SellingStatusServiceImpl implements SellingStatusService {
         List<SellingScope> scopes = gated.stream().map(SellingRule::scope).toList();
         Map<SellingScope, Filed> filed = applications.latest(orgId, scopes);
         boolean retail = settings.isRetail(orgId);
-        List<ApprovalRow> rows = new ArrayList<>();
-        List<Notice> notices = new ArrayList<>();
+        List<SellingApprovalRow> rows = new ArrayList<>();
+        List<SellingNotice> notices = new ArrayList<>();
         for (SellingRule rule : gated) {
             SellingApproval a = have.get(rule.scope());
             if (rule.level() == SellingLevel.NOT_AVAILABLE) {
@@ -114,7 +114,7 @@ class SellingStatusServiceImpl implements SellingStatusService {
 
     @Override
     @Transactional(readOnly = true)
-    public Capabilities capabilities(String orgId) {
+    public SellingCapabilities capabilities(String orgId) {
         authorise(orgId);
         Instant now = Instant.now(clock);
         Map<SellingScope, SellingApproval> have = new HashMap<>();
@@ -122,20 +122,20 @@ class SellingStatusServiceImpl implements SellingStatusService {
         return capabilities(orgId, have, now, settings.isRetail(orgId));
     }
 
-    private Capabilities capabilities(String orgId, Map<SellingScope, SellingApproval> have, Instant now,
+    private SellingCapabilities capabilities(String orgId, Map<SellingScope, SellingApproval> have, Instant now,
                                       boolean retail) {
         SellingApproval food = have.get(SellingScope.capability("FOOD_SERVICE"));
         if (retail) {
-            return new Capabilities(new Capability(true, "APPROVED", null));
+            return new SellingCapabilities(new SellingCapability(true, "APPROVED", null));
         }
         if (food == null) {
-            return new Capabilities(new Capability(false, "NOT_APPLIED", null));
+            return new SellingCapabilities(new SellingCapability(false, "NOT_APPLIED", null));
         }
-        return new Capabilities(new Capability(food.valid(now), food.expired(now) ? "EXPIRED" : food.status().name(),
+        return new SellingCapabilities(new SellingCapability(food.valid(now), food.expired(now) ? "EXPIRED" : food.status().name(),
                 food.expiresAt()));
     }
 
-    private ApprovalRow row(SellingRule rule, SellingApproval a, Filed filed, Instant now, boolean retail) {
+    private SellingApprovalRow row(SellingRule rule, SellingApproval a, Filed filed, Instant now, boolean retail) {
         SellingApprovalStatus state;
         String message;
         boolean canApply = false;
@@ -149,7 +149,7 @@ class SellingStatusServiceImpl implements SellingStatusService {
             SellingStatus one = SellingEvaluator.evaluate(factsFor(rule), List.of(rule),
                     a == null ? Map.of() : Map.of(rule.scope(), a), filed == null ? Map.of()
                     : Map.of(rule.scope(), filed), now);
-            Missing m = one.missing().isEmpty() ? null : one.missing().getFirst();
+            SellingMissing m = one.missing().isEmpty() ? null : one.missing().getFirst();
             if (m == null) {
                 state = SellingApprovalStatus.APPROVED;
                 message = "You are approved" + (a != null && a.expiresAt() != null
@@ -160,11 +160,11 @@ class SellingStatusServiceImpl implements SellingStatusService {
                 canApply = m.canApply();
             }
         }
-        return new ApprovalRow(rule.scope().type().name(), rule.scope().key(), rule.label(), rule.level().name(),
+        return new SellingApprovalRow(rule.scope().type().name(), rule.scope().key(), rule.label(), rule.level().name(),
                 state.name(), state.words(), message, canApply, a == null ? null : a.approvedAt(),
                 a == null ? null : a.expiresAt(), a == null ? null : a.daysToExpiry(now),
-                a == null ? null : a.reapplyAfter(), rule.documents().stream().map(Slot::of).toList(),
-                a == null ? List.of() : a.documents().stream().map(OnFile::of).toList(),
+                a == null ? null : a.reapplyAfter(), rule.documents().stream().map(SellingDocumentSlot::of).toList(),
+                a == null ? List.of() : a.documents().stream().map(SellingDocumentOnFile::of).toList(),
                 filed == null ? null : filed.id(), filed == null ? null : filed.status().name(),
                 rule.note(), a != null && a.listingsPaused());
     }
@@ -175,27 +175,27 @@ class SellingStatusServiceImpl implements SellingStatusService {
                 rule.watch());
     }
 
-    private List<Notice> noticesOf(SellingApproval a, Filed filed, Instant now) {
-        List<Notice> out = new ArrayList<>();
+    private List<SellingNotice> noticesOf(SellingApproval a, Filed filed, Instant now) {
+        List<SellingNotice> out = new ArrayList<>();
         String label = a.label();
         Long days = a.daysToExpiry(now);
         if (a.status() == SellingApprovalStatus.APPROVED && days != null && days >= 0 && days <= 30 && !a.paused()) {
-            out.add(new Notice(days <= 7 ? "urgent" : "warning", a.scope().key(), label, "A document for " + label
+            out.add(new SellingNotice(days <= 7 ? "urgent" : "warning", a.scope().key(), label, "A document for " + label
                     + " runs out in " + days + (days == 1 ? " day" : " days") + " (" + DAY.format(a.expiresAt()
                     .atZone(ZoneOffset.UTC)) + "). Upload the renewed one to keep selling."));
         }
         if (a.expired(now) && !a.listingsPaused()) {
-            out.add(new Notice("urgent", a.scope().key(), label, "Your approval for " + label + " expired. Your "
+            out.add(new SellingNotice("urgent", a.scope().key(), label, "Your approval for " + label + " expired. Your "
                     + "listings stay up until " + DAY.format(a.graceEndsAt().atZone(ZoneOffset.UTC))
                     + ", then they are paused. Nothing is deleted; they return when you renew."));
         }
         if (a.listingsPaused()) {
-            out.add(new Notice("urgent", a.scope().key(), label, "Your listings in " + label + " are paused"
+            out.add(new SellingNotice("urgent", a.scope().key(), label, "Your listings in " + label + " are paused"
                     + (a.paused() && a.pauseReason() != null ? ": " + a.pauseReason() : " until you renew")
                     + ". Nothing is deleted."));
         }
         if (filed != null && filed.status() == ApplicationStatus.INFO_REQUESTED) {
-            out.add(new Notice("action", a.scope().key(), label, "We need more from you for " + label + "."));
+            out.add(new SellingNotice("action", a.scope().key(), label, "We need more from you for " + label + "."));
         }
         return out;
     }

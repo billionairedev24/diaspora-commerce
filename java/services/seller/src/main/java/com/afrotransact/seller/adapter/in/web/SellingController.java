@@ -8,8 +8,8 @@ import com.afrotransact.seller.application.SellingApplicationService.ApplyComman
 import com.afrotransact.seller.application.SellingApplicationService.DocumentInput;
 import com.afrotransact.seller.application.SellingApplicationService.ResubmitCommand;
 import com.afrotransact.seller.application.SellingStatusService;
-import com.afrotransact.seller.application.SellingViews.Capabilities;
-import com.afrotransact.seller.application.SellingViews.MyApplication;
+import com.afrotransact.seller.application.SellingViews.SellingCapabilities;
+import com.afrotransact.seller.application.SellingViews.SellingMyApplication;
 import com.afrotransact.seller.application.SellingViews.SellingApprovals;
 import com.afrotransact.seller.domain.SellingFacts;
 import com.afrotransact.seller.domain.SellingStatus;
@@ -71,7 +71,7 @@ class SellingController {
 
     @Operation(summary = "Seller capabilities (food service): the product form shows food service fields only when approved")
     @GetMapping("/v1/orgs/{orgId}/selling-capabilities")
-    Capabilities capabilities(@PathVariable String orgId) {
+    SellingCapabilities capabilities(@PathVariable String orgId) {
         return status.capabilities(orgId);
     }
 
@@ -84,27 +84,27 @@ class SellingController {
                     + "not come. Repeating the call while an application is in progress returns it.")
     @PostMapping("/v1/orgs/{orgId}/selling-applications")
     @ResponseStatus(HttpStatus.CREATED)
-    MyApplication apply(@PathVariable String orgId, @Valid @RequestBody ApplyRequest body) {
+    SellingMyApplication apply(@PathVariable String orgId, @Valid @RequestBody ApplyRequest body) {
         return applications.apply(orgId, new ApplyCommand(body.scopeType(), body.scopeKey(), body.note(),
                 body.documents() == null ? List.of() : body.documents().stream().map(DocumentBody::toInput).toList()));
     }
 
     @Operation(summary = "The organisation's selling applications, newest first")
     @GetMapping("/v1/orgs/{orgId}/selling-applications")
-    List<MyApplication> list(@PathVariable String orgId) {
+    List<SellingMyApplication> list(@PathVariable String orgId) {
         return applications.list(orgId);
     }
 
     @Operation(summary = "One selling application")
     @GetMapping("/v1/orgs/{orgId}/selling-applications/{applicationId}")
-    MyApplication one(@PathVariable String orgId, @PathVariable String applicationId) {
+    SellingMyApplication one(@PathVariable String orgId, @PathVariable String applicationId) {
         return applications.get(orgId, applicationId);
     }
 
     @Operation(summary = "Answer a request for information with the documents asked for",
             description = "Only while the application is INFO_REQUESTED. The review starts again at step 1.")
     @PostMapping("/v1/orgs/{orgId}/selling-applications/{applicationId}/resubmit")
-    MyApplication resubmit(@PathVariable String orgId, @PathVariable String applicationId,
+    SellingMyApplication resubmit(@PathVariable String orgId, @PathVariable String applicationId,
                            @Valid @RequestBody ResubmitRequest body) {
         return applications.resubmit(orgId, applicationId, new ResubmitCommand(body.note(),
                 body.documents() == null ? List.of() : body.documents().stream().map(DocumentBody::toInput).toList()));

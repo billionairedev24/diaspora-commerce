@@ -9,13 +9,13 @@ import com.afrotransact.seller.application.SellingApprovalService;
 import com.afrotransact.seller.application.SellingRuleAdminService;
 import com.afrotransact.seller.application.SellingRuleAdminService.Doc;
 import com.afrotransact.seller.application.SellingRuleAdminService.RuleInput;
-import com.afrotransact.seller.application.SellingViews.ApprovalView;
-import com.afrotransact.seller.application.SellingViews.RuleView;
+import com.afrotransact.seller.application.SellingViews.SellingApprovalView;
+import com.afrotransact.seller.application.SellingViews.SellingRuleView;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellingApprovalStatus;
 import com.afrotransact.seller.domain.SellingScopeType;
 import com.afrotransact.seller.port.Page;
-import com.afrotransact.seller.port.SellingRuleRepository.RuleAudit;
+import com.afrotransact.seller.port.SellingRuleRepository.SellingRuleAudit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -52,33 +52,33 @@ class SellingRuleController {
     RulePage list(@RequestParam(required = false) String scopeType, @RequestParam(required = false) String level,
                   @RequestParam(required = false) String text, @RequestParam(defaultValue = "false") boolean activeOnly,
                   @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
-        Page<RuleView> p = rules.search(scopeType, level, text, activeOnly, page, size);
+        Page<SellingRuleView> p = rules.search(scopeType, level, text, activeOnly, page, size);
         return new RulePage(p.items(), p.page(), p.size(), p.total());
     }
 
     @Operation(summary = "One rule")
     @GetMapping("/v1/selling-rules/{id}")
-    RuleView one(@PathVariable UUID id) {
+    SellingRuleView one(@PathVariable UUID id) {
         return rules.get(id);
     }
 
     @Operation(summary = "The rule's audit trail, newest first: who changed it, why, what it was and what it became")
     @GetMapping("/v1/selling-rules/{id}/audit")
-    List<RuleAudit> audit(@PathVariable UUID id) {
+    List<SellingRuleAudit> audit(@PathVariable UUID id) {
         return rules.audit(id);
     }
 
     @Operation(summary = "Add a rule, typically a gated brand (selling-rules:manage, reason required)")
     @PostMapping("/v1/selling-rules")
     @ResponseStatus(HttpStatus.CREATED)
-    RuleView create(@Valid @RequestBody RuleBody body) {
+    SellingRuleView create(@Valid @RequestBody RuleBody body) {
         return rules.create(body.toInput(), body.reason(), body.actorName());
     }
 
     @Operation(summary = "Edit a rule (selling-rules:manage, reason required; the scope never changes)",
             description = "A change publishes seller.selling.rule.changed so catalog re-checks the scope's listings.")
     @PutMapping("/v1/selling-rules/{id}")
-    RuleView update(@PathVariable UUID id, @Valid @RequestBody RuleBody body) {
+    SellingRuleView update(@PathVariable UUID id, @Valid @RequestBody RuleBody body) {
         return rules.update(id, body.toInput(), body.reason(), body.actorName());
     }
 
@@ -87,7 +87,7 @@ class SellingRuleController {
     ApprovalPage approvals(@RequestParam(required = false) String orgId, @RequestParam(required = false) String status,
                            @RequestParam(required = false) String scopeType,
                            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
-        Page<ApprovalView> p = approvals.search(orgId == null || orgId.isBlank() ? null : orgId.trim(),
+        Page<SellingApprovalView> p = approvals.search(orgId == null || orgId.isBlank() ? null : orgId.trim(),
                 status == null || status.isBlank() ? null : parse(SellingApprovalStatus.class, status),
                 scopeType == null || scopeType.isBlank() ? null : parse(SellingScopeType.class, scopeType), page, size);
         return new ApprovalPage(p.items(), p.page(), p.size(), p.total());
@@ -95,25 +95,25 @@ class SellingRuleController {
 
     @Operation(summary = "Staff: one approval")
     @GetMapping("/v1/selling-approvals/{id}")
-    ApprovalView approval(@PathVariable UUID id) {
+    SellingApprovalView approval(@PathVariable UUID id) {
         return approvals.get(id);
     }
 
     @Operation(summary = "Pause the scope's listings (performance problem or a new rule); the approval is kept (applications:approve)")
     @PostMapping("/v1/selling-approvals/{id}/pause")
-    ApprovalView pause(@PathVariable UUID id, @Valid @RequestBody ApprovalAction body) {
+    SellingApprovalView pause(@PathVariable UUID id, @Valid @RequestBody ApprovalAction body) {
         return approvals.pause(id, body.reason(), body.actorName());
     }
 
     @Operation(summary = "Lift a staff pause: listings come back (applications:approve)")
     @PostMapping("/v1/selling-approvals/{id}/restore")
-    ApprovalView restore(@PathVariable UUID id, @Valid @RequestBody ApprovalAction body) {
+    SellingApprovalView restore(@PathVariable UUID id, @Valid @RequestBody ApprovalAction body) {
         return approvals.restore(id, body.reason(), body.actorName());
     }
 
     @Operation(summary = "Withdraw the approval: \"cannot apply\", not appealable, reapplyAfter required (applications:approve)")
     @PostMapping("/v1/selling-approvals/{id}/revoke")
-    ApprovalView revoke(@PathVariable UUID id, @Valid @RequestBody ApprovalAction body) {
+    SellingApprovalView revoke(@PathVariable UUID id, @Valid @RequestBody ApprovalAction body) {
         return approvals.revoke(id, body.reason(), body.reapplyAfter(), body.actorName());
     }
 
@@ -152,10 +152,10 @@ class SellingRuleController {
     }
 
     @Schema(name = "SellingRulePage")
-    record RulePage(List<RuleView> items, int page, int size, long total) {
+    record RulePage(List<SellingRuleView> items, int page, int size, long total) {
     }
 
     @Schema(name = "SellingApprovalPage")
-    record ApprovalPage(List<ApprovalView> items, int page, int size, long total) {
+    record ApprovalPage(List<SellingApprovalView> items, int page, int size, long total) {
     }
 }

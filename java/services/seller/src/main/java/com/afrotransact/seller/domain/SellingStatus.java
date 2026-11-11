@@ -9,7 +9,7 @@ import java.util.List;
  *
  * @param pendingFacts facts the answer depends on that the form has not given yet (jewelry: "material")
  */
-public record SellingStatus(SellingLevel level, String reason, List<Missing> missing, List<String> pendingFacts) {
+public record SellingStatus(SellingLevel level, String reason, List<SellingMissing> missing, List<String> pendingFacts) {
 
     public SellingStatus {
         missing = missing == null ? List.of() : List.copyOf(missing);
@@ -29,12 +29,12 @@ public record SellingStatus(SellingLevel level, String reason, List<Missing> mis
      * @param applicationId  the seller's current application for it, if any
      * @param applicationStatus its status (INFO_REQUESTED means "update it", REJECTED "apply again")
      */
-    public record Missing(SellingScope scope, String label, SellingLevel level, SellingApprovalStatus state,
+    public record SellingMissing(SellingScope scope, String label, SellingLevel level, SellingApprovalStatus state,
                           String message, boolean canApply, LocalDate reapplyAfter,
                           List<SellingDocumentRequirement> documents, String applicationId,
                           String applicationStatus) {
 
-        public Missing {
+        public SellingMissing {
             documents = documents == null ? List.of() : List.copyOf(documents);
         }
     }

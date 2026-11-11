@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
-import com.afrotransact.seller.application.SellingViews.ApprovalView;
+import com.afrotransact.seller.application.SellingViews.SellingApprovalView;
 import com.afrotransact.seller.domain.SellingApplication;
 import com.afrotransact.seller.domain.SellingApprovalStatus;
 import com.afrotransact.seller.domain.SellingScopeType;
@@ -32,18 +32,18 @@ public interface SellingApprovalService {
     void recordRejected(SellingApplication application);
 
     /** Staff (applications:approve): lists approvals across organisations. */
-    Page<ApprovalView> search(String orgId, SellingApprovalStatus status, SellingScopeType type, int page, int size);
+    Page<SellingApprovalView> search(String orgId, SellingApprovalStatus status, SellingScopeType type, int page, int size);
 
-    ApprovalView get(UUID id);
+    SellingApprovalView get(UUID id);
 
     /** Staff: pause the scope's listings for a reason such as a performance problem (10+ characters); the approval is kept. */
-    ApprovalView pause(UUID id, String reason, String actorName);
+    SellingApprovalView pause(UUID id, String reason, String actorName);
 
     /** Staff: lift a staff pause; listings come back. */
-    ApprovalView restore(UUID id, String reason, String actorName);
+    SellingApprovalView restore(UUID id, String reason, String actorName);
 
     /** Staff: withdraw the approval ("cannot apply", not appealable) with a reason and a reapply date. */
-    ApprovalView revoke(UUID id, String reason, LocalDate reapplyAfter, String actorName);
+    SellingApprovalView revoke(UUID id, String reason, LocalDate reapplyAfter, String actorName);
 
     /** The lifecycle job: idempotent and safe on several replicas (each approval is checked under its row lock). */
     int runLifecycle(Instant now);

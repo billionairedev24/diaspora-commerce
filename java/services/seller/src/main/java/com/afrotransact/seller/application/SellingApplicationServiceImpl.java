@@ -13,9 +13,9 @@ import java.util.UUID;
 
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
-import com.afrotransact.seller.application.SellingViews.MyApplication;
-import com.afrotransact.seller.application.SellingViews.OnFile;
-import com.afrotransact.seller.application.SellingViews.Slot;
+import com.afrotransact.seller.application.SellingViews.SellingMyApplication;
+import com.afrotransact.seller.application.SellingViews.SellingDocumentOnFile;
+import com.afrotransact.seller.application.SellingViews.SellingDocumentSlot;
 import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.SellerRuleViolation;
@@ -72,7 +72,7 @@ class SellingApplicationServiceImpl implements SellingApplicationService {
 
     @Override
     @Transactional
-    public MyApplication apply(String orgId, ApplyCommand cmd) {
+    public SellingMyApplication apply(String orgId, ApplyCommand cmd) {
         Actor actor = access.orgRole(orgId, APPLIERS, null);
         if (settings.isRetail(orgId)) {
             throw new SellerStateConflict("seller.selling-not-needed", "AfroTransact Retail sells everywhere");
@@ -122,7 +122,7 @@ class SellingApplicationServiceImpl implements SellingApplicationService {
 
     @Override
     @Transactional
-    public MyApplication resubmit(String orgId, String applicationId, ResubmitCommand cmd) {
+    public SellingMyApplication resubmit(String orgId, String applicationId, ResubmitCommand cmd) {
         access.orgRole(orgId, APPLIERS, null);
         SellingApplication current = applications.lockById(applicationId).filter(a -> a.orgId().equals(orgId))
                 .orElseThrow(() -> notFound(applicationId));
@@ -141,7 +141,7 @@ class SellingApplicationServiceImpl implements SellingApplicationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<MyApplication> list(String orgId) {
+    public List<SellingMyApplication> list(String orgId) {
         access.orgRoleOrStaff(orgId, SellingStatusServiceImpl.MEMBERS, SellerPermissions.APPLICATIONS_REVIEW,
                 SellerPermissions.APPLICATIONS_APPROVE);
         return applications.forOrg(orgId).stream().map(a -> view(a, rules.find(a.scope()).orElse(null))).toList();
@@ -149,7 +149,7 @@ class SellingApplicationServiceImpl implements SellingApplicationService {
 
     @Override
     @Transactional(readOnly = true)
-    public MyApplication get(String orgId, String applicationId) {
+    public SellingMyApplication get(String orgId, String applicationId) {
         access.orgRoleOrStaff(orgId, SellingStatusServiceImpl.MEMBERS, SellerPermissions.APPLICATIONS_REVIEW,
                 SellerPermissions.APPLICATIONS_APPROVE);
         SellingApplication a = applications.findById(applicationId).filter(x -> x.orgId().equals(orgId))
@@ -203,7 +203,7 @@ class SellingApplicationServiceImpl implements SellingApplicationService {
     }
 
     /** The seller's view: statuses in plain words, nothing internal (no reviewer, no flags, no step). */
-    static MyApplication view(SellingApplication a, SellingRule rule) {
+    static SellingMyApplication view(SellingApplication a, SellingRule rule) {
         String words;
         String message;
         switch (a.status()) {
@@ -229,9 +229,9 @@ class SellingApplicationServiceImpl implements SellingApplicationService {
                 message = "We aim to answer within 2 business days.";
             }
         }
-        List<Slot> required = rule == null ? List.of() : rule.documents().stream().map(Slot::of).toList();
-        return new MyApplication(a.id(), a.reference(), a.scope().type().name(), a.scope().key(), a.scopeLabel(),
+        List<SellingDocumentSlot> required = rule == null ? List.of() : rule.documents().stream().map(SellingDocumentSlot::of).toList();
+        return new SellingMyApplication(a.id(), a.reference(), a.scope().type().name(), a.scope().key(), a.scopeLabel(),
                 a.kind(), a.status().name(), words, message, a.requestedItems(), a.disqualified(), a.reapplyAfter(),
-                a.documents().stream().map(OnFile::of).toList(), required, a.submittedAt(), a.updatedAt());
+                a.documents().stream().map(SellingDocumentOnFile::of).toList(), required, a.submittedAt(), a.updatedAt());
     }
 }

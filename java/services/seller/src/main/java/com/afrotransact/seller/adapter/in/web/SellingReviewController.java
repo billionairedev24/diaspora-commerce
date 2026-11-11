@@ -9,8 +9,8 @@ import com.afrotransact.seller.application.DocumentView;
 import com.afrotransact.seller.application.ReviewCommand;
 import com.afrotransact.seller.application.SellingReviewService;
 import com.afrotransact.seller.application.SellingReviewService.QueueRequest;
-import com.afrotransact.seller.application.SellingViews.CaseView;
-import com.afrotransact.seller.application.SellingViews.Summary;
+import com.afrotransact.seller.application.SellingViews.SellingCaseView;
+import com.afrotransact.seller.application.SellingViews.SellingCaseSummary;
 import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.CaseQueue;
 import com.afrotransact.seller.domain.ReviewAction;
@@ -62,7 +62,7 @@ class SellingReviewController {
                         @RequestParam(defaultValue = "50") int size) {
         List<ApplicationStatus> statuses = status == null || status.isBlank() ? List.of()
                 : Arrays.stream(status.split(",")).map(s -> parse(ApplicationStatus.class, s, "status")).toList();
-        Page<Summary> p = reviews.queue(new QueueRequest(parse(CaseQueue.class, queue, "queue"), statuses,
+        Page<SellingCaseSummary> p = reviews.queue(new QueueRequest(parse(CaseQueue.class, queue, "queue"), statuses,
                 parse(ReviewStage.class, stage, "stage"), blankToNull(assignee), unassigned, overdue, escalated,
                 page, size));
         return new QueueResponse(p.items(), p.page(), p.size(), p.total());
@@ -70,7 +70,7 @@ class SellingReviewController {
 
     @Operation(summary = "One selling approval case: documents, timeline, who has it, the seller's current approval")
     @GetMapping("/v1/selling-applications/{id}")
-    CaseView detail(@PathVariable String id) {
+    SellingCaseView detail(@PathVariable String id) {
         return reviews.detail(id);
     }
 
@@ -82,7 +82,7 @@ class SellingReviewController {
 
     @Operation(summary = "Who has the case: CLAIM, ASSIGN, RELEASE or ESCALATE (same rules as applications)")
     @PostMapping("/v1/selling-applications/{id}/assignment")
-    CaseView assignment(@PathVariable String id, @Valid @RequestBody AssignmentBody body) {
+    SellingCaseView assignment(@PathVariable String id, @Valid @RequestBody AssignmentBody body) {
         String action = body.action().trim().toUpperCase(Locale.ROOT);
         return switch (action) {
             case "CLAIM" -> reviews.claim(id, body.actorName());
@@ -104,7 +104,7 @@ class SellingReviewController {
             description = "Idempotent like application review: a retry with the same Idempotency-Key answers the "
                     + "current case and changes nothing. REQUEST_INFO note is the message the seller reads.")
     @PostMapping("/v1/selling-applications/{id}/review")
-    CaseView review(@PathVariable String id, @Valid @RequestBody DecisionBody body,
+    SellingCaseView review(@PathVariable String id, @Valid @RequestBody DecisionBody body,
                     @RequestHeader(value = "Idempotency-Key", required = false) String key) {
         return reviews.review(id, body.toCommand(key));
     }
@@ -114,7 +114,7 @@ class SellingReviewController {
                     + "reapplyAfter (a date after today). FINAL_APPROVE gives the seller the approval until the "
                     + "earliest document expiry and restores listings that were paused for it.")
     @PostMapping("/v1/selling-applications/{id}/decision")
-    CaseView decision(@PathVariable String id, @Valid @RequestBody DecisionBody body,
+    SellingCaseView decision(@PathVariable String id, @Valid @RequestBody DecisionBody body,
                       @RequestHeader(value = "Idempotency-Key", required = false) String key) {
         return reviews.decide(id, body.toCommand(key), body.reapplyAfter());
     }
@@ -163,6 +163,6 @@ class SellingReviewController {
     }
 
     @Schema(name = "SellingApplicationQueue")
-    record QueueResponse(List<Summary> items, int page, int size, long total) {
+    record QueueResponse(List<SellingCaseSummary> items, int page, int size, long total) {
     }
 }

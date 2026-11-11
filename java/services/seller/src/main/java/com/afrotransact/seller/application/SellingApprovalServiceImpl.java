@@ -12,7 +12,7 @@ import java.util.function.Supplier;
 
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.web.error.NotFoundException;
-import com.afrotransact.seller.application.SellingViews.ApprovalView;
+import com.afrotransact.seller.application.SellingViews.SellingApprovalView;
 import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.OrgMember;
 import com.afrotransact.seller.domain.ReasonCode;
@@ -125,26 +125,26 @@ class SellingApprovalServiceImpl implements SellingApprovalService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ApprovalView> search(String orgId, SellingApprovalStatus status, SellingScopeType type, int page,
+    public Page<SellingApprovalView> search(String orgId, SellingApprovalStatus status, SellingScopeType type, int page,
                                      int size) {
         staffView();
         Instant now = Instant.now(clock);
         Page<SellingApproval> found = approvals.search(orgId, status, type, Math.max(page, 0),
                 Math.min(Math.max(size, 1), 200));
-        return new Page<>(found.items().stream().map(a -> ApprovalView.of(a, now)).toList(), found.page(),
+        return new Page<>(found.items().stream().map(a -> SellingApprovalView.of(a, now)).toList(), found.page(),
                 found.size(), found.total());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public ApprovalView get(UUID id) {
+    public SellingApprovalView get(UUID id) {
         staffView();
-        return ApprovalView.of(approvals.findById(id).orElseThrow(() -> notFound(id)), Instant.now(clock));
+        return SellingApprovalView.of(approvals.findById(id).orElseThrow(() -> notFound(id)), Instant.now(clock));
     }
 
     @Override
     @Transactional
-    public ApprovalView pause(UUID id, String reason, String actorName) {
+    public SellingApprovalView pause(UUID id, String reason, String actorName) {
         access.staff(SellerPermissions.APPLICATIONS_APPROVE);
         String why = reason(reason);
         SellingApproval a = approvals.lockById(id).orElseThrow(() -> notFound(id));
@@ -153,22 +153,22 @@ class SellingApprovalServiceImpl implements SellingApprovalService {
             throw new SellerStateConflict("seller.selling-approval-state", "Only an approved scope can be paused");
         }
         if (a.paused()) {
-            return ApprovalView.of(a, now);
+            return SellingApprovalView.of(a, now);
         }
         SellingApproval next = approvals.save(a.withPause(true, why, now).listingsPaused(true, now));
         publishLifecycle(SellerEvents.SELLING_LISTINGS_PAUSED, next, "PERFORMANCE", why, actorName, now, true);
-        return ApprovalView.of(next, now);
+        return SellingApprovalView.of(next, now);
     }
 
     @Override
     @Transactional
-    public ApprovalView restore(UUID id, String reason, String actorName) {
+    public SellingApprovalView restore(UUID id, String reason, String actorName) {
         access.staff(SellerPermissions.APPLICATIONS_APPROVE);
         String why = reason(reason);
         SellingApproval a = approvals.lockById(id).orElseThrow(() -> notFound(id));
         Instant now = Instant.now(clock);
         if (!a.paused()) {
-            return ApprovalView.of(a, now);
+            return SellingApprovalView.of(a, now);
         }
         boolean stillExpired = a.status() == SellingApprovalStatus.EXPIRED && a.graceEndsAt() != null
                 && !now.isBefore(a.graceEndsAt());
@@ -177,12 +177,12 @@ class SellingApprovalServiceImpl implements SellingApprovalService {
             publishLifecycle(SellerEvents.SELLING_LISTINGS_RESTORED, next, "STAFF_RESTORED", why, actorName, now,
                     true);
         }
-        return ApprovalView.of(next, now);
+        return SellingApprovalView.of(next, now);
     }
 
     @Override
     @Transactional
-    public ApprovalView revoke(UUID id, String reason, LocalDate reapplyAfter, String actorName) {
+    public SellingApprovalView revoke(UUID id, String reason, LocalDate reapplyAfter, String actorName) {
         access.staff(SellerPermissions.APPLICATIONS_APPROVE);
         String why = reason(reason);
         Instant now = Instant.now(clock);
@@ -196,7 +196,7 @@ class SellingApprovalServiceImpl implements SellingApprovalService {
         SellingApproval next = approvals.save(a.with(SellingApprovalStatus.NOT_AVAILABLE, why, reapplyAfter, null, now)
                 .listingsPaused(true, now));
         publishLifecycle(SellerEvents.SELLING_LISTINGS_PAUSED, next, "REVOKED", why, actorName, now, true);
-        return ApprovalView.of(next, now);
+        return SellingApprovalView.of(next, now);
     }
 
     // ---------------------------------------------------------------- lifecycle

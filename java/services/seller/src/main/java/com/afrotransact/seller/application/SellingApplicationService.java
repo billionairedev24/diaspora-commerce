@@ -3,7 +3,7 @@ package com.afrotransact.seller.application;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.afrotransact.seller.application.SellingViews.MyApplication;
+import com.afrotransact.seller.application.SellingViews.SellingMyApplication;
 
 /**
  * A seller applies to sell in a scope (owner, admin or catalog role): the documents the rule asks for are uploaded to
@@ -13,15 +13,15 @@ import com.afrotransact.seller.application.SellingViews.MyApplication;
 public interface SellingApplicationService {
 
     /** Applies, or renews an approval whose document is being replaced. Repeating it while one is in progress returns that one. */
-    MyApplication apply(String orgId, ApplyCommand command);
+    SellingMyApplication apply(String orgId, ApplyCommand command);
 
     /** Answers a request for information with the documents asked for; the review starts again at step 1. */
-    MyApplication resubmit(String orgId, String applicationId, ResubmitCommand command);
+    SellingMyApplication resubmit(String orgId, String applicationId, ResubmitCommand command);
 
     /** The organisation's applications, newest first. */
-    List<MyApplication> list(String orgId);
+    List<SellingMyApplication> list(String orgId);
 
-    MyApplication get(String orgId, String applicationId);
+    SellingMyApplication get(String orgId, String applicationId);
 
     /**
      * @param assetId          the media-service asset of the uploaded file

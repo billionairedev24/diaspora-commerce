@@ -845,6 +845,14 @@ channels:
         $ref: '#/components/messages/sellerDepartmentRequestDecided'
       sellerOrgDepartmentsChanged:
         $ref: '#/components/messages/sellerOrgDepartmentsChanged'
+      sellerSellingApplicationSubmitted:
+        $ref: '#/components/messages/sellerSellingApplicationSubmitted'
+      sellerSellingApplicationInfoRequested:
+        $ref: '#/components/messages/sellerSellingApplicationInfoRequested'
+      sellerSellingApplicationApproved:
+        $ref: '#/components/messages/sellerSellingApplicationApproved'
+      sellerSellingApplicationRejected:
+        $ref: '#/components/messages/sellerSellingApplicationRejected'
   sellerOrgEvents:
     address: at.seller-org.events
     description: Seller and provider organisations (key = org id).
@@ -872,6 +880,16 @@ channels:
         $ref: '#/components/messages/sellerListingsHidden'
       sellerListingsRestored:
         $ref: '#/components/messages/sellerListingsRestored'
+      sellerSellingExpiryWarning:
+        $ref: '#/components/messages/sellerSellingExpiryWarning'
+      sellerSellingExpired:
+        $ref: '#/components/messages/sellerSellingExpired'
+      sellerSellingListingsPaused:
+        $ref: '#/components/messages/sellerSellingListingsPaused'
+      sellerSellingListingsRestored:
+        $ref: '#/components/messages/sellerSellingListingsRestored'
+      sellerSellingRuleChanged:
+        $ref: '#/components/messages/sellerSellingRuleChanged'
   sellerSubscriptionEvents:
     address: at.seller-subscription.events
     description: Plan subscriptions on Stripe Billing, and the rewards and staff adjustments applied to them (key = org id).
@@ -2833,6 +2851,78 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/SellerApplicationEvent'
+    sellerSellingApplicationSubmitted:
+      name: seller.selling.application.submitted
+      title: A seller applied to sell in a scope (or renewed an approval)
+      summary: On at.seller-application.events, key = application id. The staff case is in the Selling approvals queue; notifications
+        may confirm to the applicant.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingApplicationInfoRequested:
+      name: seller.selling.application.info_requested
+      title: Staff asked the seller for more documents
+      summary: requestedItems and the staff message (reason) are for the seller; recipientUserIds is the applicant.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingApplicationApproved:
+      name: seller.selling.application.approved
+      title: The seller is approved for the scope; every listing there may go live
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingApplicationRejected:
+      name: seller.selling.application.rejected
+      title: 'The application was not approved, or the seller cannot apply (disqualified: not appealable, reapplyAfter set)'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingExpiryWarning:
+      name: seller.selling.approval.expiry_warning
+      title: A document of an approval expires in 30, 14 or 7 days
+      summary: Sent once per threshold (a job that was down skips the thresholds already passed). daysLeft and expiresAt say
+        when.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingExpired:
+      name: seller.selling.approval.expired
+      title: An approval expired; its listings stay up for 14 days of grace, then are paused
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingListingsPaused:
+      name: seller.selling.listings.paused
+      title: Pause the organisation's listings in the scope (never delete)
+      summary: reason EXPIRED (grace over), PERFORMANCE (staff pause) or REVOKED. staffRecipientUserIds are told too. For
+        a CAPABILITY scope categoryCodes lists the categories it covers.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingListingsRestored:
+      name: seller.selling.listings.restored
+      title: Bring back the listings paused for the scope
+      summary: reason RENEWED (renewal approved) or STAFF_RESTORED. A listing the seller paused themselves stays paused.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
+    sellerSellingRuleChanged:
+      name: seller.selling.rule.changed
+      title: A selling rule was created or edited; re-check the scope's listings
+      summary: Key = rule id; orgId is null. status is the rule's new level (SELL, APPLY or NOT_AVAILABLE).
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerSellingEvent'
     sellerApplicationAssigned:
       name: seller.application.assigned
       title: Internal staff notification - a case was assigned to you, handed to the approval pool, or sent back to review
@@ -10789,6 +10879,99 @@ components:
         occurredAt:
           type: string
           format: date-time
+    SellerSellingEvent:
+      type: object
+      required:
+      - scopeType
+      - scopeKey
+      - occurredAt
+      properties:
+        orgId:
+          type:
+          - string
+          - 'null'
+          description: Null for seller.selling.rule.changed
+        scopeType:
+          type: string
+          enum:
+          - CATEGORY
+          - PRODUCT_TYPE
+          - BRAND
+          - BRAND_IN_CATEGORY
+          - PRODUCT
+          - CAPABILITY
+        scopeKey:
+          type: string
+          description: Category or product type code, normalised brand, "brand|category", barcode, or a capability such as
+            FOOD_SERVICE
+        scopeLabel:
+          type:
+          - string
+          - 'null'
+        applicationId:
+          type:
+          - string
+          - 'null'
+        reference:
+          type:
+          - string
+          - 'null'
+          examples:
+          - SA-50001
+        status:
+          type:
+          - string
+          - 'null'
+          description: Application or approval status; for a rule change the rule level
+        reason:
+          type:
+          - string
+          - 'null'
+          description: 'Why: a staff message, EXPIRED, PERFORMANCE, REVOKED, RENEWED, RULE...'
+        note:
+          type:
+          - string
+          - 'null'
+        requestedItems:
+          type: array
+          items:
+            type: string
+        disqualified:
+          type: boolean
+        reapplyAfter:
+          type:
+          - string
+          - 'null'
+          format: date
+        expiresAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        daysLeft:
+          type:
+          - integer
+          - 'null'
+        recipientUserIds:
+          type: array
+          items:
+            type: string
+          description: The seller people to tell (the applicant
+          or the organisation's owners): null
+        staffRecipientUserIds:
+          type: array
+          items:
+            type: string
+          description: Staff to tell (supervisors) on pauses
+        categoryCodes:
+          type: array
+          items:
+            type: string
+          description: For a CAPABILITY scope
+          the categories it covers: null
+        occurredAt:
+          type: string
+          format: date-time
     SellerApplicationAssignmentEvent:
       type: object
       required:
@@ -10814,6 +10997,8 @@ components:
           enum:
           - SELLER
           - PROVIDER
+          - SELLING_APPROVAL
+          description: SELLING_APPROVAL for a selling approval case
         stage:
           type:
           - string
@@ -12812,7 +12997,14 @@ operations:
       sellers:enforce) is a separate hold: it publishes seller.listings.hidden and seller.payouts.paused with reason SUSPENDED;
       reinstatement publishes seller.payouts.resumed / seller.listings.restored with reason REINSTATED only when no Stripe
       compliance hold still requires them, and compliance releases (CLEARED, MANUAL) are held back while the organisation
-      is suspended. Consumers keep treating these as one latest-wins hold per organisation.'
+      is suspended. Consumers keep treating these as one latest-wins hold per organisation. Selling approvals (docs/runbooks/selling-approvals.md)
+      also publish here, keyed by organisation (rule changes by rule id): seller.selling.approval.expiry_warning (30, 14 and
+      7 days before the earliest document expires; recipientUserIds are the organisation''s owners) and seller.selling.approval.expired
+      tell the seller; seller.selling.listings.paused (reason EXPIRED once the 14 days of grace are over, PERFORMANCE or REVOKED
+      by staff) and seller.selling.listings.restored (RENEWED, STAFF_RESTORED) make catalog pause or resume that organisation''s
+      listings in the scope (status PAUSED with a hold that says why, never deleted; catalog publishes catalog.product.paused
+      / resumed, which the indexer follows); seller.selling.rule.changed makes catalog re-check every listing of the scope
+      against its seller''s approvals. Catalog reads them with its own consumer group next to the compliance consumer.'
   publishSellerSubscriptionEvents:
     action: send
     channel:

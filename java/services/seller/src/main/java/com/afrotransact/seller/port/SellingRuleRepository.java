@@ -34,16 +34,16 @@ public interface SellingRuleRepository {
     /** Optimistic: fails with a conflict when the rule changed since it was read. */
     SellingRule update(SellingRule rule);
 
-    void audit(RuleAudit audit);
+    void audit(SellingRuleAudit audit);
 
-    List<RuleAudit> audits(UUID ruleId);
+    List<SellingRuleAudit> audits(UUID ruleId);
 
     /** @param level null for every level; @param text matches the label or key */
     record RuleSearch(SellingScopeType type, SellingLevel level, String text, boolean activeOnly, int page, int size) {
     }
 
     /** One change to a rule: who, why (10+ characters), what it was and what it became (stored as JSON). */
-    record RuleAudit(UUID id, UUID ruleId, String action, String actorId, String actorName, String reason,
+    record SellingRuleAudit(UUID id, UUID ruleId, String action, String actorId, String actorName, String reason,
                      Object before, Object after, Instant changedAt) {
     }
 }

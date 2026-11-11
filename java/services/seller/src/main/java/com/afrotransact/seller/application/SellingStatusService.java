@@ -1,6 +1,6 @@
 package com.afrotransact.seller.application;
 
-import com.afrotransact.seller.application.SellingViews.Capabilities;
+import com.afrotransact.seller.application.SellingViews.SellingCapabilities;
 import com.afrotransact.seller.application.SellingViews.SellingApprovals;
 import com.afrotransact.seller.domain.SellingFacts;
 import com.afrotransact.seller.domain.SellingStatus;
@@ -18,5 +18,5 @@ public interface SellingStatusService {
     SellingApprovals approvals(String orgId);
 
     /** Seller capabilities such as food service: the product form shows food service fields only when approved. */
-    Capabilities capabilities(String orgId);
+    SellingCapabilities capabilities(String orgId);
 }

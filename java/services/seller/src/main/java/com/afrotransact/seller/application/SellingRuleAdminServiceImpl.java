@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
-import com.afrotransact.seller.application.SellingViews.RuleView;
+import com.afrotransact.seller.application.SellingViews.SellingRuleView;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.SellingDocumentKind;
@@ -25,7 +25,7 @@ import com.afrotransact.seller.domain.SellingScope;
 import com.afrotransact.seller.domain.SellingScopeType;
 import com.afrotransact.seller.port.Page;
 import com.afrotransact.seller.port.SellingRuleRepository;
-import com.afrotransact.seller.port.SellingRuleRepository.RuleAudit;
+import com.afrotransact.seller.port.SellingRuleRepository.SellingRuleAudit;
 import com.afrotransact.seller.port.SellingRuleRepository.RuleSearch;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,32 +51,32 @@ class SellingRuleAdminServiceImpl implements SellingRuleAdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<RuleView> search(String scopeType, String level, String text, boolean activeOnly, int page,
+    public Page<SellingRuleView> search(String scopeType, String level, String text, boolean activeOnly, int page,
                                  int size) {
         viewer();
         Page<SellingRule> found = rules.search(new RuleSearch(parseType(scopeType), parseLevel(level), text,
                 activeOnly, Math.max(page, 0), Math.min(Math.max(size, 1), 200)));
-        return new Page<>(found.items().stream().map(RuleView::of).toList(), found.page(), found.size(),
+        return new Page<>(found.items().stream().map(SellingRuleView::of).toList(), found.page(), found.size(),
                 found.total());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public RuleView get(UUID id) {
+    public SellingRuleView get(UUID id) {
         viewer();
-        return RuleView.of(rules.find(id).orElseThrow(() -> notFound(id)));
+        return SellingRuleView.of(rules.find(id).orElseThrow(() -> notFound(id)));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<RuleAudit> audit(UUID id) {
+    public List<SellingRuleAudit> audit(UUID id) {
         viewer();
         return rules.audits(id);
     }
 
     @Override
     @Transactional
-    public RuleView create(RuleInput in, String reason, String actorName) {
+    public SellingRuleView create(RuleInput in, String reason, String actorName) {
         Actor actor = access.staff(SellerPermissions.SELLING_RULES_MANAGE);
         String why = reason(reason);
         SellingScopeType type = requireType(in.scopeType());
@@ -91,15 +91,15 @@ class SellingRuleAdminServiceImpl implements SellingRuleAdminService {
                 level), text(in.note()), null, capability(in), materials(in), in.watch(), reapply(in),
                 in.active() == null || in.active(), "STAFF", now, actorName, 0);
         SellingRule saved = rules.insert(rule);
-        rules.audit(new RuleAudit(UUID.randomUUID(), saved.id(), "CREATE", actor.subject(), actorName, why, null,
-                RuleView.of(saved), now));
+        rules.audit(new SellingRuleAudit(UUID.randomUUID(), saved.id(), "CREATE", actor.subject(), actorName, why, null,
+                SellingRuleView.of(saved), now));
         changed(saved, why, now);
-        return RuleView.of(saved);
+        return SellingRuleView.of(saved);
     }
 
     @Override
     @Transactional
-    public RuleView update(UUID id, RuleInput in, String reason, String actorName) {
+    public SellingRuleView update(UUID id, RuleInput in, String reason, String actorName) {
         Actor actor = access.staff(SellerPermissions.SELLING_RULES_MANAGE);
         String why = reason(reason);
         SellingRule current = rules.find(id).orElseThrow(() -> notFound(id));
@@ -117,13 +117,13 @@ class SellingRuleAdminServiceImpl implements SellingRuleAdminService {
                 in.reapplyAfterDays() == null ? current.reapplyAfterDays() : reapply(in),
                 in.active() == null ? current.active() : in.active(), "STAFF", now, actorName, current.version());
         if (same(current, next)) {
-            return RuleView.of(current);
+            return SellingRuleView.of(current);
         }
         SellingRule saved = rules.update(next);
-        rules.audit(new RuleAudit(UUID.randomUUID(), saved.id(), "UPDATE", actor.subject(), actorName, why,
-                RuleView.of(current), RuleView.of(saved), now));
+        rules.audit(new SellingRuleAudit(UUID.randomUUID(), saved.id(), "UPDATE", actor.subject(), actorName, why,
+                SellingRuleView.of(current), SellingRuleView.of(saved), now));
         changed(saved, why, now);
-        return RuleView.of(saved);
+        return SellingRuleView.of(saved);
     }
 
     private static boolean same(SellingRule a, SellingRule b) {
