@@ -38,11 +38,13 @@ class ServiceAreaServiceImpl implements ServiceAreaService {
     private final ProviderRepository providers;
     private final GeoClient geo;
     private final BookingsAccess access;
+    private final ServiceAlertService alerts;
     private final Clock clock;
 
     ServiceAreaServiceImpl(ServiceAreaRepository areas, ServiceAreaConfigRepository config,
                            OfferingRepository offerings, ProviderRepository providers, GeoClient geo,
-                           BookingsAccess access, Clock clock) {
+                           BookingsAccess access, ServiceAlertService alerts, Clock clock) {
+        this.alerts = alerts;
         this.areas = areas;
         this.config = config;
         this.offerings = offerings;
@@ -85,6 +87,7 @@ class ServiceAreaServiceImpl implements ServiceAreaService {
         Instant now = Instant.now(clock);
         ServiceArea saved = areas.save(new ServiceArea(orgId, base.zip(), base.city(), base.state(), base.lat(),
                 base.lon(), radius, extras, served, now));
+        alerts.providerChanged(orgId);
         return view(orgId, saved);
     }
 

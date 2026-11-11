@@ -37,6 +37,12 @@ public final class BookingsEvents {
     /** A service was created or changed (key = service id) — search indexing. */
     public static final String SERVICE_UPSERTED = "booking.service.upserted";
 
+    /**
+     * A provider now serves a place a customer asked to be told about ("Tell me when one joins"); notifications
+     * emails the address in the payload (key = alert id).
+     */
+    public static final String SERVICE_ALERT = "booking.service_alert";
+
     private BookingsEvents() {
     }
 }

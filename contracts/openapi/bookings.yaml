@@ -1286,6 +1286,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicReviewPage'
       security: []
+  /v1/public/services/alerts:
+    post:
+      tags:
+      - Public bookings
+      summary: Tell me when a provider joins
+      description: 'Opens an email alert for a ZIP (and optionally a category); works without an account. The email is sent
+        once, when a provider starts serving the place. Always 202: a repeated request reveals nothing. 422 bookings.invalid-alert
+        / bookings.invalid-zip.'
+      operationId: subscribe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAlertRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+      security: []
   /v1/public/services/search:
     get:
       tags:
@@ -2525,6 +2544,29 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+    ServiceAlertRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 0
+        zip:
+          type: string
+          minLength: 1
+          pattern: ^\d{5}$
+        category:
+          type: string
+          description: Service category, or omit for any
+          maxLength: 60
+          minLength: 0
+        locale:
+          type: string
+          pattern: ^(en|fr|es|ar|yo)$
+      required:
+      - email
+      - zip
     ReviewReplyRequest:
       type: object
       description: The provider replies once to a published review

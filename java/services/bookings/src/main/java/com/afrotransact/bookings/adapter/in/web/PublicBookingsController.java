@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import com.afrotransact.bookings.adapter.in.web.ProviderDtos.AddOnDto;
 import com.afrotransact.bookings.application.PublicBookingsService;
+import com.afrotransact.bookings.application.ServiceAlertService;
 import com.afrotransact.bookings.application.PublicBookingsService.AreaView;
 import com.afrotransact.bookings.application.PublicBookingsService.Listing;
 import com.afrotransact.bookings.application.PublicBookingsService.SearchQuery;
@@ -23,11 +24,18 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,9 +46,11 @@ import org.springframework.web.bind.annotation.RestController;
 class PublicBookingsController {
 
     private final PublicBookingsService catalog;
+    private final ServiceAlertService alerts;
 
-    PublicBookingsController(PublicBookingsService catalog) {
+    PublicBookingsController(PublicBookingsService catalog, ServiceAlertService alerts) {
         this.catalog = catalog;
+        this.alerts = alerts;
     }
 
     @Schema(name = "PublicServiceArea", description = "Where the provider is, relative to the searched ZIP")
@@ -173,6 +183,22 @@ class PublicBookingsController {
                                           @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)).cachePublic())
                 .body(SearchResponse.of(catalog.search(new SearchQuery(q, category, zip, sort, size))));
+    }
+
+    @Schema(name = "ServiceAlertRequest")
+    record AlertRequest(@NotBlank @Email @Size(max = 254) String email, @NotBlank @Pattern(regexp = "^\\d{5}$") String zip,
+                        @Size(max = 60) @Schema(description = "Service category, or omit for any") String category,
+                        @Pattern(regexp = "^(en|fr|es|ar|yo)$") String locale) {
+    }
+
+    @Operation(summary = "Tell me when a provider joins", description = "Opens an email alert for a ZIP (and "
+            + "optionally a category); works without an account. The email is sent once, when a provider starts "
+            + "serving the place. Always 202: a repeated request reveals nothing. 422 bookings.invalid-alert / "
+            + "bookings.invalid-zip.")
+    @PostMapping("/v1/public/services/alerts")
+    ResponseEntity<Void> subscribe(@Valid @RequestBody AlertRequest body) {
+        alerts.subscribe(body.email(), body.zip(), body.category(), body.locale());
+        return ResponseEntity.accepted().build();
     }
 
     @Operation(summary = "Search-box suggestions: service names and provider names containing q")

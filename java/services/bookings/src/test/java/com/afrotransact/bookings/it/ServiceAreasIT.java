@@ -123,6 +123,32 @@ class ServiceAreasIT extends BookingsIntegrationTest {
     }
 
     @Test
+    void alertsAreOpenedForUnservedPlacesAndEmailedOnceWhenAProviderJoins() {
+        String email = "waiting" + UUID.randomUUID().toString().substring(0, 6) + "@example.com";
+        assertThat(send("POST", "/v1/public/services/alerts", Map.of("email", email, "zip", "78626",
+                "category", "tailoring", "locale", "fr")).statusCode()).isEqualTo(202);
+        assertThat(send("POST", "/v1/public/services/alerts", Map.of("email", email, "zip", "78626",
+                "category", "tailoring")).statusCode()).as("duplicates are quiet").isEqualTo(202);
+        assertThat(send("POST", "/v1/public/services/alerts", Map.of("email", "nope", "zip", "78626")).statusCode())
+                .isEqualTo(400);
+        UUID alert = jdbc.sql("select id from service_alert where email = :e").param("e", email).query(UUID.class)
+                .single();
+        assertThat(jdbc.sql("select count(*) from service_alert where email = :e").param("e", email)
+                .query(Long.class).single()).isEqualTo(1);
+
+        placed("78701", 40, "alert", "suit tailoring", "hair & beauty", 20_000, List.of("IN_PERSON"));
+        assertThat(outboxTypes(alert.toString())).as("a hair provider does not match a tailoring alert").isEmpty();
+        Setup tailor = placed("78701", 40, "alert", "suit tailoring", "tailoring", 20_000, List.of("IN_PERSON"));
+        assertThat(outboxTypes(alert.toString())).containsExactly("booking.service_alert");
+        String payload = jdbc.sql("select payload::text from platform_outbox where aggregate_id = :id")
+                .param("id", alert.toString()).query(String.class).single();
+        assertThat(payload).contains(email).contains("\"locale\": \"fr\"").contains("tailoring");
+        TestSupport.as(TestSupport.owner(tailor.org()));
+        ok(send("PUT", "/v1/providers/" + tailor.org() + "/service-area", Map.of("baseZip", "78701", "radiusMiles", 30)));
+        assertThat(outboxTypes(alert.toString())).as("emailed once").hasSize(1);
+    }
+
+    @Test
     void providerSavesAnAreaWithinBoundsAndGetsAZoneLabel() {
         Setup s = provider(false);
         TestSupport.as(TestSupport.owner(s.org()));

@@ -29,11 +29,13 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
     private final ProviderFees fees;
     private final BookingsAccess access;
     private final DomainEventPublisher events;
+    private final ServiceAlertService alerts;
     private final Clock clock;
 
     ServiceCatalogServiceImpl(OfferingRepository offerings, ProviderRepository providers, TeamRepository team,
                               TakeHomeCalculator takeHome, ProviderFees fees, BookingsAccess access,
-                              DomainEventPublisher events, Clock clock) {
+                              DomainEventPublisher events, ServiceAlertService alerts, Clock clock) {
+        this.alerts = alerts;
         this.fees = fees;
         this.offerings = offerings;
         this.providers = providers;
@@ -53,6 +55,7 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
         ServiceOffering created = offerings.insert(new ServiceOffering(UUID.randomUUID(), orgId, c.name(),
                 c.description(), c.category(), c.durationMinutes(), c.priceMinor(), c.depositMinor(), p.currency(),
                 c.modes(), c.addOns(), Set.of(), c.imageUrl(), true, now, now, 0));
+        alerts.providerChanged(orgId);
         return publish(created);
     }
 
@@ -69,7 +72,11 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
     @Transactional
     public ServiceView setActive(String orgId, UUID serviceId, boolean active) {
         access.providerWide(orgId, BookingsPermissions.SERVICES_WRITE);
-        return publish(offerings.update(require(orgId, serviceId).withActive(active, Instant.now(clock))));
+        ServiceView view = publish(offerings.update(require(orgId, serviceId).withActive(active, Instant.now(clock))));
+        if (active) {
+            alerts.providerChanged(orgId);
+        }
+        return view;
     }
 
     @Override

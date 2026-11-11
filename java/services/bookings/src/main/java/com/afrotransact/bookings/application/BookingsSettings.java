@@ -35,6 +35,12 @@ public record BookingsSettings(Duration holdTtl, Duration requestSla, Duration a
         manageUrlBase = manageUrlBase == null ? "" : manageUrlBase;
     }
 
+    /** Storefront service page prefix (the id is appended): the manage URL's site plus /services/. */
+    public String serviceUrlBase() {
+        int i = manageUrlBase.indexOf("/account/");
+        return (i > 0 ? manageUrlBase.substring(0, i) : "http://localhost:3000") + "/services/";
+    }
+
     public boolean isRetail(String orgId) {
         return retailOrgId.equals(orgId);
     }
