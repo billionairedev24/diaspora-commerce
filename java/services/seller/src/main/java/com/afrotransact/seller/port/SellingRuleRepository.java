@@ -39,8 +39,8 @@ public interface SellingRuleRepository {
     record RuleSearch(SellingScopeType type, SellingLevel level, String text, boolean activeOnly, int page, int size) {
     }
 
-    /** One change to a rule: who, why (10+ characters), before and after as JSON. */
+    /** One change to a rule: who, why (10+ characters), what it was and what it became (stored as JSON). */
     record RuleAudit(UUID id, UUID ruleId, String action, String actorId, String actorName, String reason,
-                     String beforeJson, String afterJson, Instant changedAt) {
+                     Object before, Object after, Instant changedAt) {
     }
 }

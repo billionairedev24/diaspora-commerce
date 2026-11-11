@@ -147,7 +147,7 @@ class JdbcSellingRuleRepository implements SellingRuleRepository {
                 """)
                 .param("id", a.id()).param("rule", a.ruleId()).param("action", a.action())
                 .param("actor", a.actorId()).param("name", a.actorName()).param("reason", a.reason())
-                .param("before", a.beforeJson()).param("after", a.afterJson()).param("at", Sql.ts(a.changedAt()))
+                .param("before", a.before() == null ? null : json.write(a.before())).param("after", json.write(a.after())).param("at", Sql.ts(a.changedAt()))
                 .update();
     }
 
