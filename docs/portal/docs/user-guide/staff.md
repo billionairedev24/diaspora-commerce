@@ -90,6 +90,33 @@ it has `delivery-quotes:agree`; supervisors with `delivery-quotes:assign` assign
   can ask. Every change needs a reason and is kept with what it was before.
 
 See the [runbook](../../../runbooks/delivery-quotes.md).
+## Selling approvals
+
+Some categories and brands need approval before a seller's listings go live (supplements, food service, car seats,
+digital products, designer and well-known brands, gold, silver, gemstones and watches). A seller applies once for a scope
+in Seller Center (**Listings, Selling approvals**, or the *Apply to sell* button next to the category in the product form).
+The application is a **case** in **Partners, Applications**, tab **Selling approvals**, and works exactly like a seller
+application: the same queues and chips, claim, assign, release, escalate, the same two steps (a reviewer, then a different
+approver), the same service levels (target: 2 business days), the same names under *With*. The sheet lists each document with
+its dates (a purchase invoice within 180 days, a permit or insurance with its expiry, insurance naming AfroTransact as
+additional insured); click **View** to open one (every opening is logged).
+
+- **Approve (step 1)** and **Final approval** need every required document on file and unexpired. The seller then sells in the
+  scope until the earliest document expires.
+- **Ask the seller for more** returns it to the seller with your message; they upload and it starts again at step 1.
+- **Reject** tells the seller why; they can apply again at once. **Cannot apply (not appealable)** (step 2) tells the seller the
+  reason and the day they may apply again (required); they cannot apply before it. Use it for fraud or counterfeits.
+- **Seller approvals** lists the approvals sellers hold with when they run out. **Pause listings** (a performance problem) puts the
+  scope's listings on hold, never deletes them, and tells the seller; **Restore** brings them back; **Withdraw** removes the approval
+  with a reapply date. Needs `applications:approve` and a reason of at least 10 characters.
+- A document that expires: the seller is warned 30, 14 and 7 days before, the listings stay up for 14 days after it expires, then
+  they are paused until the renewal is approved.
+- **Catalog, Selling rules** (with `selling-rules:manage`): change what a category or brand needs, add a gated brand, choose the
+  documents. Every change needs a reason and is audited; a stricter rule pauses the listings of sellers who do not qualify.
+- Sellers who said they were bakeries appear as cases "From bakery flag" with no permit on file. Ask for the food permit and the
+  insurance; approving without them is refused.
+
+See the [runbook](../../../runbooks/selling-approvals.md).
 
 ## Department requests
 

@@ -56,6 +56,26 @@ from a spreadsheet (**Listings → Size charts → Import charts**): download th
 **Check the file**; nothing is saved until you import, each chart is saved whole or not at all, and a name you already use
 updates that chart. A chart you retire keeps showing on products that already use it.
 
+### Selling approvals: which products need our approval
+
+Most categories are open: your listing goes live as soon as it passes validation, with no review. A few need our approval
+first, and the product form tells you as soon as you pick the category and brand: **Sell this product**, **Apply to sell**
+(with a button) or **Not available** (with the reason).
+
+- **Apply once** for a category, a brand or a seller capability; after that every listing there goes live. Open **Listings,
+  Selling approvals**, press *Apply to sell* and upload what it asks for: a purchase invoice dated within 180 days, photos of
+  all sides, a brand authorization letter, a safety or lab certificate, a permit or licence with its expiry date, liability
+  insurance naming AfroTransact as additional insured with its expiry date. Your files are private.
+- Gold, silver, gemstone and watch jewelry need approval; fashion and beaded jewelry do not. Food cooked, baked or catered by
+  you needs the **Food service** capability (a food permit with its expiry date and insurance); packaged groceries need no permit.
+- Statuses in plain words: *Not applied*, *With our team* (we aim to answer within 2 business days), *Needs your attention* (we asked for
+  more: upload it and send), *Approved*, *Expired*, *Not available*. If we cannot approve you the reason is shown with the day you can apply
+  again; that decision cannot be appealed.
+- **Renewals.** We warn you 30, 14 and 7 days before a document expires. If it expires, your listings stay up for 14 days and
+  are then paused, never deleted; upload the renewed document (*Renew*) and they come back when it is approved. We can also pause a
+  scope's listings after a performance problem, and tell you why.
+- A listing you cannot publish yet stays a draft with a link to apply.
+
 ### Which departments you sell in
 
 You choose your **departments** (Groceries, Fashion, Beauty and so on) when you apply, and AfroTransact records them when

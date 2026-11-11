@@ -3,7 +3,7 @@
 import { type ListingRow, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Badge, Button, buttonClassName, InlineEdit, RowName, Tabs, useToast } from '@afrotransact/ui';
-import { Eye, FileArrowUp, ImagesSquare, Pause, PencilSimple, Play, Plus, Stack, Truck } from '@phosphor-icons/react/ssr';
+import { Eye, FileArrowUp, ImagesSquare, Pause, PencilSimple, Play, Plus, ShieldCheck, Stack, Truck } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -48,6 +48,9 @@ export function ListingsView() {
       module="listings"
       actions={editable ? (
         <>
+          <Link href="/listings/approvals" className={buttonClassName({ variant: 'neutral' })}>
+            <ShieldCheck size={18} aria-hidden /> Selling approvals
+          </Link>
           {has('imageLibrary') ? (
             <Link href="/listings/images" className={buttonClassName({ variant: 'neutral' })}>
               <ImagesSquare size={18} aria-hidden /> {t('sc.listings.images')}

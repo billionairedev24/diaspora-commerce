@@ -77,7 +77,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'moderation', label: 'Moderation queue' },
     { resource: 'product-reviews', label: 'Product reviews' },
     { resource: 'products', label: 'Products' },
-    { resource: 'category-requests', label: 'Category requests', statusFilter: true }
+    { resource: 'category-requests', label: 'Category requests', statusFilter: true },
+    { resource: 'selling-rules', label: 'Selling rules', statusFilter: true }
   ],
   inventory: [{ resource: 'inventory', label: 'Lots' }],
   retail: [{ resource: 'purchase-orders', label: 'Purchase orders' }],
@@ -86,7 +87,11 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'organisations', label: 'Organisations' },
     { resource: 'connect-accounts', label: 'Stripe Connect' }
   ],
-  apps: [{ resource: 'applications', label: 'Applications', statusFilter: true, defaultStatus: 'MY' }],
+  apps: [
+    { resource: 'applications', label: 'Applications', statusFilter: true, defaultStatus: 'MY' },
+    { resource: 'selling-approvals', label: 'Selling approvals', statusFilter: true, defaultStatus: 'MY' },
+    { resource: 'seller-approvals', label: 'Seller approvals', statusFilter: true }
+  ],
   deliveryQuotes: [
     { resource: 'delivery-quotes', label: 'Delivery quotes', statusFilter: true, defaultStatus: 'MY' },
     { resource: 'delivery-quote-settings', label: 'SLA, escalation and amounts' }

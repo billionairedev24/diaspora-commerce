@@ -4,7 +4,7 @@ export { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, PENDING_OR
 export { MOCK_DEPARTMENTS, MOCK_FASHION_ORG, MOCK_FOOD_ORG, MOCK_ORG_DEPARTMENTS } from './departments';
 export { gtinValid, MOCK_ROLE_COOKIE, sellerHandlers } from './handlers';
 export { allows, describePolicy, navigation, roleCards, takeHome } from './model';
-export { decideSellingMock, resetSellingMocks } from './selling';
 export { MOCK_RUN_AMARILLO, MOCK_RUN_LUBBOCK } from './run-pickups';
+export { decideSellingMock, resetSellingMocks } from './selling';
 export { SIZE_CHART_IDS } from './size-charts';
 export { TAX_PRODUCT_TYPES, TAX_TREE } from './taxonomy';

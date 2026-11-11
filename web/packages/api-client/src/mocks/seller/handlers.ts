@@ -11,8 +11,8 @@ import { applyBps } from '../../fees';
 import { bffProblemType } from '../../problem-types';
 import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import { REVIEW_REASON_CODES, SELLER_REPLY_MAX } from '../../schemas/reviews';
-import { applyToSell, resubmitSelling, SellingMockError, sellingApplication, sellingApplications, sellingApprovals, sellingCapabilities, sellingStatus } from './selling';
 import {
+  ApplyToSellSchema,
   AvailabilityFormSchema,
   type BookingAction,
   BookingActionSchema,
@@ -39,10 +39,9 @@ import {
   PickupWindowSchema,
   type PlanFeeCollectionView,
   ProductDraftSchema,
+  ResubmitSellingSchema,
   SellerAddressSchema,
   type SellerCoupon,
-  ApplyToSellSchema,
-  ResubmitSellingSchema,
   SellerDepartmentRequestInputSchema,
   type SellerFeesView,
   type SellerFeeVersion,
@@ -108,6 +107,7 @@ import {
   submit,
   verifyStripe
 } from './onboarding';
+import { applyToSell, resubmitSelling, sellingApplication, sellingApplications, sellingApprovals, sellingCapabilities, SellingMockError, sellingStatus } from './selling';
 import { sellerSettingsHandlers } from './settings';
 import { chartProblems, type MockSizeChart, readSizeChartCsv, sizeChartTemplateCsv, sizeProblems, suggestionsFor } from './size-charts';
 

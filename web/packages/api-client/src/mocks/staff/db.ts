@@ -10,7 +10,6 @@ import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './conte
 import { seedQuotes,seedQuoteSettings } from './delivery-quotes';
 import { MOCK_DEPARTMENT_ORGS, type MockDepartmentsState, seedDepartments } from './departments';
 import { type MockDispatch, seedDispatch } from './dispatch';
-import { seedSelling } from './selling';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
@@ -21,6 +20,7 @@ import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTe
 import { seedShipments, syncOrder } from './order-shipments';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
+import { seedSelling } from './selling';
 import { seedServiceAreaRules, seedServiceZones } from './service-areas';
 import { seedShippingSettings } from './shipping-settings';
 import { type MockTaxState, seedTax } from './tax';
