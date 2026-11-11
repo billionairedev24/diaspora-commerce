@@ -288,3 +288,51 @@ Legend: R required, R* required or an exemption with a reason, DOC document uplo
 | Handmade products (`handmade-products`) | Other & Specialty | HOM | open | REFINE_CODE | Barcode exemption allowed. Brand "Handmade". |
 | School & office supplies (`school-office-supplies`) | Other & Specialty | HOM | open | ACTIVE |  |
 | Sports goods (`sports-goods`) | Other & Specialty | HOM | open | ACTIVE |  |
+
+## 6. Implementation notes (catalog, seller center, gateway)
+
+One source, three consumers. `tools/listing-rules/rules.json` is the only copy of the data. Catalog loads it through the
+`RulesRegistry` port (`ClasspathRulesRegistry`); the build copy in `java/services/catalog/src/main/resources/listing-rules/rules.json`
+is produced by `tools/listing-rules/sync.sh` and `ClasspathRulesRegistryTest` fails when it differs from the source (it also
+checks the matrix in section 4 of this document cell by cell, and that every rule category is a category of the seed
+taxonomy). The product form gets the rules for the chosen category from `GET /v1/listing-rules?categoryCode=` (through the
+gateway as `GET /v1/seller/catalog/listing-rules`); the API validation (`DefaultProductDraftPolicy` plus `ListingRuleChecker`)
+and the bulk upload (`ImportColumns.forCategories`, `ImportValidator`) read the same `CategoryRules`. The gateway holds no rule
+data: it checks the shape of a submission and forwards catalog's field errors.
+
+What the statuses mean in code:
+
+- `required`: must be answered. `required_or_exemption`: answered, or the seller gives a reason (`listing.exemptions[fieldId]`,
+  the `why_not_provided` column in uploads). The product ID keeps its own mechanic (`gtinExempt`, books always need the ISBN) and
+  the brand its reason (`brand_reason`); a `required` barcode has no exemption.
+- `hidden`: not shown, not required, and a submitted value is ignored the same way by the form, the API and the upload
+  (`ListingNormaliser`): attributes are dropped, condition becomes New, the package and dangerous goods answer are dropped for
+  digital, gift cards and services, a hidden barcode makes the variant exempt. An upload cell for a hidden question is ignored
+  with a warning.
+- `document`, and the document rows of section 4 (`required`, `required_or_exemption`, `document`): the form collects the file
+  (private upload, stored in `listing.documents` marked `PENDING_REVIEW`) and the approval engine reviews it. They never block
+  a listing in catalog, because whether a document is due depends on the approval scope (gated brand, cold chain), which the
+  approval engine decides. When it exposes that decision, catalog can enforce the `required*` document rows.
+- Sizes and size chart: the rule applies where the product type is sized (it has a size dimension). `required` makes the chart
+  required, `required_or_exemption` and `optional` leave it optional, `hidden` removes it. A product type without sizes
+  (fabrics sold by the yard, bags) is not asked for sizes, whatever its kind.
+
+Clarifications this implementation made:
+
+- The rules know a category by the code of the CATEGORY node above a product type (`dairy-eggs`). A category without rules
+  (created by staff after the matrix) and a requested category get the general goods rules (`HOM`, marked provisional); the
+  endpoint answers them for the code `general`.
+- `fabrics-textiles` is in `rules.json` with `provisional: true` (kind FSH, open). It is not one of the 73 approved categories;
+  consumers must skip provisional entries when they count.
+- A category can override a field of its kind (`overrides`). Car seats are `KID` with Condition hidden, so they are New only
+  while toys choose.
+- Package length, width, height and weight are stored per variant (`product_variant.package_*`, migration V2, back-filled from the
+  listing package where it was valid). `listing.packaging` stays as the default for variants without their own and is set to the
+  first variant's package for readers that only know the listing. The event payload carries `packaging` per variant (falling back
+  to the listing package for listings not edited yet) and `dangerousGoods`.
+- Existing listings are not changed by the migration. They are checked against the rules when they are next edited, so an old
+  listing without a label photo or country of origin must get them before it can be saved again. System updates that go through
+  the same writer (attaching library images) report such a listing as skipped with the reason.
+- The label photo is an image with `role: LABEL`, kept last in `images` so the first picture stays the main image.
+- Description is required for every kind (it was optional before).
+

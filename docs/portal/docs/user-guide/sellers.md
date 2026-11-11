@@ -44,6 +44,40 @@ anything from you, the status changes to **Needs your attention** and you will g
 categories need a permit or licence uploaded in your application. Services (**Services** menu) need duration,
 price, hours and a calendar.
 
+### What each category asks for
+
+The product form asks only what your category needs, and says so at the top: **What you need to list this product**, a
+checklist where every item opens its field. Chips next to the category tell you whether you can **Sell this product**
+straight away, **Apply to sell** once (then every listing in that category or brand goes live), or whether it is **Not
+available**.
+
+- **Photos.** At least one picture. Packaged food, baby feeding, beauty, health products and pet food also need a
+  **label photo** (the ingredients and nutrition panel, the Supplement Facts or the Drug Facts). It is a slot of its own;
+  other pictures do not count. For packaged groceries you do not type the ingredients: the label photo covers it, and you
+  can tick the allergens it contains. Prepared food (cooked or baked by you) asks for typed ingredients and the allergen
+  list instead.
+- **Package size and weight.** Every physical product needs the length, width, height and weight of the box as shipped
+  (at most 108 in on each side and 150 lb; you can type cm and kg). Give each size or colour its own box when they
+  differ: a variant you leave empty starts from the first one, and **Same package for all variants** copies it down.
+  Digital products, gift cards and services have no package.
+- **Country of origin** for every physical product, and the **dangerous goods** question (aerosols, flammables,
+  batteries, candles, cleaners) where it applies. A *yes* keeps the item out of Fulfilled by AfroTransact until we review
+  it.
+- **Condition** (New, Renewed, Used) is asked only for electronics, books, general goods and toys. Everything else is
+  listed as New, and car seats are always New.
+- **Product facts**: net weight, servings, shelf life or expiry, storage, material, model number, age grade. Where a
+  question says *required*, you must answer it. Where it can be left out, tick **I can't provide this** and write why (for
+  example "handmade, no model number").
+- **Barcode**: required where the category says so; handmade and unbranded items may say they have none.
+- **Documents** (permit, brand authorization, safety or lab certificate, insurance, purchase invoice): upload them in
+  the **Compliance** section. They are kept private and reviewed by the approval team when you apply for a category or
+  brand; they never hold up a listing.
+
+The bulk upload template is built from the same rules: pick a category, download its template, and the columns, the
+required stars and the help text match what the form asks. Rows are checked the same way, with a plain message on the
+column that needs fixing; the package columns are per row (leave them empty on a variant that ships in the first row's
+box).
+
 ### Clothes and shoes: sizes and size charts
 
 For fashion categories you can write your own sizes ("UK 12", "Free size", "EU 38") and colours ("Indigo adire") when
