@@ -12,7 +12,17 @@ public enum SlotKey {
     HOME_PRODUCT_ROW,
     DISPLAY_BANNER,
     CATEGORY_BANNER,
-    CHECKOUT_CROSS_SELL;
+    CHECKOUT_CROSS_SELL,
+    /** Paid: full-width sponsored brand banner between rails. */
+    HOME_BRAND_BANNER,
+    /** Paid: products sellers promote, from the sponsored-products auction. */
+    HOME_SPONSORED_PRODUCTS,
+    /** Paid: two or three image ads side by side. */
+    HOME_AD_ROW,
+    /** Paid: editorial card from a partner. */
+    HOME_ADVERTORIAL,
+    /** Rule-based home module (deals, spotlights, bands). */
+    HOME_BLOCK;
 
     /** Wire key, for example {@code hero_carousel}. */
     public String key() {

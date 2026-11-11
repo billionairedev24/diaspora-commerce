@@ -115,4 +115,17 @@ class PlacementWorkflowTest {
                 Placements.content(Targeting.everyone(), schedule, FrequencyCap.unlimited(), 1, paid), "maya",
                 Placements.NOW);
     }
+
+    @Test
+    void aLivePlacementCanBeMovedInThePageOrderWithoutANewReviewButAnEndedOneCannot() {
+        Placement live = draft(Placements.window(-1, 24), false).submit("maya", Placements.NOW)
+                .approve("lead", Placements.NOW);
+        Placement moved = live.withPriority(90, Placements.NOW);
+        assertThat(moved.priority()).isEqualTo(90);
+        assertThat(moved.status()).isEqualTo(PlacementStatus.LIVE);
+        assertThat(moved.payload()).isEqualTo(live.payload());
+        assertThatThrownBy(() -> live.withPriority(5000, Placements.NOW)).isInstanceOf(ContentRuleViolation.class);
+        assertThatThrownBy(() -> live.end(Placements.NOW).withPriority(1, Placements.NOW))
+                .isInstanceOf(ContentStateConflict.class);
+    }
 }

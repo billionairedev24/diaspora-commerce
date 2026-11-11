@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.afrotransact.content.adapter.in.web.PlacementDtos.PlacementRequest;
 import com.afrotransact.content.adapter.in.web.PlacementDtos.PlacementResponse;
+import com.afrotransact.content.adapter.in.web.PlacementDtos.PriorityRequest;
 import com.afrotransact.content.adapter.in.web.PlacementDtos.RejectRequest;
 import com.afrotransact.content.adapter.in.web.PlacementDtos.SlotResponse;
 import com.afrotransact.content.application.PlacementService;
@@ -69,6 +70,12 @@ class PlacementAdminController {
             throw new IllegalArgumentException("expectedVersion is required");
         }
         return PlacementResponse.of(placements.update(id, body.toContent(), body.expectedVersion()));
+    }
+
+    @Operation(summary = "Change the home page order of a placement that is not ended (content:placements.edit)")
+    @PutMapping("/placements/{id}/priority")
+    PlacementResponse reprioritise(@PathVariable String id, @Valid @RequestBody PriorityRequest body) {
+        return PlacementResponse.of(placements.reprioritise(id, body.priority()));
     }
 
     @Operation(summary = "Send a draft for review (content:placements.edit)")

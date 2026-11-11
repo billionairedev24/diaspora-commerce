@@ -62,6 +62,22 @@ public record Placement(String id, SlotKey slot, String name, String payload, Ta
                 reviewNote, version, createdAt, now);
     }
 
+    /**
+     * Moves the placement in the home page order. Allowed in any state but ENDED, because ordering a live page must not
+     * need a new draft and a new review (the content of the placement is unchanged).
+     */
+    public Placement withPriority(int newPriority, Instant now) {
+        if (status == PlacementStatus.ENDED) {
+            throw new ContentStateConflict("content.placement-ended", "An ended placement cannot be reordered");
+        }
+        if (newPriority < -1000 || newPriority > 1000) {
+            throw new ContentRuleViolation("content.invalid-priority", "Priority must be between -1000 and 1000",
+                    Map.of("priority", "Between -1000 and 1000"));
+        }
+        return new Placement(id, slot, name, payload, targeting, schedule, frequencyCap, newPriority, sponsorship,
+                status, createdBy, submittedBy, approvedBy, reviewNote, version, createdAt, now);
+    }
+
     public Placement submit(String actor, Instant now) {
         requireStatus(PlacementStatus.DRAFT, "content.placement-not-draft", "Only drafts can be sent for review");
         if (schedule.endedBy(now)) {

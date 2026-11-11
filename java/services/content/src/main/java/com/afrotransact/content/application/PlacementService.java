@@ -21,6 +21,9 @@ public interface PlacementService {
 
     Placement update(String id, PlacementContent content, long expectedVersion);
 
+    /** Changes the home page order (priority, higher first) of a placement that is not ended; no new review needed. */
+    Placement reprioritise(String id, int priority);
+
     Placement submit(String id);
 
     /** Approves; paid third-party creatives need an approver other than the author and submitter. */

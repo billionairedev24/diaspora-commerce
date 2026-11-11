@@ -9,12 +9,14 @@ import java.util.stream.Collectors;
 
 import com.afrotransact.content.adapter.in.web.PlacementDtos.BundleResponse;
 import com.afrotransact.content.adapter.in.web.PlacementDtos.BundledPlacement;
+import com.afrotransact.content.adapter.in.web.PlacementDtos.EventRequest;
 import com.afrotransact.content.adapter.in.web.PlacementDtos.ResolveResponse;
 import com.afrotransact.content.adapter.in.web.PlacementDtos.ServedPlacement;
 import com.afrotransact.content.application.ContentSettings;
 import com.afrotransact.content.application.PlacementDeliveryService;
 import com.afrotransact.content.application.PlacementDeliveryService.PlacementBundle;
 import com.afrotransact.content.application.PlacementDeliveryService.ResolvedPlacements;
+import com.afrotransact.content.application.PlacementStatsService;
 import com.afrotransact.content.domain.placement.Device;
 import com.afrotransact.content.domain.placement.PlacementContext;
 import com.afrotransact.content.domain.placement.SlotKey;
@@ -22,12 +24,17 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Placement delivery", description = "Public, cacheable placements for storefront, apps and the CDN")
@@ -38,10 +45,20 @@ class PlacementPublicController {
 
     private final PlacementDeliveryService delivery;
     private final ContentSettings settings;
+    private final PlacementStatsService stats;
 
-    PlacementPublicController(PlacementDeliveryService delivery, ContentSettings settings) {
+    PlacementPublicController(PlacementDeliveryService delivery, ContentSettings settings,
+                              PlacementStatsService stats) {
         this.delivery = delivery;
         this.settings = settings;
+        this.stats = stats;
+    }
+
+    @Operation(summary = "Count an impression or click on a placement (reported by the gateway for paid home modules)")
+    @PostMapping("/{id}/events")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void event(@PathVariable String id, @Valid @RequestBody EventRequest body) {
+        stats.record(id, body.kind());
     }
 
     @Operation(summary = "Live placements for a context (ETag; 304 on If-None-Match)",

@@ -16,6 +16,8 @@ import com.afrotransact.content.domain.placement.Sponsorship;
 import com.afrotransact.content.domain.placement.Targeting;
 import com.fasterxml.jackson.annotation.JsonRawValue;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import tools.jackson.databind.JsonNode;
@@ -104,6 +106,14 @@ final class PlacementDtos {
 
     @Schema(name = "RejectPlacementRequest")
     record RejectRequest(@NotBlank String note) {
+    }
+
+    @Schema(name = "PlacementPriorityRequest", description = "Position in the home page order: higher first")
+    record PriorityRequest(@NotNull @Min(-1000) @Max(1000) Integer priority) {
+    }
+
+    @Schema(name = "PlacementEventRequest")
+    record EventRequest(@NotBlank @Schema(allowableValues = {"impression", "click"}) String kind) {
     }
 
     @Schema(name = "ServedPlacement", description = "A placement as delivered to storefront and apps")

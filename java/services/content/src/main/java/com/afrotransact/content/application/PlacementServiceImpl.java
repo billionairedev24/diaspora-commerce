@@ -100,6 +100,18 @@ class PlacementServiceImpl implements PlacementService {
 
     @Override
     @Transactional
+    public Placement reprioritise(String id, int priority) {
+        Actor actor = access.require(ContentPermissions.PLACEMENTS_EDIT);
+        Placement p = load(id);
+        save(p.withPriority(priority, now()));
+        audit.record(actor.subject(), "placement.reprioritised", ENTITY, id,
+                Map.of("from", p.priority(), "to", priority));
+        cache.invalidate();
+        return load(id);
+    }
+
+    @Override
+    @Transactional
     public Placement submit(String id) {
         Actor actor = access.require(ContentPermissions.PLACEMENTS_EDIT);
         Placement p = load(id).submit(actor.subject(), now());
