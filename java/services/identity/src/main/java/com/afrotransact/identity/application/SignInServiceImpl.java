@@ -13,6 +13,7 @@ import com.afrotransact.identity.domain.MfaEnrolment;
 import com.afrotransact.identity.domain.MfaFactor;
 import com.afrotransact.identity.domain.MfaPolicy;
 import com.afrotransact.identity.domain.MfaRequirement;
+import com.afrotransact.identity.domain.RateLimitExceeded;
 import com.afrotransact.identity.domain.RecoveryCodes;
 import com.afrotransact.identity.domain.SecretHashing;
 import com.afrotransact.identity.domain.TotpAuthenticator;
@@ -77,24 +78,50 @@ class SignInServiceImpl implements SignInService {
     public SecondFactorChallenge challenge(UUID userId, Optional<String> trustedBrowserToken, boolean passkey) {
         UserAccount u = user(userId);
         MfaEnrolment e = support.enrolment(userId);
-        boolean mandatory = secondFactorMandatory(u, e);
         Instant now = Instant.now(clock);
         boolean trusted = trustedBrowserToken
                 .flatMap(t -> mfa.trustedBrowser(userId, SecretHashing.sha256Hex(t), now))
                 .isPresent();
-        if (!policy.secondFactorRequired(mandatory, e, trusted, passkey)) {
-            return SecondFactorChallenge.none();
+        if (policy.secondFactorRequired(e, trusted, passkey)) {
+            return new SecondFactorChallenge(true, e.totp(), e.sms(), mask(e.smsPhone()), e.recoveryCodesLeft() > 0,
+                    e.emailOtp(), maskEmail(u.email()), false);
         }
-        String smsPhone = smsDestination(u, e, mandatory);
-        return new SecondFactorChallenge(true, e.totp(), smsPhone != null, mask(smsPhone), e.recoveryCodesLeft() > 0);
+        if (policy.enrolmentRequired(secondFactorMandatory(u), e, passkey)) {
+            return SecondFactorChallenge.enrol();
+        }
+        return SecondFactorChallenge.none();
+    }
+
+    @Override
+    @Transactional
+    public Instant sendEmailCode(UUID userId) {
+        UserAccount u = user(userId);
+        if (!support.enrolment(userId).emailOtp()) {
+            throw new IdentityRuleViolation("identity.email-otp-unavailable", "Email codes are not set up");
+        }
+        return codes.issue(u, VerificationPurpose.SIGN_IN_EMAIL, "EMAIL", u.email());
+    }
+
+    @Override
+    @Transactional
+    public boolean sendEmailCodeIfDefault(UUID userId) {
+        MfaEnrolment e = support.enrolment(userId);
+        if (!e.emailOtp() || e.totp() || e.sms()) {
+            return false;
+        }
+        try {
+            sendEmailCode(userId);
+            return true;
+        } catch (RateLimitExceeded tooSoon) {
+            return false;
+        }
     }
 
     @Override
     @Transactional
     public Instant sendSmsCode(UUID userId) {
         UserAccount u = user(userId);
-        MfaEnrolment enrolment = support.enrolment(userId);
-        String phone = smsDestination(u, enrolment, secondFactorMandatory(u, enrolment));
+        String phone = support.enrolment(userId).smsPhone();
         if (phone == null) {
             throw new IdentityRuleViolation("identity.sms-unavailable", "Text-message codes are not set up");
         }
@@ -107,13 +134,22 @@ class SignInServiceImpl implements SignInService {
         Instant now = Instant.now(clock);
         boolean ok = switch (factor) {
             case TOTP -> verifyTotp(userId, code, now);
-            case SMS -> verifySms(userId, code);
+            case SMS -> support.smsEnabled() && verifySms(userId, code);
+            case EMAIL_OTP -> verifyEmail(userId, code, now);
             case RECOVERY_CODE -> mfa.useRecoveryCode(userId, RecoveryCodes.hash(code), now);
         };
         if (ok && factor == MfaFactor.RECOVERY_CODE) {
             changeLog.append(userId.toString(), "mfa.recovery-code.used", userId, null, "recovery-code", null);
         }
         return ok;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean setupPromptDue(UUID userId) {
+        UserAccount u = user(userId);
+        return policy.reminderDue(support.enrolment(userId), secondFactorMandatory(u),
+                mfa.setupPromptDismissedAt(userId).orElse(null), Instant.now(clock));
     }
 
     @Override
@@ -137,6 +173,20 @@ class SignInServiceImpl implements SignInService {
         return step.isPresent();
     }
 
+    private boolean verifyEmail(UUID userId, String code, Instant now) {
+        if (!support.enrolment(userId).emailOtp()) {
+            return false;
+        }
+        try {
+            codes.consume(userId, VerificationPurpose.SIGN_IN_EMAIL, code);
+        } catch (IdentityRuleViolation wrong) {
+            return false;
+        }
+        mfa.touchEmailOtp(userId, now);
+        changeLog.append(userId.toString(), "mfa.email-otp.used", userId, null, "email-otp", null);
+        return true;
+    }
+
     private boolean verifySms(UUID userId, String code) {
         try {
             codes.consume(userId, VerificationPurpose.SIGN_IN_SMS, code);
@@ -146,19 +196,10 @@ class SignInServiceImpl implements SignInService {
         }
     }
 
-    /** Staff always; others when their portal's MFA setting is on (S291) and a factor can be asked of them. */
-    private boolean secondFactorMandatory(UserAccount u, MfaEnrolment e) {
+    /** Staff always; others when their portal's MFA setting is on (S291). Mandatory means "must enrol", never "send a code". */
+    private boolean secondFactorMandatory(UserAccount u) {
         EffectiveAccess access = accessPolicy.resolve(profiles.load(u));
-        return MfaRequirement.mandatory(access.staff(), access.roles(), authSettings.effective(), e,
-                u.phone() != null);
-    }
-
-    /** Enrolled SMS phone; people who must use a second factor but have none fall back to the phone on file. */
-    private String smsDestination(UserAccount u, MfaEnrolment e, boolean mandatory) {
-        if (e.sms()) {
-            return e.smsPhone();
-        }
-        return mandatory && !e.totp() ? u.phone() : null;
+        return MfaRequirement.mandatory(access.staff(), access.roles(), authSettings.effective());
     }
 
     private static String mask(String phone) {
@@ -166,6 +207,15 @@ class SignInServiceImpl implements SignInService {
             return null;
         }
         return "•••• " + phone.substring(phone.length() - 4);
+    }
+
+    /** a••••••@example.com */
+    private static String maskEmail(String email) {
+        int at = email == null ? -1 : email.indexOf('@');
+        if (at <= 0) {
+            return null;
+        }
+        return email.charAt(0) + "•".repeat(Math.max(1, Math.min(6, at - 1))) + email.substring(at);
     }
 
     private UserAccount user(UUID id) {

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.identity.domain.EmailOtpEnrolment;
 import com.afrotransact.identity.domain.TotpEnrolment;
 import com.afrotransact.identity.domain.TrustedBrowser;
 import com.afrotransact.identity.port.MfaRepository;
@@ -92,6 +93,49 @@ class JdbcMfaRepository implements MfaRepository {
     @Override
     public void disableSms(UUID userId) {
         jdbc.sql("delete from mfa_sms where user_id = :u").param("u", userId).update();
+    }
+
+    @Override
+    public Optional<EmailOtpEnrolment> emailOtp(UUID userId) {
+        return jdbc.sql("select user_id, enabled, enrolled_at, last_used_at from mfa_email_otp where user_id = :u")
+                .param("u", userId)
+                .query((rs, n) -> new EmailOtpEnrolment(rs.getObject("user_id", UUID.class), rs.getBoolean("enabled"),
+                        Jdbc.instant(rs, "enrolled_at"), Jdbc.instant(rs, "last_used_at")))
+                .optional();
+    }
+
+    @Override
+    public void enableEmailOtp(UUID userId, Instant at) {
+        jdbc.sql("""
+                insert into mfa_email_otp (user_id, enabled, enrolled_at) values (:u, true, :at)
+                on conflict (user_id) do update set enabled = true
+                """).param("u", userId).param("at", Jdbc.ts(at)).update();
+    }
+
+    @Override
+    public void disableEmailOtp(UUID userId) {
+        jdbc.sql("delete from mfa_email_otp where user_id = :u").param("u", userId).update();
+    }
+
+    @Override
+    public void touchEmailOtp(UUID userId, Instant at) {
+        jdbc.sql("update mfa_email_otp set last_used_at = :at where user_id = :u")
+                .param("u", userId).param("at", Jdbc.ts(at)).update();
+    }
+
+    @Override
+    public Optional<Instant> setupPromptDismissedAt(UUID userId) {
+        return jdbc.sql("select dismissed_at from mfa_setup_prompt where user_id = :u").param("u", userId)
+                .query((rs, n) -> Jdbc.instant(rs, "dismissed_at")).optional();
+    }
+
+    @Override
+    public void recordSetupPromptDismissed(UUID userId, Instant at) {
+        jdbc.sql("""
+                insert into mfa_setup_prompt (user_id, dismissed_at, dismiss_count) values (:u, :at, 1)
+                on conflict (user_id) do update set dismissed_at = excluded.dismissed_at,
+                    dismiss_count = mfa_setup_prompt.dismiss_count + 1
+                """).param("u", userId).param("at", Jdbc.ts(at)).update();
     }
 
     @Override

@@ -160,7 +160,7 @@ class SignUpPageController {
             return verifyView(model, email, text("auth.verify.invalid"));
         }
         request.getSession().removeAttribute(PENDING);
-        return REDIRECT + hostedSignIn.signInAndContinue(request, response, email);
+        return REDIRECT + hostedSignIn.signInAndOfferMfaSetup(request, response, email);
     }
 
     @PostMapping("/signup/verify/resend")

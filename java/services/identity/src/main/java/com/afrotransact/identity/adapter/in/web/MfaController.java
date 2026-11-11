@@ -6,6 +6,7 @@ import java.util.UUID;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.CodeRequest;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.CodeSentResponse;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.MfaStatusResponse;
+import com.afrotransact.identity.adapter.in.web.SecurityDtos.PasswordConfirmation;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.RecoveryCodesResponse;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.TotpSetupResponse;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.TrustedBrowserResponse;
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Two-step verification", description = "Authenticator app, SMS codes and recovery codes")
+@Tag(name = "Two-step verification", description = "Authenticator app, email codes and recovery codes (SMS codes only while the feature flag is on)")
 @RestController
 class MfaController {
 
@@ -52,14 +53,43 @@ class MfaController {
         return new RecoveryCodesResponse(mfa.confirmTotp(body.code()));
     }
 
-    @Operation(summary = "Turn off the authenticator app (403 identity.staff-mfa-required for staff without SMS codes on)")
+    @Operation(summary = "Turn off the authenticator app; needs the password (403 identity.mfa-required when MFA is "
+            + "mandatory and it is the last factor)")
     @DeleteMapping("/v1/me/mfa/totp")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void disableTotp() {
-        mfa.disableTotp();
+    void disableTotp(@Valid @RequestBody PasswordConfirmation body) {
+        mfa.disableTotp(body.password());
     }
 
-    @Operation(summary = "Text a code to the account phone to turn on SMS sign-in codes")
+    @Operation(summary = "Email a first code to the verified account email to turn on email sign-in codes")
+    @PostMapping("/v1/me/mfa/email")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    CodeSentResponse startEmail() {
+        return new CodeSentResponse(mfa.startEmailOtp());
+    }
+
+    @Operation(summary = "Confirm the emailed code and turn email codes on; returns recovery codes the first time")
+    @PostMapping("/v1/me/mfa/email/confirm")
+    RecoveryCodesResponse confirmEmail(@Valid @RequestBody CodeRequest body) {
+        return new RecoveryCodesResponse(mfa.confirmEmailOtp(body.code()));
+    }
+
+    @Operation(summary = "Turn off email codes; needs the password (403 identity.mfa-required when MFA is mandatory "
+            + "and it is the last factor)")
+    @DeleteMapping("/v1/me/mfa/email")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void disableEmail(@Valid @RequestBody PasswordConfirmation body) {
+        mfa.disableEmailOtp(body.password());
+    }
+
+    @Operation(summary = "Not now: hide the 'Secure your account' reminder until the reminder interval has passed")
+    @PostMapping("/v1/me/mfa/prompt/dismiss")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void dismissPrompt() {
+        mfa.dismissSetupPrompt();
+    }
+
+    @Operation(summary = "Text a code to the account phone to turn on SMS sign-in codes (409 identity.sms-unavailable while the SMS flag is off)")
     @PostMapping("/v1/me/mfa/sms")
     @ResponseStatus(HttpStatus.ACCEPTED)
     CodeSentResponse startSms() {
@@ -72,11 +102,11 @@ class MfaController {
         return new RecoveryCodesResponse(mfa.confirmSms(body.code()));
     }
 
-    @Operation(summary = "Turn off SMS sign-in codes (403 identity.staff-mfa-required for staff without the authenticator app on)")
+    @Operation(summary = "Turn off SMS sign-in codes; needs the password")
     @DeleteMapping("/v1/me/mfa/sms")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void disableSms() {
-        mfa.disableSms();
+    void disableSms(@Valid @RequestBody PasswordConfirmation body) {
+        mfa.disableSms(body.password());
     }
 
     @Operation(summary = "Regenerate recovery codes (old ones stop working)")

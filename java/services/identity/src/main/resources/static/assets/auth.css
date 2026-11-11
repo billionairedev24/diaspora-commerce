@@ -160,3 +160,12 @@ select.control { padding: 0 var(--at-space-2); cursor: pointer; }
 .btn[aria-busy="true"] svg { visibility: hidden; }
 @keyframes auth-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .btn[aria-busy="true"]::after { animation-duration: 2.4s; } }
+
+/* Secure your account */
+.method-card { display: grid; gap: var(--at-space-2); padding: var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-lg); background: var(--at-color-surface); }
+.method-card .h2 { margin: 0; font-size: var(--at-text-lg); }
+.qr { width: 200px; max-width: 100%; margin: 0 auto; }
+.qr svg { display: block; width: 100%; height: auto; border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-md); }
+.secret { font-family: var(--at-font-mono, monospace); word-break: break-all; letter-spacing: 0.08em; }
+.recovery { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--at-space-2); margin: 0; padding: 0; list-style: none; }
+.recovery code { font-family: var(--at-font-mono, monospace); }

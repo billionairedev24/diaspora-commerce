@@ -17,13 +17,15 @@ import org.springframework.security.web.authentication.SavedRequestAwareAuthenti
 import org.springframework.security.web.context.SecurityContextRepository;
 
 /**
- * After the password or social first factor: if a second factor is required (enrolled factor or staff, and the
- * browser is not trusted) the session holds a {@link MfaPendingAuthentication} and the browser goes to
- * {@code /login/mfa}; otherwise it continues to the saved request (usually {@code /oauth2/authorize}).
+ * After the password or social first factor: if the person enrolled a second factor (and the browser is not trusted)
+ * the session holds a {@link MfaPendingAuthentication} and the browser goes to {@code /login/mfa}; if MFA is mandatory
+ * for them and nothing is enrolled it goes to the forced setup page {@code /login/mfa/setup} (no code is sent);
+ * otherwise it continues to the saved request (usually {@code /oauth2/authorize}).
  */
 public class MfaAwareAuthenticationSuccessHandler implements AuthenticationSuccessHandler {
 
     public static final String MFA_PAGE = "/login/mfa";
+    public static final String SETUP_PAGE = "/login/mfa/setup";
 
     private final SignInService signIn;
     private final HostedLoginProtection protection;
@@ -48,7 +50,7 @@ public class MfaAwareAuthenticationSuccessHandler implements AuthenticationSucce
                                         Authentication authentication) throws IOException, ServletException {
         UUID userId = UUID.fromString(authentication.getName());
         SecondFactorChallenge challenge = signIn.challenge(userId, trustedBrowser.read(request), false);
-        if (!challenge.required()) {
+        if (!challenge.pending()) {
             if (authentication instanceof UsernamePasswordAuthenticationToken) {
                 protection.succeeded(request, userId);
             }
@@ -59,6 +61,14 @@ public class MfaAwareAuthenticationSuccessHandler implements AuthenticationSucce
         context.setAuthentication(new MfaPendingAuthentication(authentication));
         SecurityContextHolder.setContext(context);
         contexts.saveContext(context, request, response);
+        if (challenge.enrolmentRequired()) {
+            // Mandatory but nothing enrolled: no code is sent, the person sets up a factor first.
+            response.sendRedirect(request.getContextPath() + SETUP_PAGE);
+            return;
+        }
+        if (challenge.emailIsDefault()) {
+            signIn.sendEmailCodeIfDefault(userId);
+        }
         response.sendRedirect(request.getContextPath() + MFA_PAGE);
     }
 }

@@ -119,6 +119,9 @@ at:
     mfa:
       issuer-name: AfroTransact
       secure-cookies: true
+      # SMS second-factor codes are OFF: only authenticator and email codes are offered, and existing SMS enrolments are
+      # ignored at sign-in. Turn on later with IDENTITY_MFA_SMS_ENABLED=true (see docs/runbooks/sign-up-and-mfa.md).
+      sms-enabled: ${IDENTITY_MFA_SMS_ENABLED:false}
     # S202: envelope encryption of TOTP secrets at rest (README "Data protection"). Provider local = key ring from the
     # secret store; aws-kms / gcp-kms / azure-key-vault need a KMS DataKeyWrapper adapter (not bundled, off by default).
     data-protection:

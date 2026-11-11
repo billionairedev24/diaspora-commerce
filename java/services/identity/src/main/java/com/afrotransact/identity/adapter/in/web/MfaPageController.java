@@ -5,6 +5,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.identity.adapter.in.security.MfaAwareAuthenticationSuccessHandler;
 import com.afrotransact.identity.adapter.in.security.MfaPendingAuthentication;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.application.SecondFactorChallenge;
@@ -12,6 +13,7 @@ import com.afrotransact.identity.application.SignInAccount;
 import com.afrotransact.identity.application.SignInAttempt;
 import com.afrotransact.identity.application.SignInProtectionService;
 import com.afrotransact.identity.application.SignInService;
+import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.MfaFactor;
 import com.afrotransact.identity.domain.RateLimitExceeded;
 import io.swagger.v3.oas.annotations.Hidden;
@@ -31,7 +33,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-/** Two-step verification at sign-in: authenticator code, text-message code or recovery code, "trust this browser". */
+/** Two-step verification at sign-in (enrolled factors only): authenticator, email code or recovery code (SMS while its flag is on), "trust this browser". */
 @Hidden
 @Controller
 class MfaPageController {
@@ -66,6 +68,12 @@ class MfaPageController {
         }
         UUID userId = UUID.fromString(pending.get().getName());
         SecondFactorChallenge c = signIn.challenge(userId, Optional.empty(), false);
+        if (c.enrolmentRequired()) {
+            return "redirect:" + MfaAwareAuthenticationSuccessHandler.SETUP_PAGE;
+        }
+        if (!c.required()) {
+            return "redirect:/login";
+        }
         pages.apply(model, request, response, HostedPageModel.SIGN_IN);
         Locale locale = LocaleContextHolder.getLocale();
         if (request.getParameter("error") != null) {
@@ -74,12 +82,32 @@ class MfaPageController {
         if (request.getParameter("wait") != null) {
             model.addAttribute("formError", messages.getMessage("auth.mfa.wait", null, locale));
         }
-        if (request.getParameter("sent") != null) {
+        if ("email".equals(request.getParameter("sent"))) {
+            model.addAttribute("notice", messages.getMessage("auth.mfa.sentEmail", new Object[] {c.emailHint()},
+                    locale));
+        } else if (request.getParameter("sent") != null) {
             model.addAttribute("notice", messages.getMessage("auth.mfa.sent", new Object[] {c.smsHint()}, locale));
         }
         model.addAttribute("challenge", c);
-        model.addAttribute("defaultFactor", c.totp() ? "TOTP" : c.sms() ? "SMS" : "RECOVERY_CODE");
+        model.addAttribute("defaultFactor", c.defaultFactor());
         return "mfa";
+    }
+
+    @PostMapping("/login/mfa/email")
+    void sendEmail(HttpServletResponse response) throws IOException {
+        Optional<MfaPendingAuthentication> pending = pending();
+        if (pending.isEmpty()) {
+            response.sendRedirect("/login");
+            return;
+        }
+        try {
+            signIn.sendEmailCode(UUID.fromString(pending.get().getName()));
+            response.sendRedirect("/login/mfa?sent=email");
+        } catch (RateLimitExceeded ex) {
+            response.sendRedirect("/login/mfa?wait");
+        } catch (IdentityRuleViolation ex) {
+            response.sendRedirect("/login/mfa?error");
+        }
     }
 
     @PostMapping("/login/mfa/sms")
@@ -94,6 +122,8 @@ class MfaPageController {
             response.sendRedirect("/login/mfa?sent");
         } catch (RateLimitExceeded ex) {
             response.sendRedirect("/login/mfa?wait");
+        } catch (IdentityRuleViolation ex) {
+            response.sendRedirect("/login/mfa?error");
         }
     }
 

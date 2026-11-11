@@ -5,10 +5,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.identity.domain.EmailOtpEnrolment;
 import com.afrotransact.identity.domain.TotpEnrolment;
 import com.afrotransact.identity.domain.TrustedBrowser;
 
-/** TOTP enrolments, SMS factor, recovery codes and trusted browsers. */
+/** TOTP enrolments, email codes, SMS factor, recovery codes, trusted browsers and the setup-prompt reminder. */
 public interface MfaRepository {
 
     Optional<TotpEnrolment> totp(UUID userId);
@@ -22,6 +23,20 @@ public interface MfaRepository {
     void enableSms(UUID userId, String phone, Instant at);
 
     void disableSms(UUID userId);
+
+    Optional<EmailOtpEnrolment> emailOtp(UUID userId);
+
+    /** Turns email codes on (idempotent: a second call keeps the first enrolment time). */
+    void enableEmailOtp(UUID userId, Instant at);
+
+    void disableEmailOtp(UUID userId);
+
+    void touchEmailOtp(UUID userId, Instant at);
+
+    /** When the person last dismissed the "Secure your account" prompt (skip or later), if ever. */
+    Optional<Instant> setupPromptDismissedAt(UUID userId);
+
+    void recordSetupPromptDismissed(UUID userId, Instant at);
 
     void replaceRecoveryCodes(UUID userId, List<String> hashes, Instant at);
 

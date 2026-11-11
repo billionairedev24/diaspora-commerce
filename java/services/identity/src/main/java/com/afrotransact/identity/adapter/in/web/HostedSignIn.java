@@ -15,4 +15,11 @@ interface HostedSignIn {
      * request (or the home page), or the two-step page first when a second factor is required.
      */
     String signInAndContinue(HttpServletRequest request, HttpServletResponse response, String email);
+
+    /**
+     * Like {@link #signInAndContinue} for a brand-new account whose email was just confirmed: the browser first goes
+     * to the optional "Secure your account" page (skippable), which then continues the pending authorization request.
+     * Where MFA is mandatory the page is the forced setup instead.
+     */
+    String signInAndOfferMfaSetup(HttpServletRequest request, HttpServletResponse response, String email);
 }

@@ -3,9 +3,11 @@ package com.afrotransact.identity.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
 import com.afrotransact.identity.domain.ChallengeKind;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
@@ -44,12 +46,14 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
     private final SignInProtectionService protection;
     private final FirstPartySignInStore store;
     private final PasskeyAssertions passkeys;
+    private final SecondFactorEnrolment enrolment;
     private final Clock clock;
     private volatile String dummyHash;
 
     FirstPartySignInServiceImpl(CurrentUser current, FirstPartySignInSettings settings, UserAccountRepository users,
                                 PasswordHasher hasher, SignInService signIn, SignInProtectionService protection,
-                                FirstPartySignInStore store, PasskeyAssertions passkeys, Clock clock) {
+                                FirstPartySignInStore store, PasskeyAssertions passkeys,
+                                SecondFactorEnrolment enrolment, Clock clock) {
         this.current = current;
         this.settings = settings;
         this.users = users;
@@ -58,6 +62,7 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
         this.protection = protection;
         this.store = store;
         this.passkeys = passkeys;
+        this.enrolment = enrolment;
         this.clock = clock;
     }
 
@@ -80,12 +85,21 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
         requireUsable(user, email, ctx, client, "PASSWORD");
         Optional<String> trusted = Optional.ofNullable(command.trustedDeviceToken()).filter(t -> !t.isBlank());
         SecondFactorChallenge factors = signIn.challenge(user.id(), trusted, false);
+        if (factors.enrolmentRequired()) {
+            SignInChallenge challenge = SignInChallenge.mfa(user.id(), client, Instant.now(clock));
+            store.insertChallenge(challenge);
+            protection.audit(attempt(user.id(), email, ctx, client, "PASSWORD", null), "MFA_ENROLMENT_REQUIRED");
+            return SignInStep.enrolmentRequired(challenge.id(), challenge.expiresAt());
+        }
         if (factors.required()) {
             // The account counter is cleared only when every factor succeeded, so a known password does not buy
             // unlimited second-factor guesses.
             SignInChallenge challenge = SignInChallenge.mfa(user.id(), client, Instant.now(clock));
             store.insertChallenge(challenge);
             protection.audit(attempt(user.id(), email, ctx, client, "PASSWORD", null), "MFA_REQUIRED");
+            if (factors.emailIsDefault()) {
+                signIn.sendEmailCodeIfDefault(user.id());
+            }
             return SignInStep.mfaRequired(challenge.id(), challenge.expiresAt(), factors);
         }
         return complete(user, client, SignInMethod.PASSWORD, "PASSWORD", ctx, null);
@@ -98,6 +112,78 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
         SignInChallenge challenge = openChallenge(challengeId, ChallengeKind.MFA, client);
         Instant expires = signIn.sendSmsCode(challenge.userId());
         return new SmsCodeSent(signIn.challenge(challenge.userId(), Optional.empty(), false).smsHint(), expires);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = {SignInFailed.class, IdentityRuleViolation.class, RateLimitExceeded.class})
+    public EmailCodeSent sendEmailCode(UUID challengeId, ClientContext context) {
+        String client = requireFirstPartyClient();
+        SignInChallenge challenge = openChallenge(challengeId, ChallengeKind.MFA, client);
+        Instant expires = signIn.sendEmailCode(challenge.userId());
+        return new EmailCodeSent(signIn.challenge(challenge.userId(), Optional.empty(), false).emailHint(), expires);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = {SignInFailed.class, IdentityRuleViolation.class, RateLimitExceeded.class})
+    public TotpSetup enrolTotp(UUID challengeId, ClientContext context) {
+        UUID userId = enrolmentChallenge(challengeId).userId();
+        return enrolment.startTotp(userId);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = {SignInFailed.class, ForbiddenActionException.class, RateLimitExceeded.class,
+            IdentityRuleViolation.class})
+    public EnrolmentCompleted confirmEnrolTotp(UUID challengeId, String code, ClientContext context) {
+        return confirmEnrolment(challengeId, "MFA_ENROL_TOTP", context, userId -> enrolment.confirmTotp(userId, code));
+    }
+
+    @Override
+    @Transactional(noRollbackFor = {SignInFailed.class, IdentityRuleViolation.class, RateLimitExceeded.class})
+    public EmailCodeSent enrolEmail(UUID challengeId, ClientContext context) {
+        UUID userId = enrolmentChallenge(challengeId).userId();
+        Instant expires = enrolment.startEmailOtp(userId);
+        return new EmailCodeSent(signIn.challenge(userId, Optional.empty(), false).emailHint(), expires);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = {SignInFailed.class, ForbiddenActionException.class, RateLimitExceeded.class,
+            IdentityRuleViolation.class})
+    public EnrolmentCompleted confirmEnrolEmail(UUID challengeId, String code, ClientContext context) {
+        return confirmEnrolment(challengeId, "MFA_ENROL_EMAIL", context,
+                userId -> enrolment.confirmEmailOtp(userId, code));
+    }
+
+    private EnrolmentCompleted confirmEnrolment(UUID challengeId, String method, ClientContext context,
+                                                Function<UUID, List<String>> confirm) {
+        String client = requireFirstPartyClient();
+        ClientContext ctx = context(context);
+        SignInChallenge challenge = enrolmentChallenge(challengeId);
+        UserAccount user = users.findById(challenge.userId())
+                .orElseThrow(FirstPartySignInServiceImpl::invalidChallenge);
+        protection.requireNotLocked(attempt(user.id(), user.email(), ctx, client, method, null));
+        List<String> recovery;
+        try {
+            recovery = confirm.apply(user.id());
+        } catch (IdentityRuleViolation wrong) {
+            SignInChallenge failed = challenge.failedAttempt();
+            store.updateChallenge(failed);
+            protection.recordFailure(attempt(user.id(), user.email(), ctx, client, method, "wrong-code"));
+            throw new SignInFailed("identity.invalid-code", failed.attemptsLeft() > 0 ? "That code isn't right"
+                    : "Too many wrong codes. Sign in again", failed.attemptsLeft());
+        }
+        store.updateChallenge(challenge.completed(Instant.now(clock)));
+        requireUsable(user, user.email(), ctx, client, method);
+        return new EnrolmentCompleted(recovery, complete(user, client, SignInMethod.PASSWORD_MFA, method, ctx, null));
+    }
+
+    /** An open challenge whose account must still enrol (MFA mandatory, nothing set up yet). */
+    private SignInChallenge enrolmentChallenge(UUID challengeId) {
+        String client = requireFirstPartyClient();
+        SignInChallenge challenge = openChallenge(challengeId, ChallengeKind.MFA, client);
+        if (!signIn.challenge(challenge.userId(), Optional.empty(), false).enrolmentRequired()) {
+            throw invalidChallenge();
+        }
+        return challenge;
     }
 
     @Override
@@ -189,7 +275,8 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
         store.purgeExpired(now.minus(RETENTION));
         protection.recordSuccess(attempt(user.id(), user.email(), ctx, client, auditMethod, "ticket-issued"));
         return SignInStep.authenticated(user.id(), ticket, stored.expiresAt(), trustedToken,
-                trustedToken == null ? null : now.plus(MfaPolicy.TRUSTED_BROWSER_TTL));
+                trustedToken == null ? null : now.plus(MfaPolicy.TRUSTED_BROWSER_TTL),
+                signIn.setupPromptDue(user.id()));
     }
 
     /** The OAuth client that may redeem the ticket: the native app the BFF signs in for, else the BFF itself. */

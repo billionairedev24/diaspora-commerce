@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -49,6 +50,7 @@ class FirstPartySignInServiceImplTest {
     private final SignInService signIn = mock(SignInService.class);
     private final SignInProtectionService protection = mock(SignInProtectionService.class);
     private final PasskeyAssertions passkeys = mock(PasskeyAssertions.class);
+    private final SecondFactorEnrolment enrolment = mock(SecondFactorEnrolment.class);
     private final FakeStore store = new FakeStore();
     private final UserAccount ada = new UserAccount(UUID.randomUUID(), "Ada", "Okafor", "ada@example.com", true,
             "+17132490142", "{bcrypt}hash", true, false, NOW, null, NOW, NOW, 0);
@@ -57,7 +59,7 @@ class FirstPartySignInServiceImplTest {
     private FirstPartySignInServiceImpl service() {
         return new FirstPartySignInServiceImpl(new CurrentUser(() -> caller),
                 new FirstPartySignInSettings(Set.of("gateway-bff"), Set.of("customer-app", "driver-app")), users, hasher, signIn, protection, store,
-                passkeys, Clock.fixed(NOW, ZoneOffset.UTC));
+                passkeys, enrolment, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -110,6 +112,67 @@ class FirstPartySignInServiceImplTest {
         assertThat(c.userId()).isEqualTo(ada.id());
         assertThat(c.clientId()).isEqualTo("gateway-bff");
         verify(protection, never()).recordSuccess(any());
+    }
+
+    @Test
+    void emailOnlyFactorSendsTheCodeStraightAway() {
+        when(users.findByEmail("ada@example.com")).thenReturn(Optional.of(ada));
+        when(hasher.matches("right", "{bcrypt}hash")).thenReturn(true);
+        when(signIn.challenge(ada.id(), Optional.empty(), false))
+                .thenReturn(new SecondFactorChallenge(true, false, false, null, true, true, "a•@example.com", false));
+
+        SignInStep step = service().password(new PasswordSignIn("ada@example.com", "right", null, CTX));
+
+        assertThat(step.status()).isEqualTo(SignInStep.Status.MFA_REQUIRED);
+        verify(signIn).sendEmailCodeIfDefault(ada.id());
+    }
+
+    @Test
+    void mandatoryMfaWithoutAFactorForcesEnrolmentAndSendsNoCode() {
+        when(users.findByEmail("ada@example.com")).thenReturn(Optional.of(ada));
+        when(hasher.matches("right", "{bcrypt}hash")).thenReturn(true);
+        when(signIn.challenge(ada.id(), Optional.empty(), false)).thenReturn(SecondFactorChallenge.enrol());
+
+        SignInStep step = service().password(new PasswordSignIn("ada@example.com", "right", null, CTX));
+
+        assertThat(step.status()).isEqualTo(SignInStep.Status.MFA_ENROLMENT_REQUIRED);
+        assertThat(step.loginTicket()).isNull();
+        assertThat(store.challenges).containsKey(step.challengeId());
+        verify(signIn, never()).sendEmailCode(any());
+        verify(signIn, never()).sendSmsCode(any());
+        verify(signIn, never()).sendEmailCodeIfDefault(any());
+        verify(protection, never()).recordSuccess(any());
+    }
+
+    @Test
+    void enrolmentConfirmedWithTheChallengeFinishesSigningIn() {
+        when(users.findByEmail("ada@example.com")).thenReturn(Optional.of(ada));
+        when(users.findById(ada.id())).thenReturn(Optional.of(ada));
+        when(hasher.matches("right", "{bcrypt}hash")).thenReturn(true);
+        when(signIn.challenge(ada.id(), Optional.empty(), false)).thenReturn(SecondFactorChallenge.enrol());
+        when(enrolment.confirmTotp(ada.id(), "123456")).thenReturn(List.of("abcde-fghjk"));
+        FirstPartySignInServiceImpl s = service();
+        SignInStep start = s.password(new PasswordSignIn("ada@example.com", "right", null, CTX));
+
+        EnrolmentCompleted done = s.confirmEnrolTotp(start.challengeId(), "123456", CTX);
+
+        assertThat(done.recoveryCodes()).containsExactly("abcde-fghjk");
+        assertThat(done.step().status()).isEqualTo(SignInStep.Status.AUTHENTICATED);
+        assertThat(done.step().loginTicket()).isNotBlank();
+        assertThat(store.challenges.get(start.challengeId()).completedAt()).isNotNull();
+    }
+
+    @Test
+    void enrolmentEndpointsRefuseAChallengeWhoseAccountDoesNotNeedToEnrol() {
+        when(users.findByEmail("ada@example.com")).thenReturn(Optional.of(ada));
+        when(hasher.matches("right", "{bcrypt}hash")).thenReturn(true);
+        when(signIn.challenge(ada.id(), Optional.empty(), false))
+                .thenReturn(new SecondFactorChallenge(true, true, false, null, true));
+        FirstPartySignInServiceImpl s = service();
+        SignInStep step = s.password(new PasswordSignIn("ada@example.com", "right", null, CTX));
+
+        assertThatThrownBy(() -> s.enrolTotp(step.challengeId(), CTX)).isInstanceOf(SignInFailed.class);
+        verify(enrolment, never()).startTotp(any());
     }
 
     @Test

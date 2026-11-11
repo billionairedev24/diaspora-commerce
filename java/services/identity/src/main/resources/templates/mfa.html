@@ -20,6 +20,10 @@
               <input type="radio" name="factor" value="TOTP" th:checked="${defaultFactor == 'TOTP'}">
               <span th:text="#{auth.mfa.totp}">Authenticator app</span>
             </label>
+            <label class="method" th:if="${challenge.emailOtp()}">
+              <input type="radio" name="factor" value="EMAIL_OTP" th:checked="${defaultFactor == 'EMAIL_OTP'}">
+              <span th:text="#{auth.mfa.email}">Email code</span>
+            </label>
             <label class="method" th:if="${challenge.sms()}">
               <input type="radio" name="factor" value="SMS" th:checked="${defaultFactor == 'SMS'}">
               <span th:text="#{auth.mfa.sms}">Text message</span>
@@ -30,6 +34,7 @@
             </label>
           </fieldset>
           <p class="message" th:if="${challenge.totp()}" th:text="#{auth.mfa.hintTotp}"></p>
+          <p class="message" th:if="${challenge.emailOtp()}" th:text="#{auth.mfa.hintEmail(${challenge.emailHint()})}"></p>
           <p class="message" th:if="${challenge.sms()}" th:text="#{auth.mfa.hintSms(${challenge.smsHint()})}"></p>
           <div class="field">
             <label class="label" for="code" th:text="#{auth.mfa.code}">Code</label>
@@ -42,6 +47,10 @@
             <span th:text="#{auth.mfa.trust}">Trust this browser for 30 days</span>
           </label>
           <button type="submit" class="btn btn-primary" th:text="#{auth.mfa.verify}">Verify</button>
+        </form>
+        <form th:if="${challenge.emailOtp()}" method="post" th:action="@{/login/mfa/email}" class="form">
+          <button type="submit" class="btn btn-neutral"
+                  th:text="${challenge.totp() ? #messages.msg('auth.mfa.emailInstead') : #messages.msg('auth.mfa.emailMe')}">Email me a code</button>
         </form>
         <form th:if="${challenge.sms()}" method="post" th:action="@{/login/mfa/sms}" class="form">
           <button type="submit" class="btn btn-neutral" th:text="#{auth.mfa.textMe}">Text me a code</button>

@@ -69,18 +69,34 @@ final class SecurityDtos {
     }
 
     @Schema(name = "MfaStatus")
-    record MfaStatusResponse(boolean totp, boolean sms, String smsPhone, int recoveryCodesLeft, int passkeys,
-                             boolean required, boolean mayDisable,
-                             @Schema(description = "The authenticator app may be turned off now (staff only while SMS "
-                                     + "codes stay on)") boolean mayRemoveTotp,
-                             @Schema(description = "SMS codes may be turned off now (staff only while the "
-                                     + "authenticator app stays on)") boolean mayRemoveSms) {
+    record MfaStatusResponse(boolean totp, boolean emailOtp, boolean sms, String smsPhone, int recoveryCodesLeft,
+                             int passkeys,
+                             @Schema(description = "MFA is mandatory for this person (staff, or their portal's "
+                                     + "Auth setting): they cannot turn off their last factor") boolean required,
+                             boolean mayDisable,
+                             @Schema(description = "The authenticator app may be turned off now (when mandatory: only "
+                                     + "while another factor stays on)") boolean mayRemoveTotp,
+                             @Schema(description = "Email codes may be turned off now (when mandatory: only while "
+                                     + "another factor stays on)") boolean mayRemoveEmailOtp,
+                             @Schema(description = "SMS codes may be turned off now (only while SMS is available)")
+                             boolean mayRemoveSms,
+                             @Schema(description = "Show the gentle, dismissable 'Secure your account' reminder: "
+                                     + "nothing is set up, MFA is not mandatory and the reminder is due again")
+                             boolean setupSuggested,
+                             @Schema(description = "SMS codes are offered at all (feature flag "
+                                     + "at.identity.mfa.sms-enabled, off by default); hide SMS in the UI when false")
+                             boolean smsAvailable) {
 
         static MfaStatusResponse of(MfaStatus s) {
-            return new MfaStatusResponse(s.enrolment().totp(), s.enrolment().sms(), s.enrolment().smsPhone(),
-                    s.enrolment().recoveryCodesLeft(), s.enrolment().passkeys(), s.required(), s.mayDisable(),
-                    s.mayRemoveTotp(), s.mayRemoveSms());
+            return new MfaStatusResponse(s.enrolment().totp(), s.enrolment().emailOtp(), s.enrolment().sms(),
+                    s.enrolment().smsPhone(), s.enrolment().recoveryCodesLeft(), s.enrolment().passkeys(),
+                    s.required(), s.mayDisable(), s.mayRemoveTotp(), s.mayRemoveEmailOtp(), s.mayRemoveSms(),
+                    s.setupSuggested(), s.smsAvailable());
         }
+    }
+
+    @Schema(name = "PasswordConfirmation", description = "Re-authentication to turn a factor off")
+    record PasswordConfirmation(@NotBlank String password) {
     }
 
     @Schema(name = "TrustedBrowser")

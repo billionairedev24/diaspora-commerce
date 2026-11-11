@@ -12,13 +12,32 @@ import java.util.UUID;
  */
 public interface FirstPartySignInService {
 
-    /** Email + password; returns an MFA challenge when a second factor is required, else a login ticket. */
+    /**
+     * Email + password. A code is asked only of people who enrolled a factor (MFA_REQUIRED, an email code is sent
+     * straight away when it is their only factor); where MFA is mandatory and nothing is set up the step is
+     * MFA_ENROLMENT_REQUIRED (no code is sent, enrol first); everyone else gets a login ticket with the password only.
+     */
     SignInStep password(PasswordSignIn command);
 
     /** Texts a sign-in code for an MFA challenge (rate limited like the hosted page). */
     SmsCodeSent sendSmsCode(UUID challengeId, ClientContext context);
 
-    /** Authenticator, text-message or recovery code for an MFA challenge; returns a login ticket. */
+    /** Emails a sign-in code for an MFA challenge (only for people who enrolled email codes; rate limited). */
+    EmailCodeSent sendEmailCode(UUID challengeId, ClientContext context);
+
+    /** Forced enrolment (MFA_ENROLMENT_REQUIRED): starts the authenticator app; no session exists yet. */
+    TotpSetup enrolTotp(UUID challengeId, ClientContext context);
+
+    /** Confirms the authenticator with a code and completes the sign-in. */
+    EnrolmentCompleted confirmEnrolTotp(UUID challengeId, String code, ClientContext context);
+
+    /** Forced enrolment: emails a first code to the verified account email. */
+    EmailCodeSent enrolEmail(UUID challengeId, ClientContext context);
+
+    /** Confirms the emailed code, turns email codes on and completes the sign-in. */
+    EnrolmentCompleted confirmEnrolEmail(UUID challengeId, String code, ClientContext context);
+
+    /** Authenticator, email, text-message or recovery code for an MFA challenge; returns a login ticket. */
     SignInStep verifySecondFactor(SecondFactorSubmission submission);
 
     /** Starts a passkey sign-in (discoverable credential, user verification required). */

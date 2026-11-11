@@ -10,6 +10,7 @@ import com.afrotransact.identity.adapter.in.security.HostedLoginEntryPoint;
 import com.afrotransact.identity.adapter.in.security.MfaAwareAuthenticationSuccessHandler;
 import com.afrotransact.identity.adapter.in.security.MfaPendingAuthentication;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
+import com.afrotransact.identity.application.SecondFactorChallenge;
 import com.afrotransact.identity.application.SignInAttempt;
 import com.afrotransact.identity.application.SignInProtectionService;
 import com.afrotransact.identity.application.SignInService;
@@ -56,6 +57,16 @@ class HostedSignInImpl implements HostedSignIn {
 
     @Override
     public String signInAndContinue(HttpServletRequest request, HttpServletResponse response, String email) {
+        return signIn(request, response, email, false);
+    }
+
+    @Override
+    public String signInAndOfferMfaSetup(HttpServletRequest request, HttpServletResponse response, String email) {
+        return signIn(request, response, email, true);
+    }
+
+    private String signIn(HttpServletRequest request, HttpServletResponse response, String email,
+                          boolean offerSetup) {
         UserDetails user = accounts.loadUserByUsername(email);
         if (!user.isEnabled()) {
             return HostedLoginEntryPoint.LOGIN_PAGE + "?error";
@@ -70,17 +81,28 @@ class HostedSignInImpl implements HostedSignIn {
         Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null,
                 principal.getAuthorities());
         UUID userId = UUID.fromString(authentication.getName());
-        boolean secondFactor = signIn.challenge(userId, trustedBrowser.read(request), false).required();
+        SecondFactorChallenge challenge = signIn.challenge(userId, trustedBrowser.read(request), false);
+        boolean secondFactor = challenge.pending();
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(secondFactor ? new MfaPendingAuthentication(authentication) : authentication);
         SecurityContextHolder.setContext(context);
         request.changeSessionId();
         contexts.saveContext(context, request, response);
+        if (challenge.enrolmentRequired()) {
+            return MfaAwareAuthenticationSuccessHandler.SETUP_PAGE;
+        }
         if (secondFactor) {
+            if (challenge.emailIsDefault()) {
+                signIn.sendEmailCodeIfDefault(userId);
+            }
             return MfaAwareAuthenticationSuccessHandler.MFA_PAGE;
         }
         protection.recordSuccess(new SignInAttempt(userId, email, request.getRemoteAddr(),
                 request.getHeader("User-Agent"), null, SignInAttempt.HOSTED, "PASSWORD", null));
+        if (offerSetup) {
+            // Optional "Secure your account" step first; the saved authorization request stays for its Skip/Done.
+            return MfaAwareAuthenticationSuccessHandler.SETUP_PAGE;
+        }
         SavedRequest saved = requestCache.getRequest(request, response);
         requestCache.removeRequest(request, response);
         return saved != null ? saved.getRedirectUrl() : homeUrl;

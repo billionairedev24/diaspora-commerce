@@ -132,6 +132,37 @@
     update();
   }
 
+  function setupRecoveryCodeTools() {
+    const text = (id) => Array.from(document.querySelectorAll('#' + id + ' code')).map((c) => c.textContent).join('\n');
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      if (!navigator.clipboard) return;
+      button.hidden = false;
+      const label = button.textContent;
+      button.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(text(button.dataset.copy));
+          button.textContent = button.dataset.copied || label;
+          window.setTimeout(() => { button.textContent = label; }, 2000);
+        } catch (err) {
+          button.hidden = true;
+        }
+      });
+    });
+    document.querySelectorAll('[data-download]').forEach((button) => {
+      button.hidden = false;
+      button.addEventListener('click', () => {
+        const url = URL.createObjectURL(new Blob([text(button.dataset.download) + '\n'], { type: 'text/plain' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'afrotransact-recovery-codes.txt';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      });
+    });
+  }
+
   function focusProblems() {
     const summary = document.querySelector('[data-error-summary]');
     if (summary) {
@@ -167,6 +198,7 @@
     setupPasswordToggles();
     setupPasswordRules();
     preventDoubleSubmit();
+    setupRecoveryCodeTools();
     focusProblems();
     const passkey = document.querySelector('[data-passkey]');
     if (passkey) passkey.addEventListener('click', () => void passkeySignIn(passkey));

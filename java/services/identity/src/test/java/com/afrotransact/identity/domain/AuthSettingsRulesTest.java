@@ -74,18 +74,15 @@ class AuthSettingsRulesTest {
     }
 
     @Test
-    void mfaIsMandatoryForStaffAndWhereAPortalSwitchIsOnAndAFactorCanBeAsked() {
+    void mfaIsMandatoryForStaffAndWherePortalSwitchIsOn() {
         AuthSettings sellersOn = new AuthSettings(12, false, true, false, 30, 1440, null, null);
-        MfaEnrolment none = new MfaEnrolment(false, false, null, 0, 0);
-        MfaEnrolment totp = new MfaEnrolment(true, false, null, 0, 0);
 
-        assertThat(MfaRequirement.mandatory(true, Set.of("platform.finance"), DEFAULTS, none, false)).isTrue();
-        assertThat(MfaRequirement.mandatory(false, Set.of("seller.owner"), sellersOn, none, true)).isTrue();
-        assertThat(MfaRequirement.mandatory(false, Set.of("seller.owner"), sellersOn, totp, false)).isTrue();
-        // nothing to ask: no enrolled factor and no phone on file, so the switch must not lock the person out
-        assertThat(MfaRequirement.mandatory(false, Set.of("seller.owner"), sellersOn, none, false)).isFalse();
+        assertThat(MfaRequirement.mandatory(true, Set.of("platform.finance"), DEFAULTS)).isTrue();
+        assertThat(MfaRequirement.mandatory(false, Set.of("seller.owner"), sellersOn)).isTrue();
         // other portals are unaffected by the seller switch
-        assertThat(MfaRequirement.mandatory(false, Set.of("account.customer"), sellersOn, totp, true)).isFalse();
-        assertThat(MfaRequirement.mandatory(false, Set.of("provider.manager"), sellersOn, totp, true)).isFalse();
+        assertThat(MfaRequirement.mandatory(false, Set.of("account.customer"), sellersOn)).isFalse();
+        assertThat(MfaRequirement.mandatory(false, Set.of("provider.manager"), sellersOn)).isFalse();
+        // mandatory never depends on a phone or enrolled factor: it means "must enrol", not "send a code"
+        assertThat(MfaRequirement.mandatory(false, Set.of("seller.owner"), DEFAULTS)).isFalse();
     }
 }
