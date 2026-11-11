@@ -10,6 +10,7 @@ import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './conte
 import { seedQuotes,seedQuoteSettings } from './delivery-quotes';
 import { MOCK_DEPARTMENT_ORGS, type MockDepartmentsState, seedDepartments } from './departments';
 import { type MockDispatch, seedDispatch } from './dispatch';
+import { seedSelling } from './selling';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
@@ -687,6 +688,7 @@ function seed(now: Date): MockStaffDb {
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now), 'delivery-quotes': seedQuotes(now), 'delivery-quote-settings': seedQuoteSettings(now), 'service-area-rules': seedServiceAreaRules(now), 'service-zones': seedServiceZones(now), 'shipping-settings': seedShippingSettings(now),
+      ...seedSelling(now),
       ...seedIdentityAdmin(now)
     },
     notifications,

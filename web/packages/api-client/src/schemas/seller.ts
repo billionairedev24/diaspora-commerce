@@ -1016,6 +1016,137 @@ export const SellerCatalogScopeSchema = z.object({
 });
 export type SellerCatalogScope = z.infer<typeof SellerCatalogScopeSchema>;
 
+/* ---- Selling approvals (docs/runbooks/selling-approvals.md) ---- */
+export const SellingLevelSchema = z.enum(['SELL', 'APPLY', 'NOT_AVAILABLE']);
+export type SellingLevel = z.infer<typeof SellingLevelSchema>;
+export const SellingScopeTypeSchema = z.enum(['CATEGORY', 'PRODUCT_TYPE', 'BRAND', 'BRAND_IN_CATEGORY', 'PRODUCT', 'CAPABILITY']);
+export type SellingScopeType = z.infer<typeof SellingScopeTypeSchema>;
+export const SellingDocumentKindSchema = z.enum(['PURCHASE_INVOICE', 'PHOTOS_ALL_SIDES', 'BRAND_AUTHORIZATION', 'SAFETY_CERTIFICATE', 'PERMIT_LICENCE', 'LIABILITY_INSURANCE']);
+export type SellingDocumentKind = z.infer<typeof SellingDocumentKindSchema>;
+export const SellingApprovalStateSchema = z.enum(['NOT_APPLIED', 'APPLIED', 'NEEDS_ATTENTION', 'APPROVED', 'EXPIRED', 'NOT_AVAILABLE']);
+export type SellingApprovalState = z.infer<typeof SellingApprovalStateSchema>;
+/** A document a rule asks for, with how the form asks for it (expiry date, invoice date, additional insured). */
+export const SellingDocumentSlotSchema = z.object({
+  kind: SellingDocumentKindSchema,
+  label: z.string(),
+  optional: z.boolean(),
+  expiryRequired: z.boolean(),
+  dated: z.boolean(),
+  namesAfroTransact: z.boolean()
+});
+export type SellingDocumentSlot = z.infer<typeof SellingDocumentSlotSchema>;
+export const SellingDocumentOnFileSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  label: z.string(),
+  assetId: z.string(),
+  fileName: nullableString.optional(),
+  issuedOn: nullableString.optional(),
+  expiresOn: nullableString.optional(),
+  namesAfroTransact: z.boolean().optional(),
+  note: nullableString.optional()
+});
+export type SellingDocumentOnFile = z.infer<typeof SellingDocumentOnFileSchema>;
+/** One scope in the way of a listing: what to apply for, or why it cannot be sold. */
+export const SellingMissingSchema = z.object({
+  scope: z.object({ type: SellingScopeTypeSchema, key: z.string() }),
+  label: z.string(),
+  level: z.enum(['APPLY', 'NOT_AVAILABLE']),
+  state: SellingApprovalStateSchema,
+  message: z.string(),
+  canApply: z.boolean(),
+  reapplyAfter: nullableString.optional(),
+  documents: z.array(z.object({ kind: z.string(), optional: z.boolean() })),
+  applicationId: nullableString.optional(),
+  applicationStatus: nullableString.optional()
+});
+export type SellingMissing = z.infer<typeof SellingMissingSchema>;
+/** GET /v1/seller/selling-status: the product form's chip ("Sell this product", "Apply to sell", "Not available"). */
+export const SellerSellingStatusSchema = z.object({
+  level: SellingLevelSchema,
+  reason: nullableString.optional(),
+  missing: z.array(SellingMissingSchema),
+  pendingFacts: z.array(z.string())
+});
+export type SellerSellingStatus = z.infer<typeof SellerSellingStatusSchema>;
+export const SellingApprovalRowSchema = z.object({
+  scopeType: SellingScopeTypeSchema,
+  scopeKey: z.string(),
+  label: z.string(),
+  level: z.enum(['APPLY', 'NOT_AVAILABLE']),
+  state: SellingApprovalStateSchema,
+  statusWords: z.string(),
+  message: nullableString.optional(),
+  canApply: z.boolean(),
+  approvedAt: nullableString.optional(),
+  expiresAt: nullableString.optional(),
+  daysToExpiry: z.number().nullable().optional(),
+  reapplyAfter: nullableString.optional(),
+  documents: z.array(SellingDocumentSlotSchema),
+  onFile: z.array(SellingDocumentOnFileSchema),
+  applicationId: nullableString.optional(),
+  applicationStatus: nullableString.optional(),
+  note: nullableString.optional(),
+  listingsPaused: z.boolean()
+});
+export type SellingApprovalRow = z.infer<typeof SellingApprovalRowSchema>;
+export const SellingCapabilitiesSchema = z.object({
+  foodService: z.object({ approved: z.boolean(), state: z.string(), expiresAt: nullableString.optional() })
+});
+export type SellingCapabilities = z.infer<typeof SellingCapabilitiesSchema>;
+export const SellingApprovalsSchema = z.object({
+  approvals: z.array(SellingApprovalRowSchema),
+  notices: z.array(z.object({ severity: z.enum(['action', 'warning', 'urgent']), scopeKey: z.string().optional(), scopeLabel: z.string().optional(), message: z.string() })),
+  capabilities: SellingCapabilitiesSchema
+});
+export type SellingApprovals = z.infer<typeof SellingApprovalsSchema>;
+export const SellingApplicationSchema = z.object({
+  id: z.string(),
+  reference: z.string(),
+  scopeType: z.string(),
+  scopeKey: z.string(),
+  scopeLabel: z.string(),
+  kind: z.enum(['NEW', 'RENEWAL']),
+  status: z.enum(['PENDING_REVIEW', 'FLAGGED', 'AWAITING_FINAL_APPROVAL', 'INFO_REQUESTED', 'APPROVED', 'REJECTED']),
+  statusWords: z.string(),
+  message: z.string(),
+  requestedItems: z.array(z.string()),
+  disqualified: z.boolean(),
+  reapplyAfter: nullableString.optional(),
+  documents: z.array(SellingDocumentOnFileSchema),
+  required: z.array(SellingDocumentSlotSchema),
+  submittedAt: nullableString.optional(),
+  updatedAt: z.string()
+});
+export type SellingApplication = z.infer<typeof SellingApplicationSchema>;
+export const SellingDocumentInputSchema = z.object({
+  kind: SellingDocumentKindSchema,
+  assetId: z.string().min(1),
+  fileName: z.string().max(200).optional(),
+  issuedOn: z.string().optional(),
+  expiresOn: z.string().optional(),
+  namesAfroTransact: z.boolean().optional(),
+  note: z.string().max(500).optional()
+});
+export type SellingDocumentInput = z.infer<typeof SellingDocumentInputSchema>;
+export const ApplyToSellSchema = z.object({
+  scopeType: SellingScopeTypeSchema,
+  scopeKey: z.string().min(1).max(200),
+  note: z.string().max(1000).optional(),
+  documents: z.array(SellingDocumentInputSchema).max(20).optional()
+});
+export type ApplyToSell = z.infer<typeof ApplyToSellSchema>;
+export const ResubmitSellingSchema = z.object({ note: z.string().max(1000).optional(), documents: z.array(SellingDocumentInputSchema).max(20).optional() });
+export type ResubmitSelling = z.infer<typeof ResubmitSellingSchema>;
+/** What the product form asks the status of: the listing's facts so far. */
+export interface SellingFacts {
+  categoryCode?: string;
+  brand?: string;
+  productTypeCode?: string;
+  material?: string;
+  gtin?: string;
+}
+
 export const ProductImageInputSchema = z.object({
   url: z.string().min(1),
   width: z.number().int().min(0).optional(),

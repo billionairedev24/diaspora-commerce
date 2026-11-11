@@ -132,8 +132,19 @@ import {
   SavedProductDraftSchema,
   type SaveProductDraftRequest,
   type SellerAddress,
+  type ApplyToSell,
+  type ResubmitSelling,
   type SellerCatalogScope,
   SellerCatalogScopeSchema,
+  type SellerSellingStatus,
+  SellerSellingStatusSchema,
+  type SellingApplication,
+  SellingApplicationSchema,
+  type SellingApprovals,
+  SellingApprovalsSchema,
+  type SellingCapabilities,
+  SellingCapabilitiesSchema,
+  type SellingFacts,
   type SellerCoupon,
   SellerCouponListSchema,
   SellerCouponSchema,
@@ -519,6 +530,16 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/category-requests', CategoryRequestSchema, { method: 'POST', body: input }),
     /** The departments the organisation may sell in, whether any sells sized goods, and its department requests. */
     getCatalogScope: (signal?: AbortSignal): Promise<SellerCatalogScope> => request('/v1/seller/catalog-scope', SellerCatalogScopeSchema, { signal }),
+    /* Selling approvals: sell, apply or not available (the product form's chip), the approvals page, applying with documents */
+    getSellingStatus: (facts: SellingFacts, signal?: AbortSignal): Promise<SellerSellingStatus> =>
+      request('/v1/seller/selling-status', SellerSellingStatusSchema, { query: { ...facts }, signal }),
+    getSellingApprovals: (signal?: AbortSignal): Promise<SellingApprovals> => request('/v1/seller/selling-approvals', SellingApprovalsSchema, { signal }),
+    getSellingCapabilities: (signal?: AbortSignal): Promise<SellingCapabilities> => request('/v1/seller/selling-capabilities', SellingCapabilitiesSchema, { signal }),
+    listSellingApplications: (signal?: AbortSignal): Promise<SellingApplication[]> => request('/v1/seller/selling-applications', z.array(SellingApplicationSchema), { signal }),
+    getSellingApplication: (id: string, signal?: AbortSignal): Promise<SellingApplication> => request(`/v1/seller/selling-applications/${enc(id)}`, SellingApplicationSchema, { signal }),
+    applyToSell: (input: ApplyToSell): Promise<SellingApplication> => request('/v1/seller/selling-applications', SellingApplicationSchema, { method: 'POST', body: input }),
+    resubmitSellingApplication: (id: string, input: ResubmitSelling): Promise<SellingApplication> =>
+      request(`/v1/seller/selling-applications/${enc(id)}/resubmit`, SellingApplicationSchema, { method: 'POST', body: input }),
     /** The catalog's departments with the evidence each asks for (what onboarding offers). */
     listDepartments: (signal?: AbortSignal): Promise<SellerDepartment[]> => request('/v1/seller/departments', z.array(SellerDepartmentSchema), { signal }),
     /** Ask staff to let the organisation sell in another department. */

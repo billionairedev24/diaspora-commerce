@@ -11,6 +11,7 @@ import { applyBps } from '../../fees';
 import { bffProblemType } from '../../problem-types';
 import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import { REVIEW_REASON_CODES, SELLER_REPLY_MAX } from '../../schemas/reviews';
+import { applyToSell, resubmitSelling, SellingMockError, sellingApplication, sellingApplications, sellingApprovals, sellingCapabilities, sellingStatus } from './selling';
 import {
   AvailabilityFormSchema,
   type BookingAction,
@@ -40,6 +41,8 @@ import {
   ProductDraftSchema,
   SellerAddressSchema,
   type SellerCoupon,
+  ApplyToSellSchema,
+  ResubmitSellingSchema,
   SellerDepartmentRequestInputSchema,
   type SellerFeesView,
   type SellerFeeVersion,
@@ -273,6 +276,16 @@ function catalogScope(ctx: Ctx) {
   const departments = scopedTree(ctx).map((d) => ({ id: d.id, code: MOCK_DEPARTMENTS.find((m) => m.id === d.id)?.code ?? d.id, name: d.name, hasSizing: hasSizingNode(d) }));
   const requests = (ctx.db.departmentRequests[ctx.org.id] ?? []).map((r) => ({ departmentCode: r.departmentCode, departmentName: r.departmentName ?? r.departmentCode, status: r.status, needs: r.needs, createdAt: r.createdAt }));
   return { exempt: false, departments, hasSizing: departments.some((d) => d.hasSizing), requests };
+}
+
+/** Runs a selling approvals mock and turns its refusal into the BFF's problem answer. */
+function sellingMock<T>(run: () => T): T {
+  try {
+    return run();
+  } catch (e) {
+    if (e instanceof SellingMockError) throw new SellerProblem(e.status, e.status === 422 ? 'VALIDATION_FAILED' : e.code, e.status === 404 ? 'Not found' : e.status === 409 ? 'Invalid state' : 'Validation failed', e.message, e.errors);
+    throw e;
+  }
 }
 
 function route(fn: Resolver, status: number | ((out: unknown) => number) = 200) {
@@ -1755,6 +1768,26 @@ export const sellerHandlers = [
     return scopedTree(ctx);
   })),
   http.get(`${W}/catalog-scope`, route((ctx) => catalogScope(ctx))),
+  http.get(`${W}/selling-status`, route((ctx) => {
+    require(ctx, 'listings', 'VIEW', 'SELLER');
+    const q = new URL(ctx.request.url).searchParams;
+    const pick = (k: string) => q.get(k) ?? undefined;
+    return sellingStatus(ctx.org.id, { categoryCode: pick('categoryCode'), brand: pick('brand'), productTypeCode: pick('productTypeCode'), material: pick('material'), gtin: pick('gtin') });
+  })),
+  http.get(`${W}/selling-approvals`, route((ctx) => { require(ctx, 'listings', 'VIEW', 'SELLER'); return sellingApprovals(ctx.org.id); })),
+  http.get(`${W}/selling-capabilities`, route((ctx) => { require(ctx, 'listings', 'VIEW', 'SELLER'); return sellingCapabilities(ctx.org.id); })),
+  http.get(`${W}/selling-applications`, route((ctx) => { require(ctx, 'listings', 'VIEW', 'SELLER'); return sellingApplications(ctx.org.id); })),
+  http.get(`${W}/selling-applications/:id`, route((ctx, p) => { require(ctx, 'listings', 'VIEW', 'SELLER'); return sellingMock(() => sellingApplication(ctx.org.id, p.id ?? '')); })),
+  http.post(`${W}/selling-applications`, route(async (ctx) => {
+    const b = await body(ctx.request, ApplyToSellSchema);
+    require(ctx, 'listings', 'EDIT', 'SELLER');
+    return sellingMock(() => applyToSell(ctx.org.id, b));
+  }, 201)),
+  http.post(`${W}/selling-applications/:id/resubmit`, route(async (ctx, p) => {
+    const b = await body(ctx.request, ResubmitSellingSchema);
+    require(ctx, 'listings', 'EDIT', 'SELLER');
+    return sellingMock(() => resubmitSelling(ctx.org.id, p.id ?? '', b));
+  })),
   http.get(`${W}/departments`, route(() => MOCK_DEPARTMENTS.map((d) => ({ code: d.code, name: d.name, requires: d.requires })))),
   http.post(
     `${W}/department-requests`,

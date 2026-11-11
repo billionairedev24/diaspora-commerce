@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { BACKGROUND } from '../http';
-import { type BrandScope, type Cadence, type ImageLibraryQuery, type ProductImport } from '../schemas/seller';
+import { type BrandScope, type Cadence, type ImageLibraryQuery, type ProductImport, type SellingFacts } from '../schemas/seller';
 import { type ImportRowsQuery, type ListingsQuery, type ProductDraftsQuery, type SellerApiClient, type SellerOrdersQuery, type SizeChartsQuery } from '../seller-client';
 import { pollingOf,type PollRule } from './polling';
 
@@ -33,6 +33,11 @@ export const sellerKeys = {
   categories: (orgId: string) => [...sellerKeys.org(orgId), 'catalog', 'categories'] as const,
   /** Which departments the organisation may sell in, whether any sells sized goods, its requests. */
   scope: (orgId: string) => [...sellerKeys.org(orgId), 'catalog-scope'] as const,
+  /** Selling approvals: the answer for a listing's facts, the approvals page, the capabilities, the applications. */
+  sellingStatus: (orgId: string, facts: SellingFacts) => [...sellerKeys.org(orgId), 'selling', 'status', facts] as const,
+  sellingApprovals: (orgId: string) => [...sellerKeys.org(orgId), 'selling', 'approvals'] as const,
+  sellingCapabilities: (orgId: string) => [...sellerKeys.org(orgId), 'selling', 'capabilities'] as const,
+  sellingApplications: (orgId: string) => [...sellerKeys.org(orgId), 'selling', 'applications'] as const,
   /** The catalog's departments onboarding offers. */
   departments: () => [...sellerKeys.all, 'catalog', 'departments'] as const,
   productType: (code: string) => [...sellerKeys.all, 'catalog', 'product-type', code] as const,
@@ -127,6 +132,14 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.categories(orgId), queryFn: ({ signal }) => api.getCategoryTree(signal), staleTime: 5 * MINUTE }),
   scope: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.scope(orgId), queryFn: ({ signal }) => api.getCatalogScope(signal), staleTime: MINUTE }),
+  sellingStatus: (api: SellerApiClient, orgId: string, facts: SellingFacts) =>
+    queryOptions({ queryKey: sellerKeys.sellingStatus(orgId, facts), queryFn: ({ signal }) => api.getSellingStatus(facts, signal), staleTime: 20_000, placeholderData: keepPreviousData }),
+  sellingApprovals: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.sellingApprovals(orgId), queryFn: ({ signal }) => api.getSellingApprovals(signal), staleTime: 30_000 }),
+  sellingCapabilities: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.sellingCapabilities(orgId), queryFn: ({ signal }) => api.getSellingCapabilities(signal), staleTime: MINUTE }),
+  sellingApplications: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.sellingApplications(orgId), queryFn: ({ signal }) => api.listSellingApplications(signal), staleTime: 30_000 }),
   departments: (api: SellerApiClient) =>
     queryOptions({ queryKey: sellerKeys.departments(), queryFn: ({ signal }) => api.listDepartments(signal), staleTime: 30 * MINUTE }),
   productType: (api: SellerApiClient, code: string) =>

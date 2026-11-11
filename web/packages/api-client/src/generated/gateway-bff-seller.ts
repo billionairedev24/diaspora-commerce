@@ -1334,6 +1334,133 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/selling-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Can the organisation sell this product? SELL, APPLY or NOT_AVAILABLE, with the reason and what is missing
+         * @description seller-service `GET /v1/orgs/{orgId}/selling-status`. Call it as the form fills in (every parameter is optional).
+         *     `pendingFacts` lists what the answer still depends on (jewelry: `material`); gold, silver, a gemstone or a watch
+         *     make the jewelry rule apply. For `APPLY`, `missing` lists each scope to apply for; its `canApply` says whether the
+         *     button is shown. AfroTransact Retail always gets `SELL`.
+         */
+        get: operations["getSellingStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/selling-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Selling approvals page - every scope that needs approval with the organisation's state in plain words
+         * @description seller-service `GET /v1/orgs/{orgId}/selling-approvals`. `state` is NOT_APPLIED, APPLIED, NEEDS_ATTENTION, APPROVED,
+         *     EXPIRED or NOT_AVAILABLE. `notices` are expiry warnings (30, 14 and 7 days), paused listings and applications that
+         *     need an answer.
+         */
+        get: operations["listSellingApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/selling-capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Seller capabilities - food service is granted by approval of a permit with an expiry
+         * @description The product form shows the food service fields only when `foodService.approved`.
+         */
+        get: operations["getSellingCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/selling-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The organisation's selling applications, newest first */
+        get: operations["listSellingApplications"];
+        put?: never;
+        /**
+         * Apply to sell in a scope (owner, admin or catalog role; Listings: EDIT)
+         * @description seller-service `POST /v1/orgs/{orgId}/selling-applications`. Upload each file to media first and send its asset id with
+         *     the dates read off it. 422 names the documents to fix (field `documents.<KIND>`): an invoice must be dated within 180
+         *     days, a permit or insurance policy needs a future expiry date, insurance must name AfroTransact as additional insured.
+         *     409 `seller.selling-not-available` when the organisation was disqualified and the reapply date has not come (not
+         *     appealable). Repeating the call while an application is in progress returns it. The application becomes a staff case.
+         */
+        post: operations["applyToSell"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/selling-applications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One selling application */
+        get: operations["getSellingApplication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/selling-applications/{id}/resubmit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer a request for information with the documents asked for
+         * @description Only while the application needs your attention (INFO_REQUESTED). The review starts again at step 1.
+         */
+        post: operations["resubmitSellingApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/catalog/product-types/{code}": {
         parameters: {
             query?: never;
@@ -4075,6 +4202,175 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             decisionNote?: string | null;
+        };
+        SellerSellingDocumentSlot: {
+            /** @enum {string} */
+            kind: "PURCHASE_INVOICE" | "PHOTOS_ALL_SIDES" | "BRAND_AUTHORIZATION" | "SAFETY_CERTIFICATE" | "PERMIT_LICENCE" | "LIABILITY_INSURANCE";
+            /** @description What the seller reads next to the upload field */
+            label: string;
+            /** @description Or tell us why you cannot */
+            optional: boolean;
+            /** @description Ask for the expiry date */
+            expiryRequired: boolean;
+            /** @description Ask for the date on the document (an invoice, within 180 days) */
+            dated: boolean;
+            /** @description Ask the seller to confirm the policy names AfroTransact as additional insured */
+            namesAfroTransact: boolean;
+        };
+        SellerSellingDocumentOnFile: {
+            id: string;
+            kind: string;
+            label: string;
+            assetId: string;
+            fileName?: string | null;
+            /** Format: date */
+            issuedOn?: string | null;
+            /** Format: date */
+            expiresOn?: string | null;
+            namesAfroTransact?: boolean;
+            note?: string | null;
+        };
+        SellerSellingMissing: {
+            scope: {
+                /** @enum {string} */
+                type: "CATEGORY" | "PRODUCT_TYPE" | "BRAND" | "BRAND_IN_CATEGORY" | "PRODUCT" | "CAPABILITY";
+                key: string;
+            };
+            label: string;
+            /** @enum {string} */
+            level: "APPLY" | "NOT_AVAILABLE";
+            /** @enum {string} */
+            state: "NOT_APPLIED" | "APPLIED" | "NEEDS_ATTENTION" | "APPROVED" | "EXPIRED" | "NOT_AVAILABLE";
+            /** @description Plain words for the seller */
+            message: string;
+            /** @description Show the Apply to sell button */
+            canApply: boolean;
+            /** Format: date */
+            reapplyAfter?: string | null;
+            documents: {
+                kind: string;
+                optional: boolean;
+            }[];
+            applicationId?: string | null;
+            applicationStatus?: string | null;
+        };
+        SellerSellingStatus: {
+            /**
+             * @description The chip: "Sell this product", "Apply to sell" (with a button) or "Not available" (with the reason)
+             * @enum {string}
+             */
+            level: "SELL" | "APPLY" | "NOT_AVAILABLE";
+            reason?: string | null;
+            missing: components["schemas"]["SellerSellingMissing"][];
+            pendingFacts: string[];
+        };
+        SellerSellingApprovalRow: {
+            scopeType: string;
+            scopeKey: string;
+            label: string;
+            /** @enum {string} */
+            level: "APPLY" | "NOT_AVAILABLE";
+            /** @enum {string} */
+            state: "NOT_APPLIED" | "APPLIED" | "NEEDS_ATTENTION" | "APPROVED" | "EXPIRED" | "NOT_AVAILABLE";
+            /**
+             * @example Approved
+             * @example With our team
+             * @example Needs your attention
+             * @example Not available
+             * @example Expired
+             * @example Not applied
+             */
+            statusWords: string;
+            message: string | null;
+            canApply: boolean;
+            /** Format: date-time */
+            approvedAt?: string | null;
+            /** Format: date-time */
+            expiresAt?: string | null;
+            daysToExpiry?: number | null;
+            /** Format: date */
+            reapplyAfter?: string | null;
+            documents: components["schemas"]["SellerSellingDocumentSlot"][];
+            onFile: components["schemas"]["SellerSellingDocumentOnFile"][];
+            applicationId?: string | null;
+            applicationStatus?: string | null;
+            note?: string | null;
+            listingsPaused: boolean;
+        };
+        SellerSellingNotice: {
+            /** @enum {string} */
+            severity: "action" | "warning" | "urgent";
+            scopeKey?: string;
+            scopeLabel?: string;
+            message: string;
+        };
+        SellerSellingCapabilities: {
+            foodService: {
+                approved: boolean;
+                state: string;
+                /** Format: date-time */
+                expiresAt?: string | null;
+            };
+        };
+        SellerSellingApprovals: {
+            approvals: components["schemas"]["SellerSellingApprovalRow"][];
+            notices: components["schemas"]["SellerSellingNotice"][];
+            capabilities: components["schemas"]["SellerSellingCapabilities"];
+        };
+        SellerSellingApplication: {
+            id: string;
+            /** @example SA-50001 */
+            reference: string;
+            scopeType: string;
+            scopeKey: string;
+            scopeLabel: string;
+            /** @enum {string} */
+            kind: "NEW" | "RENEWAL";
+            /** @enum {string} */
+            status: "PENDING_REVIEW" | "FLAGGED" | "AWAITING_FINAL_APPROVAL" | "INFO_REQUESTED" | "APPROVED" | "REJECTED";
+            statusWords: string;
+            message: string;
+            requestedItems: string[];
+            disqualified: boolean;
+            /** Format: date */
+            reapplyAfter?: string | null;
+            documents: components["schemas"]["SellerSellingDocumentOnFile"][];
+            required: components["schemas"]["SellerSellingDocumentSlot"][];
+            /** Format: date-time */
+            submittedAt?: string | null;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        SellerSellingDocumentInput: {
+            /** @enum {string} */
+            kind: "PURCHASE_INVOICE" | "PHOTOS_ALL_SIDES" | "BRAND_AUTHORIZATION" | "SAFETY_CERTIFICATE" | "PERMIT_LICENCE" | "LIABILITY_INSURANCE";
+            /** @description The media asset of the uploaded file */
+            assetId: string;
+            fileName?: string;
+            /**
+             * Format: date
+             * @description The date on an invoice
+             */
+            issuedOn?: string;
+            /**
+             * Format: date
+             * @description Expiry of a permit, licence or policy
+             */
+            expiresOn?: string;
+            /** @description Insurance - the policy names AfroTransact as additional insured */
+            namesAfroTransact?: boolean;
+            note?: string;
+        };
+        SellerApplyToSell: {
+            /** @enum {string} */
+            scopeType: "CATEGORY" | "PRODUCT_TYPE" | "BRAND" | "BRAND_IN_CATEGORY" | "PRODUCT" | "CAPABILITY";
+            scopeKey: string;
+            note?: string;
+            documents?: components["schemas"]["SellerSellingDocumentInput"][];
+        };
+        SellerResubmitSellingApplication: {
+            note?: string;
+            documents?: components["schemas"]["SellerSellingDocumentInput"][];
         };
         SellerDepartmentRequestInput: {
             departmentCode: string;
@@ -8090,6 +8386,202 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellingStatus: {
+        parameters: {
+            query?: {
+                /** @description The category code (or a comma-separated list: the category and its parents) */
+                categoryCode?: string;
+                brand?: string;
+                productTypeCode?: string;
+                material?: string;
+                /** @description Barcode, for a rule about one product */
+                gtin?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSellingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellingApprovals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approvals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSellingApprovals"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellingCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capabilities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSellingCapabilities"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellingApplications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Applications */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSellingApplication"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    applyToSell: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerApplyToSell"];
+            };
+        };
+        responses: {
+            /** @description Filed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSellingApplication"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellingApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The application */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSellingApplication"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resubmitSellingApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerResubmitSellingApplication"];
+            };
+        };
+        responses: {
+            /** @description Sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSellingApplication"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
