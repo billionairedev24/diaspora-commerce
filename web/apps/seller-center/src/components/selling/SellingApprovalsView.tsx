@@ -37,7 +37,7 @@ const ORDER = ['CAPABILITY', 'CATEGORY', 'PRODUCT_TYPE', 'BRAND', 'BRAND_IN_CATE
 export function SellingApprovalsView() {
   const { orgId, can } = useSeller();
   const api = sellerApi();
-  const q = useQuery({ ...sellerQueries.sellingApprovals(api, orgId), refetchOnWindowFocus: true });
+  const q = useQuery({ ...sellerQueries.sellingApprovals(api, orgId) });
   const editable = can('listings');
   const params = useSearchParams();
   const [filter, setFilter] = useState('');
