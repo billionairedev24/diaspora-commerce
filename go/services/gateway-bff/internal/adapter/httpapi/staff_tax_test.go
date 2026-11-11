@@ -69,6 +69,7 @@ type fakeTax struct {
 	bodies   map[string]map[string]any
 	reqInfo  bool
 	shadow   map[string]any
+	review   map[string]any
 }
 
 func newFakeTax(t *testing.T) *fakeTax {
@@ -114,6 +115,16 @@ func newFakeTax(t *testing.T) *fakeTax {
 			"decisions":  []any{}, "reviewedBy": "stf-admin", "reviewedAt": "2026-11-07T08:00:00Z", "ruleVersion": "tx-2026.11.09-draft.1",
 			"audit": []any{map[string]any{"at": "2026-11-07T08:00:00Z", "actor": "stf-admin", "action": "APPROVED", "reason": "Label matches", "ruleVersion": "tx-2026.11.09-draft.1"}}},
 	}
+	f.records["AT-AUDIT"] = map[string]any{"atin": "AT-AUDIT", "title": "Shea butter 8 oz", "categoryCode": "skincare-cosmetics", "status": "APPROVED", "facts": map[string]any{},
+		"resolution":   map[string]any{"status": "RESOLVED", "outcome": "TAXABLE", "rowId": "S041", "missingFacts": []any{}, "ruleVersion": "tx-2026.11.09-draft.1"},
+		"decisions":    []any{map[string]any{"sellerOrgId": "org-1", "resolution": map[string]any{"status": "RESOLVED", "outcome": "TAXABLE", "missingFacts": []any{}, "ruleVersion": "x"}}},
+		"classifiedBy": "auto", "classifiedAt": "2026-11-09T09:00:00Z", "reviewedBy": "auto", "reviewedAt": "2026-11-09T09:00:00Z", "ruleVersion": "tx-2026.11.09-draft.1",
+		"auditSample": true, "auditSampledAt": "2026-11-09T09:00:00Z",
+		"audit": []any{map[string]any{"at": "2026-11-09T09:00:00Z", "actor": "usr-seller", "action": "SUBMITTED", "ruleVersion": "tx-2026.11.09-draft.1"},
+			map[string]any{"at": "2026-11-09T09:00:00Z", "actor": "auto", "action": "APPROVED", "reason": "Risk-based review: the category is ACTIVE", "ruleVersion": "tx-2026.11.09-draft.1"},
+			map[string]any{"at": "2026-11-09T09:00:00Z", "actor": "auto", "action": "AUDIT_SAMPLED", "reason": "Placed in the audit sample", "ruleVersion": "tx-2026.11.09-draft.1"}}}
+	f.review = map[string]any{"mode": "ALL", "alwaysReview": []any{"baby-food-formula", "dietary-supplements", "gift-cards", "medical-devices", "medicated-skincare", "otc-medicines"},
+		"alwaysReviewStatuses": []any{"NEEDS_APPROVAL", "REFINE_CODE", "CONFLICT_OPEN", "BLOCKED_BUNDLE"}, "auditPercent": 5, "changedBy": nil, "changedAt": nil, "history": []any{}}
 	diff := func(i int, kind string, inO, prO string, in, pr float64) map[string]any {
 		return map[string]any{"orderId": "ord-1", "lineId": "l-" + string(rune('a'+i)), "atin": "AT-NUTS", "internalTaxCode": "AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS",
 			"providerCode": "txcd_40040016", "kind": kind, "inHouse": map[string]any{"outcome": inO, "rate": in, "taxMinor": 0},
@@ -214,12 +225,36 @@ func (f *fakeTax) tax(w http.ResponseWriter, r *http.Request, p string, body map
 			return
 		}
 		problemJ(w, 404, "tax.profile-not-found")
+	case p == "/v1/tax/review-settings" && r.Method == http.MethodPut:
+		if r.Header.Get("Authorization") != "Bearer admin" && r.Header.Get("Authorization") != "Bearer catalog" {
+			problemJ(w, 403, "forbidden")
+			return
+		}
+		before := map[string]any{"mode": f.review["mode"], "alwaysReview": f.review["alwaysReview"], "auditPercent": f.review["auditPercent"]}
+		f.review["mode"] = body["mode"]
+		if v, ok := body["alwaysReview"]; ok {
+			f.review["alwaysReview"] = v
+		}
+		if v, ok := body["auditPercent"]; ok {
+			f.review["auditPercent"] = v
+		}
+		f.review["changedBy"], f.review["changedAt"] = "stf-admin", "2026-11-09T12:00:00Z"
+		hist := f.review["history"].([]any)
+		f.review["history"] = append([]any{map[string]any{"from": before, "to": map[string]any{"mode": f.review["mode"], "alwaysReview": f.review["alwaysReview"],
+			"auditPercent": f.review["auditPercent"]}, "reason": body["reason"], "changedBy": "stf-admin", "changedAt": "2026-11-09T12:00:00Z"}}, hist...)
+		writeJ(w, 200, f.review)
+	case p == "/v1/tax/review-settings":
+		writeJ(w, 200, f.review)
 	case p == "/v1/tax/variant-classifications":
 		status := r.URL.Query().Get("status")
 		items := []any{}
-		for _, id := range []string{"AT-NUTS", "AT-EBOOK", "AT-DONE"} {
-			if f.records[id]["status"] == status {
-				items = append(items, f.records[id])
+		if r.URL.Query().Get("auditSample") == "true" {
+			items = append(items, f.records["AT-AUDIT"])
+		} else {
+			for _, id := range []string{"AT-NUTS", "AT-EBOOK", "AT-DONE"} {
+				if f.records[id]["status"] == status {
+					items = append(items, f.records[id])
+				}
 			}
 		}
 		writeJ(w, 200, map[string]any{"items": items, "page": 0, "size": 25, "total": len(items)})
@@ -233,13 +268,18 @@ func (f *fakeTax) tax(w http.ResponseWriter, r *http.Request, p string, body map
 		}
 		switch action {
 		case "approve":
+			if rec["auditSample"] == true {
+				rec["auditSample"], rec["reviewedBy"] = false, "stf-admin"
+				writeJ(w, 200, rec)
+				return
+			}
 			if rec["resolution"].(map[string]any)["status"] != "RESOLVED" {
 				problemJ(w, 422, "tax.classification-not-resolvable")
 				return
 			}
 			rec["status"], rec["reviewedBy"] = "APPROVED", "stf-admin"
 		case "reclassify":
-			rec["categoryCode"], rec["status"] = body["categoryCode"], "PENDING_REVIEW"
+			rec["categoryCode"], rec["status"], rec["auditSample"] = body["categoryCode"], "PENDING_REVIEW", false
 		case "request-information":
 			if !f.reqInfo {
 				http.NotFound(w, r)

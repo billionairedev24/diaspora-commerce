@@ -708,6 +708,42 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/TaxSettings'
+  /v1/tax/review-settings:
+    get:
+      tags:
+      - Tax settings
+      summary: The tax review mode, always-review list, audit sample percentage and their history (tax:read)
+      operationId: taxReviewSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxReviewSettings'
+    put:
+      tags:
+      - Tax settings
+      summary: Set the tax review mode, always-review list and audit sample percentage (tax:classify-admin)
+      description: 'taxReview.mode is ALL until staff change it (every classification waits for a tax reviewer). RISK_BASED lets the system approve a classification only when the category is ACTIVE, the rules resolve cleanly (RESOLVED), no required evidence is missing and the category is not on the always-review list; everything else, and every category whose status is NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN or BLOCKED_BUNDLE, stays in the review queue. Never switch it on before the Texas tax professional agrees (docs/engineering/listing-rules.md D7). A reason of 10+ characters is required (422 tax.reason-required) and the change is recorded. alwaysReview replaces the list, absent keeps it (422 tax.unknown-category); auditPercent 0 to 100, absent keeps it (422 tax.invalid-audit-percent). It applies to new classification events; records already decided keep their status. Needs tax:classify-admin only (403 otherwise).'
+      operationId: changeTaxReviewSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxReviewSettingsChangeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxReviewSettings'
+        '403':
+          description: Needs tax:classify-admin
+        '422':
+          description: tax.reason-required, tax.unknown-category or tax.invalid-audit-percent
   /v1/tax/remittances:
     get:
       tags:
@@ -1061,8 +1097,10 @@ paths:
       tags:
       - Tax classification
       summary: Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)
+      description: auditSample=true lists the audit sample instead (status is ignored): items the system approved under the risk-based review rule that are live and wait for a reviewer to confirm (POST approve) or reclassify them.
       operationId: listVariantClassifications
       parameters:
+      - {name: auditSample, in: query, required: false, description: Only the audit sample, oldest first, schema: {type: boolean, default: false}}
       - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/ClassificationRecordStatus'}}
       - {name: categoryCode, in: query, required: false, schema: {type: string}}
       - {name: sellerOrgId, in: query, required: false, schema: {type: string}}
@@ -1317,6 +1355,42 @@ components:
         method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
         shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null], description: 'Turn SHADOW mode on for this provider, or null/absent to turn it off. A PUT replaces both method and shadowProvider. The provider must be configured and differ from the method''s provider (422 tax.shadow-same-as-method); a method that is a provider needs at least one mapped code (422 tax.provider-not-mapped).'}
         reason: {type: string}
+    TaxReviewSettingsValues:
+      type: object
+      properties:
+        mode: {type: string, enum: [ALL, RISK_BASED]}
+        alwaysReview: {type: array, items: {type: string}, description: Category codes}
+        auditPercent: {type: integer, minimum: 0, maximum: 100}
+    TaxReviewSettingsChange:
+      type: object
+      properties:
+        from: {oneOf: [{$ref: '#/components/schemas/TaxReviewSettingsValues'}, {type: 'null'}]}
+        to: {$ref: '#/components/schemas/TaxReviewSettingsValues'}
+        reason: {type: string}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+    TaxReviewSettings:
+      type: object
+      description: 'ALL until staff change it. RISK_BASED must only be switched on after the Texas tax professional agrees.'
+      properties:
+        mode: {type: string, enum: [ALL, RISK_BASED], description: 'ALL: every classification waits for a tax reviewer (the default). RISK_BASED: only when the category is ACTIVE, the rules resolve, no required evidence is missing and the category is not on the always-review list.'}
+        alwaysReview: {type: array, items: {type: string}, description: 'Category codes that always go to review in RISK_BASED mode. Default: dietary-supplements, otc-medicines, medicated-skincare, medical-devices, baby-food-formula, gift-cards.'}
+        alwaysReviewStatuses: {type: array, items: {type: string}, description: 'Category statuses that always go to review whatever the list says: NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN, BLOCKED_BUNDLE.'}
+        auditPercent: {type: integer, minimum: 0, maximum: 100, description: 'Share of auto-approved items also queued as audit items (default 5). Deterministic: a hash of the variant ATIN.'}
+        changedBy: {type: [string, 'null']}
+        changedAt: {type: [string, 'null'], format: date-time}
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxReviewSettingsChange'
+    TaxReviewSettingsChangeRequest:
+      type: object
+      required: [mode, reason]
+      properties:
+        mode: {type: string, enum: [ALL, RISK_BASED]}
+        alwaysReview: {type: [array, 'null'], items: {type: string}, description: Replaces the always-review list; absent or null keeps the current list}
+        auditPercent: {type: [integer, 'null'], minimum: 0, maximum: 100, description: Absent or null keeps the current percentage}
+        reason: {type: string, minLength: 10}
     StateTaxRule:
       type: object
       description: State rates are fractions (0.0625 = 6.25 %)
@@ -2406,6 +2480,8 @@ components:
         facts: {type: object, additionalProperties: {}}
         staffFacts: {type: object, additionalProperties: {}, description: Facts set by tax review (owner STAFF)}
         ordersAffected: {type: integer, format: int64, description: Orders placed with this variant (detail only)}
+        auditSample: {type: boolean, description: 'Approved by the system under the risk-based rule and waiting in the audit sample for a reviewer to confirm or reclassify it. The item is live meanwhile.'}
+        auditSampledAt: {type: [string, 'null'], format: date-time}
         informationRequest:
           type: [object, 'null']
           description: What tax review asked the seller to provide; cleared when the seller's facts change
@@ -2447,7 +2523,7 @@ components:
             properties:
               at: {type: string, format: date-time}
               actor: {type: string}
-              action: {type: string, enum: [FACTS_CHANGED, SUBMITTED, APPROVED, REJECTED, RECLASSIFIED, MARKED_STALE, EVIDENCE_ADDED, INFORMATION_REQUESTED]}
+              action: {type: string, enum: [FACTS_CHANGED, SUBMITTED, APPROVED, REJECTED, RECLASSIFIED, MARKED_STALE, EVIDENCE_ADDED, INFORMATION_REQUESTED, AUDIT_SAMPLED, AUDIT_CONFIRMED]}
               reason: {type: string}
               ruleVersion: {type: string}
               before: {type: object, additionalProperties: {}}

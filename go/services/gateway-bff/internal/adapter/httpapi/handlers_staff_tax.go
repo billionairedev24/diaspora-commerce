@@ -19,6 +19,8 @@ func (h *handlersImpl) registerStaffTax(route func(pattern string, fn http.Handl
 	route("PUT /v1/staff/tax/code-map/{internalTaxCode}", h.staffTaxCodeUpdate)
 	route("GET /v1/staff/tax/method", h.staffTaxMethod)
 	route("PUT /v1/staff/tax/method", h.staffTaxChangeMethod)
+	route("GET /v1/staff/tax/review-settings", h.staffTaxReviewSettings)
+	route("PUT /v1/staff/tax/review-settings", h.staffTaxChangeReviewSettings)
 	route("GET /v1/staff/tax/shadow", h.staffTaxShadow)
 }
 
@@ -129,5 +131,20 @@ func (h *handlersImpl) staffTaxChangeMethod(w http.ResponseWriter, r *http.Reque
 
 func (h *handlersImpl) staffTaxShadow(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Tax.Shadow(r.Context(), callerFrom(r.Context()), r.URL.Query())
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTaxReviewSettings(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Tax.ReviewSettings(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTaxChangeReviewSettings(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Tax.ChangeReviewSettings(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }

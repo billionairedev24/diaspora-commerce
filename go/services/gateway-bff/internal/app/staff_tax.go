@@ -35,6 +35,8 @@ type StaffTaxService interface {
 	ImportCodeMap(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	Method(ctx context.Context, c *domain.Caller) (any, error)
 	ChangeMethod(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	ReviewSettings(ctx context.Context, c *domain.Caller) (any, error)
+	ChangeReviewSettings(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	Shadow(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 }
 
@@ -104,6 +106,10 @@ func taxErr(err error) error {
 		msg = "This open decision still has no code. Update the rules first, then lift the block."
 	case "tax.stripe-not-set-up":
 		msg = "Stripe Tax isn't set up yet, so it can't be chosen."
+	case "tax.unknown-category":
+		msg = "One of the categories isn't a known tax category. Choose categories from the list."
+	case "tax.invalid-audit-percent":
+		msg = "The audit sample is a share from 0 to 100 percent."
 	case "tax.profile-not-found":
 		return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such tax category.")
 	case "tax.classification-not-found":

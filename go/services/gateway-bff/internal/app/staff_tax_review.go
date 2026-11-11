@@ -19,6 +19,10 @@ import (
 
 var reviewStatuses = []string{"PENDING_REVIEW", "APPROVED", "REJECTED", "STALE", "MISSING_FACTS", "DRAFT"}
 
+// reviewAuditSample is the queue tab of items the system approved under the risk-based rule that are live and wait for a
+// person to confirm or reclassify them (tax-returns lists them with auditSample=true).
+const reviewAuditSample = "AUDIT_SAMPLE"
+
 func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Values) (any, error) {
 	sc, err := s.need(ctx, c, "")
 	if err != nil {
@@ -32,10 +36,15 @@ func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Valu
 	if status == "" {
 		status = "PENDING_REVIEW"
 	}
-	if !slices.Contains(reviewStatuses, status) {
+	if status != reviewAuditSample && !slices.Contains(reviewStatuses, status) {
 		return nil, domain.ValidationProblem(map[string]string{"status": "Choose a review status"})
 	}
-	up := url.Values{"status": {status}, "page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
+	up := url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
+	if status == reviewAuditSample {
+		up.Set("auditSample", "true")
+	} else {
+		up.Set("status", status)
+	}
 	for _, k := range []string{"categoryCode", "sellerOrgId", "q"} {
 		if v := strings.TrimSpace(q.Get(k)); v != "" {
 			up.Set(k, v)
@@ -47,6 +56,7 @@ func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Valu
 	}
 	list := jpage(raw)
 	names := s.categoryNames(ctx, sc)
+	nameSystemActors(list.items, "reviewedBy", "classifiedBy")
 	nameAll(ctx, sc, list.items, personRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
 	for _, it := range list.items {
 		nameAll(ctx, sc, objs(it, "decisions"), sellerRef("sellerOrgId"))
@@ -60,7 +70,11 @@ func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Valu
 		total = *list.total
 	}
 	counts := []jobj{}
-	for _, st := range reviewStatuses[:4] {
+	for _, st := range reviewStatuses[:1] {
+		counts = append(counts, jobj{"value": st, "label": taxRecordStatus[st]})
+	}
+	counts = append(counts, jobj{"value": reviewAuditSample, "label": "Audit sample"})
+	for _, st := range reviewStatuses[1:4] {
 		counts = append(counts, jobj{"value": st, "label": taxRecordStatus[st]})
 	}
 	return jobj{"items": rows, "total": total, "page": page, "size": size, "status": status, "statuses": counts,
@@ -111,13 +125,17 @@ func reviewRow(it jobj, names map[string]string) jobj {
 	return jobj{"atin": jstr(it, "atin"), "gtin": jstr(it, "gtin"), "title": jstr(it, "title"), "sellers": sellerNames(it), "categoryCode": cat,
 		"categoryName": firstNonEmpty(names[cat], domain.Humanize(cat)), "status": status, "statusLabel": taxRecordStatus[status],
 		"why": reviewWhy(it), "proposed": proposedOf(it), "classifiedAt": jstr(it, "classifiedAt"), "classifiedByName": jstr(it, "classifiedByName"),
-		"reviewedAt": jstr(it, "reviewedAt"), "reviewedByName": jstr(it, "reviewedByName"), "ruleVersion": jstr(it, "ruleVersion")}
+		"reviewedAt": jstr(it, "reviewedAt"), "reviewedByName": jstr(it, "reviewedByName"), "ruleVersion": jstr(it, "ruleVersion"),
+		"auditSample": boolean(it, "auditSample"), "autoApproved": status == "APPROVED" && jstr(it, "reviewedByName") == autoApprovalWho}
 }
 
 // reviewWhy says in plain words why this variant needs a person.
 func reviewWhy(it jobj) string {
 	res, _ := it["resolution"].(map[string]any)
 	status := jstr(it, "status")
+	if boolean(it, "auditSample") && status == "APPROVED" {
+		return "The system approved this under the risk-based rule and it is live. Check the category and the answers, then confirm it or move it to the right category."
+	}
 	switch status {
 	case "STALE":
 		return "The product's facts or category changed after it was approved, so the old decision no longer holds."
@@ -174,6 +192,8 @@ func (s *staffTaxImpl) reviewView(ctx context.Context, sc staffCtx, rec jobj) jo
 	if perr == nil {
 		facts = taxFactsOf(profile)
 	}
+	nameSystemActors([]jobj{rec}, "reviewedBy", "classifiedBy")
+	nameSystemActors(objs(rec, "audit"), "actor")
 	nameAll(ctx, sc, []jobj{rec}, personRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
 	nameAll(ctx, sc, objs(rec, "decisions"), sellerRef("sellerOrgId"))
 	nameAll(ctx, sc, objs(rec, "evidence"), personRef("uploadedBy", "Uploaded by"))
@@ -198,6 +218,7 @@ func (s *staffTaxImpl) reviewView(ctx context.Context, sc staffCtx, rec jobj) jo
 		"decision":         jobj{"reviewedByName": row["reviewedByName"], "reviewedAt": row["reviewedAt"], "ruleVersion": jstr(rec, "ruleVersion")},
 		"classifiedByName": row["classifiedByName"], "classifiedAt": row["classifiedAt"], "audit": auditView(rec), "canDecide": canDecide,
 		"canApprove": canDecide && (status == "PENDING_REVIEW" || status == "STALE"), "approve": approveForm(rec, profile),
+		"auditSample": row["auditSample"], "autoApproved": row["autoApproved"], "canConfirm": canDecide && status == "APPROVED" && boolean(rec, "auditSample"),
 		"refinedProviderCodes": orEmptyMap(rec["refinedProviderCodes"])}
 	if v, ok := rec["ordersAffected"]; ok {
 		view["ordersAffected"] = v

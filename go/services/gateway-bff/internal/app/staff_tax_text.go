@@ -59,6 +59,7 @@ var taxProviders = map[string]string{"STRIPE": "Stripe Tax", "AVALARA": "Avalara
 var taxAuditActions = map[string]string{
 	"FACTS_CHANGED": "Facts changed", "SUBMITTED": "Submitted for review", "APPROVED": "Approved", "REJECTED": "Sent back",
 	"RECLASSIFIED": "Moved to another category", "MARKED_STALE": "Marked out of date", "EVIDENCE_ADDED": "Evidence added",
+	"INFORMATION_REQUESTED": "Asked the seller for more", "AUDIT_SAMPLED": "Put in the audit sample", "AUDIT_CONFIRMED": "Audit sample confirmed",
 }
 
 var taxDepartments = map[string]string{

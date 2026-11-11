@@ -3375,9 +3375,9 @@ paths:
       operationId: listStaffTaxReviews
       security: [{sessionCookie: []}]
       summary: 'Variants waiting for tax review, or the decisions already made'
-      description: 'tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. Sellers and people by name.'
+      description: 'tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. `status=AUDIT_SAMPLE` is the "Audit sample" tab (tax-returns `auditSample=true`): items the system approved under the risk-based review rule (setting `taxReview.mode` RISK_BASED) that are live and wait for a reviewer to confirm or reclassify them. Sellers and people by name; the system''s own approvals read "Automatic approval (risk-based rule)".'
       parameters:
-        - {name: status, in: query, required: false, schema: {type: string}}
+        - {name: status, in: query, required: false, description: 'PENDING_REVIEW (default), AUDIT_SAMPLE, APPROVED, REJECTED, STALE, MISSING_FACTS or DRAFT', schema: {type: string}}
         - {name: categoryCode, in: query, required: false, schema: {type: string}}
         - {name: sellerOrgId, in: query, required: false, schema: {type: string}}
         - {name: q, in: query, required: false, schema: {type: string}}
@@ -3557,6 +3557,33 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxMethodChange'}}}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxMethod'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/review-settings:
+    get:
+      tags: [Tax]
+      operationId: getStaffTaxReviewSettings
+      security: [{sessionCookie: []}]
+      summary: 'How tax review works: every classification, or by risk, with the always-review list and the audit sample'
+      description: 'tax-returns `GET /v1/tax/review-settings` with category names. Mode ALL (the default) sends every classification to a tax reviewer. RISK_BASED must only be switched on after the Texas tax professional agrees.'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReviewSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Tax]
+      operationId: changeStaffTaxReviewSettings
+      security: [{sessionCookie: []}]
+      summary: 'Change the tax review mode, the always-review categories and the audit sample percentage'
+      description: 'tax-returns `PUT /v1/tax/review-settings` (`tax:classify-admin`). A reason of 10+ characters is required and the change is recorded. The categories are sent as codes (the console shows names). It applies to new classification events; records already decided keep their status. 422 for an unknown category or a percentage outside 0 to 100.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReviewSettingsChange'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReviewSettings'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
@@ -10628,12 +10655,15 @@ components:
         reviewedAt: {type: string}
         reviewedByName: {type: string}
         ruleVersion: {type: string}
+        auditSample: {type: boolean, description: 'Approved by the system and live; waits in the Audit sample for a reviewer to confirm or reclassify it'}
+        autoApproved: {type: boolean, description: 'Approved by the system under the risk-based rule, not by a person'}
     StaffTaxReview:
       allOf:
         - $ref: '#/components/schemas/StaffTaxReviewRow'
         - type: object
           required: [facts, evidence, audit, canDecide, canApprove, approve]
           properties:
+            canConfirm: {type: boolean, description: 'An audit sample item the signed-in person may confirm (POST approve with a reason) or reclassify'}
             departmentName: {type: string}
             profileStatus: {type: string}
             profileStatusLabel: {type: string}
@@ -10771,6 +10801,32 @@ components:
       properties:
         method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
         shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null, '']}
+        reason: {type: string, minLength: 10, maxLength: 1000}
+    StaffTaxReviewSettings:
+      type: object
+      required: [mode, modeLabel, modeExplain, options, categories, alwaysReviewStatuses, auditPercent, history, canChange, warning]
+      properties:
+        mode: {type: string, enum: [ALL, RISK_BASED]}
+        modeLabel: {type: string}
+        modeExplain: {type: string}
+        options: {type: array, items: {type: object, additionalProperties: true, description: 'mode, label, explain, current'}}
+        categories: {type: array, items: {type: object, additionalProperties: true, description: 'code, name, departmentName, alwaysReview (on the list), gated (status always sends it to review), gateLabel'}}
+        alwaysReviewNames: {type: array, items: {type: string}, description: Names of the categories on the always-review list}
+        alwaysReviewStatuses: {type: array, items: {type: object, additionalProperties: true, description: 'status, label'}}
+        auditPercent: {type: integer, minimum: 0, maximum: 100}
+        auditExplain: {type: string}
+        history: {type: array, items: {type: object, additionalProperties: true, description: 'at, changedByName, fromLabel, toLabel, summary, reason'}}
+        changedByName: {type: string}
+        changedAt: {type: string}
+        canChange: {type: boolean}
+        warning: {type: string, description: 'Plain-language warning: RISK_BASED must only be switched on after the Texas tax professional agrees'}
+    StaffTaxReviewSettingsChange:
+      type: object
+      required: [mode, reason]
+      properties:
+        mode: {type: string, enum: [ALL, RISK_BASED]}
+        alwaysReview: {type: array, items: {type: string}, description: 'Category codes; replaces the list, absent keeps it'}
+        auditPercent: {type: integer, minimum: 0, maximum: 100}
         reason: {type: string, minLength: 10, maxLength: 1000}
     StaffTaxShadow:
       type: object
