@@ -176,7 +176,7 @@ class ImageLibraryAttachIT {
         pairs.addAll(List.of("Description=Hand-finished wax print.",
                 "Price (USD) *=49.00", "Quantity *=5", "No barcode=Yes", "Variation=" + (size.isEmpty() ? "" : "Size"),
                 "Size=" + size, "Material=Lace", "Fit=Regular", "Length=Midi",
-                "Occasion=Everyday", "Care=Cold wash", "Made in=Nigeria"));
+                "Occasion=Everyday", "Care=Cold wash", "Country of origin=Nigeria"));
         return row(pairs.toArray(String[]::new));
     }
 

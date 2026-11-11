@@ -148,7 +148,7 @@ public final class ImportColumns {
         List<ImportColumn> cols = new ArrayList<>(head(paths, paths.size() > 1));
         if (a.shown(RuleField.BRAND)) {
             String base = a.note(RuleField.BRAND).isEmpty() ? "The brand shoppers search for." : a.note(RuleField.BRAND);
-            cols.add(new ImportColumn(BRAND, "Brand", base + " Write \"No brand\" or \"Handmade\" if it has none. A brand "
+            cols.add(new ImportColumn(BRAND, type.brandAttribute().map(AttributeDefinition::label).orElse("Brand"), base + " Write \"No brand\" or \"Handmade\" if it has none. A brand "
                     + "we do not know yet is added and reviewed by AfroTransact.", a.required(RuleField.BRAND),
                     ColumnKind.TEXT, List.of(), "Adire Lagos", true));
         }
