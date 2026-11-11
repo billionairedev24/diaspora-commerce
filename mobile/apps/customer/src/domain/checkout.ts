@@ -5,7 +5,10 @@ import { type components } from '@afrotransact/api-client/generated/gateway-bff'
 export type CheckoutSummary = components['schemas']['CheckoutSummary'];
 export type PlaceOrderRequest = components['schemas']['PlaceOrderRequest'];
 export type OrderConfirmation = components['schemas']['OrderConfirmation'];
-export type DeliveryOptionKey = PlaceOrderRequest['deliverySelections'][number]['option'];
+/** An option an order can be placed with (listing rules section 3: no express; quote_required is never payable). */
+export type PlaceableOption = PlaceOrderRequest['deliverySelections'][number]['option'];
+/** An option the checkout page can show a package: the placeable ones and quote_required (outside every delivery zone). */
+export type DeliveryOptionKey = CheckoutSummary['packages'][number]['deliveryOptions'][number]['key'];
 export type Wallet = NonNullable<PlaceOrderRequest['wallet']>;
 
 /** What the shopper reads when placing the order failed. A cart mismatch (a line gone or reduced, the cart emptied) is a
@@ -38,6 +41,15 @@ export function blockedLines(summary: CheckoutSummary): BlockedLine[] {
 export function canPlaceOrder(summary: CheckoutSummary): boolean {
   return blockedLines(summary).length === 0 && summary.canPlaceOrder !== false;
 }
+
+/** Why delivery stops the order (a package to quote, or an unknown fee), in plain words; null when nothing does. */
+export function deliveryBlock(summary: CheckoutSummary, choices: Record<string, PackageChoice>): string | null {
+  const quote = summary.packages.some((p) => choices[p.packageId]?.option === 'quote_required');
+  return quote ? QUOTE_REQUIRED_MESSAGE : (summary.deliveryBlockedReason ?? null);
+}
+
+/** The option an order is placed with: quote_required is never payable (validateChoices stops it), so it maps to pickup. */
+export const placeable = (option: DeliveryOptionKey): PlaceableOption => (option === 'quote_required' ? 'pickup' : option);
 
 /** Plain words naming the item and what happens next: no ids and no tax terms (the server's own message is English only). */
 export function blockedItemText(line: Pick<BlockedLine, 'title'>): string {
@@ -87,10 +99,14 @@ export function totalFor(summary: CheckoutSummary, choices: Record<string, Packa
   return summary.subtotalMinor + shipping + summary.taxMinor;
 }
 
+/** Plain words for a package too far for standard delivery: the shopper asks for a quote, picks up or changes the address. */
+export const QUOTE_REQUIRED_MESSAGE = 'Part of your order is too far for standard delivery. Ask us for a quote, choose pickup, or choose another address.';
+
 export function validateChoices(summary: CheckoutSummary, choices: Record<string, PackageChoice>): string | null {
   for (const p of summary.packages) {
     const ch = choices[p.packageId];
     if (!ch) return `Choose a delivery option for ${p.heading}.`;
+    if (ch.option === 'quote_required') return QUOTE_REQUIRED_MESSAGE;
     if (ch.option === 'pickup' && !ch.pickupPointId) return `Choose a pickup point for ${p.heading}.`;
   }
   return null;
@@ -106,7 +122,7 @@ export function buildPlaceOrderRequest(
     ...payment,
     deliverySelections: Object.entries(choices).map(([packageId, ch]) => ({
       packageId,
-      option: ch.option,
+      option: placeable(ch.option),
       ...(ch.pickupPointId ? { pickupPointId: ch.pickupPointId } : {}),
       ...(ch.option === 'afrotransact_delivery'
         ? { preferences: { handover: 'hand' as const, contact: 'text' as const, ...ch.preferences } }

@@ -15,7 +15,8 @@ import { accountKeys, cartKeys, checkoutKeys } from '@/api/keys';
 import { useCheckoutSummary } from '@/api/queries';
 import { type CheckoutSummary } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
-import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, checkoutFailure, defaultChoices, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '@/domain/checkout';
+import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, checkoutFailure, defaultChoices, deliveryBlock, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '@/domain/checkout';
+import { onRequestQuote } from '@/domain/quote';
 import { usePayments } from '@/payments/usePayments';
 import { c, sp, t } from '@/theme';
 import { PaymentMark } from '@/ui/PaymentMarks';
@@ -88,7 +89,7 @@ export default function Checkout() {
     );
   }
 
-  const setChoice = (pkgId: string, patch: Partial<PackageChoice>) => setChoices((cur) => ({ ...cur, [pkgId]: { ...(cur[pkgId] ?? { option: 'carrier' }), ...patch } }));
+  const setChoice = (pkgId: string, patch: Partial<PackageChoice>) => setChoices((cur) => ({ ...cur, [pkgId]: { ...(cur[pkgId] ?? { option: 'afrotransact_delivery' }), ...patch } }));
 
   /** Takes an item that can't be sold yet out of this order (it stays in the cart) and reads the summary again. */
   const removeBlocked = async (lineId: string) => {
@@ -106,7 +107,7 @@ export default function Checkout() {
   const place = async (sum: CheckoutSummary) => {
     setErr('');
     setCartChanged(false);
-    if (!canPlaceOrder(sum)) return setErr('Remove the items that can’t be sold yet to place your order.');
+    if (!canPlaceOrder(sum)) return setErr(sum.deliveryBlockedReason ?? 'Remove the items that can’t be sold yet to place your order.');
     if (!address) return setErr('Add a delivery address first.');
     const invalid = validateChoices(sum, choices);
     if (invalid) return setErr(invalid);
@@ -169,7 +170,7 @@ export default function Checkout() {
       icon={isWallet ? (Platform.OS === 'ios' ? AppleLogo : GoogleLogo) : LockSimple}
       label={isWallet ? `Pay with ${walletLabel} · ${formatMoney(total, s.currency)}` : `Place order · ${formatMoney(total, s.currency)}`}
       loading={busy}
-      disabled={!canPlaceOrder(s)}
+      disabled={!canPlaceOrder(s) || !!deliveryBlock(s, choices)}
       onPress={() => void place(s)}
     />
   );
@@ -187,6 +188,12 @@ export default function Checkout() {
           </View>
         ) : <AppText>Add an address</AppText>}
       </Card>
+
+      {deliveryBlock(s, choices) ? (
+        <View accessibilityRole="alert" testID="checkout-delivery-blocked">
+          <Banner tone="danger" icon={WarningCircle}>{deliveryBlock(s, choices)}</Banner>
+        </View>
+      ) : null}
 
       {blockedLines(s).length ? (
         <View style={{ gap: sp['2'] }} accessibilityRole="alert" testID="checkout-blocked">
@@ -207,7 +214,13 @@ export default function Checkout() {
         return (
           <View key={p.packageId} style={{ gap: sp['2'] }}>
             <SectionLabel>{p.heading.toUpperCase()} · {p.itemCount} ITEM{p.itemCount === 1 ? '' : 'S'}</SectionLabel>
-            {p.deliveryOptions.map((o) => (
+            {p.deliveryOptions.map((o) => o.key === 'quote_required' ? (
+              // Outside every delivery zone: not payable. Ask for a quote (built by the delivery quote flow), pick up or change address.
+              <Card key={o.key} accessibilityLabel={o.label}>
+                <AppText variant="bodyStrong">{o.label}</AppText>
+                <Button kind="dark" size="md" label="Ask us for a quote" onPress={() => onRequestQuote(p)} />
+              </Card>
+            ) : (
               <Card key={o.key} selected={ch?.option === o.key} onPress={() => setChoice(p.packageId, { option: o.key, ...(o.key !== 'pickup' ? { pickupPointId: undefined } : {}) })} accessibilityLabel={`${o.label}, ${o.eta}`}>
                 <View style={styles.between}>
                   <View style={{ flex: 1 }}>

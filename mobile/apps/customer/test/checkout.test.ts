@@ -4,19 +4,20 @@ import { resolve } from 'node:path';
 import { ApiError } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, CART_CHANGED_MESSAGE, checkoutFailure, type CheckoutSummary, defaultChoices, idempotencyKey, ITEM_BLOCKED_MESSAGE, keyAfterFailure, paymentSheetIntent, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '../src/domain/checkout';
+import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, CART_CHANGED_MESSAGE, checkoutFailure, type CheckoutSummary, defaultChoices, deliveryBlock, idempotencyKey, ITEM_BLOCKED_MESSAGE, keyAfterFailure, paymentSheetIntent, QUOTE_REQUIRED_MESSAGE, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '../src/domain/checkout';
+import { onRequestQuote } from '../src/domain/quote';
 import { allocateShipping, type AllocationMethod } from '../src/domain/shippingAllocation';
+import { deliveryFee } from '../src/domain/shippingFee';
 
-const promise = { days: 0, label: 'Today', prefix: 'FREE delivery', free: true, feeMinor: 0, expressLabel: null, cutoff: null };
+const promise = { days: 0, label: 'Today', prefix: 'Delivery by AfroTransact', free: false, feeMinor: 599, cutoff: null };
 const summary = {
   packages: [
     {
       packageId: 'pkg-1', seller: { id: 's', name: 'AfroTransact Retail', kind: 'PLATFORM', city: 'Houston' }, fulfilment: 'AFROTRANSACT',
       heading: 'Shipped by AfroTransact', shipsFrom: 'Houston FC', delivery: promise,
       deliveryOptions: [
-        { key: 'afrotransact_delivery', label: 'AfroTransact Delivery', eta: 'Today 6–8 pm', feeMinor: 0, free: true },
-        { key: 'express', label: 'Next Day Air', eta: 'Tomorrow', feeMinor: 1299, free: false },
-        { key: 'pickup', label: 'Pickup', eta: 'Today', feeMinor: 0, free: true }
+        { key: 'afrotransact_delivery', label: 'Delivery by AfroTransact', eta: 'Today 6–8 pm', feeMinor: 599, free: false },
+        { key: 'pickup', label: 'Pickup at an AfroTransact point', eta: 'Today', feeMinor: 0, free: true }
       ],
       lines: [], itemCount: 1, subtotalMinor: 5000, freeShippingNudge: null, pickupPoints: []
     }
@@ -32,21 +33,38 @@ describe('checkout rules', () => {
     expect(requiresDeviceAuth(500, 'google_pay')).toBe(false);
   });
 
-  it('defaults to free options and re-totals for upgrades', () => {
+  it('defaults to delivery by AfroTransact and re-totals for pickup', () => {
     const ch = defaultChoices(summary);
     expect(ch['pkg-1']?.option).toBe('afrotransact_delivery');
-    expect(totalFor(summary, ch)).toBe(5413);
-    expect(totalFor(summary, { 'pkg-1': { option: 'express' } })).toBe(5413 + 1299);
+    expect(totalFor(summary, ch)).toBe(5000 + 599 + 413);
+    expect(totalFor(summary, { 'pkg-1': { option: 'pickup' } })).toBe(5000 + 413);
+  });
+
+  it('a package outside every delivery zone offers quote_required: not payable, with pickup beside it', () => {
+    const far = { ...summary.packages[0], packageId: 'pkg-far', deliveryOptions: [
+      { key: 'quote_required', label: 'Too far for standard delivery. Ask us for a quote', eta: '', feeMinor: 0, free: false },
+      { key: 'pickup', label: 'Pickup at an AfroTransact point', eta: 'Today', feeMinor: 0, free: true }
+    ] };
+    const sum = { ...summary, packages: [far], canPlaceOrder: false, deliveryBlockedReason: QUOTE_REQUIRED_MESSAGE } as unknown as CheckoutSummary;
+    const ch = defaultChoices(sum);
+    expect(ch['pkg-far']?.option).toBe('quote_required');
+    expect(validateChoices(sum, ch)).toBe(QUOTE_REQUIRED_MESSAGE);
+    expect(deliveryBlock(sum, ch)).toMatch(/Ask us for a quote/);
+    expect(canPlaceOrder(sum)).toBe(false);
+    expect(totalFor(sum, ch)).toBe(5000 + 413); // no delivery price is invented
+    expect(validateChoices(sum, { 'pkg-far': { option: 'pickup', pickupPointId: 'pp-1' } })).toBeNull();
+    expect(deliveryBlock(sum, { 'pkg-far': { option: 'pickup', pickupPointId: 'pp-1' } })).toBe(QUOTE_REQUIRED_MESSAGE); // the summary still says so until it is re-read
+    expect(onRequestQuote(far as unknown as Parameters<typeof onRequestQuote>[0])).toBeUndefined(); // the stub the delivery quote flow replaces
   });
 
   it('does not default to pickup when a delivery option exists', () => {
     const seller = { ...summary.packages[0], packageId: 'pkg-2', deliveryOptions: [
-      { key: 'carrier', label: 'USPS', eta: '3 days', feeMinor: 599, free: false },
-      { key: 'pickup', label: 'Pickup', eta: 'Tomorrow', feeMinor: 0, free: true }
+      { key: 'afrotransact_delivery', label: 'AfroTransact collects from the store and delivers', eta: '3 days', feeMinor: 599, free: false },
+      { key: 'pickup', label: 'Collect from the store', eta: 'Tomorrow', feeMinor: 0, free: true }
     ] };
     const onlyPickup = { ...summary.packages[0], packageId: 'pkg-3', deliveryOptions: [{ key: 'pickup', label: 'Pickup', eta: 'Tomorrow', feeMinor: 0, free: true }], pickupPoints: [{ id: 'pp-9', name: 'Shop', address: 'x', hours: 'y', ready: 'z', setBy: 'seller' }] };
     const ch = defaultChoices({ ...summary, packages: [seller, onlyPickup] } as unknown as CheckoutSummary);
-    expect(ch['pkg-2']).toEqual({ option: 'carrier' });
+    expect(ch['pkg-2']).toEqual({ option: 'afrotransact_delivery' });
     expect(ch['pkg-3']).toEqual({ option: 'pickup', pickupPointId: 'pp-9' });
   });
 
@@ -153,5 +171,26 @@ describe('shipping allocation (shared vectors with orders, gateway-bff and the w
   };
   it.each(vectors.cases)('$name', (c) => {
     expect(allocateShipping(c.totalMinor, c.weightsMinor, c.method)).toEqual(c.expectedMinor);
+  });
+});
+
+describe('the delivery fee equals what orders charges (shared fee vectors)', () => {
+  const vectors = JSON.parse(readFileSync(resolve(__dirname, '../../../../tools/checkout/shipping-fee-vectors.json'), 'utf8')) as {
+    settings: { name: string; flatFeeMinor: number; freeAboveMinor: number | null; carts: { itemsMinor: number; afrotransactDeliveryMinor: number; pickupMinor: number }[] }[];
+  };
+
+  it('is the flat fee, free at or above the threshold, for every vector', () => {
+    expect(vectors.settings.length).toBeGreaterThanOrEqual(4);
+    for (const set of vectors.settings) {
+      for (const c of set.carts) {
+        expect(deliveryFee(c.itemsMinor, { flatFeeMinor: set.flatFeeMinor, freeAboveMinor: set.freeAboveMinor }), `${set.name} items ${c.itemsMinor}`).toBe(c.afrotransactDeliveryMinor);
+      }
+    }
+  });
+
+  it('pickup is always free and the request never carries quote_required', () => {
+    const req = buildPlaceOrderRequest('a1', { 'pkg-1': { option: 'pickup', pickupPointId: 'pp-1' } }, { paymentMethodId: 'pm_1' });
+    expect(req.deliverySelections[0]?.option).toBe('pickup');
+    expect(totalFor(summary, { 'pkg-1': { option: 'pickup' } }) - summary.subtotalMinor - summary.taxMinor).toBe(0);
   });
 });

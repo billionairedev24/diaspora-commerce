@@ -3,6 +3,7 @@
 import { bffProblemType, type Cart, type CartPackage, type DeliveryPromise, type ProductDetail, type ProductSummary, type SearchPage } from '@afrotransact/api-client';
 
 import { allocateShipping } from '../../domain/shippingAllocation';
+import { deliveryFee, LAUNCH_SHIPPING } from '../../domain/shippingFee';
 import { type Booking, type CheckoutSummary, type OrderConfirmation, type OrderTracking } from '../types';
 import { mockDb, type MockLine, type MockReview, type MockShipment, nextId, productByAtin } from './db';
 import { DRESS_SIZE_CHART, type FixtureProduct, PRODUCTS, PROVIDERS, USER } from './fixtures';
@@ -25,13 +26,13 @@ function mockCreditEntries() {
 }
 
 const TAX_RATE = 0.0825;
-const FREE_THRESHOLD = 3500;
-const SELLER_SHIPPING = 599;
 
+/** Launch shipping: one flat delivery fee, no carrier named, no express (listing rules D16). */
 function promiseOf(p: FixtureProduct): DeliveryPromise {
+  const fee = LAUNCH_SHIPPING.flatFeeMinor;
   return p.sameDay
-    ? { days: 0, label: 'Today by 8 pm', prefix: 'FREE delivery', free: true, feeMinor: 0, expressLabel: 'Today 6–8 pm', cutoff: 'Order within 3 hrs' }
-    : { days: 1, label: 'Tomorrow', prefix: 'FREE delivery', free: true, feeMinor: 0, expressLabel: null, cutoff: null };
+    ? { days: 0, label: 'Today by 8 pm', prefix: 'Delivery by AfroTransact', free: false, feeMinor: fee, cutoff: 'Order within 3 hrs' }
+    : { days: 1, label: 'Tomorrow', prefix: 'Delivery by AfroTransact', free: false, feeMinor: fee, cutoff: null };
 }
 
 const stockStatus = (n: number) => (n === 0 ? 'OUT_OF_STOCK' : n <= 5 ? 'LOW_STOCK' : 'IN_STOCK') as 'OUT_OF_STOCK' | 'LOW_STOCK' | 'IN_STOCK';
@@ -113,7 +114,7 @@ function buildCart(): Cart {
       lines,
       itemCount: lines.reduce((a, l) => a + l.quantity, 0),
       subtotalMinor: subtotal,
-      freeShippingNudge: !fba && subtotal < FREE_THRESHOLD ? { remainingMinor: FREE_THRESHOLD - subtotal, thresholdMinor: FREE_THRESHOLD } : null
+      freeShippingNudge: LAUNCH_SHIPPING.freeAboveMinor !== null && subtotal < LAUNCH_SHIPPING.freeAboveMinor ? { remainingMinor: LAUNCH_SHIPPING.freeAboveMinor - subtotal, thresholdMinor: LAUNCH_SHIPPING.freeAboveMinor } : null
     };
   });
   const all = packages.flatMap((p) => p.lines);
@@ -129,19 +130,14 @@ function buildCart(): Cart {
 }
 
 function deliveryOptions(p: FixtureProduct, subtotal: number) {
-  if (p.fulfilment === 'AFROTRANSACT') {
-    return [
-      ...(p.sameDay ? [{ key: 'afrotransact_delivery' as const, label: 'AfroTransact Delivery', eta: 'Today 6–8 pm', feeMinor: 0, free: true }] : []),
-      { key: 'carrier' as const, label: 'UPS Ground', eta: p.sameDay ? 'Tomorrow' : 'In 2 days', feeMinor: 0, free: true },
-      { key: 'express' as const, label: 'UPS Next Day Air', eta: 'Tomorrow by 10:30 am', feeMinor: 1299, free: false },
-      { key: 'pickup' as const, label: 'Pickup', eta: 'Ready today after 4 pm', feeMinor: 0, free: true }
-    ];
-  }
-  const free = subtotal >= FREE_THRESHOLD;
+  // Delivery by AfroTransact (or AfroTransact collects from the seller's store and delivers) at the one flat fee; pickup is free.
+  const fee = deliveryFee(subtotal);
+  const fba = p.fulfilment === 'AFROTRANSACT';
   return [
-    { key: 'carrier' as const, label: 'USPS Ground Advantage', eta: 'In 3–4 days', feeMinor: free ? 0 : SELLER_SHIPPING, free },
-    ...(p.sameDay ? [{ key: 'afrotransact_delivery' as const, label: 'AfroTransact Delivery', eta: 'Today 6–8 pm', feeMinor: 499, free: false }] : []),
-    { key: 'pickup' as const, label: `Pickup at ${p.sellerName}`, eta: 'Ready tomorrow', feeMinor: 0, free: true }
+    { key: 'afrotransact_delivery' as const, label: fba ? 'Delivery by AfroTransact' : 'AfroTransact collects from the store and delivers', eta: p.sameDay ? 'Today 6–8 pm' : 'In 2 days', feeMinor: fee, free: fee === 0 },
+    fba
+      ? { key: 'pickup' as const, label: 'Pickup at an AfroTransact point', eta: 'Ready today after 4 pm', feeMinor: 0, free: true }
+      : { key: 'pickup' as const, label: 'Collect from the store', eta: 'Ready tomorrow', feeMinor: 0, free: true }
   ];
 }
 
@@ -160,7 +156,7 @@ function checkoutSummary(): CheckoutSummary | null {
     }));
   if (!packages.length) return null;
   const subtotal = packages.reduce((a, p) => a + p.subtotalMinor, 0);
-  const shipping = packages.reduce((a, p) => a + (p.deliveryOptions.find((o) => o.free) ?? p.deliveryOptions[0] ?? { feeMinor: 0 }).feeMinor, 0);
+  const shipping = packages.reduce((a, p) => a + (p.deliveryOptions.find((o) => o.key !== 'pickup') ?? p.deliveryOptions[0] ?? { feeMinor: 0 }).feeMinor, 0);
   const t = mockTax(packages, shipping);
   return {
     packages, addresses: db.addresses, paymentMethods: db.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: t.taxMinor,

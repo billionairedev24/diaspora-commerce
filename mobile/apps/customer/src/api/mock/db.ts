@@ -47,9 +47,9 @@ function seedOrders(): MockOrder[] {
     { orderNumber: 'AT-1049-2283', placedAt: daysFromNow(0, 9).toISOString(), totalMinor: 5247, shipTo: 'Adaeze Okafor, Houston TX 77032', status: 'out_for_delivery',
       shipments: [{ shipmentId: 'shp_1049_1', label: 'AfroTransact Delivery', status: 'out_for_delivery', eta: '6–8 pm', method: 'afrotransact_delivery', handover: 'hand', perishable: false, deliveryCode: '4821', items: [{ atin: 'ATBASMAT05', quantity: 1 }, { atin: 'ATSUYA0006', quantity: 2 }] }] },
     { orderNumber: 'AT-0988-1120', placedAt: '2026-09-25T15:00:00Z', totalMinor: 3498, shipTo: 'Adaeze Okafor, Houston TX 77032', status: 'delivered',
-      shipments: [{ shipmentId: 'shp_0988_1', label: 'UPS Ground', status: 'delivered', eta: null, method: 'carrier', handover: null, perishable: false, deliveryCode: null, items: [{ atin: 'ATBASMAT05', quantity: 1 }, { atin: 'ATGARI0004', quantity: 1 }] }] },
+      shipments: [{ shipmentId: 'shp_0988_1', label: 'Delivery by AfroTransact', status: 'delivered', eta: null, method: 'carrier', handover: null, perishable: false, deliveryCode: null, items: [{ atin: 'ATBASMAT05', quantity: 1 }, { atin: 'ATGARI0004', quantity: 1 }] }] },
     { orderNumber: 'AT-0951-7743', placedAt: '2026-09-30T15:00:00Z', totalMinor: 1800, shipTo: 'Adaeze Okafor, Houston TX 77032', status: 'refunded',
-      shipments: [{ shipmentId: 'shp_0951_1', label: 'USPS Ground Advantage', status: 'returned', eta: null, method: 'carrier', handover: null, perishable: false, deliveryCode: null, items: [{ atin: 'ATKENTE008', quantity: 1 }] }] }
+      shipments: [{ shipmentId: 'shp_0951_1', label: 'Delivery by AfroTransact', status: 'returned', eta: null, method: 'carrier', handover: null, perishable: false, deliveryCode: null, items: [{ atin: 'ATKENTE008', quantity: 1 }] }] }
   ];
 }
 
