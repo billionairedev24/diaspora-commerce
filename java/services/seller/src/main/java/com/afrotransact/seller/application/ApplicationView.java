@@ -13,13 +13,28 @@ import com.afrotransact.seller.domain.TimelineEntry;
  *
  * @param taxIdMasked e.g. {@code •••-••-6789}
  * @param taxIdFull      formatted tax ID, only for {@link PiiLevel#FULL}
+ * @param workflow       who holds the application and for how long (staff views only)
  * @param planFeeOptions whether the Plan step offers paying the plan from sales, and the platform default (S298)
  */
 public record ApplicationView(Application application, PiiLevel pii, String taxIdMasked, String taxIdFull,
                               List<OnboardingStep> steps, List<OnboardingStep> completedSteps,
                               FirstCharge firstCharge, String planName, List<DocumentRef> documents,
                               List<TimelineEntry> timeline, List<DocumentAccess> accessLog,
-                              PlanFeeCollectionService.Options planFeeOptions) {
+                              PlanFeeCollectionService.Options planFeeOptions, ApplicationCaseView workflow) {
+
+    public ApplicationView(Application application, PiiLevel pii, String taxIdMasked, String taxIdFull,
+                           List<OnboardingStep> steps, List<OnboardingStep> completedSteps, FirstCharge firstCharge,
+                           String planName, List<DocumentRef> documents, List<TimelineEntry> timeline,
+                           List<DocumentAccess> accessLog, PlanFeeCollectionService.Options planFeeOptions) {
+        this(application, pii, taxIdMasked, taxIdFull, steps, completedSteps, firstCharge, planName, documents,
+                timeline, accessLog, planFeeOptions, null);
+    }
+
+    /** The same view with who holds the application (staff only). */
+    public ApplicationView withWorkflow(ApplicationCaseView next) {
+        return new ApplicationView(application, pii, taxIdMasked, taxIdFull, steps, completedSteps, firstCharge,
+                planName, documents, timeline, accessLog, planFeeOptions, next);
+    }
 
     public ApplicationView {
         steps = List.copyOf(steps);

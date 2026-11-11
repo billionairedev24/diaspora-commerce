@@ -12,6 +12,7 @@ import com.afrotransact.seller.port.DepartmentDirectory;
 import org.springframework.beans.factory.annotation.Value;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestPlanPayments;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeConnect;
+import com.afrotransact.seller.adapter.out.identity.HttpStaffDirectory;
 import com.afrotransact.seller.adapter.out.media.HttpMediaClient;
 import com.afrotransact.seller.adapter.out.payments.DisabledEarningsWithholding;
 import com.afrotransact.seller.adapter.out.payments.HttpConnectedAccountRegistry;
@@ -38,6 +39,7 @@ import com.afrotransact.seller.port.BillingScheduler;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.MediaClient;
+import com.afrotransact.seller.port.StaffDirectory;
 import com.afrotransact.seller.port.StorageUsageSource;
 import com.afrotransact.seller.port.PlanPaymentsGateway;
 import com.afrotransact.seller.port.StripeConnectGateway;
@@ -178,6 +180,14 @@ class SellerConfiguration {
     ServiceTokens sellerServiceTokens(SellerProperties props, Clock clock) {
         SellerProperties.Metering m = props.metering();
         return new ServiceTokens(RestClient.create(), m.tokenUri(), m.clientId(), m.clientSecret(), clock);
+    }
+
+    @Bean
+    StaffDirectory staffDirectory(SellerProperties props, ServiceTokens tokens) {
+        String tokenUri = props.metering().tokenUri();
+        int cut = tokenUri.indexOf("/oauth2/token");
+        String identity = cut > 0 ? tokenUri.substring(0, cut) : tokenUri;
+        return new HttpStaffDirectory(identity, props.metering().timeout(), tokens);
     }
 
     @Bean

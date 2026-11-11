@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import com.afrotransact.seller.application.ApplicationPrefill;
+import com.afrotransact.seller.application.ApplicationCaseView;
 import com.afrotransact.seller.application.ApplicationView;
 import com.afrotransact.seller.application.DocumentRef;
 import com.afrotransact.seller.application.PiiLevel;
@@ -225,7 +226,9 @@ final class OnboardingDtos {
                                        + "the platform default (S298)")
                                PlanFeeDtos.OptionView planFeeCollectionOption,
                                @Schema(description = "When step 1 was decided") Instant reviewedAt,
-                               @Schema(description = "When the final decision was made") Instant decidedAt) {
+                               @Schema(description = "When the final decision was made") Instant decidedAt,
+                               @Schema(description = "Staff only: who holds the application, for how long, the SLA "
+                                       + "state, escalation, and what the viewer may do") ApplicationCaseView workflow) {
 
         static ApplicationResponse of(ApplicationView v) {
             Application a = v.application();
@@ -265,7 +268,7 @@ final class OnboardingDtos {
                     v.timeline().stream().map(t -> TimelineView.of(t, v.pii() != PiiLevel.APPLICANT)).toList(),
                     applicant ? List.of() : v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(),
                     a.updatedAt(), v.planFeeOptions() == null ? null : PlanFeeDtos.OptionView.of(v.planFeeOptions()),
-                    applicant ? null : a.reviewedAt(), a.decidedAt());
+                    applicant ? null : a.reviewedAt(), a.decidedAt(), applicant ? null : v.workflow());
         }
 
         private static String dob(LocalDate d, boolean mask) {

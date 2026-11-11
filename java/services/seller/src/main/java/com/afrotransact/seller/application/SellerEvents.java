@@ -17,6 +17,10 @@ public final class SellerEvents {
     public static final String APPLICATION_INFO_REQUESTED = "seller.application.info_requested";
     public static final String APPLICATION_APPROVED = "seller.application.approved";
     public static final String APPLICATION_REJECTED = "seller.application.rejected";
+    /** Internal: a case was assigned, claimed, handed to the approval pool or sent back (staff recipients; never the applicant). */
+    public static final String APPLICATION_ASSIGNED = "seller.application.assigned";
+    /** Internal: a case reached escalation level 1 or 2; recipients are the escalation targets. */
+    public static final String APPLICATION_ESCALATED = "seller.application.escalated";
     public static final String ORG_APPROVED = "seller.org.approved";
     public static final String ORG_UPDATED = "seller.org.updated";
     public static final String COMPLIANCE_CHANGED = "seller.compliance.changed";

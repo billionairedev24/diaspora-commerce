@@ -31,6 +31,9 @@ public interface ApplicationRepository {
 
     Page<Application> search(List<ApplicationStatus> statuses, OrgKind kind, int page, int size);
 
+    /** The queue with who holds each application, oldest wait first. */
+    Page<CaseRow> searchCases(CaseSearch search);
+
     /** Human reference such as {@code APP-30131}. */
     String nextReference();
 

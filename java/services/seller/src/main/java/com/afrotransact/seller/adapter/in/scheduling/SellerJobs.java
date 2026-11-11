@@ -4,6 +4,7 @@ import com.afrotransact.seller.application.BillingAdjustmentService;
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.ComplianceService;
 import com.afrotransact.seller.application.ConnectedAccountSyncService;
+import com.afrotransact.seller.application.EscalationService;
 import com.afrotransact.seller.application.ChargeGateEvaluator;
 import com.afrotransact.seller.application.EarningsCollectionService;
 import com.afrotransact.seller.application.InvoiceCollectionService;
@@ -34,11 +35,12 @@ class SellerJobs {
     private final InvoiceCollectionService collection;
     private final ChargeGateEvaluator gates;
     private final ConnectedAccountSyncService accountSync;
+    private final EscalationService escalation;
 
     SellerJobs(ComplianceService compliance, BillingService billing, UsageMeteringService metering,
                RewardService rewards, BillingAdjustmentService adjustments, EarningsCollectionService earnings,
                InvoiceCollectionService collection, ChargeGateEvaluator gates,
-               ConnectedAccountSyncService accountSync) {
+               ConnectedAccountSyncService accountSync, EscalationService escalation) {
         this.compliance = compliance;
         this.billing = billing;
         this.metering = metering;
@@ -48,6 +50,23 @@ class SellerJobs {
         this.collection = collection;
         this.gates = gates;
         this.accountSync = accountSync;
+        this.escalation = escalation;
+    }
+
+    /**
+     * Application review: raises the escalation level of cases that are overdue or that nobody has taken. Each case is
+     * checked under its application's row lock and only ever moves up one level, so replicas running at once (and
+     * re-runs) escalate once.
+     */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.escalation-interval:5m}",
+            initialDelayString = "${at.seller.jobs.escalation-interval:5m}")
+    void applicationEscalations() {
+        run("application-escalations", () -> {
+            int raised = escalation.runDue();
+            if (raised > 0) {
+                LOG.info("Escalated {} application(s)", raised);
+            }
+        });
     }
 
     /**

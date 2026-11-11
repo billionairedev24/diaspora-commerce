@@ -21,7 +21,7 @@ public class ServiceTokens {
      * Scopes for the usage sources of metered billing (S206) and for plan fees collected from earnings at payments
      * (S298).
      */
-    static final String SCOPES = "inventory:storage.read ads:spend.read ai:usage.read payments:plan-fees";
+    static final String SCOPES = "inventory:storage.read ads:spend.read ai:usage.read payments:plan-fees users:read";
     private static final Duration EARLY_REFRESH = Duration.ofSeconds(60);
 
     private final RestClient client;

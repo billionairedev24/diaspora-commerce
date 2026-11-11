@@ -7,6 +7,11 @@ public final class SellerPermissions {
     public static final String APPLICATIONS_REVIEW = "applications:review";
     /** Step 2: final approve, send back to reviewer, reject. */
     public static final String APPLICATIONS_APPROVE = "applications:approve";
+    /**
+     * Application supervisor: sees every application, assigns, reassigns and takes over reviews, manages SLAs and
+     * escalation targets. Holds neither step permission by default.
+     */
+    public static final String APPLICATIONS_ASSIGN = "applications:assign";
     /** See full SSN/EIN and dates of birth in application dossiers (every view is logged). */
     public static final String APPLICATIONS_PII = "applications:pii";
     /** Stripe compliance console: list accounts, send reminders, pause payouts (Ops, Finance). */

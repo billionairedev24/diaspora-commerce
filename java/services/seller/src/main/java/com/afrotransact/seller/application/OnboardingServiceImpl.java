@@ -85,11 +85,13 @@ class OnboardingServiceImpl implements OnboardingService {
     private final DomainEventPublisher events;
     private final SellerSettings settings;
     private final Clock clock;
+    private final ReviewAssignmentService assignments;
 
     OnboardingServiceImpl(ApplicationRepository apps, OrganisationRepository orgs, LaunchListRepository launchList,
                           ApplicationRules rules, ApplicationViews views, FieldCipher cipher,
                           CallerProfileProvider profiles, PhoneNumbers phones, AccessGuard access,
-                          DomainEventPublisher events, SellerSettings settings, Clock clock) {
+                          DomainEventPublisher events, SellerSettings settings, Clock clock,
+                          ReviewAssignmentService assignments) {
         this.apps = apps;
         this.orgs = orgs;
         this.launchList = launchList;
@@ -102,6 +104,7 @@ class OnboardingServiceImpl implements OnboardingService {
         this.events = events;
         this.settings = settings;
         this.clock = clock;
+        this.assignments = assignments;
     }
 
     @Override
@@ -293,6 +296,7 @@ class OnboardingServiceImpl implements OnboardingService {
                 resubmission ? ReviewAction.RESUBMITTED : ReviewAction.SUBMITTED, app.status(),
                 submitted.status(), actor.subject(), null, null, List.of(), now);
         apps.appendTimeline(entry);
+        assignments.transitioned(app, submitted, entry.action(), actor.subject(), null, null);
         events.publish(SellerEvents.APPLICATION_SUBMITTED, SellerEvents.AGGREGATE_APPLICATION, app.id(),
                 ApplicationEventPayload.of(submitted, entry));
         return applicantView(submitted);

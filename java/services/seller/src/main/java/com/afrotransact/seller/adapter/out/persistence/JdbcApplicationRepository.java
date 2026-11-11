@@ -2,20 +2,26 @@ package com.afrotransact.seller.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.ApplicationData;
 import com.afrotransact.seller.domain.ApplicationStatus;
+import com.afrotransact.seller.domain.CaseQueue;
 import com.afrotransact.seller.domain.DocumentAccess;
 import com.afrotransact.seller.domain.OnboardingStep;
 import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.TimelineEntry;
 import com.afrotransact.seller.port.ApplicationRepository;
+import com.afrotransact.seller.port.CaseRow;
+import com.afrotransact.seller.port.CaseSearch;
 import com.afrotransact.seller.port.Page;
 import com.afrotransact.platform.web.error.ConflictException;
 import org.springframework.jdbc.core.RowMapper;
@@ -122,6 +128,89 @@ class JdbcApplicationRepository implements ApplicationRepository {
             rows = rows.param("kind", kind.name());
         }
         return new Page<>(rows.query(mapper).list(), page, size, count.query(Long.class).single());
+    }
+
+    private static final String STAGE = "(case a.status when 'PENDING_REVIEW' then 'REVIEW' when 'FLAGGED' then 'APPROVAL' "
+            + "when 'AWAITING_FINAL_APPROVAL' then 'APPROVAL' end)";
+    private static final String ENTERED = "coalesce(c.stage_entered_at, a.updated_at)";
+
+    @Override
+    public Page<CaseRow> searchCases(CaseSearch q) {
+        List<String> where = new ArrayList<>();
+        Map<String, Object> params = new HashMap<>();
+        params.put("me", q.me() == null ? "" : q.me());
+        params.put("canReview", q.canReview());
+        params.put("canApprove", q.canApprove());
+        CaseQueue queue = q.queue();
+        if (queue == null || queue == CaseQueue.ALL) {
+            List<ApplicationStatus> statuses = q.statuses();
+            if (statuses.isEmpty() && queue == null) {
+                statuses = List.of(ApplicationStatus.PENDING_REVIEW, ApplicationStatus.FLAGGED,
+                        ApplicationStatus.AWAITING_FINAL_APPROVAL);
+            }
+            if (statuses.isEmpty()) {
+                where.add("a.status <> 'DRAFT'");
+            } else {
+                where.add("a.status in (:statuses)");
+                params.put("statuses", statuses.stream().map(Enum::name).toList());
+            }
+        } else {
+            switch (queue) {
+                case MY -> where.add("(c.assignee_id = :me or (c.assignee_id is null and a.applicant_user_id <> :me and "
+                        + "((" + STAGE + " = 'REVIEW' and :canReview) or (" + STAGE + " = 'APPROVAL' and :canApprove "
+                        + "and coalesce(a.reviewer_id, '') <> :me)))) and " + STAGE + " is not null");
+                case AWAITING_REVIEW -> where.add(STAGE + " = 'REVIEW'");
+                case AWAITING_APPROVAL -> where.add(STAGE + " = 'APPROVAL'");
+                case ESCALATED -> where.add(STAGE + " is not null and coalesce(c.escalation_level, 0) > 0");
+                case RETURNED -> where.add("a.status = 'INFO_REQUESTED'");
+                default -> { }
+            }
+        }
+        if (q.kind() != null) {
+            where.add("a.kind = :kind");
+            params.put("kind", q.kind().name());
+        }
+        if (q.stage() != null) {
+            where.add(STAGE + " = :stage");
+            params.put("stage", q.stage().name());
+        }
+        if (q.assigneeId() != null) {
+            where.add("c.assignee_id = :assignee");
+            params.put("assignee", q.assigneeId());
+        }
+        if (q.unassigned()) {
+            where.add(STAGE + " is not null and c.assignee_id is null");
+        }
+        if (q.escalated()) {
+            where.add(STAGE + " is not null and coalesce(c.escalation_level, 0) > 0");
+        }
+        if (q.overdue()) {
+            where.add("((" + STAGE + " = 'REVIEW' and " + ENTERED + " <= :rc) or (" + STAGE + " = 'APPROVAL' and "
+                    + ENTERED + " <= :ac))");
+            params.put("rc", Sql.ts(q.reviewCutoff()));
+            params.put("ac", Sql.ts(q.approvalCutoff()));
+        }
+        String from = " from application a left join application_case c on c.application_id = a.id where "
+                + String.join(" and ", where);
+        JdbcClient.StatementSpec count = jdbc.sql("select count(*)" + from);
+        JdbcClient.StatementSpec rows = jdbc.sql("select a.*, c.application_id as c_id, c.stage as c_stage, "
+                + "c.assignee_id as c_assignee_id, c.assignee_name as c_assignee_name, "
+                + "c.assigned_by_id as c_assigned_by_id, c.assigned_by_name as c_assigned_by_name, "
+                + "c.assigned_at as c_assigned_at, c.stage_entered_at as c_stage_entered_at, "
+                + "c.escalation_level as c_escalation_level, c.escalated_at as c_escalated_at, "
+                + "c.escalation_reason as c_escalation_reason, c.escalation_target_ids as c_escalation_target_ids, "
+                + "c.escalation_target_names as c_escalation_target_names, c.returned_by_id as c_returned_by_id, "
+                + "c.returned_by_name as c_returned_by_name, c.returned_at as c_returned_at, "
+                + "c.return_note as c_return_note, c.return_count as c_return_count, c.updated_at as c_updated_at, "
+                + "c.version as c_version" + from + " order by " + ENTERED + ", a.created_at limit :limit offset :offset");
+        for (Map.Entry<String, Object> e : params.entrySet()) {
+            count = count.param(e.getKey(), e.getValue());
+            rows = rows.param(e.getKey(), e.getValue());
+        }
+        rows = rows.param("limit", q.size()).param("offset", q.page() * q.size());
+        List<CaseRow> items = rows.query((rs, n) -> new CaseRow(map(rs, n), JdbcApplicationCaseRepository.map(rs,
+                "c_", json))).list();
+        return new Page<>(items, q.page(), q.size(), count.query(Long.class).single());
     }
 
     @Override

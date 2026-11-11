@@ -29,6 +29,7 @@ import com.afrotransact.seller.domain.ReasonCode;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.TimelineEntry;
+import com.afrotransact.seller.port.ApplicationCaseRepository;
 import com.afrotransact.seller.port.ApplicationRepository;
 import com.afrotransact.seller.port.MediaClient;
 import com.afrotransact.seller.port.OrganisationRepository;
@@ -51,7 +52,8 @@ class ReviewServiceImplTest {
     private final DomainEventPublisher events = mock(DomainEventPublisher.class);
     private final ReviewServiceImpl service = new ReviewServiceImpl(apps, orgs, reasons, mock(MediaClient.class),
             views, billing, access, mock(CatalogScopeService.class), events, TransactionOperations.withoutTransaction(),
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            Clock.fixed(NOW, ZoneOffset.UTC), mock(ReviewAssignmentService.class),
+            mock(ApplicationCaseRepository.class));
 
     private final Application approved = Application.start("app_1", "APP-30200", "org_1", "applicant",
                     OrgKind.SELLER, ApplicationData.empty(), Set.of(), NOW).submit(NOW)

@@ -11,10 +11,12 @@ import java.util.function.Supplier;
 
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.ApplicationAlreadyDecided;
-import com.afrotransact.seller.domain.ApplicationStatus;
+import com.afrotransact.seller.domain.ApplicationCase;
+import com.afrotransact.seller.domain.ReviewSettings;
+import com.afrotransact.seller.domain.ReviewStage;
+import com.afrotransact.seller.domain.SellerForbidden;
 import com.afrotransact.seller.domain.BusinessDetailsSection;
 import com.afrotransact.seller.domain.DocumentAccess;
-import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.domain.OrgMember;
 import com.afrotransact.seller.domain.OrgStatus;
 import com.afrotransact.seller.domain.Organisation;
@@ -23,7 +25,10 @@ import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.TimelineEntry;
+import com.afrotransact.seller.port.ApplicationCaseRepository;
 import com.afrotransact.seller.port.ApplicationRepository;
+import com.afrotransact.seller.port.CaseRow;
+import com.afrotransact.seller.port.CaseSearch;
 import com.afrotransact.seller.port.MediaClient;
 import com.afrotransact.seller.port.OrganisationRepository;
 import com.afrotransact.seller.port.Page;
@@ -54,10 +59,13 @@ class ReviewServiceImpl implements ReviewService {
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
     private final Clock clock;
+    private final ReviewAssignmentService assignments;
+    private final ApplicationCaseRepository cases;
 
     ReviewServiceImpl(ApplicationRepository apps, OrganisationRepository orgs, ReasonCodeRepository reasons,
                       MediaClient media, ApplicationViews views, BillingService billing, AccessGuard access,
-                      CatalogScopeService catalogScope, DomainEventPublisher events, TransactionOperations tx, Clock clock) {
+                      CatalogScopeService catalogScope, DomainEventPublisher events, TransactionOperations tx, Clock clock,
+                      ReviewAssignmentService assignments, ApplicationCaseRepository cases) {
         this.apps = apps;
         this.orgs = orgs;
         this.reasons = reasons;
@@ -69,32 +77,41 @@ class ReviewServiceImpl implements ReviewService {
         this.events = events;
         this.tx = tx;
         this.clock = clock;
+        this.assignments = assignments;
+        this.cases = cases;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ApplicationSummary> queue(List<ApplicationStatus> statuses, OrgKind kind, int page, int size) {
-        access.staff(SellerPermissions.APPLICATIONS_REVIEW);
-        List<ApplicationStatus> wanted = statuses == null || statuses.isEmpty()
-                ? List.of(ApplicationStatus.PENDING_REVIEW, ApplicationStatus.FLAGGED,
-                        ApplicationStatus.AWAITING_FINAL_APPROVAL)
-                : statuses;
-        Page<Application> found = apps.search(wanted, kind, Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE));
-        return new Page<>(found.items().stream().map(ReviewServiceImpl::summary).toList(), found.page(), found.size(),
-                found.total());
+    public Page<ApplicationSummary> queue(QueueRequest q) {
+        Actor actor = access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE,
+                SellerPermissions.APPLICATIONS_ASSIGN);
+        ReviewSettings settings = assignments.settings();
+        Instant now = Instant.now(clock);
+        String assignee = "me".equals(q.assignee()) ? actor.subject() : q.assignee();
+        CaseSearch search = new CaseSearch(q.queue(), q.statuses(), q.kind(), q.stage(), assignee, q.unassigned(),
+                q.overdue(), q.escalated(), actor.subject(), actor.can(SellerPermissions.APPLICATIONS_REVIEW),
+                actor.can(SellerPermissions.APPLICATIONS_APPROVE), now.minus(settings.sla(ReviewStage.REVIEW)),
+                now.minus(settings.sla(ReviewStage.APPROVAL)), Math.max(q.page(), 0),
+                Math.min(Math.max(q.size(), 1), MAX_PAGE));
+        Page<CaseRow> found = apps.searchCases(search);
+        return new Page<>(found.items().stream().map(r -> summary(r.application(),
+                assignments.viewFor(r.application(), r.workflow(), actor, settings))).toList(), found.page(),
+                found.size(), found.total());
     }
 
     @Override
     @Transactional
     public ApplicationView detail(String applicationId) {
-        Actor actor = access.staff(SellerPermissions.APPLICATIONS_REVIEW);
+        Actor actor = access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE,
+                SellerPermissions.APPLICATIONS_ASSIGN);
         return staffView(find(applicationId), actor);
     }
 
     @Override
     @Transactional
     public DocumentView viewDocument(String applicationId, String assetId) {
-        Actor actor = access.staff(SellerPermissions.APPLICATIONS_REVIEW);
+        Actor actor = access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE);
         Application app = find(applicationId);
         DocumentRef doc = ApplicationViews.documents(app.data()).stream().filter(d -> d.assetId().equals(assetId))
                 .findFirst().orElseThrow(() -> new NotFoundException("seller.document-not-found",
@@ -113,10 +130,12 @@ class ReviewServiceImpl implements ReviewService {
         if (isReplay(app, cmd, actor)) {
             return staffView(app, actor);
         }
+        enforceAssignee(app, actor);
         Instant now = Instant.now(clock);
         Application next = apps.update(named(app, actor, () -> app.review(cmd.action(), actor.subject(),
                 reason.code(), cmd.failedChecks(), cmd.requestedItems(), now)));
         TimelineEntry entry = timeline(app, next, cmd, actor, reason, now);
+        assignments.transitioned(app, next, cmd.action(), actor.subject(), cmd.actorName(), cmd.note());
         syncOrg(next, now);
         switch (cmd.action()) {
             case FLAG -> publish(SellerEvents.APPLICATION_FLAGGED, next, entry);
@@ -155,10 +174,12 @@ class ReviewServiceImpl implements ReviewService {
         if (isReplay(app, cmd, actor)) {
             return new Decided(app, true);
         }
+        enforceAssignee(app, actor);
         Instant now = Instant.now(clock);
         Application next = apps.update(named(app, actor, () -> app.decide(cmd.action(), actor.subject(),
                 reason.code(), cmd.requestedItems(), now)));
         TimelineEntry entry = timeline(app, next, cmd, actor, reason, now);
+        assignments.transitioned(app, next, cmd.action(), actor.subject(), cmd.actorName(), cmd.note());
         Organisation org = syncOrg(next, now);
         switch (cmd.action()) {
             case FINAL_APPROVE -> {
@@ -195,13 +216,30 @@ class ReviewServiceImpl implements ReviewService {
                 return true;
             }
         }
-        List<TimelineEntry> timeline = apps.timeline(app.id());
-        if (app.isRepeatOf(cmd.action(), actor.subject(), timeline.isEmpty() ? null : timeline.getLast())) {
+        TimelineEntry lastDecision = apps.timeline(app.id()).reversed().stream()
+                .filter(t -> !t.action().isWorkflow()).findFirst().orElse(null);
+        if (app.isRepeatOf(cmd.action(), actor.subject(), lastDecision)) {
             LOG.info("Replayed {} on {}: {} repeated their own decision", cmd.action(), app.reference(),
                     actor.subject());
             return true;
         }
         return false;
+    }
+
+    /**
+     * With "only the assignee decides" on, a case held by someone else cannot be decided by a third person; a
+     * supervisor (applications:assign) can always decide after taking it over.
+     */
+    private void enforceAssignee(Application app, Actor actor) {
+        if (ReviewStage.of(app.status()).isEmpty() || actor.can(SellerPermissions.APPLICATIONS_ASSIGN)) {
+            return;
+        }
+        ApplicationCase c = cases.find(app.id()).orElse(null);
+        if (c != null && c.assigned() && !actor.subject().equals(c.assigneeId())
+                && assignments.settings().enforceAssignee()) {
+            throw new SellerForbidden("seller.assigned-to-other", app.reference() + " is with " + c.assigneeName()
+                    + ". Ask a supervisor to reassign it, or ask " + c.assigneeName() + " to release it.");
+        }
     }
 
     /** Runs a review step; an "already decided" conflict is re-thrown naming who decided (from the timeline). */
@@ -261,8 +299,10 @@ class ReviewServiceImpl implements ReviewService {
             apps.logAccess(new DocumentAccess(UUID.randomUUID(), app.id(), null, "PII_VIEW", actor.subject(),
                     Instant.now(clock)));
         }
+        ApplicationCaseView workflow = assignments.viewFor(app, cases.find(app.id()).orElse(null), actor,
+                assignments.settings());
         return views.view(app, pii ? PiiLevel.FULL : PiiLevel.MASKED, apps.timeline(app.id()),
-                apps.accessLog(app.id()));
+                apps.accessLog(app.id())).withWorkflow(workflow);
     }
 
     private ReasonCode reason(ReviewCommand cmd) {
@@ -301,7 +341,7 @@ class ReviewServiceImpl implements ReviewService {
         return apps.findById(id).orElseThrow(() -> notFound(id));
     }
 
-    private static ApplicationSummary summary(Application a) {
+    private static ApplicationSummary summary(Application a, ApplicationCaseView workflow) {
         int step = switch (a.status()) {
             case PENDING_REVIEW -> 1;
             case FLAGGED, AWAITING_FINAL_APPROVAL -> 2;
@@ -315,7 +355,7 @@ class ReviewServiceImpl implements ReviewService {
                         : (nz(d.legalFirstName()) + " " + nz(d.legalLastName())).trim(),
                 d == null || d.address() == null ? d == null ? null : d.stateOfFormation() : d.address().state(),
                 a.data().plan() == null ? null : a.data().plan().planCode(), step, a.reviewerId(), a.failedChecks(),
-                a.submittedAt(), a.updatedAt());
+                a.submittedAt(), a.updatedAt(), workflow);
     }
 
     private static String nz(String s) {
