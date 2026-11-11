@@ -228,7 +228,7 @@ components:
         code: {type: string, pattern: '^[0-9]{6}$'}
         expiresInMinutes: {type: integer, examples: [10]}
         expiresAt: {type: string, format: date-time}
-        purpose: {type: string, enum: [EMAIL_VERIFICATION, SIGN_IN_SMS, SMS_ENROLMENT, PHONE_VERIFICATION, PASSWORD_RESET]}
+        purpose: {type: string, enum: [EMAIL_VERIFICATION, SIGN_IN_EMAIL, EMAIL_OTP_ENROLMENT, SIGN_IN_SMS, SMS_ENROLMENT, PHONE_VERIFICATION, PASSWORD_RESET]}
         userId: {type: string, format: uuid}
         firstName: {type: string}
         transactional: {type: boolean, const: true}

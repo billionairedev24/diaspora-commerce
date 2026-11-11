@@ -6354,6 +6354,8 @@ components:
           type: string
           enum:
           - EMAIL_VERIFICATION
+          - SIGN_IN_EMAIL
+          - EMAIL_OTP_ENROLMENT
           - SIGN_IN_SMS
           - SMS_ENROLMENT
           - PHONE_VERIFICATION

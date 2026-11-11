@@ -125,6 +125,7 @@ type OrderPayment struct {
 // MfaStatus is the account's second factors.
 type MfaStatus struct {
 	TOTP              bool    `json:"totp"`
+	EmailOTP          bool    `json:"emailOtp"`
 	SMS               bool    `json:"sms"`
 	SMSPhone          *string `json:"smsPhone"`
 	RecoveryCodesLeft int     `json:"recoveryCodesLeft"`
@@ -132,6 +133,11 @@ type MfaStatus struct {
 	MayDisable        bool    `json:"mayDisable"`
 	MayRemoveTOTP     bool    `json:"mayRemoveTotp"`
 	MayRemoveSMS      bool    `json:"mayRemoveSms"`
+	MayRemoveEmailOTP bool    `json:"mayRemoveEmailOtp"`
+	// SetupSuggested shows the gentle, dismissable "Secure your account" reminder.
+	SetupSuggested bool `json:"setupSuggested"`
+	// SMSAvailable is false while identity's SMS feature flag is off: the app hides every SMS option.
+	SMSAvailable bool `json:"smsAvailable"`
 }
 
 // TrustedBrowser is a browser that skips the second factor until it expires.

@@ -13,17 +13,22 @@ import (
 )
 
 // SecurityService is Login & security over identity /v1/me for every app (storefront, Seller Center, staff console):
-// password, authenticator app and SMS codes, recovery codes, passkeys, trusted browsers, signed-in sessions, recent
+// password, authenticator app and email codes (SMS only behind identity's flag), recovery codes, passkeys, trusted browsers, signed-in sessions, recent
 // sign-in activity, push devices, linked accounts and notification switches.
 type SecurityService interface {
 	Overview(ctx context.Context, c *domain.Caller) (domain.SecurityOverview, error)
 	ChangePassword(ctx context.Context, c *domain.Caller, in domain.PasswordChange) error
 	StartTOTP(ctx context.Context, c *domain.Caller) (domain.TotpSetup, error)
 	ConfirmTOTP(ctx context.Context, c *domain.Caller, code string) (domain.RecoveryCodes, error)
-	DisableTOTP(ctx context.Context, c *domain.Caller) error
+	// DisableTOTP, DisableEmail and DisableSMS need the account password again.
+	DisableTOTP(ctx context.Context, c *domain.Caller, password string) error
+	StartEmail(ctx context.Context, c *domain.Caller) (string, error)
+	ConfirmEmail(ctx context.Context, c *domain.Caller, code string) (domain.RecoveryCodes, error)
+	DisableEmail(ctx context.Context, c *domain.Caller, password string) error
+	DismissMfaPrompt(ctx context.Context, c *domain.Caller) error
 	StartSMS(ctx context.Context, c *domain.Caller) (string, error)
 	ConfirmSMS(ctx context.Context, c *domain.Caller, code string) (domain.RecoveryCodes, error)
-	DisableSMS(ctx context.Context, c *domain.Caller) error
+	DisableSMS(ctx context.Context, c *domain.Caller, password string) error
 	RecoveryCodes(ctx context.Context, c *domain.Caller) (domain.RecoveryCodes, error)
 	RemovePasskey(ctx context.Context, c *domain.Caller, id string) error
 	RenamePasskey(ctx context.Context, c *domain.Caller, id, label string) (domain.Passkey, error)
@@ -64,9 +69,12 @@ func securityErr(err error) error {
 			firstNonEmpty(p.Detail, "Your current password is incorrect.")).WithCause(err)
 	case strings.Contains(code, "weak-password") || strings.Contains(code, "password-policy"):
 		return domain.FieldProblem(domain.CodeWeakPassword, "Password too weak", "newPassword", firstNonEmpty(p.Detail, "Choose a stronger password.")).WithCause(err)
-	case strings.Contains(code, "staff-mfa-required"):
+	case strings.Contains(code, "mfa-required"): // identity.mfa-required (and the older identity.staff-mfa-required)
 		return domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Two-step verification is required",
-			firstNonEmpty(p.Detail, "Two-step verification is mandatory for staff accounts: turn on another method first.")).WithCause(err)
+			firstNonEmpty(p.Detail, "Two-step verification is mandatory for your account: turn on another method first.")).WithCause(err)
+	case strings.Contains(code, "sms-unavailable"):
+		return domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Not available",
+			"Text-message codes are not available.").WithCause(err)
 	case strings.Contains(code, "trusted-browser-not-found"):
 		return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "That browser is no longer trusted.").WithCause(err)
 	case strings.Contains(code, "last-sign-in-method") || strings.Contains(code, "last-method"):
@@ -110,8 +118,10 @@ func (s *securityServiceImpl) Overview(ctx context.Context, c *domain.Caller) (d
 		}
 	}
 	out := domain.SecurityOverview{
-		MFA: domain.MfaStatus{TOTP: mfa.TOTP, SMS: mfa.SMS, SMSPhone: optStr(mfa.SMSPhone), RecoveryCodesLeft: mfa.RecoveryCodesLeft,
-			Required: mfa.Required, MayDisable: mfa.MayDisable, MayRemoveTOTP: mfa.TOTP && mfa.MayRemoveTOTP, MayRemoveSMS: mfa.SMS && mfa.MayRemoveSMS},
+		MFA: domain.MfaStatus{TOTP: mfa.TOTP, EmailOTP: mfa.EmailOTP, SMS: mfa.SMS && mfa.SMSAvailable, SMSPhone: optStr(smsPhone(mfa)),
+			RecoveryCodesLeft: mfa.RecoveryCodesLeft, Required: mfa.Required, MayDisable: mfa.MayDisable, MayRemoveTOTP: mfa.TOTP && mfa.MayRemoveTOTP,
+			MayRemoveSMS: mfa.SMS && mfa.SMSAvailable && mfa.MayRemoveSMS, MayRemoveEmailOTP: mfa.EmailOTP && mfa.MayRemoveEmailOTP,
+			SetupSuggested: mfa.SetupSuggested, SMSAvailable: mfa.SMSAvailable},
 		Passkeys: []domain.Passkey{}, TrustedBrowsers: []domain.TrustedBrowser{}, Sessions: []domain.SignedInSession{}, Devices: []domain.PushDevice{},
 		Linked:                 domain.LinkedAccounts{Accounts: []domain.LinkedAccount{}, HasPassword: linked.HasPassword},
 		PasskeyRegistrationURL: strings.TrimSuffix(s.d.IdentityPublicURL, "/") + "/webauthn/register",
@@ -188,11 +198,67 @@ func (s *securityServiceImpl) ConfirmTOTP(ctx context.Context, c *domain.Caller,
 	return codes(rc), wrapSec(err)
 }
 
-func (s *securityServiceImpl) DisableTOTP(ctx context.Context, c *domain.Caller) error {
+// smsPhone hides the phone while SMS codes are switched off.
+func smsPhone(m port.UpMfa) string {
+	if !m.SMSAvailable {
+		return ""
+	}
+	return m.SMSPhone
+}
+
+func (s *securityServiceImpl) DisableTOTP(ctx context.Context, c *domain.Caller, password string) error {
 	if err := requireCustomer(c); err != nil {
 		return err
 	}
-	return wrapSec(s.d.Security.DisableTOTP(ctx, c.BearerToken))
+	if err := requirePassword(password); err != nil {
+		return err
+	}
+	return wrapSec(s.d.Security.DisableTOTP(ctx, c.BearerToken, password))
+}
+
+// requirePassword: turning a factor off asks for the account password again (identity checks it).
+func requirePassword(password string) error {
+	if strings.TrimSpace(password) == "" {
+		return domain.FieldProblem(domain.CodeValidationFailed, "Enter your password", "currentPassword",
+			"Enter your current password to turn this off.")
+	}
+	return nil
+}
+
+func (s *securityServiceImpl) StartEmail(ctx context.Context, c *domain.Caller) (string, error) {
+	if err := requireCustomer(c); err != nil {
+		return "", err
+	}
+	at, err := s.d.Security.StartEmail(ctx, c.BearerToken)
+	return at, wrapSec(err)
+}
+
+func (s *securityServiceImpl) ConfirmEmail(ctx context.Context, c *domain.Caller, code string) (domain.RecoveryCodes, error) {
+	if err := requireCustomer(c); err != nil {
+		return domain.RecoveryCodes{}, err
+	}
+	if err := checkCode(code); err != nil {
+		return domain.RecoveryCodes{}, err
+	}
+	rc, err := s.d.Security.ConfirmEmail(ctx, c.BearerToken, strings.TrimSpace(code))
+	return codes(rc), wrapSec(err)
+}
+
+func (s *securityServiceImpl) DisableEmail(ctx context.Context, c *domain.Caller, password string) error {
+	if err := requireCustomer(c); err != nil {
+		return err
+	}
+	if err := requirePassword(password); err != nil {
+		return err
+	}
+	return wrapSec(s.d.Security.DisableEmail(ctx, c.BearerToken, password))
+}
+
+func (s *securityServiceImpl) DismissMfaPrompt(ctx context.Context, c *domain.Caller) error {
+	if err := requireCustomer(c); err != nil {
+		return err
+	}
+	return wrapSec(s.d.Security.DismissMfaPrompt(ctx, c.BearerToken))
 }
 
 func (s *securityServiceImpl) StartSMS(ctx context.Context, c *domain.Caller) (string, error) {
@@ -214,11 +280,14 @@ func (s *securityServiceImpl) ConfirmSMS(ctx context.Context, c *domain.Caller, 
 	return codes(rc), wrapSec(err)
 }
 
-func (s *securityServiceImpl) DisableSMS(ctx context.Context, c *domain.Caller) error {
+func (s *securityServiceImpl) DisableSMS(ctx context.Context, c *domain.Caller, password string) error {
 	if err := requireCustomer(c); err != nil {
 		return err
 	}
-	return wrapSec(s.d.Security.DisableSMS(ctx, c.BearerToken))
+	if err := requirePassword(password); err != nil {
+		return err
+	}
+	return wrapSec(s.d.Security.DisableSMS(ctx, c.BearerToken, password))
 }
 
 func (s *securityServiceImpl) RecoveryCodes(ctx context.Context, c *domain.Caller) (domain.RecoveryCodes, error) {

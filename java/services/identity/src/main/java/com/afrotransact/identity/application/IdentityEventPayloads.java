@@ -41,7 +41,7 @@ public final class IdentityEventPayloads {
      * always sent, quiet hours do not apply.
      *
      * @param channel {@code email} or {@code sms}
-     * @param purpose EMAIL_VERIFICATION, SIGN_IN_SMS or SMS_ENROLMENT
+     * @param purpose EMAIL_VERIFICATION, SIGN_IN_EMAIL, EMAIL_OTP_ENROLMENT, SIGN_IN_SMS (flag), SMS_ENROLMENT (flag), PHONE_VERIFICATION or PASSWORD_RESET
      */
     public record VerificationRequested(Recipient recipient, String channel, String code, long expiresInMinutes,
                                         Instant expiresAt, String purpose, String userId, String firstName,

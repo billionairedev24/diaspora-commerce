@@ -374,6 +374,7 @@ type CouponQuote struct {
 // UpMfa is identity's MfaStatus.
 type UpMfa struct {
 	TOTP              bool   `json:"totp"`
+	EmailOTP          bool   `json:"emailOtp"`
 	SMS               bool   `json:"sms"`
 	SMSPhone          string `json:"smsPhone"`
 	RecoveryCodesLeft int    `json:"recoveryCodesLeft"`
@@ -381,6 +382,9 @@ type UpMfa struct {
 	MayDisable        bool   `json:"mayDisable"`
 	MayRemoveTOTP     bool   `json:"mayRemoveTotp"`
 	MayRemoveSMS      bool   `json:"mayRemoveSms"`
+	MayRemoveEmailOTP bool   `json:"mayRemoveEmailOtp"`
+	SetupSuggested    bool   `json:"setupSuggested"`
+	SMSAvailable      bool   `json:"smsAvailable"`
 }
 
 // UpTrustedBrowser is identity's TrustedBrowser.
@@ -449,10 +453,15 @@ type SecurityClient interface {
 	ChangePassword(ctx context.Context, bearer string, in domain.PasswordChange) error
 	StartTOTP(ctx context.Context, bearer string) (domain.TotpSetup, error)
 	ConfirmTOTP(ctx context.Context, bearer, code string) (domain.RecoveryCodes, error)
-	DisableTOTP(ctx context.Context, bearer string) error
+	DisableTOTP(ctx context.Context, bearer, password string) error
+	StartEmail(ctx context.Context, bearer string) (string, error)
+	ConfirmEmail(ctx context.Context, bearer, code string) (domain.RecoveryCodes, error)
+	DisableEmail(ctx context.Context, bearer, password string) error
+	// DismissMfaPrompt is "Not now" on the gentle "Secure your account" reminder.
+	DismissMfaPrompt(ctx context.Context, bearer string) error
 	StartSMS(ctx context.Context, bearer string) (string, error)
 	ConfirmSMS(ctx context.Context, bearer, code string) (domain.RecoveryCodes, error)
-	DisableSMS(ctx context.Context, bearer string) error
+	DisableSMS(ctx context.Context, bearer, password string) error
 	RecoveryCodes(ctx context.Context, bearer string) (domain.RecoveryCodes, error)
 	RemovePasskey(ctx context.Context, bearer, id string) error
 	RenamePasskey(ctx context.Context, bearer, id, label string) (UpPasskey, error)

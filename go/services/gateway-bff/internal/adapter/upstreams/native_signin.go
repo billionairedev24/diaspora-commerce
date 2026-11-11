@@ -65,6 +65,36 @@ func (n *nativeSignInImpl) SendSMSCode(ctx context.Context, challengeID string, 
 	return out, err
 }
 
+func (n *nativeSignInImpl) SendEmailCode(ctx context.Context, challengeID string, who port.NativeWho) (port.NativeSMSSent, error) {
+	var out port.NativeSMSSent
+	err := n.post(ctx, "/v1/auth/mfa/email", whoBody(who, map[string]any{"challengeId": challengeID}), &out)
+	return out, err
+}
+
+func (n *nativeSignInImpl) EnrolTOTP(ctx context.Context, challengeID string, who port.NativeWho) (port.NativeTotpSetup, error) {
+	var out port.NativeTotpSetup
+	err := n.post(ctx, "/v1/auth/mfa/enrol/totp", whoBody(who, map[string]any{"challengeId": challengeID}), &out)
+	return out, err
+}
+
+func (n *nativeSignInImpl) ConfirmEnrolTOTP(ctx context.Context, challengeID, code string, who port.NativeWho) (port.NativeEnrolment, error) {
+	var out port.NativeEnrolment
+	err := n.post(ctx, "/v1/auth/mfa/enrol/totp/confirm", whoBody(who, map[string]any{"challengeId": challengeID, "code": code}), &out)
+	return out, err
+}
+
+func (n *nativeSignInImpl) EnrolEmail(ctx context.Context, challengeID string, who port.NativeWho) (port.NativeSMSSent, error) {
+	var out port.NativeSMSSent
+	err := n.post(ctx, "/v1/auth/mfa/enrol/email", whoBody(who, map[string]any{"challengeId": challengeID}), &out)
+	return out, err
+}
+
+func (n *nativeSignInImpl) ConfirmEnrolEmail(ctx context.Context, challengeID, code string, who port.NativeWho) (port.NativeEnrolment, error) {
+	var out port.NativeEnrolment
+	err := n.post(ctx, "/v1/auth/mfa/enrol/email/confirm", whoBody(who, map[string]any{"challengeId": challengeID, "code": code}), &out)
+	return out, err
+}
+
 func (n *nativeSignInImpl) VerifyFactor(ctx context.Context, challengeID, factor, code string, trustDevice bool, who port.NativeWho) (port.NativeStep, error) {
 	var out port.NativeStep
 	err := n.post(ctx, "/v1/auth/mfa/verify", whoBody(who, map[string]any{"challengeId": challengeID, "factor": factor,

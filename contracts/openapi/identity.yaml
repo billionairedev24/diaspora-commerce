@@ -1166,6 +1166,101 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/UserAccess'
+  /v1/auth/mfa/email:
+    post:
+      tags:
+      - First-party sign-in
+      summary: Email a sign-in code for an MFA challenge (only for people who turned email codes on)
+      operationId: email
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaChallengeRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SmsCodeResponse'
+  /v1/auth/mfa/enrol/email:
+    post:
+      tags:
+      - First-party sign-in
+      summary: 'Forced enrolment: email a first code to the verified account email'
+      operationId: enrolEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaChallengeRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SmsCodeResponse'
+  /v1/auth/mfa/enrol/email/confirm:
+    post:
+      tags:
+      - First-party sign-in
+      summary: 'Forced enrolment: confirm the emailed code, turn email codes on and finish signing in'
+      operationId: confirmEnrolEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaEnrolConfirmRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EnrolmentCompleted'
+  /v1/auth/mfa/enrol/totp:
+    post:
+      tags:
+      - First-party sign-in
+      summary: 'Forced enrolment: start the authenticator app (MFA_ENROLMENT_REQUIRED challenge)'
+      operationId: enrolTotp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaChallengeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FirstPartyTotpSetup'
+  /v1/auth/mfa/enrol/totp/confirm:
+    post:
+      tags:
+      - First-party sign-in
+      summary: 'Forced enrolment: confirm the authenticator with a code and finish signing in'
+      operationId: confirmEnrolTotp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaEnrolConfirmRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EnrolmentCompleted'
   /v1/auth/mfa/sms:
     post:
       tags:
@@ -1189,7 +1284,7 @@ paths:
     post:
       tags:
       - First-party sign-in
-      summary: Verify an authenticator, text-message or recovery code (returns a login ticket)
+      summary: Verify an authenticator, email-code, text-message or recovery code (returns a login ticket)
       operationId: verify
       requestBody:
         content:
@@ -1673,6 +1768,62 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/MfaStatus'
+  /v1/me/mfa/email:
+    post:
+      tags:
+      - Two-step verification
+      summary: Email a first code to the verified account email to turn on email sign-in codes
+      operationId: startEmail
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CodeSent'
+    delete:
+      tags:
+      - Two-step verification
+      summary: Turn off email codes; needs the password (403 identity.mfa-required when MFA is mandatory and it is the last
+        factor)
+      operationId: disableEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordConfirmation'
+        required: true
+      responses:
+        '204':
+          description: No Content
+  /v1/me/mfa/email/confirm:
+    post:
+      tags:
+      - Two-step verification
+      summary: Confirm the emailed code and turn email codes on; returns recovery codes the first time
+      operationId: confirmEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RecoveryCodes'
+  /v1/me/mfa/prompt/dismiss:
+    post:
+      tags:
+      - Two-step verification
+      summary: 'Not now: hide the ''Secure your account'' reminder until the reminder interval has passed'
+      operationId: dismissPrompt
+      responses:
+        '204':
+          description: No Content
   /v1/me/mfa/recovery-codes:
     post:
       tags:
@@ -1690,7 +1841,8 @@ paths:
     post:
       tags:
       - Two-step verification
-      summary: Text a code to the account phone to turn on SMS sign-in codes
+      summary: Text a code to the account phone to turn on SMS sign-in codes (409 identity.sms-unavailable while the SMS flag
+        is off)
       operationId: startSms
       responses:
         '202':
@@ -1702,8 +1854,14 @@ paths:
     delete:
       tags:
       - Two-step verification
-      summary: Turn off SMS sign-in codes (403 identity.staff-mfa-required for staff without the authenticator app on)
+      summary: Turn off SMS sign-in codes; needs the password
       operationId: disableSms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordConfirmation'
+        required: true
       responses:
         '204':
           description: No Content
@@ -1742,8 +1900,15 @@ paths:
     delete:
       tags:
       - Two-step verification
-      summary: Turn off the authenticator app (403 identity.staff-mfa-required for staff without SMS codes on)
+      summary: Turn off the authenticator app; needs the password (403 identity.mfa-required when MFA is mandatory and it
+        is the last factor)
       operationId: disableTotp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordConfirmation'
+        required: true
       responses:
         '204':
           description: No Content
@@ -3291,22 +3456,35 @@ components:
       properties:
         totp:
           type: boolean
+        emailOtp:
+          type: boolean
+        emailHint:
+          type: string
+          description: Masked email the code goes to, e.g. a••••@example.com
         sms:
           type: boolean
+          description: Only while SMS codes are switched on (off by default)
         smsHint:
           type: string
-          description: Masked phone, e.g. •••• 0142
+          description: Masked phone, e.g. •••• 0142 (SMS only)
         recoveryCode:
           type: boolean
+        enrolMethods:
+          type: array
+          description: Enrolment methods offered when status is MFA_ENROLMENT_REQUIRED (authenticator and email codes)
+          items:
+            type: string
     SignInStepResponse:
       type: object
-      description: 'MFA_REQUIRED: continue with challengeId and one of factors. AUTHENTICATED: redeem loginTicket (single
-        use, 60 s) on /oauth2/authorize.'
+      description: 'MFA_REQUIRED: the person enrolled a factor: continue with challengeId and one of factors. MFA_ENROLMENT_REQUIRED:
+        MFA is mandatory for them and nothing is set up: no code was sent, enrol with the /v1/auth/mfa/enrol/* endpoints using
+        challengeId. AUTHENTICATED: redeem loginTicket (single use, 60 s) on /oauth2/authorize.'
       properties:
         status:
           type: string
           enum:
           - MFA_REQUIRED
+          - MFA_ENROLMENT_REQUIRED
           - AUTHENTICATED
         challengeId:
           type: string
@@ -3329,6 +3507,10 @@ components:
         trustedDeviceExpiresAt:
           type: string
           format: date-time
+        mfaSetupSuggested:
+          type: boolean
+          description: 'AUTHENTICATED only: show a gentle, dismissable ''Secure your account'' prompt (nothing enrolled, reminder
+            due). Never blocks sign-in.'
     PasskeyVerifyRequest:
       type: object
       properties:
@@ -3387,6 +3569,7 @@ components:
           type: string
           enum:
           - TOTP
+          - EMAIL_OTP
           - SMS
           - RECOVERY_CODE
           minLength: 1
@@ -3404,9 +3587,9 @@ components:
         userAgent:
           type: string
           maxLength: 512
+          minLength: 0
         appClientId:
           type: string
-          description: Native app the login ticket is for (customer-app, driver-app); omit for web sessions
           maxLength: 64
           minLength: 0
       required:
@@ -3439,6 +3622,65 @@ components:
         expiresAt:
           type: string
           format: date-time
+    MfaChallengeRequest:
+      type: object
+      description: Identifies an open sign-in challenge (MFA_REQUIRED or MFA_ENROLMENT_REQUIRED) and the end user's client
+        details
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        clientIp:
+          type: string
+          minLength: 1
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+        userAgent:
+          type: string
+          maxLength: 512
+          minLength: 0
+      required:
+      - challengeId
+      - clientIp
+    FirstPartyTotpSetup:
+      type: object
+      description: Render otpauthUri as a QR code; secret is for manual entry
+      properties:
+        secret:
+          type: string
+        otpauthUri:
+          type: string
+    MfaEnrolConfirmRequest:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          maxLength: 32
+          minLength: 0
+        clientIp:
+          type: string
+          minLength: 1
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+        userAgent:
+          type: string
+          maxLength: 512
+          minLength: 0
+      required:
+      - challengeId
+      - clientIp
+      - code
+    EnrolmentCompleted:
+      type: object
+      description: 'The forced enrolment finished: redeem step.loginTicket; show recoveryCodes once when present'
+      properties:
+        recoveryCodes:
+          type: array
+          items:
+            type: string
+        step:
+          $ref: '#/components/schemas/SignInStepResponse'
     CreateStaffUserRequest:
       type: object
       properties:
@@ -3803,6 +4045,8 @@ components:
       properties:
         totp:
           type: boolean
+        emailOtp:
+          type: boolean
         sms:
           type: boolean
         smsPhone:
@@ -3815,14 +4059,27 @@ components:
           format: int32
         required:
           type: boolean
+          description: 'MFA is mandatory for this person (staff, or their portal''s Auth setting): they cannot turn off their
+            last factor'
         mayDisable:
           type: boolean
         mayRemoveTotp:
           type: boolean
-          description: The authenticator app may be turned off now (staff only while SMS codes stay on)
+          description: 'The authenticator app may be turned off now (when mandatory: only while another factor stays on)'
+        mayRemoveEmailOtp:
+          type: boolean
+          description: 'Email codes may be turned off now (when mandatory: only while another factor stays on)'
         mayRemoveSms:
           type: boolean
-          description: SMS codes may be turned off now (staff only while the authenticator app stays on)
+          description: SMS codes may be turned off now (only while SMS is available)
+        setupSuggested:
+          type: boolean
+          description: 'Show the gentle, dismissable ''Secure your account'' reminder: nothing is set up, MFA is not mandatory
+            and the reminder is due again'
+        smsAvailable:
+          type: boolean
+          description: SMS codes are offered at all (feature flag at.identity.mfa.sms-enabled, off by default); hide SMS in
+            the UI when false
     LinkedAccount:
       type: object
       properties:
@@ -4030,6 +4287,15 @@ components:
         size:
           type: integer
           format: int32
+    PasswordConfirmation:
+      type: object
+      description: Re-authentication to turn a factor off
+      properties:
+        password:
+          type: string
+          minLength: 1
+      required:
+      - password
     UnregisterDeviceRequest:
       type: object
       properties:

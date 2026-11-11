@@ -55,22 +55,64 @@ func TestNativeSecondFactorStep(t *testing.T) {
 	mustStatus(t, r, 200)
 	step := r.json(t)
 	factors := step["factors"].(map[string]any)
-	if step["status"] != "MFA_REQUIRED" || step["challengeId"] != "chal-1" || factors["smsHint"] != "•••• 0142" || step["code"] != nil {
+	if step["status"] != "MFA_REQUIRED" || step["challengeId"] != "chal-1" || factors["emailOtp"] != true || factors["sms"] != false || step["code"] != nil {
 		t.Fatalf("step = %v", step)
 	}
-	mustStatus(t, b.do("POST", "/v1/auth/native/mfa/sms", nativeBody(map[string]any{"challengeId": "chal-1"})), 202)
+	// "send me an email code instead"
+	mustStatus(t, b.do("POST", "/v1/auth/native/mfa/email", nativeBody(map[string]any{"challengeId": "chal-1"})), 202)
 
-	bad := b.do("POST", "/v1/auth/native/mfa/verify", nativeBody(map[string]any{"challengeId": "chal-1", "factor": "sms", "code": "000000"}))
+	bad := b.do("POST", "/v1/auth/native/mfa/verify", nativeBody(map[string]any{"challengeId": "chal-1", "factor": "email_otp", "code": "000000"}))
 	mustStatus(t, bad, 422)
 	if got := problemCode(t, bad); got != "INVALID_CODE" {
 		t.Fatalf("code = %s", got)
 	}
-	ok := b.do("POST", "/v1/auth/native/mfa/verify", nativeBody(map[string]any{"challengeId": "chal-1", "factor": "sms", "code": "123456",
+	ok := b.do("POST", "/v1/auth/native/mfa/verify", nativeBody(map[string]any{"challengeId": "chal-1", "factor": "email_otp", "code": "123456",
 		"trustDevice": true}))
 	mustStatus(t, ok, 200)
 	out := ok.json(t)
 	if out["status"] != "AUTHENTICATED" || out["code"] == "" || out["trustedDeviceToken"] != "trusted-1" {
 		t.Fatalf("verified = %v", out)
+	}
+}
+
+func TestNativePlainAccountSignsInWithPasswordOnlyAndIsSuggestedToSecureIt(t *testing.T) {
+	_, b := setup(t, testkit.Options{})
+	r := b.do("POST", "/v1/auth/native/password", nativeBody(map[string]any{"email": "adaeze@example.com", "password": "Passw0rd!"}))
+	mustStatus(t, r, 200)
+	out := r.json(t)
+	if out["status"] != "AUTHENTICATED" || out["mfaSetupSuggested"] != true || out["challengeId"] != nil {
+		t.Fatalf("result = %v", out)
+	}
+}
+
+func TestNativeMandatoryMfaWithoutAFactorForcesEnrolment(t *testing.T) {
+	_, b := setup(t, testkit.Options{})
+	r := b.do("POST", "/v1/auth/native/password", nativeBody(map[string]any{"email": "staff@example.com", "password": "Passw0rd!"}))
+	mustStatus(t, r, 200)
+	step := r.json(t)
+	factors := step["factors"].(map[string]any)
+	if step["status"] != "MFA_ENROLMENT_REQUIRED" || step["challengeId"] != "chal-enrol" || step["code"] != nil || len(factors["enrolMethods"].([]any)) != 2 {
+		t.Fatalf("step = %v", step)
+	}
+	setup := b.do("POST", "/v1/auth/native/mfa/enrol/totp", nativeBody(map[string]any{"challengeId": "chal-enrol"}))
+	mustStatus(t, setup, 200)
+	if !strings.HasPrefix(setup.json(t)["otpauthUri"].(string), "otpauth://totp/") {
+		t.Fatalf("setup = %v", setup.json(t))
+	}
+	bad := b.do("POST", "/v1/auth/native/mfa/enrol/totp/confirm", nativeBody(map[string]any{"challengeId": "chal-enrol", "code": "000000"}))
+	mustStatus(t, bad, 422)
+	done := b.do("POST", "/v1/auth/native/mfa/enrol/totp/confirm", nativeBody(map[string]any{"challengeId": "chal-enrol", "code": "123456"}))
+	mustStatus(t, done, 200)
+	out := done.json(t)
+	if out["status"] != "AUTHENTICATED" || !strings.HasPrefix(out["code"].(string), "code-") || len(out["recoveryCodes"].([]any)) != 2 {
+		t.Fatalf("enrolled = %v", out)
+	}
+	// email codes work as the other method
+	mustStatus(t, b.do("POST", "/v1/auth/native/mfa/enrol/email", nativeBody(map[string]any{"challengeId": "chal-enrol"})), 202)
+	mail := b.do("POST", "/v1/auth/native/mfa/enrol/email/confirm", nativeBody(map[string]any{"challengeId": "chal-enrol", "code": "123456"}))
+	mustStatus(t, mail, 200)
+	if mail.json(t)["status"] != "AUTHENTICATED" {
+		t.Fatalf("email enrol = %v", mail.json(t))
 	}
 }
 

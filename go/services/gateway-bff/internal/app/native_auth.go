@@ -23,6 +23,16 @@ type NativeAuthService interface {
 	SendSMSCode(ctx context.Context, in NativeSMS) (port.NativeSMSSent, error)
 	// VerifyFactor checks the second factor; the result carries the authorization code.
 	VerifyFactor(ctx context.Context, in NativeFactor) (NativeResult, error)
+	// SendEmailCode emails a sign-in code for a second-factor step (people who turned email codes on).
+	SendEmailCode(ctx context.Context, in NativeSMS) (port.NativeSMSSent, error)
+	// EnrolTOTP starts the authenticator for a forced enrolment (the Password result was MFA_ENROLMENT_REQUIRED).
+	EnrolTOTP(ctx context.Context, in NativeSMS) (port.NativeTotpSetup, error)
+	// ConfirmEnrolTOTP confirms the authenticator; the result carries the authorization code and recovery codes.
+	ConfirmEnrolTOTP(ctx context.Context, in NativeFactor) (NativeResult, error)
+	// EnrolEmail emails a first code to the verified account email for a forced enrolment.
+	EnrolEmail(ctx context.Context, in NativeSMS) (port.NativeSMSSent, error)
+	// ConfirmEnrolEmail confirms the emailed code, turns email codes on and completes the sign-in.
+	ConfirmEnrolEmail(ctx context.Context, in NativeFactor) (NativeResult, error)
 }
 
 // NativeApp is one native app's identity client.
@@ -67,14 +77,15 @@ type NativeSMS struct {
 type NativeFactor struct {
 	NativeRequest
 	ChallengeID string
-	// Factor is TOTP, SMS or RECOVERY_CODE.
+	// Factor is TOTP, EMAIL_OTP or RECOVERY_CODE (SMS only while identity's SMS flag is on).
 	Factor      string
 	Code        string
 	TrustDevice bool
 }
 
-// NativeResult is MFA_REQUIRED (continue with ChallengeID and a factor) or AUTHENTICATED (Code is the authorization
-// code the app exchanges at identity with its PKCE verifier).
+// NativeResult is MFA_REQUIRED (continue with ChallengeID and a factor), MFA_ENROLMENT_REQUIRED (mandatory MFA and
+// nothing set up: enrol an authenticator or email codes with ChallengeID, no code was sent) or AUTHENTICATED (Code is
+// the authorization code the app exchanges at identity with its PKCE verifier).
 type NativeResult struct {
 	Status             string              `json:"status"`
 	ChallengeID        string              `json:"challengeId,omitempty"`
@@ -82,6 +93,10 @@ type NativeResult struct {
 	Factors            *port.NativeFactors `json:"factors,omitempty"`
 	Code               string              `json:"code,omitempty"`
 	TrustedDeviceToken string              `json:"trustedDeviceToken,omitempty"`
+	// RecoveryCodes are shown once after the first factor was enrolled (forced enrolment).
+	RecoveryCodes []string `json:"recoveryCodes,omitempty"`
+	// MFASetupSuggested: show a gentle, dismissable "Secure your account" prompt (AUTHENTICATED only).
+	MFASetupSuggested bool `json:"mfaSetupSuggested,omitempty"`
 }
 
 // DefaultNativeApps are the two native apps and their public clients at identity (scopes as registered there).
@@ -109,6 +124,7 @@ func NewNativeAuthService(client port.NativeSignInClient, o NativeAuthOptions) N
 
 const (
 	statusMFA           = "MFA_REQUIRED"
+	statusEnrol         = "MFA_ENROLMENT_REQUIRED"
 	statusAuthenticated = "AUTHENTICATED"
 	maxChallengeLen     = 43 // S256 code challenge: 43 base64url characters
 )
@@ -164,6 +180,62 @@ func (n *nativeAuthImpl) SendSMSCode(ctx context.Context, in NativeSMS) (port.Na
 	return sent, mapNativeErr(err)
 }
 
+func (n *nativeAuthImpl) SendEmailCode(ctx context.Context, in NativeSMS) (port.NativeSMSSent, error) {
+	_, who, err := n.resolve(in.NativeRequest, false)
+	if err != nil {
+		return port.NativeSMSSent{}, err
+	}
+	sent, err := n.client.SendEmailCode(ctx, in.ChallengeID, who)
+	return sent, mapNativeErr(err)
+}
+
+func (n *nativeAuthImpl) EnrolTOTP(ctx context.Context, in NativeSMS) (port.NativeTotpSetup, error) {
+	_, who, err := n.resolve(in.NativeRequest, false)
+	if err != nil {
+		return port.NativeTotpSetup{}, err
+	}
+	setup, err := n.client.EnrolTOTP(ctx, in.ChallengeID, who)
+	return setup, mapNativeErr(err)
+}
+
+func (n *nativeAuthImpl) EnrolEmail(ctx context.Context, in NativeSMS) (port.NativeSMSSent, error) {
+	_, who, err := n.resolve(in.NativeRequest, false)
+	if err != nil {
+		return port.NativeSMSSent{}, err
+	}
+	sent, err := n.client.EnrolEmail(ctx, in.ChallengeID, who)
+	return sent, mapNativeErr(err)
+}
+
+func (n *nativeAuthImpl) ConfirmEnrolTOTP(ctx context.Context, in NativeFactor) (NativeResult, error) {
+	return n.confirmEnrol(ctx, in, n.client.ConfirmEnrolTOTP)
+}
+
+func (n *nativeAuthImpl) ConfirmEnrolEmail(ctx context.Context, in NativeFactor) (NativeResult, error) {
+	return n.confirmEnrol(ctx, in, n.client.ConfirmEnrolEmail)
+}
+
+func (n *nativeAuthImpl) confirmEnrol(ctx context.Context, in NativeFactor,
+	confirm func(context.Context, string, string, port.NativeWho) (port.NativeEnrolment, error)) (NativeResult, error) {
+	app, who, err := n.resolve(in.NativeRequest, true)
+	if err != nil {
+		return NativeResult{}, err
+	}
+	if strings.TrimSpace(in.Code) == "" {
+		return NativeResult{}, domain.FieldProblem(domain.CodeInvalidCode, "Enter the code", "code", "Enter the code.")
+	}
+	done, err := confirm(ctx, in.ChallengeID, strings.TrimSpace(in.Code), who)
+	if err != nil {
+		return NativeResult{}, mapNativeErr(err)
+	}
+	res, err := n.finish(ctx, app, in.NativeRequest, done.Step)
+	if err != nil {
+		return NativeResult{}, err
+	}
+	res.RecoveryCodes = done.RecoveryCodes
+	return res, nil
+}
+
 func (n *nativeAuthImpl) VerifyFactor(ctx context.Context, in NativeFactor) (NativeResult, error) {
 	app, who, err := n.resolve(in.NativeRequest, true)
 	if err != nil {
@@ -187,6 +259,10 @@ func (n *nativeAuthImpl) finish(ctx context.Context, app NativeApp, r NativeRequ
 		return NativeResult{Status: statusMFA, ChallengeID: step.ChallengeID, ChallengeExpiresAt: step.ChallengeExpiresAt,
 			Factors: step.Factors}, nil
 	}
+	if step.Status == statusEnrol {
+		return NativeResult{Status: statusEnrol, ChallengeID: step.ChallengeID, ChallengeExpiresAt: step.ChallengeExpiresAt,
+			Factors: step.Factors}, nil
+	}
 	if step.Status != statusAuthenticated || step.LoginTicket == "" {
 		return NativeResult{}, domain.UpstreamError("identity", http.StatusBadGateway)
 	}
@@ -198,7 +274,8 @@ func (n *nativeAuthImpl) finish(ctx context.Context, app NativeApp, r NativeRequ
 		}
 		return NativeResult{}, mapNativeErr(err)
 	}
-	return NativeResult{Status: statusAuthenticated, Code: code, TrustedDeviceToken: step.TrustedDeviceToken}, nil
+	return NativeResult{Status: statusAuthenticated, Code: code, TrustedDeviceToken: step.TrustedDeviceToken,
+		MFASetupSuggested: step.MFASetupSuggested}, nil
 }
 
 // mapNativeErr turns identity's sign-in problems into the contract's. A wrong password is 401 INVALID_CREDENTIALS

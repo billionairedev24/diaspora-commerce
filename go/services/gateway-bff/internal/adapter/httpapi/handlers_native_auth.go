@@ -76,6 +76,65 @@ func (h *handlersImpl) nativeVerify(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+func (h *handlersImpl) nativeChallengeStep(w http.ResponseWriter, r *http.Request,
+	step func(*http.Request, app.NativeSMS) (any, error), status int) {
+	var b struct {
+		nativeRequest
+		ChallengeID string `json:"challengeId"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := step(r, app.NativeSMS{NativeRequest: h.nativeCtx(r, b.nativeRequest), ChallengeID: b.ChallengeID})
+	h.reply(w, r, status, v, err)
+}
+
+func (h *handlersImpl) nativeEmail(w http.ResponseWriter, r *http.Request) {
+	h.nativeChallengeStep(w, r, func(r *http.Request, in app.NativeSMS) (any, error) {
+		return h.s.Native.SendEmailCode(r.Context(), in)
+	}, http.StatusAccepted)
+}
+
+func (h *handlersImpl) nativeEnrolTotp(w http.ResponseWriter, r *http.Request) {
+	h.nativeChallengeStep(w, r, func(r *http.Request, in app.NativeSMS) (any, error) {
+		return h.s.Native.EnrolTOTP(r.Context(), in)
+	}, http.StatusOK)
+}
+
+func (h *handlersImpl) nativeEnrolEmail(w http.ResponseWriter, r *http.Request) {
+	h.nativeChallengeStep(w, r, func(r *http.Request, in app.NativeSMS) (any, error) {
+		return h.s.Native.EnrolEmail(r.Context(), in)
+	}, http.StatusAccepted)
+}
+
+func (h *handlersImpl) nativeConfirm(w http.ResponseWriter, r *http.Request,
+	confirm func(*http.Request, app.NativeFactor) (app.NativeResult, error)) {
+	var b struct {
+		nativeRequest
+		ChallengeID string `json:"challengeId"`
+		Code        string `json:"code"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := confirm(r, app.NativeFactor{NativeRequest: h.nativeCtx(r, b.nativeRequest), ChallengeID: b.ChallengeID, Code: b.Code})
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) nativeEnrolTotpConfirm(w http.ResponseWriter, r *http.Request) {
+	h.nativeConfirm(w, r, func(r *http.Request, in app.NativeFactor) (app.NativeResult, error) {
+		return h.s.Native.ConfirmEnrolTOTP(r.Context(), in)
+	})
+}
+
+func (h *handlersImpl) nativeEnrolEmailConfirm(w http.ResponseWriter, r *http.Request) {
+	h.nativeConfirm(w, r, func(r *http.Request, in app.NativeFactor) (app.NativeResult, error) {
+		return h.s.Native.ConfirmEnrolEmail(r.Context(), in)
+	})
+}
+
 // Attempts per email within nativeEmailWindow, whatever the source address. The per-IP limit and identity's account
 // lockout still apply; this one holds when an attacker rotates or spoofs IPs, and (unlike the lockout) it does not
 // count the real owner's later successful sign-ins against anything.

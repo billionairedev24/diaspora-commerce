@@ -1054,7 +1054,9 @@ paths:
       description: |
         The native apps show their own sign-in form instead of identity's hosted page. The BFF checks the credentials
         with identity's first-party sign-in API and either asks for a second factor (`MFA_REQUIRED`, continue at
-        `/v1/auth/native/mfa/verify`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
+        `/v1/auth/native/mfa/verify`; only for people who enrolled a factor: authenticator app, email codes), asks the person to set one
+        up first (`MFA_ENROLMENT_REQUIRED`: MFA is mandatory for them and nothing is enrolled, no code is sent; continue at
+        `/v1/auth/native/mfa/enrol/*`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
         request and returns the authorization `code` (`AUTHENTICATED`). The app exchanges the code with its PKCE
         verifier at identity's `/oauth2/token` and receives its own access and refresh tokens. A wrong password is 401
         `INVALID_CREDENTIALS` (no token was sent, so the app shows it on the form), repeated failures 429 `RATE_LIMITED`.
@@ -1078,7 +1080,7 @@ paths:
       tags: [Auth]
       operationId: nativeSendSmsCode
       security: [{}]
-      summary: Text a sign-in code for a second-factor step
+      summary: Text a sign-in code for a second-factor step (only while identity's SMS flag is on; off by default)
       requestBody:
         required: true
         content:
@@ -1110,6 +1112,112 @@ paths:
       responses:
         '200':
           description: Signed in
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSignInResult'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/email:
+    post:
+      tags: [Auth]
+      operationId: nativeSendEmailCode
+      security: [{}]
+      summary: Email a sign-in code for a second-factor step (people who turned email codes on)
+      description: |
+        "Send me an email code instead" when both an authenticator and email codes are on; when email is the only
+        factor identity already sent the code with the password step. Resends are throttled (one per 30 seconds,
+        five per hour).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeChallengeRequest'}
+      responses:
+        '202':
+          description: Code sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeCodeSent'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/enrol/totp:
+    post:
+      tags: [Auth]
+      operationId: nativeEnrolTotp
+      security: [{}]
+      summary: Forced enrolment (MFA_ENROLMENT_REQUIRED) - start the authenticator app
+      description: |
+        MFA is mandatory for this person (staff, or their portal's Auth setting) and nothing is set up yet. No code was
+        sent. They must set up the authenticator app or email codes with the `challengeId` before they get a session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeChallengeRequest'}
+      responses:
+        '200':
+          description: Secret and otpauth URI (render as a QR code)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TotpSetup'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/enrol/totp/confirm:
+    post:
+      tags: [Auth]
+      operationId: nativeConfirmEnrolTotp
+      security: [{}]
+      summary: Forced enrolment - confirm the authenticator with a code and sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeEnrolConfirmRequest'}
+      responses:
+        '200':
+          description: Signed in (`recoveryCodes` are shown once)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSignInResult'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/enrol/email:
+    post:
+      tags: [Auth]
+      operationId: nativeEnrolEmail
+      security: [{}]
+      summary: Forced enrolment - email a first code to the verified account email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeChallengeRequest'}
+      responses:
+        '202':
+          description: Code sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeCodeSent'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/enrol/email/confirm:
+    post:
+      tags: [Auth]
+      operationId: nativeConfirmEnrolEmail
+      security: [{}]
+      summary: Forced enrolment - confirm the emailed code, turn email codes on and sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeEnrolConfirmRequest'}
+      responses:
+        '200':
+          description: Signed in (`recoveryCodes` are shown once)
           content:
             application/json:
               schema: {$ref: '#/components/schemas/NativeSignInResult'}
@@ -2366,12 +2474,19 @@ paths:
     delete:
       tags: [Account]
       operationId: disableTotp
-      summary: Turn off the authenticator app
+      summary: Turn off the authenticator app (needs the account password; 403 while MFA is mandatory and it is the last factor)
       security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasswordConfirmation'}
       responses:
         '204': {description: Off}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/account/mfa/totp/confirm:
     post:
@@ -2398,7 +2513,7 @@ paths:
     post:
       tags: [Account]
       operationId: startSmsMfa
-      summary: Text a code to the account phone to turn on SMS sign-in codes
+      summary: Text a code to the account phone to turn on SMS sign-in codes (409 CONFLICT while identity's SMS flag is off)
       security: [{sessionCookie: []}, {bearer: []}]
       responses:
         '202':
@@ -2417,12 +2532,19 @@ paths:
     delete:
       tags: [Account]
       operationId: disableSmsMfa
-      summary: Turn off SMS sign-in codes
+      summary: Turn off SMS sign-in codes (needs the account password)
       security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasswordConfirmation'}
       responses:
         '204': {description: Off}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/account/mfa/sms/confirm:
     post:
@@ -2443,6 +2565,75 @@ paths:
               schema: {$ref: '#/components/schemas/RecoveryCodes'}
         '401': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/email:
+    post:
+      tags: [Account]
+      operationId: startEmailMfa
+      summary: Email a first code to the verified account email to turn on email sign-in codes
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '202':
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [codeExpiresAt]
+                properties:
+                  codeExpiresAt: {type: [string, 'null'], format: date-time}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Account]
+      operationId: disableEmailMfa
+      summary: Turn off email sign-in codes (needs the account password; 403 while MFA is mandatory and it is the last factor)
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasswordConfirmation'}
+      responses:
+        '204': {description: Off}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/email/confirm:
+    post:
+      tags: [Account]
+      operationId: confirmEmailMfa
+      summary: Confirm the emailed code and turn email codes on; returns recovery codes the first time
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CodeInput'}
+      responses:
+        '200':
+          description: On
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryCodes'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/prompt/dismiss:
+    post:
+      tags: [Account]
+      operationId: dismissMfaPrompt
+      summary: 'Not now: hide the "Secure your account" reminder until the reminder interval has passed'
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '204': {description: Dismissed}
+        '401': {$ref: '#/components/responses/Problem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/account/mfa/recovery-codes:
@@ -3556,25 +3747,63 @@ components:
       properties:
         app: {$ref: '#/components/schemas/NativeApp'}
         challengeId: {type: string, format: uuid}
-        factor: {type: string, enum: [TOTP, SMS, RECOVERY_CODE]}
+        factor: {type: string, enum: [TOTP, EMAIL_OTP, SMS, RECOVERY_CODE], description: SMS only while identity's SMS flag is on}
         code: {type: string, maxLength: 32}
         trustDevice: {type: boolean, description: Return a trustedDeviceToken so this phone skips the second factor for 30 days}
         codeChallenge: {type: string, minLength: 43, maxLength: 43}
         redirectUri: {type: string}
+    NativeChallengeRequest:
+      type: object
+      required: [app, challengeId, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        challengeId: {type: string, format: uuid}
+        codeChallenge: {type: string}
+        redirectUri: {type: string}
+    NativeEnrolConfirmRequest:
+      type: object
+      required: [app, challengeId, code, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        challengeId: {type: string, format: uuid}
+        code: {type: string, maxLength: 32}
+        codeChallenge: {type: string, minLength: 43, maxLength: 43}
+        redirectUri: {type: string}
+    NativeCodeSent:
+      type: object
+      properties:
+        sentTo: {type: string, description: Masked destination, example: 'a••••@example.com'}
+        expiresAt: {type: string, format: date-time}
     NativeSignInResult:
       type: object
       required: [status]
       properties:
-        status: {type: string, enum: [MFA_REQUIRED, AUTHENTICATED]}
-        challengeId: {type: string, format: uuid, description: MFA_REQUIRED only}
+        status:
+          type: string
+          enum: [MFA_REQUIRED, MFA_ENROLMENT_REQUIRED, AUTHENTICATED]
+          description: |
+            MFA_REQUIRED: the person enrolled a factor, ask for it. MFA_ENROLMENT_REQUIRED: MFA is mandatory for them and
+            nothing is set up (no code was sent): enrol with `factors.enrolMethods`. AUTHENTICATED: exchange `code`.
+        challengeId: {type: string, format: uuid, description: MFA_REQUIRED and MFA_ENROLMENT_REQUIRED only}
         challengeExpiresAt: {type: string, format: date-time}
         factors:
           type: object
           properties:
             totp: {type: boolean}
-            sms: {type: boolean}
+            emailOtp: {type: boolean, description: Email codes are on; the code goes to emailHint}
+            emailHint: {type: string}
+            sms: {type: boolean, description: Always false unless identity's SMS flag is on}
             smsHint: {type: string}
             recoveryCode: {type: boolean}
+            enrolMethods:
+              type: array
+              description: MFA_ENROLMENT_REQUIRED only
+              items: {type: string, enum: [TOTP, EMAIL_OTP]}
+        recoveryCodes:
+          type: array
+          description: Shown once after the first factor was enrolled (forced enrolment)
+          items: {type: string}
+        mfaSetupSuggested: {type: boolean, description: 'AUTHENTICATED only: show a gentle, dismissable "Secure your account" prompt (never blocking)'}
         code: {type: string, description: 'AUTHENTICATED only: authorization code to exchange at identity /oauth2/token with the PKCE verifier'}
         trustedDeviceToken: {type: string}
     PayLinkToken:
@@ -5944,6 +6173,11 @@ components:
                     priceMinor: {type: integer}
                     returnable: {type: boolean}
               timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}
+    PasswordConfirmation:
+      type: object
+      required: [currentPassword]
+      properties:
+        currentPassword: {type: string, maxLength: 1024, description: The account password, asked again to turn a factor off}
     CodeInput:
       type: object
       required: [code]
@@ -5980,16 +6214,20 @@ components:
       properties:
         mfa:
           type: object
-          required: [totp, sms, smsPhone, recoveryCodesLeft, required, mayDisable, mayRemoveTotp, mayRemoveSms]
+          required: [totp, emailOtp, sms, smsPhone, recoveryCodesLeft, required, mayDisable, mayRemoveTotp, mayRemoveEmailOtp, mayRemoveSms, setupSuggested, smsAvailable]
           properties:
             totp: {type: boolean}
-            sms: {type: boolean}
+            emailOtp: {type: boolean, description: Email codes are on (a code is emailed at sign-in)}
+            sms: {type: boolean, description: Always false while SMS codes are switched off}
             smsPhone: {type: [string, 'null']}
             recoveryCodesLeft: {type: integer}
-            required: {type: boolean, description: Two-step verification is required at sign-in (always for staff)}
-            mayDisable: {type: boolean, description: Two-step verification may be turned off altogether (never for staff)}
-            mayRemoveTotp: {type: boolean, description: The authenticator app may be turned off now (staff only while SMS codes stay on)}
-            mayRemoveSms: {type: boolean, description: SMS codes may be turned off now (staff only while the authenticator app stays on)}
+            required: {type: boolean, description: "Two-step verification is mandatory for this person (staff, or their portal's Auth setting): they cannot turn off their last factor"}
+            mayDisable: {type: boolean, description: Two-step verification may be turned off altogether (never when required)}
+            mayRemoveTotp: {type: boolean, description: The authenticator app may be turned off now (when required, only while another factor stays on)}
+            mayRemoveEmailOtp: {type: boolean, description: Email codes may be turned off now (when required, only while another factor stays on)}
+            mayRemoveSms: {type: boolean, description: SMS codes may be turned off now}
+            setupSuggested: {type: boolean, description: 'Show the gentle, dismissable "Secure your account" reminder'}
+            smsAvailable: {type: boolean, description: SMS codes are offered at all (feature flag, off by default); hide every SMS option when false}
         passkeys:
           type: array
           items: {$ref: '#/components/schemas/Passkey'}

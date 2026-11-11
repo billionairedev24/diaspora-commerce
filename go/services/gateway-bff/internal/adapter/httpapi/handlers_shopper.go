@@ -96,10 +96,14 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	route("PUT /v1/account/password", auth(h.changePassword))
 	route("POST /v1/account/mfa/totp", h.startTOTP)
 	route("POST /v1/account/mfa/totp/confirm", auth(h.confirmTOTP))
-	route("DELETE /v1/account/mfa/totp", h.disableTOTP)
+	route("DELETE /v1/account/mfa/totp", auth(h.disableTOTP))
+	route("POST /v1/account/mfa/email", auth(h.startEmailMfa))
+	route("POST /v1/account/mfa/email/confirm", auth(h.confirmEmailMfa))
+	route("DELETE /v1/account/mfa/email", auth(h.disableEmailMfa))
+	route("POST /v1/account/mfa/prompt/dismiss", auth(h.dismissMfaPrompt))
 	route("POST /v1/account/mfa/sms", auth(h.startSMS))
 	route("POST /v1/account/mfa/sms/confirm", auth(h.confirmSMS))
-	route("DELETE /v1/account/mfa/sms", h.disableSMS)
+	route("DELETE /v1/account/mfa/sms", auth(h.disableSMS))
 	route("POST /v1/account/mfa/recovery-codes", auth(h.recoveryCodes))
 	route("DELETE /v1/account/passkeys/{credentialId}", h.removePasskey)
 	route("PATCH /v1/account/passkeys/{credentialId}", h.renamePasskey)
@@ -295,8 +299,52 @@ func (h *handlersImpl) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 	h.ok(w, r, v, err)
 }
 
+// passwordBody reads the account password a factor is turned off with.
+func passwordBody(r *http.Request) (string, error) {
+	var b struct {
+		CurrentPassword string `json:"currentPassword"`
+	}
+	if err := decode(r, &b, true); err != nil {
+		return "", err
+	}
+	return b.CurrentPassword, nil
+}
+
 func (h *handlersImpl) disableTOTP(w http.ResponseWriter, r *http.Request) {
-	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.DisableTOTP(r.Context(), callerFrom(r.Context())))
+	pw, err := passwordBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.DisableTOTP(r.Context(), callerFrom(r.Context()), pw))
+}
+
+func (h *handlersImpl) startEmailMfa(w http.ResponseWriter, r *http.Request) {
+	at, err := h.s.Shopper.Security.StartEmail(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusAccepted, map[string]any{"codeExpiresAt": optional(at)}, err)
+}
+
+func (h *handlersImpl) confirmEmailMfa(w http.ResponseWriter, r *http.Request) {
+	code, err := codeBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Shopper.Security.ConfirmEmail(r.Context(), callerFrom(r.Context()), code)
+	h.ok(w, r, v, err)
+}
+
+func (h *handlersImpl) disableEmailMfa(w http.ResponseWriter, r *http.Request) {
+	pw, err := passwordBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.DisableEmail(r.Context(), callerFrom(r.Context()), pw))
+}
+
+func (h *handlersImpl) dismissMfaPrompt(w http.ResponseWriter, r *http.Request) {
+	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.DismissMfaPrompt(r.Context(), callerFrom(r.Context())))
 }
 
 func (h *handlersImpl) startSMS(w http.ResponseWriter, r *http.Request) {
@@ -322,7 +370,12 @@ func (h *handlersImpl) confirmSMS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) disableSMS(w http.ResponseWriter, r *http.Request) {
-	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.DisableSMS(r.Context(), callerFrom(r.Context())))
+	pw, err := passwordBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.DisableSMS(r.Context(), callerFrom(r.Context()), pw))
 }
 
 func (h *handlersImpl) recoveryCodes(w http.ResponseWriter, r *http.Request) {

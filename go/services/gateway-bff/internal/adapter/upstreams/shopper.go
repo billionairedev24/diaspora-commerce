@@ -224,8 +224,28 @@ func (s *securityImpl) ConfirmTOTP(ctx context.Context, bearer, code string) (do
 	return out, s.send(ctx, bearer, http.MethodPost, "/v1/me/mfa/totp/confirm", map[string]string{"code": code}, &out)
 }
 
-func (s *securityImpl) DisableTOTP(ctx context.Context, bearer string) error {
-	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/mfa/totp", nil, nil)
+func (s *securityImpl) DisableTOTP(ctx context.Context, bearer, password string) error {
+	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/mfa/totp", map[string]string{"password": password}, nil)
+}
+
+func (s *securityImpl) StartEmail(ctx context.Context, bearer string) (string, error) {
+	var out struct {
+		CodeExpiresAt string `json:"codeExpiresAt"`
+	}
+	return out.CodeExpiresAt, s.send(ctx, bearer, http.MethodPost, "/v1/me/mfa/email", nil, &out)
+}
+
+func (s *securityImpl) ConfirmEmail(ctx context.Context, bearer, code string) (domain.RecoveryCodes, error) {
+	var out domain.RecoveryCodes
+	return out, s.send(ctx, bearer, http.MethodPost, "/v1/me/mfa/email/confirm", map[string]string{"code": code}, &out)
+}
+
+func (s *securityImpl) DisableEmail(ctx context.Context, bearer, password string) error {
+	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/mfa/email", map[string]string{"password": password}, nil)
+}
+
+func (s *securityImpl) DismissMfaPrompt(ctx context.Context, bearer string) error {
+	return s.send(ctx, bearer, http.MethodPost, "/v1/me/mfa/prompt/dismiss", nil, nil)
 }
 
 func (s *securityImpl) StartSMS(ctx context.Context, bearer string) (string, error) {
@@ -240,8 +260,8 @@ func (s *securityImpl) ConfirmSMS(ctx context.Context, bearer, code string) (dom
 	return out, s.send(ctx, bearer, http.MethodPost, "/v1/me/mfa/sms/confirm", map[string]string{"code": code}, &out)
 }
 
-func (s *securityImpl) DisableSMS(ctx context.Context, bearer string) error {
-	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/mfa/sms", nil, nil)
+func (s *securityImpl) DisableSMS(ctx context.Context, bearer, password string) error {
+	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/mfa/sms", map[string]string{"password": password}, nil)
 }
 
 func (s *securityImpl) RecoveryCodes(ctx context.Context, bearer string) (domain.RecoveryCodes, error) {

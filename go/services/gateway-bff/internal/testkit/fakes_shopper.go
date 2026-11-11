@@ -303,8 +303,8 @@ func (u *Upstreams) shopperIdentityRoutes(mux *http.ServeMux, st *shopperState, 
 		st.mu.Lock()
 		staff := st.account.principalType == "STAFF"
 		st.mu.Unlock()
-		writeJSON(w, 200, map[string]any{"totp": true, "sms": false, "smsPhone": "•••• 0142", "recoveryCodesLeft": 8, "passkeys": 1, "required": staff, "mayDisable": !staff,
-			"mayRemoveTotp": !staff, "mayRemoveSms": false})
+		writeJSON(w, 200, map[string]any{"totp": true, "emailOtp": false, "sms": false, "smsPhone": "•••• 0142", "recoveryCodesLeft": 8, "passkeys": 1, "required": staff,
+			"mayDisable": !staff, "mayRemoveTotp": !staff, "mayRemoveEmailOtp": false, "mayRemoveSms": false, "setupSuggested": false, "smsAvailable": false})
 	}))
 	mux.HandleFunc("GET /v1/me/passkeys", authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{{"credentialId": "cred-1", "label": "iPhone", "createdAt": "2026-09-01T10:00:00Z"}})
@@ -346,8 +346,26 @@ func (u *Upstreams) shopperIdentityRoutes(mux *http.ServeMux, st *shopperState, 
 		}
 	}))
 	mux.HandleFunc("POST /v1/me/mfa/recovery-codes", authed(func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, recovery) }))
-	mux.HandleFunc("DELETE /v1/me/mfa/totp", authed(noContent))
-	mux.HandleFunc("DELETE /v1/me/mfa/sms", authed(noContent))
+	mux.HandleFunc("POST /v1/me/mfa/email", authed(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 202, map[string]any{"codeExpiresAt": "2026-10-10T10:10:00Z"})
+	}))
+	mux.HandleFunc("POST /v1/me/mfa/email/confirm", authed(func(w http.ResponseWriter, r *http.Request) {
+		if code(w, r) {
+			writeJSON(w, 200, recovery)
+		}
+	}))
+	mux.HandleFunc("POST /v1/me/mfa/prompt/dismiss", authed(noContent))
+	// Turning a factor off needs the password again (identity: 422 identity.invalid-password).
+	disable := func(w http.ResponseWriter, r *http.Request) {
+		if readJSON(r)["password"] != ShopperCurrentPassword {
+			problem(w, 422, "identity.invalid-password", "That password isn't right", nil)
+			return
+		}
+		w.WriteHeader(204)
+	}
+	mux.HandleFunc("DELETE /v1/me/mfa/totp", authed(disable))
+	mux.HandleFunc("DELETE /v1/me/mfa/email", authed(disable))
+	mux.HandleFunc("DELETE /v1/me/mfa/sms", authed(disable))
 	mux.HandleFunc("DELETE /v1/me/passkeys/{id}", authed(func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") == "last" {
 			problem(w, 409, "identity.last-sign-in-method", "Keep one way to sign in", nil)

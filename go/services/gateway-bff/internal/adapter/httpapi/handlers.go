@@ -177,6 +177,11 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 		route("POST /v1/auth/native/password", auth(h.nativePassword))
 		route("POST /v1/auth/native/mfa/sms", auth(h.nativeSMS))
 		route("POST /v1/auth/native/mfa/verify", auth(h.nativeVerify))
+		route("POST /v1/auth/native/mfa/email", auth(h.nativeEmail))
+		route("POST /v1/auth/native/mfa/enrol/totp", auth(h.nativeEnrolTotp))
+		route("POST /v1/auth/native/mfa/enrol/totp/confirm", auth(h.nativeEnrolTotpConfirm))
+		route("POST /v1/auth/native/mfa/enrol/email", auth(h.nativeEnrolEmail))
+		route("POST /v1/auth/native/mfa/enrol/email/confirm", auth(h.nativeEnrolEmailConfirm))
 	}
 	route("POST /v1/auth/sign-out", h.signOut)
 	route("GET /v1/auth/signed-out/{app}", auth(h.signedOut))

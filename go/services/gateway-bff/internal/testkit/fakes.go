@@ -1021,20 +1021,58 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 			return
 		}
 		email, _ := b["email"].(string)
-		if b["password"] != "Passw0rd!" || (email != "adaeze@example.com" && email != "mfa@example.com") {
+		if b["password"] != "Passw0rd!" || (email != "adaeze@example.com" && email != "mfa@example.com" && email != "staff@example.com") {
 			problem(w, 401, "identity.invalid-credentials", "Email or password is incorrect", nil)
 			return
 		}
-		if email == "mfa@example.com" {
+		switch email {
+		case "mfa@example.com":
 			writeJSON(w, 200, map[string]any{"status": "MFA_REQUIRED", "challengeId": "chal-1", "challengeExpiresAt": "2026-10-10T12:05:00Z",
-				"factors": map[string]any{"totp": true, "sms": true, "smsHint": "•••• 0142", "recoveryCode": true}})
+				"factors": map[string]any{"totp": true, "emailOtp": true, "emailHint": "m••@example.com", "sms": false, "recoveryCode": true}})
+			return
+		case "staff@example.com": // mandatory MFA, nothing enrolled: no code is sent, enrol first
+			writeJSON(w, 200, map[string]any{"status": "MFA_ENROLMENT_REQUIRED", "challengeId": "chal-enrol", "challengeExpiresAt": "2026-10-10T12:05:00Z",
+				"factors": map[string]any{"totp": false, "emailOtp": false, "sms": false, "recoveryCode": false, "enrolMethods": []string{"TOTP", "EMAIL_OTP"}}})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"status": "AUTHENTICATED", "userId": "user-1", "loginTicket": "ticket-" + b["appClientId"].(string)})
+		writeJSON(w, 200, map[string]any{"status": "AUTHENTICATED", "userId": "user-1", "loginTicket": "ticket-" + b["appClientId"].(string),
+			"mfaSetupSuggested": true})
 	})
 	mux.HandleFunc("POST /v1/auth/mfa/sms", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 202, map[string]any{"sentTo": "•••• 0142", "expiresAt": "2026-10-10T12:05:00Z"})
 	})
+	mux.HandleFunc("POST /v1/auth/mfa/email", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 202, map[string]any{"sentTo": "m••@example.com", "expiresAt": "2026-10-10T12:05:00Z"})
+	})
+	mux.HandleFunc("POST /v1/auth/mfa/enrol/totp", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b["challengeId"] != "chal-enrol" {
+			problem(w, 422, "identity.challenge-invalid", "This sign-in expired", nil)
+			return
+		}
+		//nolint:gosec // a fake TOTP secret
+		writeJSON(w, 200, map[string]any{"secret": "JBSWY3DPEHPK3PXP", "otpauthUri": "otpauth://totp/AfroTransact:staff@example.com?secret=JBSWY3DPEHPK3PXP"})
+	})
+	enrolConfirm := func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b["challengeId"] != "chal-enrol" {
+			problem(w, 422, "identity.challenge-invalid", "This sign-in expired", nil)
+			return
+		}
+		if b["code"] != "123456" {
+			problem(w, 422, "identity.invalid-code", "That code isn't right", nil)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"recoveryCodes": []string{"abcde-fghjk", "mnpqr-stuvw"},
+			"step": map[string]any{"status": "AUTHENTICATED", "userId": "user-1", "loginTicket": "ticket-" + b["appClientId"].(string)}})
+	}
+	mux.HandleFunc("POST /v1/auth/mfa/enrol/totp/confirm", enrolConfirm)
+	mux.HandleFunc("POST /v1/auth/mfa/enrol/email", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 202, map[string]any{"sentTo": "s••@example.com", "expiresAt": "2026-10-10T12:05:00Z"})
+	})
+	mux.HandleFunc("POST /v1/auth/mfa/enrol/email/confirm", enrolConfirm)
 	mux.HandleFunc("POST /v1/auth/mfa/verify", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)
