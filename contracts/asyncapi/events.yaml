@@ -642,6 +642,18 @@ channels:
         $ref: '#/components/messages/ordersPreorderRefundSettled'
       ordersPreorderRefundFailed:
         $ref: '#/components/messages/ordersPreorderRefundFailed'
+      ordersDeliveryQuoteRequested:
+        $ref: '#/components/messages/ordersDeliveryQuoteRequested'
+      ordersDeliveryQuoteReady:
+        $ref: '#/components/messages/ordersDeliveryQuoteReady'
+      ordersDeliveryQuoteDeclined:
+        $ref: '#/components/messages/ordersDeliveryQuoteDeclined'
+      ordersDeliveryQuoteExpired:
+        $ref: '#/components/messages/ordersDeliveryQuoteExpired'
+      ordersDeliveryQuoteAssigned:
+        $ref: '#/components/messages/ordersDeliveryQuoteAssigned'
+      ordersDeliveryQuoteEscalated:
+        $ref: '#/components/messages/ordersDeliveryQuoteEscalated'
   paymentsPaymentEvents:
     address: at.payment.events
     description: Payment lifecycle, captures, refunds, settlement transfers and chargebacks from payments-service (key = order
@@ -2230,6 +2242,53 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/OrdersPreorderRefundFailed'
+    ordersDeliveryQuoteRequested:
+      name: orders.delivery-quote.requested
+      title: A shopper outside the delivery zones asked for a delivery quote (listing rules D20); the case waits in the Delivery
+        quotes queue
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryQuoteLifecycle'
+    ordersDeliveryQuoteReady:
+      name: orders.delivery-quote.ready
+      title: 'Customer care agreed an amount: notifications emails the shopper (delivery_quote.ready) with the pay link back
+        to checkout'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryQuoteReady'
+    ordersDeliveryQuoteDeclined:
+      name: orders.delivery-quote.declined
+      title: 'Customer care declined to quote: notifications emails the shopper (delivery_quote.declined); the staff reason
+        is never in the event'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryQuoteLifecycle'
+    ordersDeliveryQuoteExpired:
+      name: orders.delivery-quote.expired
+      title: An agreed quote was not used within its validity
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryQuoteLifecycle'
+    ordersDeliveryQuoteAssigned:
+      name: orders.delivery-quote.assigned
+      title: 'Staff: a quote request was assigned to you (claimed for you, taken over or auto-assigned); recipientUserIds
+        says who'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryQuoteAssignment'
+    ordersDeliveryQuoteEscalated:
+      name: orders.delivery-quote.escalated
+      title: 'Staff: a late or untaken quote request was escalated to the people of its level (recipientUserIds); they can
+        take over or reassign'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryQuoteAssignment'
     paymentsIntentCreated:
       name: payments.intent.created
       title: PaymentIntent created for an order (manual capture)
@@ -7783,6 +7842,113 @@ components:
           enum:
           - REDEEMED
           - RELEASED
+    OrdersDeliveryQuoteLifecycle:
+      type: object
+      description: 'Requested, declined or expired. Ids, reference and city only: never an email, phone number or street address
+        (notifications resolves the shopper from customerId).'
+      required:
+      - quoteId
+      - reference
+      - customerId
+      - place
+      - itemCount
+      - at
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+          examples:
+          - DQ-2026-K7M2XQ
+        customerId:
+          type: string
+        place:
+          type: string
+          description: City, state and ZIP
+          examples:
+          - Marfa, TX 79843
+        itemCount:
+          type: integer
+        at:
+          type: string
+          format: date-time
+    OrdersDeliveryQuoteReady:
+      type: object
+      required:
+      - quoteId
+      - reference
+      - customerId
+      - amountMinor
+      - currency
+      - expiresAt
+      - at
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        customerId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          description: The agreed delivery charge
+        currency:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the quote stops being usable (48 hours by default)
+        at:
+          type: string
+          format: date-time
+    OrdersDeliveryQuoteAssignment:
+      type: object
+      required:
+      - quoteId
+      - reference
+      - place
+      - reason
+      - recipientUserIds
+      - escalationLevel
+      - at
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        place:
+          type: string
+        reason:
+          type: string
+          description: ASSIGNED, AUTO_ASSIGNED, or for an escalation why it was raised
+        assignedTo:
+          type:
+          - string
+          - 'null'
+          description: Name of the person holding the case
+        byName:
+          type:
+          - string
+          - 'null'
+        recipientUserIds:
+          type: array
+          items:
+            type: string
+        escalationLevel:
+          type: integer
+          minimum: 0
+          maximum: 2
+        note:
+          type:
+          - string
+          - 'null'
+        at:
+          type: string
+          format: date-time
     OrdersAttribution:
       type:
       - object

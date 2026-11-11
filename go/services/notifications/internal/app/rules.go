@@ -216,6 +216,13 @@ var DefaultEventRules = map[string][]EventRule{
 		{Topic: TopicOrders, Template: "preorder.confirmed", Channels: chEmail, Recipient: RecipientUser,
 			IDField: "customerId", When: hasPreorder, Enrich: enrichPreorderConfirmed},
 	},
+	// Delivery quotes (listing rules D20): the shopper is told when customer care agreed an amount (with the pay link back
+	// to checkout) or declined. orders.delivery-quote.requested / assigned / escalated / expired send nothing here: staff
+	// find their cases in the Delivery quotes queue.
+	"orders.delivery-quote.ready": {{Topic: TopicOrders, Template: "delivery_quote.ready", Channels: chEmail,
+		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichDeliveryQuoteReady}},
+	"orders.delivery-quote.declined": {{Topic: TopicOrders, Template: "delivery_quote.declined", Channels: chEmail,
+		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichDeliveryQuoteDeclined}},
 	// Pre-orders (S270–S275): missed delivery date → refund or new date.
 	"orders.preorder.delivery_missed": {{Topic: TopicOrders, Template: "preorder.delivery_missed", Channels: chEmail,
 		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichPreorderMissed}},

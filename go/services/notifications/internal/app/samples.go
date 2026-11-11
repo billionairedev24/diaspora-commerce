@@ -325,7 +325,7 @@ func TemplateArea(key string) string {
 		return AreaSecurity
 	case has("account", "org", "careers", "identity"):
 		return AreaAccount
-	case has("order", "shipment", "payment", "preorder", "run"):
+	case has("order", "shipment", "payment", "preorder", "run", "delivery_quote"):
 		return AreaOrders
 	case has("payout", "seller.payouts"):
 		return AreaPayouts

@@ -17,14 +17,14 @@ type QuoteRequest struct {
 	Currency    string     `json:"currency"`
 	ExpiresAt   *time.Time `json:"expiresAt"`
 	// Usable: the quote can be applied at checkout right now.
-	Usable    bool                   `json:"usable"`
-	Place     string                 `json:"place"`
+	Usable    bool                  `json:"usable"`
+	Place     string                `json:"place"`
 	Packages  []QuoteRequestPackage `json:"packages"`
 	Lines     []QuoteRequestLine    `json:"lines"`
-	Contact   string                 `json:"contact"`
-	Note      *string                `json:"note"`
-	CreatedAt time.Time              `json:"createdAt"`
-	UpdatedAt time.Time              `json:"updatedAt"`
+	Contact   string                `json:"contact"`
+	Note      *string               `json:"note"`
+	CreatedAt time.Time             `json:"createdAt"`
+	UpdatedAt time.Time             `json:"updatedAt"`
 	// Message says in plain words where the request stands and what to do next.
 	Message string `json:"message"`
 }

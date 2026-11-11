@@ -179,8 +179,8 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 				"deliveryFeeRule": map[string]any{"method": "CARRIER", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a11", "ruleVersion": 4, "currency": "USD",
 					"amountMinor": 0, "source": "RULE", "band": "free over 35.00"},
 				"membershipWaiver": map[string]any{"tierCode": "plus", "tierName": "Plus", "benefit": "FREE_SHIPPING", "waivedMinor": MembershipWaivedOnOrderMinor},
-				"lines":    []map[string]any{{"id": ShopperLineID, "variantAtin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250, "itemsMinor": 2500}},
-				"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "at": "2026-10-01T15:00:00Z"}, {"from": "out_for_delivery", "to": "delivered", "at": "2026-10-03T17:00:00Z"}}}}}
+				"lines":            []map[string]any{{"id": ShopperLineID, "variantAtin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250, "itemsMinor": 2500}},
+				"timeline":         []map[string]any{{"from": "pending_payment", "to": "placed", "at": "2026-10-01T15:00:00Z"}, {"from": "out_for_delivery", "to": "delivered", "at": "2026-10-03T17:00:00Z"}}}}}
 	}
 	mux.HandleFunc("GET /v1/orders", customerOnly("orders.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"items": []any{order("delivered", false)}, "nextCursor": ""})
