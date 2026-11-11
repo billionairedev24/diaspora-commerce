@@ -28,7 +28,7 @@ class BusinessPageServiceImplTest {
     private final OrganisationRepository orgs = mock(OrganisationRepository.class);
     private final ApplicationRepository apps = mock(ApplicationRepository.class);
     private final BusinessPageServiceImpl service = new BusinessPageServiceImpl(pages, orgs, apps,
-            "https://afrotransact.com/", Clock.fixed(Instant.parse("2026-10-18T12:00:00Z"), ZoneOffset.UTC));
+            "https://afrotransact.com/", "", Clock.fixed(Instant.parse("2026-10-18T12:00:00Z"), ZoneOffset.UTC));
 
     private static BusinessSection business(String name, String website) {
         return new BusinessSection(Offering.PRODUCTS, EntityType.SOLE_PROPRIETOR, "US", name, null, null, website);
@@ -60,5 +60,15 @@ class BusinessPageServiceImplTest {
         assertThat(service.websiteFor("org_1", business("Another name", null))).isEqualTo(
                 "https://afrotransact.com/b/ades-kitchen");
         verify(pages, never()).insert(any());
+    }
+
+    @Test
+    void aTestEnvironmentGivesStripeItsOwnAddressBecauseLocalhostIsRefused() {
+        BusinessPageServiceImpl local = new BusinessPageServiceImpl(pages, orgs, apps, "http://localhost:3000",
+                "https://accessible.stripe.com/", Clock.fixed(Instant.parse("2026-10-18T12:00:00Z"), ZoneOffset.UTC));
+        when(pages.findByOrg("org_2")).thenReturn(Optional.of(new BusinessPage("org_2", "kente-co",
+                Instant.parse("2026-10-18T12:00:00Z"))));
+
+        assertThat(local.websiteFor("org_2", null)).isEqualTo("https://accessible.stripe.com/b/kente-co");
     }
 }

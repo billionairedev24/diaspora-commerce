@@ -24,15 +24,18 @@ class BusinessPageServiceImpl implements BusinessPageService {
     private final OrganisationRepository orgs;
     private final ApplicationRepository apps;
     private final String publicWebUrl;
+    private final String stripeWebsiteBase;
     private final Clock clock;
 
     BusinessPageServiceImpl(BusinessPageRepository pages, OrganisationRepository orgs, ApplicationRepository apps,
                             @Value("${at.seller.public-web-url:http://localhost:3000}") String publicWebUrl,
+                            @Value("${at.seller.stripe-website-base:}") String stripeWebsiteBase,
                             Clock clock) {
         this.pages = pages;
         this.orgs = orgs;
         this.apps = apps;
         this.publicWebUrl = publicWebUrl.replaceAll("/+$", "");
+        this.stripeWebsiteBase = stripeWebsiteBase == null ? "" : stripeWebsiteBase.trim().replaceAll("/+$", "");
         this.clock = clock;
     }
 
@@ -40,7 +43,11 @@ class BusinessPageServiceImpl implements BusinessPageService {
     @Transactional
     public String websiteFor(String orgId, BusinessSection business) {
         BusinessPage page = pages.findByOrg(orgId).orElseGet(() -> create(orgId, business));
-        return publicWebUrl + "/b/" + page.slug();
+        // Stripe refuses an address that is not publicly reachable (http://localhost:3000/b/x is "Not a valid URL"), so
+        // a local or test environment gives it at.seller.stripe-website-base instead (the local profile uses Stripe's
+        // own test address). Empty means the real public address of the page.
+        String base = stripeWebsiteBase.isEmpty() ? publicWebUrl : stripeWebsiteBase;
+        return base + "/b/" + page.slug();
     }
 
     @Override

@@ -98,6 +98,9 @@ at:
       departments-ttl: ${DEPARTMENTS_TTL:60s}
     # Where AfroTransact's public pages live: a business without a website is given <this>/b/<slug> as its website.
     public-web-url: ${PUBLIC_WEB_URL:http://localhost:3000}
+    # Base of the business website address given to Stripe, when it must differ from public-web-url (Stripe refuses
+    # localhost). Empty = use public-web-url. The local profile sets it to Stripe's test website.
+    stripe-website-base: ${STRIPE_WEBSITE_BASE:}
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
       connect-webhook-secret: ${STRIPE_CONNECT_WEBHOOK_SECRET:}
