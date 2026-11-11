@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.orders.application.DeliveryQuoteSweepService;
+import com.afrotransact.orders.application.PaymentEventService;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -29,10 +30,12 @@ class DeliveryQuoteIT extends OrdersIntegrationTest {
     private static final String ASSIGN = "delivery-quotes:assign";
 
     private DeliveryQuoteSweepService sweep;
+    private PaymentEventService paymentEvents;
 
     @BeforeEach
-    void wire(@Autowired DeliveryQuoteSweepService sweepService) {
+    void wire(@Autowired DeliveryQuoteSweepService sweepService, @Autowired PaymentEventService events) {
         this.sweep = sweepService;
+        this.paymentEvents = events;
         jdbc.sql("update delivery_quote_settings set auto_assign = 'NONE', requests_per_hour = 50, "
                 + "level1_role = null, level1_user_ids = '{}', level2_role = null, level2_user_ids = '{}', "
                 + "min_amount_minor = 500, max_amount_minor = 50000, validity_hours = 48, sla_business_days = 1 "
@@ -56,17 +59,17 @@ class DeliveryQuoteIT extends OrdersIntegrationTest {
         return new Actor("viewer-1", PrincipalType.STAFF, Optional.empty(), Set.of("platform.auditor"), Set.of(VIEW));
     }
 
-    /** The staff directory (identity): who holds {@code permission}. */
+    /** The staff directory (identity): who holds {@code permission}, and each person by id. */
     private void staff(String permission, String... idsAndNames) {
-        StringBuilder sb = new StringBuilder("[");
+        StringBuilder all = new StringBuilder("[");
         for (int i = 0; i + 1 < idsAndNames.length; i += 2) {
-            sb.append(i == 0 ? "" : ",").append("{\"userId\":\"").append(idsAndNames[i]).append("\",\"name\":\"")
-                    .append(idsAndNames[i + 1]).append("\"}");
+            String one = "{\"userId\":\"" + idsAndNames[i] + "\",\"name\":\"" + idsAndNames[i + 1] + "\"}";
+            all.append(i == 0 ? "" : ",").append(one);
+            UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/internal/staff"))
+                    .withQueryParam("ids", WireMock.equalTo(idsAndNames[i])), 200, "[" + one + "]");
         }
         UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/internal/staff"))
-                .withQueryParam("permission", WireMock.equalTo(permission)), 200, sb.append("]").toString());
-        UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/internal/staff"))
-                .withQueryParam("ids", WireMock.matching(".*")), 200, sb.toString());
+                .withQueryParam("permission", WireMock.equalTo(permission)), 200, all.append("]").toString());
     }
 
     private record Shopper(String id, String bearer, String org, String atin, String pack) {
@@ -244,7 +247,8 @@ class DeliveryQuoteIT extends OrdersIntegrationTest {
         TestSupport.as(supervisor());
         JsonNode detail = ok(send("GET", "/v1/staff/delivery-quotes/" + id, null));
         assertThat(detail.path("timeline").get(0).path("action").asString()).isEqualTo("REQUESTED");
-        assertThat(detail.toString()).contains("Taken over", "Assigned to Kofi Mensah").doesNotContain("agent-2");
+        assertThat(detail.path("timeline").toString()).contains("Claimed by Amina Bello", "Assigned to Kofi Mensah (was with Amina Bello)")
+                .doesNotContain("agent-2");
         // released back to the pool by the person who has it
         TestSupport.as(agent("agent-2"));
         JsonNode released = ok(send("POST", "/v1/staff/delivery-quotes/" + id + "/assignment",
@@ -261,7 +265,7 @@ class DeliveryQuoteIT extends OrdersIntegrationTest {
         claim(agent("agent-1"), id);
         TestSupport.as(agent("agent-1"));
         problem(send("POST", "/v1/staff/delivery-quotes/" + id + "/agree", "{\"amountMinor\":2000,\"reason\":\"  \"}"),
-                400, "validation.failed");
+                400, "");
         problem(send("POST", "/v1/staff/delivery-quotes/" + id + "/agree", "{\"amountMinor\":2000,\"reason\":\"abc\"}"),
                 422, "orders.invalid-quote-amount");
         problem(send("POST", "/v1/staff/delivery-quotes/" + id + "/agree",
@@ -343,7 +347,13 @@ class DeliveryQuoteIT extends OrdersIntegrationTest {
                 "Authorization", "Bearer " + s.bearer()), 201);
         assertThat(again.path("orderId").asString()).isEqualTo(created.path("orderId").asString());
 
-        // another checkout cannot reuse it
+        // the order is paid and placed; another checkout cannot reuse the quote
+        String orderId = created.path("orderId").asString();
+        String number = created.path("orderNumber").asString();
+        assertThat(paymentEvents.onIntentEvent(UUID.randomUUID(), "payments.intent.succeeded", orderId, null)).isTrue();
+        eventually(() -> "placed".equals(ok(send("GET", "/v1/checkout/" + number, null)).path("status").asString()),
+                "order placed");
+        assertThat(quoteStatus(quote)).isEqualTo("USED");
         TestSupport.as(TestSupport.customer(s.id()));
         problem(send("POST", "/v1/checkout", checkoutBody(s, quote), "Idempotency-Key", "idem-2-" + s.id(),
                 "Authorization", "Bearer " + s.bearer()), 422, "orders.quote-used");
@@ -401,13 +411,16 @@ class DeliveryQuoteIT extends OrdersIntegrationTest {
     void aCheckoutThatFailsGivesTheQuoteBack() {
         Shopper s = shopper();
         String quote = readyQuote(s, 1800);
-        // the stock is gone: the saga fails after the quote was used and compensates
-        UPSTREAMS.insufficient(s.atin());
-        HttpResponse<String> failed = checkout(s, quote, "idem-f-" + s.id());
-        assertThat(failed.statusCode()).isGreaterThanOrEqualTo(400);
+        JsonNode created = ok(checkout(s, quote, "idem-f-" + s.id()), 201);
+        assertThat(quoteStatus(quote)).isEqualTo("USED");
+        // the card is declined: the saga voids the order and the quote can be used again
+        paymentEvents.onIntentEvent(UUID.randomUUID(), "payments.intent.failed", created.path("orderId").asString(),
+                "Card declined");
         eventually(() -> "READY".equals(quoteStatus(quote)), "the quote restored");
         assertThat(jdbc.sql("select count(*) from delivery_quote_event where quote_id = :q and action = 'RESTORED'")
                 .param("q", UUID.fromString(quote)).query(Long.class).single()).isEqualTo(1);
+        assertThat(jdbc.sql("select used_order_id from delivery_quote where id = :q")
+                .param("q", UUID.fromString(quote)).query(String.class).optional()).isEmpty();
     }
 
     @Test

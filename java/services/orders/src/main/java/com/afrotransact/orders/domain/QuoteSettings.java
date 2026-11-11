@@ -78,7 +78,7 @@ public record QuoteSettings(int slaBusinessDays, int dueSoonPercent, int unassig
         if (maxAmountMinor < minAmountMinor) {
             p.put("maxAmountMinor", "The largest amount must be at least the smallest");
         }
-        if (level2.empty() == false && level1.empty()) {
+        if (!level2.empty() && level1.empty()) {
             p.put("level2", "Set level 1 before level 2");
         }
         return p;
