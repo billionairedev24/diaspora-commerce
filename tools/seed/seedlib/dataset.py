@@ -50,35 +50,88 @@ SELLER_BY_KEY = {s.key: s for s in SELLERS}
 
 @dataclass(frozen=True)
 class Provider:
+    """A demo service provider. Services are in person only (docs/engineering/service-areas.md): a service's modes are
+    IN_PERSON (the customer goes to the provider) and/or AT_HOME (the provider comes to the customer); there is no virtual
+    mode. `zip` is the base location, `radius` the miles served, `extra` named areas ("CITY:Taylor:TX", "ZIP:76574" or
+    "ZONE:greater-austin"), `tz` the provider's time zone."""
+
     key: str
     org_id: str
     name: str
     legal: str
     location: str
     member: str
-    services: tuple[tuple[str, str, str, int, int, int, tuple[str, ...]], ...]  # name, desc, category, mins, price, deposit, modes
+    # name, description, category, minutes, price, deposit, modes, photo search queries
+    services: tuple[tuple[str, str, str, int, int, int, tuple[str, ...], tuple[str, ...]], ...]
+    zip: str = ""
+    radius: int = 20
+    extra: tuple[str, ...] = ()
+    tz: str = "America/Chicago"
 
+
+BRAIDS = ("braids hairstyle woman", "african hair braiding", "cornrows braids")
+SILK = ("hair salon stylist", "hair styling african woman")
+TRAYS = ("jollof rice catering", "african party food buffet", "nigerian party food")
+TAILOR = ("tailor sewing fabric", "african fabric tailoring", "tailor shop measuring")
 
 PROVIDERS: list[Provider] = [
     Provider("aminata", "org_aminatas_braids", "Aminata's Braids", "Aminata's Braids LLC", "Houston, TX", "Aminata Diallo", (
         ("Knotless box braids (mid-back)", "Knotless, lightweight box braids. Hair included; studio or home visits within 20 miles.",
-         "hair & beauty", 300, 18000, 4000, ("IN_PERSON", "AT_HOME")),
+         "hair & beauty", 300, 18000, 4000, ("IN_PERSON", "AT_HOME"), BRAIDS),
         ("Fulani braids with beads", "Fulani-style cornrows with a centre part, side braids and beads.", "hair & beauty", 240,
-         15000, 4000, ("IN_PERSON",)),
-        ("Kids' cornrows", "Neat cornrows for school, ages 4–12.", "hair & beauty", 90, 6000, 1500, ("IN_PERSON",)),
-    )),
+         15000, 4000, ("IN_PERSON",), BRAIDS),
+        ("Kids' cornrows", "Neat cornrows for school, ages 4–12.", "hair & beauty", 90, 6000, 1500, ("IN_PERSON",), BRAIDS),
+    ), zip="77002", radius=20),
     Provider("jollof-co", "org_jollof_and_co_catering", "Jollof & Co. Catering", "Jollof and Co Catering LLC", "Dallas, TX",
              "Bisi Adeyemi", (
                  ("Owambe party trays (50 guests)", "Party jollof, fried rice, peppered chicken, moin moin and dodo for 50.",
-                  "catering", 240, 42000, 10000, ("AT_HOME",)),
+                  "catering", 240, 42000, 10000, ("AT_HOME",), TRAYS),
                  ("Naming ceremony small chops", "Puff-puff, samosa, spring rolls and suya skewers for 30 guests.", "catering",
-                  180, 26000, 6000, ("AT_HOME",)),
-             )),
+                  180, 26000, 6000, ("AT_HOME",), TRAYS),
+             ), zip="75201", radius=40),
     Provider("adire", "org_adire_tailors", "Adire Tailors", "Adire Tailors LLC", "Brooklyn, NY", "Tunde Bakare", (
-        ("Agbada sewn to measure", "Three-piece agbada from your fabric; video fitting included.", "tailoring", 60, 22000, 3000,
-         ("IN_PERSON", "VIRTUAL")),
-        ("Aso-ebi fitting", "Measurements and fitting for aso-ebi outfits.", "tailoring", 45, 9500, 3000, ("IN_PERSON", "VIRTUAL")),
-    )),
+        ("Agbada sewn to measure", "Three-piece agbada from your fabric, fitted in our Brooklyn shop.", "tailoring", 60, 22000,
+         3000, ("IN_PERSON",), TAILOR),
+        ("Aso-ebi fitting", "Measurements and fitting for aso-ebi outfits.", "tailoring", 45, 9500, 3000, ("IN_PERSON",), TAILOR),
+    ), zip="11211", radius=25, tz="America/New_York"),
+    # Greater Austin: Georgetown sees these local matches (Round Rock 10 mi, Hutto 9 mi, Pflugerville 17 mi) and nothing from
+    # Brooklyn or Houston. Capital City Tailors is in Austin with a small radius: Georgetown shows it as the nearest
+    # suggestion ("does not usually travel to Georgetown"), and Dallas, which has no tailor, shows the empty state.
+    Provider("hillcountry", "org_hill_country_braids", "Hill Country Braids", "Hill Country Braids LLC", "Round Rock, TX",
+             "Nia Johnson", (
+                 ("Box braids at your home", "Medium box braids, hair included. I come to you anywhere around Austin.",
+                  "hair & beauty", 240, 19500, 4000, ("AT_HOME",), BRAIDS),
+                 ("Twists and locs maintenance", "Retwist, palm roll and style at your home.", "hair & beauty", 120, 9000, 2000,
+                  ("AT_HOME",), BRAIDS),
+             ), zip="78664", radius=20, extra=("CITY:Taylor:TX",)),
+    Provider("zuri", "org_zuri_hair_studio", "Zuri Hair Studio", "Zuri Hair Studio LLC", "Pflugerville, TX", "Zuri Okafor", (
+        ("Silk press & trim", "Silk press, trim and treatment at our Pflugerville studio.", "hair & beauty", 120, 9500, 2000,
+         ("IN_PERSON",), SILK),
+        ("Wash, deep condition and style", "A full wash day at the studio.", "hair & beauty", 90, 7000, 1500, ("IN_PERSON",), SILK),
+    ), zip="78660", radius=25),
+    Provider("bolas", "org_bolas_kitchen", "Bola's Kitchen", "Bolas Kitchen LLC", "Hutto, TX", "Bola Adeniyi", (
+        ("Party jollof for 30 guests", "Party jollof, fried plantain and peppered chicken, delivered and set up.", "catering",
+         180, 33000, 8000, ("AT_HOME",), TRAYS),
+        ("Small chops platter (20 guests)", "Puff-puff, spring rolls, samosa and suya skewers.", "catering", 120, 18000, 5000,
+         ("AT_HOME",), TRAYS),
+    ), zip="78634", radius=40, extra=("ZONE:greater-austin",)),
+    Provider("capital-tailors", "org_capital_city_tailors", "Capital City Tailors", "Capital City Tailors LLC", "Austin, TX",
+             "Kofi Mensah", (
+                 ("Alterations and made-to-measure", "Alterations, kaftans and suits, fitted in our Austin shop.", "tailoring", 45,
+                  12000, 0, ("IN_PERSON",), TAILOR),
+             ), zip="78701", radius=10),
+    Provider("lagos-stitches", "org_lagos_stitches", "Lagos Stitches", "Lagos Stitches LLC", "Houston, TX", "Folake Adeyemi", (
+        ("Dress and agbada tailoring", "Made-to-measure dresses and agbada, fitted at our Houston shop.", "tailoring", 60, 16000,
+         4000, ("IN_PERSON",), TAILOR),
+    ), zip="77042", radius=25),
+    Provider("garden-state", "org_garden_state_braids", "Garden State Braids", "Garden State Braids LLC", "Edison, NJ", "Ngozi Eze", (
+        ("Knotless braids, studio or home", "Knotless braids at our Edison studio or at your home.", "hair & beauty", 270, 20000,
+         5000, ("IN_PERSON", "AT_HOME"), BRAIDS),
+    ), zip="08817", radius=25, tz="America/New_York"),
+    Provider("bronx-braids", "org_bronx_braids", "Bronx Braids & Locs", "Bronx Braids and Locs LLC", "Bronx, NY", "Awa Diop", (
+        ("Senegalese twists", "Senegalese twists, hair included, at our Bronx studio.", "hair & beauty", 240, 17000, 4000,
+         ("IN_PERSON",), BRAIDS),
+    ), zip="10456", radius=20, tz="America/New_York"),
 ]
 
 Options = Union[str, dict]  # noqa: UP007 (runs on Python 3.9, e.g. macOS)

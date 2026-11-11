@@ -258,3 +258,89 @@ class SkuThemeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+GREATER_AUSTIN = {"Austin", "Georgetown", "Round Rock", "Hutto", "Pflugerville", "Cedar Park", "Leander", "Taylor"}
+# (lat, lon) of the demo ZIP centroids (geo's ZIP table has the same values to 4 decimals)
+ZIP_CENTROIDS = {"78626": (30.668, -97.5747), "78664": (30.5305, -97.6351), "78634": (30.543, -97.547),
+                 "78660": (30.4427, -97.5971), "78701": (30.2711, -97.7437), "77002": (29.7543, -95.3577),
+                 "77042": (29.7392, -95.5614), "75201": (32.7867, -96.8003), "11211": (40.7078, -73.9453),
+                 "10456": (40.8309, -73.9096), "08817": (40.5188, -74.4121)}
+
+
+def miles_between(a, b):
+    import math
+    (la1, lo1), (la2, lo2) = a, b
+    p1, p2 = math.radians(la1), math.radians(la2)
+    h = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lo2 - lo1) / 2) ** 2
+    return 2 * 3958.8 * math.asin(math.sqrt(h))
+
+
+class ProvidersTest(unittest.TestCase):
+    """Services are in person only, providers declare where they work, and the metros match the design brief."""
+
+    def test_in_person_only_no_virtual_anything(self):
+        for p in D.PROVIDERS:
+            for name, desc, _cat, _mins, _price, _dep, modes, _q in p.services:
+                self.assertTrue(set(modes) <= {"IN_PERSON", "AT_HOME"}, (p.key, name, modes))
+                self.assertTrue(modes, (p.key, name))
+                self.assertNotRegex(f"{name} {desc}".lower(), r"video|virtual|online|remote|zoom", (p.key, name))
+
+    def test_unique_keys_orgs_and_service_names(self):
+        self.assertEqual(len({p.key for p in D.PROVIDERS}), len(D.PROVIDERS))
+        self.assertEqual(len({p.org_id for p in D.PROVIDERS}), len(D.PROVIDERS))
+        names = [s[0] for p in D.PROVIDERS for s in p.services]
+        self.assertEqual(len(set(names)), len(names), "service names are the idempotency key")
+
+    def test_every_provider_has_a_base_zip_a_sensible_radius_and_photo_queries(self):
+        bounds = {"hair & beauty": (5, 40), "catering": (10, 100), "tailoring": (5, 60), "tax & legal": (5, 60)}
+        for p in D.PROVIDERS:
+            self.assertRegex(p.zip, r"^\d{5}$", p.key)
+            lo = min(bounds[s[2]][0] for s in p.services)
+            hi = max(bounds[s[2]][1] for s in p.services)
+            self.assertTrue(lo <= p.radius <= hi, (p.key, p.radius, lo, hi))
+            self.assertRegex(p.org_id, r"^org_[a-z0-9_]+$")
+            for s in p.services:
+                self.assertTrue(s[7], f"{p.key}/{s[0]} needs photo search queries (the pipeline never uses a placeholder)")
+                self.assertTrue(s[4] > 0 and 0 <= s[5] <= s[4], s[0])
+            self.assertTrue(p.location.endswith(tuple(f", {st}" for st in ("TX", "NY", "NJ", "GA", "FL"))), p.location)
+
+    def test_at_least_three_providers_in_greater_austin_with_varied_modes_and_radii(self):
+        austin = [p for p in D.PROVIDERS if p.location.split(",")[0] in GREATER_AUSTIN]
+        self.assertGreaterEqual(len(austin), 3)
+        self.assertTrue({"Round Rock", "Hutto", "Pflugerville"} <= {p.location.split(",")[0] for p in austin})
+        modes = {m for p in austin for s in p.services for m in s[6]}
+        self.assertEqual(modes, {"IN_PERSON", "AT_HOME"})
+        self.assertGreater(len({p.radius for p in austin}), 2)
+
+    def test_other_metros_exist_but_are_far_from_georgetown(self):
+        states = {p.location.split(", ")[1] for p in D.PROVIDERS}
+        self.assertTrue({"TX", "NY", "NJ"} <= states)
+        georgetown = ZIP_CENTROIDS["78626"]
+        for p in D.PROVIDERS:
+            far = miles_between(georgetown, ZIP_CENTROIDS[p.zip])
+            if p.location.endswith(("NY", "NJ")) or p.location.startswith(("Houston", "Dallas")):
+                self.assertGreater(far, 100, p.key)
+
+    def test_georgetown_sees_local_matches_a_nearest_suggestion_and_dallas_has_no_tailor(self):
+        """Mirrors bookings' matching rule: AT_HOME within the radius, IN_PERSON within min(radius, 30) miles, named areas."""
+        def serves(p, service, at_zip, at_city, at_state):
+            d = miles_between(ZIP_CENTROIDS[p.zip], ZIP_CENTROIDS[at_zip])
+            modes = service[6]
+            named = any(e == f"CITY:{at_city}:{at_state}" or e == f"ZIP:{at_zip}" for e in p.extra)
+            return ("AT_HOME" in modes and d <= p.radius) or ("IN_PERSON" in modes and d <= min(p.radius, 30)) or named, d
+
+        local, nearest = [], []
+        for p in D.PROVIDERS:
+            for s in p.services:
+                ok, d = serves(p, s, "78626", "Georgetown", "TX")
+                (local if ok else nearest if d <= 60 else []).append((p.key, s[2]))
+        local_keys = {k for k, _ in local}
+        self.assertTrue({"hillcountry", "zuri", "bolas"} <= local_keys, local)
+        self.assertFalse({"adire", "aminata", "garden-state", "bronx-braids"} & local_keys, "never cross-state")
+        self.assertIn(("capital-tailors", "tailoring"), nearest)
+        self.assertNotIn("tailoring", {c for _, c in local}, "Georgetown has no tailor: the nearest suggestion shows")
+        for p in D.PROVIDERS:
+            for s in p.services:
+                if s[2] == "tailoring":
+                    self.assertFalse(serves(p, s, "75201", "Dallas", "TX")[0], "Dallas has no tailoring: the designed empty state")

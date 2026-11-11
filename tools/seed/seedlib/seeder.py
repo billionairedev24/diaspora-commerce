@@ -1020,7 +1020,7 @@ class Seeder:
 
     # ------------------------------------------------------------------------------------------------ bookings
     def step_bookings(self) -> None:
-        self.log("== service providers (bookings)")
+        self.log("== service providers (bookings): in-person services, service areas, photos")
         if not self.up.get("bookings"):
             self.log("  · bookings is not running: providers' services skipped (tools/dev/local.sh restart bookings, "
                      "then make seed again)")
@@ -1032,7 +1032,7 @@ class Seeder:
         for prov in D.PROVIDERS:
             try:
                 bk.put(f"/v1/providers/{prov.org_id}/settings", {
-                    "displayName": prov.name, "timeZone": "America/Chicago", "currency": "USD", "location": prov.location,
+                    "displayName": prov.name, "timeZone": prov.tz, "currency": "USD", "location": prov.location,
                     "rules": {"leadMinutes": 720, "horizonDays": 45, "bufferMinutes": 15, "stepMinutes": 30,
                               "maxPerDay": 6, "instantBooking": True, "autoAcceptReschedule": False}})
                 team = bk.get(f"/v1/providers/{prov.org_id}/team") or []
@@ -1040,20 +1040,42 @@ class Seeder:
                     bk.post(f"/v1/providers/{prov.org_id}/team", {"displayName": prov.member, "role": "OWNER",
                                                                   "bookable": True, "active": True, "hours": hours})
                 have = {s.get("name"): s for s in bk.get(f"/v1/providers/{prov.org_id}/services") or []}
-                for name, desc, category, mins, price, deposit, modes in prov.services:
+                for name, desc, category, mins, price, deposit, modes, queries in prov.services:
+                    img = self._images(f"service:{prov.key}:{name}", queries, 1, orientation="landscape", main_min_edge=300)
+                    photo = self.uploader.upload(img[0], "storefront")["url"] if img else None
+                    if not img:
+                        self.log(f"    ! {name}: no photo found (the storefront shows the provider's monogram)")
+                    body = {"name": name, "description": desc, "category": category, "durationMinutes": mins,
+                            "priceMinor": price, "depositMinor": deposit, "modes": list(modes)}
+                    if photo:
+                        body["imageUrl"] = photo
                     svc = have.get(name)
                     if svc is None:
-                        svc = bk.post(f"/v1/providers/{prov.org_id}/services", {
-                            "name": name, "description": desc, "category": category, "durationMinutes": mins,
-                            "priceMinor": price, "depositMinor": deposit, "modes": list(modes)})
+                        svc = bk.post(f"/v1/providers/{prov.org_id}/services", body)
                         self.report.add("services", "created")
+                    elif sorted(svc.get("modes") or []) != sorted(modes) or (photo and svc.get("imageUrl") != photo):
+                        svc = bk.put(f"/v1/providers/{prov.org_id}/services/{svc['id']}",
+                                     {**body, "addOns": svc.get("addOns") or []})
+                        self.report.add("services", "updated")
                     else:
                         self.report.add("services", "existing")
                     if not svc.get("active"):
                         bk.post(f"/v1/providers/{prov.org_id}/services/{svc['id']}/activate")
-                self.log(f"  ✓ {prov.name}: {len(prov.services)} services")
+                self._service_area(bk, prov)
+                self.log(f"  ✓ {prov.name}: {len(prov.services)} services, {prov.location}, {prov.radius} mi")
             except ApiError as e:
                 self._problem(f"provider {prov.name}: {e}")
+
+    def _service_area(self, bk: Any, prov: D.Provider) -> None:
+        """Where the provider works: base ZIP (placed by geo), radius and named extra areas. Always an upsert."""
+        extra = []
+        for e in prov.extra:
+            kind, _, rest = e.partition(":")
+            value, _, state = rest.partition(":")
+            extra.append({"kind": kind, "value": value, **({"state": state} if state else {})})
+        bk.put(f"/v1/providers/{prov.org_id}/service-area",
+               {"baseZip": prov.zip, "radiusMiles": prov.radius, "extraAreas": extra})
+        self.report.add("service areas", "saved")
 
     # ------------------------------------------------------------------------------------------------ ops
     def step_ops(self) -> None:

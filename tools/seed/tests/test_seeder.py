@@ -605,5 +605,45 @@ class PickupPointsTest(unittest.TestCase):
         self.assertEqual(s.svc["carrier-gateway"].calls, [])
 
 
+
+class ServiceProvidersTest(unittest.TestCase):
+    """step_bookings: every provider gets in-person services with a photo and a service area; a rerun changes nothing."""
+
+    def run_step(self, s, store):
+        bk = s.svc["bookings"]
+        bk.on("PUT", "/v1/providers/*", lambda path, body, kw: store.setdefault(path, body))
+        bk.on("GET", "/v1/providers/*", lambda path, body, kw: store.get("__get__" + path, []))
+
+        def post(path, body, kw):
+            if path.endswith("/team"):
+                return {"id": "m1"}
+            if path.endswith("/activate"):
+                return {}
+            store.setdefault("services", []).append((path, body))
+            return {"id": f"s{len(store['services'])}", "name": body["name"], "modes": body["modes"], "active": True}
+
+        bk.on("POST", "/v1/providers/*", post)
+        s.uploader.upload = lambda img, purpose: {"url": "http://media.test/" + img.sha256[:8] + ".jpg"}
+        s._images = lambda key, queries, count, **kw: [type("I", (), {"sha256": "abcdef12" + str(abs(hash(key)))})()]
+        s.step_bookings()
+
+    def test_in_person_services_with_photos_and_areas(self):
+        s = seeder()
+        store = {}
+        self.run_step(s, store)
+        services = store["services"]
+        self.assertEqual(len(services), sum(len(p.services) for p in D.PROVIDERS))
+        for _path, body in services:
+            self.assertTrue(set(body["modes"]) <= {"IN_PERSON", "AT_HOME"}, body)
+            self.assertTrue(body["imageUrl"].startswith("http://media.test/"), "a real photo, never a placeholder")
+        areas = {p: b for p, b in store.items() if p.endswith("/service-area")}
+        self.assertEqual(len(areas), len(D.PROVIDERS))
+        hill = areas["/v1/providers/org_hill_country_braids/service-area"]
+        self.assertEqual(hill, {"baseZip": "78664", "radiusMiles": 20, "extraAreas": [{"kind": "CITY", "value": "Taylor", "state": "TX"}]})
+        bolas = areas["/v1/providers/org_bolas_kitchen/service-area"]
+        self.assertEqual(bolas["extraAreas"], [{"kind": "ZONE", "value": "greater-austin"}])
+        settings = {p: b for p, b in store.items() if p.endswith("/settings")}
+        self.assertEqual(settings["/v1/providers/org_adire_tailors/settings"]["timeZone"], "America/New_York")
+
 if __name__ == "__main__":
     unittest.main()
