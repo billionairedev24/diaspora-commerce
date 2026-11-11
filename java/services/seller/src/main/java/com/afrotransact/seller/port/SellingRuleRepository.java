@@ -20,6 +20,9 @@ public interface SellingRuleRepository {
     /** Every active rule that is not plain SELL: what the Selling approvals page lists. */
     List<SellingRule> findGated();
 
+    /** The category codes whose rule is satisfied by this capability (food service: bakery, prepared meals). */
+    List<String> categoriesWithCapability(String capability);
+
     Optional<SellingRule> find(UUID id);
 
     Optional<SellingRule> find(SellingScope scope);

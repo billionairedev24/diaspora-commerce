@@ -33,6 +33,7 @@ class ProductServiceImpl implements ProductService {
 
     private final ProductRepository products;
     private final ProductWriter writer;
+    private final SellingPublishGate sellingGate;
     private final PermissionChecker permissions;
     private final ResourceAccessChecker access;
     private final ActorResolver actors;
@@ -43,7 +44,7 @@ class ProductServiceImpl implements ProductService {
 
     ProductServiceImpl(ProductRepository products, ProductWriter writer, PermissionChecker permissions,
                        ResourceAccessChecker access, ActorResolver actors, OwnerResolver owners,
-                       ProductEvents events, CategoryRepository categories, Clock clock) {
+                       ProductEvents events, CategoryRepository categories, Clock clock, SellingPublishGate sellingGate) {
         this.products = products;
         this.writer = writer;
         this.permissions = permissions;
@@ -53,6 +54,7 @@ class ProductServiceImpl implements ProductService {
         this.events = events;
         this.categories = categories;
         this.clock = clock;
+        this.sellingGate = sellingGate;
     }
 
     @Override
@@ -129,6 +131,7 @@ class ProductServiceImpl implements ProductService {
         permissions.require(CatalogPermissions.MODERATE);
         return transition(id, p -> {
             requireTaxReady(p);
+            sellingGate.requireApprovable(p);
             return p.approve(Instant.now(clock));
         }, CatalogEvents.PRODUCT_APPROVED);
     }
@@ -154,7 +157,10 @@ class ProductServiceImpl implements ProductService {
     @Transactional
     public Product resume(UUID id) {
         requireEditable(id);
-        return transition(id, p -> p.resume(Instant.now(clock)), CatalogEvents.PRODUCT_RESUMED);
+        return transition(id, p -> {
+            sellingGate.requireResumable(p);
+            return p.resume(Instant.now(clock));
+        }, CatalogEvents.PRODUCT_RESUMED);
     }
 
     @Override

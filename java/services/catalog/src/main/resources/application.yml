@@ -129,6 +129,16 @@ at:
       base-url: ${SELLER_URL:http://localhost:8106}
       timeout: ${SELLER_TIMEOUT:3s}
       scope-ttl: ${SELLER_SCOPE_TTL:15s}
+      selling-ttl: ${SELLER_SELLING_TTL:10s}
+    # Selling approvals (docs/engineering/listing-rules.md section 2): the publish gate asks seller-service
+    # (GET /v1/orgs/{orgId}/selling-status) and refuses a listing the seller may not sell (409
+    # catalog.selling-approval-required; the form keeps its draft). A listing the seller may sell goes live after validation
+    # (auto-publish) when its tax details are ready; only flagged listings are reviewed. Off: the old review queue.
+    selling-gate:
+      enabled: ${SELLING_GATE_ENABLED:true}
+      page-size: 200
+    listing:
+      auto-publish: ${LISTING_AUTO_PUBLISH:true}
     # S324 verified-purchase product reviews: catalog asks orders-service whether the customer received the product
     # (GET /v1/lookup/customers/{customerId}/purchases/{atin}, scope orders:purchase-check).
     orders:

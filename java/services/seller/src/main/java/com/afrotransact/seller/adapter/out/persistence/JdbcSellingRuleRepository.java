@@ -53,6 +53,12 @@ class JdbcSellingRuleRepository implements SellingRuleRepository {
     }
 
     @Override
+    public List<String> categoriesWithCapability(String capability) {
+        return jdbc.sql("select scope_key from selling_rule where scope_type = 'CATEGORY' and capability = :c and active "
+                + "order by scope_key").param("c", capability).query(String.class).list();
+    }
+
+    @Override
     public Optional<SellingRule> find(UUID id) {
         return jdbc.sql("select * from selling_rule where id = :id").param("id", id).query((rs, n) -> map(rs))
                 .optional();

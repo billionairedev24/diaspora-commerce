@@ -1,6 +1,7 @@
 package com.afrotransact.seller.domain;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -26,20 +27,27 @@ public record SellingFacts(String categoryCode, String brand, String productType
                 || material != null && material.equalsIgnoreCase("watch");
     }
 
+    /**
+     * The category and its ancestors, as the catalog sends them (comma-separated: a listing sits in a product type
+     * inside a category inside a department, and a rule may be about any of them).
+     */
+    public List<String> categoryCodes() {
+        if (categoryCode == null) {
+            return List.of();
+        }
+        return Arrays.stream(categoryCode.split(",")).map(String::strip).filter(c -> !c.isEmpty()).distinct().toList();
+    }
+
     /** The scopes whose rules can apply to this listing. */
     public List<SellingScope> candidateScopes() {
         List<SellingScope> out = new ArrayList<>();
-        if (categoryCode != null) {
-            out.add(SellingScope.category(categoryCode));
-        }
+        categoryCodes().forEach(c -> out.add(SellingScope.category(c)));
         if (productTypeCode != null) {
             out.add(SellingScope.productType(productTypeCode));
         }
         if (brand != null && !SellingScope.normaliseBrand(brand).isEmpty()) {
             out.add(SellingScope.brand(brand));
-            if (categoryCode != null) {
-                out.add(SellingScope.brandInCategory(brand, categoryCode));
-            }
+            categoryCodes().forEach(c -> out.add(SellingScope.brandInCategory(brand, c)));
         }
         if (gtin != null && !gtin.isEmpty()) {
             out.add(SellingScope.product(gtin));

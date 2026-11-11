@@ -275,7 +275,7 @@ class SellingApprovalServiceImpl implements SellingApprovalService {
         events.publish(type, SellerEvents.AGGREGATE_APPLICATION, app.id(), new SellingEventPayload(app.orgId(),
                 app.scope().type().name(), app.scope().key(), app.scopeLabel(), app.id(), app.reference(),
                 app.status().name(), reason, app.decisionNote(), app.requestedItems(), app.disqualified(),
-                app.reapplyAfter(), null, null, List.of(app.applicantUserId()), List.of(), now));
+                app.reapplyAfter(), null, null, List.of(app.applicantUserId()), List.of(), now, List.of()));
     }
 
     private void publishLifecycle(String type, SellingApproval a, String reason, String note, String actorName,
@@ -292,10 +292,15 @@ class SellingApprovalServiceImpl implements SellingApprovalService {
         events.publish(type, SellerEvents.AGGREGATE_COMPLIANCE, a.orgId(), new SellingEventPayload(a.orgId(),
                 a.scope().type().name(), a.scope().key(), a.label(), a.applicationId(), null, a.status().name(),
                 reason, note == null ? actorName : note, List.of(), false, a.reapplyAfter(), a.expiresAt(), daysLeft,
-                owners, staff, now));
+                owners, staff, now, categoriesOf(a)));
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private List<String> categoriesOf(SellingApproval a) {
+        return a.scope().type() == SellingScopeType.CAPABILITY ? rules.categoriesWithCapability(a.scope().key())
+                : List.of();
+    }
 
     /** What the seller is told: the staff message, else the reason code's label. */
     private String sellerReason(SellingApplication app) {

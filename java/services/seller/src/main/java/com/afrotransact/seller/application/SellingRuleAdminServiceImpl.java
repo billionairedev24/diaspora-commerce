@@ -139,7 +139,8 @@ class SellingRuleAdminServiceImpl implements SellingRuleAdminService {
         events.publish(SellerEvents.SELLING_RULE_CHANGED, SellerEvents.AGGREGATE_COMPLIANCE, rule.id().toString(),
                 new SellingEventPayload(null, rule.scope().type().name(), rule.scope().key(), rule.label(), null, null,
                         rule.level().name(), "RULE", why, List.of(), false, null, null, null, List.of(), List.of(),
-                        now));
+                        now, rule.scope().type() == SellingScopeType.CAPABILITY
+                        ? rules.categoriesWithCapability(rule.scope().key()) : List.of()));
     }
 
     // ---------------------------------------------------------------- input
