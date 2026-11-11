@@ -53,11 +53,18 @@ export function useFormatters(): Formatters {
 }
 
 /**
+ * The language picker is hidden everywhere for now (only English is offered). Set to true to bring it back in the
+ * seller centre, staff console and storefront footer; the translations and the at_locale cookie stay in place.
+ */
+export const LANGUAGE_SWITCH_ENABLED = false;
+
+/**
  * Language picker for the web apps: stores the choice in the at_locale cookie and calls onChanged (the app refreshes
  * its server components, e.g. router.refresh()). Each option is labelled in its own language and script direction.
  */
 export function LocaleSelect({ label, className, onChanged }: { label: string; className?: string; onChanged: (locale: Locale) => void }) {
   const { locale } = useI18n();
+  if (!LANGUAGE_SWITCH_ENABLED) return null;
   return (
     <select
       aria-label={label}

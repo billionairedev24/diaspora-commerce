@@ -2,7 +2,7 @@
 
 import { type LegalDocumentKey, legalDocumentKeyOf, legalHref, NewsletterRequestSchema, type SiteConfig } from '@afrotransact/api-client';
 import { isLocale, localeCookie, LOCALES } from '@afrotransact/i18n';
-import { useLocale } from '@afrotransact/i18n/react';
+import { LANGUAGE_SWITCH_ENABLED, useLocale } from '@afrotransact/i18n/react';
 import { AppleGlyph, CaretDown, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -249,23 +249,27 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
       <div className={styles.bottom}>
         <div className={styles.bottomInner}>
           <label className={styles.lang}>
-            <Globe aria-hidden />
-            <span className="at-visually-hidden">{t('footer.language')}</span>
-            <select
-              className={styles.langSelect}
-              value={locale ?? active}
-              onChange={(e) => {
-                if (!isLocale(e.target.value)) return;
-                document.cookie = localeCookie(e.target.value);
-                router.refresh();
-              }}
-            >
-              {LOCALES.map((l) => (
-                <option key={l.code} value={l.code} lang={l.code} dir={l.dir}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
+            {LANGUAGE_SWITCH_ENABLED ? (
+              <>
+              <Globe aria-hidden />
+              <span className="at-visually-hidden">{t('footer.language')}</span>
+              <select
+                className={styles.langSelect}
+                value={locale ?? active}
+                onChange={(e) => {
+                  if (!isLocale(e.target.value)) return;
+                  document.cookie = localeCookie(e.target.value);
+                  router.refresh();
+                }}
+              >
+                {LOCALES.map((l) => (
+                  <option key={l.code} value={l.code} lang={l.code} dir={l.dir}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+              </>
+            ) : null}
             <span>{t('footer.market', { currency: config?.market.currency ?? 'USD', country: config?.market.country ?? 'United States' })}</span>
           </label>
           <nav aria-label={t('footer.legal')}>
