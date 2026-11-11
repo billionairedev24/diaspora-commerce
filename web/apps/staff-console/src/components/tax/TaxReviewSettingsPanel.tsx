@@ -87,7 +87,7 @@ function Loaded({ s }: { s: TaxReviewSettings }) {
       <fieldset className="m-0 flex max-w-[80ch] flex-col gap-3 border-0 p-0" disabled={!s.canChange}>
         <legend className="mb-1 p-0 text-sm font-bold">How tax review works</legend>
         {s.options.map((o) => (
-          <label key={o.mode} className="flex items-start gap-3 text-sm">
+          <label key={o.mode} className="flex items-start gap-3 text-sm" aria-disabled={!s.canChange}>
             <input type="radio" name="tax-review-mode" className="mt-1" checked={mode === o.mode} onChange={() => setMode(o.mode)} />
             <span className="flex flex-col gap-0.5">
               <strong className="font-semibold">
@@ -95,6 +95,7 @@ function Loaded({ s }: { s: TaxReviewSettings }) {
                 {o.current ? ' (in use now)' : ''}
               </strong>
               <span className="text-muted">{o.explain}</span>
+              {o.current && o.mode === 'RISK_BASED' ? <span className="text-warning">Only the tax professional can say this is safe to leave on.</span> : null}
             </span>
           </label>
         ))}

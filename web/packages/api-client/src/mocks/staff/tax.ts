@@ -6,6 +6,7 @@ import { http } from 'msw';
 import { z } from 'zod';
 
 import {
+  TAX_AUDIT_SAMPLE,
   type TaxCodeEntry,
   type TaxCodeMap,
   type TaxCodeMapImportResult,
@@ -17,9 +18,7 @@ import {
   type TaxReviewPage,
   type TaxReviewRow,
   type TaxReviewSettings,
-  type TaxShadow,
-  TAX_AUDIT_SAMPLE
-} from '../../staff-tax';
+  type TaxShadow} from '../../staff-tax';
 import fixture from './fixtures/category-tax-map.json';
 import { allows } from './model';
 import { type PreorderCtx, type PreorderHandlerDeps } from './preorders';
