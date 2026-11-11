@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -416,28 +417,43 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 			problem(w, 422, "bookings.invalid-zip", "Invalid ZIP", nil)
 			return
 		}
+		// radiusMiles: absent = the category default (25 here), 0 = any distance.
+		radius, radiusDefault := 25, true
+		if raw := r.URL.Query().Get("radiusMiles"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 0 || n > 1000 {
+				problem(w, 422, "bookings.invalid-radius", "Choose a search distance", nil)
+				return
+			}
+			radius, radiusDefault = n, false
+		}
 		hit := map[string]any{"serviceId": ShopperServiceID, "orgId": ShopperProviderID, "name": "Knotless braids",
 			"providerName": "Braids by Ama", "description": "Mid-back knotless braids", "category": "hair & beauty", "durationMinutes": 240, "priceFromMinor": 18000,
 			"depositMinor": 3000, "currency": "USD", "modes": []string{"IN_PERSON", "AT_HOME"}, "rating": 4.8, "ratingCount": 52, "nextAvailable": "2026-11-11T16:00:00Z",
 			"location": "Round Rock, TX", "imageUrl": "https://img.example/braids.jpg",
 			"area": map[string]any{"baseCity": "Round Rock", "baseState": "TX", "distanceMiles": 9.4, "zone": "Greater Austin",
-				"serves": []string{"Georgetown", "Hutto", "Pflugerville", "Cedar Park"}, "nearest": false}}
+				"serves": []string{"Georgetown", "Hutto", "Pflugerville", "Cedar Park"}}}
 		switch z {
 		case "10001": // nobody serves New York in this fixture
 			writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "New York", "state": "NY"}, "coverage": "NONE",
-				"services": []any{}, "nearest": []any{}, "categories": []any{}})
-		case "78701": // only providers outside their usual coverage
-			near := map[string]any{}
-			for k, v := range hit {
-				near[k] = v
+				"services": []any{}, "categories": []any{}, "radiusMiles": radius, "radiusDefault": radiusDefault})
+		case "78701": // Austin: the tailor is 28 miles away, reached only when the shopper goes at least that far
+			if radius != 0 && radius < 28 {
+				writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "Austin", "state": "TX", "zone": "Greater Austin"}, "coverage": "NONE",
+					"services": []any{}, "categories": []any{}, "radiusMiles": radius, "radiusDefault": radiusDefault})
+				return
 			}
-			near["area"] = map[string]any{"baseCity": "Hutto", "baseState": "TX", "distanceMiles": 62.0, "serves": []string{}, "nearest": true}
-			writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "Austin", "state": "TX", "zone": "Greater Austin"}, "coverage": "NEAREST",
-				"services": []any{}, "nearest": []any{near}, "categories": []any{}})
+			far := map[string]any{}
+			for k, v := range hit {
+				far[k] = v
+			}
+			far["area"] = map[string]any{"baseCity": "Hutto", "baseState": "TX", "distanceMiles": 28.0, "serves": []string{"Austin"}}
+			writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "Austin", "state": "TX", "zone": "Greater Austin"}, "coverage": "LOCAL",
+				"services": []any{far}, "categories": []any{map[string]any{"category": "hair & beauty", "count": 1}}, "radiusMiles": radius, "radiusDefault": radiusDefault})
 		default:
 			writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "Georgetown", "state": "TX", "zone": "Greater Austin"}, "coverage": "LOCAL",
-				"services": []any{hit}, "nearest": []any{}, "categories": []any{map[string]any{"category": "hair & beauty", "count": 1},
-					map[string]any{"category": "tailoring", "count": 0}}})
+				"services": []any{hit}, "categories": []any{map[string]any{"category": "hair & beauty", "count": 1},
+					map[string]any{"category": "tailoring", "count": 0}}, "radiusMiles": radius, "radiusDefault": radiusDefault})
 		}
 	})
 	mux.HandleFunc("GET /v1/public/services/suggest", func(w http.ResponseWriter, _ *http.Request) {

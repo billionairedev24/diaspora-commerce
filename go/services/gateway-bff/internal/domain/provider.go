@@ -359,13 +359,12 @@ type ProviderServiceArea struct {
 }
 
 // ServiceAreaView is the area (nil before the first save) with the rules around it: the radius bounds for the
-// provider's services, the platform's customer-travel limit, the zones and the categories to choose from.
+// provider's services (how far they travel to customers), the zones and the categories to choose from.
 type ServiceAreaView struct {
-	Area                *ProviderServiceArea  `json:"area"`
-	Bounds              ServiceAreaRadius     `json:"bounds"`
-	CustomerTravelMiles int                   `json:"customerTravelMiles"`
-	Zones               []ServiceAreaZone     `json:"zones"`
-	Categories          []ServiceAreaCategory `json:"categories"`
+	Area       *ProviderServiceArea  `json:"area"`
+	Bounds     ServiceAreaRadius     `json:"bounds"`
+	Zones      []ServiceAreaZone     `json:"zones"`
+	Categories []ServiceAreaCategory `json:"categories"`
 }
 
 // ServiceAreaInput saves the area; RadiusMiles nil takes the default of the provider's categories.

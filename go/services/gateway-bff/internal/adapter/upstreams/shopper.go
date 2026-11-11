@@ -380,6 +380,9 @@ func (b *customerBookingsImpl) SearchPlace(ctx context.Context, p port.ServiceSe
 			v.Set(k, s)
 		}
 	}
+	if p.Radius != nil {
+		v.Set("radiusMiles", strconv.Itoa(*p.Radius))
+	}
 	var out port.UpBkSearch
 	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/public/services/search", Query: v}, &out)
 	return out, err

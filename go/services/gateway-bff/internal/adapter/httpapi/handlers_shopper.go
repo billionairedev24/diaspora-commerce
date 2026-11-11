@@ -467,7 +467,7 @@ func slotQueryOf(r *http.Request) (port.SlotQuery, error) {
 
 func (h *handlersImpl) searchServices(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	v, err := h.s.Shopper.Services.Search(r.Context(), callerFrom(r.Context()), q.Get("q"), q.Get("category"), q.Get("zip"), q.Get("sort"))
+	v, err := h.s.Shopper.Services.Search(r.Context(), callerFrom(r.Context()), q.Get("q"), q.Get("category"), q.Get("zip"), q.Get("sort"), q.Get("radiusMiles"))
 	h.ok(w, r, v, err)
 }
 

@@ -264,8 +264,6 @@ type ServiceListingArea struct {
 	DistanceMiles float64  `json:"distanceMiles"`
 	Zone          string   `json:"zone,omitempty"`
 	Serves        []string `json:"serves"`
-	// Nearest is true for a suggestion outside the provider's usual coverage (never shown as a local match).
-	Nearest bool `json:"nearest"`
 }
 
 // ServiceCategoryCount is the number of services per category that serve the place.
@@ -276,18 +274,20 @@ type ServiceCategoryCount struct {
 
 // ServiceSearch is the services directory for a ZIP.
 //
-// Coverage is LOCAL (providers serve the place), NEAREST (none do; Nearest lists providers outside their usual
-// coverage, within the staff-set maximum), NONE (nothing, not even nearby) or ANY (no location given). Categories lists
-// what the place has (never a zero count).
+// Coverage is LOCAL (providers serve the place within the distance searched), NONE (nothing within it) or ANY (no
+// location given). RadiusMiles is the distance searched for shops the shopper goes to (0 = any distance) and
+// RadiusDefault says it is the category default, not the shopper's choice. Categories lists what the place has (never a
+// zero count).
 type ServiceSearch struct {
-	ZIP        string                 `json:"zip"`
-	City       string                 `json:"city"`
-	State      string                 `json:"state"`
-	Zone       string                 `json:"zone,omitempty"`
-	Coverage   string                 `json:"coverage"`
-	Services   []ServiceListing       `json:"services"`
-	Nearest    []ServiceListing       `json:"nearest"`
-	Categories []ServiceCategoryCount `json:"categories"`
+	ZIP           string                 `json:"zip"`
+	City          string                 `json:"city"`
+	State         string                 `json:"state"`
+	Zone          string                 `json:"zone,omitempty"`
+	Coverage      string                 `json:"coverage"`
+	Services      []ServiceListing       `json:"services"`
+	Categories    []ServiceCategoryCount `json:"categories"`
+	RadiusMiles   int                    `json:"radiusMiles"`
+	RadiusDefault bool                   `json:"radiusDefault"`
 }
 
 // ServiceAlertRequest is "tell me when a provider joins": an email (a signed-in shopper may omit it) and optionally a

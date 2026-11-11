@@ -21,7 +21,7 @@ func TestStaffServiceAreaSettings(t *testing.T) {
 
 	rules := jsonOf(t, do("admin", "GET", "/v1/staff/resources/service-area-rules", nil, 200))
 	rows := rules["rows"].([]any)
-	if len(rows) != 4 { // hair & beauty, catering, any other category, platform limits
+	if len(rows) != 3 { // hair & beauty, catering, any other category: defaults, not limits
 		t.Fatalf("rule rows = %v", rows)
 	}
 	cells := rows[0].(map[string]any)["cells"].(map[string]any)
@@ -35,7 +35,22 @@ func TestStaffServiceAreaSettings(t *testing.T) {
 	if b := f.bodies["PUT /v1/staff/service-areas/policy"]; b["reason"] != "Caterers asked for a wider default" {
 		t.Fatalf("policy change = %v", b)
 	}
-	do("admin", "PATCH", "/v1/staff/resources/service-area-rules/_limits", map[string]any{"values": map[string]any{"customerTravelMiles": 35, "nearestMaxMiles": 50, "reason": "Shorter fallback"}}, 200)
+	// There is no customer travel limit or nearest-suggestion distance any more: that row is gone and so are the words.
+	do("admin", "PATCH", "/v1/staff/resources/service-area-rules/_limits", map[string]any{"values": map[string]any{"customerTravelMiles": 35, "reason": "Shorter fallback"}}, 404)
+	do("admin", "PATCH", "/v1/staff/resources/service-area-rules/_fallback", map[string]any{"values": map[string]any{"defaultMiles": 30, "minMiles": 5, "maxMiles": 60, "reason": "A wider default for other services"}}, 200)
+	if body := f.bodies["PUT /v1/staff/service-areas/policy"]; body["reason"] != "A wider default for other services" {
+		t.Fatalf("fallback change = %v", body)
+	}
+	for _, raw := range []string{string(do("admin", "GET", "/v1/staff/resources/service-area-rules", nil, 200).Body.Bytes()),
+		string(do("admin", "GET", "/v1/staff/resources/service-area-rules/catering", nil, 200).Body.Bytes())} {
+		low := strings.ToLower(raw)
+		if strings.Contains(low, "travel limit") || strings.Contains(low, "nearest suggestion") || strings.Contains(low, "platform limits") {
+			t.Fatalf("limits wording is gone: %s", raw)
+		}
+		if !strings.Contains(low, "default search radius") {
+			t.Fatalf("relabelled as the default search radius: %s", raw)
+		}
+	}
 
 	zones := jsonOf(t, do("admin", "GET", "/v1/staff/resources/service-zones", nil, 200))
 	zrow := zones["rows"].([]any)[0].(map[string]any)

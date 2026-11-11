@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 // slots, the provider page (bookings profile + the provider's published storefront page), booking with a deposit
 // and the customer's bookings (cancel with the exact refund quote, reschedule, new-time answers, review).
 type ServicesService interface {
-	Search(ctx context.Context, c *domain.Caller, q, category, zip, sort string) (domain.ServiceSearch, error)
+	Search(ctx context.Context, c *domain.Caller, q, category, zip, sort, radius string) (domain.ServiceSearch, error)
 	Suggest(ctx context.Context, q string) ([]string, error)
 	AlertMe(ctx context.Context, c *domain.Caller, req domain.ServiceAlertRequest) error
 	Service(ctx context.Context, id string) (domain.ServiceDetail, error)
@@ -146,7 +147,7 @@ func listing(l port.UpBkListing) domain.ServiceListing {
 		ImageURL: l.ImageURL}
 	if a := l.Area; a != nil {
 		out.Area = &domain.ServiceListingArea{BaseCity: a.BaseCity, BaseState: a.BaseState, DistanceMiles: a.DistanceMiles, Zone: a.Zone,
-			Serves: orEmpty(a.Serves), Nearest: a.Nearest}
+			Serves: orEmpty(a.Serves)}
 	}
 	return out
 }
@@ -159,14 +160,40 @@ func listings(in []port.UpBkListing) []domain.ServiceListing {
 	return out
 }
 
-// Search lists in-person services that serve the visitor's place: the deliver-to location unless a ZIP is given.
-func (s *servicesServiceImpl) Search(ctx context.Context, c *domain.Caller, q, category, zip, sort string) (domain.ServiceSearch, error) {
+// maxRadiusMiles is only a sanity bound on what a shopper may ask for: nothing limits how far they choose to go.
+const maxRadiusMiles = 1000
+
+// parseRadius reads the shopper's chosen distance: empty = the category default (nil), "any" or 0 = any distance,
+// otherwise 1..maxRadiusMiles miles.
+func parseRadius(s string) (*int, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return nil, nil
+	}
+	if s == "any" {
+		zero := 0
+		return &zero, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 || n > maxRadiusMiles {
+		return nil, domain.FieldProblem(domain.CodeValidationFailed, "Check the distance", "radiusMiles", "Choose a distance from 1 to 1000 miles, or any.")
+	}
+	return &n, nil
+}
+
+// Search lists in-person services that serve the visitor's place: the deliver-to location unless a ZIP is given. The
+// shopper chooses how far to go to a shop (radius); without a choice each category's default applies.
+func (s *servicesServiceImpl) Search(ctx context.Context, c *domain.Caller, q, category, zip, sort, radius string) (domain.ServiceSearch, error) {
 	if len(q) > 120 || len(category) > 60 {
 		return domain.ServiceSearch{}, domain.ValidationProblem(map[string]string{"q": "At most 120 characters"})
 	}
 	sort = strings.ToUpper(sort)
 	if sort != "" && !serviceSorts[sort] {
 		return domain.ServiceSearch{}, domain.ValidationProblem(map[string]string{"sort": "Choose NEAREST, SOONEST, PRICE or RATING"})
+	}
+	chosen, err := parseRadius(radius)
+	if err != nil {
+		return domain.ServiceSearch{}, err
 	}
 	city, state := "", ""
 	if zip == "" && s.d.Location != nil {
@@ -176,13 +203,13 @@ func (s *servicesServiceImpl) Search(ctx context.Context, c *domain.Caller, q, c
 	if zip != "" && !zip5.MatchString(zip) {
 		return domain.ServiceSearch{}, domain.FieldProblem(domain.CodeValidationFailed, "Check the ZIP code", "zip", "Enter a 5-digit US ZIP code.")
 	}
-	res, err := s.d.Bookings.SearchPlace(ctx, port.ServiceSearchParams{Q: strings.TrimSpace(q), Category: category, ZIP: zip, Sort: sort})
+	res, err := s.d.Bookings.SearchPlace(ctx, port.ServiceSearchParams{Q: strings.TrimSpace(q), Category: category, ZIP: zip, Sort: sort, Radius: chosen})
 	if err != nil {
 		return domain.ServiceSearch{}, bookingsErr(err)
 	}
 	out := domain.ServiceSearch{ZIP: zip, City: firstNonEmpty(res.Place.City, city), State: firstNonEmpty(res.Place.State, state),
-		Zone: res.Place.Zone, Coverage: firstNonEmpty(res.Coverage, "ANY"), Services: listings(res.Services), Nearest: listings(res.Nearest),
-		Categories: make([]domain.ServiceCategoryCount, 0, len(res.Categories))}
+		Zone: res.Place.Zone, Coverage: firstNonEmpty(res.Coverage, "ANY"), Services: listings(res.Services),
+		Categories: make([]domain.ServiceCategoryCount, 0, len(res.Categories)), RadiusMiles: res.RadiusMiles, RadiusDefault: chosen == nil}
 	for _, c := range res.Categories {
 		if c.Count > 0 {
 			out.Categories = append(out.Categories, domain.ServiceCategoryCount{Category: c.Category, Count: c.Count})

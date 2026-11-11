@@ -5774,7 +5774,7 @@ components:
       properties: {defaultMiles: {type: integer}, minMiles: {type: integer}, maxMiles: {type: integer}}
     ServiceAreaView:
       type: object
-      required: [area, bounds, customerTravelMiles, zones, categories]
+      required: [area, bounds, zones, categories]
       properties:
         area:
           oneOf:
@@ -5790,7 +5790,6 @@ components:
                 zone: {type: string}
             - {type: 'null'}
         bounds: {$ref: '#/components/schemas/ServiceAreaRadius'}
-        customerTravelMiles: {type: integer, description: How far customers are assumed to travel to a shop ("You go to them")}
         zones:
           type: array
           items:

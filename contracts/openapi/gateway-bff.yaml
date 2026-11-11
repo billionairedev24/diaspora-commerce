@@ -3225,16 +3225,22 @@ paths:
       operationId: searchServices
       summary: In-person services that serve the visitor's place (the deliver-to location; zip overrides)
       description: |
-        Services are in person only. A provider is listed when it serves the place: within its radius (comes to you),
-        within the customer-travel limit (you go to them) or a named area/zone. Results are ranked per `sort`.
-        `coverage` is LOCAL, NEAREST (nobody serves the place: `nearest` lists providers outside their usual coverage,
-        within the staff-set maximum, each flagged `area.nearest`), NONE, or ANY (no location). `categories` counts the
-        services per category at the place; categories with no services are not listed.
+        Services are in person only. A provider is listed when it serves the place: a service that comes to you when
+        you are within the provider's own radius, a shop you go to when it is within `radiusMiles` of you (your choice,
+        any value 1-1000 or `any`; omitted = the category's default, staff-editable), or a named area/zone. There is no
+        platform distance limit. Results are ranked per `sort` (nearest first by default) and carry the distance.
+        `coverage` is LOCAL, NONE (nothing within the distance searched) or ANY (no location). `radiusMiles` in the
+        response is the distance searched (0 = any distance) and `radiusDefault` says it was the category default.
+        `categories` counts the services per category at the place; categories with no services are not listed.
       parameters:
         - {name: q, in: query, schema: {type: string, maxLength: 120}}
         - {name: category, in: query, schema: {type: string, maxLength: 60}}
         - {name: zip, in: query, schema: {type: string, pattern: '^\d{5}$'}}
         - {name: sort, in: query, schema: {type: string, enum: [NEAREST, SOONEST, PRICE, RATING], default: NEAREST}}
+        - name: radiusMiles
+          in: query
+          description: 'How far the shopper will go to a shop, in miles (1-1000), or `any` / `0` for any distance. Omitted = the category default.'
+          schema: {type: string, pattern: '^(any|\d{1,4})$'}
       responses:
         '200':
           description: Services
@@ -6447,14 +6453,13 @@ components:
       enum: [IN_PERSON, AT_HOME]
     ServiceListingArea:
       type: object
-      required: [baseCity, baseState, distanceMiles, serves, nearest]
+      required: [baseCity, baseState, distanceMiles, serves]
       properties:
         baseCity: {type: string}
         baseState: {type: string}
         distanceMiles: {type: number}
         zone: {type: string, description: Metro zone of the base city}
         serves: {type: array, items: {type: string}, description: 'Cities served, the visitor''s first'}
-        nearest: {type: boolean, description: Outside the provider's usual coverage (a suggestion, not a match)}
     ServiceListing:
       type: object
       required: [serviceId, orgId, name, providerName, description, category, durationMinutes, priceFromMinor, depositMinor, currency, modes, rating, ratingCount, nextAvailable, location, delivery, imageUrl, area]
@@ -6482,15 +6487,16 @@ components:
             - {type: 'null'}
     ServiceSearch:
       type: object
-      required: [zip, city, state, coverage, services, nearest, categories]
+      required: [zip, city, state, coverage, services, categories, radiusMiles, radiusDefault]
       properties:
         zip: {type: string}
         city: {type: string}
         state: {type: string}
         zone: {type: string}
-        coverage: {type: string, enum: [LOCAL, NEAREST, NONE, ANY]}
+        coverage: {type: string, enum: [LOCAL, NONE, ANY]}
         services: {type: array, items: {$ref: '#/components/schemas/ServiceListing'}}
-        nearest: {type: array, items: {$ref: '#/components/schemas/ServiceListing'}}
+        radiusMiles: {type: integer, description: 'Miles searched for shops the shopper goes to; 0 = any distance'}
+        radiusDefault: {type: boolean, description: 'true = the category default, the shopper chose nothing'}
         categories:
           type: array
           items:

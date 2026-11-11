@@ -12,14 +12,15 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// Service areas (Settings > Markets & locations): the radius policy per service category and the platform's metro zones.
+// Service areas (Settings > Markets & locations): the default search radius per service category and the platform's metro
+// zones. The radius rules are DEFAULTS for what a shopper searches until they choose their own distance, never limits:
+// the platform sets no limit on how far a shopper goes. A provider's declared radius is how far they travel to customers.
 // Bookings owns both (GET/PUT /v1/staff/service-areas/...); every change carries a reason and is audited there.
 // docs/engineering/service-areas.md explains how the policy and the zones decide which providers a customer sees.
 
 const (
 	areaRulesPath = "/v1/staff/service-areas/policy"
 	areaZonesPath = "/v1/staff/service-areas/zones"
-	areaLimitsID  = "_limits"
 )
 
 func areaPolicy(ctx context.Context, sc staffCtx) (jobj, error) {
@@ -48,9 +49,6 @@ func areaRuleRows(p jobj) []jobj {
 	}
 	fb, _ := p["fallback"].(map[string]any)
 	rows = append(rows, ruleRow("_fallback", "Any other category", fb))
-	rows = append(rows, jobj{"id": areaLimitsID, "name": "Platform limits", "customerTravelMiles": num(p, "customerTravelMiles"),
-		"nearestMaxMiles": num(p, "nearestMaxMiles"), "note": fmt.Sprintf("Customers are assumed to travel up to %.0f miles to a shop; the nearest suggestions go up to %.0f miles.",
-			num(p, "customerTravelMiles"), num(p, "nearestMaxMiles"))})
 	return rows
 }
 
@@ -75,36 +73,26 @@ func serviceAreaRulesResource() *staffResource {
 		return nil, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such rule.")
 	}
 	return &staffResource{
-		key: "service-area-rules", module: "markets", title: "Service radius rules", exportable: false,
-		columns: []domain.Column{col("name", "Service category", "strong", 34), col("defaultMiles", "Default radius (mi)", "number", 16), col("minMiles", "Minimum (mi)", "number", 14),
-			col("maxMiles", "Maximum (mi)", "number", 14), col("note", "Notes", "text", 22)},
+		key: "service-area-rules", module: "markets", title: "Default search radius by category", exportable: false,
+		columns: []domain.Column{col("name", "Service category", "strong", 34), col("defaultMiles", "Default search radius (mi)", "number", 20), col("minMiles", "Provider minimum (mi)", "number", 18),
+			col("maxMiles", "Provider maximum (mi)", "number", 18)},
 		idOf: func(o jobj) string { return jstr(o, "id") },
 		list: listAll(load), get: rule,
-		titleOf:    func(o jobj) string { return jstr(o, "name") },
-		subtitleOf: func(o jobj) string { return "Providers choose their radius between the minimum and the maximum" },
+		titleOf: func(o jobj) string { return jstr(o, "name") },
+		subtitleOf: func(o jobj) string {
+			return "Shoppers search this far by default and can choose any distance; providers declare how far they travel to customers between the minimum and the maximum"
+		},
 		sections: func(o jobj) []domain.DetailSection {
-			if jstr(o, "id") == areaLimitsID {
-				return []domain.DetailSection{{Title: "Platform limits", Fields: []domain.DetailField{
-					fieldOf("Customer travel limit (miles)", jstr(o, "customerTravelMiles"), "text"),
-					fieldOf("Nearest suggestions up to (miles)", jstr(o, "nearestMaxMiles"), "text")}}}
-			}
 			return []domain.DetailSection{{Title: "Radius", Fields: []domain.DetailField{
-				fieldOf("Default", jstr(o, "defaultMiles"), "text"), fieldOf("Minimum", jstr(o, "minMiles"), "text"), fieldOf("Maximum", jstr(o, "maxMiles"), "text")}}}
+				fieldOf("Default search radius", jstr(o, "defaultMiles"), "text"), fieldOf("Provider minimum", jstr(o, "minMiles"), "text"), fieldOf("Provider maximum", jstr(o, "maxMiles"), "text")}}}
 		},
 		edit: &staffEdit{permission: "content:markets.edit",
 			form: func(o jobj) domain.Form {
-				if jstr(o, "id") == areaLimitsID {
-					return domain.Form{Title: "Platform limits", SubmitLabel: "Save", Intro: "Services are in person only. A customer who goes to a provider's shop is matched within the smaller of the provider's radius and the travel limit. When nobody serves a place, providers outside their usual coverage are suggested up to the nearest-suggestion distance (0 turns the suggestions off).",
-						Fields: []domain.FormField{
-							withValue(withRange(ff("customerTravelMiles", "Customer travel limit (miles)", "number", true), 150), num(o, "customerTravelMiles")),
-							withValue(withRange(ff("nearestMaxMiles", "Nearest suggestions up to (miles)", "number", true), 300), num(o, "nearestMaxMiles")),
-							withMax(ff("reason", "Reason (kept in the audit trail)", "textarea", true), 500)}}
-				}
-				return domain.Form{Title: "Radius rule for " + jstr(o, "name"), SubmitLabel: "Save", Intro: "What a provider may choose for the radius of the services it lists in this category.",
+				return domain.Form{Title: "Default search radius for " + jstr(o, "name"), SubmitLabel: "Save", Intro: "The default is how far shoppers search in this category until they choose their own distance: it is not a limit, shoppers may pick any distance. Providers declare how far they travel to customers between the minimum and the maximum.",
 					Fields: []domain.FormField{
-						withValue(withRange(ff("defaultMiles", "Default radius (miles)", "number", true), 150), num(o, "defaultMiles")),
-						withValue(withRange(ff("minMiles", "Minimum (miles)", "number", true), 150), num(o, "minMiles")),
-						withValue(withRange(ff("maxMiles", "Maximum (miles)", "number", true), 150), num(o, "maxMiles")),
+						withValue(withRange(ff("defaultMiles", "Default search radius (miles)", "number", true), 150), num(o, "defaultMiles")),
+						withValue(withRange(ff("minMiles", "Provider minimum radius (miles)", "number", true), 150), num(o, "minMiles")),
+						withValue(withRange(ff("maxMiles", "Provider maximum radius (miles)", "number", true), 150), num(o, "maxMiles")),
 						withMax(ff("reason", "Reason (kept in the audit trail)", "textarea", true), 500)}}
 			},
 			save: func(ctx context.Context, sc staffCtx, o jobj, v jobj, _ string) error {
@@ -117,19 +105,13 @@ func serviceAreaRulesResource() *staffResource {
 					return err
 				}
 				id := jstr(o, "id")
-				switch id {
-				case areaLimitsID:
-					p["customerTravelMiles"] = int64(vn(v, "customerTravelMiles"))
-					p["nearestMaxMiles"] = int64(vn(v, "nearestMaxMiles"))
-				default:
-					r := jobj{"defaultMiles": int64(vn(v, "defaultMiles")), "minMiles": int64(vn(v, "minMiles")), "maxMiles": int64(vn(v, "maxMiles"))}
-					if id == "_fallback" {
-						p["fallback"] = r
-					} else {
-						byCat, _ := p["byCategory"].(map[string]any)
-						byCat[id] = r
-						p["byCategory"] = byCat
-					}
+				r := jobj{"defaultMiles": int64(vn(v, "defaultMiles")), "minMiles": int64(vn(v, "minMiles")), "maxMiles": int64(vn(v, "maxMiles"))}
+				if id == "_fallback" {
+					p["fallback"] = r
+				} else {
+					byCat, _ := p["byCategory"].(map[string]any)
+					byCat[id] = r
+					p["byCategory"] = byCat
 				}
 				return sc.call(ctx, sc.up.Bookings, port.StaffCall{Method: http.MethodPut, Path: areaRulesPath, Body: jobj{"policy": p, "reason": reason}}, nil)
 			}},

@@ -552,7 +552,6 @@ type UpBkArea struct {
 	DistanceMiles float64  `json:"distanceMiles"`
 	Zone          string   `json:"zone"`
 	Serves        []string `json:"serves"`
-	Nearest       bool     `json:"nearest"`
 }
 
 // UpBkSearch is bookings' PublicServiceSearch for a place.
@@ -565,16 +564,19 @@ type UpBkSearch struct {
 	} `json:"place"`
 	Coverage   string        `json:"coverage"`
 	Services   []UpBkListing `json:"services"`
-	Nearest    []UpBkListing `json:"nearest"`
 	Categories []struct {
 		Category string `json:"category"`
 		Count    int    `json:"count"`
 	} `json:"categories"`
+	RadiusMiles   int  `json:"radiusMiles"`
+	RadiusDefault bool `json:"radiusDefault"`
 }
 
 // ServiceSearchParams are the filters of a services search.
 type ServiceSearchParams struct {
 	Q, Category, ZIP, Sort string
+	// Radius is the shopper's distance in miles for shops they go to: nil = the category default, 0 = any distance.
+	Radius *int
 }
 
 // UpBkBooking is bookings' Booking (customer view).
