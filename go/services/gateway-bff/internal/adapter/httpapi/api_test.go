@@ -346,6 +346,22 @@ func TestPendingUpstreamsAnswer503(t *testing.T) {
 	}
 }
 
+func TestHomeAdEventsAreCountedPerPlacementWithoutIdentity(t *testing.T) {
+	bff, b := setup(t, testkit.Options{Content: true})
+	mustStatus(t, b.do("POST", "/v1/home/ad-events", map[string]string{"placementId": "plc_home_brand", "event": "impression"}), 204)
+	mustStatus(t, b.do("POST", "/v1/home/ad-events", map[string]string{"placementId": "plc_home_brand", "event": "click"}), 204)
+	if n := bff.Upstreams.CallCount("POST /v1/placements/plc_home_brand/events"); n != 2 {
+		t.Fatalf("content calls = %d, want 2", n)
+	}
+	for _, bad := range []map[string]string{{"placementId": "plc_home_brand", "event": "view"}, {"placementId": "../x", "event": "click"}, {"event": "click"}} {
+		mustStatus(t, b.do("POST", "/v1/home/ad-events", bad), 422)
+	}
+	mustStatus(t, b.do("POST", "/v1/home/ad-events", map[string]string{"placementId": "plc_gone", "event": "click"}), 404)
+	if n := bff.Upstreams.CallCount("POST /v1/placements/plc_home_brand/events"); n != 2 {
+		t.Fatalf("invalid events must not reach content (calls = %d)", n)
+	}
+}
+
 func TestRecentlyViewedCards(t *testing.T) {
 	_, b := setup(t, testkit.Options{Content: true})
 	// Order is kept, duplicates collapse, and out-of-stock (garri), unknown and malformed ids are dropped.

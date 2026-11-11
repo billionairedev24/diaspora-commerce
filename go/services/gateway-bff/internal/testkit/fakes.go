@@ -1195,6 +1195,13 @@ func (u *Upstreams) contentRoutes(mux *http.ServeMux) {
 			{"id": "plc_unknown", "slot": "checkout_cross_sell", "priority": 10, "payload": map[string]any{"title": "x", "skus": []string{"ATSHEA0001"}}},
 		}})
 	})
+	mux.HandleFunc("POST /v1/placements/{id}/events", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") == "plc_gone" {
+			problem(w, 404, "content.placement-not-found", "No such placement", nil)
+			return
+		}
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("GET /v1/markets/eligibility", func(w http.ResponseWriter, r *http.Request) {
 		allowed := r.URL.Query().Get("state") != "NY" // New York switched off in this fixture
 		writeJSON(w, 200, map[string]any{"country": r.URL.Query().Get("country"), "countryStatus": "LIVE", "region": r.URL.Query().Get("state"),
