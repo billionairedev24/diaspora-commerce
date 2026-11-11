@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -35,6 +36,7 @@ import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.SellingApplication;
 import com.afrotransact.seller.domain.SellingAssignmentRules;
+import com.afrotransact.seller.domain.SellingDocuments;
 import com.afrotransact.seller.domain.SlaState;
 import com.afrotransact.seller.domain.TimelineEntry;
 import com.afrotransact.seller.port.CallerProfileProvider;
@@ -162,6 +164,9 @@ class SellingReviewServiceImpl implements SellingReviewService {
             return caseView(app, actor);
         }
         enforceAssignee(app, actor);
+        if (cmd.action() == ReviewAction.APPROVE) {
+            requireDocuments(app);
+        }
         Instant now = Instant.now(clock);
         SellingApplication next = apps.update(app.review(cmd.action(), actor.subject(), reason.code(),
                 cmd.failedChecks(), cmd.requestedItems(), cmd.note(), now));
@@ -187,6 +192,9 @@ class SellingReviewServiceImpl implements SellingReviewService {
             throw new SellerRuleViolation("seller.note-required", "Tell the seller why they cannot apply",
                     Map.of("note", "Required"));
         }
+        if (cmd.action() == ReviewAction.FINAL_APPROVE) {
+            requireDocuments(app);
+        }
         Instant now = Instant.now(clock);
         SellingApplication next = apps.update(app.decide(cmd.action(), actor.subject(), reason.code(),
                 cmd.requestedItems(), cmd.note(), reapplyAfter, now));
@@ -199,6 +207,20 @@ class SellingReviewServiceImpl implements SellingReviewService {
             default -> { }
         }
         return caseView(next, actor);
+    }
+
+    /** An approval needs every required document on file and none expired (a migrated application starts with none). */
+    private void requireDocuments(SellingApplication app) {
+        LocalDate submitted = (app.submittedAt() == null ? Instant.now(clock) : app.submittedAt())
+                .atZone(ZoneOffset.UTC).toLocalDate();
+        rules.find(app.scope()).ifPresent(rule -> SellingDocuments.require(rule.documents(), app.documents(),
+                submitted));
+        LocalDate today = Instant.now(clock).atZone(ZoneOffset.UTC).toLocalDate();
+        if (app.documents().stream().anyMatch(d -> d.expiresOn() != null && !d.expiresOn().isAfter(today))) {
+            throw new SellerRuleViolation("seller.selling-documents-invalid",
+                    "A document has expired since it was uploaded: ask the seller for a current one",
+                    Map.of("documents", "Expired"));
+        }
     }
 
     private boolean isReplay(SellingApplication app, ReviewCommand cmd, Actor actor) {

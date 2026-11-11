@@ -1,5 +1,8 @@
 package com.afrotransact.seller.adapter.in.scheduling;
 
+import java.time.Clock;
+import java.time.Instant;
+
 import com.afrotransact.seller.application.BillingAdjustmentService;
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.ComplianceService;
@@ -7,8 +10,11 @@ import com.afrotransact.seller.application.ConnectedAccountSyncService;
 import com.afrotransact.seller.application.EscalationService;
 import com.afrotransact.seller.application.ChargeGateEvaluator;
 import com.afrotransact.seller.application.EarningsCollectionService;
+import com.afrotransact.seller.application.FoodServiceMigrationService;
 import com.afrotransact.seller.application.InvoiceCollectionService;
 import com.afrotransact.seller.application.RewardService;
+import com.afrotransact.seller.application.SellingApprovalService;
+import com.afrotransact.seller.application.SellingReviewService;
 import com.afrotransact.seller.application.UsageMeteringService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,11 +42,17 @@ class SellerJobs {
     private final ChargeGateEvaluator gates;
     private final ConnectedAccountSyncService accountSync;
     private final EscalationService escalation;
+    private final SellingApprovalService selling;
+    private final SellingReviewService sellingReview;
+    private final FoodServiceMigrationService foodService;
+    private final Clock clock;
 
     SellerJobs(ComplianceService compliance, BillingService billing, UsageMeteringService metering,
                RewardService rewards, BillingAdjustmentService adjustments, EarningsCollectionService earnings,
                InvoiceCollectionService collection, ChargeGateEvaluator gates,
-               ConnectedAccountSyncService accountSync, EscalationService escalation) {
+               ConnectedAccountSyncService accountSync, EscalationService escalation,
+               SellingApprovalService selling, SellingReviewService sellingReview,
+               FoodServiceMigrationService foodService, Clock clock) {
         this.compliance = compliance;
         this.billing = billing;
         this.metering = metering;
@@ -51,6 +63,10 @@ class SellerJobs {
         this.gates = gates;
         this.accountSync = accountSync;
         this.escalation = escalation;
+        this.selling = selling;
+        this.sellingReview = sellingReview;
+        this.foodService = foodService;
+        this.clock = clock;
     }
 
     /**
@@ -67,6 +83,40 @@ class SellerJobs {
                 LOG.info("Escalated {} application(s)", raised);
             }
         });
+    }
+
+    /** Selling approvals: the same escalation as applications, for the "Selling approval" case type. */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.escalation-interval:5m}",
+            initialDelayString = "${at.seller.jobs.escalation-interval:5m}")
+    void sellingEscalations() {
+        run("selling-escalations", () -> {
+            int raised = sellingReview.runDueEscalations();
+            if (raised > 0) {
+                LOG.info("Escalated {} selling approval case(s)", raised);
+            }
+        });
+    }
+
+    /**
+     * Selling approval lifecycle, hourly: warnings 30, 14 and 7 days before a document expires, expiry, and after 14
+     * days of grace the scope's listings are paused (never deleted). Each approval is checked under its row lock and
+     * stamps what it did, so replicas running at once and re-runs warn, expire and pause once.
+     */
+    @Scheduled(cron = "${at.seller.jobs.selling-lifecycle-cron:0 10 * * * *}", zone = "UTC")
+    void sellingLifecycle() {
+        run("selling-lifecycle", () -> {
+            int changed = selling.runLifecycle(Instant.now(clock));
+            if (changed > 0) {
+                LOG.info("Selling approval lifecycle changed {} approval(s)", changed);
+            }
+        });
+    }
+
+    /** D11: bakery answers become PENDING food service applications for staff (idempotent, never approves). */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.food-service-migration-interval:6h}",
+            initialDelayString = "${at.seller.jobs.food-service-migration-initial-delay:2m}")
+    void foodServiceMigration() {
+        run("food-service-migration", foodService::run);
     }
 
     /**

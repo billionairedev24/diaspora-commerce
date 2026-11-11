@@ -5,9 +5,11 @@ import java.time.Duration;
 import java.util.Set;
 
 import com.afrotransact.seller.adapter.out.billing.RruleBillingScheduler;
+import com.afrotransact.seller.adapter.out.catalog.HttpBakeryClaims;
 import com.afrotransact.seller.adapter.out.catalog.HttpDepartmentDirectory;
 import com.afrotransact.seller.adapter.out.crypto.AesGcmFieldCipher;
 import com.afrotransact.seller.adapter.out.geo.HttpGeoClient;
+import com.afrotransact.seller.port.BakeryClaims;
 import com.afrotransact.seller.port.DepartmentDirectory;
 import org.springframework.beans.factory.annotation.Value;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestPlanPayments;
@@ -90,6 +92,12 @@ class SellerConfiguration {
                                             @Value("${at.seller.catalog.timeout:3s}") Duration timeout,
                                             @Value("${at.seller.catalog.departments-ttl:60s}") Duration ttl, Clock clock) {
         return new HttpDepartmentDirectory(baseUrl, timeout, ttl, clock);
+    }
+
+    @Bean
+    BakeryClaims bakeryClaims(@Value("${at.seller.catalog.base-url:http://localhost:8101}") String baseUrl,
+                              @Value("${at.seller.catalog.timeout:3s}") Duration timeout, ServiceTokens tokens) {
+        return new HttpBakeryClaims(baseUrl, timeout, tokens);
     }
 
     @Bean
