@@ -114,6 +114,43 @@ paths:
       responses:
         '200': {description: Place, content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/zips/nearby:
+    get:
+      tags: [Addresses]
+      operationId: nearbyCities
+      summary: Cities around a point from the US ZIP-centroid table (service-area preview and matching)
+      description: |
+        Distinct cities (city + state) with a ZIP centroid within `miles` of the point, nearest first; `distanceMiles`
+        is to the city's nearest ZIP. Reference data, cacheable for a day. `GET /v1/zip/{zip}` answers from the same
+        table (city, state, centroid) before any vendor is called.
+      security: []
+      parameters:
+        - {name: lat, in: query, required: true, schema: {type: number, minimum: -90, maximum: 90}}
+        - {name: lon, in: query, required: true, schema: {type: number, minimum: -180, maximum: 180}}
+        - {name: miles, in: query, required: true, schema: {type: number, minimum: 1, maximum: 150}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: Cities
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [city, state, lat, lon, distanceMiles, zips]
+                      properties:
+                        city: {type: string}
+                        state: {type: string}
+                        lat: {type: number}
+                        lon: {type: number}
+                        distanceMiles: {type: number}
+                        zips: {type: array, items: {type: string}}
+        '400': {$ref: '#/components/responses/Problem'}
   /v1/reverse:
     get:
       tags: [Addresses]

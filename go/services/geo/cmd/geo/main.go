@@ -29,6 +29,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/roadrouter"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/routecache"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/smarty"
+	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/zipindex"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/port"
@@ -104,7 +105,11 @@ func run() error {
 	if cfg.Smarty.AuthID != "" {
 		validator = smarty.New(cfg.Smarty.AuthID, cfg.Smarty.AuthToken, "", httpClient)
 	}
-	addresses := app.NewAddressService(providers, validator, smarty.NewRules(), log)
+	zipIndex, err := zipindex.New()
+	if err != nil {
+		return fmt.Errorf("zip index: %w", err)
+	}
+	addresses := app.WithZipIndex(app.NewAddressService(providers, validator, smarty.NewRules(), log), zipIndex)
 	store := postgis.New(pool)
 	zones := app.NewZoneService(store)
 
@@ -132,6 +137,7 @@ func run() error {
 			nil),
 	}, log)
 	httpapi.New(addresses, reverse, zones, distances).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
+	httpapi.NewZips(zipIndex).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
 	world, err := gazetteer.New()
 	if err != nil {
 		return fmt.Errorf("gazetteer: %w", err)

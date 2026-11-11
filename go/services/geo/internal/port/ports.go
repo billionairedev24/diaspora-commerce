@@ -71,3 +71,12 @@ type Gazetteer interface {
 	// Search returns places whose name contains q, prefix matches first, at most limit (country "" = anywhere).
 	Search(q, country string, limit int) []domain.PlaceMatch
 }
+
+// ZipIndex answers ZIP and nearby-place questions from the embedded US ZIP-centroid table (no vendor call).
+type ZipIndex interface {
+	// Lookup returns the ZIP's city, state and centroid; ok is false for an unknown ZIP.
+	Lookup(zip string) (domain.ZipPlace, bool)
+	// Nearby returns the distinct cities (city + state) with a ZIP centroid within miles of the point, nearest
+	// first, at most limit of them.
+	Nearby(lat, lon, miles float64, limit int) []domain.NearbyCity
+}
