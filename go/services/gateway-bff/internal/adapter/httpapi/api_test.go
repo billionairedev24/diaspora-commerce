@@ -341,7 +341,7 @@ func TestPendingUpstreamsAnswer503(t *testing.T) {
 	}
 	// Home degrades to default rails (search-backed) instead of failing.
 	home := b.do("GET", "/v1/home", nil).json(t)
-	if len(home["rails"].([]any)) == 0 || home["deliverTo"].(map[string]any)["zip"] != "77042" {
+	if len(home["blocks"].([]any)) == 0 || home["deliverTo"].(map[string]any)["zip"] != "77042" {
 		t.Fatalf("home = %v", home)
 	}
 }
@@ -386,9 +386,16 @@ func TestContentBackedScreens(t *testing.T) {
 		t.Fatalf("site config fetched %d times; want 1 (cached)", n)
 	}
 	home := b.do("GET", "/v1/home", nil).json(t)
-	rails := home["rails"].([]any)
+	// The body is the banner and the rails by priority, as typed blocks; the rails keep their order.
+	var rails []any
+	for _, b := range home["blocks"].([]any) {
+		if blk := b.(map[string]any); blk["type"] == "rail" {
+			rails = append(rails, blk["rail"])
+		}
+	}
+	banner := home["blocks"].([]any)[1].(map[string]any)
 	if len(home["announcements"].([]any)) != 1 || len(home["hero"].([]any)) != 1 || len(home["tiles"].([]any)) != 1 ||
-		home["banners"].([]any)[0].(map[string]any)["slot"] != "home-mid" || len(rails) != 2 || rails[0].(map[string]any)["title"] != "Pantry staples" {
+		banner["type"] != "banner" || banner["sponsored"] != true || len(rails) != 2 || rails[0].(map[string]any)["title"] != "Pantry staples" {
 		t.Fatalf("home = %v", home)
 	}
 	// Both terms are searched, but the garri hit is out of stock: rails only show in-stock products with a real photo.

@@ -204,7 +204,7 @@ func TestHomeChangesWithTheShoppersZIP(t *testing.T) {
 	f := &localFixture{search: &rulesSearch{hits: map[string][]port.SearchHit{"|rating|": hits}}}
 	from := map[string]string{"ATLOC00000": "Houston, TX", "ATLOC00001": "Dallas, TX", "ATLOC00002": "Edison, NJ", "ATLOC00003": "Bronx, NY",
 		"ATLOC00004": "Edison, NJ", "ATLOC00005": "AfroTransact"}
-	pl := domain.Placements{Rails: []domain.RailPlacement{{ID: "near", Title: "Near {city}, {state}", Href: "/s", Source: domain.RailSource{Kind: "near-you", Limit: 12}}}}
+	pl := domain.Placements{Rails: []domain.RailPlacement{{MinItems: 1, ID: "near", Title: "Near {city}, {state}", Href: "/s", Source: domain.RailSource{Kind: "near-you", Limit: 12}}}}
 	svc := f.service(pl, from, nil)
 
 	tx, err := svc.Home(context.Background(), guestAt("77042"))
@@ -238,8 +238,8 @@ func TestHomeChangesWithTheShoppersZIP(t *testing.T) {
 
 func TestNearYouRailIsHiddenWhenNothingShipsNearby(t *testing.T) {
 	f := &localFixture{search: &rulesSearch{hits: map[string][]port.SearchHit{"|rating|": localHits(3)}}}
-	pl := domain.Placements{Rails: []domain.RailPlacement{{ID: "near", Title: "Near {city}", Href: "/s", Source: domain.RailSource{Kind: "near-you"}},
-		{ID: "popular", Title: "Popular", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: "rating"}}}}
+	pl := domain.Placements{Rails: []domain.RailPlacement{{MinItems: 1, ID: "near", Title: "Near {city}", Href: "/s", Source: domain.RailSource{Kind: "near-you"}},
+		{MinItems: 1, ID: "popular", Title: "Popular", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: "rating"}}}}
 	home, err := f.service(pl, map[string]string{"ATLOC00000": "Edison, NJ"}, nil).Home(context.Background(), guestAt("77042"))
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +255,7 @@ func TestNearYouRailIsHiddenWhenNothingShipsNearby(t *testing.T) {
 func TestDeliverableFastKeepsPromisesWithinDaysAndNamesTheDay(t *testing.T) {
 	f := &localFixture{search: &rulesSearch{hits: map[string][]port.SearchHit{"|relevance|": localHits(4)}}}
 	days := map[string]int{"77042|ATLOC00000": 1, "77042|ATLOC00001": 2, "77042|ATLOC00002": 5, "08817|ATLOC00002": 1}
-	pl := domain.Placements{Rails: []domain.RailPlacement{{ID: "fast", Title: "Get it by {day}", Href: "/s", Source: domain.RailSource{Kind: "deliverable-fast"}}}}
+	pl := domain.Placements{Rails: []domain.RailPlacement{{MinItems: 1, ID: "fast", Title: "Get it by {day}", Href: "/s", Source: domain.RailSource{Kind: "deliverable-fast"}}}}
 	svc := f.service(pl, nil, days)
 
 	tx, _ := svc.Home(context.Background(), guestAt("77042"))
@@ -286,8 +286,8 @@ func TestHomeShowsAProductOnce(t *testing.T) {
 			{Source: &domain.RailSource{Kind: "search", Department: "Groceries", Sort: "rating"}},
 			{Source: &domain.RailSource{Kind: "search", Department: "Groceries", Sort: "rating"}}}}},
 		Rails: []domain.RailPlacement{
-			{ID: "a", Title: "A", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: "rating"}},
-			{ID: "b", Title: "B", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: "rating"}}}}
+			{MinItems: 1, ID: "a", Title: "A", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: "rating"}},
+			{MinItems: 1, ID: "b", Title: "B", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: "rating"}}}}
 	home, err := f.service(pl, nil, nil).Home(context.Background(), guestAt("77042"))
 	if err != nil {
 		t.Fatal(err)

@@ -1190,8 +1190,8 @@ func (u *Upstreams) contentRoutes(mux *http.ServeMux) {
 			{"id": "plc_tiles", "slot": "home_tiles", "priority": 10, "payload": map[string]any{"title": "Shop by community", "cta": "See all", "href": "/communities",
 				"cells": []map[string]any{{"label": "Nigerian", "href": "/communities/nigerian", "imageUrl": nil}, {"label": "Ghanaian", "href": "/communities/ghanaian"}}}},
 			{"id": "plc_banner", "slot": "display_banner", "priority": 10, "payload": map[string]any{"position": "home-mid", "advertiser": "Bonwire Weavers", "title": "Kente", "sub": "Hand-woven", "cta": "Shop", "href": "/s?q=kente", "imageUrl": nil}},
-			{"id": "plc_row_fast", "slot": "home_product_row", "priority": 20, "payload": map[string]any{"title": "Pantry staples", "href": "/s?q=garri", "query": "jollof OR garri OR nothing-matches"}},
-			{"id": "plc_row_picked", "slot": "home_product_row", "priority": 10, "payload": map[string]any{"title": "Picked for you", "href": "/s", "skus": []string{"ATSHEA0001", "ATNOPE0000"}}},
+			{"id": "plc_row_fast", "slot": "home_product_row", "priority": 20, "payload": map[string]any{"title": "Pantry staples", "href": "/s?q=garri", "query": "jollof OR garri OR nothing-matches", "minItems": 1}},
+			{"id": "plc_row_picked", "slot": "home_product_row", "priority": 10, "payload": map[string]any{"title": "Picked for you", "href": "/s", "skus": []string{"ATSHEA0001", "ATNOPE0000"}, "minItems": 1}},
 			{"id": "plc_unknown", "slot": "checkout_cross_sell", "priority": 10, "payload": map[string]any{"title": "x", "skus": []string{"ATSHEA0001"}}},
 		}})
 	})

@@ -206,6 +206,29 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+  /v1/home/ad-events:
+    post:
+      tags: [Site]
+      operationId: recordHomeAdEvent
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Count an impression or a click on a paid home module
+      description: |
+        The storefront reports each paid module (`HomeBlock.sponsored`) once per view (impression, when at least half of
+        it was visible) and on click. Counted per placement and UTC day by content; nothing identifies the shopper.
+        Sponsored product cards are not reported here: they use `POST /v1/search/clicks`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [placementId, event]
+              properties:
+                placementId: {type: string, examples: [plc_home_brand_demo]}
+                event: {type: string, enum: [impression, click]}
+      responses:
+        '204': {description: Counted}
+        '400': {$ref: '#/components/responses/Problem'}
   /v1/newsletter/subscriptions:
     post:
       tags: [Site]
@@ -4431,15 +4454,63 @@ components:
         title: {type: string}
         href: {type: string}
         items: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+    HomeBlock:
+      type: object
+      description: |
+        One module of the home page body, in the order staff set. `type` decides which fields are filled; clients ignore
+        types they do not know. Paid modules (`brand-banner`, `sponsored-products`, `ad-row`, `advertorial`, `banner`) always carry
+        `sponsored: true` and the `advertiser`; the placement `id` is what impressions and clicks are reported against
+        (`POST /v1/home/ad-events`). Sponsored products are reported with the existing search click endpoint (`searchId`,
+        the card's `sponsor.adToken`).
+      required: [id, type, sponsored]
+      properties:
+        id: {type: string}
+        type:
+          type: string
+          description: rail, banner, brand-banner, sponsored-products, ad-row, advertorial, deals, based-on-orders, recently-viewed, preorders, services-near-you, community-spotlight, seller-spotlight, membership-promo, signin-promo, occasions
+        sponsored: {type: boolean}
+        advertiser: {type: string}
+        title: {type: string}
+        sub: {type: string}
+        body: {type: string}
+        cta: {type: string}
+        href: {type: string}
+        imageUrl: {type: [string, 'null']}
+        logoUrl: {type: [string, 'null']}
+        tone: {type: string}
+        rail: {$ref: '#/components/schemas/Rail'}
+        products: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+        ads:
+          type: array
+          items:
+            type: object
+            required: [imageUrl, alt, href, advertiser]
+            properties:
+              imageUrl: {type: string}
+              alt: {type: string}
+              href: {type: string}
+              advertiser: {type: string}
+        cells:
+          type: array
+          items:
+            type: object
+            required: [label, href, imageUrl]
+            properties:
+              label: {type: string}
+              href: {type: string}
+              imageUrl: {type: [string, 'null']}
+              sub: {type: string}
+        endsAt: {type: string, format: date-time, description: When a deals module ends (countdown)}
+        searchId: {type: string, description: The search a sponsored products module came from; send it with each click}
+        maxPerSession: {type: integer, description: Most times one browser session shows this paid module (0 = no cap)}
     Home:
       type: object
-      required: [announcements, hero, tiles, banners, rails, deliverTo]
+      required: [announcements, hero, tiles, blocks, deliverTo]
       properties:
         announcements: {type: array, items: {$ref: '#/components/schemas/Announcement'}}
         hero: {type: array, items: {$ref: '#/components/schemas/HeroSlide'}}
         tiles: {type: array, items: {$ref: '#/components/schemas/Tile'}}
-        banners: {type: array, items: {$ref: '#/components/schemas/Banner'}}
-        rails: {type: array, items: {$ref: '#/components/schemas/Rail'}}
+        blocks: {type: array, items: {$ref: '#/components/schemas/HomeBlock'}}
         deliverTo: {$ref: '#/components/schemas/DeliveryLocation'}
     DeliveryLocation:
       type: object

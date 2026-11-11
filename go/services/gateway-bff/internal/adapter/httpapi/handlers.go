@@ -130,6 +130,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/site-config", h.siteConfig)
 	route("GET /v1/home", h.home)
 	route("GET /v1/home/recently-viewed", h.recentlyViewed)
+	route("POST /v1/home/ad-events", h.adEvent)
 	route("POST /v1/newsletter/subscriptions", lookup(h.newsletter))
 	// Legal & privacy center
 	route("GET /v1/legal", h.legalIndex)
@@ -287,6 +288,20 @@ func (h *handlersImpl) home(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) recentlyViewed(w http.ResponseWriter, r *http.Request) {
 	items, err := h.s.Site.RecentlyViewed(r.Context(), strings.Split(r.URL.Query().Get("atins"), ","))
 	h.reply(w, r, http.StatusOK, map[string]any{"items": items}, err)
+}
+
+// adEvent counts an impression or click on a paid home module. Fire and forget for the browser: 204, no identity kept.
+func (h *handlersImpl) adEvent(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		PlacementID string `json:"placementId"`
+		Event       string `json:"event"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	err := h.s.Site.RecordAdEvent(r.Context(), b.PlacementID, b.Event)
+	h.reply(w, r, http.StatusNoContent, nil, err)
 }
 
 func (h *handlersImpl) newsletter(w http.ResponseWriter, r *http.Request) {

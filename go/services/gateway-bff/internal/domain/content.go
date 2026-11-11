@@ -69,12 +69,16 @@ type Rail struct {
 
 // Home is the home page.
 type Home struct {
-	Announcements []Announcement   `json:"announcements"`
-	Hero          []HeroSlide      `json:"hero"`
-	Tiles         []Tile           `json:"tiles"`
-	Banners       []Banner         `json:"banners"`
-	Rails         []Rail           `json:"rails"`
-	DeliverTo     DeliveryLocation `json:"deliverTo"`
+	Announcements []Announcement `json:"announcements"`
+	Hero          []HeroSlide    `json:"hero"`
+	Tiles         []Tile         `json:"tiles"`
+	// Blocks is the composed page body under the tiles, in the order staff set: product rails, sponsored modules and
+	// the rule-based modules. The storefront renders by Type and ignores types it does not know.
+	Blocks []HomeBlock `json:"blocks"`
+	// Banners and Rails are the same blocks seen as the older two lists; kept for tests and internal callers only.
+	Banners   []Banner         `json:"-"`
+	Rails     []Rail           `json:"-"`
+	DeliverTo DeliveryLocation `json:"deliverTo"`
 }
 
 // RailSource says how a placement rail (or a rule-based tile cell) is filled: a search (query/department/fulfilment,
@@ -101,6 +105,8 @@ type RailPlacement struct {
 	Title  string     `json:"title"` // may contain {city}
 	Href   string     `json:"href"`
 	Source RailSource `json:"source"`
+	// MinItems hides the rail when fewer products qualify (default MinRailItems).
+	MinItems int `json:"-"`
 }
 
 // Placements is what content resolves for a market/ZIP.
@@ -111,6 +117,18 @@ type Placements struct {
 	Banners           []Banner        `json:"banners"`
 	Rails             []RailPlacement `json:"rails"`
 	CheckoutCrossSell []RailPlacement `json:"-"`
+	// Body lists every body placement (rails, banners, sponsored modules, blocks) with its priority, in content's
+	// order. When empty the page body is built from Banners and Rails as before.
+	Body []BodyPlacement `json:"-"`
+}
+
+// BodyPlacement is one placement of the page body as content serves it. Payload is the slot's JSON.
+type BodyPlacement struct {
+	ID         string
+	Slot       string
+	Priority   int
+	Advertiser string
+	Payload    []byte
 }
 
 // SiteConfig is published site configuration, passed through as content serves it (contract schema SiteConfig).

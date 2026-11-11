@@ -58,6 +58,7 @@ func (k *contentImpl) SiteConfig(ctx context.Context) (port.ContentSiteConfig, e
 type servedPlacement struct {
 	ID         string          `json:"id"`
 	Slot       string          `json:"slot"`
+	Priority   int             `json:"priority"`
 	Label      string          `json:"label"`
 	Advertiser string          `json:"advertiser"`
 	Payload    json.RawMessage `json:"payload"`
@@ -80,10 +81,17 @@ func (k *contentImpl) Placements(ctx context.Context, market, zip string) (domai
 	}, k.ttl)
 }
 
+// bodySlots are the slots whose placements make up the home page body, composed by priority in the gateway.
+var bodySlots = map[string]bool{"home_product_row": true, "display_banner": true, "home_brand_banner": true, "home_sponsored_products": true,
+	"home_ad_row": true, "home_advertorial": true, "home_block": true}
+
 // placementsFrom maps slot payloads onto the home page shapes; payloads that do not decode are skipped.
 func placementsFrom(in []servedPlacement) domain.Placements {
 	var p domain.Placements
 	for _, sp := range in {
+		if bodySlots[sp.Slot] {
+			p.Body = append(p.Body, domain.BodyPlacement{ID: sp.ID, Slot: sp.Slot, Priority: sp.Priority, Advertiser: sp.Advertiser, Payload: sp.Payload})
+		}
 		switch sp.Slot {
 		case "announcement_bar":
 			var a domain.Announcement
@@ -135,17 +143,19 @@ func placementsFrom(in []servedPlacement) domain.Placements {
 				Department string `json:"department"`
 				MaxDays    int    `json:"maxDays"`
 				Community  string `json:"community"`
+				MinItems   int    `json:"minItems"`
 			}
 			if json.Unmarshal(sp.Payload, &r) == nil && r.Title != "" {
-				src := domain.RailSource{Kind: "search", Query: r.Query, Limit: 12}
+				src := domain.RailSource{Kind: "search", Query: r.Query, Limit: 24}
 				if r.Kind != "" {
-					src = domain.RailSource{Kind: r.Kind, Query: r.Query, Department: r.Department, MaxDays: r.MaxDays, Community: r.Community, Limit: 12}
+					src = domain.RailSource{Kind: r.Kind, Query: r.Query, Department: r.Department, MaxDays: r.MaxDays, Community: r.Community, Limit: 24}
 				}
 				if len(r.SKUs) > 0 {
-					src = domain.RailSource{Kind: "atins", ATINs: r.SKUs, Limit: 12}
+					src = domain.RailSource{Kind: "atins", ATINs: r.SKUs, Limit: 24}
 				}
-				rp := domain.RailPlacement{ID: sp.ID, Title: r.Title, Href: r.Href, Source: src}
+				rp := domain.RailPlacement{ID: sp.ID, Title: r.Title, Href: r.Href, Source: src, MinItems: r.MinItems}
 				if sp.Slot == "checkout_cross_sell" {
+					rp.Source.Limit = 12
 					p.CheckoutCrossSell = append(p.CheckoutCrossSell, rp)
 				} else {
 					p.Rails = append(p.Rails, rp)
@@ -154,6 +164,12 @@ func placementsFrom(in []servedPlacement) domain.Placements {
 		}
 	}
 	return p
+}
+
+func (k *contentImpl) RecordPlacementEvent(ctx context.Context, placementID, kind string) error {
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/placements/" + url.PathEscape(placementID) + "/events",
+		JSON: map[string]string{"kind": kind}}, nil)
+	return err
 }
 
 func (k *contentImpl) Subscribe(ctx context.Context, email string) (string, error) {

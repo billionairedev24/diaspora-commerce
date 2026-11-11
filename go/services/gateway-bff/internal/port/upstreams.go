@@ -425,6 +425,8 @@ type ContentSiteConfig struct {
 type ContentClient interface {
 	SiteConfig(ctx context.Context) (ContentSiteConfig, error)
 	Placements(ctx context.Context, market, zip string) (domain.Placements, error)
+	// RecordPlacementEvent counts an "impression" or "click" on a placement (paid home modules).
+	RecordPlacementEvent(ctx context.Context, placementID, kind string) error
 	Subscribe(ctx context.Context, email string) (string, error)
 	Jobs(ctx context.Context) ([]domain.Job, error)
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)

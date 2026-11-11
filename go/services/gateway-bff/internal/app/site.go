@@ -28,6 +28,8 @@ type SiteService interface {
 	// hides the rail when the result is empty.
 	RecentlyViewed(ctx context.Context, atins []string) ([]domain.ProductSummary, error)
 	CheckoutCrossSell(ctx context.Context, c *domain.Caller) (*domain.Rail, error)
+	// RecordAdEvent counts an impression or click ("impression" | "click") on a paid home module's placement.
+	RecordAdEvent(ctx context.Context, placementID, kind string) error
 	Subscribe(ctx context.Context, email string) (string, error)
 	Jobs(ctx context.Context) ([]domain.Job, error)
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)
@@ -58,6 +60,8 @@ type SiteDeps struct {
 	Offers port.StorefrontOffersClient
 	// Orders (optional) feeds the signed-in "Based on your orders" rail.
 	Orders port.OrdersClient
+	// Services (optional) tells the "Services near you" module whether providers list for the shopper's ZIP.
+	Services port.CustomerBookingsClient
 	// Promise (optional) feeds the deliverable-fast rule: the delivery promise to the shopper's ZIP.
 	Promise   port.PromiseClient
 	Location  LocationService
@@ -158,10 +162,10 @@ func siteConfigBody(c port.ContentSiteConfig, enabled map[string]bool) map[strin
 // defaultPlacements keep the home page useful while content is unavailable: product rails only.
 func defaultPlacements() domain.Placements {
 	return domain.Placements{Rails: []domain.RailPlacement{
-		{ID: "deliverable-fast", Title: "Get it by {day}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "deliverable-fast", Limit: 12}},
-		{ID: "near-you", Title: "Shipping from near {city}", Href: "/s", Source: domain.RailSource{Kind: "near-you", Limit: 12}},
-		{ID: "fastest", Title: "Fast delivery to {city}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "fulfilled-fastest", Limit: 12}},
-		{ID: "popular", Title: "Popular right now", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: domain.SortRating, Limit: 12}},
+		{ID: "deliverable-fast", Title: "Get it by {day}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "deliverable-fast", Limit: 24}},
+		{ID: "near-you", Title: "Shipping from near {city}", Href: "/s", Source: domain.RailSource{Kind: "near-you", Limit: 24}},
+		{ID: "fastest", Title: "Fast delivery to {city}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "fulfilled-fastest", Limit: 24}},
+		{ID: "popular", Title: "Popular right now", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: domain.SortRating, Limit: 24}},
 	}}
 }
 
@@ -174,33 +178,14 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 	}
 	now := s.d.Clock.now()
 	sc := newScope(loc, c, now)
-	rails := make([]*domain.Rail, len(pl.Rails))
-	var wg sync.WaitGroup
-	var personal *domain.Rail
-	wg.Go(func() { personal = s.basedOnOrders(ctx, c, sc) })
-	for i, r := range pl.Rails {
-		wg.Go(func() {
-			items, err := s.railItems(ctx, r.Source, sc)
-			if err != nil {
-				s.d.Log.InfoContext(ctx, "rail not resolved", "rail", r.ID, "error", err)
-				return
-			}
-			if len(items) > 0 {
-				rails[i] = &domain.Rail{ID: r.ID, Title: s.railTitle(r.Title, loc, items, now), Href: r.Href, Items: items}
-			}
-		})
-	}
 	tiles := pl.Tiles
 	for i := range tiles {
 		if len(tiles[i].Cells) > 4 {
 			tiles[i].Cells = tiles[i].Cells[:4]
 		}
 	}
-	wg.Go(func() { tiles = s.resolveTiles(ctx, tiles, sc) })
-	wg.Wait()
-	home := domain.Home{Announcements: orEmpty(pl.Announcements), Hero: activeHero(pl.Hero, now), Tiles: orEmpty(tiles),
-		Banners: orEmpty(pl.Banners), Rails: []domain.Rail{}, DeliverTo: loc}
-	// A product is on the page once: tiles first, then the personal rail, then the rails in page order.
+	tiles = s.resolveTiles(ctx, tiles, sc)
+	// A product is on the page once: tiles first, then the body in the order staff set it.
 	used := map[string]bool{}
 	for _, t := range tiles {
 		for _, cell := range t.Cells {
@@ -209,14 +194,16 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 			}
 		}
 	}
-	all := dedupeRails(append([]*domain.Rail{personal}, rails...), used)
-	if all[0] != nil {
-		home.Rails = append(home.Rails, *all[0])
-	}
-	for _, r := range all[1:] {
-		if r != nil {
-			home.Rails = append(home.Rails, *r)
+	blocks := s.composeBody(ctx, c, loc, pl, sc, now, used)
+	home := domain.Home{Announcements: orEmpty(pl.Announcements), Hero: activeHero(pl.Hero, now), Tiles: orEmpty(tiles),
+		Blocks: orEmpty(blocks), Banners: []domain.Banner{}, Rails: []domain.Rail{}, DeliverTo: loc}
+	for _, b := range blocks {
+		if b.Rail != nil && (b.Type == domain.BlockRail || b.Type == domain.BlockBasedOnOrders) {
+			home.Rails = append(home.Rails, *b.Rail)
 		}
+	}
+	for _, b := range pl.Banners {
+		home.Banners = append(home.Banners, b)
 	}
 	return home, nil
 }
