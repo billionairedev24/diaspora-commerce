@@ -793,7 +793,7 @@ class Seeder:
         mine = [p for p in current if p.get("name") == seeded and p.get("status") in ("LIVE", "SCHEDULED", "IN_REVIEW", "DRAFT")]
         zips = sorted(zip_prefixes or [])
         same = next((p for p in mine if p.get("payload") == payload and p.get("status") in ("LIVE", "SCHEDULED")
-                     and p.get("priority") == priority
+                     and p.get("priority", priority) == priority
                      and sorted((p.get("targeting") or {}).get("zipPrefixes") or []) == zips), None)
         if same:
             self.report.add("placements", "existing")
