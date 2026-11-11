@@ -176,7 +176,7 @@ func (s *servicesServiceImpl) Search(ctx context.Context, c *domain.Caller, q, c
 	if zip != "" && !zip5.MatchString(zip) {
 		return domain.ServiceSearch{}, domain.FieldProblem(domain.CodeValidationFailed, "Check the ZIP code", "zip", "Enter a 5-digit US ZIP code.")
 	}
-	res, err := s.d.Bookings.Search(ctx, port.ServiceSearchParams{Q: strings.TrimSpace(q), Category: category, ZIP: zip, Sort: sort})
+	res, err := s.d.Bookings.SearchPlace(ctx, port.ServiceSearchParams{Q: strings.TrimSpace(q), Category: category, ZIP: zip, Sort: sort})
 	if err != nil {
 		return domain.ServiceSearch{}, bookingsErr(err)
 	}

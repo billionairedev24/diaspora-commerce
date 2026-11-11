@@ -368,7 +368,12 @@ func slotQuery(q port.SlotQuery) url.Values {
 	return v
 }
 
-func (b *customerBookingsImpl) Search(ctx context.Context, p port.ServiceSearchParams) (port.UpBkSearch, error) {
+func (b *customerBookingsImpl) Search(ctx context.Context, q, category, zip string) ([]port.UpBkListing, error) {
+	res, err := b.SearchPlace(ctx, port.ServiceSearchParams{Q: q, Category: category, ZIP: zip})
+	return res.Services, err
+}
+
+func (b *customerBookingsImpl) SearchPlace(ctx context.Context, p port.ServiceSearchParams) (port.UpBkSearch, error) {
 	v := url.Values{"size": {"40"}}
 	for k, s := range map[string]string{"q": p.Q, "category": p.Category, "zip": p.ZIP, "sort": p.Sort} {
 		if s != "" {
