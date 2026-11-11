@@ -846,6 +846,26 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
   };
 }
 
+/** A stored "12 months" of a rule-owned measure (shelf life, net weight) as the form holds it: the number, and its unit apart. Idempotent. */
+export function splitMeasures(s: FormState, rules: ListingRules | undefined): FormState {
+  const fields = ruleAttributeFields(rules).filter((f) => f.control === 'measure' && f.units.length);
+  if (!fields.length) return s;
+  const attrs = { ...s.attrs };
+  const units = { ...s.units };
+  let changed = false;
+  fields.forEach((f) => {
+    const key = f.attributeKey ?? f.id;
+    const m = /^(\S+)\s+(.+)$/.exec((attrs[key] ?? '').trim());
+    const unit = m?.[2]?.trim();
+    if (m && unit && f.units.includes(unit)) {
+      attrs[key] = m[1] ?? '';
+      units[key] = unit;
+      changed = true;
+    }
+  });
+  return changed ? { ...s, attrs, units } : s;
+}
+
 /* ── Edit and drafts ── */
 
 const money = (minor: number | null) => (minor ? (minor / 100).toFixed(2) : '');

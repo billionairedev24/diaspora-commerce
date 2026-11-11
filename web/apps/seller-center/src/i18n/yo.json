@@ -547,7 +547,7 @@
   "sc.pf.ai.upgrade": "Wo àwọn ètò",
   "sc.pf.images.drop": "Ju àwọn àwòrán síbí",
   "sc.pf.images.browse": "tàbí tẹ̀ láti wá wọn",
-  "sc.pf.images.rules": "{count}/{max} · JPG, PNG tàbí WebP · títí dé 8 MB · àwòrán pàtàkì ó kéré tán {px} px",
+  "sc.pf.images.rules": "{count}/{max} · JPG, PNG tàbí WebP · títí dé 8 MB",
   "sc.pf.images.max": "Àwòrán {max} ní púpọ̀ jù.",
   "sc.pf.images.type": "{name}: lo JPG, PNG tàbí WebP.",
   "sc.pf.images.size": "{name}: ó ju 8 MB lọ.",

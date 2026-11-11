@@ -10,6 +10,7 @@ import {
   comboKey,
   combos,
   emptyForm,
+  emptyPackage,
   fieldId,
   fillSkus,
   type FormState,
@@ -19,7 +20,7 @@ import {
   gtinOk,
   leavesOf,
   orderedProblems,
-  packagingOf,
+  packageOf,
   previewAttributes,
   priceMinor,
   qualityItems,
@@ -51,7 +52,7 @@ function suya(): FormState {
     units: { shelf: 'months' },
     images: [image],
     noGtin: true,
-    single: { sku: 'suya-1', gtin: '', price: '8.99', compareAt: '11.99', qty: '40', image: '' }
+    single: { sku: 'suya-1', gtin: '', price: '8.99', compareAt: '11.99', qty: '40', image: '', pkg: emptyPackage() }
   };
 }
 
@@ -66,8 +67,8 @@ describe('one-step product form: sections follow the product type', () => {
   });
 
   it('searches categories by every word, accent-insensitively', () => {
-    const leaves = leavesOf([{ id: 'd', name: 'Beauty', level: 'DEPARTMENT', productType: null, path: 'Beauty', children: [
-      { id: 'b', name: 'Butters & oils', level: 'PRODUCT_TYPE', productType: 'beauty', path: 'Beauty › Skin & body › Butters & oils', children: [] }] }]);
+    const leaves = leavesOf([{ id: 'd', code: 'beauty', name: 'Beauty', level: 'DEPARTMENT', productType: null, path: 'Beauty', children: [
+      { id: 'b', code: 'butters', name: 'Butters & oils', level: 'PRODUCT_TYPE', productType: 'beauty', path: 'Beauty › Skin & body › Butters & oils', children: [] }] }]);
     expect(searchLeaves(leaves, 'skin butters').map((l) => l.id)).toEqual(['b']);
     expect(searchLeaves(leaves, 'BÉAUTY')).toHaveLength(1);
     expect(searchLeaves(leaves, 'dress')).toEqual([]);
@@ -87,13 +88,13 @@ describe('one-step product form: validation and readiness', () => {
     expect(validateForm({ ...suya(), single: { ...suya().single, compareAt: '5' } }, grocery)[fieldId.compareAt]?.key).toBe('sc.pf.err.compareAt');
     expect(validateForm({ ...suya(), noGtin: false, single: { ...suya().single, gtin: '4006381333932' } }, grocery)[fieldId.gtin]?.key).toBe('sc.pf.err.gtin');
     expect(validateForm({ ...suya(), noGtin: false, single: { ...suya().single, gtin: '4006381333931' } }, grocery)).toEqual({});
-    expect(validateForm({ ...suya(), fulfilment: 'AFROTRANSACT' }, grocery)[fieldId.pkg]?.key).toBe('sc.pf.err.packageFba');
-    expect(validateForm({ ...suya(), fulfilment: 'AFROTRANSACT', pkg: { length: '6', width: '4', height: '2', weight: '0.5' } }, grocery)).toEqual({});
+    expect(validateForm({ ...suya(), fulfilment: 'AFROTRANSACT' }, grocery)[fieldId.pkg]?.key).toBe('sc.pf.err.packageRequired');
+    expect(validateForm({ ...suya(), fulfilment: 'AFROTRANSACT', single: { ...suya().single, pkg: { length: '6', width: '4', height: '2', weight: '0.5' } } }, grocery)).toEqual({});
     // The package can be typed in cm and kg: limits and the submission use inches and pounds.
-    const metric = { ...suya(), fulfilment: 'AFROTRANSACT' as const, pkgUnits: { size: 'cm' as const, weight: 'kg' as const }, pkg: { length: '30', width: '20', height: '10', weight: '1' } };
-    expect(packagingOf(metric)).toEqual({ lengthIn: 11.81, widthIn: 7.87, heightIn: 3.94, weightLb: 2.2 });
+    const metric = { ...suya(), fulfilment: 'AFROTRANSACT' as const, pkgUnits: { size: 'cm' as const, weight: 'kg' as const }, single: { ...suya().single, pkg: { length: '30', width: '20', height: '10', weight: '1' } } };
+    expect(packageOf(metric.single.pkg, metric.pkgUnits)).toEqual({ lengthIn: 11.81, widthIn: 7.87, heightIn: 3.94, weightLb: 2.2 });
     expect(validateForm(metric, grocery)).toEqual({});
-    expect(validateForm({ ...metric, pkg: { ...metric.pkg, length: '300' } }, grocery)[fieldId.pkg]?.key).toBe('sc.pf.err.packageLimits');
+    expect(validateForm({ ...metric, single: { ...metric.single, pkg: { ...metric.single.pkg, length: '300' } } }, grocery)[fieldId.pkg]?.key).toBe('sc.pf.err.packageLimits');
     expect(toProductDraft(metric, grocery).listing?.packaging).toEqual({ lengthIn: 11.81, widthIn: 7.87, heightIn: 3.94, weightLb: 2.2 });
     expect(validateForm({ ...suya(), attrs: { ...suya().attrs, shelf: 'a year' } }, grocery)[fieldId.attr('shelf')]?.key).toBe('sc.pf.err.number');
     expect(validateForm({ ...suya(), images: [{ ...image, width: 600, height: 600 }] }, grocery)[fieldId.images]).toBeUndefined();
@@ -120,7 +121,7 @@ describe('one-step product form: validation and readiness', () => {
   it('keeps live variants: removing one is a problem', () => {
     const s: FormState = { ...suya(), ...withCategory(suya(), { id: 'pt-dresses', path: 'x', productType: 'dress' }), title: 'Ankara Wrap Dress', images: [image], noGtin: true,
       attrs: { brand: 'A', material: 'Cotton', fit: 'Regular', length: 'Midi' }, hasVariants: true, theme: 'Size', selected: { Size: ['M'] },
-      rows: { M: { sku: 'ANK-M', gtin: '', price: '49', compareAt: '', qty: '1', image: '' } } };
+      rows: { M: { sku: 'ANK-M', gtin: '', price: '49', compareAt: '', qty: '1', image: '', pkg: emptyPackage() } } };
     expect(validateForm(s, dress, { lockedSkus: ['ANK-M', 'ANK-L'] })[fieldId.theme]?.key).toBe('sc.pf.err.liveVariants');
   });
 });
@@ -258,7 +259,7 @@ describe('size guide: sized product types link a size chart', () => {
   const kaftan = (extra: Partial<FormState> = {}): FormState => ({
     ...withCategory(emptyForm(), { id: 'pt-men', path: 'Fashion › Men › Kaftans', productType: 'menwear' }), title: 'Agbada Kaftan Set in Cotton', images: [image], noGtin: true,
     attrs: { brand: 'Adire', material: 'Cotton', fit: 'Regular' }, hasVariants: true, theme: 'Size × Color', selected: { Size: ['M', '4XL'], Color: ['Gold'] },
-    rows: { 'M / Gold': { sku: 'K-M', gtin: '', price: '90', compareAt: '', qty: '2', image: '' }, '4XL / Gold': { sku: 'K-4', gtin: '', price: '95', compareAt: '', qty: '1', image: '' } }, ...extra
+    rows: { 'M / Gold': { sku: 'K-M', gtin: '', price: '90', compareAt: '', qty: '2', image: '', pkg: emptyPackage() }, '4XL / Gold': { sku: 'K-4', gtin: '', price: '95', compareAt: '', qty: '1', image: '', pkg: emptyPackage() } }, ...extra
   });
 
   it('adds the Size guide section after the variants, for sized types only', () => {
@@ -271,7 +272,7 @@ describe('size guide: sized product types link a size chart', () => {
     expect(validateForm(kaftan(), menwear)[fieldId.sizeChart]).toMatchObject({ key: 'sc.pf.err.sizeChartRequired', section: 'sizeGuide' });
     expect(validateForm(kaftan({ sizeChartId: 'c1' }), menwear)).toEqual({});
     const optional = { ...kaftan(), ...withCategory(emptyForm(), { id: 'pt-dresses', path: 'x', productType: 'dress' }) };
-    expect(validateForm({ ...optional, title: 'Ankara Wrap Dress', images: [image], noGtin: true, attrs: { brand: 'A', material: 'Cotton', fit: 'Regular', length: 'Midi' }, single: { sku: 'D-1', gtin: '', price: '40', compareAt: '', qty: '1', image: '' } }, dress)[fieldId.sizeChart]).toBeUndefined();
+    expect(validateForm({ ...optional, title: 'Ankara Wrap Dress', images: [image], noGtin: true, attrs: { brand: 'A', material: 'Cotton', fit: 'Regular', length: 'Midi' }, single: { sku: 'D-1', gtin: '', price: '40', compareAt: '', qty: '1', image: '', pkg: emptyPackage() } }, dress)[fieldId.sizeChart]).toBeUndefined();
   });
 
   it('checks the chart has a row for every size sold, ignoring case and spacing', () => {

@@ -547,7 +547,7 @@
   "sc.pf.ai.upgrade": "Voir les offres",
   "sc.pf.images.drop": "Déposez les images ici",
   "sc.pf.images.browse": "ou cliquez pour parcourir",
-  "sc.pf.images.rules": "{count}/{max} · JPG, PNG ou WebP · 8 Mo max · image principale d’au moins {px} px",
+  "sc.pf.images.rules": "{count}/{max} · JPG, PNG ou WebP · 8 Mo max",
   "sc.pf.images.max": "{max} images maximum.",
   "sc.pf.images.type": "{name} : utilisez JPG, PNG ou WebP.",
   "sc.pf.images.size": "{name} : plus de 8 Mo.",

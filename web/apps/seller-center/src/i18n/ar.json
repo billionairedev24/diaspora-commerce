@@ -547,7 +547,7 @@
   "sc.pf.ai.upgrade": "عرض الباقات",
   "sc.pf.images.drop": "أفلت الصور هنا",
   "sc.pf.images.browse": "أو انقر للتصفح",
-  "sc.pf.images.rules": "{count}/{max} · JPG أو PNG أو WebP · حتى 8 ميغابايت · الصورة الرئيسية {px} بكسل على الأقل",
+  "sc.pf.images.rules": "{count}/{max} · JPG أو PNG أو WebP · حتى 8 ميغابايت",
   "sc.pf.images.max": "حتى {max} صور.",
   "sc.pf.images.type": "{name}: استخدم JPG أو PNG أو WebP.",
   "sc.pf.images.size": "{name}: أكبر من 8 ميغابايت.",

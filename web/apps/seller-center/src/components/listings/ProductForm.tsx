@@ -15,8 +15,8 @@ import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { money, time } from '@/lib/format';
-import { useSeller } from '@/lib/session';
 import { useSellingStatus } from '@/lib/selling-status';
+import { useSeller } from '@/lib/session';
 
 import { ActionBar } from './form/ActionBar';
 import { AttributeField } from './form/AttributeField';
@@ -61,11 +61,11 @@ import {
   leavesOf,
   orderedProblems,
   previewAttributes,
-  rowsOf,
   priceMinor,
   type Problems,
   qualityItems,
   qualityScore,
+  rowsOf,
   ruleAttributeFields,
   ruleDocuments,
   rulesCodeOf,
@@ -74,6 +74,7 @@ import {
   sectionStatus,
   serverFieldId,
   soldSizes,
+  splitMeasures,
   toDraftPayload,
   toProductDraft,
   validateForm,
@@ -143,6 +144,11 @@ export function ProductForm({ productId }: { productId?: string }) {
       setReady(true);
     }
   }, [draftParam, savedDraft.data, editing, detail.data, typeQ.data, typeQ.isError]);
+
+  // A stored "12 months" shows as the number and its unit once the rules say which answers are measures (listing opened for edit).
+  useEffect(() => {
+    if (rules && loaded.current) setS((prev) => splitMeasures(prev, rules));
+  }, [rules, ready]);
 
   /* ── Change tracking, touched fields and server errors ── */
   const [touched, setTouched] = useState<Set<string>>(new Set());
@@ -394,8 +400,9 @@ export function ProductForm({ productId }: { productId?: string }) {
       ) : null}
       <SectionNav items={navItems} />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex min-w-0 flex-col gap-6">
+        <RequiredSummary items={items} rules={rules} onGo={jump} labelOf={(i) => labelOf(t, i.label)} />
         <form className="flex min-w-0 flex-col gap-6" noValidate onBlur={onBlur} onSubmit={(e) => { e.preventDefault(); primary(); }} aria-label={t('sc.pf.formLabel')}>
-          <RequiredSummary items={items} rules={rules} onGo={jump} labelOf={(i) => labelOf(t, i.label)} />
           <FormSection {...section('basics')} hint={editing ? undefined : t('sc.pf.s.basicsHint')}>
             <CategoryPicker tree={tree.data} s={s} locked={live} error={err(fieldId.category)}
               onChoose={(leaf: CategoryLeaf | null, request) => update((prev) => withCategory(prev, leaf, request ?? null))} />
@@ -619,6 +626,7 @@ export function ProductForm({ productId }: { productId?: string }) {
           ) : null}
           <button type="submit" className="at-visually-hidden" tabIndex={-1}>{primaryLabel}</button>
         </form>
+        </div>
         {type?.traits.sizing ? <SizeChartsManager open={manageCharts} onClose={() => setManageCharts(false)} /> : null}
         {type?.traits.sizing ? (
           <SizeChartEditor open={chartSheet !== null} chart={chartSheet === 'edit' ? (chart ?? null) : null} scope={{ productType: type.code, label: type.label }} selling={soldSizes(s, type)}

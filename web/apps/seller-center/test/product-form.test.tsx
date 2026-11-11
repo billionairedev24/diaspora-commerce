@@ -42,14 +42,15 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     expect(sectionTitles()).toEqual(['Basics', 'Photos']);
 
     await chooseCategory('spices', /Spices & seasonings/);
-    await screen.findByRole('heading', { level: 3, name: 'Food information' });
+    // The listing rules decide: packaged groceries ask the facts (net weight, servings, shelf life ...) under Details and upload slots under Compliance.
+    await screen.findByLabelText('Shelf life or expiry');
     expect(sectionTitles()).toEqual(['Basics', 'Photos', 'Price & stock', 'Details', 'Variants', 'Shipping & fulfilment', 'Compliance']);
-    expect(screen.queryByRole('heading', { name: 'Permits and licences' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Shelf life')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Documents' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Ingredients')).not.toBeInTheDocument();
 
     await chooseCategory('frozen', /Frozen vegetables/);
-    expect(await screen.findByRole('heading', { level: 3, name: 'Permits and licences' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Food facility / permit no.')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Permit or licence')).toBeInTheDocument();
+    expect(screen.getByLabelText('Storage')).toBeInTheDocument();
   });
 
   it('chooses a category by typing over its full path and the keyboard alone, then offers it as a recent one', async () => {
@@ -103,16 +104,17 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     expect(brand).toHaveValue('Nike');
     // moving to groceries drops the fashion brand: it is not sold there
     await chooseCategory('spices', /Spices & seasonings/);
-    const grocery = await screen.findByRole('combobox', { name: 'Brand (optional)' });
+    const grocery = await screen.findByRole('combobox', { name: 'Brand' });
     await waitFor(() => expect(grocery).toHaveValue(''));
   });
 
   it('uses a dropdown or a segmented control for every choice', async () => {
     await renderScreen(<ProductForm />);
     await chooseCategory('spices', /Spices & seasonings/);
-    await screen.findByLabelText('Shelf life');
-    // Dropdowns: condition, the enum attributes, the unit next to the number, ship-from and handling time.
-    for (const name of ['Condition', 'Allergens (FALCPA)', 'Storage', 'Unit of Shelf life', 'Ships from', 'Handling time (business days)']) {
+    await screen.findByLabelText('Shelf life or expiry');
+    // Dropdowns: the choice questions, the unit next to a number, ship-from and handling time. (Condition is not asked for food: the item is New.)
+    expect(screen.queryByLabelText('Condition')).not.toBeInTheDocument();
+    for (const name of ['Storage (optional)', 'Unit of Shelf life or expiry', 'Ships from', 'Handling time (business days)']) {
       expect(screen.getByRole('combobox', { name }).tagName).toBe('SELECT');
     }
     expect(within(screen.getByLabelText('Handling time (business days)')).getAllByRole('option').length).toBeGreaterThan(5);
@@ -121,7 +123,7 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     expect(within(ship).getByRole('button', { name: 'I ship it' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(within(ship).getByRole('button', { name: 'Fulfilled by AfroTransact' }));
     expect(within(ship).getByRole('button', { name: 'Fulfilled by AfroTransact' })).toHaveAttribute('aria-pressed', 'true');
-    // AfroTransact fulfilment: the ship-from choices go away and the package (with its unit selects) opens.
+    // AfroTransact fulfilment: the ship-from choices go away; the package (with its unit selects) is asked for every physical product, whoever ships it.
     expect(screen.queryByLabelText('Ships from')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Size unit').tagName).toBe('SELECT');
     expect(screen.getByLabelText('Weight unit').tagName).toBe('SELECT');
@@ -210,11 +212,11 @@ describe('attributes come from the product type (owner feedback)', () => {
     await chooseCategory('cookbooks', /African & Caribbean cooking/);
     await screen.findByLabelText('Author');
     expect(screen.queryByRole('combobox', { name: /Brand/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Brand/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Brand( \(optional\))?$/)).not.toBeInTheDocument();
     for (const label of ['Author', 'Publisher', 'Language', 'Pages']) expect(screen.getByLabelText(label)).toBeInTheDocument();
     // The ISBN is the identifier of a book and cannot be waived.
     expect(screen.getByLabelText('ISBN-13')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Books need an ISBN-13/)).toBeDisabled();
+    expect(screen.queryByLabelText(/Books need an ISBN-13/)).not.toBeInTheDocument();
     // Optional book fields are offered under More details.
     expect(screen.getByLabelText('Publication year (optional)').closest('details')).not.toHaveAttribute('open');
     expect(screen.getByLabelText('Edition (optional)')).toBeInTheDocument();
@@ -248,19 +250,22 @@ describe('section navigator, listing quality and the sticky actions', () => {
     await chooseCategory('cookbooks', /African & Caribbean cooking/);
     await screen.findByLabelText('Author');
     fireEvent.change(screen.getByLabelText('Product title'), { target: { value: 'Jollof Rice and Other Stories' } });
+    // A description is required for every kind of product.
+    expect(stateOf(/Basics/)).toBe('incomplete');
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Recipes from Lagos kitchens.' } });
     expect(stateOf(/Basics/)).toBe('complete');
     expect(within(sections()).getByRole('link', { name: /Basics/ })).toHaveTextContent('Complete');
     expect(stateOf(/Details/)).toBe('incomplete');
-    expect(within(sections()).getByRole('link', { name: /Details/ })).toHaveTextContent('4 to do');
+    expect(within(sections()).getByRole('link', { name: /Details/ })).toHaveTextContent('5 to do');
 
-    for (const [label, value] of [['Author', 'Ade Bello'], ['Publisher', 'Kachifo'], ['Pages', '240']] as const) fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    for (const [label, value] of [['Author', 'Ade Bello'], ['Publisher', 'Kachifo'], ['Pages', '240'], ['Country of origin', 'Nigeria']] as const) fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'English' } });
     expect(stateOf(/Details/)).toBe('complete');
     // The section card shows the same state.
     const card = document.querySelector('[data-section="details"]') as HTMLElement;
     expect(within(card).getByTestId('section-state')).toHaveTextContent('Complete');
-    // Shipping has valid defaults; Price & stock still needs SKU, ISBN, price and quantity.
-    expect(stateOf(/Shipping/)).toBe('complete');
+    // Every physical product needs its package (a book too); Price & stock still needs SKU, ISBN, price and quantity.
+    expect(stateOf(/Shipping/)).toBe('incomplete');
     expect(stateOf(/Price & stock/)).toBe('incomplete');
   });
 
@@ -410,7 +415,7 @@ describe('size guide section', () => {
 
   it('appears for sized categories after the variants, and asks for a chart where the category requires one', async () => {
     const panel = await kaftan();
-    expect(sectionTitles()).toEqual(['Basics', 'Photos', 'Price & stock', 'Details', 'Variants', 'Size guide', 'Shipping & fulfilment']);
+    expect(sectionTitles()).toEqual(['Basics', 'Photos', 'Price & stock', 'Details', 'Variants', 'Size guide', 'Shipping & fulfilment', 'Compliance']);
     expect(await within(panel).findByRole('link', { name: /Size chart/ })).toHaveTextContent('Choose a size chart');
     const group = screen.getByRole('radiogroup', { name: /Size chart/ });
     expect(await within(group).findByRole('radio', { name: 'Kaftans and shirts' })).toBeInTheDocument();
@@ -429,7 +434,7 @@ describe('size guide section', () => {
   it('is not shown for a category without sizes', async () => {
     await renderScreen(<ProductForm />);
     await chooseCategory('spices', /Spices & seasonings/);
-    await screen.findByRole('heading', { level: 3, name: 'Food information' });
+    await screen.findByRole('heading', { level: 3, name: 'Documents' });
     expect(screen.queryByRole('radiogroup', { name: /Size chart/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 2, name: 'Size guide' })).not.toBeInTheDocument();
   });

@@ -70,7 +70,6 @@ import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { SERVICE_PLACES } from '../shopper-state';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
-import { listingRulesFor } from './listing-rules';
 import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import { MOCK_DEPARTMENTS, MOCK_ORG_DEPARTMENTS } from './departments';
 import { homeModules } from './home-modules';
@@ -93,6 +92,7 @@ import {
   templateCsv,
   validateSheet
 } from './listing-form';
+import { listingRulesFor } from './listing-rules';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
 import {
   accountForm,

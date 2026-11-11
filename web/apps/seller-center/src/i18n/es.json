@@ -547,7 +547,7 @@
   "sc.pf.ai.upgrade": "Ver planes",
   "sc.pf.images.drop": "Suelta las imágenes aquí",
   "sc.pf.images.browse": "o haz clic para explorar",
-  "sc.pf.images.rules": "{count}/{max} · JPG, PNG o WebP · hasta 8 MB · imagen principal de al menos {px} px",
+  "sc.pf.images.rules": "{count}/{max} · JPG, PNG o WebP · hasta 8 MB",
   "sc.pf.images.max": "Hasta {max} imágenes.",
   "sc.pf.images.type": "{name}: usa JPG, PNG o WebP.",
   "sc.pf.images.size": "{name}: supera los 8 MB.",
