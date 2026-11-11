@@ -573,6 +573,38 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("PATCH", "/v1/seller/provider/services/s1a", svc), 200)
 	svc["depositMinor"] = 9000
 	mustStatus(t, b.do("POST", "/v1/seller/provider/services", svc), 422)
+	// In person only: no online/virtual/remote option, whatever the spelling.
+	svc["depositMinor"] = 2000
+	for _, bad := range []map[string]any{{"delivery": "VIRTUAL"}, {"delivery": "ONLINE"}, {"virtual": true}, {"online": true}, {"remote": true}} {
+		withBad := map[string]any{}
+		for k, v := range svc {
+			withBad[k] = v
+		}
+		for k, v := range bad {
+			withBad[k] = v
+		}
+		mustStatus(t, b.do("POST", "/v1/seller/provider/services", withBad), 422)
+	}
+	svc["delivery"], svc["category"] = "AT_CUSTOMER", "hair & beauty"
+	mustStatus(t, b.do("POST", "/v1/seller/provider/services", svc), 201)
+	delete(svc, "delivery")
+	delete(svc, "category")
+	// Service area: base, radius within the staff-set bounds, live preview of the cities and zone.
+	if r := b.do("GET", "/v1/seller/provider/service-area", nil); r.status != 200 || r.json(t)["bounds"].(map[string]any)["maxMiles"] != float64(40) {
+		t.Fatalf("service area = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/provider/service-area", map[string]any{"baseZip": "78664", "radiusMiles": 20,
+		"extraAreas": []map[string]any{{"kind": "CITY", "value": "Taylor", "state": "TX"}, {"kind": "ZONE", "value": "greater-austin"}}}), 200)
+	if r := b.do("PUT", "/v1/seller/provider/service-area", map[string]any{"baseZip": "78664", "radiusMiles": 90}); r.status != 422 ||
+		r.json(t)["errors"].(map[string]any)["radiusMiles"] == nil {
+		t.Fatalf("a radius over the maximum is a radiusMiles field error: %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/provider/service-area", map[string]any{"baseZip": "786"}), 422)
+	mustStatus(t, b.do("PUT", "/v1/seller/provider/service-area", map[string]any{"baseZip": "78664", "extraAreas": []map[string]any{{"kind": "CITY", "value": "Taylor"}}}), 422)
+	if r := b.do("GET", "/v1/seller/provider/service-area/preview?zip=78664&radiusMiles=15", nil); r.status != 200 || r.json(t)["zone"] != "Greater Austin" {
+		t.Fatalf("preview = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/provider/service-area/preview?zip=7866", nil), 422)
 	mustStatus(t, b.do("GET", "/v1/seller/provider/cancellation-policy", nil), 200)
 	mustStatus(t, b.do("PUT", "/v1/seller/provider/cancellation-policy", map[string]any{"kind": "CUSTOM", "freeHours": 48, "partialRefund": true,
 		"partialFromHours": 24, "partialPercent": 50, "noShow": "FULL", "rescheduleHours": 24, "maxReschedules": 2}), 200)

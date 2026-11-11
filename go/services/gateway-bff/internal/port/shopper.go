@@ -526,21 +526,55 @@ type UpBkProvider struct {
 
 // UpBkListing is bookings' PublicServiceListing.
 type UpBkListing struct {
-	ServiceID       string   `json:"serviceId"`
-	OrgID           string   `json:"orgId"`
-	Name            string   `json:"name"`
-	ProviderName    string   `json:"providerName"`
-	Description     string   `json:"description"`
-	Category        string   `json:"category"`
-	DurationMinutes int      `json:"durationMinutes"`
-	PriceFromMinor  int64    `json:"priceFromMinor"`
-	DepositMinor    int64    `json:"depositMinor"`
-	Currency        string   `json:"currency"`
-	Modes           []string `json:"modes"`
-	Rating          float64  `json:"rating"`
-	RatingCount     int      `json:"ratingCount"`
-	NextAvailable   string   `json:"nextAvailable"`
-	Location        string   `json:"location"`
+	ServiceID       string    `json:"serviceId"`
+	OrgID           string    `json:"orgId"`
+	Name            string    `json:"name"`
+	ProviderName    string    `json:"providerName"`
+	Description     string    `json:"description"`
+	Category        string    `json:"category"`
+	DurationMinutes int       `json:"durationMinutes"`
+	PriceFromMinor  int64     `json:"priceFromMinor"`
+	DepositMinor    int64     `json:"depositMinor"`
+	Currency        string    `json:"currency"`
+	Modes           []string  `json:"modes"`
+	Rating          float64   `json:"rating"`
+	RatingCount     int       `json:"ratingCount"`
+	NextAvailable   string    `json:"nextAvailable"`
+	Location        string    `json:"location"`
+	ImageURL        string    `json:"imageUrl"`
+	Area            *UpBkArea `json:"area"`
+}
+
+// UpBkArea is bookings' PublicServiceArea: where the provider is relative to the searched ZIP.
+type UpBkArea struct {
+	BaseCity      string   `json:"baseCity"`
+	BaseState     string   `json:"baseState"`
+	DistanceMiles float64  `json:"distanceMiles"`
+	Zone          string   `json:"zone"`
+	Serves        []string `json:"serves"`
+	Nearest       bool     `json:"nearest"`
+}
+
+// UpBkSearch is bookings' PublicServiceSearch for a place.
+type UpBkSearch struct {
+	Place struct {
+		ZIP   string `json:"zip"`
+		City  string `json:"city"`
+		State string `json:"state"`
+		Zone  string `json:"zone"`
+	} `json:"place"`
+	Coverage   string        `json:"coverage"`
+	Services   []UpBkListing `json:"services"`
+	Nearest    []UpBkListing `json:"nearest"`
+	Categories []struct {
+		Category string `json:"category"`
+		Count    int    `json:"count"`
+	} `json:"categories"`
+}
+
+// ServiceSearchParams are the filters of a services search.
+type ServiceSearchParams struct {
+	Q, Category, ZIP, Sort string
 }
 
 // UpBkBooking is bookings' Booking (customer view).
@@ -621,7 +655,11 @@ type SlotQuery struct {
 
 // CustomerBookingsClient calls bookings' public directory and the customer's own bookings.
 type CustomerBookingsClient interface {
-	Search(ctx context.Context, q, category, zip string) ([]UpBkListing, error)
+	Search(ctx context.Context, p ServiceSearchParams) (UpBkSearch, error)
+	// Suggest lists service and provider names containing the text (search-box suggestions).
+	Suggest(ctx context.Context, q string) ([]string, error)
+	// SubscribeAlert opens a "tell me when a provider joins" email alert (no account needed).
+	SubscribeAlert(ctx context.Context, email, zip, category, locale string) error
 	Service(ctx context.Context, id string) (UpBkService, error)
 	Provider(ctx context.Context, orgID string) (UpBkProvider, error)
 	Days(ctx context.Context, serviceID string, q SlotQuery) ([]domain.AvailableDay, error)

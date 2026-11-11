@@ -411,13 +411,46 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 			"payment": map[string]any{"state": "DEPOSIT_CAPTURED", "depositCapturedMinor": 3000, "refundedMinor": 0, "balance": map[string]any{"state": "ON_AUTHORISATION"}}}
 	}
 	mux.HandleFunc("GET /v1/public/services/search", func(w http.ResponseWriter, r *http.Request) {
-		if z := r.URL.Query().Get("zip"); z != "" && len(z) != 5 {
+		z := r.URL.Query().Get("zip")
+		if z != "" && len(z) != 5 {
 			problem(w, 422, "bookings.invalid-zip", "Invalid ZIP", nil)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"services": []map[string]any{{"serviceId": ShopperServiceID, "orgId": ShopperProviderID, "name": "Knotless braids",
-			"providerName": "Braids by Ama", "description": "Mid-back knotless braids", "category": "hair", "durationMinutes": 240, "priceFromMinor": 18000,
-			"depositMinor": 3000, "currency": "USD", "modes": []string{"IN_PERSON"}, "rating": 4.8, "ratingCount": 52, "nextAvailable": "Tomorrow 10:00", "location": "Houston, TX"}}})
+		hit := map[string]any{"serviceId": ShopperServiceID, "orgId": ShopperProviderID, "name": "Knotless braids",
+			"providerName": "Braids by Ama", "description": "Mid-back knotless braids", "category": "hair & beauty", "durationMinutes": 240, "priceFromMinor": 18000,
+			"depositMinor": 3000, "currency": "USD", "modes": []string{"IN_PERSON", "AT_HOME"}, "rating": 4.8, "ratingCount": 52, "nextAvailable": "2026-11-11T16:00:00Z",
+			"location": "Round Rock, TX", "imageUrl": "https://img.example/braids.jpg",
+			"area": map[string]any{"baseCity": "Round Rock", "baseState": "TX", "distanceMiles": 9.4, "zone": "Greater Austin",
+				"serves": []string{"Georgetown", "Hutto", "Pflugerville", "Cedar Park"}, "nearest": false}}
+		switch z {
+		case "10001": // nobody serves New York in this fixture
+			writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "New York", "state": "NY"}, "coverage": "NONE",
+				"services": []any{}, "nearest": []any{}, "categories": []any{}})
+		case "78701": // only providers outside their usual coverage
+			near := map[string]any{}
+			for k, v := range hit {
+				near[k] = v
+			}
+			near["area"] = map[string]any{"baseCity": "Hutto", "baseState": "TX", "distanceMiles": 62.0, "serves": []string{}, "nearest": true}
+			writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "Austin", "state": "TX", "zone": "Greater Austin"}, "coverage": "NEAREST",
+				"services": []any{}, "nearest": []any{near}, "categories": []any{}})
+		default:
+			writeJSON(w, 200, map[string]any{"place": map[string]any{"zip": z, "city": "Georgetown", "state": "TX", "zone": "Greater Austin"}, "coverage": "LOCAL",
+				"services": []any{hit}, "nearest": []any{}, "categories": []any{map[string]any{"category": "hair & beauty", "count": 1},
+					map[string]any{"category": "tailoring", "count": 0}}})
+		}
+	})
+	mux.HandleFunc("GET /v1/public/services/suggest", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []string{"Knotless braids", "Braids by Ama"})
+	})
+	mux.HandleFunc("POST /v1/public/services/alerts", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b["email"] == nil || b["zip"] == nil {
+			problem(w, 422, "bookings.invalid-alert", "Enter a valid email address", nil)
+			return
+		}
+		w.WriteHeader(202)
 	})
 	mux.HandleFunc("GET /v1/public/services/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") != ShopperServiceID {

@@ -19,6 +19,7 @@ channels:
       bookingsNoShow: {$ref: '#/components/messages/bookingsNoShow'}
       bookingsBalanceUnpaid: {$ref: '#/components/messages/bookingsBalanceUnpaid'}
       bookingsServiceUpserted: {$ref: '#/components/messages/bookingsServiceUpserted'}
+      bookingsServiceAlert: {$ref: '#/components/messages/bookingsServiceAlert'}
       bookingsReviewSubmitted: {$ref: '#/components/messages/bookingsReviewSubmitted'}
       bookingsReviewApproved: {$ref: '#/components/messages/bookingsReviewApproved'}
       bookingsReviewRejected: {$ref: '#/components/messages/bookingsReviewRejected'}
@@ -161,7 +162,28 @@ components:
       title: A provider's service was created or changed (key = service id)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/BookingsServiceEvent'}
+    bookingsServiceAlert:
+      name: booking.service_alert
+      title: A provider now serves a place a customer asked to be told about (key = alert id); notifications emails it once
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsServiceAlertEvent'}
   schemas:
+    BookingsServiceAlertEvent:
+      type: object
+      required: [recipient, locale, city, state, category, serviceName, providerName, serviceUrl]
+      properties:
+        recipient:
+          type: object
+          required: [email]
+          properties:
+            email: {type: string, description: The address the customer left (there may be no account)}
+        locale: {type: string, enum: [en, fr, es, ar, yo]}
+        city: {type: string}
+        state: {type: string}
+        category: {type: string}
+        serviceName: {type: string}
+        providerName: {type: string}
+        serviceUrl: {type: string}
     BookingsBookingEvent:
       type: object
       required: [recipient, firstName, serviceName, providerName, startsAt, location, bookingReference, manageUrl,
@@ -226,7 +248,7 @@ components:
         currency: {type: string}
         modes:
           type: array
-          items: {type: string, enum: [IN_PERSON, AT_HOME, VIRTUAL]}
+          items: {type: string, enum: [IN_PERSON, AT_HOME]}
         addOns:
           type: array
           items: {type: string}

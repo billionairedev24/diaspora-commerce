@@ -182,6 +182,9 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/provider/services", h.services)
 	route("POST /v1/seller/provider/services", h.createService)
 	route("PATCH /v1/seller/provider/services/{serviceId}", h.updateService)
+	route("GET /v1/seller/provider/service-area", h.serviceArea)
+	route("PUT /v1/seller/provider/service-area", h.saveServiceArea)
+	route("GET /v1/seller/provider/service-area/preview", h.previewServiceArea)
 	route("GET /v1/seller/provider/cancellation-policy", h.cancellationPolicy)
 	route("PUT /v1/seller/provider/cancellation-policy", h.saveCancellationPolicy)
 	route("GET /v1/seller/provider/earnings", h.earnings)
@@ -706,6 +709,39 @@ func (h *handlersImpl) updateService(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.ProviderHub.UpdateService(r.Context(), callerFrom(r.Context()), r.PathValue("serviceId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) serviceArea(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.ProviderHub.ServiceArea(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) saveServiceArea(w http.ResponseWriter, r *http.Request) {
+	var b domain.ServiceAreaInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.ProviderHub.SaveServiceArea(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) previewServiceArea(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	miles, err := strconv.Atoi(firstQuery(q.Get("radiusMiles"), "20"))
+	if err != nil {
+		h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"radiusMiles": "Enter a number of miles"}))
+		return
+	}
+	v, err := h.s.ProviderHub.PreviewServiceArea(r.Context(), callerFrom(r.Context()), q.Get("zip"), miles)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func firstQuery(v, fallback string) string {
+	if v == "" {
+		return fallback
+	}
+	return v
 }
 
 func (h *handlersImpl) cancellationPolicy(w http.ResponseWriter, r *http.Request) {

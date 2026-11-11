@@ -25,6 +25,8 @@ type ShopperDeps struct {
 	Payments port.OrderPaymentsClient
 	Security port.SecurityClient
 	Bookings port.CustomerBookingsClient
+	// Limiter bounds public alert sign-ups ("tell me when a provider joins"; optional).
+	Limiter  port.RateLimiter
 	Lola     port.LolaClient
 	Delivery port.DeliveryFactsClient
 	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).

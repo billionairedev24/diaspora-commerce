@@ -1409,6 +1409,35 @@ func (u *Upstreams) bookingsRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, off)
 	})
 	mux.HandleFunc("POST /v1/providers/{org}/services/{id}/activate", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, svc) })
+	area := map[string]any{"baseZip": "78664", "baseCity": "Round Rock", "baseState": "TX", "radiusMiles": 20, "extraAreas": []any{},
+		"servedCities": []any{map[string]any{"city": "Round Rock", "state": "TX"}, map[string]any{"city": "Georgetown", "state": "TX"}}, "zone": "Greater Austin"}
+	areaView := func(a any) map[string]any {
+		return map[string]any{"area": a, "bounds": map[string]any{"defaultMiles": 20, "minMiles": 5, "maxMiles": 40}, "customerTravelMiles": 30,
+			"zones": []any{map[string]any{"key": "greater-austin", "name": "Greater Austin", "cities": []any{map[string]any{"city": "Round Rock", "state": "TX"}}}},
+			"categories": []any{map[string]any{"category": "hair & beauty", "rule": map[string]any{"defaultMiles": 20, "minMiles": 5, "maxMiles": 40}}}}
+	}
+	mux.HandleFunc("GET /v1/providers/{org}/service-area", func(w http.ResponseWriter, r *http.Request) {
+		if org(w, r) {
+			writeJSON(w, 200, areaView(area))
+		}
+	})
+	mux.HandleFunc("PUT /v1/providers/{org}/service-area", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if m, ok := b["radiusMiles"].(float64); ok && m > 40 {
+			problem(w, 422, "bookings.invalid-service-area", "Service area is invalid", map[string]any{"errors": map[string]any{"radiusMiles": "Between 5 and 40 miles for your services"}})
+			return
+		}
+		if org(w, r) {
+			writeJSON(w, 200, areaView(area))
+		}
+	})
+	mux.HandleFunc("GET /v1/providers/{org}/service-area/preview", func(w http.ResponseWriter, r *http.Request) {
+		if org(w, r) {
+			writeJSON(w, 200, map[string]any{"baseCity": "Round Rock", "baseState": "TX", "zone": "Greater Austin",
+				"cities": []any{map[string]any{"city": "Round Rock", "state": "TX"}, map[string]any{"city": "Hutto", "state": "TX"}}})
+		}
+	})
 	mux.HandleFunc("PUT /v1/providers/{org}/cancellation-policy", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)

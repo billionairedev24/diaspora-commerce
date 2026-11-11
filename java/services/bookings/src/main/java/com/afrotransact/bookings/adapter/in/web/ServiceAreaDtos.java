@@ -122,13 +122,21 @@ final class ServiceAreaDtos {
 
     @Schema(name = "ServiceAreaView", description = "The saved area (null before the first save), the radius bounds "
             + "for this provider's services, the platform's customer-travel limit and the zones to choose from")
-    record AreaViewResponse(AreaResponse area, RadiusRuleDto bounds, int customerTravelMiles, List<ZoneDto> zones) {
+    record AreaViewResponse(AreaResponse area, RadiusRuleDto bounds, int customerTravelMiles, List<ZoneDto> zones,
+                            @Schema(description = "Service categories with their staff-set radius rules (the "
+                                    + "categories a service can be listed under)") List<CategoryRuleDto> categories) {
 
         static AreaViewResponse of(AreaView v) {
             return new AreaViewResponse(v.area() == null ? null : AreaResponse.of(v.area(), v.zones()),
                     RadiusRuleDto.of(v.bounds()), v.policy().customerTravelMiles(),
-                    v.zones().stream().map(ZoneDto::of).toList());
+                    v.zones().stream().map(ZoneDto::of).toList(),
+                    v.policy().byCategory().entrySet().stream().sorted(Map.Entry.comparingByKey())
+                            .map(e -> new CategoryRuleDto(e.getKey(), RadiusRuleDto.of(e.getValue()))).toList());
         }
+    }
+
+    @Schema(name = "CategoryRadiusRule")
+    record CategoryRuleDto(String category, RadiusRuleDto rule) {
     }
 
     @Schema(name = "ServiceAreaPreview")

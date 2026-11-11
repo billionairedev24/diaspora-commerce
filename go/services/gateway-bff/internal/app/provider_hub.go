@@ -24,6 +24,9 @@ type ProviderHubService interface {
 	Services(ctx context.Context, c *domain.Caller) ([]domain.ServiceOffer, error)
 	CreateService(ctx context.Context, c *domain.Caller, in domain.ServiceInput) (domain.ServiceOffer, error)
 	UpdateService(ctx context.Context, c *domain.Caller, id string, in domain.ServiceInput) (domain.ServiceOffer, error)
+	ServiceArea(ctx context.Context, c *domain.Caller) (domain.ServiceAreaView, error)
+	SaveServiceArea(ctx context.Context, c *domain.Caller, in domain.ServiceAreaInput) (domain.ServiceAreaView, error)
+	PreviewServiceArea(ctx context.Context, c *domain.Caller, zip string, radiusMiles int) (domain.ServiceAreaPreview, error)
 	Policy(ctx context.Context, c *domain.Caller) (domain.CancellationPolicy, error)
 	SavePolicy(ctx context.Context, c *domain.Caller, in domain.PolicyInput) (domain.CancellationPolicy, error)
 	Earnings(ctx context.Context, c *domain.Caller, from, to string) (domain.Earnings, error)
@@ -261,6 +264,61 @@ func (p *providerHubImpl) UpdateService(ctx context.Context, c *domain.Caller, i
 		return domain.ServiceOffer{}, mapErr("bookings", err)
 	}
 	return serviceOf(s), nil
+}
+
+func (p *providerHubImpl) ServiceArea(ctx context.Context, c *domain.Caller) (domain.ServiceAreaView, error) {
+	sc, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelView)
+	if err != nil {
+		return domain.ServiceAreaView{}, err
+	}
+	v, err := p.r.d.Bookings.ServiceArea(ctx, c.BearerToken, sc.provider())
+	if err != nil {
+		return domain.ServiceAreaView{}, mapErr("bookings", err)
+	}
+	return v, nil
+}
+
+func (p *providerHubImpl) SaveServiceArea(ctx context.Context, c *domain.Caller, in domain.ServiceAreaInput) (domain.ServiceAreaView, error) {
+	if errs := in.Validate(); len(errs) > 0 {
+		return domain.ServiceAreaView{}, domain.ValidationProblem(errs)
+	}
+	sc, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelEdit)
+	if err != nil {
+		return domain.ServiceAreaView{}, err
+	}
+	v, err := p.r.d.Bookings.SaveServiceArea(ctx, c.BearerToken, sc.provider(), in)
+	if err != nil {
+		return domain.ServiceAreaView{}, bookingsAreaErr(err)
+	}
+	return v, nil
+}
+
+func (p *providerHubImpl) PreviewServiceArea(ctx context.Context, c *domain.Caller, zip string, radiusMiles int) (domain.ServiceAreaPreview, error) {
+	if errs := (domain.ServiceAreaInput{BaseZip: zip, RadiusMiles: &radiusMiles}).Validate(); len(errs) > 0 {
+		return domain.ServiceAreaPreview{}, domain.ValidationProblem(errs)
+	}
+	sc, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelView)
+	if err != nil {
+		return domain.ServiceAreaPreview{}, err
+	}
+	v, err := p.r.d.Bookings.PreviewServiceArea(ctx, c.BearerToken, sc.provider(), zip, radiusMiles)
+	if err != nil {
+		return domain.ServiceAreaPreview{}, bookingsAreaErr(err)
+	}
+	return v, nil
+}
+
+// bookingsAreaErr turns bookings' 422 field errors (radius outside the staff-set bounds, unknown ZIP) into the form's
+// field problems.
+func bookingsAreaErr(err error) error {
+	if pr, ok := port.AsUpstreamProblem(err); ok && pr.Code == "bookings.invalid-service-area" {
+		errs := pr.Fields
+		if len(errs) == 0 {
+			errs = map[string]string{"radiusMiles": firstNonEmpty(pr.Detail, "Check the service area")}
+		}
+		return domain.ValidationProblem(errs).WithCause(err)
+	}
+	return mapErr("bookings", err)
 }
 
 func (p *providerHubImpl) Policy(ctx context.Context, c *domain.Caller) (domain.CancellationPolicy, error) {

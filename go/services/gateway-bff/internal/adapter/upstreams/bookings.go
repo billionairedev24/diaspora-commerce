@@ -1,6 +1,7 @@
 package upstreams
 
 import (
+	"strconv"
 	"context"
 	"fmt"
 	"net/http"
@@ -437,6 +438,7 @@ type bkService struct {
 	Modes           []string `json:"modes"`
 	AddOns          []any    `json:"addOns"`
 	Active          bool     `json:"active"`
+	ImageURL        string   `json:"imageUrl"`
 	TakeHome        *struct {
 		CommissionBps   int   `json:"commissionBps"`
 		CommissionMinor int64 `json:"commissionMinor"`
@@ -447,7 +449,8 @@ type bkService struct {
 
 func (s bkService) offer() domain.ServiceOffer {
 	o := domain.ServiceOffer{ID: s.ID, Name: s.Name, Description: s.Description, DurationMinutes: s.DurationMinutes,
-		PriceMinor: s.PriceMinor, DepositMinor: s.DepositMinor, Currency: strings.ToUpper(s.Currency), Active: s.Active}
+		PriceMinor: s.PriceMinor, DepositMinor: s.DepositMinor, Currency: strings.ToUpper(s.Currency), Active: s.Active,
+		Category: s.Category, Delivery: deliveryFromModes(s.Modes), ImageURL: s.ImageURL}
 	if t := s.TakeHome; t != nil {
 		o.TakeHome = domain.TakeHome{CommissionPercent: float64(t.CommissionBps) / 100, CommissionMinor: t.CommissionMinor,
 			CardFeesMinor: t.CardFeesMinor, TakeHomeMinor: t.TakeHomeMinor}
@@ -455,21 +458,101 @@ func (s bkService) offer() domain.ServiceOffer {
 	return o
 }
 
+// deliveryFromModes maps bookings' modes (AT_HOME comes to you, IN_PERSON you go to them) onto AT_CUSTOMER,
+// AT_PROVIDER or BOTH; there is no virtual delivery.
+func deliveryFromModes(modes []string) string {
+	home, shop := false, false
+	for _, m := range modes {
+		home = home || m == "AT_HOME"
+		shop = shop || m == "IN_PERSON"
+	}
+	switch {
+	case home && shop:
+		return "BOTH"
+	case home:
+		return "AT_CUSTOMER"
+	default:
+		return "AT_PROVIDER"
+	}
+}
+
+func modesOf(delivery string) []string {
+	switch delivery {
+	case "AT_CUSTOMER":
+		return []string{"AT_HOME"}
+	case "BOTH":
+		return []string{"IN_PERSON", "AT_HOME"}
+	default:
+		return []string{"IN_PERSON"}
+	}
+}
+
 func serviceRequest(in domain.ServiceInput, current *bkService) map[string]any {
 	body := map[string]any{"name": strings.TrimSpace(in.Name), "description": in.Description, "durationMinutes": in.DurationMinutes,
-		"priceMinor": in.PriceMinor, "depositMinor": in.DepositMinor, "modes": []string{"IN_PERSON"}}
+		"priceMinor": in.PriceMinor, "depositMinor": in.DepositMinor, "modes": modesOf(in.Delivery)}
+	if in.Category != "" {
+		body["category"] = strings.ToLower(strings.TrimSpace(in.Category))
+	}
+	if in.ImageURL != "" {
+		body["imageUrl"] = in.ImageURL
+	}
 	if current != nil {
-		if len(current.Modes) > 0 {
+		if in.Delivery == "" && len(current.Modes) > 0 {
 			body["modes"] = current.Modes
 		}
-		if current.Category != "" {
+		if in.Category == "" && current.Category != "" {
 			body["category"] = current.Category
+		}
+		if in.ImageURL == "" && current.ImageURL != "" {
+			body["imageUrl"] = current.ImageURL
 		}
 		if current.AddOns != nil {
 			body["addOns"] = current.AddOns
 		}
 	}
 	return body
+}
+
+// ---- service area
+
+func (b *bookingsImpl) ServiceArea(ctx context.Context, bearer string, p port.ProviderRef) (domain.ServiceAreaView, error) {
+	var out domain.ServiceAreaView
+	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/service-area"), Bearer: bearer}, &out)
+	return normaliseArea(out), err
+}
+
+func (b *bookingsImpl) SaveServiceArea(ctx context.Context, bearer string, p port.ProviderRef, in domain.ServiceAreaInput) (domain.ServiceAreaView, error) {
+	var out domain.ServiceAreaView
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: providerPath(p, "/service-area"), Bearer: bearer, JSON: in}, &out)
+	return normaliseArea(out), err
+}
+
+func (b *bookingsImpl) PreviewServiceArea(ctx context.Context, bearer string, p port.ProviderRef, zip string, radiusMiles int) (domain.ServiceAreaPreview, error) {
+	var out domain.ServiceAreaPreview
+	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/service-area/preview"), Bearer: bearer,
+		Query: url.Values{"zip": {zip}, "radiusMiles": {strconv.Itoa(radiusMiles)}}}, &out)
+	if out.Cities == nil {
+		out.Cities = []domain.ServiceAreaCity{}
+	}
+	return out, err
+}
+
+func normaliseArea(v domain.ServiceAreaView) domain.ServiceAreaView {
+	if v.Zones == nil {
+		v.Zones = []domain.ServiceAreaZone{}
+	}
+	if v.Categories == nil {
+		v.Categories = []domain.ServiceAreaCategory{}
+	}
+	if a := v.Area; a != nil {
+		if a.ExtraAreas == nil {
+			a.ExtraAreas = []domain.ServiceAreaNamed{}
+		}
+		if a.ServedCities == nil {
+			a.ServedCities = []domain.ServiceAreaCity{}
+		}
+	}
+	return v
 }
 
 func (b *bookingsImpl) Services(ctx context.Context, bearer string, p port.ProviderRef) ([]domain.ServiceOffer, error) {

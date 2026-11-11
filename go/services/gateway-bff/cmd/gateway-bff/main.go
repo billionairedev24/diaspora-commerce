@@ -215,7 +215,7 @@ func run() error {
 		Shell: services.SellerShell, Dashboard: services.SellerDashboard})
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
-		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store}, services, log)
+		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store, limiter: store}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,

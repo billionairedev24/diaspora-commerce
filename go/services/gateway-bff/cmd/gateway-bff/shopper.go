@@ -21,6 +21,7 @@ type shopperClients struct {
 	proofLinks                 port.ProofLinks
 	media                      port.MediaClient
 	receipts                   port.ReceiptStore
+	limiter                    port.RateLimiter
 }
 
 // shopperServices wires the storefront's account, checkout payment, services & bookings and Lola use cases.
@@ -35,7 +36,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(sc.payments), Orders: upstreams.NewCustomerOrders(sc.orders),
 		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns), sc.serviceTokens), Payments: upstreams.NewOrderPayments(sc.payments),
-		Security: upstreams.NewSecurity(sc.identity), Bookings: upstreams.NewCustomerBookings(client("bookings", up.Bookings)),
+		Security: upstreams.NewSecurity(sc.identity), Bookings: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Limiter: sc.limiter,
 		Lola: upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
 		Delivery: upstreams.NewDeliveryFacts(client("promise", up.Promise), client("carrier-gateway", up.Carrier), client("geo", up.Geo),
 			sc.serviceTokens),

@@ -256,6 +256,10 @@ type ServiceOffer struct {
 	Currency        string   `json:"currency"`
 	Active          bool     `json:"active"`
 	TakeHome        TakeHome `json:"takeHome"`
+	Category        string   `json:"category"`
+	// Delivery is AT_CUSTOMER (comes to you), AT_PROVIDER (you go to them) or BOTH. Services are in person only.
+	Delivery string `json:"delivery"`
+	ImageURL string `json:"imageUrl"`
 }
 
 // ServiceInput creates or changes a service.
@@ -266,7 +270,19 @@ type ServiceInput struct {
 	PriceMinor      int64  `json:"priceMinor"`
 	DepositMinor    int64  `json:"depositMinor"`
 	Active          bool   `json:"active"`
+	// Category is one of the staff-set service categories (empty keeps "services" or the current one).
+	Category string `json:"category"`
+	// Delivery is AT_CUSTOMER, AT_PROVIDER or BOTH (empty keeps the current one, AT_PROVIDER for a new service).
+	Delivery string `json:"delivery"`
+	ImageURL string `json:"imageUrl"`
+	// Virtual, Online and Remote exist only to be refused: AfroTransact services are in person only.
+	Virtual *bool `json:"virtual,omitempty"`
+	Online  *bool `json:"online,omitempty"`
+	Remote  *bool `json:"remote,omitempty"`
 }
+
+// Deliveries are the in-person ways a service can be delivered.
+var Deliveries = map[string]bool{"AT_CUSTOMER": true, "AT_PROVIDER": true, "BOTH": true}
 
 // Validate applies bookings' ServiceOffering rules.
 func (s ServiceInput) Validate() map[string]string {
@@ -283,7 +299,121 @@ func (s ServiceInput) Validate() map[string]string {
 	if s.DepositMinor < 0 || s.DepositMinor > s.PriceMinor {
 		errs["depositMinor"] = "Deposit must be between 0 and the price"
 	}
+	if s.Delivery != "" && !Deliveries[s.Delivery] {
+		errs["delivery"] = "Services are in person only: choose AT_CUSTOMER (comes to you), AT_PROVIDER (you go to them) or BOTH"
+	}
+	if (s.Virtual != nil && *s.Virtual) || (s.Online != nil && *s.Online) || (s.Remote != nil && *s.Remote) {
+		errs["delivery"] = "AfroTransact services are in person only; online, virtual and remote services are not offered"
+	}
+	if len(s.Category) > 60 {
+		errs["category"] = "At most 60 characters"
+	}
+	if len(s.ImageURL) > 500 {
+		errs["imageUrl"] = "At most 500 characters"
+	}
 	return errs
+}
+
+// ServiceAreaCity is a city a provider's area reaches.
+type ServiceAreaCity struct {
+	City  string `json:"city"`
+	State string `json:"state"`
+}
+
+// ServiceAreaNamed is an extra area by name: CITY (with its state), ZIP or ZONE (a metro zone key).
+type ServiceAreaNamed struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+	State string `json:"state,omitempty"`
+}
+
+// ServiceAreaZone is a platform metro zone a provider can add whole.
+type ServiceAreaZone struct {
+	Key    string            `json:"key"`
+	Name   string            `json:"name"`
+	Cities []ServiceAreaCity `json:"cities"`
+}
+
+// ServiceAreaRadius is a default, minimum and maximum radius in miles.
+type ServiceAreaRadius struct {
+	DefaultMiles int `json:"defaultMiles"`
+	MinMiles     int `json:"minMiles"`
+	MaxMiles     int `json:"maxMiles"`
+}
+
+// ServiceAreaCategory is a service category with its radius rule.
+type ServiceAreaCategory struct {
+	Category string            `json:"category"`
+	Rule     ServiceAreaRadius `json:"rule"`
+}
+
+// ProviderServiceArea is where a provider works: the base, the radius, extra areas and the cities they reach.
+type ProviderServiceArea struct {
+	BaseZip      string             `json:"baseZip"`
+	BaseCity     string             `json:"baseCity"`
+	BaseState    string             `json:"baseState"`
+	RadiusMiles  int                `json:"radiusMiles"`
+	ExtraAreas   []ServiceAreaNamed `json:"extraAreas"`
+	ServedCities []ServiceAreaCity  `json:"servedCities"`
+	Zone         string             `json:"zone,omitempty"`
+}
+
+// ServiceAreaView is the area (nil before the first save) with the rules around it: the radius bounds for the
+// provider's services, the platform's customer-travel limit, the zones and the categories to choose from.
+type ServiceAreaView struct {
+	Area                *ProviderServiceArea  `json:"area"`
+	Bounds              ServiceAreaRadius     `json:"bounds"`
+	CustomerTravelMiles int                   `json:"customerTravelMiles"`
+	Zones               []ServiceAreaZone     `json:"zones"`
+	Categories          []ServiceAreaCategory `json:"categories"`
+}
+
+// ServiceAreaInput saves the area; RadiusMiles nil takes the default of the provider's categories.
+type ServiceAreaInput struct {
+	BaseZip     string             `json:"baseZip"`
+	RadiusMiles *int               `json:"radiusMiles"`
+	ExtraAreas  []ServiceAreaNamed `json:"extraAreas"`
+}
+
+// Validate applies the form rules (bookings repeats them).
+func (a ServiceAreaInput) Validate() map[string]string {
+	errs := map[string]string{}
+	if len(a.BaseZip) != 5 || strings.Trim(a.BaseZip, "0123456789") != "" {
+		errs["baseZip"] = "Enter the 5-digit ZIP code of your base location"
+	}
+	if a.RadiusMiles != nil && (*a.RadiusMiles < 1 || *a.RadiusMiles > 150) {
+		errs["radiusMiles"] = "Between 1 and 150 miles"
+	}
+	if len(a.ExtraAreas) > 20 {
+		errs["extraAreas"] = "At most 20 extra areas"
+	}
+	for _, e := range a.ExtraAreas {
+		switch e.Kind {
+		case "CITY":
+			if strings.TrimSpace(e.Value) == "" || len(e.State) != 2 {
+				errs["extraAreas"] = "A city needs its 2-letter state"
+			}
+		case "ZIP":
+			if len(e.Value) != 5 || strings.Trim(e.Value, "0123456789") != "" {
+				errs["extraAreas"] = "A ZIP code has 5 digits"
+			}
+		case "ZONE":
+			if strings.TrimSpace(e.Value) == "" {
+				errs["extraAreas"] = "Choose a zone"
+			}
+		default:
+			errs["extraAreas"] = "Add a city, a ZIP code or a zone"
+		}
+	}
+	return errs
+}
+
+// ServiceAreaPreview is what a base ZIP and radius would cover: the cities and the metro zone.
+type ServiceAreaPreview struct {
+	BaseCity  string            `json:"baseCity"`
+	BaseState string            `json:"baseState"`
+	Zone      string            `json:"zone,omitempty"`
+	Cities    []ServiceAreaCity `json:"cities"`
 }
 
 // PolicyInput is a cancellation policy choice.

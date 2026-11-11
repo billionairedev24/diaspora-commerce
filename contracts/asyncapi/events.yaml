@@ -43,6 +43,8 @@ channels:
         $ref: '#/components/messages/bookingsBalanceUnpaid'
       bookingsServiceUpserted:
         $ref: '#/components/messages/bookingsServiceUpserted'
+      bookingsServiceAlert:
+        $ref: '#/components/messages/bookingsServiceAlert'
       bookingsReviewSubmitted:
         $ref: '#/components/messages/bookingsReviewSubmitted'
       bookingsReviewApproved:
@@ -1062,6 +1064,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/BookingsServiceEvent'
+    bookingsServiceAlert:
+      name: booking.service_alert
+      title: A provider now serves a place a customer asked to be told about (key = alert id); notifications emails it once
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/BookingsServiceAlertEvent'
     carrierTrackingUpdated:
       name: carrier.tracking.updated
       title: A carrier scan was applied to a tracked parcel
@@ -3133,6 +3142,46 @@ components:
         requestedAt:
           type: string
           format: date-time
+    BookingsServiceAlertEvent:
+      type: object
+      required:
+      - recipient
+      - locale
+      - city
+      - state
+      - category
+      - serviceName
+      - providerName
+      - serviceUrl
+      properties:
+        recipient:
+          type: object
+          required:
+          - email
+          properties:
+            email:
+              type: string
+              description: The address the customer left (there may be no account)
+        locale:
+          type: string
+          enum:
+          - en
+          - fr
+          - es
+          - ar
+          - yo
+        city:
+          type: string
+        state:
+          type: string
+        category:
+          type: string
+        serviceName:
+          type: string
+        providerName:
+          type: string
+        serviceUrl:
+          type: string
     BookingsBookingEvent:
       type: object
       required:
@@ -3336,7 +3385,6 @@ components:
             enum:
             - IN_PERSON
             - AT_HOME
-            - VIRTUAL
         addOns:
           type: array
           items:

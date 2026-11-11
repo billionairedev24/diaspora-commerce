@@ -368,18 +368,31 @@ func slotQuery(q port.SlotQuery) url.Values {
 	return v
 }
 
-func (b *customerBookingsImpl) Search(ctx context.Context, q, category, zip string) ([]port.UpBkListing, error) {
+func (b *customerBookingsImpl) Search(ctx context.Context, p port.ServiceSearchParams) (port.UpBkSearch, error) {
 	v := url.Values{"size": {"40"}}
-	for k, s := range map[string]string{"q": q, "category": category, "zip": zip} {
+	for k, s := range map[string]string{"q": p.Q, "category": p.Category, "zip": p.ZIP, "sort": p.Sort} {
 		if s != "" {
 			v.Set(k, s)
 		}
 	}
-	var out struct {
-		Services []port.UpBkListing `json:"services"`
-	}
+	var out port.UpBkSearch
 	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/public/services/search", Query: v}, &out)
-	return out.Services, err
+	return out, err
+}
+
+func (b *customerBookingsImpl) Suggest(ctx context.Context, q string) ([]string, error) {
+	var out []string
+	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/public/services/suggest", Query: url.Values{"q": {q}, "limit": {"8"}}}, &out)
+	return out, err
+}
+
+func (b *customerBookingsImpl) SubscribeAlert(ctx context.Context, email, zip, category, locale string) error {
+	body := map[string]any{"email": email, "zip": zip, "locale": locale}
+	if category != "" {
+		body["category"] = category
+	}
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/public/services/alerts", JSON: body}, nil)
+	return err
 }
 
 func (b *customerBookingsImpl) Service(ctx context.Context, id string) (port.UpBkService, error) {

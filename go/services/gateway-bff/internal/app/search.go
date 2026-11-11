@@ -115,7 +115,8 @@ func (s *searchServiceImpl) matchingServices(ctx context.Context, q domain.Searc
 	if !zip5.MatchString(zip) {
 		zip = ""
 	}
-	list, err := s.services.Search(ctx, text, "", zip)
+	found, err := s.services.Search(ctx, port.ServiceSearchParams{Q: text, ZIP: zip})
+	list := found.Services
 	if err != nil {
 		return out
 	}

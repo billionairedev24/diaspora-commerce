@@ -121,6 +121,8 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	}
 	// Services & bookings
 	route("GET /v1/services/search", h.searchServices)
+	route("GET /v1/services/suggest", h.suggestServices)
+	route("POST /v1/services/alerts", h.alertServices)
 	route("GET /v1/service-providers/{orgId}", h.providerPage)
 	route("GET /v1/services/{serviceId}", h.serviceDetail)
 	route("GET /v1/services/{serviceId}/days", h.serviceDays)
@@ -465,8 +467,22 @@ func slotQueryOf(r *http.Request) (port.SlotQuery, error) {
 
 func (h *handlersImpl) searchServices(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	v, err := h.s.Shopper.Services.Search(r.Context(), callerFrom(r.Context()), q.Get("q"), q.Get("category"), q.Get("zip"))
+	v, err := h.s.Shopper.Services.Search(r.Context(), callerFrom(r.Context()), q.Get("q"), q.Get("category"), q.Get("zip"), q.Get("sort"))
 	h.ok(w, r, v, err)
+}
+
+func (h *handlersImpl) suggestServices(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.Services.Suggest(r.Context(), r.URL.Query().Get("q"))
+	h.ok(w, r, v, err)
+}
+
+func (h *handlersImpl) alertServices(w http.ResponseWriter, r *http.Request) {
+	var b domain.ServiceAlertRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.reply(w, r, http.StatusAccepted, nil, h.s.Shopper.Services.AlertMe(r.Context(), callerFrom(r.Context()), b))
 }
 
 func (h *handlersImpl) providerPage(w http.ResponseWriter, r *http.Request) {

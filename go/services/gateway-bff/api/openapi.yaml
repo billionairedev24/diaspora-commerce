@@ -3223,11 +3223,18 @@ paths:
     get:
       tags: [Services]
       operationId: searchServices
-      summary: Services near a ZIP (bookings public search; the deliver-to ZIP when omitted)
+      summary: In-person services that serve the visitor's place (the deliver-to location; zip overrides)
+      description: |
+        Services are in person only. A provider is listed when it serves the place: within its radius (comes to you),
+        within the customer-travel limit (you go to them) or a named area/zone. Results are ranked per `sort`.
+        `coverage` is LOCAL, NEAREST (nobody serves the place: `nearest` lists providers outside their usual coverage,
+        within the staff-set maximum, each flagged `area.nearest`), NONE, or ANY (no location). `categories` counts the
+        services per category at the place; categories with no services are not listed.
       parameters:
         - {name: q, in: query, schema: {type: string, maxLength: 120}}
         - {name: category, in: query, schema: {type: string, maxLength: 60}}
         - {name: zip, in: query, schema: {type: string, pattern: '^\d{5}$'}}
+        - {name: sort, in: query, schema: {type: string, enum: [NEAREST, SOONEST, PRICE, RATING], default: NEAREST}}
       responses:
         '200':
           description: Services
@@ -3235,6 +3242,42 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ServiceSearch'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/suggest:
+    get:
+      tags: [Services]
+      operationId: suggestServices
+      summary: Search-box suggestions (service types and provider names containing q)
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 120}}
+      responses:
+        '200':
+          description: Suggestions
+          content:
+            application/json:
+              schema: {type: array, items: {type: string}}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/alerts:
+    post:
+      tags: [Services]
+      operationId: alertServices
+      summary: Tell me when a provider joins (email; works signed out)
+      description: |
+        Opens an alert for the visitor's deliver-to place, optionally for one category. The address is emailed once,
+        when a provider starts serving the place. Always 202 for a valid request; a repeat reveals nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: {type: string, description: 'Optional when signed in'}
+                category: {type: string, maxLength: 60}
+      responses:
+        '202': {description: Accepted}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/services/{serviceId}:
     get:
@@ -3306,7 +3349,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ServiceId'
         - {name: addOnIds, in: query, schema: {type: string}, description: Comma-separated add-on ids}
-        - {name: mode, in: query, schema: {type: string, enum: [IN_PERSON, AT_HOME, VIRTUAL]}}
+        - {name: mode, in: query, schema: {type: string, enum: [IN_PERSON, AT_HOME]}}
       responses:
         '200':
           description: Quote
@@ -6397,34 +6440,61 @@ components:
         displayName: {type: string}
     ServiceMode:
       type: string
-      enum: [IN_PERSON, AT_HOME, VIRTUAL]
+      enum: [IN_PERSON, AT_HOME]
+    ServiceListingArea:
+      type: object
+      required: [baseCity, baseState, distanceMiles, serves, nearest]
+      properties:
+        baseCity: {type: string}
+        baseState: {type: string}
+        distanceMiles: {type: number}
+        zone: {type: string, description: Metro zone of the base city}
+        serves: {type: array, items: {type: string}, description: 'Cities served, the visitor''s first'}
+        nearest: {type: boolean, description: Outside the provider's usual coverage (a suggestion, not a match)}
+    ServiceListing:
+      type: object
+      required: [serviceId, orgId, name, providerName, description, category, durationMinutes, priceFromMinor, depositMinor, currency, modes, rating, ratingCount, nextAvailable, location, delivery, imageUrl, area]
+      properties:
+        serviceId: {type: string}
+        orgId: {type: string}
+        name: {type: string}
+        providerName: {type: string}
+        description: {type: string}
+        category: {type: string}
+        durationMinutes: {type: integer}
+        priceFromMinor: {type: integer}
+        depositMinor: {type: integer}
+        currency: {type: string}
+        modes: {type: array, items: {$ref: '#/components/schemas/ServiceMode'}}
+        rating: {type: number, description: 0 without reviews (show no rating)}
+        ratingCount: {type: integer}
+        nextAvailable: {type: [string, 'null'], format: date-time, description: UTC instant; format in the visitor's time zone}
+        location: {type: string}
+        delivery: {type: string, enum: [AT_CUSTOMER, AT_PROVIDER, BOTH], description: 'Comes to you, you go to them, or both. Never online.'}
+        imageUrl: {type: string, description: 'The service photo; empty = show the provider monogram'}
+        area:
+          oneOf:
+            - {$ref: '#/components/schemas/ServiceListingArea'}
+            - {type: 'null'}
     ServiceSearch:
       type: object
-      required: [zip, city, services]
+      required: [zip, city, state, coverage, services, nearest, categories]
       properties:
         zip: {type: string}
         city: {type: string}
-        services:
+        state: {type: string}
+        zone: {type: string}
+        coverage: {type: string, enum: [LOCAL, NEAREST, NONE, ANY]}
+        services: {type: array, items: {$ref: '#/components/schemas/ServiceListing'}}
+        nearest: {type: array, items: {$ref: '#/components/schemas/ServiceListing'}}
+        categories:
           type: array
           items:
             type: object
-            required: [serviceId, orgId, name, providerName, description, category, durationMinutes, priceFromMinor, depositMinor, currency, modes, rating, ratingCount, nextAvailable, location]
+            required: [category, count]
             properties:
-              serviceId: {type: string}
-              orgId: {type: string}
-              name: {type: string}
-              providerName: {type: string}
-              description: {type: string}
               category: {type: string}
-              durationMinutes: {type: integer}
-              priceFromMinor: {type: integer}
-              depositMinor: {type: integer}
-              currency: {type: string}
-              modes: {type: array, items: {$ref: '#/components/schemas/ServiceMode'}}
-              rating: {type: number}
-              ratingCount: {type: integer}
-              nextAvailable: {type: [string, 'null']}
-              location: {type: string}
+              count: {type: integer, minimum: 1}
     ServiceDetail:
       type: object
       required: [id, orgId, providerName, name, description, category, durationMinutes, priceMinor, depositMinor, balanceMinor, currency, modes, addOns, policy, instantBooking, team]

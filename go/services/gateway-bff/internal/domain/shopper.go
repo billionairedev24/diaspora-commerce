@@ -248,13 +248,53 @@ type ServiceListing struct {
 	RatingCount     int      `json:"ratingCount"`
 	NextAvailable   *string  `json:"nextAvailable"`
 	Location        string   `json:"location"`
+	// Delivery says where the service happens: AT_CUSTOMER (comes to you), AT_PROVIDER (you go to them) or BOTH.
+	// Services are in person only; there is no online delivery.
+	Delivery string `json:"delivery"`
+	// ImageURL is the service's photo (empty: the storefront shows the provider's monogram).
+	ImageURL string `json:"imageUrl"`
+	// Area locates the provider relative to the searched place; nil without a location.
+	Area *ServiceListingArea `json:"area"`
+}
+
+// ServiceListingArea is where a listed provider is relative to the visitor's deliver-to place.
+type ServiceListingArea struct {
+	BaseCity      string   `json:"baseCity"`
+	BaseState     string   `json:"baseState"`
+	DistanceMiles float64  `json:"distanceMiles"`
+	Zone          string   `json:"zone,omitempty"`
+	Serves        []string `json:"serves"`
+	// Nearest is true for a suggestion outside the provider's usual coverage (never shown as a local match).
+	Nearest bool `json:"nearest"`
+}
+
+// ServiceCategoryCount is the number of services per category that serve the place.
+type ServiceCategoryCount struct {
+	Category string `json:"category"`
+	Count    int    `json:"count"`
 }
 
 // ServiceSearch is the services directory for a ZIP.
+//
+// Coverage is LOCAL (providers serve the place), NEAREST (none do; Nearest lists providers outside their usual
+// coverage, within the staff-set maximum), NONE (nothing, not even nearby) or ANY (no location given). Categories lists
+// what the place has (never a zero count).
 type ServiceSearch struct {
-	ZIP      string           `json:"zip"`
-	City     string           `json:"city"`
-	Services []ServiceListing `json:"services"`
+	ZIP        string                 `json:"zip"`
+	City       string                 `json:"city"`
+	State      string                 `json:"state"`
+	Zone       string                 `json:"zone,omitempty"`
+	Coverage   string                 `json:"coverage"`
+	Services   []ServiceListing       `json:"services"`
+	Nearest    []ServiceListing       `json:"nearest"`
+	Categories []ServiceCategoryCount `json:"categories"`
+}
+
+// ServiceAlertRequest is "tell me when a provider joins": an email (a signed-in shopper may omit it) and optionally a
+// category; the place is the visitor's deliver-to location.
+type ServiceAlertRequest struct {
+	Email    string `json:"email"`
+	Category string `json:"category"`
 }
 
 // ServiceAddOn is an optional extra.

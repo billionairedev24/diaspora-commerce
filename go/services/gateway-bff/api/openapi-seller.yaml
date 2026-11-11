@@ -2590,6 +2590,50 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/provider/service-area:
+    get:
+      tags: [Provider Hub]
+      operationId: getServiceArea
+      security: [{sessionCookie: []}]
+      summary: Where the provider works (base, radius, extra areas) with the staff-set bounds, zones and categories
+      responses:
+        '200': {description: Service area, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceAreaView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Provider Hub]
+      operationId: saveServiceArea
+      security: [{sessionCookie: []}]
+      summary: Save the service area
+      description: The base ZIP is placed by geo; the radius must be within the bounds of the provider's service categories (422 on radiusMiles).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ServiceAreaInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceAreaView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/provider/service-area/preview:
+    get:
+      tags: [Provider Hub]
+      operationId: previewServiceArea
+      security: [{sessionCookie: []}]
+      summary: Cities and metro zone a base ZIP and radius would cover (live preview, nothing saved)
+      parameters:
+        - {name: zip, in: query, required: true, schema: {type: string, pattern: '^\d{5}$'}}
+        - {name: radiusMiles, in: query, schema: {type: integer, minimum: 1, maximum: 150, default: 20}}
+      responses:
+        '200': {description: Preview, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceAreaPreview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/provider/cancellation-policy:
     get:
       tags: [Provider Hub]
@@ -5693,6 +5737,13 @@ components:
         currency: {type: string}
         active: {type: boolean}
         takeHome: {$ref: '#/components/schemas/TakeHome'}
+        category: {type: string}
+        delivery: {$ref: '#/components/schemas/ServiceDelivery'}
+        imageUrl: {type: string}
+    ServiceDelivery:
+      type: string
+      enum: [AT_CUSTOMER, AT_PROVIDER, BOTH]
+      description: 'Comes to you, you go to them, or both. Services are in person only: there is no online, virtual or remote option.'
     ServiceInput:
       type: object
       required: [name, durationMinutes, priceMinor, depositMinor, active]
@@ -5703,6 +5754,75 @@ components:
         priceMinor: {type: integer, minimum: 1}
         depositMinor: {type: integer, minimum: 0}
         active: {type: boolean}
+        category: {type: string, maxLength: 60, description: One of the staff-set service categories}
+        delivery: {$ref: '#/components/schemas/ServiceDelivery'}
+        imageUrl: {type: string, maxLength: 500}
+    ServiceAreaCity:
+      type: object
+      required: [city, state]
+      properties: {city: {type: string}, state: {type: string}}
+    ServiceAreaNamed:
+      type: object
+      required: [kind, value]
+      properties:
+        kind: {type: string, enum: [CITY, ZIP, ZONE]}
+        value: {type: string}
+        state: {type: string, description: Required for CITY}
+    ServiceAreaRadius:
+      type: object
+      required: [defaultMiles, minMiles, maxMiles]
+      properties: {defaultMiles: {type: integer}, minMiles: {type: integer}, maxMiles: {type: integer}}
+    ServiceAreaView:
+      type: object
+      required: [area, bounds, customerTravelMiles, zones, categories]
+      properties:
+        area:
+          oneOf:
+            - type: object
+              required: [baseZip, baseCity, baseState, radiusMiles, extraAreas, servedCities]
+              properties:
+                baseZip: {type: string}
+                baseCity: {type: string}
+                baseState: {type: string}
+                radiusMiles: {type: integer}
+                extraAreas: {type: array, items: {$ref: '#/components/schemas/ServiceAreaNamed'}}
+                servedCities: {type: array, items: {$ref: '#/components/schemas/ServiceAreaCity'}}
+                zone: {type: string}
+            - {type: 'null'}
+        bounds: {$ref: '#/components/schemas/ServiceAreaRadius'}
+        customerTravelMiles: {type: integer, description: How far customers are assumed to travel to a shop ("You go to them")}
+        zones:
+          type: array
+          items:
+            type: object
+            required: [key, name, cities]
+            properties:
+              key: {type: string}
+              name: {type: string}
+              cities: {type: array, items: {$ref: '#/components/schemas/ServiceAreaCity'}}
+        categories:
+          type: array
+          items:
+            type: object
+            required: [category, rule]
+            properties:
+              category: {type: string}
+              rule: {$ref: '#/components/schemas/ServiceAreaRadius'}
+    ServiceAreaInput:
+      type: object
+      required: [baseZip]
+      properties:
+        baseZip: {type: string, pattern: '^\d{5}$'}
+        radiusMiles: {type: [integer, 'null'], minimum: 1, maximum: 150, description: Omit for the default of the provider's categories}
+        extraAreas: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/ServiceAreaNamed'}}
+    ServiceAreaPreview:
+      type: object
+      required: [baseCity, baseState, cities]
+      properties:
+        baseCity: {type: string}
+        baseState: {type: string}
+        zone: {type: string}
+        cities: {type: array, items: {$ref: '#/components/schemas/ServiceAreaCity'}}
     PolicyKind: {type: string, enum: [FLEXIBLE, MODERATE, STRICT, CUSTOM]}
     CancellationPolicyInput:
       type: object

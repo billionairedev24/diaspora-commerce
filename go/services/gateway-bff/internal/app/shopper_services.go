@@ -16,7 +16,9 @@ import (
 // slots, the provider page (bookings profile + the provider's published storefront page), booking with a deposit
 // and the customer's bookings (cancel with the exact refund quote, reschedule, new-time answers, review).
 type ServicesService interface {
-	Search(ctx context.Context, c *domain.Caller, q, category, zip string) (domain.ServiceSearch, error)
+	Search(ctx context.Context, c *domain.Caller, q, category, zip, sort string) (domain.ServiceSearch, error)
+	Suggest(ctx context.Context, q string) ([]string, error)
+	AlertMe(ctx context.Context, c *domain.Caller, req domain.ServiceAlertRequest) error
 	Service(ctx context.Context, id string) (domain.ServiceDetail, error)
 	Days(ctx context.Context, id string, q port.SlotQuery) ([]domain.AvailableDay, error)
 	Slots(ctx context.Context, id string, q port.SlotQuery) ([]domain.AvailableSlot, error)
@@ -42,7 +44,7 @@ func NewServicesService(d ShopperDeps) ServicesService { return &servicesService
 
 var (
 	zip5      = regexp.MustCompile(`^\d{5}$`)
-	modes     = map[string]bool{"IN_PERSON": true, "AT_HOME": true, "VIRTUAL": true}
+	modes     = map[string]bool{"IN_PERSON": true, "AT_HOME": true}
 	cancelOK  = map[string]bool{"PENDING_PAYMENT": true, "REQUESTED": true, "CONFIRMED": true, "RESCHEDULE_REQUESTED": true, "RESCHEDULE_PROPOSED": true}
 	slotIDRe  = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 	isoLayout = time.RFC3339
@@ -115,30 +117,131 @@ func toCancellationQuote(q port.UpBkQuote) domain.CancellationQuote {
 		Currency: firstNonEmpty(q.Currency, domain.Currency)}
 }
 
-func (s *servicesServiceImpl) Search(ctx context.Context, c *domain.Caller, q, category, zip string) (domain.ServiceSearch, error) {
+// serviceSorts are the result orders; NEAREST is the default.
+var serviceSorts = map[string]bool{"NEAREST": true, "SOONEST": true, "PRICE": true, "RATING": true}
+
+// deliveryOf maps bookings' modes onto the owner's words: AT_HOME comes to you (AT_CUSTOMER), IN_PERSON means you go
+// to them (AT_PROVIDER). Anything else (there is no virtual mode) is ignored.
+func deliveryOf(modes []string) string {
+	home, shop := false, false
+	for _, m := range modes {
+		home = home || m == "AT_HOME"
+		shop = shop || m == "IN_PERSON"
+	}
+	switch {
+	case home && shop:
+		return "BOTH"
+	case home:
+		return "AT_CUSTOMER"
+	default:
+		return "AT_PROVIDER"
+	}
+}
+
+func listing(l port.UpBkListing) domain.ServiceListing {
+	out := domain.ServiceListing{ServiceID: l.ServiceID, OrgID: l.OrgID, Name: l.Name, ProviderName: l.ProviderName,
+		Description: l.Description, Category: l.Category, DurationMinutes: l.DurationMinutes, PriceFromMinor: l.PriceFromMinor,
+		DepositMinor: l.DepositMinor, Currency: firstNonEmpty(l.Currency, domain.Currency), Modes: orEmpty(l.Modes), Rating: l.Rating,
+		RatingCount: l.RatingCount, NextAvailable: optStr(l.NextAvailable), Location: l.Location, Delivery: deliveryOf(l.Modes),
+		ImageURL: l.ImageURL}
+	if a := l.Area; a != nil {
+		out.Area = &domain.ServiceListingArea{BaseCity: a.BaseCity, BaseState: a.BaseState, DistanceMiles: a.DistanceMiles, Zone: a.Zone,
+			Serves: orEmpty(a.Serves), Nearest: a.Nearest}
+	}
+	return out
+}
+
+func listings(in []port.UpBkListing) []domain.ServiceListing {
+	out := make([]domain.ServiceListing, 0, len(in))
+	for _, l := range in {
+		out = append(out, listing(l))
+	}
+	return out
+}
+
+// Search lists in-person services that serve the visitor's place: the deliver-to location unless a ZIP is given.
+func (s *servicesServiceImpl) Search(ctx context.Context, c *domain.Caller, q, category, zip, sort string) (domain.ServiceSearch, error) {
 	if len(q) > 120 || len(category) > 60 {
 		return domain.ServiceSearch{}, domain.ValidationProblem(map[string]string{"q": "At most 120 characters"})
 	}
-	city := ""
+	sort = strings.ToUpper(sort)
+	if sort != "" && !serviceSorts[sort] {
+		return domain.ServiceSearch{}, domain.ValidationProblem(map[string]string{"sort": "Choose NEAREST, SOONEST, PRICE or RATING"})
+	}
+	city, state := "", ""
 	if zip == "" && s.d.Location != nil {
 		loc := s.d.Location.Current(ctx, c)
-		zip, city = loc.ZIP, loc.City
+		zip, city, state = loc.ZIP, loc.City, loc.State
 	}
 	if zip != "" && !zip5.MatchString(zip) {
 		return domain.ServiceSearch{}, domain.FieldProblem(domain.CodeValidationFailed, "Check the ZIP code", "zip", "Enter a 5-digit US ZIP code.")
 	}
-	list, err := s.d.Bookings.Search(ctx, strings.TrimSpace(q), category, zip)
+	res, err := s.d.Bookings.Search(ctx, port.ServiceSearchParams{Q: strings.TrimSpace(q), Category: category, ZIP: zip, Sort: sort})
 	if err != nil {
 		return domain.ServiceSearch{}, bookingsErr(err)
 	}
-	out := domain.ServiceSearch{ZIP: zip, City: city, Services: make([]domain.ServiceListing, 0, len(list))}
-	for _, l := range list {
-		out.Services = append(out.Services, domain.ServiceListing{ServiceID: l.ServiceID, OrgID: l.OrgID, Name: l.Name, ProviderName: l.ProviderName,
-			Description: l.Description, Category: l.Category, DurationMinutes: l.DurationMinutes, PriceFromMinor: l.PriceFromMinor,
-			DepositMinor: l.DepositMinor, Currency: firstNonEmpty(l.Currency, domain.Currency), Modes: orEmpty(l.Modes), Rating: l.Rating,
-			RatingCount: l.RatingCount, NextAvailable: optStr(l.NextAvailable), Location: l.Location})
+	out := domain.ServiceSearch{ZIP: zip, City: firstNonEmpty(res.Place.City, city), State: firstNonEmpty(res.Place.State, state),
+		Zone: res.Place.Zone, Coverage: firstNonEmpty(res.Coverage, "ANY"), Services: listings(res.Services), Nearest: listings(res.Nearest),
+		Categories: make([]domain.ServiceCategoryCount, 0, len(res.Categories))}
+	for _, c := range res.Categories {
+		if c.Count > 0 {
+			out.Categories = append(out.Categories, domain.ServiceCategoryCount{Category: c.Category, Count: c.Count})
+		}
 	}
 	return out, nil
+}
+
+// Suggest answers the search box: service types and provider names that contain the text.
+func (s *servicesServiceImpl) Suggest(ctx context.Context, q string) ([]string, error) {
+	q = strings.TrimSpace(q)
+	if len([]rune(q)) < 2 || len(q) > 120 {
+		return []string{}, nil
+	}
+	out, err := s.d.Bookings.Suggest(ctx, q)
+	if err != nil {
+		return nil, bookingsErr(err)
+	}
+	return orEmpty(out), nil
+}
+
+// AlertMe opens "tell me when a provider joins" for the visitor's deliver-to place. It works without an account (the
+// typed address is used; a signed-in shopper's address is the default) and answers the same whether or not the
+// address already waits, so it reveals nothing about other people's subscriptions.
+func (s *servicesServiceImpl) AlertMe(ctx context.Context, c *domain.Caller, req domain.ServiceAlertRequest) error {
+	if s.d.Limiter != nil {
+		ip := firstNonEmpty(c.ClientIP, "unknown")
+		for _, k := range []string{"svcalert:ip:" + ip} {
+			ok, retry, err := s.d.Limiter.Allow(ctx, k, DefaultAlertsPerIP, time.Hour)
+			if err == nil && !ok {
+				p := domain.NewProblem(http.StatusTooManyRequests, domain.CodeRateLimited, "Too many requests",
+					"You've asked for a lot of alerts. Please try again a little later.")
+				p.RetryAfter = max(1, int(retry.Seconds()))
+				return p
+			}
+		}
+	}
+	email := strings.TrimSpace(req.Email)
+	if email == "" && c.Session != nil && c.Session.Profile != nil {
+		email = c.Session.Profile.Email
+	}
+	if email == "" {
+		return domain.ValidationProblem(map[string]string{"email": "Enter your email"})
+	}
+	clean, err := domain.ParseEmail(email)
+	if err != nil {
+		return domain.ValidationProblem(map[string]string{"email": "Enter a valid email address, like name@example.com"})
+	}
+	if len(req.Category) > 60 {
+		return domain.ValidationProblem(map[string]string{"category": "At most 60 characters"})
+	}
+	zip := ""
+	if s.d.Location != nil {
+		zip = s.d.Location.Current(ctx, c).ZIP
+	}
+	if !zip5.MatchString(zip) {
+		return domain.FieldProblem(domain.CodeValidationFailed, "Choose your location first", "zip", "Choose where you are first.")
+	}
+	return bookingsErr(s.d.Bookings.SubscribeAlert(ctx, clean, zip, strings.ToLower(strings.TrimSpace(req.Category)), alertLocale(c.Language)))
 }
 
 func (s *servicesServiceImpl) Service(ctx context.Context, id string) (domain.ServiceDetail, error) {
@@ -155,7 +258,7 @@ func validSlotQuery(q port.SlotQuery) error {
 		errs["days"] = "Between 1 and 62"
 	}
 	if q.Mode != "" && !modes[q.Mode] {
-		errs["mode"] = "Choose IN_PERSON, AT_HOME or VIRTUAL"
+		errs["mode"] = "Services are in person: choose IN_PERSON or AT_HOME"
 	}
 	for _, a := range q.AddOnIDs {
 		if !slotIDRe.MatchString(a) {
@@ -225,7 +328,7 @@ func (s *servicesServiceImpl) Book(ctx context.Context, c *domain.Caller, key st
 		errs["startAt"] = "Choose a time"
 	}
 	if !modes[req.Mode] {
-		errs["mode"] = "Choose IN_PERSON, AT_HOME or VIRTUAL"
+		errs["mode"] = "Services are in person: choose IN_PERSON or AT_HOME"
 	}
 	if req.Mode == "AT_HOME" && strings.TrimSpace(req.Location) == "" {
 		errs["location"] = "Enter the address for the home visit"
