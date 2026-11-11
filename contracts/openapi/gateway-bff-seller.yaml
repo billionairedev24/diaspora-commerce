@@ -67,6 +67,13 @@ tags:
       every variant) and the proof files (label photo, Drug Facts, Supplement Facts) that an exemption claim needs. A
       product goes live only when its status is READY; missing facts come in plain words and the tax is never guessed.
       Needs the Listings module (View to read, Edit to upload).
+  - name: Selling approvals
+    description: |
+      Amazon-style approvals to sell (docs/engineering/listing-rules.md section 2; seller-service decides). A product is
+      `SELL` (live after validation), `APPLY` (apply once; after approval every listing in that scope goes live) or
+      `NOT_AVAILABLE` (prohibited or disqualified, with the reason; not appealable). The product form shows the answer as a chip.
+      Documents are uploaded to media first (`/v1/seller/media`) and referenced by asset id with the dates read off them.
+      Needs the Listings module (View to read, Edit to apply).
   - name: Catalog scope
     description: |
       The catalog departments the organisation may sell in: the ones chosen at onboarding (and later approved requests).
@@ -1426,6 +1433,128 @@ paths:
         '201': {description: Requested, content: {application/json: {schema: {$ref: '#/components/schemas/SellerDepartmentRequest'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/selling-status:
+    get:
+      tags: [Selling approvals]
+      operationId: getSellingStatus
+      security: [{sessionCookie: []}]
+      summary: 'Can the organisation sell this product? SELL, APPLY or NOT_AVAILABLE, with the reason and what is missing'
+      description: |
+        seller-service `GET /v1/orgs/{orgId}/selling-status`. Call it as the form fills in (every parameter is optional).
+        `pendingFacts` lists what the answer still depends on (jewelry: `material`); gold, silver, a gemstone or a watch
+        make the jewelry rule apply. For `APPLY`, `missing` lists each scope to apply for; its `canApply` says whether the
+        button is shown. AfroTransact Retail always gets `SELL`.
+      parameters:
+        - {name: categoryCode, in: query, schema: {type: string, maxLength: 300}, description: 'The category code (or a comma-separated list: the category and its parents)'}
+        - {name: brand, in: query, schema: {type: string, maxLength: 300}}
+        - {name: productTypeCode, in: query, schema: {type: string, maxLength: 300}}
+        - {name: material, in: query, schema: {type: string, maxLength: 300}}
+        - {name: gtin, in: query, schema: {type: string, maxLength: 300}, description: 'Barcode, for a rule about one product'}
+      responses:
+        '200': {description: The answer, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSellingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/selling-approvals:
+    get:
+      tags: [Selling approvals]
+      operationId: listSellingApprovals
+      security: [{sessionCookie: []}]
+      summary: The Selling approvals page - every scope that needs approval with the organisation's state in plain words
+      description: |
+        seller-service `GET /v1/orgs/{orgId}/selling-approvals`. `state` is NOT_APPLIED, APPLIED, NEEDS_ATTENTION, APPROVED,
+        EXPIRED or NOT_AVAILABLE. `notices` are expiry warnings (30, 14 and 7 days), paused listings and applications that
+        need an answer.
+      responses:
+        '200': {description: Approvals, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSellingApprovals'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/selling-capabilities:
+    get:
+      tags: [Selling approvals]
+      operationId: getSellingCapabilities
+      security: [{sessionCookie: []}]
+      summary: Seller capabilities - food service is granted by approval of a permit with an expiry
+      description: The product form shows the food service fields only when `foodService.approved`.
+      responses:
+        '200': {description: Capabilities, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSellingCapabilities'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/selling-applications:
+    get:
+      tags: [Selling approvals]
+      operationId: listSellingApplications
+      security: [{sessionCookie: []}]
+      summary: The organisation's selling applications, newest first
+      responses:
+        '200': {description: Applications, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SellerSellingApplication'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Selling approvals]
+      operationId: applyToSell
+      security: [{sessionCookie: []}]
+      summary: 'Apply to sell in a scope (owner, admin or catalog role; Listings: EDIT)'
+      description: |
+        seller-service `POST /v1/orgs/{orgId}/selling-applications`. Upload each file to media first and send its asset id with
+        the dates read off it. 422 names the documents to fix (field `documents.<KIND>`): an invoice must be dated within 180
+        days, a permit or insurance policy needs a future expiry date, insurance must name AfroTransact as additional insured.
+        409 `seller.selling-not-available` when the organisation was disqualified and the reapply date has not come (not
+        appealable). Repeating the call while an application is in progress returns it. The application becomes a staff case.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SellerApplyToSell'}}}
+      responses:
+        '201': {description: Filed, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSellingApplication'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/selling-applications/{id}:
+    get:
+      tags: [Selling approvals]
+      operationId: getSellingApplication
+      security: [{sessionCookie: []}]
+      summary: One selling application
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: The application, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSellingApplication'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/selling-applications/{id}/resubmit:
+    post:
+      tags: [Selling approvals]
+      operationId: resubmitSellingApplication
+      security: [{sessionCookie: []}]
+      summary: Answer a request for information with the documents asked for
+      description: Only while the application needs your attention (INFO_REQUESTED). The review starts again at step 1.
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SellerResubmitSellingApplication'}}}
+      responses:
+        '200': {description: Sent, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSellingApplication'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -4355,6 +4484,155 @@ components:
         needs: {type: array, items: {type: string, enum: [FOOD_PERMIT, BEAUTY_LABELLING]}}
         createdAt: {type: string, format: date-time}
         decisionNote: {type: [string, 'null']}
+    SellerSellingDocumentSlot:
+      type: object
+      required: [kind, label, optional, expiryRequired, dated, namesAfroTransact]
+      properties:
+        kind: {type: string, enum: [PURCHASE_INVOICE, PHOTOS_ALL_SIDES, BRAND_AUTHORIZATION, SAFETY_CERTIFICATE, PERMIT_LICENCE, LIABILITY_INSURANCE]}
+        label: {type: string, description: What the seller reads next to the upload field}
+        optional: {type: boolean, description: Or tell us why you cannot}
+        expiryRequired: {type: boolean, description: Ask for the expiry date}
+        dated: {type: boolean, description: 'Ask for the date on the document (an invoice, within 180 days)'}
+        namesAfroTransact: {type: boolean, description: Ask the seller to confirm the policy names AfroTransact as additional insured}
+    SellerSellingDocumentOnFile:
+      type: object
+      required: [id, kind, label, assetId]
+      properties:
+        id: {type: string}
+        kind: {type: string}
+        label: {type: string}
+        assetId: {type: string}
+        fileName: {type: [string, 'null']}
+        issuedOn: {type: [string, 'null'], format: date}
+        expiresOn: {type: [string, 'null'], format: date}
+        namesAfroTransact: {type: boolean}
+        note: {type: [string, 'null']}
+    SellerSellingMissing:
+      type: object
+      required: [scope, label, level, state, message, canApply, documents]
+      properties:
+        scope:
+          type: object
+          required: [type, key]
+          properties:
+            type: {type: string, enum: [CATEGORY, PRODUCT_TYPE, BRAND, BRAND_IN_CATEGORY, PRODUCT, CAPABILITY]}
+            key: {type: string}
+        label: {type: string}
+        level: {type: string, enum: [APPLY, NOT_AVAILABLE]}
+        state: {type: string, enum: [NOT_APPLIED, APPLIED, NEEDS_ATTENTION, APPROVED, EXPIRED, NOT_AVAILABLE]}
+        message: {type: string, description: Plain words for the seller}
+        canApply: {type: boolean, description: Show the Apply to sell button}
+        reapplyAfter: {type: [string, 'null'], format: date}
+        documents:
+          type: array
+          items:
+            type: object
+            required: [kind, optional]
+            properties:
+              kind: {type: string}
+              optional: {type: boolean}
+        applicationId: {type: [string, 'null']}
+        applicationStatus: {type: [string, 'null']}
+    SellerSellingStatus:
+      type: object
+      required: [level, missing, pendingFacts]
+      properties:
+        level: {type: string, enum: [SELL, APPLY, NOT_AVAILABLE], description: 'The chip: "Sell this product", "Apply to sell" (with a button) or "Not available" (with the reason)'}
+        reason: {type: [string, 'null']}
+        missing: {type: array, items: {$ref: '#/components/schemas/SellerSellingMissing'}}
+        pendingFacts: {type: array, items: {type: string}}
+    SellerSellingApprovalRow:
+      type: object
+      required: [scopeType, scopeKey, label, level, state, statusWords, message, canApply, documents, onFile, listingsPaused]
+      properties:
+        scopeType: {type: string}
+        scopeKey: {type: string}
+        label: {type: string}
+        level: {type: string, enum: [APPLY, NOT_AVAILABLE]}
+        state: {type: string, enum: [NOT_APPLIED, APPLIED, NEEDS_ATTENTION, APPROVED, EXPIRED, NOT_AVAILABLE]}
+        statusWords: {type: string, examples: [Approved, With our team, Needs your attention, Not available, Expired, Not applied]}
+        message: {type: [string, 'null']}
+        canApply: {type: boolean}
+        approvedAt: {type: [string, 'null'], format: date-time}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        daysToExpiry: {type: [integer, 'null']}
+        reapplyAfter: {type: [string, 'null'], format: date}
+        documents: {type: array, items: {$ref: '#/components/schemas/SellerSellingDocumentSlot'}}
+        onFile: {type: array, items: {$ref: '#/components/schemas/SellerSellingDocumentOnFile'}}
+        applicationId: {type: [string, 'null']}
+        applicationStatus: {type: [string, 'null']}
+        note: {type: [string, 'null']}
+        listingsPaused: {type: boolean}
+    SellerSellingNotice:
+      type: object
+      required: [severity, message]
+      properties:
+        severity: {type: string, enum: [action, warning, urgent]}
+        scopeKey: {type: string}
+        scopeLabel: {type: string}
+        message: {type: string}
+    SellerSellingCapabilities:
+      type: object
+      required: [foodService]
+      properties:
+        foodService:
+          type: object
+          required: [approved, state]
+          properties:
+            approved: {type: boolean}
+            state: {type: string}
+            expiresAt: {type: [string, 'null'], format: date-time}
+    SellerSellingApprovals:
+      type: object
+      required: [approvals, notices, capabilities]
+      properties:
+        approvals: {type: array, items: {$ref: '#/components/schemas/SellerSellingApprovalRow'}}
+        notices: {type: array, items: {$ref: '#/components/schemas/SellerSellingNotice'}}
+        capabilities: {$ref: '#/components/schemas/SellerSellingCapabilities'}
+    SellerSellingApplication:
+      type: object
+      required: [id, reference, scopeType, scopeKey, scopeLabel, kind, status, statusWords, message, requestedItems, disqualified, documents, required]
+      properties:
+        id: {type: string}
+        reference: {type: string, examples: [SA-50001]}
+        scopeType: {type: string}
+        scopeKey: {type: string}
+        scopeLabel: {type: string}
+        kind: {type: string, enum: [NEW, RENEWAL]}
+        status: {type: string, enum: [PENDING_REVIEW, FLAGGED, AWAITING_FINAL_APPROVAL, INFO_REQUESTED, APPROVED, REJECTED]}
+        statusWords: {type: string}
+        message: {type: string}
+        requestedItems: {type: array, items: {type: string}}
+        disqualified: {type: boolean}
+        reapplyAfter: {type: [string, 'null'], format: date}
+        documents: {type: array, items: {$ref: '#/components/schemas/SellerSellingDocumentOnFile'}}
+        required: {type: array, items: {$ref: '#/components/schemas/SellerSellingDocumentSlot'}}
+        submittedAt: {type: [string, 'null'], format: date-time}
+        updatedAt: {type: string, format: date-time}
+    SellerSellingDocumentInput:
+      type: object
+      required: [kind, assetId]
+      properties:
+        kind: {type: string, enum: [PURCHASE_INVOICE, PHOTOS_ALL_SIDES, BRAND_AUTHORIZATION, SAFETY_CERTIFICATE, PERMIT_LICENCE, LIABILITY_INSURANCE]}
+        assetId: {type: string, description: The media asset of the uploaded file}
+        fileName: {type: string, maxLength: 200}
+        issuedOn: {type: string, format: date, description: The date on an invoice}
+        expiresOn: {type: string, format: date, description: 'Expiry of a permit, licence or policy'}
+        namesAfroTransact: {type: boolean, description: Insurance - the policy names AfroTransact as additional insured}
+        note: {type: string, maxLength: 500}
+    SellerApplyToSell:
+      type: object
+      required: [scopeType, scopeKey]
+      properties:
+        scopeType: {type: string, enum: [CATEGORY, PRODUCT_TYPE, BRAND, BRAND_IN_CATEGORY, PRODUCT, CAPABILITY]}
+        scopeKey: {type: string, maxLength: 200}
+        note: {type: string, maxLength: 1000}
+        documents: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/SellerSellingDocumentInput'}}
+    SellerResubmitSellingApplication:
+      type: object
+      properties:
+        note: {type: string, maxLength: 1000}
+        documents: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/SellerSellingDocumentInput'}}
     SellerDepartmentRequestInput:
       type: object
       required: [departmentCode]

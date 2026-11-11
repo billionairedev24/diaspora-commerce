@@ -88,6 +88,7 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 	u.sizeChartRoutes(mux)
 	u.productTaxRoutes(mux)
 	u.scopeRoutes(mux)
+	u.sellingRoutes(mux)
 	u.moneyRoutes(mux)
 	u.libraryRoutes(mux)
 	if u.opts.SellerPending {

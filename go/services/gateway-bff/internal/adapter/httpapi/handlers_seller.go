@@ -120,6 +120,9 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	if h.s.SellerScope != nil {
 		h.registerSellerScope(route)
 	}
+	if h.s.SellerSelling != nil {
+		h.registerSellerSelling(route)
+	}
 	if h.s.SellerProductTax != nil {
 		route("GET /v1/seller/products/{productId}/tax-readiness", h.productTaxReadiness)
 		route("GET /v1/seller/variants/{atin}/tax-evidence", h.variantTaxEvidence)

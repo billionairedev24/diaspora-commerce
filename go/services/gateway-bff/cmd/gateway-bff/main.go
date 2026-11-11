@@ -203,6 +203,7 @@ func run() error {
 		SellerSizeCharts:   app.NewSellerSizeChartService(sellerDeps),
 		SellerProductTax:   app.NewSellerProductTaxService(sellerDeps),
 		SellerScope:        app.NewSellerScopeService(sellerDeps),
+		SellerSelling:      app.NewSellerSellingService(sellerDeps),
 		SellerMoney:        app.NewSellerMoneyService(sellerDeps),
 		SellerFees:         app.NewSellerFeesService(sellerDeps),
 		SellerTeam:         app.NewSellerTeamService(sellerDeps),

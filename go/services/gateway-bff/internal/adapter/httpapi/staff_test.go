@@ -377,6 +377,30 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"id": "app-1", "reference": "APP-1", "kind": "SELLER", "status": "AWAITING_FINAL_APPROVAL", "reviewerId": "stf-1",
 			"business": map[string]any{"storeName": "Kente Naturals", "entityType": "SINGLE_MEMBER_LLC"}, "steps": []string{"business", "bank"},
 			"workflow": appWorkflow(now), "timeline": []any{map[string]any{"action": "APPROVE", "actorId": "stf-1", "actorName": "Rita Okoro", "occurredAt": now, "note": "ok"}}})
+	// seller: selling approvals (a case next to applications, the approvals sellers hold, the rules)
+	case p == "/v1/selling-applications":
+		writeJ(w, 200, page(map[string]any{"id": "sap-1", "reference": "SA-50001", "orgId": "org-1", "scopeLabel": "Dietary supplements", "scopeType": "CATEGORY", "scopeKey": "dietary-supplements",
+			"kind": "NEW", "source": "SELLER", "status": "AWAITING_FINAL_APPROVAL", "reviewerId": "stf-1", "submittedAt": now, "workflow": appWorkflow(now)}))
+	case strings.HasPrefix(p, "/v1/selling-applications/"):
+		writeJ(w, 200, map[string]any{"id": "sap-1", "reference": "SA-50001", "orgId": "org-1", "applicantName": "Ada Obi", "scopeLabel": "Dietary supplements", "scopeType": "CATEGORY", "scopeKey": "dietary-supplements",
+			"kind": "NEW", "source": "SELLER", "status": "AWAITING_FINAL_APPROVAL", "reviewerId": "stf-1", "submissionCount": 1, "workflow": appWorkflow(now),
+			"documents": []any{map[string]any{"id": "d1", "kind": "PERMIT_LICENCE", "label": "Permit or licence (with its expiry date)", "assetId": "asset-1", "fileName": "permit.pdf", "expiresOn": "2027-06-30"}},
+			"required":  []any{map[string]any{"kind": "PERMIT_LICENCE", "optional": false}, map[string]any{"kind": "LIABILITY_INSURANCE", "optional": false}},
+			"timeline":  []any{map[string]any{"action": "APPROVE", "actorId": "stf-1", "actorName": "Rita Okoro", "occurredAt": now, "note": "ok"}}})
+	case p == "/v1/selling-approvals":
+		writeJ(w, 200, page(map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a1", "orgId": "org-1", "scopeType": "CATEGORY", "scopeKey": "dietary-supplements", "label": "Dietary supplements",
+			"status": "APPROVED", "expiresAt": now, "daysToExpiry": 20, "paused": false, "listingsPaused": false}))
+	case strings.HasPrefix(p, "/v1/selling-approvals/"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a1", "orgId": "org-1", "scopeType": "CATEGORY", "scopeKey": "dietary-supplements", "label": "Dietary supplements",
+			"status": "APPROVED", "expiresAt": now, "daysToExpiry": 20, "paused": false, "listingsPaused": false, "documents": []any{}})
+	case p == "/v1/selling-rules":
+		writeJ(w, 200, page(map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000b1", "scopeType": "BRAND", "scopeKey": "gucci", "label": "Gucci", "level": "APPLY", "active": true, "source": "SEED",
+			"documents": []any{map[string]any{"kind": "BRAND_AUTHORIZATION", "optional": false}}, "materials": []any{}, "reapplyAfterDays": 30, "version": 0}))
+	case strings.HasPrefix(p, "/v1/selling-rules/") && strings.HasSuffix(p, "/audit"):
+		writeJ(w, 200, []any{map[string]any{"action": "UPDATE", "actorName": "Rita Rules", "reason": "Counterfeits reported", "changedAt": now}})
+	case strings.HasPrefix(p, "/v1/selling-rules/"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000b1", "scopeType": "BRAND", "scopeKey": "gucci", "label": "Gucci", "level": "APPLY", "active": true, "source": "SEED",
+			"documents": []any{map[string]any{"kind": "BRAND_AUTHORIZATION", "optional": false}}, "materials": []any{}, "reapplyAfterDays": 30, "version": 0})
 	// seller: the organisation directory mirror and Stripe Connect compliance
 	case p == "/v1/orgs/mirror":
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"orgId": "org-1", "displayName": "Kente Naturals", "legalName": "Kente Naturals LLC", "kind": "SELLER", "offering": "PRODUCTS", "country": "US", "status": "APPROVED"}}, "total": 1})

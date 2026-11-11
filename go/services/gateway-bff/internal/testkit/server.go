@@ -175,6 +175,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerSizeCharts:   app.NewSellerSizeChartService(sellerDeps),
 		SellerProductTax:   app.NewSellerProductTaxService(sellerDeps),
 		SellerScope:        app.NewSellerScopeService(sellerDeps),
+		SellerSelling:      app.NewSellerSellingService(sellerDeps),
 		SellerImports:      app.NewSellerImportService(sellerDeps, "/api/bff"),
 		SellerMoney:        app.NewSellerMoneyService(sellerDeps),
 		SellerFees:         app.NewSellerFeesService(sellerDeps),
