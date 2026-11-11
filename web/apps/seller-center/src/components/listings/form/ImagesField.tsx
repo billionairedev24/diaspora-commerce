@@ -7,7 +7,7 @@ import { type DragEvent, useState } from 'react';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 
-import { fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES, MIN_IMAGE_PX } from '../form-model';
+import { fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES } from '../form-model';
 
 const dims = (file: File) =>
   new Promise<{ w: number; h: number }>((resolve) => {
@@ -62,14 +62,13 @@ export function ImagesField({ images, update, error }: Props) {
       count++;
       const id = `${Date.now()}-${count}-${file.name}`;
       const { w, h } = await dims(file);
-      const low = w < MIN_IMAGE_PX || h < MIN_IMAGE_PX;
       update((list) => [...list, { id, previewUrl: URL.createObjectURL(file), url: null, width: w, height: h, bytes: file.size, contentType: file.type, status: 'uploading', alt: '' }]);
       try {
         const ticket = await api.requestUpload({ purpose: 'product-image', fileName: file.name, contentType: file.type as (typeof IMAGE_TYPES)[number], size: file.size });
         const put = await fetch(ticket.url, { method: ticket.method, headers: ticket.headers, body: file });
         if (!put.ok) throw new Error('upload failed');
         const asset = await api.completeUpload(ticket.assetId);
-        patch(id, { url: asset.url, status: low ? 'low' : 'ready' });
+        patch(id, { url: asset.url, status: 'ready' });
       } catch {
         patch(id, { status: 'error' });
       }
@@ -87,7 +86,6 @@ export function ImagesField({ images, update, error }: Props) {
   const status = (im: FormImage, i: number) => {
     if (im.status === 'uploading') return t('sc.pf.images.uploading');
     if (im.status === 'error') return t('sc.pf.images.failed');
-    if (im.status === 'low' && i === 0) return t('sc.pf.images.tooSmall', { px: MIN_IMAGE_PX });
     return `${im.width}×${im.height}`;
   };
   const empty = images.length === 0;
@@ -107,7 +105,7 @@ export function ImagesField({ images, update, error }: Props) {
       >
         <UploadSimple size={empty ? 40 : 28} aria-hidden />
         <span className={empty ? 'text-base' : undefined}><strong>{empty ? t('sc.pf.images.drop') : t('sc.pf.images.addMore')}</strong> {t('sc.pf.images.browse')}</span>
-        <span className="text-xs text-muted">{t('sc.pf.images.rules', { count: images.length, max: MAX_IMAGES, px: MIN_IMAGE_PX })}</span>
+        <span className="text-xs text-muted">{t('sc.pf.images.rules', { count: images.length, max: MAX_IMAGES })}</span>
         <input type="file" data-testid="image-input" accept={IMAGE_TYPES.join(',')} multiple className="at-visually-hidden" aria-describedby={error ? 'pf-images-error' : undefined}
           onChange={(e) => { void add(e.target.files); e.target.value = ''; }} />
       </label>

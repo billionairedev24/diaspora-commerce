@@ -252,17 +252,17 @@ class ImageLibraryAttachIT {
                 image("ATT-3", "MAIN", "READY", 800)));
 
         AttachResult first = library.attach(List.of());
-        assertThat(first.productsUpdated()).isEqualTo(1);
-        assertThat(first.imagesAttached()).isEqualTo(2);
-        assertThat(first.skipped()).extracting(ImageLibraryService.Skipped::sku, ImageLibraryService.Skipped::reason)
-                .containsExactly(tuple("ATT-3", "The main image is under 1000 × 1000 px"));
+        assertThat(first.productsUpdated()).isEqualTo(2);
+        assertThat(first.imagesAttached()).isEqualTo(3);
+        assertThat(first.skipped()).isEmpty();
         Product attached = products.get(ids.get("ATT-1"));
         assertThat(attached.images()).extracting(ProductImage::url)
                 .containsExactly("https://utfs.io/f/ATT-1.MAIN.jpg", "https://utfs.io/f/ATT-1.PT01.jpg");
-        // held and small-main listings keep their images
+        // held listings keep their images; a small main image is attached like any other
         assertThat(products.get(ids.get("ATT-2")).images()).extracting(ProductImage::url)
                 .doesNotContain("https://utfs.io/f/ATT-2.MAIN.jpg");
-        assertThat(products.get(ids.get("ATT-3")).images()).hasSize(1);
+        assertThat(products.get(ids.get("ATT-3")).images()).extracting(ProductImage::url)
+                .containsExactly("https://utfs.io/f/ATT-3.MAIN.jpg");
         assertThat(products.get(ids.get("ATT-4")).images()).hasSize(1);
 
         // running it again changes nothing; naming SKUs limits the run

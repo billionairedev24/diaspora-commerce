@@ -112,7 +112,6 @@ export const emptyForm = (): FormState => ({
   pkg: { length: '', width: '', height: '', weight: '' }, pkgUnits: { size: 'in', weight: 'lb' }, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: '', facts: {}, behaviour: {}
 });
 
-export const MIN_IMAGE_PX = 1000;
 export const MAX_IMAGES = 10;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
@@ -382,7 +381,6 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   if (!s.images.length) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesNone');
   else if (s.images.some((i) => i.status === 'uploading')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesUploading');
   else if (s.images.some((i) => i.status === 'error')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesFailed');
-  else if (s.images[0]?.status !== 'ready') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainSmall', { px: MIN_IMAGE_PX });
 
   type?.attributes.forEach((a) => {
     if (a.key === 'brand' || a.taxFact) return;
@@ -682,7 +680,7 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
     } else attrs[k] = v;
   });
   const images: FormImage[] = d.images.map((im, i) => ({ id: `img-${i}`, previewUrl: im.url, url: im.url, width: im.width ?? 0, height: im.height ?? 0, bytes: im.bytes ?? 0,
-    contentType: im.contentType, status: (im.width ?? MIN_IMAGE_PX) < MIN_IMAGE_PX && i === 0 ? 'low' : 'ready', alt: im.alt ?? '' }));
+    contentType: im.contentType, status: 'ready', alt: im.alt ?? '' }));
   const rowOf = (v: SellerProductDetail['variants'][number]): VariantRow => {
     const img = v.images[0] ? images.find((i) => i.url === v.images[0]?.url) : undefined;
     let image = img?.id ?? '';

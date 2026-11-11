@@ -62,9 +62,6 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
                 errors.put("images[" + i + "]", "Larger than 8 MB");
             }
         }
-        if (!images.getFirst().largeEnoughForMain()) {
-            errors.put("images[0]", "Main image must be at least 1000 × 1000 px");
-        }
     }
 
     private static void checkDetails(ListingDetails d, Map<String, String> errors) {

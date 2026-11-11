@@ -96,7 +96,7 @@ describe('one-step product form: validation and readiness', () => {
     expect(validateForm({ ...metric, pkg: { ...metric.pkg, length: '300' } }, grocery)[fieldId.pkg]?.key).toBe('sc.pf.err.packageLimits');
     expect(toProductDraft(metric, grocery).listing?.packaging).toEqual({ lengthIn: 11.81, widthIn: 7.87, heightIn: 3.94, weightLb: 2.2 });
     expect(validateForm({ ...suya(), attrs: { ...suya().attrs, shelf: 'a year' } }, grocery)[fieldId.attr('shelf')]?.key).toBe('sc.pf.err.number');
-    expect(validateForm({ ...suya(), images: [{ ...image, status: 'low' }] }, grocery)[fieldId.images]?.key).toBe('sc.pf.err.imagesMainSmall');
+    expect(validateForm({ ...suya(), images: [{ ...image, width: 600, height: 600 }] }, grocery)[fieldId.images]).toBeUndefined();
     expect(priceMinor('$1,299.50')).toBe(129950);
     expect(priceMinor('12.5O')).toBeNull();
     expect(gtinOk('9780141439518')).toBe(true);

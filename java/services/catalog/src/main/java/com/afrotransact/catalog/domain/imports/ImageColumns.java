@@ -24,8 +24,8 @@ public final class ImageColumns {
     /** The template columns, in order. */
     public static List<ImportColumn> template() {
         List<ImportColumn> out = new ArrayList<>();
-        out.add(new ImportColumn(MAIN, "Main image URL", "The main image: a public https link to a JPG, PNG or WebP "
-                + "(at least 1000 × 1000 px), or a file name from your image library. Leave all image columns empty to "
+        out.add(new ImportColumn(MAIN, "Main image URL", "The main image: a public https link to a JPG, PNG or WebP, "
+                + "or a file name from your image library. Leave all image columns empty to "
                 + "use the library images named after the SKU (SKU.MAIN.jpg, SKU.PT01.jpg …).", false, ColumnKind.URLS,
                 List.of(), "https://example.com/ankara-front.jpg", true));
         for (int i = 1; i <= OTHER_COUNT; i++) {

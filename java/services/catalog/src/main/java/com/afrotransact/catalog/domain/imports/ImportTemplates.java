@@ -20,7 +20,7 @@ public final class ImportTemplates {
                     + "details are read from its first row; variant rows only need SKU, options, price, quantity "
                     + "and barcode.",
             "Images, method 1 (links): put a public https link to a JPG, PNG or WebP file in Main image URL and up to "
-                    + "eight more in Other image URL 1 to 8 (at least 1000 × 1000 px for the main image); Swatch image "
+                    + "eight more in Other image URL 1 to 8; Swatch image "
                     + "URL is a small picture of the colour or pattern. We copy each image into AfroTransact and check "
                     + "it like an upload. Example: https://example.com/ankara-front.jpg.",
             "Images, method 2 (image library): upload your photos to Listings → Images first, named after the SKU "

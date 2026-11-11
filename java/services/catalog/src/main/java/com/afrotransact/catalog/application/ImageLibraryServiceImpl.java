@@ -106,11 +106,6 @@ class ImageLibraryServiceImpl implements ImageLibraryService {
                 skipped.add(new Skipped(sku, "The listing is taken down"));
                 continue;
             }
-            if (images != null && !images.getFirst().largeEnoughForMain()) {
-                skipped.add(new Skipped(sku, "The main image is under " + ProductImage.MIN_MAIN_EDGE + " × "
-                        + ProductImage.MIN_MAIN_EDGE + " px"));
-                continue;
-            }
             List<ProductImage> next = images == null ? p.images() : images;
             UpdateProductCommand cmd = new UpdateProductCommand(null, p.title(), p.attributes(), next,
                     p.variationTheme(), variants, p.preorderEligible(), p.shipsNow(), p.details(), p.version(), null);
