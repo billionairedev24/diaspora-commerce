@@ -93,7 +93,7 @@ only, or forced setup where mandatory). The code and rows are kept. To switch on
 redeploy; existing SMS enrolments work again, the UI shows the SMS row, and phone-on-file is still **never** used as an
 implicit factor. The flag also needs the notifications SMS provider configured (Twilio).
 
-Migration note (V39): no data is changed. People who relied on the phone-on-file fallback (staff) will be forced through
+Migration note (V40): no data is changed. People who relied on the phone-on-file fallback (staff) will be forced through
 setup at their next sign-in.
 
 ## Where to look
