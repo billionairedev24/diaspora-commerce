@@ -240,7 +240,18 @@ name. The tax rules are a **draft** until a Texas tax professional signs them of
   code is lifted product by product in Tax review, so the profile is read only.
 - **Tax review** is the queue of products whose tax waits for a person: the product, the seller, the category, what the seller
   entered, the proof they attached, the proposed decision and why it needs review. **Approve**, **Move to another category** or
-  **Ask the seller for more**. The **Decisions** view lists who decided, when and under which rule version.
+  **Ask the seller for more**. The **Audit sample** tab lists items the system approved by itself (only when *Review by risk* is on):
+  they are live, and you **Confirm** each one or **Move it to another category**, which closes it until it is reviewed again. The
+  **Decisions** view lists who decided, when and under which rule version; the system's own approvals read "Automatic approval
+  (risk-based rule)".
+- **Review settings** says how tax review works: *Review every item* (the default: every product waits for a tax reviewer) or *Review
+  by risk* (the system approves an item itself only when its category is active, the tax rules give a clear answer, no required proof
+  is missing and the category is not on the always-review list). You also choose the categories that always go to a reviewer (by name;
+  supplements, over-the-counter medicines, medicated skincare, medical devices, baby food and formula and gift cards to start with,
+  and any category that needs sign-off, a specific code, a decision or itemising is always reviewed) and the share of approved items
+  put in the Audit sample (5% to start with). **Only switch to Review by risk after the Texas tax professional has agreed**; put
+  their name or the reference in the reason. Needs `tax:classify-admin`. Checkout still blocks any item without a clear stored tax
+  decision.
 - **Provider codes** shows, for Stripe and Avalara, the code for each outcome with whether a person verified it, and how many
   outcomes still need a code. A line with no verified code is blocked at checkout, never guessed. Export the map to CSV, or import a
   CSV: you see what would change first, and a file with a bad row is not applied at all.

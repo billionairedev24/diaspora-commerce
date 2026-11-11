@@ -75,6 +75,17 @@ Adding a provider-backed `JurisdictionResolver` adapter (precision `ADDRESS`) gi
 
 The tax professional signs off the cutover; attach the signed note to the settings history entry (reference in the `reason`).
 
+## Risk-based tax review and a cutover
+
+`taxReview.mode` (Settings → Sales tax → *Review settings*, `GET|PUT /v1/tax/review-settings`) decides who approves a variant's tax
+classification: every variant waits for a reviewer (`ALL`, default) or the system approves when the category is ACTIVE, the rules
+resolve and the category is not on the always-review list (`RISK_BASED`, with a 5% audit sample). It does not change which provider
+calculates the amount. For a cutover: leave it on `ALL` until the tax professional has agreed in writing (record the reference in the
+change reason), do not change it in the same window as the method switch (a difference in the shadow report would then have two
+possible causes), and keep the **Audit sample** tab clear. A reclassification from the audit sample re-closes the gate and re-resolves
+checkout lines, so its effect shows in the next shadow quotes. Rolling it back is a `PUT` with mode `ALL`: new events then go to
+review again; items the system already approved keep their approval until their facts change or a reviewer reclassifies them.
+
 ## Rollback
 
 `PUT /v1/tax/settings {"method":"RULES","reason":"..."}` (or `shadowProvider: null` to stop shadowing). Immediate for new quotes (other replicas follow within about 10 seconds); placed orders keep their tax. Mappings stay; re-verification is only needed if a code changed.

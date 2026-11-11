@@ -139,6 +139,12 @@ Locally security is off and no token is needed; with security on set `SEED_TAX_T
 the scopes `tax:read tax:classify-admin` and list them in `SEED_SCOPES` (which replaces the default scope list). `TAX_APPROVAL_POLICY=SENSITIVE` would also work locally but only auto-approves
 plain taxable items, so the seeder approves instead.
 
+The seeder works in both review modes. With the staff setting `taxReview.mode` = `RISK_BASED` (Settings → Sales tax → *Review settings*;
+off by default) the system approves many variants itself (`classifiedBy` `auto`), so they never appear in the queue: the seeder counts
+them as *approved by the system (risk-based review)* instead of waiting for them, leaves audit sample items (live, waiting for a person
+to confirm) alone, and if a record is approved by the system between the listing and its own approve call it re-reads the record
+instead of failing the run.
+
 **Retail offer.** AfroTransact Retail's offer is created by offers from the Kafka event `catalog.product.created`. On a cold
 stack the consumer group can take a while to join, so the seeder waits up to 120 s for the first Retail product
 (`SEED_RETAIL_OFFER_WAIT`), then 20 s for the rest once one arrived (or after a timeout, so a dead Kafka path does not cost

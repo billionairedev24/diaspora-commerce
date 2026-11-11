@@ -346,6 +346,45 @@ class TaxReviewTest(unittest.TestCase):
         self.assertEqual(self.now, 0)
         self.assertEqual(self.s.report.counts[("tax review", "already approved")], 1)
 
+    def test_risk_based_mode_records_already_approved_by_the_system_are_settled_without_waiting_or_failing(self):
+        self.records["ATAUTO"] = {"atin": "ATAUTO", "status": "APPROVED", "classifiedBy": "auto", "reviewedBy": "auto",
+                                  "auditSample": False, "resolution": {"status": "RESOLVED"}}
+        self.records["ATAUDIT"] = {"atin": "ATAUDIT", "status": "APPROVED", "classifiedBy": "auto", "reviewedBy": "auto",
+                                   "auditSample": True, "resolution": {"status": "RESOLVED"}}
+        self.record("ATREVIEW")
+        self.s.tax_atins.update({"ATAUTO": "Auto", "ATAUDIT": "Audit", "ATREVIEW": "Review"})
+        self.s._review_tax()
+        self.assertEqual([a for a, _ in self.approved], ["ATREVIEW"], "audit sample items are left for a reviewer")
+        self.assertEqual(self.s.report.counts[("tax review", "approved by the system (risk-based review)")], 2)
+        self.assertEqual(self.s.report.counts[("tax review", "approved")], 1)
+        self.assertEqual(self.s.report.problems, [])
+        self.assertEqual(self.now, 0)
+
+    def test_a_record_the_system_approved_between_the_listing_and_the_approve_does_not_fail_the_run(self):
+        self.record("ATRACE")
+        self.s.tax_atins["ATRACE"] = "Race"
+
+        def approve(path, body, kw):
+            self.records["ATRACE"].update(status="APPROVED", classifiedBy="auto")
+            raise ApiError("POST", path, 422, {"code": "tax.classification-not-resolvable"})
+
+        self.tax.on("POST", "/v1/tax/variant-classifications/*", approve)
+        self.s._review_tax()
+        self.assertEqual(self.s.report.problems, [])
+        self.assertEqual(self.s.report.counts[("tax review", "approved by the system (risk-based review)")], 1)
+
+    def test_a_refused_approve_of_a_record_that_is_still_pending_is_reported_not_raised(self):
+        self.record("ATSTUCK")
+        self.s.tax_atins["ATSTUCK"] = "Stuck"
+
+        def approve(path, body, kw):
+            raise ApiError("POST", path, 422, {"code": "tax.classification-not-resolvable"})
+
+        self.tax.on("POST", "/v1/tax/variant-classifications/*", approve)
+        self.s._review_tax()
+        self.assertEqual(len(self.s.report.problems), 1)
+        self.assertIn("tax-returns has no classification yet", self.s.report.problems[0])
+
     def test_a_record_that_arrives_over_kafka_a_little_late_is_approved(self):
         self.s.tax_atins["ATLATE"] = "Late"
         calls = []

@@ -504,7 +504,8 @@ class Seeder:
 
     def _review_tax(self, atins: set[str] | None = None) -> None:
         """Acts as a tax reviewer for demo data: every given variant (default: all of this run's) that is in the review
-        queue with a RESOLVED decision is approved with a reason. A record that is not RESOLVED (missing facts, blocked,
+        queue with a RESOLVED decision is approved with a reason. Works in both review modes: with taxReview.mode
+        RISK_BASED many variants are already approved by the system and never appear in the queue; they count as settled. A record that is not RESOLVED (missing facts, blocked,
         gated, conflict) is never approved here; it is reported. Records arrive from catalog over Kafka, so the queue
         is polled for a bounded time until every variant is accounted for."""
         wanted = set(self.tax_atins if atins is None else atins)
@@ -550,7 +551,14 @@ class Seeder:
                 self._problem(f"tax review: {self.tax_atins.get(atin, atin)} ({atin}) stays in review: its decision is "
                               f"{status or 'unknown'}, not RESOLVED (the seeder never approves that)")
             return False
-        self.svc["tax-returns"].post(f"/v1/tax/variant-classifications/{atin}/approve", {"reason": TAX_REVIEW_REASON})
+        try:
+            self.svc["tax-returns"].post(f"/v1/tax/variant-classifications/{atin}/approve", {"reason": TAX_REVIEW_REASON})
+        except ApiError as e:
+            if e.status not in (409, 422):
+                raise
+            # With taxReview.mode RISK_BASED the system may have approved the record between the listing and this call
+            # (or its facts changed again). Look at it as it is now instead of failing the whole run.
+            return self._tax_settled(atin)
         self.report.add("tax review", "approved")
         return True
 
@@ -563,7 +571,10 @@ class Seeder:
                 return False
             raise
         if rec.get("status") == "APPROVED":
-            self.report.add("tax review", "already approved")
+            # Approved by an earlier run, by a person, or by the system (taxReview.mode RISK_BASED: classifiedBy "auto",
+            # maybe an audit sample item that stays live until a reviewer confirms it). Nothing for the seeder to do.
+            self.report.add("tax review", "approved by the system (risk-based review)"
+                            if rec.get("classifiedBy") == "auto" else "already approved")
             return True
         if rec.get("status") == "PENDING_REVIEW":
             return False  # the queue listing is the one that approves

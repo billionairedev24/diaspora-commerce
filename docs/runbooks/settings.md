@@ -46,6 +46,12 @@ provider: `docs/runbooks/tax-provider-cutover.md`. Profiles, review and provider
 
 `TAX_PROVIDER` (`RULES` by default) is only the starting value before anyone chooses.
 
+**Tax review mode.** Settings → Sales tax → *Review settings* (`taxReview.mode`): *Review every item* by default; *Review by risk* lets
+the system approve a variant's classification itself (ACTIVE category, clear rules, no missing proof, not on the always-review list)
+and puts 5% of those in the *Audit sample* tab for a person to confirm or reclassify. Needs `tax:classify-admin` and a reason (10+
+characters). **Switch it on only after the Texas tax professional agrees**; switching it back to *Review every item* applies to new
+events and leaves existing approvals alone. See `docs/engineering/category-tax-design.md` section 9.
+
 ## Tax filings: what we filed and paid to each state
 
 AfroTransact collects sales tax as marketplace facilitator, so it files and pays it to the states. **Settings → Sales tax →

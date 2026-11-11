@@ -247,7 +247,7 @@ Spec: [`docs/engineering/category-tax-design.md`](../../../docs/engineering/cate
 approve before production use.** Never guess: no definite decision means a status (MISSING_FACTS, BLOCKED, NEEDS_APPROVAL,
 REFINE_CODE, CONFLICT_OPEN) and no rate; there is no default rate and no default outcome.
 
-| Table (V10 to V12) | Holds |
+| Table (V10 to V13) | Holds |
 |---|---|
 | `tax_fact_definition`, `tax_profile`, `tax_profile_fact` | 36 typed facts, 73 category profiles with their status gate, the facts each uses (`required_when` conditions) |
 | `tax_outcome_code`, `tax_decision_row` | 105 outcome-level internal codes (`AT.<CATEGORY>.<OUTCOME>`), the ordered decision rows (first match wins, mutually exclusive) |
@@ -262,7 +262,7 @@ V12 is generated: `python3 tools/taxonomy/gen_seed_sql.py` (and `--check`; `make
 **Endpoints** (contract `contracts/openapi/tax-returns.yaml`): `POST /v1/tax/classifications/resolve` (`tax:classify`, also `tax:read`, `tax:classify-admin`);
 `GET /v1/tax/profiles`, `GET /v1/tax/profiles/{code}` (`tax:read`), `PUT /v1/tax/profiles/{code}/status` (`tax:classify-admin`);
 `GET /v1/tax/provider-code-map`, `PUT /v1/tax/provider-code-map/{internalTaxCode}`; `GET /v1/tax/variant-classifications[?status=PENDING_REVIEW]`,
-`GET .../{atin}`, `POST .../{atin}/approve`, `POST .../{atin}/reclassify`; `GET /v1/tax/shadow/report`; `GET|PUT /v1/tax/settings` (method + `shadowProvider`).
+`GET .../{atin}`, `POST .../{atin}/approve`, `POST .../{atin}/reclassify`; `GET /v1/tax/shadow/report`; `GET|PUT /v1/tax/settings` (method + `shadowProvider`); `GET /v1/tax/review-settings` (`tax:read`) and `PUT` (`tax:classify-admin`): `taxReview.mode` ALL (default) or RISK_BASED, the always-review categories and the audit sample percentage (V13; `GET .../variant-classifications?auditSample=true` lists the audit sample; design: category-tax-design.md section 9, "Risk-based review").
 `tax:configure` holders are accepted for the admin actions until identity V38 (`tax:classify`, `tax:classify-admin`, role Tax Reviewer) runs; `POST .../{atin}/request-information` stores a seller request on the record (cleared when the seller's facts change).
 
 **Events**: consumes `catalog.product.tax-facts-changed` (topic `at.product.events`); publishes `tax.classification.changed` (kinds PROFILE_STATUS, PROVIDER_CODE_MAP, VARIANT_CLASSIFICATION) on `at.taxreturns.events`.

@@ -115,8 +115,9 @@ certification to sellers is a legal task; gift card redemption tax is decided pe
 
 ## 6. Publication gates
 
-A variant is **READY** only when the tax rules resolve to `RESOLVED` **and** the classification record is `APPROVED` by admin tax review
-(section 9). Catalog blocks publication otherwise.
+A variant is **READY** only when the tax rules resolve to `RESOLVED` **and** the classification record is `APPROVED`: by admin tax review
+(section 9) or, only when the staff setting `taxReview.mode` is `RISK_BASED`, by the risk rule (section 9, "Risk-based review").
+Catalog blocks publication otherwise.
 
 | Gate | Meaning | Who lifts it |
 |---|---|---|
@@ -185,7 +186,37 @@ choose another provider code, ask the provider for a custom/refined code, or kee
 
 New permissions: `tax:classify` (resolve, service clients), `tax:classify-admin` (approve, reclassify, change profile status, edit code map). `tax:read` already exists. See [authorisation.md](./authorisation.md) for how roles are granted.
 
-Audit: every classification action (facts changed, submitted, approved, rejected, reclassified, marked stale, evidence added) is
+### Risk-based review (staff setting `taxReview.mode`, OFF by default)
+
+Decision D7 of `docs/engineering/listing-rules.md`. **Never switch it on before the Texas tax professional agrees**: it lets the
+system approve classifications without a person, and the rules in this document are a draft.
+
+- `taxReview.mode` is `ALL` (default, the behaviour above: every variant classification waits in the review queue) or `RISK_BASED`.
+  It is a staff setting, `GET|PUT /v1/tax/review-settings` (a separate route from `/v1/tax/settings`, because that PUT replaces the
+  method and the shadow provider together). Reading needs `tax:read`; changing needs `tax:classify-admin` only (not `tax:configure`).
+  A change needs a reason of 10+ characters, is recorded with its before and after in the history (`tax_setting_history`, key
+  `tax.review`) and applies to classification events from then on; records already decided keep their status. The value is absent
+  until someone changes it, and an unreadable stored value falls back to `ALL`, never to `RISK_BASED`.
+- In `RISK_BASED` mode a classification is approved by the system (`classifiedBy` and `reviewedBy` = `auto`, with the `ruleVersion`, the
+  facts and an audit row `APPROVED` by actor `auto` whose reason states the rule) **only when all of these hold**: the category profile
+  status is `ACTIVE`; the resolve result is `RESOLVED`; no evidence fact the category requires for these facts is missing; the category
+  is not on the always-review list. Everything else goes to the existing review queue unchanged.
+- The always-review list is configurable. Default: `dietary-supplements`, `otc-medicines`, `medicated-skincare`, `medical-devices`,
+  `baby-food-formula`, `gift-cards`. Every category whose status is `NEEDS_APPROVAL`, `REFINE_CODE`, `CONFLICT_OPEN` or
+  `BLOCKED_BUNDLE` is always reviewed whatever the list says (the status rule cannot be switched off).
+- **Audit sample**: a configurable percentage (default 5, 0 to 100) of the items the system approves is also placed in the review
+  queue as an **audit item** (`variant_classification.audit_sampled_at`, audit row `AUDIT_SAMPLED`). Which items is a stable hash
+  (SHA-256) of the variant ATIN, so a retried event never samples an item twice or differently, and a larger percentage only adds
+  items. An audit item **stays APPROVED and live**; checkout is unaffected. A reviewer **confirms** it (`POST .../approve` on an
+  APPROVED audit item: audit row `AUDIT_CONFIRMED`, it leaves the queue) or **reclassifies** it (`POST .../reclassify`: the record
+  returns to `PENDING_REVIEW`, the gate re-closes, `tax.classification.changed` is published, catalog re-closes the variant and
+  checkout re-resolves the lines through the existing flow). The queue lists them with `GET /v1/tax/variant-classifications?auditSample=true`.
+- **Checkout safeguard, unchanged**: a line without a stored decision that is `READY` and `RESOLVED` is blocked; there is never a default
+  rate or outcome. The mode only changes who approves, not what a decision is.
+- Staff console: Settings → Sales tax → *Tax review* has the tab **Audit sample**; *Review settings* shows the mode, the always-review
+  categories (by name) and the sampling percentage with a plain-language warning. The BFF maps `status=AUDIT_SAMPLE`.
+
+Audit: every classification action (facts changed, submitted, approved, rejected, reclassified, marked stale, evidence added, audit sampled, audit confirmed) is
 an append-only row with actor, time, reason, `ruleVersion`, before and after. Profile status and code-map changes are audited the
 same way and publish `tax.classification.changed`. The reviewer's decision stores who classified, which codes and conditions were used, and when.
 

@@ -85,7 +85,8 @@ A record is created or refreshed from the facts catalog reports. It is `MISSING_
 once the facts are complete (the review queue), `APPROVED` after an admin (`tax:classify-admin`) approves it. A later fact edit keeps the
 approval only when the decision (outcome, internal code, status) is unchanged; a new category or new evidence always returns it to review.
 `at.taxreturns.tax.classification.approval-policy=SENSITIVE` lets the system approve plain taxable, evidence-free records in ACTIVE profiles;
-the design default `ALL` reviews everything. Anything exempt, evidence-based or gated always needs a person.
+the design default `ALL` reviews everything. Anything exempt, evidence-based or gated always needs a person under that policy.
+The staff setting `taxReview.mode` (V13, OFF = `ALL` by default, changed at runtime by `tax:classify-admin`) is separate: `RISK_BASED` lets the system approve any ACTIVE, RESOLVED record with no missing required evidence outside the always-review list, and samples 5% for audit ([category-tax-design.md](./category-tax-design.md) section 9). When it is `RISK_BASED` it replaces `approval-policy`; when it is `ALL` the policy above applies as before.
 
 ### Never guess, as built
 
