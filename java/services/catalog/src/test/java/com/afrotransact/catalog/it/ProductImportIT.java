@@ -155,7 +155,7 @@ class ProductImportIT {
     /** A dress row; {@code image} holds one or more URLs separated by spaces (the template's Main image URL, then Other image URL 1 to 8). */
     private String dressRow(String parent, String sku, String size, String image) {
         List<String> pairs = new ArrayList<>(List.of("Parent SKU=" + parent, "SKU=" + sku, "Title *=Ankara Wrap Dress, Puff Sleeve",
-                "Brand or label *=Adire Lagos", "Description=Hand-finished wax print.",
+                "Brand or label=Adire Lagos", "Description=Hand-finished wax print.",
                 "Price (USD) *=49.00", "Quantity *=5", "No barcode=Yes", "Variation=" + (size.isEmpty() ? "" : "Size"),
                 "Size=" + size, "Material=Lace", "Fit=Regular", "Length=Midi",
                 "Occasion=Everyday", "Care=Cold wash", "Country of origin=Nigeria"));

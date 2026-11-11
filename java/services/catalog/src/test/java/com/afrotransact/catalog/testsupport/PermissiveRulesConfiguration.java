@@ -23,8 +23,9 @@ public class PermissiveRulesConfiguration {
         RuleBook real = RulesFixtures.book();
         CategoryRules open = RulesFixtures.permissive();
         Map<String, CategoryRules> all = new LinkedHashMap<>();
+        // Every category is general goods ("HOM") with every question optional; the book keeps a general goods kind for requests.
         real.categories().forEach((code, c) -> all.put(code, new CategoryRules(code, c.name(), c.department(),
-                open.kindCode(), open.kindName(), c.approval(), c.note(), c.provisional(), open.fields())));
+                "HOM", "General goods", c.approval(), c.note(), c.provisional(), open.fields())));
         RuleBook book = new RuleBook(real.kinds(), all);
         return () -> book;
     }

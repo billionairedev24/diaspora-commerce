@@ -169,7 +169,7 @@ class ImageLibraryAttachIT {
     /** A dress row; {@code images} are the template's Main image URL and Other image URL 1…8 columns, in order. */
     private String dressRow(String parent, String sku, String size, String... images) {
         List<String> pairs = new ArrayList<>(List.of("Parent SKU=" + parent, "SKU=" + sku,
-                "Title *=Ankara Wrap Dress, Puff Sleeve", "Brand or label *=Adire Lagos"));
+                "Title *=Ankara Wrap Dress, Puff Sleeve", "Brand or label=Adire Lagos"));
         for (int i = 0; i < images.length; i++) {
             pairs.add((i == 0 ? "Main image URL=" : "Other image URL " + i + "=") + images[i]);
         }
