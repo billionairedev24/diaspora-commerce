@@ -88,8 +88,27 @@ public record CheckoutInput(String orderId, String orderNumber, String customerI
      * Delivery choice for one cart package ({@code <sellerOrgId>:<fulfilment>}).
      *
      * @param option carrier | express | afrotransact_delivery | pickup
+     * @param quote  the agreed delivery quote to charge instead of the standard fee; null otherwise
      */
     public record Selection(String packageId, String option, String serviceLevel, String pickupLocationId,
-                            DeliveryPreferences preferences) {
+                            DeliveryPreferences preferences, QuoteRef quote) {
+
+        /** A selection without a delivery quote. */
+        public Selection(String packageId, String option, String serviceLevel, String pickupLocationId,
+                         DeliveryPreferences preferences) {
+            this(packageId, option, serviceLevel, pickupLocationId, preferences, null);
+        }
+
+        /** The same selection carrying the checked quote (the server fills it in; a client only names the id). */
+        public Selection withQuote(QuoteRef checked) {
+            return new Selection(packageId, option, serviceLevel, pickupLocationId, preferences, checked);
+        }
+    }
+
+    /**
+     * A delivery quote applied to a package (listing rules D20). A client sends only the id; checkout validates and
+     * consumes the quote and fills in the reference and the agreed amount, which becomes the package's shipping.
+     */
+    public record QuoteRef(String quoteId, String reference, long amountMinor) {
     }
 }

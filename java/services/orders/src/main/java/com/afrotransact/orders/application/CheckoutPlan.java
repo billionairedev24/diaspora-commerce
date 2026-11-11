@@ -37,6 +37,7 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
      * @param preorder      the pre-order window of a PREORDER package (S272); null otherwise
      * @param preorderFeeMinor the window's delivery fee for the chosen fulfilment (door / pickup), spread over the
      *                      package's shipments
+     * @param quote         the agreed delivery quote whose amount is the shipping (listing rules D20); null otherwise
      * @param feeRule       the staff delivery fee rule that priced the package (ADR 0005 §3: window door / pickup fee,
      *                      carrier rate beyond coverage), kept on the shipment; null when flat rates applied
      */
@@ -44,7 +45,24 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
                           DeliveryMethod method, String serviceLevel, String pickupLocationId,
                           DeliveryPreferences preferences, int promiseDays, List<Line> lines,
                           LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor,
-                          FeeRuleSnapshot feeRule) {
+                          FeeRuleSnapshot feeRule, CheckoutInput.QuoteRef quote) {
+
+        /** A package priced by a fee rule, without a delivery quote. */
+        public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                       DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                       DeliveryPreferences preferences, int promiseDays, List<Line> lines,
+                       LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor,
+                       FeeRuleSnapshot feeRule) {
+            this(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel, pickupLocationId,
+                    preferences, promiseDays, lines, localDelivery, preorder, preorderFeeMinor, feeRule, null);
+        }
+
+        /** The package whose shipping is the agreed amount of {@code ref} (listing rules D20). */
+        public Package withQuote(CheckoutInput.QuoteRef ref) {
+            return new Package(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel,
+                    pickupLocationId, preferences, promiseDays, lines, localDelivery, preorder, preorderFeeMinor,
+                    feeRule, ref);
+        }
 
         /** A package priced without a fee rule. */
         public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
@@ -59,7 +77,7 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
         public Package withFeeRule(FeeRuleSnapshot rule) {
             return new Package(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel,
                     pickupLocationId, preferences, promiseDays, lines, localDelivery, preorder, preorderFeeMinor,
-                    rule);
+                    rule, quote);
         }
 
         /** A package that is not a pre-order. */

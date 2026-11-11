@@ -14,6 +14,8 @@ public enum ReviewAction {
     FINAL_APPROVE,
     SEND_BACK,
     REJECT,
+    /** Selling approvals only: "cannot apply", not appealable, with a reapply date. */
+    DISQUALIFY,
     /** Workflow entries (not decisions): who holds the case, and escalation. */
     ASSIGNED,
     RELEASED,
@@ -24,7 +26,7 @@ public enum ReviewAction {
     }
 
     public boolean isFinalAction() {
-        return this == FINAL_APPROVE || this == SEND_BACK || this == REJECT || this == REQUEST_INFO;
+        return this == FINAL_APPROVE || this == SEND_BACK || this == REJECT || this == REQUEST_INFO || this == DISQUALIFY;
     }
 
     /** Assignment and escalation entries: they never change the status and never count as a decision. */

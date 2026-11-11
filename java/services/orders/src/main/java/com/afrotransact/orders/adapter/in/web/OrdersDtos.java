@@ -78,11 +78,17 @@ final class OrdersDtos {
                     + "counter or locker; a seller's packages (including AfroTransact Delivery from the store) one of "
                     + "that seller's own pickup locations. Anything else is refused with 422 orders.invalid-selection. "
                     + "A pickup package has no shipping charge.") String pickupPointId,
-            @Valid Preferences preferences) {
+            @Valid Preferences preferences,
+            @Schema(description = "An agreed delivery quote (POST /v1/delivery-quotes) to use as this package's "
+                    + "shipping charge. It must be the shopper's own, for this exact cart and address, ready and not "
+                    + "expired, and is used once. Not for pickup or pre-order packages. 422 orders.quote-changed, "
+                    + "orders.quote-expired, orders.quote-used, orders.quote-not-ready or orders.quote-not-found "
+                    + "otherwise.") @Size(max = 64) String quoteId) {
 
         CheckoutInput.Selection toSelection() {
             return new CheckoutInput.Selection(packageId, option, serviceLevel, pickupPointId,
-                    preferences == null ? null : preferences.toDomain());
+                    preferences == null ? null : preferences.toDomain(), quoteId == null || quoteId.isBlank() ? null
+                    : new CheckoutInput.QuoteRef(quoteId.trim(), null, 0));
         }
     }
 

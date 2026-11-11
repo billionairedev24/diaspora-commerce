@@ -2,6 +2,7 @@ package com.afrotransact.orders.adapter.in.web;
 
 import com.afrotransact.orders.application.CheckoutCodes;
 import com.afrotransact.orders.application.CheckoutFailed;
+import com.afrotransact.orders.domain.OrdersRateLimited;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.OrdersStateConflict;
 import com.afrotransact.orders.domain.TransitionRefused;
@@ -10,9 +11,12 @@ import com.afrotransact.platform.web.error.ProblemTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -27,6 +31,19 @@ class OrdersErrorAdvice {
     @ExceptionHandler(OrdersRuleViolation.class)
     ProblemDetail rule(OrdersRuleViolation ex) {
         return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.code(), "Orders rule violated", ex.getMessage());
+    }
+
+    @ExceptionHandler(OrdersRateLimited.class)
+    ResponseEntity<ProblemDetail> rateLimited(OrdersRateLimited ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds()))
+                .body(problem(HttpStatus.TOO_MANY_REQUESTS, ex.code(), "Too many requests", ex.getMessage()));
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail concurrent(OptimisticLockingFailureException ex) {
+        return problem(HttpStatus.CONFLICT, "orders.concurrent-update", "Changed by someone else",
+                "Someone else changed this at the same moment. Reload it and try again.");
     }
 
     @ExceptionHandler(OrdersStateConflict.class)

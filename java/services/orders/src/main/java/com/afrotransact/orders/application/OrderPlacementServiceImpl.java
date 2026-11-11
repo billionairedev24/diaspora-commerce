@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.orders.domain.Order;
@@ -35,11 +36,13 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
     private final ShipByPolicy shipBy;
     private final FollowUpRepository followUps;
     private final OrdersSettings settings;
+    private final DeliveryQuoteRedemptionService quotes;
     private final Clock clock;
 
     OrderPlacementServiceImpl(OrderRepository orders, CheckoutRequestRepository requests,
                               ShipmentTransitions transitions, DomainEventPublisher events, ShipByPolicy shipBy,
-                              FollowUpRepository followUps, OrdersSettings settings, Clock clock) {
+                              FollowUpRepository followUps, OrdersSettings settings,
+                              DeliveryQuoteRedemptionService quotes, Clock clock) {
         this.orders = orders;
         this.requests = requests;
         this.transitions = transitions;
@@ -47,6 +50,7 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
         this.shipBy = shipBy;
         this.followUps = followUps;
         this.settings = settings;
+        this.quotes = quotes;
         this.clock = clock;
     }
 
@@ -92,7 +96,8 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
     @Override
     @Transactional
     public void abandon(String orderId, String code, String message) {
-        orders.lockById(orderId).ifPresent(order -> {
+        Optional<Order> existing = orders.lockById(orderId);
+        existing.ifPresent(order -> {
             if (order.status() != OrderStatus.PENDING_PAYMENT) {
                 return;
             }
@@ -108,6 +113,11 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
                     new OrdersEventPayloads.OrderCancelled(orderId, order.number(), order.customerId(), code, message,
                             false, now));
         });
+        // A delivery quote this checkout used is usable again; a paid order keeps it.
+        if (existing.isEmpty() || existing.get().status() == OrderStatus.PENDING_PAYMENT
+                || existing.get().status() == OrderStatus.CANCELLED) {
+            quotes.restore(orderId);
+        }
         requests.markOutcome(orderId, STATUS_FAILED, code, message);
     }
 }

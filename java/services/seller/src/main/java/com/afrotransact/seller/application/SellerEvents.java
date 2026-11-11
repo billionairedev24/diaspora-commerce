@@ -44,6 +44,19 @@ public final class SellerEvents {
     /** EnforcementPayload reason when a reinstatement releases payouts / listings (no compliance hold remains). */
     public static final String REASON_REINSTATED = "REINSTATED";
 
+    /** Selling approvals (docs/runbooks/selling-approvals.md). Applications go on at.seller-application.events (key = application id). */
+    public static final String SELLING_SUBMITTED = "seller.selling.application.submitted";
+    public static final String SELLING_INFO_REQUESTED = "seller.selling.application.info_requested";
+    public static final String SELLING_APPROVED = "seller.selling.application.approved";
+    public static final String SELLING_REJECTED = "seller.selling.application.rejected";
+    /** Lifecycle events go on at.seller-compliance.events (key = org id) so catalog's existing consumer sees them in order. */
+    public static final String SELLING_EXPIRY_WARNING = "seller.selling.approval.expiry_warning";
+    public static final String SELLING_EXPIRED = "seller.selling.approval.expired";
+    public static final String SELLING_LISTINGS_PAUSED = "seller.selling.listings.paused";
+    public static final String SELLING_LISTINGS_RESTORED = "seller.selling.listings.restored";
+    /** A rule became stricter (APPLY, NOT_AVAILABLE) or was edited: catalog re-checks the listings of its scope. Key = rule id. */
+    public static final String SELLING_RULE_CHANGED = "seller.selling.rule.changed";
+
     private SellerEvents() {
     }
 }

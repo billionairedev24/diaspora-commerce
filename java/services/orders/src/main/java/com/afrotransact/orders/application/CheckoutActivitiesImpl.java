@@ -67,6 +67,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
 
     private static final Logger LOG = LoggerFactory.getLogger(CheckoutActivitiesImpl.class);
     private static final Pattern ZIP = Pattern.compile("\\d{5}");
+    /** {@link FeeRuleSnapshot#source()} of a shipment charged by an agreed delivery quote: never waived by a membership. */
+    static final String QUOTE_SOURCE = "DELIVERY_QUOTE";
 
     private final MarketEligibility markets;
     private final ProductFactsClient catalog;
@@ -260,9 +262,17 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             LocalDelivery quoted = sellerStore && method == DeliveryMethod.AFROTRANSACT_DELIVERY
                     ? localDelivery.quote(first.sellerOrgId(), first.sellerName(), pickups.get(offerKey(first)), to)
                     : null;
-            packages.add(new CheckoutPlan.Package(e.getKey(), first.sellerOrgId(), first.sellerName(),
+            CheckoutPlan.Package pack = new CheckoutPlan.Package(e.getKey(), first.sellerOrgId(), first.sellerName(),
                     fulfilmentType(first), method, level, method == DeliveryMethod.PICKUP ? pickup.trim() : null,
-                    prefs, days, lines, quoted));
+                    prefs, days, lines, quoted);
+            if (sel != null && sel.quote() != null) {
+                if (method == DeliveryMethod.PICKUP) {
+                    throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION,
+                            "A delivery quote is for delivery, not pickup");
+                }
+                pack = pack.withQuote(sel.quote());
+            }
+            packages.add(pack);
         }
         List<Set<String>> allowedMethods = new ArrayList<>();
         for (Map.Entry<String, List<CartClient.Item>> w : byWindow.entrySet()) {
@@ -275,8 +285,21 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             }
             packages.add(preorderPackage(in, window, selections.get(PREORDER_PACKAGE + w.getKey()), lines));
         }
+        requireQuoteApplied(in, packages);
         return new CheckoutPlan(in.currency(), packages,
                 PreorderPayments.stripeTypes(PreorderPayments.allowed(allowedMethods)));
+    }
+
+    /**
+     * A delivery quote the shopper named must charge some delivered package (never a pre-order or pickup one): else the
+     * quote would be used up without changing the order, so the checkout is refused (and the quote restored).
+     */
+    private static void requireQuoteApplied(CheckoutInput in, List<CheckoutPlan.Package> packages) {
+        boolean named = in.selections().stream().anyMatch(s -> s.quote() != null);
+        if (named && packages.stream().noneMatch(p -> p.quote() != null)) {
+            throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, "The delivery quote doesn't match a "
+                    + "package that is delivered to you. Pickup and pre-order packages don't use quotes.");
+        }
     }
 
     /**
@@ -390,6 +413,10 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
      */
     private CheckoutPlan.Package preorderPackage(CheckoutInput in, PreorderEligibility.Line w,
                                                  CheckoutInput.Selection sel, List<CheckoutPlan.Line> lines) {
+        if (sel != null && sel.quote() != null) {
+            throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION,
+                    "Pre-order delivery has its own fee; a delivery quote doesn't apply to it");
+        }
         String chosen = sel != null && sel.option() != null && !sel.option().isBlank() ? sel.option()
                 : in.preorderFulfilment().get(w.windowId());
         PreorderFulfilment fulfilment = chosen == null || chosen.isBlank() ? w.defaultFulfilment()
@@ -480,6 +507,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         LocalDate today = LocalDate.now(clock.withZone(ZoneId.of(settings.zone())));
         List<OrderDraft.DraftShipment> shipments = new ArrayList<>();
         int seq = 0;
+        boolean quoteCharged = false;
         for (CheckoutPlan.Package p : plan.packages()) {
             if (p.preorder() != null) {
                 for (OrderDraft.DraftShipment s : preorderShipments(in, p, seq)) {
@@ -511,11 +539,16 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 }
                 int days = lines.stream().mapToInt(CheckoutPlan.Line::promiseDays).max().orElse(p.promiseDays());
                 int slack = p.method() == DeliveryMethod.CARRIER ? 2 : 0;
-                FeeRuleSnapshot rule = carrierRule(p, items, plan.currency());
+                // An agreed delivery quote is the shipping of the order's first delivered shipment (once, whatever the
+                // number of packages or fulfilment nodes), recorded on the shipment; later ones carry 0.
+                FeeRuleSnapshot rule = p.quote() != null ? quoteRule(p, plan.currency(), quoteCharged)
+                        : carrierRule(p, items, plan.currency());
+                long shippingMinor = p.quote() != null ? rule.amountMinor() : shippingOf(p, items, rule);
+                quoteCharged |= p.quote() != null;
                 shipments.add(new OrderDraft.DraftShipment(id, seq, p.sellerOrgId(), p.sellerName(),
                         p.fulfilmentType(), group.getKey().isEmpty() ? null : group.getKey(), p.method(),
                         p.serviceLevel(), p.pickupLocationId(), p.preferences(), perishable, codeNeeded, hash, sealed,
-                        shippingOf(p, items, rule), BusinessDays.add(today, days),
+                        shippingMinor, BusinessDays.add(today, days),
                         BusinessDays.add(today, days + slack), lines, p.localDelivery(), null, rule));
             }
         }
@@ -535,6 +568,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private List<OrderDraft.DraftShipment> withMembership(CheckoutInput in, String currency,
                                                           List<OrderDraft.DraftShipment> shipments) {
         List<MemberBenefits.Fee> fees = shipments.stream().filter(s -> s.shippingMinor() > 0)
+                .filter(s -> s.feeRule() == null || !QUOTE_SOURCE.equals(s.feeRule().source()))
                 .map(s -> new MemberBenefits.Fee(Integer.toString(s.seq()), feeKind(s), s.shippingMinor())).toList();
         long items = shipments.stream().flatMap(s -> s.lines().stream()).mapToLong(CheckoutPlan.Line::itemsMinor).sum();
         Optional<MemberBenefits.Waivers> answer = memberBenefits.waivers(in.customerId(), items, currency, fees);
@@ -664,7 +698,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             List<CouponsClient.Line> lines = new ArrayList<>();
             for (CheckoutPlan.Package p : plan.packages()) {
                 long items = p.lines().stream().mapToLong(CheckoutPlan.Line::itemsMinor).sum();
-                shippingEstimate += shippingOf(p, items, carrierRule(p, items, in.currency()));
+                shippingEstimate += p.quote() != null ? p.quote().amountMinor()
+                        : shippingOf(p, items, carrierRule(p, items, in.currency()));
                 p.lines().stream().filter(l -> l.offerId() != null)
                         .forEach(l -> lines.add(new CouponsClient.Line(l.offerId(), l.quantity())));
             }
@@ -909,6 +944,13 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             return p.localDelivery().customerChargeMinor();
         }
         return rule != null ? rule.amountMinor() : shipping.fee(p.method(), p.serviceLevel(), itemsMinor);
+    }
+
+    /** The fee rule snapshot of a shipment charged by an agreed delivery quote ({@code source DELIVERY_QUOTE}). */
+    private static FeeRuleSnapshot quoteRule(CheckoutPlan.Package p, String currency, boolean alreadyCharged) {
+        CheckoutInput.QuoteRef q = p.quote();
+        return new FeeRuleSnapshot(p.method().name(), q.quoteId(), 0, currency, alreadyCharged ? 0 : q.amountMinor(),
+                QUOTE_SOURCE, q.reference(), null);
     }
 
     /**

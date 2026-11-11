@@ -66,12 +66,13 @@ class CheckoutServiceImpl implements CheckoutService {
     private final HandoverCodeVault vault;
     private final OrderPlacementService placement;
     private final OrdersSettings settings;
+    private final DeliveryQuoteRedemptionService quotes;
     private final Clock clock;
 
     CheckoutServiceImpl(OrdersAccess access, CheckoutRequestRepository requests, OrderRepository orders,
                         CartClient cart, AddressBook addresses, CheckoutWorkflows workflows, PaymentsClient payments,
                         OrderNumberGenerator numbers, HandoverCodeVault vault, OrderPlacementService placement,
-                        OrdersSettings settings, Clock clock) {
+                        OrdersSettings settings, DeliveryQuoteRedemptionService quotes, Clock clock) {
         this.access = access;
         this.requests = requests;
         this.orders = orders;
@@ -83,6 +84,7 @@ class CheckoutServiceImpl implements CheckoutService {
         this.vault = vault;
         this.placement = placement;
         this.settings = settings;
+        this.quotes = quotes;
         this.clock = clock;
     }
 
@@ -108,6 +110,8 @@ class CheckoutServiceImpl implements CheckoutService {
             try {
                 workflows.start(input(request, cmd));
             } catch (RuntimeException e) {
+                // The saga never started: a delivery quote this attempt used goes back, the key can be retried.
+                quotes.restore(request.orderId());
                 requests.release(customer.subject(), key);
                 throw e;
             }
@@ -218,14 +222,37 @@ class CheckoutServiceImpl implements CheckoutService {
                 .orElseThrow(() -> new OrdersRuleViolation(CheckoutCodes.ADDRESS_NOT_FOUND,
                         "Address " + cmd.addressId() + " is not in your address book"));
         String currency = snapshot.currency() == null || snapshot.currency().isBlank() ? "USD" : snapshot.currency();
+        List<CartClient.Item> items = select(snapshot, cmd.lines());
         return new CheckoutInput(request.orderId(), request.orderNumber(), request.customerId(),
-                request.idempotencyKey(), request.workflowId(), currency, shipTo, select(snapshot, cmd.lines()),
-                cmd.selections(), settings.paymentTimeout().toSeconds(), Instant.now(clock), cmd.couponCode(),
+                request.idempotencyKey(), request.workflowId(), currency, shipTo, items,
+                redeemQuote(request, cmd.selections(), items, shipTo), settings.paymentTimeout().toSeconds(),
+                Instant.now(clock), cmd.couponCode(),
                 cmd.attribution(), snapshot.preorderFulfilment(), null, cmd.savePaymentMethod(), cmd.useCredit());
     }
 
+    /**
+     * The delivery quote the shopper applied (listing rules D20), validated for their cart and address and used by this
+     * order in one step; its agreed amount replaces what the client sent. At most one quote per checkout.
+     */
+    private List<CheckoutInput.Selection> redeemQuote(CheckoutRequest request, List<CheckoutInput.Selection> selections,
+                                                      List<CartClient.Item> items, ShipTo shipTo) {
+        List<String> ids = selections.stream().filter(s -> s.quote() != null).map(s -> s.quote().quoteId())
+                .distinct().toList();
+        if (ids.isEmpty()) {
+            return selections;
+        }
+        if (ids.size() > 1) {
+            throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, "Use one delivery quote per order");
+        }
+        DeliveryQuoteRedemptionService.Redeemed redeemed = quotes.redeem(request.customerId(), ids.getFirst(), items,
+                shipTo, request.orderId());
+        CheckoutInput.QuoteRef checked = new CheckoutInput.QuoteRef(redeemed.quoteId(), redeemed.reference(),
+                redeemed.amountMinor());
+        return selections.stream().map(s -> s.quote() == null ? s : s.withQuote(checked)).toList();
+    }
+
     /** Every available line, or the requested subset (quantities never above what is in the cart). */
-    private static List<CartClient.Item> select(CartClient.Snapshot snapshot, List<CheckoutCommand.SelectedLine> lines) {
+    static List<CartClient.Item> select(CartClient.Snapshot snapshot, List<CheckoutCommand.SelectedLine> lines) {
         if (lines.isEmpty()) {
             return snapshot.items();
         }

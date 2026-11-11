@@ -31,6 +31,13 @@ public final class OrdersPermissions {
     /** Dispatch (staff or fulfilment-service): read delivery briefs to plan routes. */
     public static final String DISPATCH = "delivery:dispatch";
 
+    /** See delivery quote requests, their timeline and who has them (customer care, supervisors). */
+    public static final String QUOTES_VIEW = "delivery-quotes:view";
+    /** Hold a delivery quote request, agree an amount or decline it (reason required, audited). */
+    public static final String QUOTES_AGREE = "delivery-quotes:agree";
+    /** Assign, reassign and take over quote requests; change their SLA, escalation and amount settings. */
+    public static final String QUOTES_ASSIGN = "delivery-quotes:assign";
+
     private OrdersPermissions() {
     }
 }
