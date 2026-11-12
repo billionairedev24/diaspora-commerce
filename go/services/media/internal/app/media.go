@@ -65,6 +65,10 @@ type MediaService interface {
 	// RescoreImages measures published images again (legacy images, changed rules) and stores the result (importer
 	// clients with media:import; the back-fill of S392).
 	RescoreImages(ctx context.Context, actor auth.Actor, items []domain.VerifyItem) ([]domain.VerifyResult, error)
+	// ListHeld is the staff review queue: product images held by moderation, oldest first, each with its findings, AI
+	// labels and mismatch score and a short-lived signed URL to look at the image (staff with media:moderate or
+	// catalog:moderate). Release or reject with Review.
+	ListHeld(ctx context.Context, actor auth.Actor, limit int) ([]domain.Asset, error)
 	// ImageRules returns the image rules in force and the staff override.
 	ImageRules(ctx context.Context, actor auth.Actor) (domain.ImageRulesView, error)
 	// SetImageRules replaces the staff override of the image rules (staff with media:moderate or catalog:moderate).

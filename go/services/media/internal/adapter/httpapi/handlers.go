@@ -37,6 +37,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux, authenticated func(http.Hand
 	mux.Handle("POST /v1/assets/{id}/complete", authenticated(http.HandlerFunc(h.complete)))
 	mux.Handle("POST /v1/assets/import", authenticated(http.HandlerFunc(h.importURL)))
 	mux.Handle("POST /v1/assets/{id}/review", authenticated(http.HandlerFunc(h.review)))
+	mux.Handle("GET /v1/assets/held", authenticated(http.HandlerFunc(h.held)))
 	mux.Handle("POST /v1/assets/verify", authenticated(http.HandlerFunc(h.verify)))
 	mux.Handle("POST /v1/assets/rescore", authenticated(http.HandlerFunc(h.rescore)))
 	mux.Handle("GET /v1/image-rules", authenticated(http.HandlerFunc(h.imageRules)))
@@ -211,6 +212,22 @@ func (h *handlersImpl) judge(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// held is the staff review queue of held product images.
+func (h *handlersImpl) held(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	limit, err := intParam(r.URL.Query().Get("limit"), 50)
+	if err != nil || limit < 1 || limit > 100 {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-query", "Check the query: limit must be 1 to 100"))
+		return
+	}
+	items, err := h.media.ListHeld(r.Context(), actor, limit)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"assets": items})
 }
 
 func (h *handlersImpl) imageRules(w http.ResponseWriter, r *http.Request) {

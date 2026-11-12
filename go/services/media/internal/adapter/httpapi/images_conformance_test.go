@@ -58,6 +58,19 @@ func (m *imageMedia) ImportImageFromURL(_ context.Context, actor auth.Actor, _ d
 	return rejected(), nil
 }
 
+func (m *imageMedia) ListHeld(_ context.Context, actor auth.Actor, _ int) ([]domain.Asset, error) {
+	if actor.Type != "STAFF" {
+		return nil, app.ErrForbidden
+	}
+	a := rejected()
+	a.Status, a.URL, a.Verdict = domain.StatusFlagged, "https://signed/quarantine/x.jpg", domain.VerdictHold
+	a.Checks = []domain.Check{domain.NewCheck(domain.CodeHeldText, domain.VerdictHold, nil)}
+	score := 0.9
+	a.Moderation = &domain.Moderation{Verdict: domain.VerdictHeld, Reasons: []string{"needs review"}, AI: domain.AIChecked,
+		AILabels: []string{"WATERMARK"}, MismatchScore: &score}
+	return []domain.Asset{a}, nil
+}
+
 func (m *imageMedia) judge(actor auth.Actor, items []domain.VerifyItem) ([]domain.VerifyResult, error) {
 	if actor.Type != "SERVICE" {
 		return nil, app.ErrForbidden
@@ -171,7 +184,10 @@ func TestImageChecksContractConformance(t *testing.T) {
 	do("POST", "/v1/assets/rescore", `{"images":[{"url":"https://cdn.example.com/a.jpg","slot":"MAIN"}]}`, 200)
 	do("GET", "/v1/image-rules", "", 200)
 	do("PUT", "/v1/image-rules", `{"warnOnly":true}`, 403)
+	do("GET", "/v1/assets/held", "", 403)
 	actor = auth.Actor{Subject: "staff-9", Type: "STAFF", Permissions: []string{"catalog:moderate"}}
+	do("GET", "/v1/assets/held?limit=10", "", 200)
+	do("GET", "/v1/assets/held?limit=500", "", 400)
 	do("PUT", "/v1/image-rules", `{"warnOnly":true,"fillReject":0.7}`, 200)
 	do("PUT", "/v1/image-rules", `{"fillReject":0.9,"fillWarn":0.8}`, 422)
 	do("PUT", "/v1/image-rules", `{"unknownThreshold":1}`, 400)
@@ -179,7 +195,7 @@ func TestImageChecksContractConformance(t *testing.T) {
 	do("POST", "/v1/assets/verify", `{"images":[{"url":"https://cdn.example.com/a.jpg","slot":"MAIN"}]}`, 403)
 	do("POST", "/v1/assets/import", `{"purpose":"product-image","url":"https://cdn.example.com/a.jpg","ownerOrg":"org_lagos"}`, 403)
 
-	for _, op := range []string{"verifyImages", "rescoreImages", "getImageRules", "setImageRules", "requestUpload", "importAsset"} {
+	for _, op := range []string{"verifyImages", "rescoreImages", "getImageRules", "setImageRules", "requestUpload", "importAsset", "listHeldImages"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
 		}

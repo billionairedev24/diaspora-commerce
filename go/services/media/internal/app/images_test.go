@@ -524,3 +524,38 @@ func TestEveryCheckCodeHasAPlainEnglishMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestStaffReviewQueueShowsHeldImagesWithLabelsScoreAndAPreview(t *testing.T) {
+	score := 0.85
+	ai := &fakeModerator{verdict: domain.AIVerdict{Decision: domain.AIReview, Labels: []string{"WATERMARK"}, MismatchScore: &score}}
+	f := newImageFixture(t, nil, ai)
+	ctx := context.Background()
+	moderator := auth.Actor{Subject: "staff-9", Type: "STAFF", Permissions: []string{"catalog:moderate"}}
+	titled := func(o *domain.ImageOptions) {
+		o.Hint = domain.ModerationHint{Title: "Ankara wrap dress", Brand: "Adire"}
+	}
+	held := f.put(t, sellerMember, shot(t, 1600, 1600, white, 0.92), main(titled))
+	f.put(t, sellerMember, shot(t, 1601, 1600, white, 0.92), domain.ImageOptions{Slot: domain.ImageSlotOther}) // also held (watermark)
+	ai.verdict = allow
+	published := f.put(t, sellerMember, shot(t, 1602, 1600, white, 0.92), main())
+	if published.Status != domain.StatusReady {
+		t.Fatalf("%+v", published)
+	}
+
+	queue, err := f.svc.ListHeld(ctx, moderator, 50)
+	if err != nil || len(queue) != 2 {
+		t.Fatalf("queue %d: %v", len(queue), err)
+	}
+	first := queue[0]
+	if first.ID != held.ID || !strings.HasPrefix(first.URL, "https://signed/") || first.URLExpiresAt == nil ||
+		!slices.Equal(first.Moderation.AILabels, []string{"WATERMARK"}) || first.Moderation.MismatchScore == nil ||
+		*first.Moderation.MismatchScore != 0.85 || !slices.Contains(codesOf(first), "HELD_TEXT") {
+		t.Fatalf("staff see the label, the score, the findings and a short preview link: %+v %+v", first, first.Moderation)
+	}
+	if _, err := f.svc.ListHeld(ctx, sellerMember, 50); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("sellers cannot read the queue: %v", err)
+	}
+	if one, err := f.svc.ListHeld(ctx, moderator, 1); err != nil || len(one) != 1 {
+		t.Fatalf("limit: %d %v", len(one), err)
+	}
+}

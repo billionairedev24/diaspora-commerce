@@ -275,3 +275,30 @@ func (s *mediaServiceImpl) SetImageRules(ctx context.Context, actor auth.Actor, 
 	s.rulesMu.Unlock()
 	return s.ImageRules(ctx, actor)
 }
+
+// maxHeldPage bounds one page of the review queue.
+const maxHeldPage = 100
+
+func (s *mediaServiceImpl) ListHeld(ctx context.Context, actor auth.Actor, limit int) ([]domain.Asset, error) {
+	if actor.Type != principalStaff || !slices.ContainsFunc(ModeratePermissions, actor.Can) {
+		return nil, ErrForbidden
+	}
+	if limit <= 0 || limit > maxHeldPage {
+		limit = maxHeldPage
+	}
+	held, err := s.repo.ListHeld(ctx, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list held images: %w", err)
+	}
+	out := make([]domain.Asset, 0, len(held))
+	for _, a := range held {
+		signed, err := s.signed(ctx, a, s.links.Default)
+		if err != nil {
+			s.log.WarnContext(ctx, "held image has no preview", "asset_id", a.ID, "error", err)
+			signed = a
+			signed.URL = ""
+		}
+		out = append(out, signed)
+	}
+	return out, nil
+}

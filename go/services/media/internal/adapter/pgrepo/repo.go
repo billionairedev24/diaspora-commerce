@@ -183,6 +183,16 @@ func (r *repoImpl) Update(ctx context.Context, a domain.Asset) error {
 	return nil
 }
 
+// ListHeld returns the product images waiting for staff, oldest first.
+func (r *repoImpl) ListHeld(ctx context.Context, limit int) ([]domain.Asset, error) {
+	rows, err := r.pool.Query(ctx, `select `+cols+` from asset where purpose = 'product-image' and status = 'FLAGGED'
+		and moderation ->> 'verdict' = 'HELD' order by created_at, id limit $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list held images: %w", err)
+	}
+	return collect(rows)
+}
+
 // FindByURL returns the newest READY image with the public URL.
 func (r *repoImpl) FindByURL(ctx context.Context, url string) (domain.Asset, bool, error) {
 	rows, err := r.pool.Query(ctx, `select `+cols+` from asset where url = $1 and status = 'READY'

@@ -53,6 +53,9 @@ type AssetRepository interface {
 	// maxDistance bits of hash, closest first.
 	SimilarImages(ctx context.Context, purposes []domain.Purpose, hash uint64, maxDistance int, excludeID string,
 		limit int) ([]domain.SimilarImage, error)
+	// ListHeld returns product images held for staff review (status FLAGGED with a HELD moderation verdict), oldest
+	// first, so the review queue is worked in order.
+	ListHeld(ctx context.Context, limit int) ([]domain.Asset, error)
 	// FindByURL returns the newest READY image with this public URL; ok is false when there is none.
 	FindByURL(ctx context.Context, url string) (a domain.Asset, ok bool, err error)
 	// UpdateChecks stores an image's slot, verdict, checks and metrics without touching its status or object (a

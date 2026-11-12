@@ -96,6 +96,17 @@ func (r *memRepo) SimilarImages(_ context.Context, purposes []domain.Purpose, ha
 	slices.SortFunc(out, func(x, y domain.SimilarImage) int { return x.Distance - y.Distance })
 	return out[:min(limit, len(out))], nil
 }
+func (r *memRepo) ListHeld(_ context.Context, limit int) ([]domain.Asset, error) {
+	var out []domain.Asset
+	for _, a := range r.assets {
+		if a.Purpose == domain.PurposeProductImage && a.Status == domain.StatusFlagged && a.Moderation != nil &&
+			a.Moderation.Verdict == domain.VerdictHeld {
+			out = append(out, a)
+		}
+	}
+	slices.SortFunc(out, func(x, y domain.Asset) int { return x.CreatedAt.Compare(y.CreatedAt) })
+	return out[:min(limit, len(out))], nil
+}
 func (r *memRepo) FindByURL(_ context.Context, url string) (domain.Asset, bool, error) {
 	for _, a := range r.assets {
 		if a.URL == url && a.Status == domain.StatusReady {

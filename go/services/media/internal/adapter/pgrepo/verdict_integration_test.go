@@ -98,6 +98,29 @@ func TestVerdictColumnsBackfillRescoreAndRulesOverride(t *testing.T) {
 		t.Fatalf("a ratio that was not measured is null: %v %v", unmeasured, err)
 	}
 
+	// The review queue: held product images, oldest first.
+	held, err := repo.ListHeld(ctx, 10)
+	if err != nil || len(held) != 0 {
+		// The backfilled FLAGGED row has no moderation verdict, so it is not in the queue.
+		t.Fatalf("held before any is stored: %+v %v", held, err)
+	}
+	queued := asset("12121212-1212-4212-8212-121212121212", "org", 2)
+	if err := repo.Insert(ctx, queued); err != nil {
+		t.Fatal(err)
+	}
+	queued.Status, queued.Verdict = domain.StatusFlagged, domain.VerdictHold
+	queued.Checks = []domain.Check{domain.NewCheck(domain.CodeHeldText, domain.VerdictHold, nil)}
+	queued.Moderation = &domain.Moderation{Verdict: domain.VerdictHeld, Reasons: []string{"needs review"}, AI: domain.AIChecked,
+		AILabels: []string{"WATERMARK"}}
+	cur, _ = repo.Get(ctx, queued.ID)
+	queued.Version = cur.Version
+	if err := repo.Update(ctx, queued); err != nil {
+		t.Fatal(err)
+	}
+	if held, err = repo.ListHeld(ctx, 10); err != nil || len(held) != 1 || held[0].ID != queued.ID || held[0].Moderation.AILabels[0] != "WATERMARK" {
+		t.Fatalf("review queue: %+v %v", held, err)
+	}
+
 	// The staff override: none, then saved, then replaced.
 	empty, err := repo.LoadImageRules(ctx)
 	if err != nil || empty.UpdatedAt != nil || empty.Override.WarnOnly != nil {

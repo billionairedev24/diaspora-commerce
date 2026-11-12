@@ -133,6 +133,27 @@ paths:
         '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+  /v1/assets/held:
+    get:
+      tags: [Image checks]
+      operationId: listHeldImages
+      summary: The staff review queue of held product images (staff with media:moderate or catalog:moderate)
+      description: |
+        Product images held by moderation, oldest first, each with its findings (`checks`), the AI labels and the title and
+        brand mismatch score (`moderation`), and a signed `url` valid for 5 minutes to look at the image. Release or reject
+        with `POST /v1/assets/{id}/review`.
+      parameters: [{name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}]
+      responses:
+        '200':
+          description: Held images
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets: {type: array, items: {$ref: '#/components/schemas/Asset'}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/assets/verify:
     post:
       tags: [Image checks]
