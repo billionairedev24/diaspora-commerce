@@ -1729,3 +1729,9 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Services section stays Provider Hub only
 - docs, contracts and five locales updated
 - end-to-end run against live catalog and seller-service and a Playwright run (not run here)","E13","","High","5","seller catalog services","onboarding","In Review"
+"S433","Story","Recently viewed rail: one card per product, no delivery line, only eligible items","Owner bug: the home Recently viewed rail repeated a product (a size pick recorded the variant ATIN, the gateway resolved each to the same product) and showed delivery dates. History is browser-only for guests and signed-in shoppers (no server store exists).","- One entry per product (page-level ATIN); a repeat view moves it to the front
+- Stored history is deduplicated on read without deleting other entries; 20 stored, 12 shown
+- The rail shows name, price and real ratings only: no delivery date, no Fulfilled by badge; other rails and product pages unchanged
+- Gateway drops products that are not live, out of stock, photo-less or without a READY tax decision, silently
+- Rail hidden below the module minimum (1)
+- Unit and fixture tests (four ids of one product give one card) and a storefront test for no delivery or fulfilled badge","E20","","High","2","home storefront gateway","content","Done"
