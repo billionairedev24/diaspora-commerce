@@ -32,6 +32,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
 const serviceName = "gateway-bff"
@@ -106,7 +107,12 @@ func run() error {
 	media := upstreams.NewMedia(mediaClient)
 	proofLinks := upstreams.NewProofLinks(mediaClient, serviceTokens)
 	payments := upstreams.NewPayments(paymentsClient)
-	promise := upstreams.NewPromise(client("promise", up.Promise))
+	// promise is optional: a deployment without it (upstreams.promise.disabled) keeps the estimated delivery dates.
+	promise, sitePromise := upstreams.NewNoPromise(), port.PromiseClient(nil)
+	if !up.Promise.Disabled {
+		promise = upstreams.NewPromise(client("promise", up.Promise))
+		sitePromise = promise
+	}
 	orders := upstreams.NewOrders(ordersClient)
 	notifications := upstreams.NewNotifications(client("notifications", up.Notifications))
 	sellerCases := upstreams.NewSellerCases(client("tax-returns", up.TaxReturns), client("trust-ops", up.TrustOps))
@@ -177,7 +183,7 @@ func run() error {
 			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Log: log}),
 		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, serviceTokens), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
-			Offers: storefrontOffers, Orders: orders, Services: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Promise: promise,
+			Offers: storefrontOffers, Orders: orders, Services: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Promise: sitePromise,
 			Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
 		Location: location,
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil,

@@ -70,6 +70,9 @@ upstreams:
     breaker: {failures: 5, cooldown: 15s}
   promise:
     url: http://promise
+    # Prod runs without the promise service for now: the BFF makes no promise calls and shows its own delivery
+    # estimates (product page, cart, checkout). Deploy promise and set PROMISE_DISABLED=false to get real dates.
+    disabled: true
     timeout: 800ms
     retries: 0
     breaker: {failures: 5, cooldown: 15s}

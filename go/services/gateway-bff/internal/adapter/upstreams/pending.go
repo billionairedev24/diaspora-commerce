@@ -265,6 +265,19 @@ var _ port.PromiseClient = (*promiseImpl)(nil)
 // NewPromise returns the promise client (POST /v1/promises {zip, items} → {promises:[{atin, days}]}).
 func NewPromise(c httpclient.Client) port.PromiseClient { return &promiseImpl{c: c} }
 
+// noPromiseImpl is the promise client of a deployment without the promise service: it makes no call and knows no
+// dates, so callers keep their own estimates (product pages, cart and checkout delivery dates).
+type noPromiseImpl struct{}
+
+var _ port.PromiseClient = noPromiseImpl{}
+
+// NewNoPromise returns the promise client used when upstreams.promise.disabled is set (PROMISE_DISABLED=true).
+func NewNoPromise() port.PromiseClient { return noPromiseImpl{} }
+
+func (noPromiseImpl) Promises(context.Context, string, []port.PromiseItem) (map[string]int, error) {
+	return map[string]int{}, nil
+}
+
 func (p *promiseImpl) Promises(ctx context.Context, zip string, items []port.PromiseItem) (map[string]int, error) {
 	var out struct {
 		Promises []struct {
