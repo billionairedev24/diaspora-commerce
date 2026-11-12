@@ -29,7 +29,8 @@ export function CustomerPickupSettings({ a, editable }: { a: ShipFromAddress; ed
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [problem, setProblem] = useState<string | null>(null);
   const save = useMutation({
-    mutationFn: () => sellerApi().setCustomerPickup(a.id, { enabled, hours, readyHours: Number(ready) || 0 }),
+    // Saving with pickup ticked on and the hours shown is the seller's explicit confirmation (the server requires it).
+    mutationFn: () => sellerApi().setCustomerPickup(a.id, { enabled, hours, readyHours: Number(ready) || 0, hoursConfirmed: enabled }),
     onSuccess: (saved) => {
       setProblem(null);
       setErrors({});
@@ -39,6 +40,7 @@ export function CustomerPickupSettings({ a, editable }: { a: ShipFromAddress; ed
       }
       toast.show(t('sc.cpickup.saved'));
       void qc.invalidateQueries({ queryKey: sellerKeys.shipFrom(orgId) });
+      void qc.invalidateQueries({ queryKey: sellerKeys.pickupPrompt(orgId) });
     },
     onError: (e) => {
       setProblem(isApiError(e) && e.code === 'PICKUP_INVALID_HOURS' ? t('sc.pickup.err.hours') : problemMessage(e));

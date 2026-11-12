@@ -1245,6 +1245,50 @@ type CustomerPickup struct {
 	Ready bool `json:"ready"`
 	// Issues say, in plain words, why customers do not see this address as a pickup point (or why only some do).
 	Issues []PickupIssue `json:"issues"`
+	// EnabledAt is when pickup was last switched on (carrier-gateway keeps who did it); nil while it never was.
+	EnabledAt *time.Time `json:"enabledAt"`
+}
+
+// Answers to the pickup card.
+const (
+	PickupPromptNotNow    = "NOT_NOW"
+	PickupPromptDontAsk   = "DONT_ASK_AGAIN"
+	PickupPromptStateNone = "NONE"
+)
+
+// PickupPrompt is the one-time "let customers collect orders here" card of a seller organisation: whether to show it
+// and the address it is pre-filled from. It is never on by default; turning pickup on is a separate, explicit save.
+type PickupPrompt struct {
+	// Eligible: the organisation is approved and has a ship-from address.
+	Eligible bool `json:"eligible"`
+	// HasPickupPlace: some address already has pickup switched on. Then neither the card nor the nudge show.
+	HasPickupPlace bool `json:"hasPickupPlace"`
+	// Show: the card may be shown now (eligible, no pickup place, and not dismissed or the snooze has ended).
+	Show bool `json:"show"`
+	// Nudge: the small inline reminder on checkout settings (eligible and no pickup place, whatever was dismissed).
+	Nudge bool `json:"nudge"`
+	// State is NONE, SNOOZED ("Not now") or NEVER ("Don't ask again").
+	State        string     `json:"state"`
+	SnoozedUntil *time.Time `json:"snoozedUntil"`
+	// Address pre-fills the card: the default ship-from address (nil when not eligible).
+	Address *PickupPromptAddress `json:"address"`
+}
+
+// PickupPromptAddress is the ship-from address the card is pre-filled from. AddressID is the id to save pickup for.
+type PickupPromptAddress struct {
+	AddressID  string `json:"addressId"`
+	Name       string `json:"name"`
+	Line1      string `json:"line1"`
+	Line2      string `json:"line2"`
+	City       string `json:"city"`
+	State      string `json:"state"`
+	PostalCode string `json:"postalCode"`
+	Phone      string `json:"phone"`
+}
+
+// PickupPromptAnswer is PUT /v1/seller/pickup-prompt.
+type PickupPromptAnswer struct {
+	Answer string `json:"answer"`
 }
 
 // Codes of PickupIssue.
@@ -1268,6 +1312,9 @@ type CustomerPickupRequest struct {
 	Enabled    bool           `json:"enabled"`
 	Hours      []PickupWindow `json:"hours"`
 	ReadyHours int            `json:"readyHours"`
+	// HoursConfirmed is the seller's explicit "yes, someone will be there during these hours". Required to switch pickup
+	// on; ignored when switching it off or when it stays on.
+	HoursConfirmed bool `json:"hoursConfirmed"`
 }
 
 // Validate applies the same hours rules as AfroTransact pickup (1–14 windows to enable, no overlap) and a ready time

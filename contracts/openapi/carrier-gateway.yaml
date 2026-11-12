@@ -338,6 +338,44 @@ paths:
       responses:
         '202': {description: Event enqueued}
         '403': {$ref: '#/components/responses/Problem'}
+  /v1/pickup-prompt:
+    get:
+      tags: [pickups]
+      operationId: getPickupPrompt
+      summary: The calling seller organisation's answer to the one-time "let customers collect orders here" card
+      description: Needs shipping:label and an organisation. `due` is false after "Don't ask again" and until a snooze ends.
+      responses:
+        '200': {description: The answer, content: {application/json: {schema: {$ref: '#/components/schemas/PickupPrompt'}}}}
+        '403': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [pickups]
+      operationId: answerPickupPrompt
+      summary: Record "Not now" (SNOOZE, asks again after the staff-set days) or "Don't ask again" (NEVER) for the organisation
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [action], properties: {action: {type: string, enum: [SNOOZE, NEVER]}}}}}
+      responses:
+        '200': {description: The answer, content: {application/json: {schema: {$ref: '#/components/schemas/PickupPrompt'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/pickup-prompt/settings:
+    get:
+      tags: [pickups]
+      operationId: getPickupPromptSettings
+      summary: After how many days "Not now" asks again (default 30)
+      responses:
+        '200': {description: Setting, content: {application/json: {schema: {$ref: '#/components/schemas/PickupPromptSettings'}}}}
+    put:
+      tags: [pickups]
+      operationId: setPickupPromptSettings
+      summary: Change it (shipping:admin; 1 to 365 days)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PickupPromptSettings'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/PickupPromptSettings'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/webhooks/{carrier}:
     post:
       tags: [webhooks]
@@ -588,6 +626,24 @@ components:
             lat: {type: number, minimum: -90, maximum: 90}
             lng: {type: number, minimum: -180, maximum: 180}
         updatedAt: {type: string, format: date-time}
+        hoursConfirmed:
+          type: boolean
+          description: Input only. Required (true) to switch a SELLER location on (inactive to active); 400 `carrier-gateway.invalid-request` without it.
+        enabledBy: {type: string, description: 'Who last switched it on (the caller''s subject); set by the service, ignored on input'}
+        enabledAt: {type: string, format: date-time, description: When it was last switched on; set by the service, ignored on input}
+    PickupPrompt:
+      type: object
+      required: [state, due, reappearDays]
+      properties:
+        state: {type: string, enum: [NONE, SNOOZED, NEVER]}
+        snoozedUntil: {type: string, format: date-time}
+        due: {type: boolean, description: The card may be shown now}
+        reappearDays: {type: integer}
+    PickupPromptSettings:
+      type: object
+      required: [reappearDays]
+      properties:
+        reappearDays: {type: integer, minimum: 1, maximum: 365}
     Problem:
       type: object
       properties:

@@ -31,6 +31,7 @@ import { shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
 import { CustomerPickupSettings } from './CustomerPickupSettings';
+import { PickupPromptCard } from './PickupPromptCard';
 
 type AddressForm = ShipFromForm & { label: string; company: string };
 const EMPTY: AddressForm = { label: '', name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', postalCode: '' };
@@ -285,6 +286,7 @@ export function ShipFromView() {
           </div>
         }
       />
+      <PickupPromptCard />
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data && q.data.length === 0 ? <p className="m-0 text-sm text-muted">{t('sc.shipFrom.none')}</p> : null}

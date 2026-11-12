@@ -561,7 +561,7 @@ class OpsSeeder:
         body = {"kind": "SELLER", "ownerOrg": org_id, "name": f"{a['name']} · {a['label']}", "timezone": "America/Chicago",
                 "address": {k: a[k] for k in ("line1", "line2", "city", "state", "postalCode", "country")},
                 "hours": [{"weekday": days[h["day"]], "open": h["opens"], "close": h["closes"]} for h in cfg["hours"]],
-                "readyHours": 3, "active": True}
+                "readyHours": 3, "active": True, "hoursConfirmed": True}
         if position.get("lat") is not None and position.get("lng") is not None:
             body["position"] = {"lat": position["lat"], "lng": position["lng"]}
         try:

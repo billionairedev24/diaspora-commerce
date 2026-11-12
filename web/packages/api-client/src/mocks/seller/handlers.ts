@@ -36,6 +36,7 @@ import {
   type OnboardingStripeSession,
   type OrgSummary,
   ParcelSchema,
+  type PickupPrompt,
   PickupWindowSchema,
   type PlanFeeCollectionView,
   ProductDraftSchema,
@@ -672,7 +673,7 @@ const ShipFromBody = z.object({
   version: z.number().int().nullable().optional()
 });
 
-const CustomerPickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), readyHours: z.number().int().min(0).max(168).optional() });
+const CustomerPickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), readyHours: z.number().int().min(0).max(168).optional(), hoursConfirmed: z.boolean().optional() });
 const PickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), version: z.number().int().nullable().optional() });
 const OfferFulfilmentBody = z.object({ fulfilment: FulfilmentKindSchema, shipFromLocationId: z.string().max(64).nullable().optional() });
 
@@ -753,6 +754,28 @@ function saveShipFrom(ctx: Ctx, input: z.infer<typeof ShipFromBody>, existing?: 
   if (existing) list.splice(list.indexOf(existing), 1, next);
   else list.push(next);
   return next;
+}
+
+/** The card state of the active organisation: eligible with an address, hidden once a pickup place is on or the seller said no. */
+function pickupPromptOf(ctx: Ctx): PickupPrompt {
+  const list = shipFromList(ctx);
+  const answer = ctx.db.pickupPrompt[ctx.org.id] ?? { state: 'NONE' as const, snoozedUntil: null };
+  const hasPickupPlace = list.some((a) => a.customerPickup?.enabled);
+  const eligible = list.length > 0;
+  const pre = list.find((a) => a.isDefault) ?? list[0];
+  const due = answer.state === 'NONE' || (answer.state === 'SNOOZED' && (answer.snoozedUntil === null || Date.parse(answer.snoozedUntil) <= Date.now()));
+  const open = eligible && !hasPickupPlace && pre !== undefined;
+  return {
+    eligible,
+    hasPickupPlace,
+    show: open && due,
+    nudge: open,
+    state: answer.state,
+    snoozedUntil: answer.snoozedUntil,
+    address: open
+      ? { addressId: pre.id, name: pre.company || pre.label || pre.name, line1: pre.line1, line2: pre.line2, city: pre.city, state: pre.state, postalCode: pre.postalCode, phone: pre.phone }
+      : null
+  };
 }
 
 function findShipFrom(ctx: Ctx, id: string | undefined): ShipFromAddress {
@@ -2514,6 +2537,23 @@ export const sellerHandlers = [
       return { items: list };
     })
   ),
+  http.get(
+    `${W}/pickup-prompt`,
+    route((ctx) => {
+      require(ctx, 'orders', 'VIEW', 'SELLER');
+      return pickupPromptOf(ctx);
+    })
+  ),
+  http.put(
+    `${W}/pickup-prompt`,
+    route(async (ctx) => {
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      const b = await body(ctx.request, z.object({ answer: z.enum(['NOT_NOW', 'DONT_ASK_AGAIN']) }));
+      ctx.db.pickupPrompt[ctx.org.id] =
+        b.answer === 'NOT_NOW' ? { state: 'SNOOZED', snoozedUntil: new Date(Date.now() + 30 * 86_400_000).toISOString() } : { state: 'NEVER', snoozedUntil: null };
+      return pickupPromptOf(ctx);
+    })
+  ),
   http.put(
     `${W}/ship-from-addresses/:id/customer-pickup`,
     route(async (ctx, p) => {
@@ -2523,7 +2563,13 @@ export const sellerHandlers = [
         throw new SellerProblem(422, 'PICKUP_INVALID_HOURS', 'Check the pickup hours', 'Add 1 to 14 pickup windows that don’t overlap, each opening before it closes.', hourErrors);
       require(ctx, 'orders', 'EDIT', 'SELLER');
       const a = findShipFrom(ctx, p.id);
+      // The server rule: switching pickup on (it is not on yet) needs the seller's explicit confirmation of the hours.
+      if (b.enabled && !a.customerPickup?.enabled && b.hoursConfirmed !== true)
+        throw new SellerProblem(422, 'PICKUP_HOURS_NOT_CONFIRMED', 'Confirm the opening hours', 'Confirm that someone will be there during these hours before pickup is switched on.', {
+          hoursConfirmed: 'Confirm that someone will be there during these hours.'
+        });
       a.customerPickup = {
+        enabledAt: b.enabled ? (a.customerPickup?.enabled ? (a.customerPickup.enabledAt ?? null) : new Date().toISOString()) : (a.customerPickup?.enabledAt ?? null),
         enabled: b.enabled,
         hours: b.hours,
         readyHours: b.readyHours ?? 0,

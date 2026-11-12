@@ -100,6 +100,8 @@ export interface MockSellerDb {
   shipFrom: Record<string, ShipFromAddress[]>;
   /** Delivery run pick lists per organisation (delivery-runs /v1/seller/run-pickups; S264). */
   runPickups: Record<string, SellerRunPickup[]>;
+  /** Each organisation's answer to the one-time "let customers collect orders here" card (carrier-gateway /v1/pickup-prompt). */
+  pickupPrompt: Record<string, { state: 'NONE' | 'SNOOZED' | 'NEVER'; snoozedUntil: string | null }>;
   /** How each organisation's public page looks (seller service /v1/orgs/{orgId}/business-page). */
   businessPage: Record<string, { description: string; brandColor: string; logoUrl: string }>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
@@ -675,6 +677,7 @@ function freshDb(now: Date): MockSellerDb {
     earnings: [],
     businessPage: {},
     runPickups: { [SELLER_ORG]: seedRunPickups(now) },
+    pickupPrompt: {},
     shipFrom: {
       [SELLER_ORG]: [
         { id: 'sfa-store', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',

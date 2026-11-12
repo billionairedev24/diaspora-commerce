@@ -22,6 +22,7 @@ type Services struct {
 	Returns   app.ReturnLabelService
 	Tracking  app.TrackingService
 	Pickups   app.PickupService
+	Prompt    app.PickupPromptService
 	Addresses app.AddressService
 }
 
@@ -55,6 +56,10 @@ func (h *handlersImpl) Register(mux *http.ServeMux, optionalAuth, requiredAuth f
 	mux.Handle("POST /v1/pickup-locations", requiredAuth(http.HandlerFunc(h.saveLocation)))
 	mux.Handle("PUT /v1/pickup-locations/{id}", requiredAuth(http.HandlerFunc(h.saveLocation)))
 	mux.Handle("POST /v1/pickup-locations/{id}/ready", requiredAuth(http.HandlerFunc(h.markReady)))
+	mux.Handle("GET /v1/pickup-prompt", requiredAuth(http.HandlerFunc(h.getPrompt)))
+	mux.Handle("PUT /v1/pickup-prompt", requiredAuth(http.HandlerFunc(h.answerPrompt)))
+	mux.Handle("GET /v1/pickup-prompt/settings", requiredAuth(http.HandlerFunc(h.getPromptSettings)))
+	mux.Handle("PUT /v1/pickup-prompt/settings", requiredAuth(http.HandlerFunc(h.setPromptSettings)))
 	// Webhooks authenticate with the carrier's signature or credential, not a bearer token.
 	mux.HandleFunc("POST /v1/webhooks/{carrier}", h.webhook)
 }
@@ -301,6 +306,41 @@ func (h *handlersImpl) saveLocation(w http.ResponseWriter, r *http.Request) {
 	a, _ := auth.FromContext(r.Context())
 	saved, err := h.svc.Pickups.SaveLocation(r.Context(), a, l)
 	respond(w, r, status, saved, err)
+}
+
+func (h *handlersImpl) getPrompt(w http.ResponseWriter, r *http.Request) {
+	a, _ := auth.FromContext(r.Context())
+	v, err := h.svc.Prompt.Get(r.Context(), a)
+	respond(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) answerPrompt(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Action string `json:"action"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	a, _ := auth.FromContext(r.Context())
+	v, err := h.svc.Prompt.Answer(r.Context(), a, b.Action)
+	respond(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) getPromptSettings(w http.ResponseWriter, r *http.Request) {
+	days, err := h.svc.Prompt.ReappearDays(r.Context())
+	respond(w, r, http.StatusOK, map[string]int{"reappearDays": days}, err)
+}
+
+func (h *handlersImpl) setPromptSettings(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		ReappearDays int `json:"reappearDays"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	a, _ := auth.FromContext(r.Context())
+	days, err := h.svc.Prompt.SetReappearDays(r.Context(), a, b.ReappearDays)
+	respond(w, r, http.StatusOK, map[string]int{"reappearDays": days}, err)
 }
 
 func (h *handlersImpl) markReady(w http.ResponseWriter, r *http.Request) {

@@ -75,6 +75,7 @@ const (
 	CodeCheckoutQuoteRequired     = "CHECKOUT_QUOTE_REQUIRED"
 	CodePickupOrgNotApproved      = "PICKUP_ORG_NOT_APPROVED"
 	CodePickupInvalidHours        = "PICKUP_INVALID_HOURS"
+	CodePickupHoursNotConfirmed   = "PICKUP_HOURS_NOT_CONFIRMED"
 	CodePickupNotGeocoded         = "PICKUP_NOT_GEOCODED"
 	CodePickupOutsideDeliveryArea = "PICKUP_OUTSIDE_DELIVERY_AREA"
 )

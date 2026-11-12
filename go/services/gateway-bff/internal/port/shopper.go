@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
@@ -752,6 +753,10 @@ type PickupLocation struct {
 	Active     bool `json:"active"`
 	// Position is where the location is, when known.
 	Position *GeoPoint `json:"position,omitempty"`
+	// HoursConfirmed is sent when switching a seller location on (the owner confirmed the hours); never returned.
+	HoursConfirmed bool `json:"hoursConfirmed,omitempty"`
+	// EnabledAt is when it was last switched on (carrier-gateway also records who).
+	EnabledAt *time.Time `json:"enabledAt,omitempty"`
 }
 
 // GeoPoint is a WGS84 point.

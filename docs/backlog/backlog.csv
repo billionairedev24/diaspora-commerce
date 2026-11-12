@@ -1713,3 +1713,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Preview as-of date shows exactly what goes live at that time
 - Pinned placements win ties over automatic modules and the preview says so
 - Expired modules disappear without a deploy","E20","","High","3","home content spike","content","To Do"
+"S431","Story","Prompt sellers to enable store pickup (never on by default)","A one-time card in Seller Center (home and Ship-from) offers an approved seller with a ship-from address and no pickup place the chance to let customers collect orders there. Pre-filled from the address, hours typed by the seller, off until the seller explicitly confirms. Dismissal is kept server side per organisation. Owner decision: prompted, never defaulted.","- Card shows on home and Ship-from only for an approved seller with an address and no active pickup place, pre-filled with name, address, ZIP and phone if present, with empty required hours and the plain-words explanation and a shopper preview
+- Turn on pickup is disabled until hours are valid, a ready time is typed and the seller ticks the confirmation; pickup is never switched on otherwise
+- Not now (asks again after the staff-set days, default 30) and Don't ask again (final) are saved server side per organisation in carrier-gateway, not in the browser
+- carrier-gateway refuses switching a seller pickup place on without confirmed hours and records who switched it on and when; gateway-bff requires an approved organisation
+- A small inline nudge shows on Orders only while no pickup place exists
+- Checkout says in plain words when a seller does not offer pickup, with no internal reasons
+- Copy exists in en, fr, es, ar and yo (non-English are machine drafts needing native review)
+- Unit, server-side and Playwright tests pass","E12","","High","5","seller-center pickup carrier-gateway i18n","delivery","Done"

@@ -26,6 +26,7 @@ type Store interface {
 	port.TrackingStore
 	port.Outbox
 	port.PickupRepository
+	port.PickupPromptRepository
 }
 
 type storeImpl struct {
@@ -452,27 +453,27 @@ func (s *storeImpl) SaveLocation(ctx context.Context, l domain.PickupLocation) e
 		lat, lng = &l.Position.Lat, &l.Position.Lng
 	}
 	_, err = s.pool.Exec(ctx, `insert into pickup_location
-		(id, kind, owner_org, name, address, postal_code, timezone, hours, ready_hours, active, updated_at, latitude, longitude)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		(id, kind, owner_org, name, address, postal_code, timezone, hours, ready_hours, active, updated_at, latitude, longitude, enabled_by, enabled_at)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		on conflict (id) do update set kind = excluded.kind, owner_org = excluded.owner_org, name = excluded.name,
 			address = excluded.address, postal_code = excluded.postal_code, timezone = excluded.timezone,
 			hours = excluded.hours, ready_hours = excluded.ready_hours, active = excluded.active, updated_at = excluded.updated_at,
-			latitude = excluded.latitude, longitude = excluded.longitude`,
-		l.ID, string(l.Kind), l.OwnerOrg, l.Name, addr, l.Address.PostalCode, l.Timezone, hours, l.ReadyHours, l.Active, l.UpdatedAt, lat, lng)
+			latitude = excluded.latitude, longitude = excluded.longitude, enabled_by = excluded.enabled_by, enabled_at = excluded.enabled_at`,
+		l.ID, string(l.Kind), l.OwnerOrg, l.Name, addr, l.Address.PostalCode, l.Timezone, hours, l.ReadyHours, l.Active, l.UpdatedAt, lat, lng, l.EnabledBy, l.EnabledAt)
 	if err != nil {
 		return fmt.Errorf("upsert location: %w", err)
 	}
 	return nil
 }
 
-const locationColumns = `id::text, kind, owner_org, name, address, timezone, hours, ready_hours, active, updated_at, latitude, longitude`
+const locationColumns = `id::text, kind, owner_org, name, address, timezone, hours, ready_hours, active, updated_at, latitude, longitude, enabled_by, enabled_at`
 
 func scanLocation(row pgx.Row) (domain.PickupLocation, error) {
 	var l domain.PickupLocation
 	var kind string
 	var addr, hours []byte
 	var lat, lng *float64
-	err := row.Scan(&l.ID, &kind, &l.OwnerOrg, &l.Name, &addr, &l.Timezone, &hours, &l.ReadyHours, &l.Active, &l.UpdatedAt, &lat, &lng)
+	err := row.Scan(&l.ID, &kind, &l.OwnerOrg, &l.Name, &addr, &l.Timezone, &hours, &l.ReadyHours, &l.Active, &l.UpdatedAt, &lat, &lng, &l.EnabledBy, &l.EnabledAt)
 	if err == nil && lat != nil && lng != nil {
 		l.Position = &domain.Position{Lat: *lat, Lng: *lng}
 	}
@@ -516,4 +517,54 @@ func (s *storeImpl) ListLocations(ctx context.Context, ownerOrg, postalPrefix st
 		return nil, fmt.Errorf("location rows: %w", err)
 	}
 	return out, nil
+}
+
+// ---- seller pickup prompt (the "let customers collect here" card) ----
+
+func (s *storeImpl) GetPrompt(ctx context.Context, ownerOrg string) (domain.PickupPrompt, error) {
+	p := domain.PickupPrompt{OwnerOrg: ownerOrg, State: domain.PromptNone}
+	var state string
+	err := s.pool.QueryRow(ctx, `select state, snoozed_until, decided_by, decided_at from pickup_prompt where owner_org = $1`, ownerOrg).
+		Scan(&state, &p.SnoozedUntil, &p.DecidedBy, &p.DecidedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return p, nil
+	}
+	if err != nil {
+		return domain.PickupPrompt{}, fmt.Errorf("read pickup prompt: %w", err)
+	}
+	p.State = domain.PromptState(state)
+	return p, nil
+}
+
+func (s *storeImpl) SavePrompt(ctx context.Context, p domain.PickupPrompt) error {
+	_, err := s.pool.Exec(ctx, `insert into pickup_prompt (owner_org, state, snoozed_until, decided_by, decided_at) values ($1, $2, $3, $4, $5)
+		on conflict (owner_org) do update set state = excluded.state, snoozed_until = excluded.snoozed_until,
+			decided_by = excluded.decided_by, decided_at = excluded.decided_at`,
+		p.OwnerOrg, string(p.State), p.SnoozedUntil, p.DecidedBy, p.DecidedAt)
+	if err != nil {
+		return fmt.Errorf("save pickup prompt: %w", err)
+	}
+	return nil
+}
+
+func (s *storeImpl) Setting(ctx context.Context, key string) (int, bool, error) {
+	var v int
+	err := s.pool.QueryRow(ctx, `select int_value from carrier_setting where key = $1`, key).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("read setting: %w", err)
+	}
+	return v, true, nil
+}
+
+func (s *storeImpl) SaveSetting(ctx context.Context, key string, value int, by string, at time.Time) error {
+	_, err := s.pool.Exec(ctx, `insert into carrier_setting (key, int_value, updated_by, updated_at) values ($1, $2, $3, $4)
+		on conflict (key) do update set int_value = excluded.int_value, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+		key, value, by, at)
+	if err != nil {
+		return fmt.Errorf("save setting: %w", err)
+	}
+	return nil
 }

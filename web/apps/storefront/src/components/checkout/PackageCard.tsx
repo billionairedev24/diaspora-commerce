@@ -8,6 +8,7 @@ import { useT } from '@/i18n/t';
 import { feeRuleNote } from '@/lib/fee-rule';
 
 import styles from './Checkout.module.css';
+import { pickupReasonKey } from './pickup-reason';
 import { onRequestQuote } from './quote';
 
 /** How one package reaches the shopper: a delivery option, or pickup at one of its pickup points. */
@@ -255,6 +256,11 @@ export function PackageCard({
               <span className={styles.optionFeeFree} data-testid="option-fee-pickup">{fmt.money(0)}</span>
             </label>
           )}
+          {!canPickup && pickupReasonKey(pkg.pickupUnavailableReason) ? (
+            <p className={styles.optionDesc} data-testid="pickup-unavailable">
+              {t(pickupReasonKey(pkg.pickupUnavailableReason) ?? 'co.pickupNone.seller')}
+            </p>
+          ) : null}
         </fieldset>
 
         {pickup && points.length > 0 && (

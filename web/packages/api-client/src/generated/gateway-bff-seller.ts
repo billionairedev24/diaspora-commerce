@@ -674,10 +674,37 @@ export interface paths {
          *     shipping:label and the organisation): a SELLER pickup location with the address's id, name (company · label),
          *     address, position, the state's time zone, the opening hours and how long orders take to be ready. Checkout lists
          *     it (with address, hours, ready time and distance) for this seller's packages; pickup has no shipping charge.
-         *     Enabling needs 1–14 non-overlapping windows (422 `PICKUP_INVALID_HOURS`, `errors.hours`). Disabling keeps the
-         *     hours. Unknown address → 404. carrier-gateway down → 503 `UPSTREAM_UNAVAILABLE`.
+         *     Enabling needs 1–14 non-overlapping windows (422 `PICKUP_INVALID_HOURS`, `errors.hours`) and, when pickup is
+         *     not on yet, `hoursConfirmed: true` (422 `PICKUP_HOURS_NOT_CONFIRMED`): the seller's explicit "someone will be
+         *     there during these hours". carrier-gateway enforces the same and records who switched it on and when
+         *     (`customerPickup.enabledAt`). Disabling keeps the hours. Unknown address → 404. carrier-gateway down → 503 `UPSTREAM_UNAVAILABLE`.
          */
         put: operations["setCustomerPickup"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/pickup-prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The one-time "let customers collect orders here" card (and the small checkout-settings nudge)
+         * @description Whether to show the card: the organisation is approved, has a ship-from address, has no pickup place switched
+         *     on and has not dismissed the card (a "Not now" ends after the staff-set number of days, "Don't ask again" never
+         *     ends). `address` is the default ship-from address to pre-fill from. Pickup is never switched on by this card;
+         *     that is the separate, explicit `customer-pickup` save. The answer is kept per organisation in carrier-gateway.
+         *     When carrier-gateway cannot be read the card and nudge are hidden.
+         */
+        get: operations["getPickupPrompt"];
+        /** Answer the card with "Not now" or "Don't ask again" */
+        put: operations["answerPickupPrompt"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3641,6 +3668,43 @@ export interface components {
             ready?: boolean;
             /** @description Why customers do not see this address as a pickup point, or why only some do. Plain English, no ids. */
             issues?: components["schemas"]["PickupIssue"][];
+            /**
+             * Format: date-time
+             * @description When pickup was last switched on (null while it never was)
+             */
+            enabledAt?: string | null;
+        };
+        PickupPrompt: {
+            /** @description The organisation is approved and has a ship-from address */
+            eligible: boolean;
+            /** @description Some address already has pickup on */
+            hasPickupPlace: boolean;
+            /** @description The card may be shown now */
+            show: boolean;
+            /** @description The small inline nudge on checkout settings may be shown (eligible and no pickup place, whatever was dismissed) */
+            nudge: boolean;
+            /** @enum {string} */
+            state: "NONE" | "SNOOZED" | "NEVER";
+            /** Format: date-time */
+            snoozedUntil: string | null;
+            /** @description The default ship-from address the card is pre-filled from; null when there is nothing to offer */
+            address: components["schemas"]["PickupPromptAddress"] | null;
+        };
+        PickupPromptAddress: {
+            /** @description The ship-from address to save pickup for */
+            addressId: string;
+            name: string;
+            line1: string;
+            line2: string;
+            city: string;
+            state: string;
+            postalCode: string;
+            /** @description Empty when the address has none */
+            phone: string;
+        };
+        PickupPromptAnswer: {
+            /** @enum {string} */
+            answer: "NOT_NOW" | "DONT_ASK_AGAIN";
         };
         PickupIssue: {
             /** @enum {string} */
@@ -3654,6 +3718,8 @@ export interface components {
             /** @description At least one window to enable */
             hours: components["schemas"]["PickupWindow"][];
             readyHours?: number;
+            /** @description Required (true) to switch pickup on: the seller confirmed someone will be there during these hours */
+            hoursConfirmed?: boolean;
         };
         GeoPosition: {
             lat: number;
@@ -7447,6 +7513,56 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getPickupPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupPrompt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    answerPickupPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickupPromptAnswer"];
+            };
+        };
+        responses: {
+            /** @description The card state after the answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupPrompt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };

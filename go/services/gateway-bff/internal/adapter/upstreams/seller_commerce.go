@@ -397,6 +397,19 @@ func (k *carrierImpl) SavePickupLocation(ctx context.Context, bearer string, l p
 	return out, err
 }
 
+func (k *carrierImpl) PickupPrompt(ctx context.Context, bearer string) (port.PickupPromptState, error) {
+	var out port.PickupPromptState
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/pickup-prompt", Bearer: bearer}, &out)
+	return out, err
+}
+
+func (k *carrierImpl) AnswerPickupPrompt(ctx context.Context, bearer, action string) (port.PickupPromptState, error) {
+	var out port.PickupPromptState
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/pickup-prompt", Bearer: bearer, RetryUnsafe: true,
+		JSON: map[string]string{"action": action}}, &out)
+	return out, err
+}
+
 // ---------------------------------------------------------------- payments: payouts (contracts/openapi/payments.yaml)
 
 type payoutsImpl struct{ c httpclient.Client }

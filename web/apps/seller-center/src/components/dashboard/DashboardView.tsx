@@ -5,6 +5,7 @@ import { HelpStrip, type LinkLike, ModuleSummaries, PeriodSelect, usePeriod } fr
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
+import { PickupPromptCard } from '@/components/orders/PickupPromptCard';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -42,6 +43,7 @@ export function DashboardView() {
         description={copy.description}
         actions={<PeriodSelect label={t('sc.dashboardView.period')} value={range} onChange={setRange} labels={{ '7': t('sc.dashboardView.days7'), '30': t('sc.dashboardView.days30'), '90': t('sc.dashboardView.days90') }} />}
       />
+      {isProvider ? null : <PickupPromptCard />}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {!q.isError ? (
         <ModuleSummaries modules={q.data?.modules ?? []} loading={q.isPending} onRetry={() => void q.refetch()} linkAs={AppLink} labels={{ retry: t('sc.dashboardView.retry'), error: t('sc.dashboardView.moduleError') }} />

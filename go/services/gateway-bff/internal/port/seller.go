@@ -1177,6 +1177,18 @@ type CarrierClient interface {
 	ManagedPickupLocations(ctx context.Context, bearer, ownerOrg string) ([]PickupLocation, error)
 	// SavePickupLocation creates or replaces a pickup location (PUT /v1/pickup-locations/{id}).
 	SavePickupLocation(ctx context.Context, bearer string, l PickupLocation) (PickupLocation, error)
+	// PickupPrompt is the organisation's answer to the pickup card (GET /v1/pickup-prompt).
+	PickupPrompt(ctx context.Context, bearer string) (PickupPromptState, error)
+	// AnswerPickupPrompt records "Not now" (SNOOZE) or "Don't ask again" (NEVER) (PUT /v1/pickup-prompt).
+	AnswerPickupPrompt(ctx context.Context, bearer, action string) (PickupPromptState, error)
+}
+
+// PickupPromptState is carrier-gateway's answer to the pickup card.
+type PickupPromptState struct {
+	State        string     `json:"state"`
+	SnoozedUntil *time.Time `json:"snoozedUntil"`
+	Due          bool       `json:"due"`
+	ReappearDays int        `json:"reappearDays"`
 }
 
 // ---------------------------------------------------------------- payments (payouts)

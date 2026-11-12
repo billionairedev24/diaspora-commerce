@@ -126,6 +126,7 @@ func run() error {
 		Returns:   app.NewReturnLabelService(carriers, rates, labels),
 		Tracking:  tracking,
 		Pickups:   app.NewPickupService(carriers, resolver, store, store, time.Now),
+		Prompt:    app.NewPickupPromptService(store, time.Now),
 		Addresses: app.NewAddressService(carriers),
 	}
 

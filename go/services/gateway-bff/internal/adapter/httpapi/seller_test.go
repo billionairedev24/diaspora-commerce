@@ -487,11 +487,40 @@ func TestSellerContractConformance(t *testing.T) {
 		r.json(t)["code"] != domain.CodePickupInvalidHours {
 		t.Fatalf("customer pickup without hours = %d %s", r.status, r.body)
 	}
-	cp := b.do("PUT", "/v1/seller/ship-from-addresses/"+firstID+"/customer-pickup", map[string]any{"enabled": true, "hours": hours, "readyHours": 3})
+	// The card for sellers: never on by itself. Eligible with an address and no pickup place, so it is shown, pre-filled.
+	pc := b.do("GET", "/v1/seller/pickup-prompt", nil).json(t)
+	if pc["eligible"] != true || pc["show"] != true || pc["nudge"] != true || pc["hasPickupPlace"] != false || pc["address"] == nil {
+		t.Fatalf("pickup card before = %v", pc)
+	}
+	if pre := pc["address"].(map[string]any); pre["postalCode"] == "" || pre["addressId"] == "" {
+		t.Fatalf("pickup card pre-fill = %v", pre)
+	}
+	// Switching on without confirming the hours is refused (server side), and nothing is saved.
+	if r := b.do("PUT", "/v1/seller/ship-from-addresses/"+firstID+"/customer-pickup", map[string]any{"enabled": true, "hours": hours, "readyHours": 3}); r.status != 422 ||
+		r.json(t)["code"] != domain.CodePickupHoursNotConfirmed {
+		t.Fatalf("customer pickup unconfirmed = %d %s", r.status, r.body)
+	}
+	if pc := b.do("GET", "/v1/seller/pickup-prompt", nil).json(t); pc["hasPickupPlace"] != false {
+		t.Fatalf("an unconfirmed save must not turn pickup on: %v", pc)
+	}
+	// "Not now" hides the card but keeps the small nudge; "Don't ask again" is remembered by the server.
+	if pc := b.do("PUT", "/v1/seller/pickup-prompt", map[string]any{"answer": "NOT_NOW"}).json(t); pc["show"] != false || pc["nudge"] != true || pc["state"] != "SNOOZED" || pc["snoozedUntil"] == nil {
+		t.Fatalf("not now = %v", pc)
+	}
+	if pc := b.do("PUT", "/v1/seller/pickup-prompt", map[string]any{"answer": "DONT_ASK_AGAIN"}).json(t); pc["show"] != false || pc["state"] != "NEVER" {
+		t.Fatalf("don't ask again = %v", pc)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/pickup-prompt", map[string]any{"answer": "maybe"}), 422)
+	cp := b.do("PUT", "/v1/seller/ship-from-addresses/"+firstID+"/customer-pickup", map[string]any{"enabled": true, "hours": hours, "readyHours": 3, "hoursConfirmed": true})
 	mustStatus(t, cp, 200)
-	if c := cp.json(t)["customerPickup"].(map[string]any); c["enabled"] != true || c["readyHours"] != float64(3) || len(c["hours"].([]any)) != 2 {
+	if c := cp.json(t)["customerPickup"].(map[string]any); c["enabled"] != true || c["readyHours"] != float64(3) || len(c["hours"].([]any)) != 2 || c["enabledAt"] == nil {
 		t.Fatalf("customer pickup on = %s", cp.body)
 	}
+	// Once a pickup place exists neither the card nor the nudge show; editing it needs no new confirmation.
+	if pc := b.do("GET", "/v1/seller/pickup-prompt", nil).json(t); pc["hasPickupPlace"] != true || pc["show"] != false || pc["nudge"] != false || pc["address"] != nil {
+		t.Fatalf("pickup card after = %v", pc)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/ship-from-addresses/"+firstID+"/customer-pickup", map[string]any{"enabled": true, "hours": hours, "readyHours": 5}), 200)
 	listed := b.do("GET", "/v1/seller/ship-from-addresses", nil).json(t)["items"].([]any)
 	for _, it := range listed {
 		a := it.(map[string]any)

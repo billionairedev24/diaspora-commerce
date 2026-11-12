@@ -120,6 +120,11 @@ type PickupLocation struct {
 	// Position is where the location is (optional; checkout shows the distance from the delivery address).
 	Position  *Position `json:"position,omitempty"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	// HoursConfirmed is input only: the owner confirmed the opening hours when switching a seller location on.
+	HoursConfirmed bool `json:"hoursConfirmed,omitempty"`
+	// EnabledBy and EnabledAt are the audit of the last switch-on (who, when); set by the service, never by the caller.
+	EnabledBy string     `json:"enabledBy,omitempty"`
+	EnabledAt *time.Time `json:"enabledAt,omitempty"`
 }
 
 // Position is a WGS84 point.

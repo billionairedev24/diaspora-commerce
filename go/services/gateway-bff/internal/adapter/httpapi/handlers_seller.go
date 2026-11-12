@@ -57,6 +57,8 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("DELETE /v1/seller/ship-from-addresses/{addressId}", h.shipFromDelete)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}/afrotransact-pickup", h.shipFromPickup)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}/customer-pickup", h.shipFromCustomerPickup)
+	route("GET /v1/seller/pickup-prompt", h.pickupPrompt)
+	route("PUT /v1/seller/pickup-prompt", h.answerPickupPrompt)
 	if h.s.SellerAssistant != nil {
 		route("GET /v1/seller/assistant", h.sellerAssistantStatus)
 		route("POST /v1/seller/assistant/chat", h.sellerAssistantChat)
@@ -838,6 +840,21 @@ func (h *handlersImpl) shipFromCustomerPickup(w http.ResponseWriter, r *http.Req
 		return
 	}
 	v, err := h.s.SellerShipFrom.SetCustomerPickup(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) pickupPrompt(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShipFrom.PickupPrompt(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) answerPickupPrompt(w http.ResponseWriter, r *http.Request) {
+	var b domain.PickupPromptAnswer
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShipFrom.AnswerPickupPrompt(r.Context(), callerFrom(r.Context()), b.Answer)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

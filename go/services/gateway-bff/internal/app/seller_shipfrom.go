@@ -22,6 +22,12 @@ type SellerShipFromService interface {
 	// SetCustomerPickup turns "customers can pick up their orders here" on or off: a carrier-gateway pickup location
 	// (kind SELLER, the address's id) that checkout offers for the seller's packages.
 	SetCustomerPickup(ctx context.Context, c *domain.Caller, id string, in domain.CustomerPickupRequest) (domain.ShipFromAddress, error)
+	// PickupPrompt says whether to show the one-time "let customers collect orders here" card (and the small nudge on
+	// checkout settings) and the address it is pre-filled from. Pickup is never switched on by it.
+	PickupPrompt(ctx context.Context, c *domain.Caller) (domain.PickupPrompt, error)
+	// AnswerPickupPrompt records "Not now" (asks again after the staff-set number of days) or "Don't ask again", per
+	// organisation, in carrier-gateway.
+	AnswerPickupPrompt(ctx context.Context, c *domain.Caller, answer string) (domain.PickupPrompt, error)
 }
 
 type sellerShipFromImpl struct{ r *orgResolver }
@@ -137,7 +143,7 @@ func withPickupIssues(a domain.ShipFromAddress, cp domain.CustomerPickup) domain
 }
 
 func customerPickupOf(l port.PickupLocation) domain.CustomerPickup {
-	out := domain.CustomerPickup{Enabled: l.Active, ReadyHours: l.ReadyHours, Hours: []domain.PickupWindow{}}
+	out := domain.CustomerPickup{Enabled: l.Active, ReadyHours: l.ReadyHours, Hours: []domain.PickupWindow{}, EnabledAt: l.EnabledAt}
 	for _, h := range l.Hours {
 		for day, n := range pickupWeekdays {
 			if n == h.Weekday {
@@ -166,7 +172,7 @@ var stateTimezones = map[string]string{
 // customerPickupLocation is the carrier-gateway pickup location of an address.
 func customerPickupLocation(a domain.ShipFromAddress, orgID string, in domain.CustomerPickupRequest) port.PickupLocation {
 	l := port.PickupLocation{ID: a.ID, Kind: "SELLER", OwnerOrg: orgID, Name: firstNonEmpty(strings.TrimSpace(a.Company), strings.TrimSpace(a.Label), a.Name),
-		Timezone: firstNonEmpty(stateTimezones[strings.ToUpper(a.State)], "America/Chicago"), ReadyHours: in.ReadyHours, Active: in.Enabled}
+		Timezone: firstNonEmpty(stateTimezones[strings.ToUpper(a.State)], "America/Chicago"), ReadyHours: in.ReadyHours, Active: in.Enabled, HoursConfirmed: in.HoursConfirmed}
 	if a.Company != "" && a.Label != "" && !strings.EqualFold(a.Company, a.Label) {
 		l.Name = a.Company + " · " + a.Label
 	}
@@ -214,14 +220,39 @@ func (s *sellerShipFromImpl) SetCustomerPickup(ctx context.Context, c *domain.Ca
 		if in.Enabled && len(in.Hours) == 0 {
 			return domain.ShipFromAddress{}, domain.FieldProblem(domain.CodePickupInvalidHours, "Check the pickup hours", "hours", "Add the hours customers can pick up.")
 		}
+		if in.Enabled && !in.HoursConfirmed {
+			// Keeping pickup on while editing needs no new confirmation; switching it on does.
+			if on, err := s.pickupIsOn(ctx, c, sc.org.ID, id); err != nil {
+				return domain.ShipFromAddress{}, err
+			} else if !on {
+				return domain.ShipFromAddress{}, domain.FieldProblem(domain.CodePickupHoursNotConfirmed, "Confirm the opening hours", "hoursConfirmed",
+					"Confirm that someone will be there during these hours before pickup is switched on.")
+			}
+		}
 		saved, err := s.r.d.Carrier.SavePickupLocation(ctx, c.BearerToken, customerPickupLocation(a, sc.org.ID, in))
 		if err != nil {
 			return domain.ShipFromAddress{}, mapErr("carrier-gateway", err)
 		}
+		s.r.d.Log.InfoContext(ctx, "store pickup saved", "org", sc.org.ID, "address", a.ID, "enabled", saved.Active, "by", c.Subject)
 		a.CustomerPickup = withPickupIssues(a, customerPickupOf(saved))
 		return a, nil
 	}
 	return domain.ShipFromAddress{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Address not found", "This ship-from address doesn't exist.")
+}
+
+// pickupIsOn reads carrier-gateway: is the address's pickup place active now (an unreadable answer is an error, so
+// pickup is never switched on on a guess).
+func (s *sellerShipFromImpl) pickupIsOn(ctx context.Context, c *domain.Caller, orgID, id string) (bool, error) {
+	locs, err := s.r.d.Carrier.ManagedPickupLocations(ctx, c.BearerToken, orgID)
+	if err != nil {
+		return false, mapErr("carrier-gateway", err)
+	}
+	for _, l := range locs {
+		if l.ID == id {
+			return l.Active, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *sellerShipFromImpl) Create(ctx context.Context, c *domain.Caller, in domain.ShipFromInput) (domain.ShipFromAddress, error) {
@@ -361,4 +392,81 @@ func pickupErr(err error) error {
 		return domain.UpstreamUnavailable("geo").WithCause(err)
 	}
 	return mapErr("seller", err)
+}
+
+// PickupPrompt builds the card's state. Anything unknown (carrier-gateway unreachable) hides the card and the nudge: a seller
+// is never nagged to enable pickup on a guess, and never has it enabled by this call.
+func (s *sellerShipFromImpl) PickupPrompt(ctx context.Context, c *domain.Caller) (domain.PickupPrompt, error) {
+	out := domain.PickupPrompt{State: domain.PickupPromptStateNone}
+	sc, err := s.r.resolve(ctx, c)
+	if err != nil {
+		return out, err
+	}
+	if !sc.approved || sc.kind() != domain.OrgKindSeller {
+		return out, nil
+	}
+	if sc, err = s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView); err != nil {
+		return out, err
+	}
+	list, err := s.r.d.Sellers.ShipFrom(ctx, c.BearerToken, sc.org.ID)
+	if err != nil {
+		return out, mapErr("seller", err)
+	}
+	addrs := shipFromList(list)
+	out.Eligible = len(addrs) > 0
+	if !out.Eligible || s.r.d.Carrier == nil {
+		return out, nil
+	}
+	locs, err := s.r.d.Carrier.ManagedPickupLocations(ctx, c.BearerToken, sc.org.ID)
+	if err != nil {
+		s.r.d.Log.WarnContext(ctx, "pickup card hidden: pickup places unreadable", "error", err)
+		return out, nil
+	}
+	for _, l := range locs {
+		out.HasPickupPlace = out.HasPickupPlace || l.Active
+	}
+	if out.HasPickupPlace {
+		return out, nil
+	}
+	pre := addrs[0]
+	for _, a := range addrs {
+		if a.IsDefault {
+			pre = a
+			break
+		}
+	}
+	out.Address = &domain.PickupPromptAddress{AddressID: pre.ID, Name: firstNonEmpty(pre.Company, pre.Label, pre.Name), Line1: pre.Line1, Line2: pre.Line2,
+		City: pre.City, State: pre.State, PostalCode: pre.PostalCode, Phone: pre.Phone}
+	st, err := s.r.d.Carrier.PickupPrompt(ctx, c.BearerToken)
+	if err != nil {
+		s.r.d.Log.WarnContext(ctx, "pickup card hidden: answer unreadable", "error", err)
+		out.Address = nil
+		return out, nil
+	}
+	out.Nudge = true
+	out.State, out.SnoozedUntil = firstNonEmpty(st.State, domain.PickupPromptStateNone), st.SnoozedUntil
+	out.Show = st.Due
+	return out, nil
+}
+
+func (s *sellerShipFromImpl) AnswerPickupPrompt(ctx context.Context, c *domain.Caller, answer string) (domain.PickupPrompt, error) {
+	action := ""
+	switch strings.ToUpper(strings.TrimSpace(answer)) {
+	case domain.PickupPromptNotNow:
+		action = "SNOOZE"
+	case domain.PickupPromptDontAsk:
+		action = "NEVER"
+	default:
+		return domain.PickupPrompt{}, domain.FieldProblem(domain.CodeValidationFailed, "Check the answer", "answer", "Answer NOT_NOW or DONT_ASK_AGAIN.")
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelEdit); err != nil {
+		return domain.PickupPrompt{}, err
+	}
+	if s.r.d.Carrier == nil {
+		return domain.PickupPrompt{}, domain.UpstreamUnavailable("carrier-gateway")
+	}
+	if _, err := s.r.d.Carrier.AnswerPickupPrompt(ctx, c.BearerToken, action); err != nil {
+		return domain.PickupPrompt{}, mapErr("carrier-gateway", err)
+	}
+	return s.PickupPrompt(ctx, c)
 }

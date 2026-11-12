@@ -134,3 +134,13 @@ type PickupRepository interface {
 	// ListLocations filters by owner org and/or postal-code prefix; activeOnly hides disabled ones.
 	ListLocations(ctx context.Context, ownerOrg, postalPrefix string, activeOnly bool) ([]domain.PickupLocation, error)
 }
+
+// PickupPromptRepository stores the answers to the seller pickup card and carrier-gateway's small integer settings.
+type PickupPromptRepository interface {
+	// GetPrompt is the organisation's answer (state NONE when it never answered).
+	GetPrompt(ctx context.Context, ownerOrg string) (domain.PickupPrompt, error)
+	SavePrompt(ctx context.Context, p domain.PickupPrompt) error
+	// Setting reads an integer setting; ok is false when it was never set.
+	Setting(ctx context.Context, key string) (value int, ok bool, err error)
+	SaveSetting(ctx context.Context, key string, value int, by string, at time.Time) error
+}

@@ -190,6 +190,9 @@ import {
   type ServiceInput,
   type ServiceOffer,
   ServiceOfferSchema,
+  type PickupPrompt,
+  type PickupPromptAnswer,
+  PickupPromptSchema,
   type ShipFromAddress,
   ShipFromAddressSchema,
   type ShipFromInput,
@@ -366,6 +369,12 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** "Customers can pick up their orders here" on or off, with the hours and how long orders take to be ready. */
     setCustomerPickup: (id: string, body: CustomerPickupRequest): Promise<ShipFromAddress> =>
       request(`/v1/seller/ship-from-addresses/${enc(id)}/customer-pickup`, ShipFromAddressSchema, { method: 'PUT', body }),
+    /** The one-time "let customers collect orders here" card state (server-side per organisation). */
+    getPickupPrompt: (signal?: AbortSignal, background?: boolean): Promise<PickupPrompt> =>
+      request('/v1/seller/pickup-prompt', PickupPromptSchema, { signal, background }),
+    /** "Not now" (asks again after a while) or "Don't ask again". */
+    answerPickupPrompt: (answer: PickupPromptAnswer): Promise<PickupPrompt> =>
+      request('/v1/seller/pickup-prompt', PickupPromptSchema, { method: 'PUT', body: { answer } }),
     listOffers: (productId: string, signal?: AbortSignal): Promise<SellerOfferList> =>
       request('/v1/seller/offers', SellerOfferListSchema, { query: { productId }, signal }),
     setOfferFulfilment: (offerId: string, body: OfferFulfilmentRequest): Promise<SellerOffer> =>

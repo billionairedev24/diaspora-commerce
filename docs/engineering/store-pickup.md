@@ -32,9 +32,30 @@ store** ("AfroTransact picks up from my store"), a different feature with its ow
 - **SQL** (carrier-gateway database `carriers`): `select id, kind, owner_org, name, active, postal_code, position from pickup_location where owner_org = '<seller org id>';`
   Or `GET http://localhost:8209/v1/pickup-locations?ownerOrg=<seller org id>` (active only).
 
-## Open decision (owner)
+## Prompted, never defaulted (owner decision)
 
-Whether sellers are prompted or defaulted to enable store pickup is not decided. Recommendation: prompt, do not default. Show a
-one-time card in Seller Center when a seller has an approved ship-from address and no pickup place ("Let customers collect orders
-here"), pre-filled with the address and the usual hours, with the switch off until the seller confirms. A default-on would promise
-customers a counter the seller has not staffed.
+Sellers are **prompted** to enable store pickup; it is never on by default and nothing switches it on except the seller's own
+explicit confirmation.
+
+- **The card** ("Let customers collect orders from your address") shows on Seller Center home and on Orders > Ship-from & pickup
+  to an approved seller organisation that has a ship-from address and **no active pickup place**. It is pre-filled from the default
+  address (name, address, ZIP, phone if present). Opening hours and the ready time start **empty and required**; nothing is invented.
+  It says in plain words: "Customers will be able to collect orders from this address during these hours. Only switch this on if
+  someone will be there." and previews "Shoppers near ZIP 77002 will see Pickup". "Turn on pickup" stays disabled until the hours
+  are valid, a ready time is typed and the seller ticks "Someone will be at this address during these hours."
+- **Not now / Don't ask again** are saved **server side per seller organisation** (carrier-gateway `pickup_prompt`, `GET/PUT
+  /v1/pickup-prompt`, via gateway-bff `GET/PUT /v1/seller/pickup-prompt`), so every member and every browser sees the same.
+  "Not now" asks again after **30 days** (the staff setting `pickupPrompt.reappearDays`, `GET/PUT /v1/pickup-prompt/settings`,
+  needs `shipping:admin`, 1 to 365); "Don't ask again" is final.
+- **A small inline nudge** shows on Orders while the organisation has no pickup place, whatever was dismissed.
+- **The server enforces it**: carrier-gateway refuses to switch a SELLER pickup place from off to on without `hoursConfirmed: true`
+  and at least one valid opening window (400 `carrier-gateway.invalid-request`); gateway-bff checks the same first (422
+  `PICKUP_HOURS_NOT_CONFIRMED`) and requires an approved organisation. It records **who** (`pickup_location.enabled_by`) and **when**
+  (`enabled_at`, also shown to the seller as `customerPickup.enabledAt`) and ignores audit fields sent by a client. Editing a place
+  that stays on needs no new confirmation and keeps the first record.
+- **At checkout**, a package without pickup says why only when it helps the shopper: "This seller doesn't offer pickup." (seller
+  has no place), "Add a delivery address to see pickup options." or "There's no pickup spot near this address." Internal reasons
+  (`NO_PLATFORM_POINT`, `LOOKUP_FAILED`) say nothing.
+
+"Approved address" has no per-address approval in the seller service, so it means: the seller organisation is approved and the
+address is saved (an unlocated address still shows an issue on its pickup card, and is matched by ZIP area).

@@ -626,14 +626,42 @@ export const CustomerPickupSchema = z.object({
   /** True when checkout can offer this address (pickup on and opening hours set). */
   ready: z.boolean().optional(),
   /** Why customers do not see this address as a pickup point, or why only some do (plain words, no ids). */
-  issues: z.array(PickupIssueSchema).optional()
+  issues: z.array(PickupIssueSchema).optional(),
+  /** When pickup was last switched on (null while it never was). */
+  enabledAt: nullableString.optional()
 });
 export type CustomerPickup = z.infer<typeof CustomerPickupSchema>;
 export interface CustomerPickupRequest {
   enabled: boolean;
   hours: PickupWindow[];
   readyHours: number;
+  /** The seller's explicit "someone will be there during these hours". Required to switch pickup on (422 PICKUP_HOURS_NOT_CONFIRMED). */
+  hoursConfirmed?: boolean;
 }
+
+/** The one-time "let customers collect orders here" card: shown to an approved seller with a ship-from address and no pickup place. */
+export const PickupPromptAddressSchema = z.object({
+  addressId: z.string(),
+  name: z.string(),
+  line1: z.string(),
+  line2: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  phone: z.string()
+});
+export type PickupPromptAddress = z.infer<typeof PickupPromptAddressSchema>;
+export const PickupPromptSchema = z.object({
+  eligible: z.boolean(),
+  hasPickupPlace: z.boolean(),
+  show: z.boolean(),
+  nudge: z.boolean(),
+  state: z.enum(['NONE', 'SNOOZED', 'NEVER']),
+  snoozedUntil: nullableString,
+  address: PickupPromptAddressSchema.nullable()
+});
+export type PickupPrompt = z.infer<typeof PickupPromptSchema>;
+export type PickupPromptAnswer = 'NOT_NOW' | 'DONT_ASK_AGAIN';
 
 /** A saved ship-from address of the organisation (seller service; the label form preselects the default). */
 export const ShipFromAddressSchema = z.object({

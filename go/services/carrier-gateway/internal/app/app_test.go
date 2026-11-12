@@ -300,7 +300,7 @@ func TestPickupLocationsAreOrgScoped(t *testing.T) {
 	store := newMemStore()
 	svc := app.NewPickupService(app.Carriers{}, allAccounts(), repo, store, time.Now)
 	ctx := context.Background()
-	loc := domain.PickupLocation{Kind: domain.PickupSeller, Name: "Mama Put Shop", Timezone: "America/Chicago", Active: true,
+	loc := domain.PickupLocation{Kind: domain.PickupSeller, Name: "Mama Put Shop", Timezone: "America/Chicago", Active: true, HoursConfirmed: true,
 		Address: domain.Address{Line1: "9 Bissonnet St", City: "Houston", State: "TX", PostalCode: "77005"},
 		Hours:   []domain.OpeningHours{{Weekday: time.Saturday, Open: "10:00", Close: "16:00"}}}
 	seller := auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_1", Permissions: []string{app.PermLabel}}

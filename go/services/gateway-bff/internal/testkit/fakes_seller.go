@@ -995,9 +995,47 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		l["id"] = r.PathValue("id")
 		pickupMu.Lock()
+		// The carrier-gateway rule: switching a seller place on needs the owner's confirmation of the hours; it records when.
+		prev, had := pickups[r.PathValue("id")]
+		if l["active"] == true && (!had || prev["active"] != true) {
+			if l["hoursConfirmed"] != true {
+				pickupMu.Unlock()
+				problem(w, 400, "carrier-gateway.invalid-request", "confirm the opening hours", nil)
+				return
+			}
+			l["enabledAt"] = "2026-11-12T10:00:00Z"
+		} else if had {
+			l["enabledAt"] = prev["enabledAt"]
+		}
+		delete(l, "hoursConfirmed")
 		pickups[r.PathValue("id")] = l
 		pickupMu.Unlock()
 		writeJSON(w, 200, l)
+	})
+	// The pickup card's answer per organisation (the fake has one organisation).
+	prompt := map[string]any{"state": "NONE", "due": true, "reappearDays": 30}
+	mux.HandleFunc("GET /v1/pickup-prompt", func(w http.ResponseWriter, _ *http.Request) {
+		pickupMu.Lock()
+		defer pickupMu.Unlock()
+		writeJSON(w, 200, prompt)
+	})
+	mux.HandleFunc("PUT /v1/pickup-prompt", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Action string `json:"action"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		pickupMu.Lock()
+		defer pickupMu.Unlock()
+		switch b.Action {
+		case "SNOOZE":
+			prompt = map[string]any{"state": "SNOOZED", "due": false, "reappearDays": 30, "snoozedUntil": "2026-12-12T10:00:00Z"}
+		case "NEVER":
+			prompt = map[string]any{"state": "NEVER", "due": false, "reappearDays": 30}
+		default:
+			problem(w, 400, "carrier-gateway.invalid-request", "action must be SNOOZE or NEVER", nil)
+			return
+		}
+		writeJSON(w, 200, prompt)
 	})
 	mux.HandleFunc("POST /v1/labels", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Idempotency-Key") == "" {

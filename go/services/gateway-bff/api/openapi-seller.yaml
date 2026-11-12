@@ -755,8 +755,10 @@ paths:
         shipping:label and the organisation): a SELLER pickup location with the address's id, name (company · label),
         address, position, the state's time zone, the opening hours and how long orders take to be ready. Checkout lists
         it (with address, hours, ready time and distance) for this seller's packages; pickup has no shipping charge.
-        Enabling needs 1–14 non-overlapping windows (422 `PICKUP_INVALID_HOURS`, `errors.hours`). Disabling keeps the
-        hours. Unknown address → 404. carrier-gateway down → 503 `UPSTREAM_UNAVAILABLE`.
+        Enabling needs 1–14 non-overlapping windows (422 `PICKUP_INVALID_HOURS`, `errors.hours`) and, when pickup is
+        not on yet, `hoursConfirmed: true` (422 `PICKUP_HOURS_NOT_CONFIRMED`): the seller's explicit "someone will be
+        there during these hours". carrier-gateway enforces the same and records who switched it on and when
+        (`customerPickup.enabledAt`). Disabling keeps the hours. Unknown address → 404. carrier-gateway down → 503 `UPSTREAM_UNAVAILABLE`.
       parameters:
         - {name: addressId, in: path, required: true, schema: {type: string}}
       requestBody:
@@ -767,6 +769,36 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/pickup-prompt:
+    get:
+      tags: [Orders]
+      operationId: getPickupPrompt
+      security: [{sessionCookie: []}]
+      summary: The one-time "let customers collect orders here" card (and the small checkout-settings nudge)
+      description: |
+        Whether to show the card: the organisation is approved, has a ship-from address, has no pickup place switched
+        on and has not dismissed the card (a "Not now" ends after the staff-set number of days, "Don't ask again" never
+        ends). `address` is the default ship-from address to pre-fill from. Pickup is never switched on by this card;
+        that is the separate, explicit `customer-pickup` save. The answer is kept per organisation in carrier-gateway.
+        When carrier-gateway cannot be read the card and nudge are hidden.
+      responses:
+        '200': {description: The card state, content: {application/json: {schema: {$ref: '#/components/schemas/PickupPrompt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Orders]
+      operationId: answerPickupPrompt
+      security: [{sessionCookie: []}]
+      summary: Answer the card with "Not now" or "Don't ask again"
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PickupPromptAnswer'}}}
+      responses:
+        '200': {description: The card state after the answer, content: {application/json: {schema: {$ref: '#/components/schemas/PickupPrompt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── Lola for sellers (plan tiers)
@@ -3913,6 +3945,39 @@ components:
           type: array
           description: Why customers do not see this address as a pickup point, or why only some do. Plain English, no ids.
           items: {$ref: '#/components/schemas/PickupIssue'}
+        enabledAt: {type: [string, 'null'], format: date-time, description: When pickup was last switched on (null while it never was)}
+    PickupPrompt:
+      type: object
+      required: [eligible, hasPickupPlace, show, nudge, state, snoozedUntil, address]
+      properties:
+        eligible: {type: boolean, description: The organisation is approved and has a ship-from address}
+        hasPickupPlace: {type: boolean, description: Some address already has pickup on}
+        show: {type: boolean, description: The card may be shown now}
+        nudge: {type: boolean, description: 'The small inline nudge on checkout settings may be shown (eligible and no pickup place, whatever was dismissed)'}
+        state: {type: string, enum: [NONE, SNOOZED, NEVER]}
+        snoozedUntil: {type: [string, 'null'], format: date-time}
+        address:
+          description: The default ship-from address the card is pre-filled from; null when there is nothing to offer
+          oneOf:
+            - {$ref: '#/components/schemas/PickupPromptAddress'}
+            - {type: 'null'}
+    PickupPromptAddress:
+      type: object
+      required: [addressId, name, line1, line2, city, state, postalCode, phone]
+      properties:
+        addressId: {type: string, description: The ship-from address to save pickup for}
+        name: {type: string}
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        phone: {type: string, description: Empty when the address has none}
+    PickupPromptAnswer:
+      type: object
+      required: [answer]
+      properties:
+        answer: {type: string, enum: [NOT_NOW, DONT_ASK_AGAIN]}
     PickupIssue:
       type: object
       required: [code, message, blocking]
@@ -3927,6 +3992,7 @@ components:
         enabled: {type: boolean}
         hours: {type: array, maxItems: 14, items: {$ref: '#/components/schemas/PickupWindow'}, description: At least one window to enable}
         readyHours: {type: integer, minimum: 0, maximum: 168}
+        hoursConfirmed: {type: boolean, description: 'Required (true) to switch pickup on: the seller confirmed someone will be there during these hours'}
     GeoPosition:
       type: object
       required: [lat, lng, precision, geocodedAt]

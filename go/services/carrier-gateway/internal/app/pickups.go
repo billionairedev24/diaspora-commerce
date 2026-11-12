@@ -106,6 +106,7 @@ func (s *pickupServiceImpl) SaveLocation(ctx context.Context, actor auth.Actor, 
 	if !canManage(actor, loc) {
 		return domain.PickupLocation{}, fmt.Errorf("%w: cannot manage this pickup location", ErrForbidden)
 	}
+	var prev *domain.PickupLocation
 	if loc.ID == "" {
 		loc.ID = uuid.NewString()
 	} else {
@@ -116,13 +117,41 @@ func (s *pickupServiceImpl) SaveLocation(ctx context.Context, actor auth.Actor, 
 			return domain.PickupLocation{}, fmt.Errorf("load location: %w", err)
 		case !canManage(actor, existing):
 			return domain.PickupLocation{}, fmt.Errorf("%w: cannot manage this pickup location", ErrForbidden)
+		default:
+			prev = &existing
 		}
 	}
-	loc.UpdatedAt = s.now().UTC()
+	now := s.now().UTC()
+	if err := stampEnablement(&loc, prev, actor, now); err != nil {
+		return domain.PickupLocation{}, err
+	}
+	loc.UpdatedAt = now
 	if err := s.repo.SaveLocation(ctx, loc); err != nil {
 		return domain.PickupLocation{}, fmt.Errorf("save location: %w", err)
 	}
 	return loc, nil
+}
+
+// stampEnablement is the rule for switching a pickup place on: a seller's place needs the owner's explicit confirmation
+// of its opening hours (Validate already needs the hours themselves), and the switch-on is recorded (who, when). Edits
+// that keep a place on, or off, keep the earlier record. Whatever the caller sent in the audit fields is discarded.
+func stampEnablement(loc *domain.PickupLocation, prev *domain.PickupLocation, actor auth.Actor, now time.Time) error {
+	turningOn := loc.Active && (prev == nil || !prev.Active)
+	confirmed := loc.HoursConfirmed
+	loc.HoursConfirmed = false
+	switch {
+	case turningOn:
+		if loc.Kind == domain.PickupSeller && !confirmed {
+			return fmt.Errorf("%w: confirm the opening hours before pickup is switched on", domain.ErrInvalid)
+		}
+		at := now
+		loc.EnabledBy, loc.EnabledAt = actor.Subject, &at
+	case prev != nil:
+		loc.EnabledBy, loc.EnabledAt = prev.EnabledBy, prev.EnabledAt
+	default:
+		loc.EnabledBy, loc.EnabledAt = "", nil
+	}
+	return nil
 }
 
 func (s *pickupServiceImpl) GetLocation(ctx context.Context, id string) (domain.PickupLocation, error) {

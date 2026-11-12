@@ -21,6 +21,7 @@ import { useSeller } from '@/lib/session';
 import { exportTable, pollExport, runForEach } from '@/lib/table-export';
 
 import { ACTION_LABEL, OrderSheet } from './OrderSheet';
+import { PickupNudge } from './PickupPromptCard';
 
 /** Orders: server-driven table (one search over every column, sort, cursor pages, selection, exports); rows open in a
     sheet; sellers confirm, pack and mark ready only (one row or many). */
@@ -132,6 +133,7 @@ export function OrdersView() {
           )
         }
       />
+      {isProvider ? null : <PickupNudge />}
       {!editable ? (
         <Notice tone="info" icon="eye" title="Read-only.">
           {session.activeOrg?.roleLabel} can view orders but not change them.
