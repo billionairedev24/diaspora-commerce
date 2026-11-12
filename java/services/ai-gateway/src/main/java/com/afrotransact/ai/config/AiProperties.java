@@ -24,7 +24,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "at.ai")
 public record AiProperties(Map<String, Route> routes, List<Price> prices, Price defaultPrice,
                            Map<String, Budget> budgets, Lola lola, Integer maxInputChars, Embeddings embeddings,
-                           ProviderPrivacy providerPrivacy) {
+                           ProviderPrivacy providerPrivacy, Spend spend) {
 
     public AiProperties {
         routes = routes == null ? Map.of() : Map.copyOf(routes);
@@ -35,6 +35,29 @@ public record AiProperties(Map<String, Route> routes, List<Price> prices, Price 
         maxInputChars = maxInputChars == null ? 4000 : maxInputChars;
         embeddings = embeddings == null ? new Embeddings(null) : embeddings;
         providerPrivacy = providerPrivacy == null ? new ProviderPrivacy(null, null) : providerPrivacy;
+        spend = spend == null ? new Spend(null, null, null, null) : spend;
+    }
+
+    /**
+     * The gateway-wide spend ceiling (owner decision: USD 2 per day in total). Unlike {@code budgets} it applies to every
+     * feature together; 0 = unlimited.
+     *
+     * @param globalDailyCostUsd    all callers and features together per UTC day (default 2.00)
+     * @param callerDailyCostUsd    one caller (user or service client) per UTC day, so one caller cannot use up the day
+     *                              for everyone (default 0.50)
+     * @param userCallsPerMinute    model calls per minute for a user token (default 20; one Lola message can take
+     *                              several model rounds)
+     * @param serviceCallsPerMinute model calls per minute for a service client such as media-service (default 120)
+     */
+    public record Spend(BigDecimal globalDailyCostUsd, BigDecimal callerDailyCostUsd, Integer userCallsPerMinute,
+                        Integer serviceCallsPerMinute) {
+
+        public Spend {
+            globalDailyCostUsd = globalDailyCostUsd == null ? new BigDecimal("2.00") : globalDailyCostUsd;
+            callerDailyCostUsd = callerDailyCostUsd == null ? new BigDecimal("0.50") : callerDailyCostUsd;
+            userCallsPerMinute = userCallsPerMinute == null ? 20 : userCallsPerMinute;
+            serviceCallsPerMinute = serviceCallsPerMinute == null ? 120 : serviceCallsPerMinute;
+        }
     }
 
     /** One task's route. */

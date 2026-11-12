@@ -7,6 +7,7 @@ import java.time.ZonedDateTime;
 
 import com.afrotransact.ai.domain.AiRuleViolation;
 import com.afrotransact.ai.domain.BudgetExceededException;
+import com.afrotransact.ai.domain.RateLimitedException;
 import com.afrotransact.ai.port.ModelUnavailableException;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
@@ -37,6 +38,16 @@ class AiErrorAdvice {
                 .header(HttpHeaders.RETRY_AFTER, String.valueOf(Math.max(untilMidnight, 1)))
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                 .body(pd);
+    }
+
+    @ExceptionHandler(RateLimitedException.class)
+    ResponseEntity<ProblemDetail> rateLimited(RateLimitedException ex) {
+        ProblemDetail pd = problem(HttpStatus.TOO_MANY_REQUESTS, RateLimitedException.CODE, "Too many AI requests",
+                ex.getMessage());
+        pd.setProperty("retryAfterSeconds", ex.retryAfterSeconds());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.retryAfterSeconds()))
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON).body(pd);
     }
 
     @ExceptionHandler(ModelUnavailableException.class)

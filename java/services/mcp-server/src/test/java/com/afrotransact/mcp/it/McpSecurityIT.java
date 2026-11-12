@@ -71,6 +71,9 @@ class McpSecurityIT {
         HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url("/v1/tools"))).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(200);
+        // Public server: an anonymous reader sees the shopper toolset only, never seller or staff tools.
+        assertThat(response.body()).contains("search_products").doesNotContain("update_shipment_status")
+                .doesNotContain("order_payment_split").doesNotContain("applications_queue");
     }
 
     private String url(String path) {

@@ -38,9 +38,11 @@ class ModelAccessServiceImpl implements ModelAccessService {
     private final AiSettings settings;
     private final AiMetrics metrics;
     private final Clock clock;
+    private final SpendGuard spendGuard;
 
     ModelAccessServiceImpl(ModelRouter router, UsageLedger ledger, BudgetPolicy budgets, PriceTable prices,
-                           AiSettings settings, AiMetrics metrics, Clock clock) {
+                           AiSettings settings, AiMetrics metrics, Clock clock, SpendGuard spendGuard) {
+        this.spendGuard = spendGuard;
         this.router = router;
         this.ledger = ledger;
         this.budgets = budgets;
@@ -52,6 +54,7 @@ class ModelAccessServiceImpl implements ModelAccessService {
 
     @Override
     public BudgetDecision admit(Caller caller, AiFeature feature) {
+        spendGuard.check(caller, feature);
         LocalDate today = LocalDate.ofInstant(Instant.now(clock), ZoneOffset.UTC);
         UsageTotals user = ledger.userTotals(caller.subject(), feature.key(), today);
         UsageTotals all = ledger.featureTotals(feature.key(), today);
