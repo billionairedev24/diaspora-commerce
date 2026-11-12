@@ -29,6 +29,13 @@ type AccountSettingsService interface {
 	Alerts(ctx context.Context, c *domain.Caller) (domain.AlertPreferences, error)
 	SaveAlerts(ctx context.Context, c *domain.Caller, in domain.AlertPreferencesInput) (domain.AlertPreferences, error)
 	LeaveOrg(ctx context.Context, c *domain.Caller, orgID string) error
+	// TourProgress, SaveTourProgress, MergeTourProgress, ResetTourProgress and ResetAllTourProgress keep guided-tour progress
+	// per signed-in person (Seller Center, Provider Hub and staff console), at identity. Only the caller's own, nothing personal.
+	TourProgress(ctx context.Context, c *domain.Caller) (domain.TourProgressList, error)
+	SaveTourProgress(ctx context.Context, c *domain.Caller, tourID string, in domain.TourProgressInput) (domain.TourProgress, error)
+	MergeTourProgress(ctx context.Context, c *domain.Caller, in domain.TourProgressMerge) (domain.TourProgressList, error)
+	ResetTourProgress(ctx context.Context, c *domain.Caller, tourID string) error
+	ResetAllTourProgress(ctx context.Context, c *domain.Caller) error
 }
 
 type accountSettingsImpl struct{ d AccountSettingsDeps }
@@ -44,6 +51,7 @@ const (
 	maxNameLength     = 80
 	maxJobTitleLength = 80
 	maxPhoneLength    = 32
+	maxTourMerge      = 100
 )
 
 func identityProblem(err error) error {
@@ -55,6 +63,11 @@ func identityProblem(err error) error {
 		case strings.Contains(p.Code, "owner-cannot-leave"):
 			return domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Owners can't leave",
 				firstNonEmpty(p.Detail, "Make someone else an owner first.")).WithCause(err)
+		case strings.Contains(p.Code, "invalid-tour-progress"), strings.Contains(p.Code, "tour-progress-limit"):
+			if len(p.Fields) > 0 {
+				return domain.ValidationProblem(p.Fields).WithCause(err)
+			}
+			return domain.ValidationProblem(map[string]string{"_": firstNonEmpty(p.Detail, "Tour progress is not valid.")}).WithCause(err)
 		case strings.Contains(p.Code, "member-not-found"):
 			return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found",
 				"You're not a member of that organisation.").WithCause(err)
@@ -290,4 +303,57 @@ func (s *accountSettingsImpl) LeaveOrg(ctx context.Context, c *domain.Caller, or
 		return err
 	}
 	return identityProblem(s.d.Identity.LeaveOrg(ctx, c.BearerToken, orgID))
+}
+
+func (s *accountSettingsImpl) TourProgress(ctx context.Context, c *domain.Caller) (domain.TourProgressList, error) {
+	if err := requireCustomer(c); err != nil {
+		return domain.TourProgressList{}, err
+	}
+	out, err := s.d.Identity.TourProgress(ctx, c.BearerToken)
+	if err != nil {
+		return domain.TourProgressList{}, identityProblem(err)
+	}
+	if out.Items == nil {
+		out.Items = []domain.TourProgress{}
+	}
+	return out, nil
+}
+
+func (s *accountSettingsImpl) SaveTourProgress(ctx context.Context, c *domain.Caller, tourID string, in domain.TourProgressInput) (domain.TourProgress, error) {
+	if err := requireCustomer(c); err != nil {
+		return domain.TourProgress{}, err
+	}
+	out, err := s.d.Identity.SaveTourProgress(ctx, c.BearerToken, tourID, in)
+	return out, identityProblem(err)
+}
+
+func (s *accountSettingsImpl) MergeTourProgress(ctx context.Context, c *domain.Caller, in domain.TourProgressMerge) (domain.TourProgressList, error) {
+	if err := requireCustomer(c); err != nil {
+		return domain.TourProgressList{}, err
+	}
+	if len(in.Items) > maxTourMerge {
+		return domain.TourProgressList{}, domain.FieldProblem(domain.CodeValidationFailed, "Validation failed", "items", "At most 100 tours at once")
+	}
+	out, err := s.d.Identity.MergeTourProgress(ctx, c.BearerToken, in)
+	if err != nil {
+		return domain.TourProgressList{}, identityProblem(err)
+	}
+	if out.Items == nil {
+		out.Items = []domain.TourProgress{}
+	}
+	return out, nil
+}
+
+func (s *accountSettingsImpl) ResetTourProgress(ctx context.Context, c *domain.Caller, tourID string) error {
+	if err := requireCustomer(c); err != nil {
+		return err
+	}
+	return identityProblem(s.d.Identity.ResetTourProgress(ctx, c.BearerToken, tourID))
+}
+
+func (s *accountSettingsImpl) ResetAllTourProgress(ctx context.Context, c *domain.Caller) error {
+	if err := requireCustomer(c); err != nil {
+		return err
+	}
+	return identityProblem(s.d.Identity.ResetAllTourProgress(ctx, c.BearerToken))
 }

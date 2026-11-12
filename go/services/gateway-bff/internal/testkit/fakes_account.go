@@ -2,6 +2,7 @@ package testkit
 
 import (
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -19,6 +20,7 @@ type accountState struct {
 	trusted       []map[string]any
 	left          []string
 	passkeyLabel  string
+	tours         map[string]map[string]any // tour id → progress (identity user_tour_progress for the one test account)
 }
 
 func newAccountState() *accountState {
@@ -33,7 +35,7 @@ func newAccountState() *accountState {
 		trusted: []map[string]any{{"id": "0b0b0b0b-0000-4000-8000-0000000000b1",
 			"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
 			"createdAt": "2026-10-01T10:00:00Z", "expiresAt": "2026-10-31T10:00:00Z"}},
-		passkeyLabel: "iPhone"}
+		passkeyLabel: "iPhone", tours: map[string]map[string]any{}}
 }
 
 // SetAccountPrincipal makes the signed-in test account staff ("STAFF", no organisations), a customer ("CUSTOMER", no
@@ -142,6 +144,80 @@ func (u *Upstreams) shopperAccountRoutes(mux *http.ServeMux, st *shopperState, a
 			a.display[k] = b[k]
 		}
 		writeJSON(w, 200, a.display)
+	}))
+	tourList := func() map[string]any {
+		items := []map[string]any{}
+		for _, id := range sortedKeys(a.tours) {
+			items = append(items, a.tours[id])
+		}
+		return map[string]any{"items": items, "autoStartEnabled": true}
+	}
+	// Same rules as identity: a newer version wins, an older one is ignored, "in progress" never undoes a final status.
+	applyTour := func(id string, v float64, status string, step any) map[string]any {
+		if old, ok := a.tours[id]; ok {
+			ov, _ := old["contentVersion"].(float64)
+			final := old["status"] != "IN_PROGRESS"
+			if v < ov || (v == ov && final && status == "IN_PROGRESS") {
+				return old
+			}
+		}
+		a.tours[id] = map[string]any{"tourId": id, "contentVersion": v, "status": status, "lastStep": step, "updatedAt": "2026-11-01T09:00:00Z"}
+		return a.tours[id]
+	}
+	validTour := func(id string, b map[string]any) bool {
+		v, _ := b["contentVersion"].(float64)
+		s, _ := b["status"].(string)
+		return len(id) > 0 && len(id) <= 64 && id == strings.ToLower(id) && !strings.ContainsAny(id, " /_") && v >= 1 && (s == "IN_PROGRESS" || s == "COMPLETED" || s == "DISMISSED")
+	}
+	mux.HandleFunc("GET /v1/me/tour-progress", authed(func(w http.ResponseWriter, _ *http.Request) {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		writeJSON(w, 200, tourList())
+	}))
+	mux.HandleFunc("PUT /v1/me/tour-progress/{tourId}", authed(func(w http.ResponseWriter, r *http.Request) {
+		b := readJSON(r)
+		id := r.PathValue("tourId")
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if !validTour(id, b) {
+			problem(w, 422, "identity.invalid-tour-progress", "Tour progress is not valid", map[string]any{"fieldErrors": map[string]string{"tourId": "Use lower-case words joined by - or ."}})
+			return
+		}
+		writeJSON(w, 200, applyTour(id, b["contentVersion"].(float64), b["status"].(string), b["lastStep"]))
+	}))
+	mux.HandleFunc("PUT /v1/me/tour-progress", authed(func(w http.ResponseWriter, r *http.Request) {
+		b := readJSON(r)
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		items, _ := b["items"].([]any)
+		for _, it := range items {
+			m, _ := it.(map[string]any)
+			id, _ := m["tourId"].(string)
+			if !validTour(id, m) {
+				problem(w, 422, "identity.invalid-tour-progress", "Tour progress is not valid", map[string]any{"fieldErrors": map[string]string{"tourId": "Use lower-case words joined by - or ."}})
+				return
+			}
+		}
+		for _, it := range items {
+			m := it.(map[string]any)
+			if old, ok := a.tours[m["tourId"].(string)]; ok && m["contentVersion"].(float64) <= old["contentVersion"].(float64) {
+				continue // the server's state for a version stands
+			}
+			applyTour(m["tourId"].(string), m["contentVersion"].(float64), m["status"].(string), m["lastStep"])
+		}
+		writeJSON(w, 200, tourList())
+	}))
+	mux.HandleFunc("DELETE /v1/me/tour-progress/{tourId}", authed(func(w http.ResponseWriter, r *http.Request) {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		delete(a.tours, r.PathValue("tourId"))
+		w.WriteHeader(204)
+	}))
+	mux.HandleFunc("DELETE /v1/me/tour-progress", authed(func(w http.ResponseWriter, _ *http.Request) {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		a.tours = map[string]map[string]any{}
+		w.WriteHeader(204)
 	}))
 	mux.HandleFunc("POST /v1/me/orgs/{orgId}/leave", authed(func(w http.ResponseWriter, r *http.Request) {
 		st.mu.Lock()
@@ -258,4 +334,13 @@ func (u *Upstreams) shopperAccountRoutes(mux *http.ServeMux, st *shopperState, a
 		}
 		alerts(w, r, audience)
 	}))
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

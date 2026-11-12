@@ -15,7 +15,8 @@ export const settingsKeys = {
   activity: () => [...settingsKeys.all, 'sign-in-activity'] as const,
   notifications: () => [...settingsKeys.all, 'notification-preferences'] as const,
   alerts: () => [...settingsKeys.all, 'alerts'] as const,
-  preferences: () => [...settingsKeys.all, 'preferences'] as const
+  preferences: () => [...settingsKeys.all, 'preferences'] as const,
+  tours: () => [...settingsKeys.all, 'tour-progress'] as const
 };
 
 export const settingsQueries = {

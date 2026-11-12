@@ -14,8 +14,12 @@ import {
   type AlertPreference,
   type AlertTopic,
   type QuietHours,
-  type SignInEvent
-} from '../schemas/settings';
+  type SignInEvent,
+  TOUR_STATUSES,
+  type TourProgress,
+  type TourProgressInput,
+  type TourProgressList,
+  type TourProgressMergeItem} from '../schemas/settings';
 import { type NotificationPreferences } from '../schemas/shopper';
 
 export interface SettingsMockPerson {
@@ -50,6 +54,8 @@ interface SettingsState {
   preferences: AccountPreferences;
   alerts: Map<string, boolean>;
   quiet: QuietHours;
+  /** Guided-tour progress by tour id (identity's user_tour_progress, same rules). */
+  tours: Map<string, TourProgress>;
 }
 
 /** Codes the mock accepts for SMS (and as a fallback for the authenticator in unit tests). */
@@ -153,8 +159,29 @@ function seed(kind: SettingsMockConfig['kind']): SettingsState {
     notifications: { email: true, sms: true, push: true, marketingOptIn: false },
     preferences: { locale: null, timeZone: null, dateFormat: 'AUTO', numberFormat: 'AUTO', tableDensity: 'COMFORTABLE' },
     alerts: new Map(),
-    quiet: { enabled: false, start: '21:00', end: '07:00' }
+    quiet: { enabled: false, start: '21:00', end: '07:00' },
+    tours: new Map()
   };
+}
+
+const TOUR_ID = /^[a-z][a-z0-9]*(?:[-.][a-z0-9]+)*$/;
+
+function tourList(s: SettingsState): TourProgressList {
+  return { items: [...s.tours.values()].sort((a, b) => a.tourId.localeCompare(b.tourId)), autoStartEnabled: true };
+}
+
+function badTour(t: { tourId?: unknown; contentVersion?: unknown; status?: unknown }) {
+  const ok = typeof t.tourId === 'string' && t.tourId.length <= 64 && TOUR_ID.test(t.tourId) && Number.isInteger(t.contentVersion) && Number(t.contentVersion) >= 1 && (TOUR_STATUSES as readonly unknown[]).includes(t.status);
+  return ok ? null : problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Tour progress is not valid', { tourId: 'Use lower-case words joined by - or .' });
+}
+
+/** Identity's rule: a newer version wins, an older one is ignored, "in progress" never undoes a final status of the same version. */
+function applyTour(s: SettingsState, t: { tourId: string; contentVersion: number; status: TourProgressInput['status']; lastStep: string | null }): TourProgress {
+  const have = s.tours.get(t.tourId);
+  if (have && (t.contentVersion < have.contentVersion || (t.contentVersion === have.contentVersion && have.status !== 'IN_PROGRESS' && t.status === 'IN_PROGRESS'))) return have;
+  const next: TourProgress = { ...t, updatedAt: iso(new Date()) };
+  s.tours.set(t.tourId, next);
+  return next;
 }
 
 const LOCKED: Partial<Record<AlertTopic, boolean>> = { 'seller.compliance': true, 'seller.claims': true, 'staff.escalations': true };
@@ -428,6 +455,39 @@ export function settingsHandlers(cfg: SettingsMockConfig): HttpHandler[] {
       }
       s.preferences = { ...s.preferences, ...b } as AccountPreferences;
       return ok(s.preferences);
+    })),
+
+    /* Guided-tour progress */
+    http.get('*/v1/account/tour-progress', authed((s) => ok(tourList(s)))),
+    http.put('*/v1/account/tour-progress/:tourId', authed(async (s, _p, r, params) => {
+      const id = String(params.tourId);
+      const b = await read<Partial<TourProgressInput>>(r);
+      const bad = badTour({ tourId: id, contentVersion: b.contentVersion, status: b.status });
+      if (bad) return bad;
+      return ok(applyTour(s, { tourId: id, contentVersion: Number(b.contentVersion), status: b.status as TourProgressInput['status'], lastStep: b.lastStep ?? null }));
+    })),
+    http.put('*/v1/account/tour-progress', authed(async (s, _p, r) => {
+      const { items = [] } = await read<{ items?: Array<Partial<TourProgressMergeItem>> }>(r);
+      if (items.length > 100) return problem(422, 'VALIDATION_FAILED', 'Validation failed', 'At most 100 tours at once', { items: 'At most 100 tours at once' });
+      for (const it of items) {
+        const bad = badTour(it);
+        if (bad) return bad;
+      }
+      for (const it of items) {
+        const have = s.tours.get(String(it.tourId));
+        if (!have || Number(it.contentVersion) > have.contentVersion) {
+          applyTour(s, { tourId: String(it.tourId), contentVersion: Number(it.contentVersion), status: it.status as TourProgressInput['status'], lastStep: it.lastStep ?? null });
+        }
+      }
+      return ok(tourList(s));
+    })),
+    http.delete('*/v1/account/tour-progress/:tourId', authed((s, _p, _r, params) => {
+      s.tours.delete(String(params.tourId));
+      return none();
+    })),
+    http.delete('*/v1/account/tour-progress', authed((s) => {
+      s.tours.clear();
+      return none();
     }))
   ];
 }

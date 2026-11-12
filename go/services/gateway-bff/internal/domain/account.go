@@ -53,6 +53,42 @@ type AccountProfileInput struct {
 	JobTitle  *string `json:"jobTitle"`
 }
 
+// TourProgress is one guided tour's progress for the signed-in person (identity's TourProgress). Tour ids are namespaced
+// by app (sc.orders, st.settings); Status is IN_PROGRESS, COMPLETED or DISMISSED. No personal data.
+type TourProgress struct {
+	TourID         string  `json:"tourId"`
+	ContentVersion int     `json:"contentVersion"`
+	Status         string  `json:"status"`
+	LastStep       *string `json:"lastStep"`
+	UpdatedAt      string  `json:"updatedAt"`
+}
+
+// TourProgressList is the person's progress with the platform flag that lets first-time tours start by themselves.
+type TourProgressList struct {
+	Items            []TourProgress `json:"items"`
+	AutoStartEnabled bool           `json:"autoStartEnabled"`
+}
+
+// TourProgressInput is one tour's new state (PUT /v1/account/tour-progress/{tourId}).
+type TourProgressInput struct {
+	ContentVersion int     `json:"contentVersion"`
+	Status         string  `json:"status"`
+	LastStep       *string `json:"lastStep"`
+}
+
+// TourProgressMergeItem is one element of the first-sync merge.
+type TourProgressMergeItem struct {
+	TourID         string  `json:"tourId"`
+	ContentVersion int     `json:"contentVersion"`
+	Status         string  `json:"status"`
+	LastStep       *string `json:"lastStep"`
+}
+
+// TourProgressMerge is the body of PUT /v1/account/tour-progress (at most 100 items).
+type TourProgressMerge struct {
+	Items []TourProgressMergeItem `json:"items"`
+}
+
 // AccountPreferences are the display preferences.
 type AccountPreferences struct {
 	Locale       *string `json:"locale"`

@@ -170,3 +170,62 @@ func TestAccountSettingsForStaffAndCustomers(t *testing.T) {
 	mustStatus(t, b.do("PATCH", "/v1/account/profile", map[string]any{"jobTitle": "Chef"}), 422)
 	mustStatus(t, b.do("GET", "/v1/account/alerts", nil), 403)
 }
+
+// TestTourProgressIsPerAccountAndIdempotent covers the guided-tour progress routes the Seller Center, Provider Hub and staff
+// console share: signed-in only, small payload, idempotent upserts, the first-sync merge, the reset and the validation.
+func TestTourProgressIsPerAccountAndIdempotent(t *testing.T) {
+	bff, b := setup(t, testkit.Options{Content: true, Payments: true, Promise: true, Offers: true, Notifications: true})
+	mustStatus(t, b.do("GET", "/v1/account/tour-progress", nil), 401)
+	mustStatus(t, b.do("PUT", "/v1/account/tour-progress/sc.orders", map[string]any{"contentVersion": 1, "status": "COMPLETED"}), 401)
+	mustStatus(t, signIn(t, bff, b, "/"), 302)
+
+	r := b.do("GET", "/v1/account/tour-progress", nil)
+	mustStatus(t, r, 200)
+	if len(r.json(t)["items"].([]any)) != 0 || r.json(t)["autoStartEnabled"] != true {
+		t.Fatalf("empty progress: %s", r.body)
+	}
+
+	body := map[string]any{"contentVersion": 1, "status": "COMPLETED", "lastStep": "tools"}
+	for i := 0; i < 2; i++ {
+		r = b.do("PUT", "/v1/account/tour-progress/sc.orders", body)
+		mustStatus(t, r, 200)
+		if r.json(t)["status"] != "COMPLETED" || r.json(t)["tourId"] != "sc.orders" {
+			t.Fatalf("save %d: %s", i, r.body)
+		}
+	}
+	// a replay in progress does not undo a finished tour
+	r = b.do("PUT", "/v1/account/tour-progress/sc.orders", map[string]any{"contentVersion": 1, "status": "IN_PROGRESS", "lastStep": "page"})
+	mustStatus(t, r, 200)
+	if r.json(t)["status"] != "COMPLETED" {
+		t.Fatalf("replay undid completion: %s", r.body)
+	}
+
+	r = b.do("PUT", "/v1/account/tour-progress", map[string]any{"items": []map[string]any{
+		{"tourId": "sc.payouts", "contentVersion": 1, "status": "DISMISSED"},
+		{"tourId": "sc.orders", "contentVersion": 1, "status": "DISMISSED"}}})
+	mustStatus(t, r, 200)
+	items := r.json(t)["items"].([]any)
+	if len(items) != 2 || items[0].(map[string]any)["status"] != "COMPLETED" || items[1].(map[string]any)["status"] != "DISMISSED" {
+		t.Fatalf("merge: %s", r.body)
+	}
+
+	r = b.do("PUT", "/v1/account/tour-progress/Not-A-Tour", body)
+	mustStatus(t, r, 422)
+	many := make([]map[string]any, 101)
+	for i := range many {
+		many[i] = map[string]any{"tourId": "sc.t", "contentVersion": 1, "status": "COMPLETED"}
+	}
+	mustStatus(t, b.do("PUT", "/v1/account/tour-progress", map[string]any{"items": many}), 422)
+
+	mustStatus(t, b.do("DELETE", "/v1/account/tour-progress/sc.orders", nil), 204)
+	mustStatus(t, b.do("DELETE", "/v1/account/tour-progress/sc.orders", nil), 204)
+	r = b.do("GET", "/v1/account/tour-progress", nil)
+	if len(r.json(t)["items"].([]any)) != 1 {
+		t.Fatalf("after reset of one: %s", r.body)
+	}
+	mustStatus(t, b.do("DELETE", "/v1/account/tour-progress", nil), 204)
+	r = b.do("GET", "/v1/account/tour-progress", nil)
+	if len(r.json(t)["items"].([]any)) != 0 {
+		t.Fatalf("after reset: %s", r.body)
+	}
+}

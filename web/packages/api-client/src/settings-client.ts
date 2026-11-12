@@ -16,8 +16,13 @@ import {
   type Passkey,
   PasskeySchema,
   type SignInEvent,
-  SignInEventSchema
-} from './schemas/settings';
+  SignInEventSchema,
+  type TourProgress,
+  type TourProgressInput,
+  type TourProgressList,
+  TourProgressListSchema,
+  type TourProgressMergeItem,
+  TourProgressSchema} from './schemas/settings';
 import {
   type LinkedAccounts,
   LinkedAccountsSchema,
@@ -85,7 +90,17 @@ export function createSettingsApiClient(options: ApiClientOptions) {
     /* Preferences */
     getAccountPreferences: (signal?: AbortSignal): Promise<AccountPreferences> => request('/v1/account/preferences', AccountPreferencesSchema, { signal }),
     saveAccountPreferences: (body: AccountPreferences): Promise<AccountPreferences> =>
-      request('/v1/account/preferences', AccountPreferencesSchema, { method: 'PUT', body })
+      request('/v1/account/preferences', AccountPreferencesSchema, { method: 'PUT', body }),
+
+    /* Guided-tour progress (Seller Center, Provider Hub, staff console): the signed-in person's own, kept on the server. */
+    getTourProgress: (signal?: AbortSignal): Promise<TourProgressList> => request('/v1/account/tour-progress', TourProgressListSchema, { signal }),
+    saveTourProgress: (tourId: string, body: TourProgressInput): Promise<TourProgress> =>
+      request(`/v1/account/tour-progress/${enc(tourId)}`, TourProgressSchema, { method: 'PUT', body }),
+    /** First sync: copies what the browser kept; the server's state for a version stands. */
+    mergeTourProgress: (items: TourProgressMergeItem[]): Promise<TourProgressList> =>
+      request('/v1/account/tour-progress', TourProgressListSchema, { method: 'PUT', body: { items } }),
+    /** One tour, or every tour of the person when no id is given. */
+    resetTourProgress: (tourId?: string): Promise<void> => request(tourId ? `/v1/account/tour-progress/${enc(tourId)}` : '/v1/account/tour-progress', Void, { method: 'DELETE' })
   };
 }
 

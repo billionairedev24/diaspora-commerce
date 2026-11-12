@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
@@ -58,6 +59,29 @@ func (a *accountSettingsImpl) SavePreferences(ctx context.Context, bearer string
 
 func (a *accountSettingsImpl) LeaveOrg(ctx context.Context, bearer, orgID string) error {
 	return a.do(ctx, bearer, http.MethodPost, "/v1/me/orgs/"+esc(orgID)+"/leave", nil, nil)
+}
+
+func (a *accountSettingsImpl) TourProgress(ctx context.Context, bearer string) (port.UpTourProgressList, error) {
+	var out port.UpTourProgressList
+	return out, a.do(ctx, bearer, http.MethodGet, "/v1/me/tour-progress", nil, &out)
+}
+
+func (a *accountSettingsImpl) SaveTourProgress(ctx context.Context, bearer, tourID string, in domain.TourProgressInput) (domain.TourProgress, error) {
+	var out domain.TourProgress
+	return out, a.do(ctx, bearer, http.MethodPut, "/v1/me/tour-progress/"+esc(tourID), in, &out)
+}
+
+func (a *accountSettingsImpl) MergeTourProgress(ctx context.Context, bearer string, in domain.TourProgressMerge) (port.UpTourProgressList, error) {
+	var out port.UpTourProgressList
+	return out, a.do(ctx, bearer, http.MethodPut, "/v1/me/tour-progress", in, &out)
+}
+
+func (a *accountSettingsImpl) ResetTourProgress(ctx context.Context, bearer, tourID string) error {
+	return a.do(ctx, bearer, http.MethodDelete, "/v1/me/tour-progress/"+esc(tourID), nil, nil)
+}
+
+func (a *accountSettingsImpl) ResetAllTourProgress(ctx context.Context, bearer string) error {
+	return a.do(ctx, bearer, http.MethodDelete, "/v1/me/tour-progress", nil, nil)
 }
 
 // ---------------------------------------------------------------- notifications alert topics

@@ -74,6 +74,27 @@ export const AccountPreferencesSchema = z.object({
 });
 export type AccountPreferences = z.infer<typeof AccountPreferencesSchema>;
 
+/* Guided-tour progress kept per person on the server (identity user_tour_progress, through /v1/account/tour-progress). */
+export const TOUR_STATUSES = ['IN_PROGRESS', 'COMPLETED', 'DISMISSED'] as const;
+export const TourProgressSchema = z.object({
+  tourId: z.string(),
+  contentVersion: z.number().int().min(1),
+  status: z.enum(TOUR_STATUSES),
+  lastStep: z.string().nullable(),
+  updatedAt: z.string()
+});
+export type TourProgress = z.infer<typeof TourProgressSchema>;
+export const TourProgressListSchema = z.object({ items: z.array(TourProgressSchema), autoStartEnabled: z.boolean() });
+export type TourProgressList = z.infer<typeof TourProgressListSchema>;
+export interface TourProgressInput {
+  contentVersion: number;
+  status: (typeof TOUR_STATUSES)[number];
+  lastStep?: string | null;
+}
+export interface TourProgressMergeItem extends TourProgressInput {
+  tourId: string;
+}
+
 export const ALERT_TOPICS = ['seller.orders', 'seller.inventory', 'seller.payouts', 'seller.compliance', 'seller.claims', 'staff.assigned', 'staff.escalations', 'staff.approvals'] as const;
 export const AlertTopicSchema = z.enum(ALERT_TOPICS);
 export type AlertTopic = z.infer<typeof AlertTopicSchema>;

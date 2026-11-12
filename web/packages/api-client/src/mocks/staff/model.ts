@@ -53,7 +53,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
 export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKey[] }[] = [
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
   { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'deliveryQuotes', 'preorders'] },
-  { key: 'partners', label: 'Partners', modules: ['apps', 'deptRequests', 'support', 'rbac'] },
+  { key: 'partners', label: 'Partners', modules: ['orgs', 'apps', 'deptRequests', 'support', 'rbac'] },
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
   { key: 'trust', label: 'Trust & compliance', modules: ['disputes', 'audit'] },

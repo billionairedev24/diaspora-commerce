@@ -2974,6 +2974,89 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/tour-progress:
+    get:
+      tags: [Account]
+      operationId: getTourProgress
+      summary: Guided-tour progress of the signed-in person (identity GET /v1/me/tour-progress)
+      description: >-
+        Seller Center, Provider Hub and staff console tours keep what a person finished, skipped or asked not to see again here,
+        so it follows them to another browser or device. Tour ids are namespaced by app (sc.orders, st.settings). No personal
+        data. autoStartEnabled is the platform flag that lets first-time tours start by themselves.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Progress
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TourProgressList'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Account]
+      operationId: mergeTourProgress
+      summary: Merge what the browser kept into the server copy, once per browser (identity PUT /v1/me/tour-progress)
+      description: Fills gaps and moves to newer content versions only; what the server already holds for a version stands. At most 100 items.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TourProgressMerge'}
+      responses:
+        '200':
+          description: Progress afterwards
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TourProgressList'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Account]
+      operationId: resetTourProgress
+      summary: Reset all of my tour progress
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '204': {description: Reset (also when there was nothing)}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/tour-progress/{tourId}:
+    put:
+      tags: [Account]
+      operationId: saveTourProgress
+      summary: Save one tour's progress (idempotent upsert; identity PUT /v1/me/tour-progress/{tourId})
+      description: >-
+        A newer content version replaces an older one, an older one is ignored, and for the same version IN_PROGRESS never undoes
+        COMPLETED or DISMISSED. Answers what is stored.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: tourId, in: path, required: true, schema: {type: string, maxLength: 64, pattern: '^[a-z][a-z0-9]*([-.][a-z0-9]+)*$'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TourProgressInput'}
+      responses:
+        '200':
+          description: Stored progress
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TourProgress'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Account]
+      operationId: resetOneTourProgress
+      summary: Forget one tour's progress
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: tourId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      responses:
+        '204': {description: Forgotten (also when there was nothing)}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/alerts:
     get:
       tags: [Account]
@@ -6635,6 +6718,43 @@ components:
         dateFormat: {type: string, enum: [AUTO, MDY, DMY, YMD]}
         numberFormat: {type: string, enum: [AUTO, COMMA_DOT, DOT_COMMA, SPACE_COMMA]}
         tableDensity: {type: string, enum: [COMFORTABLE, COMPACT]}
+    TourProgress:
+      type: object
+      required: [tourId, contentVersion, status, lastStep, updatedAt]
+      properties:
+        tourId: {type: string, maxLength: 64, description: 'Namespaced by app, e.g. sc.orders or st.settings'}
+        contentVersion: {type: integer, minimum: 1, description: Version of the tour text the person last dealt with}
+        status: {type: string, enum: [IN_PROGRESS, COMPLETED, DISMISSED]}
+        lastStep: {type: [string, 'null'], maxLength: 64}
+        updatedAt: {type: string, format: date-time}
+    TourProgressList:
+      type: object
+      required: [items, autoStartEnabled]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/TourProgress'}}
+        autoStartEnabled: {type: boolean, description: Platform flag; false means first-time tours never start by themselves}
+    TourProgressInput:
+      type: object
+      required: [contentVersion, status]
+      properties:
+        contentVersion: {type: integer, minimum: 1}
+        status: {type: string, enum: [IN_PROGRESS, COMPLETED, DISMISSED]}
+        lastStep: {type: [string, 'null'], maxLength: 64}
+    TourProgressMerge:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [tourId, contentVersion, status]
+            properties:
+              tourId: {type: string, maxLength: 64}
+              contentVersion: {type: integer, minimum: 1}
+              status: {type: string, enum: [IN_PROGRESS, COMPLETED, DISMISSED]}
+              lastStep: {type: [string, 'null'], maxLength: 64}
     AlertPreference:
       type: object
       required: [topic, channel, enabled, locked]

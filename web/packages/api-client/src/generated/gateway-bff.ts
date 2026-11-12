@@ -2390,6 +2390,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/tour-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Guided-tour progress of the signed-in person (identity GET /v1/me/tour-progress)
+         * @description Seller Center, Provider Hub and staff console tours keep what a person finished, skipped or asked not to see again here, so it follows them to another browser or device. Tour ids are namespaced by app (sc.orders, st.settings). No personal data. autoStartEnabled is the platform flag that lets first-time tours start by themselves.
+         */
+        get: operations["getTourProgress"];
+        /**
+         * Merge what the browser kept into the server copy, once per browser (identity PUT /v1/me/tour-progress)
+         * @description Fills gaps and moves to newer content versions only; what the server already holds for a version stands. At most 100 items.
+         */
+        put: operations["mergeTourProgress"];
+        post?: never;
+        /** Reset all of my tour progress */
+        delete: operations["resetTourProgress"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/tour-progress/{tourId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save one tour's progress (idempotent upsert; identity PUT /v1/me/tour-progress/{tourId})
+         * @description A newer content version replaces an older one, an older one is ignored, and for the same version IN_PROGRESS never undoes COMPLETED or DISMISSED. Answers what is stored.
+         */
+        put: operations["saveTourProgress"];
+        post?: never;
+        /** Forget one tour's progress */
+        delete: operations["resetOneTourProgress"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/alerts": {
         parameters: {
             query?: never;
@@ -5883,6 +5929,37 @@ export interface components {
             numberFormat: "AUTO" | "COMMA_DOT" | "DOT_COMMA" | "SPACE_COMMA";
             /** @enum {string} */
             tableDensity: "COMFORTABLE" | "COMPACT";
+        };
+        TourProgress: {
+            /** @description Namespaced by app, e.g. sc.orders or st.settings */
+            tourId: string;
+            /** @description Version of the tour text the person last dealt with */
+            contentVersion: number;
+            /** @enum {string} */
+            status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED";
+            lastStep: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        TourProgressList: {
+            items: components["schemas"]["TourProgress"][];
+            /** @description Platform flag; false means first-time tours never start by themselves */
+            autoStartEnabled: boolean;
+        };
+        TourProgressInput: {
+            contentVersion: number;
+            /** @enum {string} */
+            status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED";
+            lastStep?: string | null;
+        };
+        TourProgressMerge: {
+            items: {
+                tourId: string;
+                contentVersion: number;
+                /** @enum {string} */
+                status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED";
+                lastStep?: string | null;
+            }[];
         };
         AlertPreference: {
             /** @enum {string} */
@@ -9796,6 +9873,126 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getTourProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TourProgressList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    mergeTourProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TourProgressMerge"];
+            };
+        };
+        responses: {
+            /** @description Progress afterwards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TourProgressList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resetTourProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reset (also when there was nothing) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveTourProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tourId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TourProgressInput"];
+            };
+        };
+        responses: {
+            /** @description Stored progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TourProgress"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resetOneTourProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tourId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Forgotten (also when there was nothing) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

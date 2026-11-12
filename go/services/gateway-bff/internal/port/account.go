@@ -2,6 +2,8 @@ package port
 
 import (
 	"context"
+
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
 
 // ---------------------------------------------------------------- identity account settings (contracts/openapi/identity.yaml)
@@ -42,6 +44,9 @@ type UpUserPreferences struct {
 	TableDensity string  `json:"tableDensity"`
 }
 
+// UpTourProgressList is identity's TourProgressList (GET and merge answers).
+type UpTourProgressList = domain.TourProgressList
+
 // AccountSettingsClient reads and changes the signed-in person's profile, job title, display preferences and
 // organisation memberships at identity, with the person's own token.
 type AccountSettingsClient interface {
@@ -52,6 +57,12 @@ type AccountSettingsClient interface {
 	Preferences(ctx context.Context, bearer string) (UpUserPreferences, error)
 	SavePreferences(ctx context.Context, bearer string, in UpUserPreferences) (UpUserPreferences, error)
 	LeaveOrg(ctx context.Context, bearer, orgID string) error
+	// TourProgress is the person's guided-tour progress (identity /v1/me/tour-progress), always their own.
+	TourProgress(ctx context.Context, bearer string) (UpTourProgressList, error)
+	SaveTourProgress(ctx context.Context, bearer, tourID string, in domain.TourProgressInput) (domain.TourProgress, error)
+	MergeTourProgress(ctx context.Context, bearer string, in domain.TourProgressMerge) (UpTourProgressList, error)
+	ResetTourProgress(ctx context.Context, bearer, tourID string) error
+	ResetAllTourProgress(ctx context.Context, bearer string) error
 }
 
 // ---------------------------------------------------------------- notifications alert topics (contracts/openapi/notifications.yaml)
