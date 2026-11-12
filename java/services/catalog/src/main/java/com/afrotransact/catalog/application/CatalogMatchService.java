@@ -14,6 +14,12 @@ public interface CatalogMatchService {
     MatchResult match(MatchCommand command);
 
     /**
+     * The same lookup for an organisation, with no permission check: for catalog's own bulk upload, which has checked who
+     * may upload and runs after the request (S393). {@code sellerOrgId} decides the {@code canOffer} answer.
+     */
+    MatchResult matchForOrganisation(MatchCommand command, String sellerOrgId);
+
+    /**
      * @param gtin        a barcode as typed (spaces and dashes allowed; an ISBN-10 is converted), or null
      * @param brand       brand name or registry id, for items without a barcode
      * @param mpn         manufacturer part number

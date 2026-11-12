@@ -7,6 +7,10 @@ public final class ImportLimits {
     public static final long MAX_FILE_BYTES = 10L * 1024 * 1024;
     /** Data rows per file (one row per variant). */
     public static final int MAX_ROWS = 5_000;
+    /** Data rows per price and quantity feed (S394). */
+    public static final int MAX_FEED_ROWS = 50_000;
+    /** Largest price and quantity feed or stock file accepted (S394, S395). */
+    public static final long MAX_FEED_BYTES = 25L * 1024 * 1024;
     /** Columns per row. */
     public static final int MAX_COLUMNS = 200;
     /** Characters per cell (longer cells are errors, never truncated silently). */

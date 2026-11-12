@@ -48,6 +48,8 @@ public final class CatalogEvents {
     public static final String AGGREGATE_IMPORT = "product-import";
     /** A bulk upload finished importing (S308): counts and whether the seller is notified. */
     public static final String IMPORT_COMPLETED = "catalog.import.completed";
+    /** A bulk upload was started: who, the file's hash, the mode and the row counts (S396). */
+    public static final String IMPORT_STARTED = "catalog.import.started";
     /** The owner's listings were hidden by seller-service compliance enforcement (payload sellerHidden=true). */
     public static final String PRODUCT_HIDDEN = "catalog.product.hidden";
     /** The owner's listings were restored (payload sellerHidden=false, status unchanged). */

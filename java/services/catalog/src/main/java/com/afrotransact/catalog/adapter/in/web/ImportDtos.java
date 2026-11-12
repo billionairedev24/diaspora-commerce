@@ -19,21 +19,29 @@ final class ImportDtos {
     @Schema(name = "ProductImport", description = "A bulk upload: validation counts and import progress")
     record ImportResponse(UUID id, String reference, String fileName,
                           @Schema(allowableValues = {"XLSX", "CSV"}) String format,
-                          @Schema(allowableValues = {"CREATE", "UPDATE"}) String mode, String productType,
+                          @Schema(allowableValues = {"CREATE", "UPDATE", "OFFER", "PRICE_QTY"}) String mode,
+                          String productType,
                           @Schema(allowableValues = {"VALIDATED", "QUEUED", "RUNNING", "COMPLETED", "FAILED"})
                           String status,
                           boolean validOnly, int totalRows, int validRows, int warningRows, int errorRows,
                           int productCount, int processedRows, int createdProducts, int updatedProducts,
                           int failedRows, List<String> header, List<String> fileWarnings, String uploadedBy,
                           String uploadedByName, boolean notifySeller, Instant createdAt, Instant startedAt,
-                          Instant finishedAt) {
+                          Instant finishedAt,
+                          @Schema(description = "SHA-256 of the uploaded file") String fileSha256,
+                          @Schema(description = "The organisation's earlier upload of the same file in the same mode: "
+                                  + "offer to show that result instead of running it again") UUID sameFileAs,
+                          @Schema(description = "Rows that created an offer on an existing page") int offersCreated,
+                          @Schema(description = "Valid rows that are not for sale yet: tax decision, selling approval "
+                                  + "or moderation") int heldRows) {
 
         static ImportResponse of(ProductImport u) {
             return new ImportResponse(u.id(), u.reference(), u.fileName(), u.format().name(), u.mode().name(),
                     u.productTypeCode(), u.status().name(), u.validOnly(), u.totalRows(), u.validRows(),
                     u.warningRows(), u.errorRows(), u.productCount(), u.processedRows(), u.createdProducts(),
                     u.updatedProducts(), u.failedRows(), u.header(), u.fileWarnings(), u.uploadedBy(),
-                    u.uploadedByName(), u.notifySeller(), u.createdAt(), u.startedAt(), u.finishedAt());
+                    u.uploadedByName(), u.notifySeller(), u.createdAt(), u.startedAt(), u.finishedAt(),
+                    u.fileSha256(), u.sameFileAs(), u.offersCreated(), u.heldRows());
         }
     }
 
@@ -53,15 +61,19 @@ final class ImportDtos {
     @Schema(name = "ProductImportRow")
     record RowResponse(int rowNumber, String groupKey, String sku,
                        @Schema(allowableValues = {"VALID", "WARNING", "ERROR"}) String status,
-                       @Schema(allowableValues = {"PENDING", "CREATED", "UPDATED", "FAILED", "SKIPPED"})
+                       @Schema(allowableValues = {"PENDING", "CREATED", "UPDATED", "OFFER_CREATED", "HELD", "FAILED",
+                               "SKIPPED"})
                        String outcome,
                        String outcomeNote, UUID productId, List<MessageDto> messages, List<String> cells,
-                       List<RowImageDto> images) {
+                       List<RowImageDto> images,
+                       @Schema(description = "The page or variant the row ended on or matched (offer rows)") String atin,
+                       @Schema(description = "The offer the row created or changed") UUID offerId) {
 
         static RowResponse of(StoredRow r, List<RowImage> images) {
             return new RowResponse(r.rowNumber(), r.groupKey(), r.sku(), r.status().name(), r.outcome().name(),
                     r.outcomeNote(), r.productId(), r.messages().stream().map(MessageDto::of).toList(), r.cells(),
-                    images == null ? List.of() : images.stream().map(RowImageDto::of).toList());
+                    images == null ? List.of() : images.stream().map(RowImageDto::of).toList(), r.atin(),
+                    r.offerId());
         }
     }
 

@@ -88,11 +88,13 @@ class ImportJobImpl implements ImportJob {
     private final TransactionTemplate tx;
     private final TransactionTemplate savepoint;
     private final ListingRulesService rules;
+    private final OfferImportJob offerJob;
 
     ImportJobImpl(ProductImportRepository imports, ProductRepository products, SizeChartRepository sizeCharts,
                   CategoryRepository categories, ProductWriter writer, ImageImporter images, ImageLibraryLookup library,
                   SellerScopeGuard scopeGuard, DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions,
-                  ListingRulesService rules) {
+                  ListingRulesService rules, OfferImportJob offerJob) {
+        this.offerJob = offerJob;
         this.rules = rules;
         this.imports = imports;
         this.products = products;
@@ -111,6 +113,11 @@ class ImportJobImpl implements ImportJob {
 
     @Override
     public void drive(UUID importId) {
+        // Offer uploads and price and quantity feeds are applied through offers-service, row by row (S393, S394).
+        if (imports.findById(importId).map(u -> u.mode().offerRows()).orElse(false)) {
+            offerJob.drive(importId);
+            return;
+        }
         try {
             while (true) {
                 Next next = tx.execute(s -> next(importId));

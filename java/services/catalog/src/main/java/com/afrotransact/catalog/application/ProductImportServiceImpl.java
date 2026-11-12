@@ -1,8 +1,12 @@
 package com.afrotransact.catalog.application;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -28,6 +32,13 @@ import com.afrotransact.catalog.domain.imports.ImportMode;
 import com.afrotransact.catalog.domain.imports.ImportStatus;
 import com.afrotransact.catalog.domain.imports.ImportTemplates;
 import com.afrotransact.catalog.domain.imports.ImportValidator;
+import com.afrotransact.catalog.domain.imports.OfferImportColumns;
+import com.afrotransact.catalog.domain.imports.OfferImportContext;
+import com.afrotransact.catalog.domain.imports.OfferImportResult;
+import com.afrotransact.catalog.domain.imports.OfferImportValidator;
+import com.afrotransact.catalog.domain.imports.OfferTarget;
+import com.afrotransact.catalog.domain.imports.PriceQtyResult;
+import com.afrotransact.catalog.domain.imports.PriceQtyValidator;
 import com.afrotransact.catalog.domain.imports.ParsedSheet;
 import com.afrotransact.catalog.domain.imports.ProductImport;
 import com.afrotransact.catalog.domain.imports.ReportRow;
@@ -45,11 +56,13 @@ import com.afrotransact.catalog.domain.imports.ValidationResult;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
 import com.afrotransact.catalog.port.ImageLibraryLookup;
+import com.afrotransact.catalog.port.ImportMetrics;
 import com.afrotransact.catalog.port.ProductImportRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SizeChartRepository;
 import com.afrotransact.catalog.port.SpreadsheetReader;
 import com.afrotransact.catalog.port.SpreadsheetWriter;
+import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
@@ -85,13 +98,20 @@ class ProductImportServiceImpl implements ProductImportService {
     private final SellerScopeGuard scopeGuard;
     private final Clock clock;
     private final TransactionTemplate tx;
+    private final ImportMatcher matcher;
+    private final ImportMetrics metrics;
+    private final DomainEventPublisher events;
 
     ProductImportServiceImpl(ProductImportRepository imports, ProductRepository products,
                              SizeChartRepository sizeCharts, CategoryRepository categories, SpreadsheetReader reader, SpreadsheetWriter writer,
                              ImportJob job, PermissionChecker permissions, ResourceAccessChecker access,
                              OwnerResolver owners, ImportSettings settings, ImageLibraryLookup library,
                              @Qualifier("importExecutor") Executor executor, SellerScopeGuard scopeGuard, Clock clock,
-                             PlatformTransactionManager transactions, ListingRulesService rules) {
+                             PlatformTransactionManager transactions, ListingRulesService rules, ImportMatcher matcher,
+                             ImportMetrics metrics, DomainEventPublisher events) {
+        this.matcher = matcher;
+        this.metrics = metrics;
+        this.events = events;
         this.rules = rules;
         this.imports = imports;
         this.products = products;
@@ -109,6 +129,18 @@ class ProductImportServiceImpl implements ProductImportService {
         this.scopeGuard = scopeGuard;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
+    }
+
+    @Override
+    public FileContent template(ImportMode mode, String productType, UUID categoryId, SpreadsheetFormat format) {
+        if (mode == null || !mode.offerRows()) {
+            return template(productType, categoryId, format);
+        }
+        permissions.require(CatalogPermissions.WRITE);
+        TemplateSpec spec = mode == ImportMode.OFFER ? OfferImportColumns.offerTemplate()
+                : OfferImportColumns.priceQtyTemplate();
+        return new FileContent(spec.fileStem() + "." + format.extension(), format.contentType(),
+                writer.template(spec, format));
     }
 
     @Override
@@ -139,22 +171,69 @@ class ProductImportServiceImpl implements ProductImportService {
             throw new SpreadsheetRejected("Upload an Excel (.xlsx) or CSV (.csv) file");
         }
         ProductType fixed = productType == null || productType.isBlank() ? null : typeOf(productType, null);
-        ParsedSheet sheet = ImageColumns.fold(reader.read(content, format));
-        ImportContext ctx = context(sheet, mode == null ? ImportMode.CREATE : mode, fixed, owner);
-        ValidationResult result = ImportValidator.validate(sheet, ctx);
+        ImportMode wanted = mode == null ? ImportMode.CREATE : mode;
         Instant now = Instant.now(clock);
+        requireRoom(owner.orgId(), wanted, now);
+        String sha256 = sha256(content);
+        ParsedSheet sheet = ImageColumns.fold(reader.read(content, format, settings.rowCap(wanted),
+                ImportSettings.byteCap(wanted)));
+        ValidationResult result;
+        if (wanted == ImportMode.OFFER) {
+            Map<String, OfferTarget> targets = matcher.resolve(owner.orgId(), OfferImportValidator.keysOf(sheet));
+            OfferImportResult offerResult = OfferImportValidator.validate(sheet,
+                    new OfferImportContext(targets, settings.rowCap(wanted)));
+            result = offerResult.validation();
+        } else if (wanted == ImportMode.PRICE_QTY) {
+            PriceQtyResult feed = PriceQtyValidator.validate(sheet, settings.rowCap(wanted));
+            result = feed.validation();
+        } else {
+            result = ImportValidator.validate(sheet, context(sheet, wanted, fixed, owner));
+        }
+        UUID sameFile = imports.findLatestByHash(owner.orgId(), wanted, sha256).map(ProductImport::id).orElse(null);
         String name = fileName.replaceAll("[\\\\/]", "_");
         ProductImport upload = new ProductImport(UUID.randomUUID(), imports.nextReference(), owner, actor.subject(),
                 blankToNull(uploadedByName), name.length() > 200 ? name.substring(name.length() - 200) : name, format,
-                ctx.mode(), fixed == null ? null : fixed.code(), result.header(), result.fileWarnings(),
+                wanted, fixed == null ? null : fixed.code(), result.header(), result.fileWarnings(),
                 ImportStatus.VALIDATED, false, result.rows().size(), (int) result.count(RowStatus.VALID),
                 (int) result.count(RowStatus.WARNING), (int) result.count(RowStatus.ERROR), result.productCount(), 0, 0,
-                0, 0, result.rows().size() >= settings.notifyMinRows(), now, null, null, null, 0);
+                0, 0, result.rows().size() >= settings.notifyMinRows(), now, null, null, null, sha256, sameFile, 0, 0, 0);
         tx.executeWithoutResult(s -> imports.insert(upload, result.rows()));
+        metrics.uploaded(wanted.name());
         LOG.info("Bulk upload {} of {}: {} rows ({} valid, {} warnings, {} errors), {} mode", upload.reference(),
                 owner.orgId(), upload.totalRows(), upload.validRows(), upload.warningRows(), upload.errorRows(),
                 upload.mode());
         return imports.findById(upload.id()).orElseThrow();
+    }
+
+    /** One upload per mode at a time and a daily limit per organisation (S396); refused before anything is stored. */
+    private void requireRoom(String orgId, ImportMode mode, Instant now) {
+        if (imports.hasActive(orgId, mode)) {
+            metrics.refused(mode.name(), "ACTIVE_UPLOAD");
+            throw new ConflictException("catalog.import-already-running", "An earlier " + describe(mode) + " upload is "
+                    + "still running. Wait for it to finish, then upload this file.");
+        }
+        if (imports.countCreatedSince(orgId, now.minus(Duration.ofHours(24))) >= settings.maxUploadsPerDay()) {
+            metrics.refused(mode.name(), "DAILY_LIMIT");
+            throw new ConflictException("catalog.import-daily-limit", "You have uploaded " + settings.maxUploadsPerDay()
+                    + " files in the last 24 hours, which is the limit. Try again tomorrow, or put more rows in one file.");
+        }
+    }
+
+    private static String describe(ImportMode mode) {
+        return switch (mode) {
+            case CREATE -> "product";
+            case UPDATE -> "listing update";
+            case OFFER -> "offer";
+            case PRICE_QTY -> "price and quantity";
+        };
+    }
+
+    private static String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     /**
@@ -320,7 +399,8 @@ class ProductImportServiceImpl implements ProductImportService {
     public FileContent report(UUID id, SpreadsheetFormat format) {
         ProductImport u = owned(id, owner());
         List<ReportRow> rows = imports.allRows(u.id()).stream()
-                .map(r -> new ReportRow(r.rowNumber(), r.cells(), r.status(), result(r), summary(r)))
+                .map(r -> new ReportRow(r.rowNumber(), r.cells(), r.status(), result(r), summary(r),
+                        r.atin() == null ? "" : r.atin(), severity(r), firstColumn(r, u.header())))
                 .toList();
         String stem = u.fileName().contains(".") ? u.fileName().substring(0, u.fileName().lastIndexOf('.'))
                 : u.fileName();
@@ -333,9 +413,26 @@ class ProductImportServiceImpl implements ProductImportService {
             case PENDING -> "";
             case CREATED -> "Created";
             case UPDATED -> "Updated";
+            case OFFER_CREATED -> "Offer created";
+            case HELD -> "Held" + (r.outcomeNote() == null ? "" : ": " + r.outcomeNote());
             case FAILED -> "Failed" + (r.outcomeNote() == null ? "" : ": " + r.outcomeNote());
-            case SKIPPED -> "Not imported";
+            case SKIPPED -> r.outcomeNote() == null || r.outcomeNote().startsWith("Not imported") ? "Not imported"
+                    : "Skipped: " + r.outcomeNote();
         };
+    }
+
+    /** Error when any message of the row is an error, else Warning; blank when the row has no message. */
+    private static String severity(StoredRow r) {
+        if (r.messages().isEmpty()) {
+            return "";
+        }
+        return r.messages().stream().anyMatch(m -> m.severity() == Severity.ERROR) ? "Error" : "Warning";
+    }
+
+    /** The seller's own header text of the column the first message is about; blank for the row as a whole. */
+    private static String firstColumn(StoredRow r, List<String> header) {
+        return r.messages().stream().filter(m -> m.columnIndex() >= 0 && m.columnIndex() < header.size())
+                .findFirst().map(m -> header.get(m.columnIndex())).orElse("");
     }
 
     private static String summary(StoredRow r) {
@@ -363,7 +460,10 @@ class ProductImportServiceImpl implements ProductImportService {
             if (validOnly) {
                 imports.skipErrorRows(u.id());
             }
-            return imports.update(u.start(validOnly, Instant.now(clock)));
+            ProductImport begun = imports.update(u.start(validOnly, Instant.now(clock)));
+            events.publish(CatalogEvents.IMPORT_STARTED, CatalogEvents.AGGREGATE_IMPORT, begun.id().toString(),
+                    ImportStartedPayload.of(begun));
+            return begun;
         });
         if (started != null && started.status().active()) {
             executor.execute(() -> job.drive(started.id()));

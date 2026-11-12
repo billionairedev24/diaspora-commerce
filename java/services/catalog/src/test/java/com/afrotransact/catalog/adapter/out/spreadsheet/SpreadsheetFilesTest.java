@@ -216,13 +216,14 @@ class SpreadsheetFilesTest {
                 new ReportRow(3, List.of("A-2", "@SUM(1)", "-2"), RowStatus.VALID, "Created", ""));
         String csv = new String(writer.report(header, rows, SpreadsheetFormat.CSV), StandardCharsets.UTF_8);
         assertThat(csv).contains("'=cmd|' /C calc'!A0", "\"'=HYPERLINK(\"\"http://evil\"\",\"\"x\"\")\"", "'+1",
-                "'@SUM(1)", "'-2", "Row status", "Errors", "Error,,Title: At least 10 characters", "Valid,Created");
+                "'@SUM(1)", "'-2", "Row status", "Result", "ATIN", "Severity", "Column", "Message",
+                "Error,,,,,Title: At least 10 characters", "Valid,Created");
         try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(writer.report(header, rows,
                 SpreadsheetFormat.XLSX)))) {
             Row first = wb.getSheet("Products").getRow(1);
             assertThat(first.getCell(1).getStringCellValue()).isEqualTo("'=HYPERLINK(\"http://evil\",\"x\")");
             assertThat(first.getCell(1).getCellType()).isEqualTo(CellType.STRING);
-            assertThat(first.getCell(6).getStringCellValue()).isEqualTo("Title: At least 10 characters");
+            assertThat(first.getCell(9).getStringCellValue()).isEqualTo("Title: At least 10 characters");
         }
     }
 }

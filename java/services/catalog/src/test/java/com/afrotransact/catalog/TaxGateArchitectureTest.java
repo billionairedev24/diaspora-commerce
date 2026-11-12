@@ -109,4 +109,43 @@ class TaxGateArchitectureTest {
                 .because("only ProductLiveGate may put a product on sale");
         rule.check(CLASSES);
     }
+
+    @Test
+    void theBulkImporterCannotCallProductApproveOrAnyOtherLiveTransition() {
+        // S393: an upload row never puts a page or an offer on sale. Pages go through ProductWriter (in review, never LIVE)
+        // and the gate; offers are created by offers-service, which asks the tax gate. The importer has no path to LIVE.
+        ArchRule rule = ArchRuleDefinition.noClasses()
+                .that().haveSimpleNameStartingWith("ImportJob")
+                .or().haveSimpleNameStartingWith("OfferImportJob")
+                .or().haveSimpleNameStartingWith("ProductImportService")
+                .or().haveSimpleNameStartingWith("ImportMatcher")
+                .or().resideInAPackage("..domain.imports..")
+                .should().callMethodWhere(callsToProduct(
+                        LIVE_TRANSITIONS + "|holdForTax|reject|pause|takeDown|categoryApproved|exemptionApproved"))
+                .because("importing rows must never change whether a page is on sale: only ProductLiveGate does");
+        rule.check(CLASSES);
+    }
+
+    @Test
+    void theBulkImporterNeverBuildsAProductWithAStatusAndOnlyTheOfferJobTalksToOffers() {
+        DescribedPredicate<JavaConstructorCall> withStatus = DescribedPredicate.describe(
+                "a Product constructor with a status argument",
+                call -> call.getTargetOwner().isEquivalentTo(Product.class) && call.getTarget().getRawParameterTypes()
+                        .stream().anyMatch(t -> t.isEquivalentTo(ProductStatus.class)));
+        ArchRule noStatus = ArchRuleDefinition.noClasses()
+                .that().haveSimpleNameStartingWith("ImportJob")
+                .or().haveSimpleNameStartingWith("OfferImportJob")
+                .or().haveSimpleNameStartingWith("ProductImportService")
+                .or().resideInAPackage("..domain.imports..")
+                .should().callConstructorWhere(withStatus).allowEmptyShould(true);
+        noStatus.check(CLASSES);
+        // The offer writer is the only way a bulk row reaches an offer: offers-service applies the selling approval and
+        // the tax rule. Nothing else in catalog creates or changes offers.
+        ArchRule onlyTheJob = ArchRuleDefinition.noClasses()
+                .that().doNotHaveSimpleName("OfferImportJobImpl")
+                .and().doNotHaveSimpleName("HttpOfferWriter")
+                .should().dependOnClassesThat().haveSimpleName("OfferWriter")
+                .allowEmptyShould(true);
+        onlyTheJob.check(CLASSES);
+    }
 }

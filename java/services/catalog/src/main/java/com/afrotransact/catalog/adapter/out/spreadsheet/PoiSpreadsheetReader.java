@@ -52,20 +52,21 @@ class PoiSpreadsheetReader implements SpreadsheetReader {
     }
 
     @Override
-    public ParsedSheet read(byte[] content, SpreadsheetFormat format) {
+    public ParsedSheet read(byte[] content, SpreadsheetFormat format, int maxRows, long maxBytes) {
         if (content.length == 0) {
             throw new SpreadsheetRejected("The file is empty");
         }
-        if (content.length > ImportLimits.MAX_FILE_BYTES) {
-            throw new SpreadsheetRejected("The file is larger than 10 MB; split it into several files");
+        if (content.length > maxBytes) {
+            throw new SpreadsheetRejected("The file is larger than " + maxBytes / (1024 * 1024)
+                    + " MB; split it into several files");
         }
-        List<SheetRow> raw = format == SpreadsheetFormat.XLSX ? readXlsx(content) : readCsv(content);
+        List<SheetRow> raw = format == SpreadsheetFormat.XLSX ? readXlsx(content, maxRows) : readCsv(content, maxRows);
         // The template's image columns (main, other 1-8, swatch) become the one image list the import reads.
-        return ImageColumns.fold(toSheet(raw));
+        return ImageColumns.fold(toSheet(raw, maxRows));
     }
 
-    private static List<SheetRow> readCsv(byte[] content) {
-        List<List<String>> records = CsvCodec.parse(content, ImportLimits.MAX_ROWS + 50);
+    private static List<SheetRow> readCsv(byte[] content, int maxRows) {
+        List<List<String>> records = CsvCodec.parse(content, maxRows + 50);
         List<SheetRow> rows = new ArrayList<>(records.size());
         for (int i = 0; i < records.size(); i++) {
             rows.add(new SheetRow(i + 1, records.get(i)));
@@ -73,7 +74,7 @@ class PoiSpreadsheetReader implements SpreadsheetReader {
         return rows;
     }
 
-    private static List<SheetRow> readXlsx(byte[] content) {
+    private static List<SheetRow> readXlsx(byte[] content, int maxRows) {
         if (startsWith(content, OLE2)) {
             throw new SpreadsheetRejected("Excel 97–2003 (.xls) files and password-protected workbooks are not "
                     + "supported: save it as .xlsx");
@@ -103,13 +104,13 @@ class PoiSpreadsheetReader implements SpreadsheetReader {
             if (sheet == null) {
                 throw new SpreadsheetRejected("The workbook has no sheets");
             }
-            Collector collector = new Collector(ImportLimits.MAX_ROWS + 50);
+            Collector collector = new Collector(maxRows + 50);
             XMLReader parser = XMLHelper.newXMLReader();
             parser.setContentHandler(new XSSFSheetXMLHandler(styles, null, strings, collector, new PlainNumbers(), false));
             try {
                 parser.parse(new InputSource(new ByteArrayInputStream(sheet)));
             } catch (TooManyRows ex) {
-                throw new SpreadsheetRejected("The sheet has more than " + ImportLimits.MAX_ROWS
+                throw new SpreadsheetRejected("The sheet has more than " + maxRows
                         + " rows; split it into several files");
             }
             return collector.rows;
@@ -128,7 +129,7 @@ class PoiSpreadsheetReader implements SpreadsheetReader {
     }
 
     /** Header = first row that is not blank and not a "#" comment; data = the following non-blank, non-comment rows. */
-    private static ParsedSheet toSheet(List<SheetRow> raw) {
+    private static ParsedSheet toSheet(List<SheetRow> raw, int maxRows) {
         Iterator<SheetRow> it = raw.iterator();
         List<String> header = null;
         List<SheetRow> rows = new ArrayList<>();
@@ -141,8 +142,8 @@ class PoiSpreadsheetReader implements SpreadsheetReader {
                 header = trimTrailing(r.cells());
             } else {
                 rows.add(r);
-                if (rows.size() > ImportLimits.MAX_ROWS) {
-                    throw new SpreadsheetRejected("The file has more than " + ImportLimits.MAX_ROWS
+                if (rows.size() > maxRows) {
+                    throw new SpreadsheetRejected("The file has more than " + maxRows
                             + " product rows; split it into several files");
                 }
             }

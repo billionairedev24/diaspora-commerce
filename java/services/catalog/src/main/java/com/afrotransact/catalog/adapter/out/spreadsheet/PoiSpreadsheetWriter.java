@@ -105,7 +105,10 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
         fullHeader.add("Row");
         fullHeader.add("Row status");
         fullHeader.add("Result");
-        fullHeader.add("Errors");
+        fullHeader.add("ATIN");
+        fullHeader.add("Severity");
+        fullHeader.add("Column");
+        fullHeader.add("Message");
         if (format == SpreadsheetFormat.CSV) {
             List<List<String>> records = new ArrayList<>();
             records.add(fullHeader);
@@ -147,7 +150,7 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
     }
 
     private static List<String> reportCells(int width, ReportRow r) {
-        List<String> cells = new ArrayList<>(width + 4);
+        List<String> cells = new ArrayList<>(width + 7);
         for (int c = 0; c < width; c++) {
             cells.add(CellSafety.safe(c < r.cells().size() ? r.cells().get(c) : ""));
         }
@@ -158,6 +161,9 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
             case ERROR -> "Error";
         });
         cells.add(CellSafety.safe(r.result() == null ? "" : r.result()));
+        cells.add(CellSafety.safe(r.atin() == null ? "" : r.atin()));
+        cells.add(CellSafety.safe(r.severity() == null ? "" : r.severity()));
+        cells.add(CellSafety.safe(r.column() == null ? "" : r.column()));
         cells.add(CellSafety.safe(r.errors() == null ? "" : r.errors()));
         return cells;
     }

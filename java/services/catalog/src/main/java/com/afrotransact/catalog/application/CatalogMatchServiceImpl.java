@@ -72,6 +72,14 @@ class CatalogMatchServiceImpl implements CatalogMatchService {
         return result;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public MatchResult matchForOrganisation(MatchCommand cmd, String sellerOrgId) {
+        MatchResult result = lookup(cmd, blankToNull(sellerOrgId), settings.current());
+        metrics.matched(result.result().name());
+        return result;
+    }
+
     private MatchResult lookup(MatchCommand cmd, String org, CatalogPolicy policy) {
         boolean hasGtin = cmd.gtin() != null && !cmd.gtin().isBlank();
         boolean hasBrandMpn = cmd.brand() != null && !cmd.brand().isBlank() && cmd.mpn() != null

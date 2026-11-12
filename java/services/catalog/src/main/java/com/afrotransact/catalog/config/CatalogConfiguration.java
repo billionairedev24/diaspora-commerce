@@ -116,8 +116,11 @@ class CatalogConfiguration {
 
     @Bean
     ImportSettings importSettings(@Value("${at.catalog.imports.notify-min-rows:100}") int notifyMinRows,
-                                  @Value("${at.catalog.imports.stall-after:2m}") Duration stallAfter) {
-        return new ImportSettings(notifyMinRows, stallAfter);
+                                  @Value("${at.catalog.imports.stall-after:2m}") Duration stallAfter,
+                                  @Value("${at.catalog.imports.max-rows:5000}") int maxRows,
+                                  @Value("${at.catalog.imports.max-feed-rows:50000}") int maxFeedRows,
+                                  @Value("${at.catalog.imports.max-uploads-per-day:20}") int maxUploadsPerDay) {
+        return new ImportSettings(notifyMinRows, stallAfter, maxRows, maxFeedRows, maxUploadsPerDay);
     }
 
     /** S381-S387: the configured starting values of the thresholds staff edit; the stored copy wins. */

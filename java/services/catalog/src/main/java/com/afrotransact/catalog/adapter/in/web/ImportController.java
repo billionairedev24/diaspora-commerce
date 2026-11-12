@@ -12,9 +12,9 @@ import com.afrotransact.catalog.adapter.in.web.ImportDtos.RowPage;
 import com.afrotransact.catalog.adapter.in.web.ImportDtos.RowResponse;
 import com.afrotransact.catalog.adapter.in.web.ImportDtos.StartRequest;
 import com.afrotransact.catalog.application.PageView;
+import com.afrotransact.catalog.application.ImportSettings;
 import com.afrotransact.catalog.application.ProductImportService;
 import com.afrotransact.catalog.application.ProductImportService.FileContent;
-import com.afrotransact.catalog.domain.imports.ImportLimits;
 import com.afrotransact.catalog.domain.imports.ImportMode;
 import com.afrotransact.catalog.domain.imports.ProductImport;
 import com.afrotransact.catalog.domain.imports.RowImage;
@@ -41,7 +41,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "Bulk upload", description = "Upload templates, .xlsx/.csv uploads with row validation, preview, error "
-        + "report and the background import (S308). Limits: 10 MB and 5,000 rows per file")
+        + "report and the background import (S308, S393, S394). Limits: 10 MB and 5,000 rows per file; 25 MB and 50,000 "
+        + "rows for the price and quantity feed")
 @RestController
 @RequestMapping("/v1/imports")
 class ImportController {
@@ -56,26 +57,36 @@ class ImportController {
             description = "Generated from the product type definitions: a product type's template (productType, or "
                     + "the product type of categoryId) or the generic one. xlsx: Products sheet with required columns "
                     + "marked *, a note per column and dropdowns; Instructions, Example and hidden Lists sheets. csv: "
-                    + "\"#\" comment lines and the header row.")
+                    + "\"#\" comment lines and the header row. mode=OFFER (sell products already on AfroTransact: barcode, "
+                    + "ATIN or brand and part number, with price, quantity, condition, shipping and handling; no image, title "
+                    + "or attribute columns) and mode=PRICE_QTY (seller SKU or ATIN with price, list price and quantity) "
+                    + "are generated server-side and do not depend on a category (S393, S394).")
     @GetMapping("/template")
     ResponseEntity<byte[]> template(@RequestParam(required = false) String productType,
                                     @RequestParam(required = false) UUID categoryId,
+                                    @RequestParam(defaultValue = "CREATE") ImportMode mode,
                                     @RequestParam(defaultValue = "xlsx") String format) {
-        return file(imports.template(productType, categoryId, formatOf(format)));
+        return file(imports.template(mode, productType, categoryId, formatOf(format)));
     }
 
     @Operation(operationId = "uploadImport", summary = "Upload and validate a .xlsx or .csv file",
             description = "Every row is validated (required fields, allowed values, numbers and units, GTIN check "
                     + "digit, duplicate SKUs in the file and against the organisation's listings, image URL format). "
-                    + "422 catalog.upload-rejected when the file cannot be read (format, 10 MB, 5,000 rows, missing "
-                    + "required columns); nothing is stored then. Starts nothing: see POST /v1/imports/{id}/start.")
+                    + "422 catalog.upload-rejected when the file cannot be read (format, 10 MB (25 MB for PRICE_QTY), "
+                    + "5,000 rows (50,000 for PRICE_QTY), missing required columns); nothing is stored then. mode=OFFER "
+                    + "matches each row to an existing page (barcode, ATIN or brand and part number) and PRICE_QTY reads a "
+                    + "price and quantity feed. 409 catalog.import-already-running (one active upload per mode) and "
+                    + "catalog.import-daily-limit (20 a day). fileSha256 and sameFileAs say when the organisation uploaded "
+                    + "the same file before. Starts nothing: see POST /v1/imports/{id}/start.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     ResponseEntity<ImportResponse> upload(@RequestPart("file") MultipartFile file,
                                           @RequestParam(defaultValue = "CREATE") ImportMode mode,
                                           @RequestParam(required = false) String productType,
                                           @RequestParam(required = false) String uploadedByName) {
-        if (file.getSize() > ImportLimits.MAX_FILE_BYTES) {
-            throw new SpreadsheetRejected("The file is larger than 10 MB; split it into several files");
+        long cap = ImportSettings.byteCap(mode);
+        if (file.getSize() > cap) {
+            throw new SpreadsheetRejected("The file is larger than " + cap / (1024 * 1024)
+                    + " MB; split it into several files");
         }
         byte[] content;
         try {

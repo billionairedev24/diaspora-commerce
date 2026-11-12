@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ListingOwnerKind;
@@ -41,12 +42,13 @@ class JdbcProductImportRepository implements ProductImportRepository {
             select id, reference, owner_kind, owner_org, uploaded_by, uploaded_by_name, file_name, file_format, mode,
                    product_type, header::text as header, file_warnings::text as file_warnings, status, valid_only,
                    total_rows, valid_rows, warning_rows, error_rows, product_count, processed_rows, created_products,
-                   updated_products, failed_rows, notify, created_at, started_at, finished_at, heartbeat_at, version
+                   updated_products, failed_rows, notify, created_at, started_at, finished_at, heartbeat_at, file_sha256,
+                   same_file_as, offers_created, held_rows, version
             from product_import
             """;
     private static final String ROW_SELECT = """
             select row_number, group_key, sku, status, messages::text as messages, cells::text as cells, outcome,
-                   outcome_note, product_id
+                   outcome_note, product_id, atin, offer_id
             from product_import_row
             """;
 
@@ -63,10 +65,11 @@ class JdbcProductImportRepository implements ProductImportRepository {
         jdbc.sql("""
                 insert into product_import (id, reference, owner_kind, owner_org, uploaded_by, uploaded_by_name,
                        file_name, file_format, mode, product_type, header, file_warnings, status, valid_only,
-                       total_rows, valid_rows, warning_rows, error_rows, product_count, notify, created_at, version)
+                       total_rows, valid_rows, warning_rows, error_rows, product_count, notify, created_at, file_sha256,
+                       same_file_as, version)
                 values (:id, :reference, :ownerKind, :ownerOrg, :uploadedBy, :uploadedByName, :fileName, :format,
                         :mode, :productType, cast(:header as jsonb), cast(:warnings as jsonb), :status, false,
-                        :total, :valid, :warning, :error, :products, :notify, :createdAt, 0)
+                        :total, :valid, :warning, :error, :products, :notify, :createdAt, :sha, :sameFile, 0)
                 """)
                 .param("id", u.id()).param("reference", u.reference()).param("ownerKind", u.owner().kind().name())
                 .param("ownerOrg", u.owner().orgId()).param("uploadedBy", u.uploadedBy())
@@ -76,7 +79,8 @@ class JdbcProductImportRepository implements ProductImportRepository {
                 .param("warnings", json.writeValueAsString(u.fileWarnings())).param("status", u.status().name())
                 .param("total", u.totalRows()).param("valid", u.validRows()).param("warning", u.warningRows())
                 .param("error", u.errorRows()).param("products", u.productCount()).param("notify", u.notifySeller())
-                .param("createdAt", Timestamp.from(u.createdAt()))
+                .param("createdAt", Timestamp.from(u.createdAt())).param("sha", u.fileSha256())
+                .param("sameFile", u.sameFileAs())
                 .update();
         for (int from = 0; from < rows.size(); from += BATCH) {
             List<ValidatedRow> batch = rows.subList(from, Math.min(rows.size(), from + BATCH));
@@ -117,13 +121,14 @@ class JdbcProductImportRepository implements ProductImportRepository {
         int n = jdbc.sql("""
                 update product_import set status = :status, valid_only = :validOnly, processed_rows = :processed,
                        created_products = :created, updated_products = :updated, failed_rows = :failed,
-                       started_at = :startedAt, finished_at = :finishedAt, heartbeat_at = :heartbeatAt,
+                       offers_created = :offers, held_rows = :held, started_at = :startedAt, finished_at = :finishedAt, heartbeat_at = :heartbeatAt,
                        version = version + 1
                 where id = :id and version = :version
                 """)
                 .param("id", u.id()).param("status", u.status().name()).param("validOnly", u.validOnly())
                 .param("processed", u.processedRows()).param("created", u.createdProducts())
                 .param("updated", u.updatedProducts()).param("failed", u.failedRows())
+                .param("offers", u.offersCreated()).param("held", u.heldRows())
                 .param("startedAt", ts(u.startedAt())).param("finishedAt", ts(u.finishedAt()))
                 .param("heartbeatAt", ts(u.heartbeatAt())).param("version", u.version())
                 .update();
@@ -200,6 +205,84 @@ class JdbcProductImportRepository implements ProductImportRepository {
     }
 
     @Override
+    public List<StoredRow> pendingRows(UUID importId, int limit) {
+        return jdbc.sql(ROW_SELECT + " where import_id = :id and outcome = 'PENDING' and status <> 'ERROR' "
+                + "order by row_number limit :limit").param("id", importId).param("limit", limit).query(this::mapRow)
+                .list();
+    }
+
+    @Override
+    public void setRowResults(UUID importId, List<RowResult> results) {
+        for (RowResult r : results) {
+            jdbc.sql("""
+                    update product_import_row set outcome = :outcome, outcome_note = :note, atin = :atin,
+                           offer_id = :offerId, product_id = :productId
+                    where import_id = :id and row_number = :row and outcome = 'PENDING'
+                    """)
+                    .param("id", importId).param("row", r.rowNumber()).param("outcome", r.outcome().name())
+                    .param("note", r.note()).param("atin", r.atin()).param("offerId", r.offerId())
+                    .param("productId", r.productId()).update();
+        }
+    }
+
+    @Override
+    public Optional<ProductImport> findLatestByHash(String orgId, ImportMode mode, String fileSha256) {
+        return jdbc.sql(SELECT + " where owner_org = :org and mode = :mode and file_sha256 = :sha "
+                + "order by created_at desc limit 1").param("org", orgId).param("mode", mode.name())
+                .param("sha", fileSha256).query(this::map).optional();
+    }
+
+    @Override
+    public int countCreatedSince(String orgId, Instant since) {
+        return jdbc.sql("select count(*) from product_import where owner_org = :org and created_at >= :since")
+                .param("org", orgId).param("since", Timestamp.from(since)).query(Integer.class).single();
+    }
+
+    @Override
+    public boolean hasActive(String orgId, ImportMode mode) {
+        return jdbc.sql("select count(*) from product_import where owner_org = :org and mode = :mode "
+                + "and status in ('QUEUED', 'RUNNING')").param("org", orgId).param("mode", mode.name())
+                .query(Integer.class).single() > 0;
+    }
+
+    @Override
+    public void audit(UUID importId, String orgId, String actor, Instant at, List<AuditRow> rows) {
+        for (AuditRow r : rows) {
+            jdbc.sql("""
+                    insert into product_import_audit (id, import_id, row_number, action, actor, owner_org, atin,
+                                                      product_id, offer_id, at)
+                    values (:id, :importId, :row, :action, :actor, :org, :atin, :productId, :offerId, :at)
+                    """)
+                    .param("id", UUID.randomUUID()).param("importId", importId).param("row", r.rowNumber())
+                    .param("action", r.action()).param("actor", actor).param("org", orgId).param("atin", r.atin())
+                    .param("productId", r.productId()).param("offerId", r.offerId()).param("at", Timestamp.from(at))
+                    .update();
+        }
+    }
+
+    @Override
+    public Map<String, String> rowHashes(String orgId, Collection<String> skus) {
+        if (skus.isEmpty()) {
+            return Map.of();
+        }
+        return jdbc.sql("select sku, row_hash from product_import_row_hash where owner_org = :org and sku in (:skus)")
+                .param("org", orgId).param("skus", new ArrayList<>(skus))
+                .query((rs, n) -> Map.entry(rs.getString("sku"), rs.getString("row_hash"))).list().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a));
+    }
+
+    @Override
+    public void saveRowHashes(String orgId, UUID importId, Instant at, Map<String, RowHash> hashes) {
+        hashes.forEach((sku, h) -> jdbc.sql("""
+                insert into product_import_row_hash (owner_org, sku, row_hash, product_id, import_id, created_at)
+                values (:org, :sku, :hash, :productId, :importId, :at)
+                on conflict (owner_org, sku) do update set row_hash = excluded.row_hash,
+                       product_id = excluded.product_id, import_id = excluded.import_id, created_at = excluded.created_at
+                """).param("org", orgId).param("sku", sku).param("hash", h.hash()).param("productId", h.productId())
+                .param("importId", importId).param("at", Timestamp.from(at)).update());
+    }
+
+    @Override
     public int skipErrorRows(UUID importId) {
         return jdbc.sql("""
                 update product_import_row set outcome = 'SKIPPED', outcome_note = 'Not imported: the row has errors'
@@ -243,13 +326,15 @@ class JdbcProductImportRepository implements ProductImportRepository {
                 rs.getInt("processed_rows"), rs.getInt("created_products"), rs.getInt("updated_products"),
                 rs.getInt("failed_rows"), rs.getBoolean("notify"), instant(rs, "created_at"),
                 instant(rs, "started_at"), instant(rs, "finished_at"), instant(rs, "heartbeat_at"),
-                rs.getLong("version"));
+                rs.getString("file_sha256"), rs.getObject("same_file_as", UUID.class), rs.getInt("offers_created"),
+                rs.getInt("held_rows"), rs.getLong("version"));
     }
 
     private StoredRow mapRow(ResultSet rs, int rowNum) throws SQLException {
         return new StoredRow(rs.getInt("row_number"), rs.getString("group_key"), rs.getString("sku"),
                 RowStatus.valueOf(rs.getString("status")), json.readValue(rs.getString("messages"), MESSAGES),
                 json.readValue(rs.getString("cells"), STRINGS), RowOutcome.valueOf(rs.getString("outcome")),
-                rs.getString("outcome_note"), rs.getObject("product_id", UUID.class));
+                rs.getString("outcome_note"), rs.getObject("product_id", UUID.class), rs.getString("atin"),
+                rs.getObject("offer_id", UUID.class));
     }
 }

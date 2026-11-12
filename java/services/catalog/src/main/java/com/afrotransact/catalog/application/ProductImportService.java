@@ -26,6 +26,12 @@ public interface ProductImportService {
     FileContent template(String productType, UUID categoryId, SpreadsheetFormat format);
 
     /**
+     * The template of an upload mode. OFFER (sell products already on AfroTransact) and PRICE_QTY (price and quantity feed)
+     * are generated here with no image, title or attribute columns; CREATE and UPDATE are the product templates above.
+     */
+    FileContent template(ImportMode mode, String productType, UUID categoryId, SpreadsheetFormat format);
+
+    /**
      * Reads and validates an uploaded .xlsx or .csv file and stores it with its rows (status VALIDATED). Unreadable
      * files (format, size, row limit, missing required columns) are refused with a 422 and nothing is stored.
      *
@@ -47,7 +53,10 @@ public interface ProductImportService {
      */
     Map<Integer, List<RowImage>> rowImages(UUID id, List<StoredRow> rows);
 
-    /** The uploaded rows with "Row status", "Result" and "Errors" columns, formula-injection safe. */
+    /**
+     * The uploaded rows first, then Row, Row status, Result, ATIN, Severity, Column and Message, formula-injection safe.
+     * CSV and XLSX; errors and warnings are told apart by Severity.
+     */
     FileContent report(UUID id, SpreadsheetFormat format);
 
     /**

@@ -19,6 +19,10 @@ import com.afrotransact.catalog.domain.ListingOwner;
  * @param processedRows  rows the job has finished (created, updated, failed or skipped)
  * @param notifySeller   the seller is notified when it completes (large uploads)
  * @param heartbeatAt    last progress of the job; a running import without progress is resumed by another pod
+ * @param fileSha256     SHA-256 of the uploaded file (hex), to recognise the same file uploaded again (S393)
+ * @param sameFileAs     the organisation's earlier upload of the same file in the same mode, when there is one
+ * @param offersCreated  rows that created an offer on an existing page
+ * @param heldRows       rows that are valid but not live yet (tax decision, selling approval or moderation)
  */
 public record ProductImport(UUID id, String reference, ListingOwner owner, String uploadedBy, String uploadedByName,
                             String fileName, SpreadsheetFormat format, ImportMode mode, String productTypeCode,
@@ -26,7 +30,8 @@ public record ProductImport(UUID id, String reference, ListingOwner owner, Strin
                             int totalRows, int validRows, int warningRows, int errorRows, int productCount,
                             int processedRows, int createdProducts, int updatedProducts, int failedRows,
                             boolean notifySeller, Instant createdAt, Instant startedAt, Instant finishedAt,
-                            Instant heartbeatAt, long version) {
+                            Instant heartbeatAt, String fileSha256, UUID sameFileAs, int offersCreated, int heldRows,
+                            long version) {
 
     public ProductImport {
         Objects.requireNonNull(id, "id");
@@ -63,8 +68,16 @@ public record ProductImport(UUID id, String reference, ListingOwner owner, Strin
 
     /** One product (its rows) finished. */
     public ProductImport progressed(int rows, int created, int updated, int failed, Instant now) {
-        return with(status, validOnly, processedRows + rows, createdProducts + created, updatedProducts + updated,
-                failedRows + failed, startedAt, null, now);
+        return progressed(rows, created, updated, failed, 0, 0, now);
+    }
+
+    /** Rows finished, with the offers they created on existing pages and the rows that are held. */
+    public ProductImport progressed(int rows, int created, int updated, int failed, int offers, int held, Instant now) {
+        return new ProductImport(id, reference, owner, uploadedBy, uploadedByName, fileName, format, mode,
+                productTypeCode, header, fileWarnings, status, validOnly, totalRows, validRows, warningRows, errorRows,
+                productCount, processedRows + rows, createdProducts + created, updatedProducts + updated,
+                failedRows + failed, notifySeller, createdAt, startedAt, null, now, fileSha256, sameFileAs,
+                offersCreated + offers, heldRows + held, version);
     }
 
     public ProductImport completed(Instant now) {
@@ -82,6 +95,6 @@ public record ProductImport(UUID id, String reference, ListingOwner owner, Strin
         return new ProductImport(id, reference, owner, uploadedBy, uploadedByName, fileName, format, mode,
                 productTypeCode, header, fileWarnings, s, only, totalRows, validRows, warningRows, errorRows,
                 productCount, processed, created, updated, failed, notifySeller, createdAt, started, finished, heartbeat,
-                version);
+                fileSha256, sameFileAs, offersCreated, heldRows, version);
     }
 }

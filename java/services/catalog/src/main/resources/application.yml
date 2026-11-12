@@ -16,9 +16,11 @@ spring:
     locations: classpath:db/platform,classpath:db/migration
   servlet:
     multipart:
-      # S308 bulk upload: 10 MB per file (ImportLimits.MAX_FILE_BYTES), a little more for the form fields.
-      max-file-size: 10MB
-      max-request-size: 11MB
+      # S308 bulk upload: 10 MB per file (ImportLimits.MAX_FILE_BYTES); the price and quantity feed (S394) and the
+      # stock file allow 25 MB (ImportLimits.MAX_FEED_BYTES), checked per mode in the controller. A little more for the
+      # form fields.
+      max-file-size: 25MB
+      max-request-size: 26MB
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     producer:
@@ -126,6 +128,11 @@ at:
       notify-min-rows: ${IMPORT_NOTIFY_MIN_ROWS:100}
       stall-after: 2m
       resume-interval: 60s
+      # S393 to S396: rows per create, update or offer upload; rows per price and quantity feed or stock file; uploads one
+      # organisation may make per 24 hours (every mode together). One upload per mode runs at a time per organisation.
+      max-rows: ${IMPORT_MAX_ROWS:5000}
+      max-feed-rows: ${IMPORT_MAX_FEED_ROWS:50000}
+      max-uploads-per-day: ${IMPORT_MAX_UPLOADS_PER_DAY:20}
     # S308: images of bulk uploads are copied from their URLs by media-service (POST /v1/assets/import).
     media:
       base-url: ${MEDIA_URL:http://localhost:8207}
@@ -148,7 +155,8 @@ at:
       token-path: /oauth2/token
       client-id: ${CATALOG_CLIENT_ID:catalog-service}
       client-secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
-      scopes: media:import orders:purchase-check sellers:catalog-scope.read tax:classify offers:read
+      # offers:write: bulk offer uploads create and change the uploading seller's offers through offers-service (S393, S394).
+      scopes: media:import orders:purchase-check sellers:catalog-scope.read tax:classify offers:read offers:write
     # Selling approvals (and the registered-department hint): seller-service, scope
     # sellers:catalog-scope.read. Departments are no longer a restriction: only selling approvals fail closed.
     seller:
