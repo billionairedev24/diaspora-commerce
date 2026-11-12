@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { type APIRequestContext, expect, type Page, type TestInfo } from '@playwright/test';
 
 import { expectNoSeriousA11yViolations } from './a11y';
 
@@ -43,10 +43,35 @@ export async function recordTourEvents(page: Page): Promise<void> {
 
 const eventsOf = (page: Page): Promise<TourEvent[]> => page.evaluate(() => window.__atTour ?? []);
 
-/** Opens Help and picks the tour (the entries carry data-tour-entry="<tour id>"). */
-export async function openTourFromHelp(page: Page, tourId: string): Promise<void> {
+/** Opens the Tour hub from the Help menu (a client-side navigation, so the event recorder stays). */
+export async function openTourHub(page: Page): Promise<void> {
   await helpMenu(page).click();
+  await page.locator('[data-tour-entry="hub"]').click();
+  await expect(page.locator('[data-tour="tour-hub"]')).toBeVisible();
+}
+
+/** Opens Help, then the Tour hub, and starts the chapter (the hub's buttons carry data-tour-entry="<chapter id>"). */
+export async function openTourFromHelp(page: Page, tourId: string): Promise<void> {
+  await openTourHub(page);
   await page.locator(`[data-tour-entry="${tourId}"]`).click();
+}
+
+/** Forgets the signed-in person's tour progress on the (mock) server, so a test starts from "never seen anything". */
+export async function resetTourProgress(request: APIRequestContext, baseURL: string): Promise<void> {
+  const res = await request.delete(`${baseURL}/api/bff/v1/account/tour-progress`);
+  expect(res.status(), await res.text()).toBe(204);
+}
+
+export interface ServerTourProgress {
+  items: { tourId: string; contentVersion: number; status: string; lastStep: string | null }[];
+  autoStartEnabled: boolean;
+}
+
+/** What the mock server holds for the person (ids, version, status, last step). */
+export async function serverTourProgress(request: APIRequestContext, baseURL: string): Promise<ServerTourProgress> {
+  const res = await request.get(`${baseURL}/api/bff/v1/account/tour-progress`);
+  expect(res.status(), await res.text()).toBe(200);
+  return (await res.json()) as ServerTourProgress;
 }
 
 export interface RunOptions {

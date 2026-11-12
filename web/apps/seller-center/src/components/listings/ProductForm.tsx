@@ -386,6 +386,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   return (
     <>
       <PageHeader
+        tour="page-product-form"
         title={editing ? t('sc.pf.titleEdit') : t('sc.pf.titleNew')}
         description={editing ? d?.title : t('sc.pf.descriptionNew')}
         actions={editing || !has('bulkUpload') ? null : <Link href="/listings/bulk" className="inline-flex min-h-11 items-center text-sm sm:min-h-8">{t('sc.pf.bulkLink')}</Link>}

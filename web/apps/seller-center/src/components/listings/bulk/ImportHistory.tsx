@@ -42,7 +42,7 @@ export function ImportHistory() {
   ], [t]);
   return (
     <>
-      <PageHeader title={t('sc.bulk.historyTitle')} description={t('sc.bulk.historyDescription')}
+      <PageHeader tour="page-bulk-history" title={t('sc.bulk.historyTitle')} description={t('sc.bulk.historyDescription')}
         actions={<Link href="/listings/bulk" className={buttonClassName({ variant: 'primary' })}><UploadSimple size={18} aria-hidden /> {t('sc.bulk.newUpload')}</Link>} />
       <DataTable<ProductImport>
         id="seller.imports"

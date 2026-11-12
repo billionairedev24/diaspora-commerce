@@ -78,7 +78,7 @@ export function BulkUploadView() {
 
   return (
     <>
-      <PageHeader title={t('sc.bulk.title')} description={t('sc.bulk.description')}
+      <PageHeader tour="page-bulk" title={t('sc.bulk.title')} description={t('sc.bulk.description')}
         actions={<>
           <Link href="/listings/images" className="text-sm">{t('sc.listings.images')}</Link>
           <Link href="/listings/bulk/history" className="text-sm">{t('sc.bulk.historyLink')}</Link>

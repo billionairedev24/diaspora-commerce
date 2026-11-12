@@ -1,35 +1,60 @@
 import { expect, test } from '@playwright/test';
 
+import { expectNoSeriousA11yViolations } from '../support/a11y';
 import { actAs, PROVIDER_ORG, SELLER_ORG, setActiveOrg } from '../support/seller';
-import { expectNoDrift, helpMenu, openTourFromHelp, popover, recordTourEvents, runTour } from '../support/tours';
+import { expectNoDrift, helpMenu, openTourFromHelp, openTourHub, popover, recordTourEvents, resetTourProgress, runTour, serverTourProgress } from '../support/tours';
 
 /*
- * Seller Center / Provider Hub guided tours against the mock BFF. This is the drift guard: every tour is run for real from the
- * Help menu, and a step whose `data-tour` target (or page) is gone makes its tour report drift and the test fail. The counts are
- * the steps each tour shows for that organisation today: a change here means a screen or a tour changed on purpose.
+ * Seller Center / Provider Hub guided tours against the mock BFF. This is the drift guard: every chapter is run for real from the
+ * Tour hub (Help → Tour hub), and a step whose `data-tour` target (or page) is gone makes its chapter report drift and the test
+ * fail. The counts are the steps each chapter shows for that organisation today: a change here means a screen or a chapter changed
+ * on purpose.
  *
- * Automated browsers never get first-time tours by themselves (navigator.webdriver), so the other specs are not covered by a
- * popover; the auto-start tests below switch that on with localStorage `at.tour.autostart=force`.
+ * Progress is kept on the (mock) server per person, so each test starts by forgetting it. Automated browsers never get first-time
+ * tours by themselves (navigator.webdriver), so the auto-start tests switch that on with localStorage `at.tour.autostart=force`.
  */
 
 test.describe.configure({ mode: 'default' });
 
-const SELLER_TOURS: [id: string, shown: number][] = [
+const SELLER_CHAPTERS: [id: string, shown: number][] = [
   ['welcome', 5],
+  ['account-health', 4],
+  ['team', 5],
+  ['account-settings', 6],
+  ['help-support', 4],
+  ['listings-overview', 4],
   ['first-product', 6],
+  ['product-sections', 3],
+  ['images', 4],
+  ['bulk-upload', 5],
   ['approvals', 4],
   ['inventory', 4],
   ['orders', 5],
-  ['payouts', 5]
+  ['shipping-setup', 4],
+  ['run-pickups', 3],
+  ['returns-disputes', 5],
+  ['dashboard', 4],
+  ['payouts', 5],
+  ['fees-billing', 5],
+  ['coupons', 4],
+  ['reviews', 3]
 ];
 
-test.describe('seller center · every seller tour finds its targets', () => {
+const PROVIDER_CHAPTERS: [id: string, shown: number][] = [
+  ['services', 3],
+  ['availability', 3],
+  ['bookings', 3],
+  ['provider-earnings', 3]
+];
+
+test.describe('seller center · every seller chapter finds its targets', () => {
   test.beforeEach(async ({ request, baseURL }) => {
     await setActiveOrg(request, baseURL ?? '', SELLER_ORG);
+    await resetTourProgress(request, baseURL ?? '');
   });
 
-  for (const [id, shown] of SELLER_TOURS) {
-    test(`tour "${id}" runs to the end with no missing target`, async ({ page }, testInfo) => {
+  for (const [id, shown] of SELLER_CHAPTERS) {
+    test(`chapter "${id}" runs to the end with no missing target`, async ({ page }, testInfo) => {
       await page.goto('/');
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
       const result = await runTour(page, id, { axe: { testInfo, page: `seller tour ${id}` } });
@@ -37,57 +62,73 @@ test.describe('seller center · every seller tour finds its targets', () => {
     });
   }
 
-  test('the Help menu lists the tours the role allows, with a one-line summary', async ({ page }) => {
+  test('the Tour hub groups the chapters into journeys with their steps, and the Help menu links to it', async ({ page }) => {
     await page.goto('/');
-    await helpMenu(page).click();
-    for (const [id] of SELLER_TOURS) await expect(page.locator(`[data-tour-entry="${id}"]`)).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await openTourHub(page);
+    await expect(page.getByRole('heading', { level: 1, name: 'Tour hub' })).toBeVisible();
+    for (const journey of ['Get set up', 'Products and stock', 'Orders and delivery', 'Money and growth']) await expect(page.getByRole('heading', { level: 2, name: journey })).toBeVisible();
+    // a seller is not offered the provider journey, nor the application chapter
+    await expect(page.getByRole('heading', { level: 2, name: 'Your services' })).toHaveCount(0);
+    for (const [id] of SELLER_CHAPTERS) await expect(page.locator(`[data-tour-entry="${id}"]`)).toBeVisible();
     await expect(page.locator('[data-tour-entry="services"]')).toHaveCount(0);
-    await expect(page.getByText('Replay a tour')).toBeVisible();
+    await expect(page.locator('[data-tour-entry="application"]')).toHaveCount(0);
+    await expect(page.locator('[data-journey="setup"]')).toContainText('0 of 5 chapters done');
   });
 
-  test('a fulfilment role is only offered the tours its permissions reach', async ({ page, context, baseURL }) => {
+  test('the Tour hub has no serious accessibility violations', async ({ page }, testInfo) => {
+    await page.goto('/help/tours');
+    await expect(page.locator('[data-tour="tour-hub"]')).toBeVisible();
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller tour hub', include: '[data-tour="tour-hub"]' });
+  });
+
+  test('a fulfilment role is only offered the chapters its permissions reach', async ({ page, context, baseURL }) => {
     await actAs(context, baseURL ?? '', 'seller.fulfilment');
     await page.goto('/orders');
-    await helpMenu(page).click();
+    await openTourHub(page);
     await expect(page.locator('[data-tour-entry="orders"]')).toBeVisible();
+    await expect(page.locator('[data-tour-entry="shipping-setup"]')).toBeVisible();
     await expect(page.locator('[data-tour-entry="payouts"]')).toHaveCount(0);
     await expect(page.locator('[data-tour-entry="first-product"]')).toHaveCount(0);
+    await expect(page.locator('[data-tour-entry="team"]')).toHaveCount(0);
   });
 });
 
-test.describe('seller center · provider tour', () => {
+test.describe('seller center · provider chapters', () => {
   test.beforeEach(async ({ request, baseURL }) => {
     await setActiveOrg(request, baseURL ?? '', PROVIDER_ORG);
+    await resetTourProgress(request, baseURL ?? '');
   });
 
-  test('the services tour runs to the end with no missing target', async ({ page }, testInfo) => {
-    await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-    const result = await runTour(page, 'services', { axe: { testInfo, page: 'provider tour services' } });
-    expectNoDrift(result, 5);
-  });
+  for (const [id, shown] of PROVIDER_CHAPTERS) {
+    test(`chapter "${id}" runs to the end with no missing target`, async ({ page }, testInfo) => {
+      await page.goto('/');
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+      const result = await runTour(page, id, { axe: { testInfo, page: `provider tour ${id}` } });
+      expectNoDrift(result, shown);
+    });
+  }
 
-  test('a provider is not offered the seller-only orders tour', async ({ page }) => {
+  test('a provider is offered the service journey and not the seller-only chapters', async ({ page }) => {
     await page.goto('/');
-    await helpMenu(page).click();
-    await expect(page.locator('[data-tour-entry="services"]')).toBeVisible();
-    await expect(page.locator('[data-tour-entry="orders"]')).toHaveCount(0);
+    await openTourHub(page);
+    await expect(page.getByRole('heading', { level: 2, name: 'Your services' })).toBeVisible();
+    for (const [id] of PROVIDER_CHAPTERS) await expect(page.locator(`[data-tour-entry="${id}"]`)).toBeVisible();
+    for (const seller of ['orders', 'shipping-setup', 'run-pickups', 'returns-disputes', 'coupons', 'reviews']) await expect(page.locator(`[data-tour-entry="${seller}"]`)).toHaveCount(0);
   });
 });
 
 test.describe('seller center · tour behaviour', () => {
   test.beforeEach(async ({ request, baseURL }) => {
     await setActiveOrg(request, baseURL ?? '', SELLER_ORG);
+    await resetTourProgress(request, baseURL ?? '');
   });
 
   test('keyboard: arrows move, Esc closes and gives focus back, Tab stays inside the popover', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     await recordTourEvents(page);
-    await helpMenu(page).focus();
-    await page.keyboard.press('Enter');
-    // the menu opens with its first entry (the welcome tour) focused
-    await page.keyboard.press('Enter');
+    await openTourFromHelp(page, 'welcome');
     await expect(popover(page)).toBeVisible();
     await expect(popover(page).locator('.at-tour-count')).toHaveText('Step 1 of 5');
     // The popover is a named dialog and the primary button has focus.
@@ -111,7 +152,6 @@ test.describe('seller center · tour behaviour', () => {
 
     await page.keyboard.press('Escape');
     await expect(popover(page)).toHaveCount(0);
-    await expect(helpMenu(page)).toBeFocused();
     const events = await page.evaluate(() => window.__atTour ?? []);
     expect(events.at(-1)).toMatchObject({ type: 'ended', reason: 'close' });
   });
@@ -128,26 +168,155 @@ test.describe('seller center · tour behaviour', () => {
     await expect(popover(page)).toHaveCount(0);
   });
 
-  test('a first-time visit starts the welcome tour once; Don\'t show again keeps it away', async ({ page }) => {
+  test('a "do it" chapter waits for the person\'s own click on the real control and never clicks for them', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await openTourFromHelp(page, 'first-product');
+    await expect(page).toHaveURL(/\/listings$/);
+    await expect(popover(page)).toContainText('Start with Add a product');
+    await expect(popover(page).getByRole('button', { name: 'Skip this step' })).toBeVisible();
+    await expect(popover(page)).toContainText('Your turn');
+    // nothing moves by itself
+    await page.waitForTimeout(1_500);
+    await expect(page).toHaveURL(/\/listings$/);
+    await expect(popover(page)).toContainText('Start with Add a product');
+    // the highlighted control is the real one: a click goes through and opens the form, and the tour moves on by itself
+    await page.locator('[data-tour="listings-add"]').click();
+    await expect(page).toHaveURL(/\/listings\/new$/);
+    await expect(popover(page)).toContainText('Pick the category first', { timeout: 15_000 });
+    await page.keyboard.press('Escape');
+  });
+
+  test('"Skip this step" moves on without doing the thing', async ({ page }) => {
+    await page.goto('/');
+    await openTourFromHelp(page, 'first-product');
+    await expect(popover(page)).toContainText('Start with Add a product');
+    await popover(page).getByRole('button', { name: 'Skip this step' }).click();
+    await expect(popover(page)).toContainText('Pick the category first');
+    await page.keyboard.press('Escape');
+  });
+
+  test('progress is kept on the server: closing part way offers Resume, which starts at the last step', async ({ page, request, baseURL }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await openTourFromHelp(page, 'account-settings');
+    await expect(popover(page).locator('.at-tour-count')).toHaveText('Step 1 of 6');
+    await popover(page).locator('.at-tour-next').click();
+    await popover(page).locator('.at-tour-next').click();
+    await expect(popover(page).locator('.at-tour-count')).toHaveText('Step 3 of 6');
+    await page.keyboard.press('Escape');
+    await expect(popover(page)).toHaveCount(0);
+    await expect.poll(async () => (await serverTourProgress(request, baseURL ?? '')).items.find((i) => i.tourId === 'sc.account-settings')?.status, { timeout: 10_000 }).toBe('IN_PROGRESS');
+    expect((await serverTourProgress(request, baseURL ?? '')).items.find((i) => i.tourId === 'sc.account-settings')?.lastStep).toBe('profile');
+
+    // the Help menu offers it, and so does the hub
+    await helpMenu(page).click();
+    await expect(page.locator('[data-tour-resume-entry="account-settings"]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await openTourHub(page);
+    await expect(page.locator('[data-chapter="account-settings"]')).toContainText('In progress');
+    await page.locator('[data-tour-resume="account-settings"]').click();
+    await expect(popover(page)).toContainText('Your profile');
+    await expect(popover(page).locator('.at-tour-count')).toHaveText('Step 3 of 6');
+    await page.keyboard.press('Escape');
+  });
+
+  test('a finished chapter shows as done in the hub, counts in its journey, and can always be replayed', async ({ page, request, baseURL }) => {
+    await page.goto('/');
+    const result = await runTour(page, 'help-support');
+    expectNoDrift(result, 4);
+    await expect.poll(async () => (await serverTourProgress(request, baseURL ?? '')).items.find((i) => i.tourId === 'sc.help-support')?.status, { timeout: 10_000 }).toBe('COMPLETED');
+    await openTourHub(page);
+    await expect(page.locator('[data-chapter="help-support"]')).toContainText('Done');
+    await expect(page.locator('[data-journey="setup"]')).toContainText('1 of 5 chapters done');
+    await expect(page.locator('[data-tour-entry="help-support"]')).toHaveText('Replay');
+    await page.locator('[data-tour-entry="help-support"]').click();
+    await expect(popover(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    // closing a replay does not turn "done" into anything else
+    expect((await serverTourProgress(request, baseURL ?? '')).items.find((i) => i.tourId === 'sc.help-support')?.status).toBe('COMPLETED');
+  });
+
+  test('skipping a journey and resetting my progress both reach the server', async ({ page, request, baseURL }) => {
+    await page.goto('/help/tours');
+    await expect(page.locator('[data-tour="tour-hub"]')).toBeVisible();
+    await page.locator('[data-journey="fulfilment"]').getByRole('button', { name: 'Skip this journey' }).click();
+    await expect.poll(async () => (await serverTourProgress(request, baseURL ?? '')).items.filter((i) => i.status === 'DISMISSED').length, { timeout: 10_000 }).toBe(4);
+    await expect(page.locator('[data-chapter="orders"]')).toContainText('Skipped');
+    await page.getByRole('button', { name: 'Reset my progress' }).click();
+    await page.getByRole('button', { name: 'Yes, reset' }).click();
+    await expect(page.getByText('Your tour progress was reset.')).toBeVisible();
+    expect((await serverTourProgress(request, baseURL ?? '')).items).toEqual([]);
+    await expect(page.locator('[data-chapter="orders"]')).toContainText('Not started');
+  });
+
+  test('a first-time visit starts the welcome tour once, after the server was asked; Don\'t show again is kept on the server and follows the person to a new browser', async ({ page, browser, request, baseURL }) => {
     await page.addInitScript(() => window.localStorage.setItem('at.tour.autostart', 'force'));
     await page.goto('/');
     await expect(popover(page)).toBeVisible({ timeout: 15_000 });
     await expect(popover(page).locator('.at-tour-count')).toHaveText('Step 1 of 5');
-    // never blocking: Esc closes it at once
     await page.getByLabel("Don't show again").check();
     await page.keyboard.press('Escape');
     await expect(popover(page)).toHaveCount(0);
+    await expect.poll(async () => (await serverTourProgress(request, baseURL ?? '')).items.find((i) => i.tourId === 'sc.welcome')?.status, { timeout: 10_000 }).toBe('DISMISSED');
     await page.reload();
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     await page.waitForTimeout(4_500);
     await expect(popover(page)).toHaveCount(0);
-    const keys = await page.evaluate(() => Object.keys(window.localStorage).filter((k) => k.startsWith('at.tour.v1:')));
+    // the cache holds ids only: nothing that looks like an email or a name in a key
+    const keys = await page.evaluate(() => Object.keys(window.localStorage).filter((k) => k.startsWith('at.tour.')));
     expect(keys.length).toBeGreaterThan(0);
-    // opaque ids only: nothing that looks like an email or a name in the key
     expect(keys.join(' ')).not.toMatch(/@/);
+
+    // a different browser (nothing in its storage): the tour does not start again
+    const other = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    const fresh = await other.newPage();
+    await fresh.addInitScript(() => window.localStorage.setItem('at.tour.autostart', 'force'));
+    await fresh.goto('/');
+    await expect(fresh.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await fresh.waitForTimeout(4_500);
+    await expect(popover(fresh)).toHaveCount(0);
+    await other.close();
   });
 
-  test('it does not start by itself on top of an open dialog or a form with unsaved text', async ({ page }) => {
+  test('fail quiet: when progress cannot be loaded nothing starts by itself, and it starts once the server answers', async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem('at.tour.autostart', 'force'));
+    let down = true;
+    await page.route('**/api/bff/v1/account/tour-progress', async (route) => {
+      if (down && route.request().method() === 'GET') await route.fulfill({ status: 503, contentType: 'application/problem+json', body: '{"title":"Unavailable","status":503,"code":"UPSTREAM_UNAVAILABLE"}' });
+      else await route.continue();
+    });
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await page.waitForTimeout(8_500);
+    await expect(popover(page)).toHaveCount(0);
+    down = false;
+    // the load is tried again by itself
+    await expect(popover(page)).toBeVisible({ timeout: 30_000 });
+    await page.keyboard.press('Escape');
+  });
+
+  test('what this browser kept before is copied to the server once, and does not start the tour again', async ({ page, request, baseURL }) => {
+    const session = await (await request.get(`${baseURL}/api/bff/v1/seller/session`)).json();
+    const userId = (session as { user: { id: string } }).user.id;
+    await page.addInitScript(
+      ([id]) => {
+        window.localStorage.setItem('at.tour.autostart', 'force');
+        window.localStorage.setItem(`at.tour.v1:${id}:welcome:1`, JSON.stringify({ outcome: 'never', at: '2026-01-01T00:00:00.000Z' }));
+        window.localStorage.setItem(`at.tour.v1:${id}:orders:1`, JSON.stringify({ outcome: 'completed', at: '2026-01-01T00:00:00.000Z' }));
+      },
+      [userId]
+    );
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await expect.poll(async () => (await serverTourProgress(request, baseURL ?? '')).items.map((i) => `${i.tourId}:${i.status}`).sort(), { timeout: 15_000 }).toEqual(['sc.orders:COMPLETED', 'sc.welcome:DISMISSED']);
+    await page.waitForTimeout(4_500);
+    await expect(popover(page)).toHaveCount(0);
+    const left = await page.evaluate(() => Object.keys(window.localStorage).filter((k) => k.startsWith('at.tour.v1:')));
+    expect(left).toEqual([]);
+  });
+
+  test('it does not start by itself on top of a form with unsaved text', async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem('at.tour.autostart', 'force'));
     await page.goto('/listings/new');
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();

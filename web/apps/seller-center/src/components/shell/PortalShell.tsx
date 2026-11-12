@@ -22,6 +22,7 @@ import { SellerSessionProvider } from '@/lib/session';
 import { sessionApi } from '@/lib/session-api';
 import { sessionLabels } from '@/lib/session-labels';
 import { sessionReturnTo } from '@/lib/session-return';
+import { TOUR_HUB_HREF } from '@/tours/subject';
 
 import { ComplianceBanner, PayoutsPausedBanner } from './ComplianceBanner';
 import { Header } from './Header';
@@ -186,7 +187,9 @@ function PortalShellContent({ children }: { children: ReactNode }) {
     if (session) clearSignInAttempt();
   }, [session]);
 
-  const needsOnboarding = !entering && !!session?.activeOrg && !session.approved && active !== 'onboarding';
+  // The Tour hub opens for everyone with an organisation, whatever their role or application status.
+  const hubPage = pathname === TOUR_HUB_HREF;
+  const needsOnboarding = !entering && !!session?.activeOrg && !session.approved && active !== 'onboarding' && !hubPage;
   const leaveOnboarding = !entering && !!session?.approved && active === 'onboarding';
   // Approved: onboarding is gone, go to the landing — unless the landing is onboarding itself (a session that says
   // approved with nothing else open), which would send the page to itself for ever.
@@ -279,7 +282,7 @@ function PortalShellContent({ children }: { children: ReactNode }) {
     );
   }
 
-  const canOpen = accountPage || allowed(session, active);
+  const canOpen = accountPage || hubPage || allowed(session, active);
   return (
     <SellerSessionProvider session={session}>
       <SellerTourHost session={session}>

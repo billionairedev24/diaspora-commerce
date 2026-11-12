@@ -30,6 +30,7 @@ export function TaxStatementView() {
   const q = useQuery({ ...sellerQueries.taxStatement(api, orgId, month), placeholderData: (prev) => prev });
   const header = (
     <PageHeader
+      tour="page-tax"
       title={t('sc.tax.title')}
       description={t('sc.tax.description')}
       actions={

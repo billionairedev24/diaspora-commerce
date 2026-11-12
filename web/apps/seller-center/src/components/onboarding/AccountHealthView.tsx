@@ -69,7 +69,7 @@ export function AccountHealthView() {
             ].map(([label, value]) => ({ id: label, label, value: <span className="text-lg">{value}</span> }))}
           />
           {q.data.items.length ? (
-            <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            <ul className="m-0 flex list-none flex-col gap-2 p-0" data-tour="account-health-items">
               {q.data.items.map((i) => (
                 <li key={i.requirement} className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3">
                   <span className="flex min-w-0 flex-1 flex-col">

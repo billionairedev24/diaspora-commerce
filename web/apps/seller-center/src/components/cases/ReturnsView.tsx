@@ -71,6 +71,7 @@ export function ReturnsView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
+        tour="page-returns"
         title={copy.title}
         description={copy.description}
         actions={

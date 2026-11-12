@@ -1,132 +1,367 @@
-import { defineTour, tourText } from '@afrotransact/tour';
+import { defineChapter, type TourJourney } from '@afrotransact/tour';
 
 /*
- * Seller Center and Provider Hub tours. Targets are `data-tour` ids placed on the real components (see docs/engineering/guided-tours.md);
- * text is in src/i18n/*.json under `sc.tour.<tour>.<step>.title|body`. Rules for the words: plain, no jargon, names not ids, no
- * mention of carriers, nothing that is not built today. Bump a tour's `version` when it changes enough to show it again.
+ * Seller Center and Provider Hub tours, as short chapters (3 to 8 steps) grouped into journeys for the Tour hub.
+ * Targets are `data-tour` ids placed on the real components (see docs/engineering/guided-tours.md); text is in src/i18n/*.json under
+ * `sc.tour.<chapter>.<step>.title|body`. Rules for the words: plain, no jargon, names not ids, no mention of carriers, nothing that is
+ * not built today, no tax advice. Bump a chapter's `version` when its words change enough to deserve a "What's new" mark in the hub.
  *
- * Who sees what: `permissions` are `<module>:<level>` (levels view, edit, approve, full; each includes the ones before it),
- * `flags` are `seller`, `provider`, `approved`, `offers-services`.
+ * Who sees what: `permissions` are `<module>:<level>` (levels view, edit, approve, full; each includes the ones before it), `flags` are
+ * `seller`, `provider`, `approved`, `applying`, `offers-services` and `cap-<plan capability>`. A step's `when` names a guard (`can-<module>`)
+ * so a chapter never walks someone to a page their role cannot open. Only the first-time chapters of the busiest pages start by
+ * themselves; every other chapter is started from the Tour hub.
  */
 
-const welcome = (s: string) => tourText('sc.tour.welcome', s);
-const product = (s: string) => tourText('sc.tour.firstProduct', s);
-const approvals = (s: string) => tourText('sc.tour.approvals', s);
-const stock = (s: string) => tourText('sc.tour.inventory', s);
-const orders = (s: string) => tourText('sc.tour.orders', s);
-const payouts = (s: string) => tourText('sc.tour.payouts', s);
-const services = (s: string) => tourText('sc.tour.services', s);
+export const SELLER_JOURNEYS: readonly TourJourney[] = [
+  { id: 'setup', title: 'sc.tour.journey.setup.title', summary: 'sc.tour.journey.setup.summary' },
+  { id: 'catalogue', title: 'sc.tour.journey.catalogue.title', summary: 'sc.tour.journey.catalogue.summary' },
+  { id: 'fulfilment', title: 'sc.tour.journey.fulfilment.title', summary: 'sc.tour.journey.fulfilment.summary' },
+  { id: 'money', title: 'sc.tour.journey.money.title', summary: 'sc.tour.journey.money.summary' },
+  { id: 'services', title: 'sc.tour.journey.services.title', summary: 'sc.tour.journey.services.summary' }
+];
 
 export const SELLER_TOURS = [
-  defineTour({
+  // ---------------------------------------------------------------- Get set up
+  defineChapter({
     id: 'welcome',
-    version: 1,
-    title: 'sc.tour.welcome.title',
-    summary: 'sc.tour.welcome.summary',
+    prefix: 'sc.tour.welcome',
+    journey: 'setup',
     autoStart: { routes: ['/', '/onboarding'] },
     steps: [
-      { id: 'hello', placement: 'center', ...welcome('hello') },
-      { id: 'menu', target: 'sidebar', placement: 'end', optional: true, ...welcome('menu') },
-      { id: 'business', target: 'org-switcher', placement: 'end', optional: true, ...welcome('business') },
-      { id: 'application', target: 'onboarding-status', when: 'applying', optional: true, ...welcome('application') },
-      { id: 'steps', target: 'onboarding-stepper', when: 'applying', optional: true, ...welcome('steps') },
-      { id: 'home', target: 'page-home', route: '/', when: 'approved', ...welcome('home') },
-      { id: 'help', target: 'help-menu', placement: 'bottom', ...welcome('help') }
+      ['hello'],
+      ['menu', 'sidebar', { placement: 'end', optional: true }],
+      ['business', 'org-switcher', { placement: 'end', optional: true }],
+      ['application', 'onboarding-status', { when: 'applying', optional: true }],
+      ['steps', 'onboarding-stepper', { when: 'applying', optional: true }],
+      ['home', 'page-home', { route: '/', when: 'approved' }],
+      ['help', 'help-menu']
     ]
   }),
-  defineTour({
-    id: 'first-product',
-    version: 1,
-    title: 'sc.tour.firstProduct.title',
-    summary: 'sc.tour.firstProduct.summary',
-    audience: { permissions: ['listings:edit'] },
+  defineChapter({
+    id: 'application',
+    prefix: 'sc.tour.application',
+    journey: 'setup',
+    route: '/onboarding',
+    audience: { flags: ['applying'] },
+    steps: [['hello'], ['status', 'onboarding-status'], ['steps', 'onboarding-stepper', { optional: true }], ['after']]
+  }),
+  defineChapter({
+    id: 'account-health',
+    prefix: 'sc.tour.accountHealth',
+    journey: 'setup',
+    route: '/account-health',
+    audience: { permissions: ['account-health:view'], flags: ['approved'] },
+    steps: [
+      ['page', 'page-account-health'],
+      ['status', 'account-health-status'],
+      ['items', 'account-health-items', { optional: true }],
+      ['stripe', 'account-health-stripe', { placement: 'top' }]
+    ]
+  }),
+  defineChapter({
+    id: 'team',
+    prefix: 'sc.tour.team',
+    journey: 'setup',
+    route: '/team',
+    audience: { permissions: ['team:view'] },
+    steps: [
+      ['page', 'page-team'],
+      ['invite', 'page-team-actions', { optional: true }],
+      ['people', 'table-seller.team', { placement: 'top' }],
+      ['roles'],
+      ['business', 'page-business-page', { route: '/team/business-page' }]
+    ]
+  }),
+  defineChapter({
+    id: 'account-settings',
+    prefix: 'sc.tour.accountSettings',
+    journey: 'setup',
+    route: '/account',
+    steps: [
+      ['head', 'account-head'],
+      ['nav', 'account-nav', { placement: 'end' }],
+      ['profile', 'account-section', { placement: 'top' }],
+      ['security', 'account-section', { route: '/account/security', placement: 'top' }],
+      ['alerts', 'account-section', { route: '/account/notifications', placement: 'top' }],
+      ['display', 'account-section', { route: '/account/preferences', placement: 'top' }]
+    ]
+  }),
+  defineChapter({
+    id: 'help-support',
+    prefix: 'sc.tour.helpSupport',
+    journey: 'setup',
+    route: '/',
+    steps: [['hello'], ['help', 'help-menu'], ['assistant', 'lola-launcher', { placement: 'start', optional: true }], ['wrap']]
+  }),
+
+  // ---------------------------------------------------------------- Products and stock
+  defineChapter({
+    id: 'listings-overview',
+    prefix: 'sc.tour.listings',
+    journey: 'catalogue',
     route: '/listings',
+    audience: { permissions: ['listings:view'] },
+    steps: [
+      ['page', 'page-listings'],
+      ['actions', 'page-listings-actions', { optional: true }],
+      ['table', 'table-seller.listings', { placement: 'top' }],
+      ['status']
+    ]
+  }),
+  defineChapter({
+    id: 'first-product',
+    prefix: 'sc.tour.firstProduct',
+    journey: 'catalogue',
+    route: '/listings',
+    audience: { permissions: ['listings:edit'] },
     autoStart: { routes: ['/listings'] },
     steps: [
-      { id: 'add', target: 'listings-add', placement: 'bottom', ...product('add') },
-      { id: 'category', target: 'product-form-basics', route: '/listings/new', placement: 'top', ...product('category') },
-      { id: 'photos', target: 'product-form-images', placement: 'top', ...product('photos') },
-      { id: 'nav', target: 'product-form-nav', placement: 'bottom', ...product('nav') },
-      { id: 'missing', target: 'product-form-readiness', placement: 'start', optional: true, ...product('missing') },
-      { id: 'submit', target: 'product-form-actions', placement: 'top', ...product('submit') }
+      ['add', 'listings-add', { doIt: true, success: { target: 'listings-add', when: 'click' } }],
+      ['category', 'product-form-basics', { route: '/listings/new', placement: 'top' }],
+      ['photos', 'product-form-images', { placement: 'top' }],
+      ['nav', 'product-form-nav'],
+      ['missing', 'product-form-readiness', { placement: 'start', optional: true }],
+      ['submit', 'product-form-actions', { placement: 'top' }]
     ]
   }),
-  defineTour({
-    id: 'approvals',
-    version: 1,
-    title: 'sc.tour.approvals.title',
-    summary: 'sc.tour.approvals.summary',
+  defineChapter({
+    id: 'product-sections',
+    prefix: 'sc.tour.productSections',
+    journey: 'catalogue',
+    route: '/listings/new',
     audience: { permissions: ['listings:edit'] },
+    steps: [
+      ['intro'],
+      ['basics', 'product-form-basics', { placement: 'top' }],
+      ['nav', 'product-form-nav'],
+      ['offer', 'product-form-offer', { placement: 'top', optional: true }],
+      ['facts', 'product-form-facts', { placement: 'top', optional: true }],
+      ['variants', 'product-form-variants', { placement: 'top', optional: true }],
+      ['sizes', 'product-form-sizeguide', { placement: 'top', optional: true }],
+      ['fulfilment', 'product-form-fulfilment', { placement: 'top', optional: true }]
+    ]
+  }),
+  defineChapter({
+    id: 'images',
+    prefix: 'sc.tour.images',
+    journey: 'catalogue',
+    route: '/listings/images',
+    audience: { permissions: ['listings:edit'], flags: ['cap-imageLibrary'] },
+    steps: [
+      ['page', 'page-images'],
+      ['actions', 'page-images-actions'],
+      ['library', 'table-seller.image-library', { placement: 'top', optional: true }],
+      ['names']
+    ]
+  }),
+  defineChapter({
+    id: 'bulk-upload',
+    prefix: 'sc.tour.bulkUpload',
+    journey: 'catalogue',
+    route: '/listings/bulk',
+    audience: { permissions: ['listings:edit'], flags: ['cap-bulkUpload'] },
+    steps: [
+      ['page', 'page-bulk'],
+      ['template'],
+      ['links', 'page-bulk-actions'],
+      ['history', 'page-bulk-history', { route: '/listings/bulk/history' }],
+      ['reports', 'table-seller.imports', { placement: 'top' }]
+    ]
+  }),
+  defineChapter({
+    id: 'approvals',
+    prefix: 'sc.tour.approvals',
+    journey: 'catalogue',
     route: '/listings',
+    audience: { permissions: ['listings:edit'] },
     autoStart: { routes: ['/listings/approvals'] },
     steps: [
-      { id: 'button', target: 'listings-approvals', placement: 'bottom', ...approvals('button') },
-      { id: 'find', target: 'approvals-find', route: '/listings/approvals', placement: 'bottom', ...approvals('find') },
-      { id: 'status', target: 'approvals-first', placement: 'top', optional: true, ...approvals('status') },
-      { id: 'expiry', placement: 'center', ...approvals('expiry') }
+      ['button', 'listings-approvals'],
+      ['find', 'approvals-find', { route: '/listings/approvals' }],
+      ['status', 'approvals-first', { placement: 'top', optional: true }],
+      ['expiry']
     ]
   }),
-  defineTour({
+  defineChapter({
     id: 'inventory',
-    version: 1,
-    title: 'sc.tour.inventory.title',
-    summary: 'sc.tour.inventory.summary',
-    audience: { permissions: ['inventory:view'] },
+    prefix: 'sc.tour.inventory',
+    journey: 'catalogue',
     route: '/inventory',
+    audience: { permissions: ['inventory:view'] },
     autoStart: { routes: ['/inventory'] },
     steps: [
-      { id: 'page', target: 'page-inventory', placement: 'bottom', ...stock('page') },
-      { id: 'numbers', target: 'inventory-stats', placement: 'bottom', optional: true, ...stock('numbers') },
-      { id: 'table', target: 'table-seller.inventory', placement: 'top', ...stock('table') },
-      { id: 'count', target: 'inventory-adjust', placement: 'bottom', optional: true, ...stock('count') }
+      ['page', 'page-inventory'],
+      ['numbers', 'inventory-stats', { optional: true }],
+      ['table', 'table-seller.inventory', { placement: 'top' }],
+      ['count', 'inventory-adjust', { optional: true }]
     ]
   }),
-  defineTour({
+
+  // ---------------------------------------------------------------- Orders and delivery
+  defineChapter({
     id: 'orders',
-    version: 1,
-    title: 'sc.tour.orders.title',
-    summary: 'sc.tour.orders.summary',
-    audience: { permissions: ['orders:view'], flags: ['seller'] },
+    prefix: 'sc.tour.orders',
+    journey: 'fulfilment',
     route: '/orders',
+    audience: { permissions: ['orders:view'], flags: ['seller'] },
     autoStart: { routes: ['/orders'] },
     steps: [
-      { id: 'page', target: 'page-orders', placement: 'bottom', ...orders('page') },
-      { id: 'table', target: 'table-seller.orders', placement: 'top', ...orders('table') },
-      { id: 'next', target: 'orders-next-step', placement: 'start', optional: true, ...orders('next') },
-      { id: 'pickup', placement: 'center', ...orders('pickup') },
-      { id: 'tools', target: 'page-orders-actions', placement: 'bottom', ...orders('tools') }
+      ['page', 'page-orders'],
+      ['table', 'table-seller.orders', { placement: 'top' }],
+      ['next', 'orders-next-step', { placement: 'start', optional: true }],
+      ['pickup'],
+      ['tools', 'page-orders-actions']
     ]
   }),
-  defineTour({
+  defineChapter({
+    id: 'shipping-setup',
+    prefix: 'sc.tour.shippingSetup',
+    journey: 'fulfilment',
+    route: '/orders/ship-from',
+    audience: { permissions: ['orders:view'], flags: ['seller'] },
+    steps: [
+      ['page', 'page-ship-from'],
+      ['actions', 'page-ship-from-actions'],
+      ['address', 'ship-from-address', { placement: 'top', optional: true }],
+      ['pickup', 'ship-from-pickup', { placement: 'start', optional: true }]
+    ]
+  }),
+  defineChapter({
+    id: 'run-pickups',
+    prefix: 'sc.tour.runPickups',
+    journey: 'fulfilment',
+    route: '/orders/run-pickups',
+    audience: { permissions: ['orders:view'], flags: ['seller'] },
+    steps: [['page', 'page-run-pickups'], ['about'], ['back', 'page-run-pickups-actions']]
+  }),
+  defineChapter({
+    id: 'returns-disputes',
+    prefix: 'sc.tour.returnsDisputes',
+    journey: 'fulfilment',
+    route: '/returns',
+    audience: { permissions: ['returns:view'], flags: ['seller'] },
+    steps: [
+      ['page', 'page-returns'],
+      ['filter', 'page-returns-actions'],
+      ['table', 'table-seller.returns', { placement: 'top' }],
+      ['disputes', 'page-disputes', { route: '/disputes', when: 'can-disputes' }],
+      ['claims', 'table-seller.disputes', { placement: 'top', when: 'can-disputes' }]
+    ]
+  }),
+
+  // ---------------------------------------------------------------- Money and growth
+  defineChapter({
+    id: 'dashboard',
+    prefix: 'sc.tour.dashboard',
+    journey: 'money',
+    route: '/',
+    audience: { flags: ['approved'] },
+    steps: [
+      ['page', 'page-home'],
+      ['period', 'page-home-actions'],
+      ['reports', 'home-reports', { placement: 'top', optional: true }],
+      ['tables']
+    ]
+  }),
+  defineChapter({
     id: 'payouts',
-    version: 1,
-    title: 'sc.tour.payouts.title',
-    summary: 'sc.tour.payouts.summary',
-    audience: { permissions: ['payouts:view'], flags: ['approved'] },
+    prefix: 'sc.tour.payouts',
+    journey: 'money',
     route: '/payouts',
+    audience: { permissions: ['payouts:view'], flags: ['approved'] },
     autoStart: { routes: ['/payouts'] },
     steps: [
-      { id: 'balance', target: 'payouts-balance', placement: 'bottom', ...payouts('balance') },
-      { id: 'request', target: 'page-payouts-actions', placement: 'bottom', optional: true, ...payouts('request') },
-      { id: 'tax', target: 'payouts-tax', placement: 'top', ...payouts('tax') },
-      { id: 'status', target: 'account-health-status', route: '/account-health', placement: 'bottom', ...payouts('status') },
-      { id: 'stripe', target: 'account-health-stripe', placement: 'top', ...payouts('stripe') }
+      ['balance', 'payouts-balance'],
+      ['request', 'page-payouts-actions', { optional: true }],
+      ['history', 'table-seller.payouts', { placement: 'top', optional: true }],
+      ['tax', 'payouts-tax', { placement: 'top' }],
+      ['statement', 'page-tax', { route: '/payouts/tax' }]
     ]
   }),
-  defineTour({
+  defineChapter({
+    id: 'fees-billing',
+    prefix: 'sc.tour.feesBilling',
+    journey: 'money',
+    route: '/fees',
+    audience: { permissions: ['fees:view'], flags: ['approved'] },
+    steps: [
+      ['page', 'page-fees'],
+      ['rates'],
+      ['table', 'table-seller.fees', { placement: 'top', optional: true }],
+      ['plan', 'page-billing', { route: '/billing', when: 'can-billing' }],
+      ['invoices', 'table-seller.invoices', { placement: 'top', optional: true, when: 'can-billing' }]
+    ]
+  }),
+  defineChapter({
+    id: 'coupons',
+    prefix: 'sc.tour.coupons',
+    journey: 'money',
+    route: '/coupons',
+    audience: { permissions: ['coupons:view'], flags: ['seller'] },
+    steps: [
+      ['page', 'page-coupons'],
+      ['create', 'page-coupons-actions', { optional: true }],
+      ['table', 'table-seller.coupons', { placement: 'top' }],
+      ['scope']
+    ]
+  }),
+  defineChapter({
+    id: 'reviews',
+    prefix: 'sc.tour.reviews',
+    journey: 'money',
+    route: '/reviews',
+    audience: { permissions: ['reviews:view'], flags: ['seller'] },
+    steps: [['page', 'page-reviews'], ['filter', 'page-reviews-actions'], ['replies']]
+  }),
+
+  // ---------------------------------------------------------------- Your services (providers)
+  defineChapter({
     id: 'services',
-    version: 1,
-    title: 'sc.tour.services.title',
-    summary: 'sc.tour.services.summary',
-    audience: { permissions: ['services:view'], flags: ['offers-services'] },
+    prefix: 'sc.tour.services',
+    journey: 'services',
     route: '/services',
+    audience: { permissions: ['services:view'], flags: ['offers-services'] },
     autoStart: { routes: ['/services'] },
     steps: [
-      { id: 'add', target: 'page-services-actions', placement: 'bottom', optional: true, ...services('add') },
-      { id: 'area', target: 'service-area', placement: 'bottom', ...services('area') },
-      { id: 'hours', target: 'page-hours', route: '/hours', when: 'can-hours', placement: 'bottom', ...services('hours') },
-      { id: 'requests', target: 'page-requests', route: '/requests', when: 'can-requests', placement: 'bottom', ...services('requests') },
-      { id: 'calendar', target: 'page-calendar', route: '/calendar', when: 'can-calendar', placement: 'bottom', ...services('calendar') }
+      ['add', 'page-services-actions', { optional: true }],
+      ['list', 'table-seller.services', { placement: 'top' }],
+      ['area', 'service-area']
+    ]
+  }),
+  defineChapter({
+    id: 'availability',
+    prefix: 'sc.tour.availability',
+    journey: 'services',
+    route: '/hours',
+    audience: { anyPermissions: ['hours:view', 'policy:view'], flags: ['offers-services'] },
+    steps: [
+      ['hours', 'page-hours', { when: 'can-hours' }],
+      ['policy', 'page-policy', { route: '/policy', when: 'can-policy' }],
+      ['wrap']
+    ]
+  }),
+  defineChapter({
+    id: 'bookings',
+    prefix: 'sc.tour.bookings',
+    journey: 'services',
+    route: '/requests',
+    audience: { anyPermissions: ['requests:view', 'calendar:view'], flags: ['offers-services'] },
+    steps: [
+      ['requests', 'page-requests', { when: 'can-requests' }],
+      ['calendar', 'page-calendar', { route: '/calendar', when: 'can-calendar' }],
+      ['wrap']
+    ]
+  }),
+  defineChapter({
+    id: 'provider-earnings',
+    prefix: 'sc.tour.providerEarnings',
+    journey: 'services',
+    route: '/earnings',
+    audience: { permissions: ['earnings:view'], flags: ['offers-services'] },
+    steps: [
+      ['page', 'page-earnings'],
+      ['table', 'table-seller.earnings', { placement: 'top' }],
+      ['payouts', 'page-payouts', { route: '/payouts', when: 'can-payouts' }]
     ]
   })
 ];

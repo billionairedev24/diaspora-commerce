@@ -76,6 +76,7 @@ export function RunPickupsView() {
   return (
     <>
       <PageHeader
+        tour="page-run-pickups"
         title={t('sc.runPickups.title')}
         description={t('sc.runPickups.description')}
         actions={

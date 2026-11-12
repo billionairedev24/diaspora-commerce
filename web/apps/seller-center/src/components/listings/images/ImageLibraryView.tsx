@@ -205,7 +205,7 @@ export function ImageLibraryView() {
 
   return (
     <>
-      <PageHeader title={t('sc.img.title')} description={t('sc.img.description')}
+      <PageHeader tour="page-images" title={t('sc.img.title')} description={t('sc.img.description')}
         actions={<>
           <Link href="/listings/bulk" className="text-sm">{t('sc.img.bulkLink')}</Link>
           <Button variant="primary" loading={attach.isPending} onClick={() => attach.mutate()} data-testid="attach-images">

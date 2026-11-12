@@ -58,7 +58,7 @@ export function BusinessPageView() {
     }
   });
 
-  const header = <PageHeader title="Business page" description="The plain public page for your business: your logo, colour and what you offer. Shoppers and Stripe see it." />;
+  const header = <PageHeader tour="page-business-page" title="Business page" description="The plain public page for your business: your logo, colour and what you offer. Shoppers and Stripe see it." />;
   if (!q.data || !v) {
     return (
       <>

@@ -159,6 +159,7 @@ export function CouponsView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
+        tour="page-coupons"
         title={t('sc.coupons.title')}
         description={t('sc.coupons.lead')}
         actions={

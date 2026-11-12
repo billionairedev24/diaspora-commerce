@@ -34,8 +34,15 @@ export function Header({ session, menuButton }: { session: StaffSession | null; 
         className="h-9 w-16 min-w-11 cursor-pointer rounded-md border border-header-muted bg-header px-2 text-sm text-header-text sm:w-auto"
         onChanged={() => router.refresh()}
       />
-      {/* Replay tours: renders once the tour service is ready (inside the console shell), nothing before. */}
-      <TourHelpMenu translate={translateTour} label={t('st.tour.help.label')} heading={t('st.tour.help.heading')} resetLabel={t('st.tour.help.reset')} />
+      {/* Guided tours: the Tour hub and Resume. Renders once the tour service is ready (inside the console shell), nothing before. */}
+      <TourHelpMenu
+        translate={translateTour}
+        label={t('st.tour.help.label')}
+        heading={t('st.tour.help.heading')}
+        hubLabel={t('st.tour.help.hub')}
+        resumeLabel={t('st.tour.help.resume')}
+        whatsNewLabel={t('st.tour.help.new')}
+      />
       {session ? (
         <UserMenu
           initials={session.user.initials}

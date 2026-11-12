@@ -22,6 +22,7 @@ import { sessionApi } from '@/lib/session-api';
 import { sessionLabels } from '@/lib/session-labels';
 import { sessionReturnTo } from '@/lib/session-return';
 import { isSettingsPath, visibleSections } from '@/lib/settings-sections';
+import { TOUR_HUB_HREF } from '@/tours/subject';
 
 import { Header } from './Header';
 import { Sidebar, SidebarRail } from './Sidebar';
@@ -316,7 +317,8 @@ function ConsoleShellContent({ children }: { children: ReactNode }) {
     );
   }
   // My account (/account/…) is every staff member's own, whatever their roles open.
-  const canOpen = accountSectionOf(pathname) !== null || (settingsActive ? visibleSections(session).length > 0 : allowed(session, active));
+  // The Tour hub is every staff member's own too: the chapters it lists are the ones their permissions reach.
+  const canOpen = accountSectionOf(pathname) !== null || pathname === TOUR_HUB_HREF || (settingsActive ? visibleSections(session).length > 0 : allowed(session, active));
   return (
     <StaffSessionProvider session={session}>
       <StaffTourHost session={session}>

@@ -30,7 +30,7 @@ export function SectionBadge({ status }: { status: SectionStatus }) {
 /** A flat section of the one-page form (no card): a heading with a rule above it, then the fields on the white page. Its content is a container (`@container`), so the field grids inside follow the section's width and not the screen's. */
 export function FormSection({ id, title, hint, status, children }: Props) {
   return (
-    <section id={`pf-s-${id}`} aria-labelledby={`pf-h-${id}`} data-section={id} data-state={status?.state} data-tour={`product-form-${id}`}
+    <section id={`pf-s-${id}`} aria-labelledby={`pf-h-${id}`} data-section={id} data-state={status?.state} data-tour={`product-form-${id.toLowerCase()}`}
       className="scroll-mt-[calc(var(--at-sticky-header-h)+4.5rem)] border-t border-border pt-5">
       <header className="flex items-start justify-between gap-3 pb-3">
         <div className="flex min-w-0 flex-col gap-0.5">

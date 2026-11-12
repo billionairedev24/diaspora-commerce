@@ -193,6 +193,7 @@ export function ReviewsView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
+        tour="page-reviews"
         title={copy.title}
         description={copy.description}
         actions={

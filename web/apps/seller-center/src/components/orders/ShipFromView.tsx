@@ -269,6 +269,7 @@ export function ShipFromView() {
   return (
     <>
       <PageHeader
+        tour="page-ship-from"
         title={t('sc.shipFrom.title')}
         description={t('sc.shipFrom.description')}
         actions={
@@ -308,7 +309,7 @@ export function ShipFromView() {
               </div>
             }
           >
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-4" data-testid="ship-from-address">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-4" data-testid="ship-from-address" data-tour="ship-from-address">
               <div className="flex flex-col gap-2">
                 <address className="text-sm not-italic">
                   {a.name}
@@ -321,7 +322,7 @@ export function ShipFromView() {
                 </address>
                 <Position a={a} />
               </div>
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4" data-tour="ship-from-pickup">
                 <PickupSettings key={`${a.id}-${a.version}`} a={a} editable={editable} />
                 <CustomerPickupSettings key={`${a.id}-cp-${a.customerPickup?.enabled ? 'on' : 'off'}`} a={a} editable={editable} />
               </div>

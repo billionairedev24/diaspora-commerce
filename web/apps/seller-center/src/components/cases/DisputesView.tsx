@@ -79,6 +79,7 @@ export function DisputesView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
+        tour="page-disputes"
         title={copy.title}
         description={copy.description}
         actions={

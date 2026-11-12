@@ -47,7 +47,7 @@ export function DashboardView() {
         <ModuleSummaries modules={q.data?.modules ?? []} loading={q.isPending} onRetry={() => void q.refetch()} linkAs={AppLink} labels={{ retry: t('sc.dashboardView.retry'), error: t('sc.dashboardView.moduleError') }} />
       ) : null}
       {q.data && q.data.charts.length ? (
-        <section aria-labelledby="reports-h" className="flex flex-col gap-3">
+        <section aria-labelledby="reports-h" data-tour="home-reports" className="flex flex-col gap-3">
           <h2 id="reports-h" className="m-0 text-lg font-semibold">
             {t('sc.dashboardView.reports')}
           </h2>
