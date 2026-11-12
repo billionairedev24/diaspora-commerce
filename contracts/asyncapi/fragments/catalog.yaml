@@ -351,6 +351,7 @@ components:
         loserAtin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
         survivorProductId: {type: string, format: uuid}
         survivorAtin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        survivorCategoryId: {type: [string, 'null'], format: uuid, description: The surviving page's category (offers keep it on the moved offers)}
         variantMap:
           type: object
           description: Loser variant ATIN to the surviving page's variant ATIN

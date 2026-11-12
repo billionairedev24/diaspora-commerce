@@ -37,6 +37,10 @@ operations:
       rejected / paused take them off sale. taken_down (Trust and Safety) suppresses every offer on the page: none can
       win the buy box or appear in public reads; reinstated restores them when the listing's status is LIVE again (a
       listing reinstated as PAUSED stays off sale). The buy box of every affected ATIN is recomputed.
+      catalog.product.merged (S386, consumer offers-catalog-merge, inbox-deduplicated): two duplicate pages were merged; every
+      open offer on a variant of the merged page moves to the mapped variant of the surviving page (same offer id, new ATIN).
+      A seller who already has the same offer there keeps that one and the moved one is withdrawn. A moved offer is on a
+      different ATIN, so it waits as TAX_HELD until the seller's decision on the new ATIN is confirmed (S384).
   consumeOffersTaxClassificationEvents:
     action: receive
     channel: {$ref: '#/channels/taxReturnsEvents'}

@@ -205,6 +205,23 @@ public record Offer(UUID id, String atin, String productAtin, UUID productId, St
                 packaging, sellerBehaviour, heldReason, basis);
     }
 
+    /**
+     * The offer moves to another variant of another page (two duplicate pages were merged). It is a different ATIN now, so
+     * the seller's tax decision on the old one says nothing about it: the tax basis is dropped and an active offer waits as
+     * TAX_HELD ({@link #HOLD_UNVERIFIED}) until the tax release component has asked tax-returns about the new ATIN.
+     */
+    public Offer relocatedTo(String newAtin, String newProductAtin, UUID newProductId, UUID newCategoryId,
+                             boolean newProductLive, Instant now) {
+        if (status == OfferStatus.WITHDRAWN) {
+            throw new IllegalStateException("A withdrawn offer cannot be moved");
+        }
+        boolean wasActive = status == OfferStatus.ACTIVE;
+        return new Offer(id, newAtin, newProductAtin, newProductId, gtin, newCategoryId, sellerOrgId, sellerKind, sellerSku,
+                inventorySku, condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment, sellerQuantity,
+                handlingDays, shipFrom, wasActive ? OfferStatus.TAX_HELD : status, newProductLive, createdAt, now, version,
+                conditionNote, packaging, sellerBehaviour, wasActive ? HOLD_UNVERIFIED : heldReason, null);
+    }
+
     /** The same offer with a note on its condition and the box it ships in. */
     public Offer withDetails(String newConditionNote, OfferPackage newPackaging, Instant now) {
         return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,

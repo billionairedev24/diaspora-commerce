@@ -19,6 +19,12 @@ public interface OfferRepository {
 
     Optional<Offer> findById(UUID id);
 
+    /**
+     * Stores an offer that moved to another variant and page (a merge): the ATIN columns change, with the status, tax basis
+     * and live flag, when {@code offer.version()} still matches. Returns the stored copy with version + 1.
+     */
+    Offer relocate(Offer offer);
+
     /** Open offers for these variant ATINs (every seller, every currency). */
     List<Offer> findOpenByAtins(Collection<String> atins);
 

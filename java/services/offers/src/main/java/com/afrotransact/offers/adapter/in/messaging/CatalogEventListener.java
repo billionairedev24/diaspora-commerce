@@ -1,11 +1,13 @@
 package com.afrotransact.offers.adapter.in.messaging;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.offers.application.CatalogSyncService;
+import com.afrotransact.offers.application.OfferRelocationService;
 import com.afrotransact.offers.application.ProductSnapshot;
 import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -28,6 +30,8 @@ class CatalogEventListener {
 
     static final String CREATED = "catalog.product.created";
     static final String TERMS_CHANGED = "catalog.product.terms_changed";
+    /** S386: two duplicate pages were merged; the offers of the merged page's variants move to the surviving page. */
+    static final String MERGED = "catalog.product.merged";
     static final Set<String> STATUS_EVENTS = Set.of("catalog.product.approved", "catalog.product.rejected",
             "catalog.product.paused", "catalog.product.resumed", "catalog.product.taken_down",
             "catalog.product.reinstated");
@@ -35,10 +39,12 @@ class CatalogEventListener {
     private static final Logger LOG = LoggerFactory.getLogger(CatalogEventListener.class);
 
     private final CatalogSyncService sync;
+    private final OfferRelocationService relocation;
     private final JsonMapper json;
 
-    CatalogEventListener(CatalogSyncService sync, JsonMapper json) {
+    CatalogEventListener(CatalogSyncService sync, OfferRelocationService relocation, JsonMapper json) {
         this.sync = sync;
+        this.relocation = relocation;
         this.json = json;
     }
 
@@ -47,6 +53,12 @@ class CatalogEventListener {
     record ProductMessage(UUID productId, String atin, String ownerKind, String ownerOrgId, String status,
                           UUID categoryId, List<VariantMessage> variants, String condition, String fulfilment,
                           Integer handlingDays, ShipFromMessage shipFrom) {
+    }
+
+    /** Wire format of catalog's catalog.product.merged payload. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record MergedMessage(String loserAtin, UUID survivorProductId, String survivorAtin, UUID survivorCategoryId,
+                         Map<String, String> variantMap) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -58,17 +70,37 @@ class CatalogEventListener {
     record ShipFromMessage(String locationId, String city, String region, String country, String postalCode) {
     }
 
+    private void merged(UUID eventId, ConsumerRecord<String, String> rec, String type) {
+        MergedMessage m;
+        try {
+            m = json.readValue(rec.value(), MergedMessage.class);
+        } catch (JacksonException | IllegalArgumentException ex) {
+            throw MalformedEvent.of(type, ex);
+        }
+        if (m == null || m.survivorAtin() == null || m.variantMap() == null || m.variantMap().isEmpty()) {
+            LOG.warn("Skipping {} event {} without a surviving page or variant map", type, eventId);
+            return;
+        }
+        relocation.pagesMerged(eventId, new OfferRelocationService.Merged(m.loserAtin(), m.survivorProductId(),
+                m.survivorAtin(), m.survivorCategoryId(), m.variantMap()));
+    }
+
     @KafkaListener(id = "offers-catalog-products", groupId = "${spring.kafka.consumer.group-id:offers-service}",
             topics = "${at.offers.consumers.catalog-topic:at.product.events}",
             autoStartup = "${at.consumers.enabled:true}")
     void onMessage(ConsumerRecord<String, String> rec) {
         String type = EventHeaders.text(rec, EventHeaders.EVENT_TYPE).orElse("");
-        if (!CREATED.equals(type) && !TERMS_CHANGED.equals(type) && !STATUS_EVENTS.contains(type)) {
+        if (!CREATED.equals(type) && !TERMS_CHANGED.equals(type) && !MERGED.equals(type)
+                && !STATUS_EVENTS.contains(type)) {
             return;
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
             throw MalformedEvent.missingEventId(type, rec);
+        }
+        if (MERGED.equals(type)) {
+            merged(eventId.get(), rec, type);
+            return;
         }
         ProductMessage m;
         try {

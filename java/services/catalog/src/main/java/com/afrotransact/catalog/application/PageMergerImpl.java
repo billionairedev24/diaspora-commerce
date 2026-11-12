@@ -105,6 +105,7 @@ class PageMergerImpl implements PageMerger {
         p.put("loserAtin", loser.atin().value());
         p.put("survivorProductId", survivor.id().toString());
         p.put("survivorAtin", survivor.atin().value());
+        p.put("survivorCategoryId", survivor.categoryId() == null ? null : survivor.categoryId().toString());
         p.put("variantMap", variantMap);
         p.put("mergedBy", by);
         p.put("reason", reason);

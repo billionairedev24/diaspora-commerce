@@ -101,6 +101,26 @@ class JdbcOfferRepository implements OfferRepository {
         return findById(o.id()).orElseThrow();
     }
 
+    @Override
+    public Offer relocate(Offer o) {
+        int rows;
+        try {
+            rows = jdbc.sql("""
+                    update offer set atin = :atin, product_atin = :productAtin, product_id = :productId,
+                           category_id = :categoryId, status = :status, held_reason = :heldReason, tax_basis = :taxBasis,
+                           product_live = :live, updated_at = :updatedAt, version = version + 1
+                    where id = :id and version = :version
+                    """).params(params(o)).param("version", o.version()).update();
+        } catch (DuplicateKeyException ex) {
+            throw new ConflictException("offers.offer-exists",
+                    "The seller already has an open offer on the page this one moves to");
+        }
+        if (rows == 0) {
+            throw new ConflictException("offers.concurrent-update", "Offer changed; reload and retry");
+        }
+        return findById(o.id()).orElseThrow();
+    }
+
     private Map<String, Object> params(Offer o) {
         Map<String, Object> p = new HashMap<>();
         p.put("id", o.id());
