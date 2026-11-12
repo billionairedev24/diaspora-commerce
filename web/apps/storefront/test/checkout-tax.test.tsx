@@ -135,4 +135,43 @@ describe('checkout tax', () => {
       const clean = { ...held, blockedLines: [], taxLines: [], canPlaceOrder: true };
       // The summary holds the item back until the page asked the cart to take it out of this order.
       const removed = () => sent.some((r) => r.method === 'PATCH' && r.url.includes('/v1/cart/items/'));
-      mockServer.use(http.get('*/v1/checkout/summary', () => Ht
+      mockServer.use(http.get('*/v1/checkout/summary', () => HttpResponse.json(removed() ? clean : held)));
+      const user = userEvent.setup();
+      renderWithProviders(<CheckoutView />);
+      const box = await screen.findByTestId('checkout-blocked');
+      const title = held.blockedLines[0]?.title ?? '';
+      expect(within(box).getByTestId('checkout-blocked-line')).toHaveTextContent(`We can’t sell ${title} yet.`);
+      expect(box).toHaveTextContent('Remove it from this order to continue');
+      expect(box.textContent).not.toMatch(/AT0000|tax|ATIN/i);
+      expect(screen.getByTestId('tax-blocked-note')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+
+      // Remove takes the line out of this order (it stays in the cart), then the summary is read again.
+      await user.click(within(box).getByRole('button', { name: `Remove ${title} from this order` }));
+      await waitFor(() => expect(screen.queryByTestId('checkout-blocked')).not.toBeInTheDocument());
+      expect(sent.some((r) => r.method === 'PATCH' && r.url.includes('/v1/cart/items/'))).toBe(true);
+      expect(screen.queryByTestId('tax-blocked-note')).not.toBeInTheDocument();
+    });
+
+    it('a refused placement says so in plain words, never the server’s detail', async () => {
+      addCookie('at_mock_stripe_pk=pk_test_fake');
+      const held = await blockedSummary();
+      mockServer.use(
+        http.get('*/v1/checkout/summary', () => HttpResponse.json({ ...held, blockedLines: [], taxLines: [], canPlaceOrder: true })),
+        http.post('*/v1/checkout/orders', () => problem('CHECKOUT_ITEM_BLOCKED', 'We can’t sell ATG0000123 (orders detail)'))
+      );
+      const stripe = fakeStripe();
+      window.Stripe = stripe.factory;
+      const user = userEvent.setup();
+      renderWithProviders(<CheckoutView />);
+      await screen.findByTestId('checkout-package');
+      await waitFor(() => expect(stripe.payment()).toBeDefined());
+      const el = await screen.findByTestId('stripe-payment-element');
+      await waitFor(() => expect(el).toHaveAttribute('aria-busy', 'false'));
+      act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
+      await user.click(screen.getByRole('button', { name: /Place your order/ }));
+      expect(await screen.findByText('Some items in your order can’t be sold yet. Remove them to place your order.')).toBeInTheDocument();
+      expect(screen.queryByText(/ATG0000123/)).not.toBeInTheDocument();
+    });
+  });
+});

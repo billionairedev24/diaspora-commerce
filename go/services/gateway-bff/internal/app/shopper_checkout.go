@@ -217,7 +217,14 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 				log.WarnContext(ctx, "seller pickup locations unavailable", "error", err)
 			}
 		}
-		addPickupOption(p, pickupPointsFor(*p, platformPoints, own, addr, zip))
+		points := pickupPointsFor(*p, platformPoints, own, addr, zip)
+		if len(points) == 0 && !isFC && len(p.Preorder) == 0 {
+			// Why a seller's package shows no pickup: the seller has not turned on "customers can pick up here" in Seller
+			// Center (no active SELLER place), or the place is farther than pickupRadiusMiles / has no position and
+			// another ZIP area. Logged so support can answer "where is my pickup option?" without guessing.
+			log.InfoContext(ctx, "no store pickup offered for the package", "seller", p.Seller.ID, "sellerPickupPlaces", len(own), "zip", zip)
+		}
+		addPickupOption(p, points)
 		if outside {
 			p.DeliveryOptions = quoteRequiredOptions(*p)
 			p.LocalDelivery = nil
