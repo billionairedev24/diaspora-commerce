@@ -67,10 +67,18 @@ public interface VariantClassificationService {
      * @param variants        the variants with their current facts
      * @param changedBy       who changed it
      * @param occurredAt      when
+     * @param title           the product's title for the review queue (staff read names, never ids); null when not sent
      */
     record CatalogFactsChanged(UUID productId, String ownerOrgId, String categoryCode, String productTypeCode,
                                Map<String, Object> sellerBehaviour, List<Variant> variants, String changedBy,
-                               Instant occurredAt) {
+                               Instant occurredAt, String title) {
+
+        public CatalogFactsChanged(UUID productId, String ownerOrgId, String categoryCode, String productTypeCode,
+                                   Map<String, Object> sellerBehaviour, List<Variant> variants, String changedBy,
+                                   Instant occurredAt) {
+            this(productId, ownerOrgId, categoryCode, productTypeCode, sellerBehaviour, variants, changedBy, occurredAt,
+                    null);
+        }
 
         public CatalogFactsChanged {
             sellerBehaviour = sellerBehaviour == null ? Map.of() : sellerBehaviour;

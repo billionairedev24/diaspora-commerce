@@ -3637,6 +3637,17 @@ export interface components {
             hours: components["schemas"]["PickupWindow"][];
             /** @description Typical hours from order to ready for pickup */
             readyHours: number;
+            /** @description True when checkout can offer this address (pickup on and opening hours set) */
+            ready?: boolean;
+            /** @description Why customers do not see this address as a pickup point, or why only some do. Plain English, no ids. */
+            issues?: components["schemas"]["PickupIssue"][];
+        };
+        PickupIssue: {
+            /** @enum {string} */
+            code: "NOT_ENABLED" | "NO_HOURS" | "NOT_LOCATED" | "APPROXIMATE_LOCATION";
+            message: string;
+            /** @description A blocking issue keeps the address out of checkout; the others only narrow who sees it */
+            blocking: boolean;
         };
         CustomerPickupRequest: {
             enabled: boolean;

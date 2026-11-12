@@ -32,6 +32,7 @@ import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.ProductTaxHoldRepository;
 import com.afrotransact.catalog.port.SellingApprovals;
+import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxGateMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,12 +53,13 @@ class ProductLiveGateImplTest {
     private final ProductEvents events = mock(ProductEvents.class);
     private final SellingPublishGate selling = mock(SellingPublishGate.class);
     private final TaxGateMetrics metrics = mock(TaxGateMetrics.class);
+    private final TaxDecisionAuthority taxReturns = mock(TaxDecisionAuthority.class);
     private ProductLiveGateImpl gate;
 
     @BeforeEach
     void setUp() {
         gate = new ProductLiveGateImpl(products, holds, categories, events, selling, metrics,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                new TaxAuthorityCheck(taxReturns, metrics), Clock.fixed(NOW, ZoneOffset.UTC));
         when(products.update(any())).thenAnswer(i -> i.getArgument(0));
     }
 
@@ -228,5 +230,114 @@ class ProductLiveGateImplTest {
         when(products.findById(rejected.id())).thenReturn(Optional.of(rejected));
         gate.reconcile(rejected.id());
         verify(holds).release(rejected.id(), NOW);
+    }
+
+    // ---- tax-returns is the authority: the owner's bug (catalog READY, checkout blocked) ----
+
+    private void taxReturnsSays(String atin, String decisionStatus, String recordStatus) {
+        when(taxReturns.consulted()).thenReturn(true);
+        when(taxReturns.ask(any())).thenReturn(Map.of(atin,
+                new TaxDecisionAuthority.Answer(atin, decisionStatus, recordStatus, "reason")));
+    }
+
+    @Test
+    void aLiveListingCatalogCallsReadyIsClosedWhenTaxReturnsIsNotResolved() {
+        Product live = product(ProductStatus.LIVE, variant("AT00000011", resolved()));
+        when(products.findById(live.id())).thenReturn(Optional.of(live));
+        taxReturnsSays("AT00000011", "NEEDS_APPROVAL", "PENDING_REVIEW");
+
+        Product after = gate.reconcile(live.id());
+
+        assertThat(after.status()).isEqualTo(ProductStatus.IN_REVIEW);
+        assertThat(after.moderationNote()).isEqualTo("We are checking the tax details for this item.");
+        verify(holds).hold(live.id(), "TAX_RETURNS_NEEDS_APPROVAL", NOW);
+        verify(events).publishWithReason(eq(CatalogEvents.PRODUCT_PAUSED), any(), eq("TAX_RETURNS_NEEDS_APPROVAL"));
+        verify(metrics).disagreement("TAX_RETURNS_NEEDS_APPROVAL");
+    }
+
+    @Test
+    void aLiveListingTaxReturnsHasNoRecordOfIsClosedToo() {
+        Product live = product(ProductStatus.LIVE, variant("AT00000011", resolved()));
+        when(products.findById(live.id())).thenReturn(Optional.of(live));
+        when(taxReturns.consulted()).thenReturn(true);
+        when(taxReturns.ask(any())).thenReturn(Map.of());
+
+        assertThat(gate.reconcile(live.id()).status()).isEqualTo(ProductStatus.IN_REVIEW);
+        verify(holds).hold(live.id(), "TAX_RETURNS_NO_DECISION", NOW);
+    }
+
+    @Test
+    void aLiveListingTaxReturnsResolvesStaysLive() {
+        Product live = product(ProductStatus.LIVE, variant("AT00000011", resolved()));
+        when(products.findById(live.id())).thenReturn(Optional.of(live));
+        taxReturnsSays("AT00000011", "RESOLVED", "APPROVED");
+
+        assertThat(gate.reconcile(live.id()).status()).isEqualTo(ProductStatus.LIVE);
+        verify(holds, never()).hold(any(), any(), any());
+    }
+
+    @Test
+    void whenTaxReturnsCannotBeReachedALiveListingKeepsItsStateAndNothingIsMarkedOk() {
+        Product live = product(ProductStatus.LIVE, variant("AT00000011", resolved()));
+        when(products.findById(live.id())).thenReturn(Optional.of(live));
+        when(taxReturns.consulted()).thenReturn(true);
+        when(taxReturns.ask(any())).thenThrow(new TaxDecisionAuthority.Unavailable("down", null));
+
+        assertThat(gate.reconcile(live.id()).status()).isEqualTo(ProductStatus.LIVE);
+        verify(holds, never()).hold(any(), any(), any());
+        verify(metrics).authorityUnreachable();
+    }
+
+    @Test
+    void aHeldListingDoesNotComeBackUntilTaxReturnsResolvesIt() {
+        Product held = product(ProductStatus.IN_REVIEW, variant("AT00000011", resolved()));
+        when(products.findById(held.id())).thenReturn(Optional.of(held));
+        when(holds.isHeld(held.id())).thenReturn(true);
+        taxReturnsSays("AT00000011", "NEEDS_APPROVAL", "PENDING_REVIEW");
+        assertThat(gate.reconcile(held.id()).status()).isEqualTo(ProductStatus.IN_REVIEW);
+
+        taxReturnsSays("AT00000011", "RESOLVED", "APPROVED");
+        assertThat(gate.reconcile(held.id()).status()).isEqualTo(ProductStatus.LIVE);
+    }
+
+    @Test
+    void aHeldListingStaysHeldWhenTaxReturnsCannotBeReached() {
+        Product held = product(ProductStatus.IN_REVIEW, variant("AT00000011", resolved()));
+        when(products.findById(held.id())).thenReturn(Optional.of(held));
+        when(holds.isHeld(held.id())).thenReturn(true);
+        when(taxReturns.consulted()).thenReturn(true);
+        when(taxReturns.ask(any())).thenThrow(new TaxDecisionAuthority.Unavailable("down", null));
+
+        assertThat(gate.reconcile(held.id()).status()).isEqualTo(ProductStatus.IN_REVIEW);
+        verify(products, never()).update(any());
+    }
+
+    @Test
+    void approveRefusesAListingCatalogCallsReadyWhileTaxReturnsIsNotResolved() {
+        Product p = product(ProductStatus.IN_REVIEW, variant("AT00000011", resolved()));
+        taxReturnsSays("AT00000011", "NEEDS_APPROVAL", "PENDING_REVIEW");
+
+        assertThatThrownBy(() -> gate.approve(p, NOW)).isInstanceOf(TaxNotReady.class)
+                .hasMessageContaining("not approved by tax review");
+        taxReturnsSays("AT00000011", "RESOLVED", "APPROVED");
+        assertThat(gate.approve(p, NOW).status()).isEqualTo(ProductStatus.LIVE);
+    }
+
+    @Test
+    void approveRefusesWhenTaxReturnsCannotBeReached() {
+        Product p = product(ProductStatus.IN_REVIEW, variant("AT00000011", resolved()));
+        when(taxReturns.consulted()).thenReturn(true);
+        when(taxReturns.ask(any())).thenThrow(new TaxDecisionAuthority.Unavailable("down", null));
+        assertThatThrownBy(() -> gate.approve(p, NOW)).isInstanceOf(TaxNotReady.class)
+                .hasMessageContaining("right now");
+    }
+
+    @Test
+    void aTakedownReversedToLiveReturnsHeldWhenTaxReturnsIsNotResolved() {
+        Product taken = product(ProductStatus.TAKEN_DOWN, variant("AT00000011", resolved()));
+        taxReturnsSays("AT00000011", "NEEDS_APPROVAL", "PENDING_REVIEW");
+        Product restored = gate.restoreFromTakedown(taken, ProductStatus.LIVE, NOW);
+        assertThat(restored.status()).isEqualTo(ProductStatus.IN_REVIEW);
+        verify(holds).hold(taken.id(), "TAX_RETURNS_NEEDS_APPROVAL", NOW);
     }
 }

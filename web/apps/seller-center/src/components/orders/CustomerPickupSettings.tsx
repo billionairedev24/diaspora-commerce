@@ -65,6 +65,13 @@ export function CustomerPickupSettings({ a, editable }: { a: ShipFromAddress; ed
         </h3>
         {current.enabled ? <StatusPill tone="good">{t('sc.cpickup.on')}</StatusPill> : null}
       </div>
+      {(current.issues ?? []).length > 0 ? (
+        <div className="flex flex-col gap-2" data-testid="customer-pickup-issues">
+          {(current.issues ?? []).map((issue) => (
+            <Notice key={issue.code} tone={issue.blocking ? 'warning' : 'info'} title={issue.message} />
+          ))}
+        </div>
+      ) : null}
       <Checkbox
         id={id('enabled')}
         checked={enabled}

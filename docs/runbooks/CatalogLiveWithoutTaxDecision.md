@@ -21,3 +21,10 @@ The listing was visible in search and could be added to a cart for a short time.
 ## After the incident
 - Fix the path so it goes through `ProductLiveGate`, and add it to the table and to `TaxGatePathsTest`. `TaxGateArchitectureTest` should have caught a new call to a live transition; if the path used another way, extend the rule.
 - Link the incident ticket to this runbook and update the steps if they were wrong or incomplete.
+
+## Catalog and tax-returns disagree (`CatalogTaxReturnsDisagreement`, `CatalogTaxReturnsUnreachable`, `CatalogTaxReturnsCheckStale`)
+Catalog's own tax state is only a cache; **tax-returns' stored decision is the authority** (the one checkout reads). See "One authority" in [tax-gate-paths.md](../engineering/tax-gate-paths.md).
+- **Disagreement** (ticket): a live listing was closed because tax-returns does not answer RESOLVED for a variant. Search, offers and carts already dropped it. Open **Tax review**, find the product by name, approve it (or ask the seller for more details); it returns on its own. If many appear at once, check the `catalog-tax-classification` consumer lag on `at.taxreturns.events` (a missed `tax.classification.changed` is the usual cause) and that the local profile did not turn the review off.
+- **Unreachable** (ticket after 10 minutes): catalog could not ask tax-returns; every listing keeps its state and nothing is marked OK, but no listing can go live. Check tax-returns health and the `tax:classify` scope of catalog's client.
+- **Stale check**: no successful check against tax-returns for 30 minutes. Run `make tax-gate-sweep` (or `POST /v1/tax-gate/sweep`, permission `tax:classify-admin`) and read the catalog log line "Tax gate sweep".
+- Never write a decision by hand to clear an alert.

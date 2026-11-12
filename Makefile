@@ -24,7 +24,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
-        web-dev web-build backlog seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
+        web-dev web-build backlog tax-gate-sweep seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
         mobile-ios-device mobile-apk mobile-brand mobile-hero
 
 help: ## List targets
@@ -281,6 +281,10 @@ web-build: ## Build the web apps (pnpm -C web build); skipped if web/ or pnpm is
 	elif [ -f web/package.json ]; then pnpm -C web build; \
 	elif [ -d web/apps ]; then pnpm -r --filter "./web/apps/**" build; \
 	else echo "web/ not present — skipped"; fi
+
+CATALOG_URL ?= http://localhost:8101
+tax-gate-sweep: ## Repair now: close every live listing tax-returns does not resolve, reopen resolved ones (catalog POST /v1/tax-gate/sweep; local security is off, else set TOKEN=<staff token with tax:classify-admin>)
+	@curl -fsS -X POST $(if $(TOKEN),-H "Authorization: Bearer $(TOKEN)") "$(CATALOG_URL)/v1/tax-gate/sweep" | python3 -m json.tool
 
 backlog: ## List backlog stories and their status
 	python3 tools/backlog/mark.py --list

@@ -8,7 +8,9 @@ import com.afrotransact.catalog.domain.ProductStatus;
 
 /**
  * The single choke point for putting a product on sale. A product is LIVE (purchasable, in search, buyable through its
- * offers) only when every variant has a stored, resolved tax decision. Every transition INTO the live status goes
+ * offers) only when every variant has a stored, resolved tax decision. Going live also needs tax-returns' stored decision to be RESOLVED for every
+ * variant (the same record checkout reads), asked through {@code TaxDecisionAuthority}; when it cannot be asked the answer is
+ * no. Every transition INTO the live status goes
  * through this component: {@code ArchitectureTest} fails the build when any other class calls {@code Product.approve},
  * {@code resume}, {@code restoreFromTakedown} or {@code restoreAfterTaxHold}, and the persistence adapter refuses to
  * store a LIVE product that fails the check. Transitions that take a listing off sale need no gate. See
@@ -34,6 +36,13 @@ interface ProductLiveGate {
      * publishes {@code catalog.product.paused} with the reason code, so search and offers drop it.
      */
     Product closeIfNotReady(Product product, Instant now);
+
+    /**
+     * Closes a LIVE listing that tax-returns (the authority checkout reads) does not answer RESOLVED for: IN_REVIEW with
+     * the plain note, a hold with {@code reasonCode}, {@code catalog.product.paused} so search, offers and carts drop it.
+     * Returns the stored product (unchanged when it is not LIVE any more), or null when it does not exist.
+     */
+    Product closeForTaxReturns(UUID productId, String reasonCode);
 
     /**
      * Brings the stored product in line with its variants' tax state: a live product that is not fully resolved is

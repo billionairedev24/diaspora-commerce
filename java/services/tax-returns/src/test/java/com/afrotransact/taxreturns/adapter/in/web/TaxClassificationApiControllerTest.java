@@ -23,6 +23,9 @@ import java.util.List;
 import java.util.Map;
 
 import com.afrotransact.taxreturns.application.ClassificationResolveService;
+import com.afrotransact.taxreturns.application.LineDecisionService.ListingStatus;
+import com.afrotransact.taxreturns.application.ListingDecisionStatusService;
+import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
 import com.afrotransact.taxreturns.application.ProviderCodeService;
 import com.afrotransact.taxreturns.application.TaxProfileService;
 import com.afrotransact.taxreturns.application.TaxShadowService;
@@ -32,7 +35,6 @@ import com.afrotransact.taxreturns.domain.profile.Outcome;
 import com.afrotransact.taxreturns.domain.profile.ProfileStatus;
 import com.afrotransact.taxreturns.domain.profile.ProviderCode;
 import com.afrotransact.taxreturns.domain.profile.Resolution;
-import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
 import com.afrotransact.taxreturns.domain.profile.TaxMapFixture;
 import com.afrotransact.taxreturns.domain.profile.TaxProfile;
 import com.afrotransact.taxreturns.domain.shadow.ShadowKind;
@@ -53,8 +55,9 @@ class TaxClassificationApiControllerTest {
     private final ProviderCodeService codes = mock(ProviderCodeService.class);
     private final VariantClassificationService variants = mock(VariantClassificationService.class);
     private final TaxShadowService shadow = mock(TaxShadowService.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TaxClassificationApiController(resolve, profiles,
-            codes, variants, shadow)).build();
+    private final ListingDecisionStatusService listingStatus = mock(ListingDecisionStatusService.class);
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TaxClassificationApiController(listingStatus, resolve,
+            profiles, codes, variants, shadow)).build();
 
     private static TaxProfile profile(String code) {
         return TaxMapFixture.profiles(TaxMapFixture.read("category_tax_map.json")).stream()
@@ -94,6 +97,22 @@ class TaxClassificationApiControllerTest {
                 .andExpect(jsonPath("$.internalTaxCode", is("AT.RICE_GRAINS.STANDARD")))
                 .andExpect(jsonPath("$.providerCodes.STRIPE", is("txcd_40010002")))
                 .andExpect(jsonPath("$.rowId", is("S001"))).andExpect(jsonPath("$.openDecision", nullValue()));
+    }
+
+    @Test
+    void theListingStatusEndpointAnswersPerAtinAndNeverCallsAResolvedWhatIsNotApproved() throws Exception {
+        when(listingStatus.statusOf(any())).thenReturn(Map.of("AT00000001",
+                new ListingStatus(ResolveStatus.NEEDS_APPROVAL, "PENDING_REVIEW", "not approved")));
+
+        mvc.perform(post("/v1/tax/listing-decisions/status").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"atin\":\" at00000001\",\"sellerOrgId\":\"org_a\"}]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].atin", is("AT00000001")))
+                .andExpect(jsonPath("$.items[0].decisionStatus", is("NEEDS_APPROVAL")))
+                .andExpect(jsonPath("$.items[0].recordStatus", is("PENDING_REVIEW")));
+
+        mvc.perform(post("/v1/tax/listing-decisions/status").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"items\":[]}")).andExpect(status().isBadRequest());
     }
 
     @Test

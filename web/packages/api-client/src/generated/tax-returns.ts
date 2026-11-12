@@ -666,6 +666,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tax/listing-decisions/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Is the stored tax decision of these variants RESOLVED? Batched, read-only (tax:classify)
+         * @description The catalog publish gate's authority. Reads the same classification record and rules checkout's quote reads (record APPROVED and the
+         *     rules resolve to a chargeable outcome under the seller's behaviour), without a ship-to, without creating a record and without storing
+         *     anything. A variant with no record is MISSING_FACTS. Only RESOLVED may be listed or sold. At most 500 variants per call.
+         */
+        post: operations["listingDecisionStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tax/profiles": {
         parameters: {
             query?: never;
@@ -1535,6 +1557,29 @@ export interface components {
         FactOwner: "VARIANT" | "OFFER" | "SELLER" | "STAFF" | "CONTEXT";
         /** @enum {string} */
         ClassificationRecordStatus: "DRAFT" | "MISSING_FACTS" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "STALE";
+        ListingDecisionStatusRequest: {
+            items: components["schemas"]["ListingDecisionStatusItem"][];
+        };
+        ListingDecisionStatusItem: {
+            atin: string;
+            /** @description The seller whose behaviour the decision is read under (the listing owner) */
+            sellerOrgId?: string;
+        };
+        ListingDecisionStatusResponse: {
+            items?: components["schemas"]["ListingDecisionStatusAnswer"][];
+        };
+        ListingDecisionStatusAnswer: {
+            atin?: string;
+            /**
+             * @description Only RESOLVED may be listed or sold
+             * @enum {string}
+             */
+            decisionStatus?: "RESOLVED" | "MISSING_FACTS" | "BLOCKED" | "NEEDS_APPROVAL" | "REFINE_CODE" | "CONFLICT_OPEN";
+            /** @description The classification record's status (APPROVED */
+            recordStatus?: string | null;
+            /** @description Why it is not resolved */
+            reason?: string | null;
+        };
         ClassificationResolveRequest: {
             /** @description Stable category code, e.g. nuts-seeds */
             categoryCode: string;
@@ -2950,6 +2995,30 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listingDecisionStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListingDecisionStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description One answer per requested ATIN */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDecisionStatusResponse"];
+                };
             };
         };
     };

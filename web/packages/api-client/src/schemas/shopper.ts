@@ -228,6 +228,8 @@ export type CheckoutLocalDelivery = z.infer<typeof CheckoutLocalDeliverySchema>;
 
 export const CheckoutPackageSchema = CartPackageSchema.extend({
   pickupPoints: z.array(PickupPointSchema).optional(),
+  /** Why the package has no pickup option (absent when it has one); machine-readable, the app words it for the shopper. */
+  pickupUnavailableReason: z.enum(['NEEDS_ADDRESS', 'SELLER_NOT_ENABLED', 'TOO_FAR', 'OTHER_AREA', 'NO_PLATFORM_POINT', 'LOOKUP_FAILED']).optional(),
   localDelivery: CheckoutLocalDeliverySchema.optional(),
   /** The part of this package's delivery fee the shopper's membership waives (S323); 0 or absent for none. */
   membershipWaivedMinor: MinorSchema.optional()

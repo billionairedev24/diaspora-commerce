@@ -84,7 +84,7 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
         String rules = engine.snapshot().ruleVersion();
         VariantClassification existing = records.find(v.atin()).orElse(null);
         if (existing == null) {
-            VariantClassification fresh = new VariantClassification(v.atin(), v.gtin(), e.productId(), null,
+            VariantClassification fresh = new VariantClassification(v.atin(), v.gtin(), e.productId(), e.title(),
                     e.ownerOrgId(), e.categoryCode(), e.productTypeCode(), v.facts(), Map.of(), e.sellerBehaviour(),
                     Map.of(), RecordStatus.DRAFT, null, rules, actor, now, null, null, null, 0L, now, now);
             Resolution r = resolve(fresh);
@@ -108,10 +108,14 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
         boolean behaviourChanged = !existing.sellerBehaviour().equals(e.sellerBehaviour());
         if (!categoryChanged && !factsChanged && !behaviourChanged && !v.evidenceChanged()
                 && Objects.equals(existing.productId(), e.productId())) {
+            // Nothing to decide again; a title the queue has not seen yet is just remembered (staff read names, not ids).
+            if (e.title() != null && !e.title().isBlank() && !e.title().equals(existing.title())) {
+                records.update(existing.withTitle(e.title()));
+            }
             return;
         }
         VariantClassification updated = existing.withFacts(e.categoryCode(), e.productTypeCode(), v.facts(),
-                e.sellerBehaviour(), v.gtin(), null, actor, now);
+                e.sellerBehaviour(), v.gtin(), e.title(), actor, now);
         Resolution r = resolve(updated);
         RecordStatus next;
         AuditAction action = AuditAction.FACTS_CHANGED;

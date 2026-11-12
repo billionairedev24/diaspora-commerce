@@ -1563,7 +1563,7 @@ paths:
       tags:
       - Products
       summary: Live listings without a resolved tax decision (staff, tax:read)
-      description: 'The audit behind catalog_live_without_tax_decision: live products that have a variant whose tax gate is not READY or that has no stored decision. Always empty when the publish gate holds; the sweep closes anything listed here within a minute.'
+      description: 'The audit behind catalog_live_without_tax_decision: live products that have a variant whose tax gate is not READY or that tax-returns does not answer RESOLVED for. Always empty when the publish gate holds; the sweep closes anything listed here (POST /v1/tax-gate/sweep runs it now).'
       operationId: liveWithoutTaxDecision
       parameters:
       - name: page
@@ -1587,6 +1587,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiveWithoutTaxDecisionPage'
+  /v1/tax-gate/sweep:
+    post:
+      tags:
+      - Products
+      summary: Run the tax gate sweep now (staff, tax:classify-admin)
+      description: The repair path behind the scheduled sweep. Closes every live listing whose variants tax-returns (the decision checkout reads) does not answer RESOLVED for, re-reports facts tax-returns has no record of so they reach the Tax review queue, and reopens held listings that are now resolved. Safe to repeat.
+      operationId: runSweep
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxGateSweepResult'
   /v1/variants/{atin}/tax-evidence:
     post:
       tags:
@@ -5657,10 +5671,33 @@ components:
         message:
           type: string
           description: Plain words for the seller
+    TaxGateSweepResult:
+      type: object
+      description: What one run of the tax gate sweep did
+      properties:
+        closed:
+          type: integer
+          format: int32
+        closedByTaxReturns:
+          type: integer
+          format: int32
+        reopened:
+          type: integer
+          format: int32
+        announced:
+          type: integer
+          format: int32
+        checked:
+          type: integer
+          format: int32
+        taxReturnsReachable:
+          type: boolean
+          description: False when tax-returns could not be asked
     LiveWithoutTaxDecisionPage:
       type: object
-      description: Live listings that have a variant without a stored, resolved tax decision. Must always be empty.
+      description: Live listings that have a variant without a stored, resolved tax decision in tax-returns (the decision checkout reads). Must always be empty.
       properties:
+
         items:
           type: array
           items:
@@ -5674,6 +5711,9 @@ components:
         size:
           type: integer
           format: int32
+        taxReturnsChecked:
+          type: boolean
+          description: False when tax-returns could not be asked
     LiveWithoutTaxDecisionItem:
       type: object
       properties:

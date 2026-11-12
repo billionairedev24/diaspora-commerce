@@ -7,7 +7,80 @@ on sale, whether it goes through the gate, and the test that proves it. **A path
 
 *Not tax or legal advice. Nothing here decides any tax outcome; it only refuses to sell when no decision exists.*
 
-## How the rule is enforced (five layers)
+## One authority: tax-returns' stored decision (the owner's bug, 12 Nov)
+
+**Symptom.** A product created before the gate (Basmati Rice) was still listed and sat in a cart, and checkout answered
+`orders.tax-line-blocked: We can't sell Basmati Rice yet`.
+
+**Root cause: two sources of truth.** Checkout asks **tax-returns** (`CheckoutTaxImpl` -> `POST /v1/tax/quotes` ->
+`LineDecisionServiceImpl.early`): a line is taxed only when tax-returns' classification record of the variant is `APPROVED`
+*and* the rules resolve it to a definite outcome (`decisionStatus` `RESOLVED`). Catalog, until this change, judged "has a
+decision" from **its own copy** on the variant row (`tax_status = READY` plus a `tax_decision` object: `TaxReadiness`,
+`LiveRequiresTax`, the V4 migration, the sweep and the audit). The two copies are only joined by an asynchronous Kafka event
+(`tax.classification.changed`) and nothing ever compared them. They diverged because:
+
+1. `application-local.yml` set `at.catalog.tax.review-required: false`, so catalog marked a variant `READY` the moment the
+   rules resolved it (`TaxGateEvaluator.fromResolution`), while tax-returns' default approval policy `ALL` keeps the record
+   `PENDING_REVIEW` until a person approves it. Catalog: READY, listed, in the cart. Checkout: `NEEDS_APPROVAL`, blocked.
+2. A listing that predates the event (or whose event was missed: consumer down, group not joined, topic reset) has **no record
+   in tax-returns at all**; tax-returns only creates one when the first quote asks (`LineDecisionServiceImpl.load`), as
+   `PENDING_REVIEW`, so checkout blocks it and catalog never hears (it was already READY locally).
+3. V4 and the sweep only closed what catalog's own copy flagged, so neither could see either case.
+
+**Fix: tax-returns is the authority.** A listing is OK only if tax-returns answers `RESOLVED` for **every** variant.
+
+- tax-returns: `POST /v1/tax/listing-decisions/status` (batch of up to 500 ATINs, scope `tax:classify`) reads the same record and
+  rules the quote reads (`LineDecisionService.status`), without a ship-to, without creating a record, storing nothing.
+  A variant with no record is `MISSING_FACTS`. Test: `ListingDecisionStatusServiceImplTest`.
+- catalog: port `TaxDecisionAuthority` (`HttpTaxDecisionAuthority`: batches of 200, 2 s connect and 4 s read timeouts) behind
+  `TaxAuthorityCheck`. Used by:
+  - **the live gate** (`ProductLiveGateImpl`): `approve`, `resume` and `restoreFromTakedown` need `RESOLVED` from tax-returns on
+    every variant *in addition to* catalog's own check; `reconcile` closes a LIVE listing it does not resolve (reason
+    `TAX_RETURNS_<status>`, hold, the plain note "We are checking the tax details for this item.", `catalog.product.paused`,
+    counted as a disagreement) and reopens a held one only when tax-returns resolves it;
+  - **the sweep** (`TaxGateSweepJob` -> `TaxGateSweepServiceImpl`): every `at.catalog.tax-gate.authority-interval` (5 min) it asks
+    tax-returns about **every** LIVE listing, one batched call per page of 200, and closes each one that is not RESOLVED. It
+    re-reports the facts of every closed listing (`catalog.product.tax-facts-changed`), so tax-returns creates the missing review
+    record and learns the **product title**; the Tax review queue then shows a name and the staff approval is one click;
+  - **the audit** `GET /v1/tax-gate/live-without-decision`: lists a listing when catalog's check **or** tax-returns fails, with
+    plain per-variant reasons; `taxReturnsChecked=false` says tax-returns could not be asked (the list is then not an all-clear).
+- **tax-returns unreachable: nothing is marked OK.** Every state is kept, the sweep returns `authorityReachable=false`,
+  `catalog_tax_gate_authority_unreachable_total` rises, and a `TaxNotReady` "try again in a moment" refuses a go-live. A held
+  listing stays held. No decision is ever invented; the local dataset resolver only prepares answers for forms.
+- `at.catalog.tax.authority=off` exists **for tests only** (the catalog ITs run no tax-returns); it logs a warning at start-up.
+
+**Why existing (pre-gate) listings are not auto-resolved.** The gate may only close a listing, never approve one. A listing
+comes back **only when tax-returns itself says RESOLVED**: the record must be `APPROVED` by a person (policy `ALL`, the default)
+or by the risk rule (`taxReview.mode` `RISK_BASED`), and if the category profile awaits staff approval (`NEEDS_APPROVAL`, a
+provisional category such as Fabrics & textiles) the profile must be approved first. Auto-resolving would mean inventing a tax
+decision, which the owner's rule forbids.
+
+**Releasing a hold.** Staff open **Fees & commissions > Sales tax > Tax review**, find the product **by name**
+(`variant_classification.title`, filled from the product title in `catalog.product.tax-facts-changed`) and approve. tax-returns
+publishes `tax.classification.changed` (APPROVED), catalog's listener calls `reconcile`, the hold is released and the listing goes
+back on sale (`catalog.product.resumed`) once the seller may still sell it. If the event is missed, the next sweep does it.
+
+**Repair path (local and dev).** Run the sweep now instead of waiting for the schedule:
+
+```bash
+make tax-gate-sweep                      # POST http://localhost:8101/v1/tax-gate/sweep (security is off locally)
+make tax-gate-sweep TOKEN=<staff token>  # elsewhere: permission tax:classify-admin (Tax Reviewer, Catalog Manager, Super Admin)
+```
+
+It returns `{closed, closedByTaxReturns, reopened, announced, checked, taxReturnsReachable}`. Safe to repeat.
+
+**Carts and checkout.** Closing a listing publishes `catalog.product.paused` (status IN_REVIEW): search drops it, offers set
+`productLive=false`, so the cart service (`live()`: a non-buyable offer is unavailable) shows the line as "Currently unavailable"
+with Delete, and carts, search and home never present it as buyable. A line that is still in a cart when checkout is priced is
+listed in `blockedLines` of the checkout summary (gateway-bff `priceTax`, `canPlaceOrder=false`) with a Remove action
+(`BlockedLines.tsx`), before Place order. The checkout summary needs a delivery address to quote tax; without one the check
+happens at Place order and answers with the same plain message (`orders.tax-line-blocked`), never a late saga failure.
+
+**Metrics and alerts** (`infra/observability/rules/catalog-tax-gate.yaml`): `catalog_tax_gate_disagreement_total{reason}`
+(catalog said OK, tax-returns did not; alert `CatalogTaxReturnsDisagreement`), `catalog_tax_gate_authority_unreachable_total`
+(`CatalogTaxReturnsUnreachable`), `catalog_tax_gate_authority_last_check_timestamp_seconds` (`CatalogTaxReturnsCheckStale`).
+
+## How the rule is enforced (five layers, plus the authority above)
 
 1. **One choke point.** `ProductLiveGate` / `ProductLiveGateImpl` (catalog, `application`) is the only component that moves a
    product into LIVE: `approve`, `resume`, `restoreFromTakedown`, and (for a listing held for tax) `reconcile`. Each refuses
@@ -66,6 +139,8 @@ by the gate on its own: it waits for a person ([migration runbook, 4.7](../runbo
 | 21 | Search export / reindex (`GET /v1/search-export`) and the indexer | `application/SearchExportServiceImpl.java:42`, `ProductEventPayload.java:68`; indexer `go/services/indexer/internal/app/projector.go` (status from the payload) | yes (**fixed** for legacy rows: exported as IN_REVIEW) | `SearchExportServiceTest`, `ProductEventPayloadTest...`; search itself only returns `status = LIVE` (`go/services/search/.../query.go:171`, tested in the indexer `projector_test.go`) |
 | 22 | Cart / checkout | `go/services/cart/internal/app/cart.go:134` (live offers only); orders `CheckoutTaxImpl` | yes: cart sees only live offers; checkout **also** blocks any line without a RESOLVED decision at quote time (`orders.tax-line-blocked`) | `CheckoutTaxImplTest`, gateway-bff `TestCreditNeverEntersTheTaxQuote` (existing) |
 | 23 | Sweep (`TaxGateSweepJob` -> `TaxGateSweepServiceImpl`) | `adapter/in/scheduling/TaxGateSweepJob.java` | closes (and, for held listings, reopens through the gate) | `TaxGateSweepAndAuditTest` |
+| 24 | Staff repair run `POST /v1/tax-gate/sweep` (`make tax-gate-sweep`) | `adapter/in/web/TaxGateAuditController.java` -> `TaxGateSweepServiceImpl.sweepNowAsStaff` | closes (permission `tax:classify-admin`); reopens only through the gate | `TaxGateSweepAndAuditTest.theStaffRepairRunNeedsTheClassifyAdminPermission` |
+| 25 | **Catalog READY but tax-returns not RESOLVED** (the owner's bug) | `ProductLiveGateImpl.reconcile`, `TaxGateSweepServiceImpl.againstTaxReturns` | yes: closed, held, announced | `ProductLiveGateImplTest.aLiveListingCatalogCallsReadyIsClosedWhenTaxReturnsIsNotResolved`, `...TaxReturnsHasNoRecordOfIsClosedToo`, `TaxGateSweepAndAuditTest.theSweepClosesALiveListingTaxReturnsDoesNotResolve...`, `...theAuditListsAListingCatalogCallsReadyWhenTaxReturnsIsNotResolved...` |
 
 ### Gaps found by this audit, all closed
 

@@ -47,6 +47,9 @@ describe('AfroTransact pickup and delivery fee', () => {
     const cards = await screen.findAllByTestId('ship-from-address');
     expect(within(cards[0] as HTMLElement).getByTestId('customer-pickup')).toHaveTextContent('Customers can pick up');
     const katy = within(cards[1] as HTMLElement).getByTestId('customer-pickup');
+    // Why customers do not see this address as a pickup point is said in plain words, not left to guesswork.
+    expect(within(katy).getByTestId('customer-pickup-issues')).toHaveTextContent('Customers can’t pick up here yet');
+    expect(within(cards[0] as HTMLElement).queryByTestId('customer-pickup-issues')).toBeNull();
     await user.click(within(katy).getByLabelText(/Customers can pick up their orders here/));
     expect(within(katy).getAllByTestId('customer-pickup-window')).toHaveLength(1);
     const ready = within(katy).getByLabelText('Ready after (hours)');

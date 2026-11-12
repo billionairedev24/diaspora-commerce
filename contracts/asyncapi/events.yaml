@@ -4117,6 +4117,9 @@ components:
         atin:
           type: string
           pattern: ^AT[0-9A-Z]{8}$
+        title:
+          type: string
+          description: Product title; tax-returns keeps it so the Tax review queue shows names, never ids
         ownerOrgId:
           type: string
         categoryCode:

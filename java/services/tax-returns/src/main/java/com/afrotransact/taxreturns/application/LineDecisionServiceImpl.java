@@ -113,6 +113,37 @@ class LineDecisionServiceImpl implements LineDecisionService {
         return out;
     }
 
+    @Override
+    public Map<String, ListingStatus> status(List<Request> items, LocalDate saleDate) {
+        String rules = engine.snapshot().ruleVersion();
+        Set<String> atins = new LinkedHashSet<>();
+        for (Request r : items) {
+            if (r.atin() != null && !r.atin().isBlank()) {
+                atins.add(r.atin());
+            }
+        }
+        Map<String, VariantClassification> found = atins.isEmpty() ? Map.of() : records.findAll(atins);
+        Map<String, ListingStatus> out = new LinkedHashMap<>();
+        for (Request r : items) {
+            VariantClassification rec = r.atin() == null ? null : found.get(r.atin());
+            LineDecision early = early(r, rec, rules, false);
+            if (early != null) {
+                out.put(r.key(), new ListingStatus(early.status(), rec == null ? null : rec.status().name(),
+                        early.blockedReason()));
+                continue;
+            }
+            try {
+                Resolution res = engine.resolveRecord(rec, behaviourOf(r, rec), saleDate);
+                out.put(r.key(), new ListingStatus(res.status(), rec.status().name(),
+                        res.chargeable() ? null : res.reason()));
+            } catch (NotFoundException ex) {
+                out.put(r.key(), new ListingStatus(ResolveStatus.BLOCKED, rec.status().name(),
+                        "No tax profile for category " + rec.categoryCode()));
+            }
+        }
+        return out;
+    }
+
     /**
      * Why an exempt line carries no tax, in the shopper's words: the category and the rule's own wording from the stored
      * decision ("Baby food & formula: no sales tax applies. Standard qualifying item."). Only a RESOLVED EXEMPT decision
@@ -139,11 +170,15 @@ class LineDecisionServiceImpl implements LineDecisionService {
 
     /** A blocked decision when the record cannot be charged at all (no ATIN, no record, not approved), else null. */
     private LineDecision early(Request r, VariantClassification rec, String rules) {
+        return early(r, rec, rules, true);
+    }
+
+    private LineDecision early(Request r, VariantClassification rec, String rules, boolean count) {
         if (r.atin() == null || r.atin().isBlank()) {
-            return blocked(ResolveStatus.MISSING_FACTS, rules, null, "The line has no variant ATIN");
+            return blocked(ResolveStatus.MISSING_FACTS, rules, null, "The line has no variant ATIN", count);
         }
         if (rec == null) {
-            return blocked(ResolveStatus.MISSING_FACTS, rules, null, "No tax classification record for " + r.atin());
+            return blocked(ResolveStatus.MISSING_FACTS, rules, null, "No tax classification record for " + r.atin(), count);
         }
         if (rec.status() == RecordStatus.APPROVED) {
             return null;
@@ -154,11 +189,17 @@ class LineDecisionServiceImpl implements LineDecisionService {
             default -> ResolveStatus.NEEDS_APPROVAL;
         };
         return blocked(status, rules, rec.categoryCode(), "The classification of " + r.atin() + " is "
-                + rec.status() + ", not approved");
+                + rec.status() + ", not approved", count);
     }
 
     private LineDecision blocked(ResolveStatus status, String rules, String category, String detail) {
-        telemetry.quoteLine(status.name(), "BLOCKED");
+        return blocked(status, rules, category, detail, true);
+    }
+
+    private LineDecision blocked(ResolveStatus status, String rules, String category, String detail, boolean count) {
+        if (count) {
+            telemetry.quoteLine(status.name(), "BLOCKED");
+        }
         return LineDecision.blocked(status, rules, category, detail);
     }
 

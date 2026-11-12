@@ -385,6 +385,7 @@ components:
       properties:
         productId: {type: string, format: uuid}
         atin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        title: {type: string, description: 'Product title; tax-returns keeps it so the Tax review queue shows names, never ids'}
         ownerOrgId: {type: string}
         categoryCode: {type: string, description: 'Tax profile (category) code, e.g. nuts-seeds'}
         productTypeCode: {type: string}

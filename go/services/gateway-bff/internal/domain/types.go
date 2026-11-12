@@ -550,7 +550,26 @@ type CheckoutPackage struct {
 	// LocalDelivery is the quote of AfroTransact Delivery from the seller's store (S255); AFROTRANSACT_DELIVERY packages only.
 	LocalDelivery *CheckoutLocalDelivery `json:"localDelivery,omitempty"`
 	PickupPoints  []PickupPoint          `json:"pickupPoints"`
+	// PickupUnavailableReason is why the package has no pickup option (PickupWhy*); empty when it has one. Machine-readable:
+	// the app words it, shoppers never see ids or the code itself.
+	PickupUnavailableReason string `json:"pickupUnavailableReason,omitempty"`
 }
+
+// Reasons a package has no pickup option at checkout (CheckoutPackage.PickupUnavailableReason).
+const (
+	// PickupWhyNeedsAddress: no delivery address with a 5 digit ZIP is chosen yet.
+	PickupWhyNeedsAddress = "NEEDS_ADDRESS"
+	// PickupWhySellerNotEnabled: the seller has not turned on customer pickup for any place (no active pickup place).
+	PickupWhySellerNotEnabled = "SELLER_NOT_ENABLED"
+	// PickupWhyTooFar: the seller has pickup places, all farther than the pickup radius from the address.
+	PickupWhyTooFar = "TOO_FAR"
+	// PickupWhyOtherArea: the seller has pickup places that are not located and sit in another ZIP area.
+	PickupWhyOtherArea = "OTHER_AREA"
+	// PickupWhyNoPlatformPoint: an AfroTransact fulfilled package and no AfroTransact counter or locker near the address.
+	PickupWhyNoPlatformPoint = "NO_PLATFORM_POINT"
+	// PickupWhyLookupFailed: carrier-gateway could not be read, so pickup could not be checked.
+	PickupWhyLookupFailed = "LOOKUP_FAILED"
+)
 
 // Reasons AfroTransact Delivery from the seller's store can't be quoted for an address.
 const (

@@ -30,6 +30,7 @@ import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.port.ShadowQuoteRepository;
 import com.afrotransact.taxreturns.port.TaxProfileRepository;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -49,6 +50,25 @@ final class TaxClassificationDtos {
             return new ClassificationResolveService.ResolveCommand(categoryCode, productTypeCode, facts, sellerBehaviour,
                     context, shipToState, saleDate);
         }
+    }
+
+    @Schema(name = "ListingDecisionStatusRequest")
+    record ListingStatusRequest(@NotNull @Size(min = 1, max = 500) List<@Valid ListingStatusItem> items) {
+    }
+
+    @Schema(name = "ListingDecisionStatusItem")
+    record ListingStatusItem(@NotBlank String atin, String sellerOrgId) {
+    }
+
+    @Schema(name = "ListingDecisionStatusResponse", description = "One answer per requested ATIN")
+    record ListingStatusResponse(List<ListingStatusAnswer> items) {
+    }
+
+    @Schema(name = "ListingDecisionStatusAnswer")
+    record ListingStatusAnswer(String atin, @Schema(description = "RESOLVED, MISSING_FACTS, BLOCKED, NEEDS_APPROVAL, "
+            + "REFINE_CODE or CONFLICT_OPEN. Only RESOLVED may be listed or sold") String decisionStatus,
+                               @Schema(description = "The classification record's status (APPROVED, PENDING_REVIEW...); null when none")
+                               String recordStatus, @Schema(description = "Why it is not resolved, plain words") String reason) {
     }
 
     @Schema(name = "MissingFact")

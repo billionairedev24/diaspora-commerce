@@ -854,11 +854,31 @@ export interface paths {
         };
         /**
          * Live listings without a resolved tax decision (staff, tax:read)
-         * @description The audit behind catalog_live_without_tax_decision: live products that have a variant whose tax gate is not READY or that has no stored decision. Always empty when the publish gate holds; the sweep closes anything listed here within a minute.
+         * @description The audit behind catalog_live_without_tax_decision: live products that have a variant whose tax gate is not READY or that tax-returns does not answer RESOLVED for. Always empty when the publish gate holds; the sweep closes anything listed here (POST /v1/tax-gate/sweep runs it now).
          */
         get: operations["liveWithoutTaxDecision"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tax-gate/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the tax gate sweep now (staff, tax:classify-admin)
+         * @description The repair path behind the scheduled sweep. Closes every live listing whose variants tax-returns (the decision checkout reads) does not answer RESOLVED for, re-reports facts tax-returns has no record of so they reach the Tax review queue, and reopens held listings that are now resolved. Safe to repeat.
+         */
+        post: operations["runSweep"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2675,7 +2695,22 @@ export interface components {
             /** @description Plain words for the seller */
             message: string;
         };
-        /** @description Live listings that have a variant without a stored, resolved tax decision. Must always be empty. */
+        /** @description What one run of the tax gate sweep did */
+        TaxGateSweepResult: {
+            /** Format: int32 */
+            closed?: number;
+            /** Format: int32 */
+            closedByTaxReturns?: number;
+            /** Format: int32 */
+            reopened?: number;
+            /** Format: int32 */
+            announced?: number;
+            /** Format: int32 */
+            checked?: number;
+            /** @description False when tax-returns could not be asked */
+            taxReturnsReachable?: boolean;
+        };
+        /** @description Live listings that have a variant without a stored, resolved tax decision in tax-returns (the decision checkout reads). Must always be empty. */
         LiveWithoutTaxDecisionPage: {
             items?: components["schemas"]["LiveWithoutTaxDecisionItem"][];
             /** Format: int64 */
@@ -2684,6 +2719,8 @@ export interface components {
             page?: number;
             /** Format: int32 */
             size?: number;
+            /** @description False when tax-returns could not be asked */
+            taxReturnsChecked?: boolean;
         };
         LiveWithoutTaxDecisionItem: {
             /** Format: uuid */
@@ -4696,6 +4733,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LiveWithoutTaxDecisionPage"];
+                };
+            };
+        };
+    };
+    runSweep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxGateSweepResult"];
                 };
             };
         };

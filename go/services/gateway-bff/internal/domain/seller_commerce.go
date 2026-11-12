@@ -1241,6 +1241,26 @@ type CustomerPickup struct {
 	Enabled    bool           `json:"enabled"`
 	Hours      []PickupWindow `json:"hours"`
 	ReadyHours int            `json:"readyHours"`
+	// Ready is true when checkout can offer this address: pickup is on and it has opening hours.
+	Ready bool `json:"ready"`
+	// Issues say, in plain words, why customers do not see this address as a pickup point (or why only some do).
+	Issues []PickupIssue `json:"issues"`
+}
+
+// Codes of PickupIssue.
+const (
+	PickupIssueNotEnabled = "NOT_ENABLED"
+	PickupIssueNoHours    = "NO_HOURS"
+	PickupIssueNotLocated = "NOT_LOCATED"
+	PickupIssueApprox     = "APPROXIMATE_LOCATION"
+)
+
+// PickupIssue is one reason an address is not (fully) pickup-ready. Message is plain English for the seller, no ids.
+type PickupIssue struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	// Blocking issues keep the address out of checkout; the others only narrow who sees it.
+	Blocking bool `json:"blocking"`
 }
 
 // CustomerPickupRequest is PUT /v1/seller/ship-from-addresses/{id}/customer-pickup.

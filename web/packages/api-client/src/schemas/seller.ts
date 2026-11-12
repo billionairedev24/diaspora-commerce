@@ -617,7 +617,17 @@ export interface AfrotransactPickupRequest {
 }
 
 /** "Customers can pick up their orders here" (a carrier-gateway SELLER pickup location with the address's id). */
-export const CustomerPickupSchema = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema), readyHours: z.number().int().min(0).max(168) });
+export const PickupIssueSchema = z.object({ code: z.enum(['NOT_ENABLED', 'NO_HOURS', 'NOT_LOCATED', 'APPROXIMATE_LOCATION']), message: z.string(), blocking: z.boolean() });
+export type PickupIssue = z.infer<typeof PickupIssueSchema>;
+export const CustomerPickupSchema = z.object({
+  enabled: z.boolean(),
+  hours: z.array(PickupWindowSchema),
+  readyHours: z.number().int().min(0).max(168),
+  /** True when checkout can offer this address (pickup on and opening hours set). */
+  ready: z.boolean().optional(),
+  /** Why customers do not see this address as a pickup point, or why only some do (plain words, no ids). */
+  issues: z.array(PickupIssueSchema).optional()
+});
 export type CustomerPickup = z.infer<typeof CustomerPickupSchema>;
 export interface CustomerPickupRequest {
   enabled: boolean;

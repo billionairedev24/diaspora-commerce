@@ -80,6 +80,7 @@ class ProductEvents {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("productId", p.id().toString());
         payload.put("atin", p.atin().value());
+        payload.put("title", p.title());
         payload.put("ownerOrgId", p.owner().orgId());
         payload.put("categoryCode", node.taxProfileId());
         payload.put("productTypeCode", p.productTypeCode());

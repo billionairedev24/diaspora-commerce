@@ -81,7 +81,7 @@ class CatalogTaxFactsListener {
         UUID productId = Json.uuid(n, "productId");
         return new VariantClassificationService.CatalogFactsChanged(productId, Json.text(n, "ownerOrgId"), category,
                 Json.text(n, "productTypeCode"), values(n.path("sellerBehaviour")), variants, Json.text(n, "changedBy"),
-                Json.instant(n, "occurredAt"));
+                Json.instant(n, "occurredAt"), Json.text(n, "title"));
     }
 
     /** Fact values as typed JSON gives them: booleans, whole numbers, decimals and text; nulls and nesting dropped. */

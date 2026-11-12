@@ -208,7 +208,9 @@ export const TaxLiveWithoutDecisionPageSchema = z.object({
   items: z.array(TaxLiveWithoutDecisionRowSchema),
   total: z.number().int(),
   page: z.number().int(),
-  size: z.number().int()
+  size: z.number().int(),
+  /** False when catalog could not ask tax-returns: the list may be incomplete and is never an all-clear. */
+  taxReturnsChecked: z.boolean().optional()
 });
 export type TaxLiveWithoutDecisionPage = z.infer<typeof TaxLiveWithoutDecisionPageSchema>;
 

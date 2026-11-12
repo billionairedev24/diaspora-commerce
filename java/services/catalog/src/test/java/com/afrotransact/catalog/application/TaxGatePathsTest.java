@@ -38,6 +38,7 @@ import com.afrotransact.catalog.port.ProductTakedownRepository;
 import com.afrotransact.catalog.port.ProductTaxHoldRepository;
 import com.afrotransact.catalog.port.SellingHoldRepository;
 import com.afrotransact.catalog.port.TaxEvidenceRepository;
+import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxGateMetrics;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
@@ -71,7 +72,8 @@ class TaxGatePathsTest {
     @BeforeEach
     void setUp() {
         liveGate = new ProductLiveGateImpl(products, taxHolds, categories, events, sellingGate,
-                mock(TaxGateMetrics.class), CLOCK);
+                mock(TaxGateMetrics.class), new TaxAuthorityCheck(mock(TaxDecisionAuthority.class),
+                mock(TaxGateMetrics.class)), CLOCK);
         when(products.update(any())).thenAnswer(i -> i.getArgument(0));
         Actor staff = mock(Actor.class);
         when(staff.type()).thenReturn(PrincipalType.STAFF);

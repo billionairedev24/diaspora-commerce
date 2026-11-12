@@ -3908,6 +3908,18 @@ components:
         enabled: {type: boolean}
         hours: {type: array, items: {$ref: '#/components/schemas/PickupWindow'}}
         readyHours: {type: integer, minimum: 0, maximum: 168, description: Typical hours from order to ready for pickup}
+        ready: {type: boolean, description: True when checkout can offer this address (pickup on and opening hours set)}
+        issues:
+          type: array
+          description: Why customers do not see this address as a pickup point, or why only some do. Plain English, no ids.
+          items: {$ref: '#/components/schemas/PickupIssue'}
+    PickupIssue:
+      type: object
+      required: [code, message, blocking]
+      properties:
+        code: {type: string, enum: [NOT_ENABLED, NO_HOURS, NOT_LOCATED, APPROXIMATE_LOCATION]}
+        message: {type: string}
+        blocking: {type: boolean, description: A blocking issue keeps the address out of checkout; the others only narrow who sees it}
     CustomerPickupRequest:
       type: object
       required: [enabled, hours]

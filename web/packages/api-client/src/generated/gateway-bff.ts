@@ -4589,6 +4589,11 @@ export interface components {
                     /** @description Straight-line miles from the delivery address; null when either isn't located */
                     distanceMiles?: number | null;
                 }[];
+                /**
+                 * @description Why the package has no pickup option; absent when it has one. Machine-readable, no ids; clients word it for the shopper. SELLER_NOT_ENABLED means the seller has not turned on customer pickup in Seller Center.
+                 * @enum {string}
+                 */
+                pickupUnavailableReason?: "NEEDS_ADDRESS" | "SELLER_NOT_ENABLED" | "TOO_FAR" | "OTHER_AREA" | "NO_PLATFORM_POINT" | "LOOKUP_FAILED";
             })[];
             addresses: components["schemas"]["Address"][];
             paymentMethods: components["schemas"]["PaymentMethod"][];

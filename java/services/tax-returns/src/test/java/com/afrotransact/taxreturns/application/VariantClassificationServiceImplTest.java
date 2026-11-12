@@ -264,4 +264,20 @@ class VariantClassificationServiceImplTest {
         service.onCatalogFactsChanged(event("nuts-seeds", "AT00000015", TAXABLE_NUTS, Map.of(), false));
         assertThat(records.records.get("AT00000015").informationRequest()).as("seller answered").isNull();
     }
+
+    @Test
+    void theProductTitleIsKeptSoTheReviewQueueShowsNamesAndALaterEventFillsItWithoutNoise() {
+        VariantClassificationService service = service(ApprovalPolicy.ALL);
+        service.onCatalogFactsChanged(event("nuts-seeds", "AT00000090", EXEMPT_NUTS, Map.of(), false));
+        assertThat(records.records.get("AT00000090").title()).isNull();
+
+        service.onCatalogFactsChanged(new CatalogFactsChanged(PRODUCT, "org_a", "nuts-seeds", "nuts-seeds", Map.of(),
+                List.of(new Variant("AT00000090", null, EXEMPT_NUTS, false)), "seller_1", TestRules.CLOCK.instant(),
+                "Roasted cashews"));
+
+        assertThat(records.records.get("AT00000090").title()).isEqualTo("Roasted cashews");
+        assertThat(records.records.get("AT00000090").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        assertThat(records.audit("AT00000090")).hasSize(1);
+        verify(publisher, times(1)).publish(any(), any(), eq("AT00000090"), any());
+    }
 }

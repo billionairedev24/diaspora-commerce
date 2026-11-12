@@ -37,7 +37,7 @@ func shipFromOf(a port.ShipFromAddress) domain.ShipFromAddress {
 	out := domain.ShipFromAddress{ID: a.ID, Label: a.Label, Name: a.Name, Company: a.Company, Phone: a.Phone, Line1: a.Line1,
 		Line2: a.Line2, City: a.City, State: a.State, PostalCode: a.PostalCode, Country: firstNonEmpty(a.Country, "US"),
 		IsDefault: a.IsDefault, Version: a.Version, AfrotransactPickup: domain.AfrotransactPickup{Hours: []domain.PickupWindow{}},
-		CustomerPickup: domain.CustomerPickup{Hours: []domain.PickupWindow{}}}
+		CustomerPickup: domain.CustomerPickup{Hours: []domain.PickupWindow{}, Issues: []domain.PickupIssue{}}}
 	if p := a.Position; p != nil {
 		out.Position = &domain.GeoPosition{Lat: p.Lat, Lng: p.Lng, Precision: strings.ToUpper(firstNonEmpty(p.Precision, "ADDRESS")), GeocodedAt: p.GeocodedAt}
 	}
@@ -84,6 +84,11 @@ func (s *sellerShipFromImpl) withCustomerPickup(ctx context.Context, c *domain.C
 	for i := range out {
 		out[i].CustomerPickup = domain.CustomerPickup{Hours: []domain.PickupWindow{}}
 	}
+	defer func() {
+		for i := range out {
+			out[i].CustomerPickup = withPickupIssues(out[i], out[i].CustomerPickup)
+		}
+	}()
 	if s.r.d.Carrier == nil || len(out) == 0 {
 		return
 	}
@@ -105,6 +110,31 @@ func (s *sellerShipFromImpl) withCustomerPickup(ctx context.Context, c *domain.C
 
 // pickupWeekdays maps Seller Center days to carrier-gateway weekdays (0 = Sunday).
 var pickupWeekdays = map[string]int{"SUNDAY": 0, "MONDAY": 1, "TUESDAY": 2, "WEDNESDAY": 3, "THURSDAY": 4, "FRIDAY": 5, "SATURDAY": 6}
+
+// withPickupIssues says why an address is not (fully) offered to customers at checkout: pickup off, no opening hours, or an
+// address geo-service could not place at street level (customers farther than the same ZIP area then do not see it, or see
+// an approximate distance). Checkout reads exactly these facts (carrier-gateway location active + hours + position).
+func withPickupIssues(a domain.ShipFromAddress, cp domain.CustomerPickup) domain.CustomerPickup {
+	cp.Issues = []domain.PickupIssue{}
+	switch {
+	case !cp.Enabled:
+		cp.Issues = append(cp.Issues, domain.PickupIssue{Code: domain.PickupIssueNotEnabled, Blocking: true,
+			Message: "Customers can't pick up here yet. Turn on pickup and add the hours you're open."})
+	case len(cp.Hours) == 0:
+		cp.Issues = append(cp.Issues, domain.PickupIssue{Code: domain.PickupIssueNoHours, Blocking: true,
+			Message: "Add the days and hours customers can collect their orders."})
+	}
+	switch {
+	case a.Position == nil:
+		cp.Issues = append(cp.Issues, domain.PickupIssue{Code: domain.PickupIssueNotLocated,
+			Message: "We couldn't find this address on the map. Only customers in the same ZIP area will see it as a pickup point. Check the address."})
+	case !strings.EqualFold(a.Position.Precision, "ADDRESS") && !strings.EqualFold(a.Position.Precision, "POINT"):
+		cp.Issues = append(cp.Issues, domain.PickupIssue{Code: domain.PickupIssueApprox,
+			Message: "We could only place this address by its ZIP area, so distances to customers are approximate."})
+	}
+	cp.Ready = cp.Enabled && len(cp.Hours) > 0
+	return cp
+}
 
 func customerPickupOf(l port.PickupLocation) domain.CustomerPickup {
 	out := domain.CustomerPickup{Enabled: l.Active, ReadyHours: l.ReadyHours, Hours: []domain.PickupWindow{}}
@@ -188,7 +218,7 @@ func (s *sellerShipFromImpl) SetCustomerPickup(ctx context.Context, c *domain.Ca
 		if err != nil {
 			return domain.ShipFromAddress{}, mapErr("carrier-gateway", err)
 		}
-		a.CustomerPickup = customerPickupOf(saved)
+		a.CustomerPickup = withPickupIssues(a, customerPickupOf(saved))
 		return a, nil
 	}
 	return domain.ShipFromAddress{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Address not found", "This ship-from address doesn't exist.")
@@ -221,7 +251,40 @@ func (s *sellerShipFromImpl) Update(ctx context.Context, c *domain.Caller, id st
 	if err != nil {
 		return domain.ShipFromAddress{}, mapErr("seller", err)
 	}
-	return shipFromOf(a), nil
+	out := shipFromOf(a)
+	s.resyncCustomerPickup(ctx, c, sc.org.ID, &out)
+	return out, nil
+}
+
+// resyncCustomerPickup keeps the pickup place customers see in step with the address after an edit: checkout reads the
+// carrier-gateway copy (address, ZIP, position), which would otherwise keep the old street and ZIP, so shoppers near the
+// new address would not see it. Hours, ready time and on/off are kept. Best effort: a failure is logged and the seller can
+// save the pickup settings again.
+func (s *sellerShipFromImpl) resyncCustomerPickup(ctx context.Context, c *domain.Caller, orgID string, a *domain.ShipFromAddress) {
+	if s.r.d.Carrier == nil {
+		return
+	}
+	locs, err := s.r.d.Carrier.ManagedPickupLocations(ctx, c.BearerToken, orgID)
+	if err != nil {
+		s.r.d.Log.WarnContext(ctx, "seller pickup locations unavailable; pickup place not refreshed", "error", err)
+		return
+	}
+	for _, l := range locs {
+		if l.ID != a.ID {
+			continue
+		}
+		cp := customerPickupOf(l)
+		saved, err := s.r.d.Carrier.SavePickupLocation(ctx, c.BearerToken, customerPickupLocation(*a, orgID,
+			domain.CustomerPickupRequest{Enabled: cp.Enabled, Hours: cp.Hours, ReadyHours: cp.ReadyHours}))
+		if err != nil {
+			s.r.d.Log.WarnContext(ctx, "pickup place not refreshed after an address edit", "error", err)
+			cp = customerPickupOf(l)
+		} else {
+			cp = customerPickupOf(saved)
+		}
+		a.CustomerPickup = withPickupIssues(*a, cp)
+		return
+	}
 }
 
 func (s *sellerShipFromImpl) MakeDefault(ctx context.Context, c *domain.Caller, id string) ([]domain.ShipFromAddress, error) {

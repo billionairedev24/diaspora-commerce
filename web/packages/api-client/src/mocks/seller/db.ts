@@ -682,12 +682,12 @@ function freshDb(now: Date): MockSellerDb {
           position: { lat: 29.6713, lng: -95.5559, precision: 'ADDRESS', geocodedAt: iso(new Date(now.getTime() - 40 * DAY)) },
           afrotransactPickup: { enabled: true, zoneName: 'Houston Metro', enabledAt: iso(new Date(now.getTime() - 20 * DAY)),
             hours: [{ day: 'MONDAY', opens: '09:00', closes: '17:00' }, { day: 'WEDNESDAY', opens: '09:00', closes: '17:00' }, { day: 'FRIDAY', opens: '09:00', closes: '15:00' }] },
-          customerPickup: { enabled: true, readyHours: 3, hours: [{ day: 'TUESDAY', opens: '10:00', closes: '19:00' }, { day: 'SATURDAY', opens: '10:00', closes: '16:00' }] } },
+          customerPickup: { enabled: true, readyHours: 3, hours: [{ day: 'TUESDAY', opens: '10:00', closes: '19:00' }, { day: 'SATURDAY', opens: '10:00', closes: '16:00' }], ready: true, issues: [] } },
         { id: 'sfa-katy', label: 'Katy kitchen', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '23501 Cinco Ranch Blvd', line2: '',
           city: 'Katy', state: 'TX', postalCode: '77494', country: 'US', isDefault: false, version: 0,
           position: { lat: 29.7355, lng: -95.7739, precision: 'ADDRESS', geocodedAt: iso(new Date(now.getTime() - 5 * DAY)) },
           afrotransactPickup: { enabled: false, zoneName: null, enabledAt: null, hours: [] },
-          customerPickup: { enabled: false, readyHours: 0, hours: [] } }
+          customerPickup: { enabled: false, readyHours: 0, hours: [], ready: false, issues: [{ code: 'NOT_ENABLED', blocking: true, message: 'Customers can’t pick up here yet. Turn on pickup and add the hours you’re open.' }] } }
       ]
     },
     offers: [],

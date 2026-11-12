@@ -104,6 +104,14 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
                 null, auditSampledAt, version, createdAt, at);
     }
 
+    /** The product title for display (staff queue); nothing else changes. */
+    public VariantClassification withTitle(String newTitle) {
+        return new VariantClassification(atin, gtin, productId, newTitle, ownerOrgId, categoryCode, productTypeCode,
+                facts, staffFacts, sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, classifiedBy,
+                classifiedAt, reviewedBy, reviewedAt, decisionRef, informationRequest, auditSampledAt, version,
+                createdAt, updatedAt);
+    }
+
     public VariantClassification withReview(Map<String, Object> newStaffFacts, Map<String, String> refined,
                                             String by, Instant at, String ref) {
         return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,

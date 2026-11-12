@@ -120,6 +120,23 @@ func pickupBody(v jobj) (jobj, error) {
 	return body, nil
 }
 
+// pickupOfferNote says why a pickup point is not (fully) offered at checkout, in plain words; empty when it is offered.
+// Checkout reads exactly these facts: active, opening hours, and a position for distances (without one only shoppers in
+// the same ZIP area see it).
+func pickupOfferNote(o jobj) string {
+	var notes []string
+	if !boolean(o, "active") {
+		notes = append(notes, "Paused: not offered")
+	}
+	if len(objs(o, "hours")) == 0 {
+		notes = append(notes, "No opening hours: not offered")
+	}
+	if _, ok := o["position"].(map[string]any); !ok {
+		notes = append(notes, "Not located: only shoppers in the same ZIP area see it")
+	}
+	return strings.Join(notes, "; ")
+}
+
 func pickupLocationsResource() *staffResource {
 	load := func(ctx context.Context, sc staffCtx, q staffQuery) ([]jobj, error) {
 		var page jobj
@@ -150,7 +167,8 @@ func pickupLocationsResource() *staffResource {
 	return &staffResource{
 		key: "pickup-locations", module: dispatchModule, title: "Pickup points", statusKey: "state", searchPlaceholder: "Name, city or ZIP",
 		columns: []domain.Column{col("name", "Name", "strong", 22), col("kindLabel", "Kind", "text", 14), col("place", "Address", "text", 26),
-			col("hoursLabel", "Hours", "text", 18), col("readyHours", "Ready after (h)", "number", 8), col("state", "Status", "status", 10)},
+			col("hoursLabel", "Hours", "text", 18), col("readyHours", "Ready after (h)", "number", 8), col("state", "Status", "status", 10),
+			col("offerNote", "Why not offered", "text", 24)},
 		facets: domain.StaffFacets("ACTIVE", "PAUSED"),
 		list:   list, get: findIn(list, "id"),
 		cells: func(o jobj) map[string]any {
@@ -161,7 +179,7 @@ func pickupLocationsResource() *staffResource {
 					label = d.label
 				}
 			}
-			return map[string]any{"kindLabel": kindLabel[jstr(o, "kind")], "hoursLabel": fmt.Sprintf("%s %s–%s", label, opens, closes),
+			return map[string]any{"kindLabel": kindLabel[jstr(o, "kind")], "hoursLabel": fmt.Sprintf("%s %s–%s", label, opens, closes), "offerNote": pickupOfferNote(o),
 				"place": strings.TrimSpace(jstr(o, "address.line1") + ", " + jstr(o, "address.city") + ", " + jstr(o, "address.state") + " " + jstr(o, "address.postalCode"))}
 		},
 		titleOf:    func(o jobj) string { return jstr(o, "name") },

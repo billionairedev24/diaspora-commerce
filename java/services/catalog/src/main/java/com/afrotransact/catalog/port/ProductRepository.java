@@ -35,6 +35,9 @@ public interface ProductRepository {
      */
     List<Product> findLiveWithoutTaxDecision(int offset, int limit);
 
+    /** Every LIVE product, keyset by id (after {@code afterId}, null = from the start), with its variants. */
+    List<Product> findLiveAfter(UUID afterId, int limit);
+
     /** How many products {@link #findLiveWithoutTaxDecision} would list. */
     long countLiveWithoutTaxDecision();
 

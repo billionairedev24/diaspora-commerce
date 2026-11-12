@@ -3001,7 +3001,7 @@ export interface paths {
         };
         /**
          * Live listings that have no resolved tax decision (always empty)
-         * @description catalog `GET /v1/tax-gate/live-without-decision` (`tax:read`). A product must never be live without a stored, resolved tax decision on every variant; this list is empty when that holds, and the catalog sweep closes anything listed within a minute. The Tax review page shows a banner with `total` and links here when it is not zero. Sellers and categories by name, and why each variant has no decision in plain words.
+         * @description catalog `GET /v1/tax-gate/live-without-decision` (`tax:read`). A product must never be live without a stored, resolved tax decision on every variant, in tax-returns (the decision checkout reads); this list is empty when that holds, and the catalog sweep closes anything listed. The Tax review page shows a banner with `total` and links here when it is not zero. Sellers and categories by name, and why each variant has no decision in plain words.
          */
         get: operations["listStaffTaxLiveWithoutDecision"];
         put?: never;
@@ -10238,6 +10238,8 @@ export interface components {
             total: number;
             page: number;
             size: number;
+            /** @description False when catalog could not ask tax-returns: the list is only catalog's own check and may be incomplete, never read as all clear */
+            taxReturnsChecked?: boolean;
         };
         StaffTaxLiveWithoutDecisionRow: {
             atin: string;

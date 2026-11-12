@@ -991,6 +991,29 @@ paths:
                 $ref: '#/components/schemas/ClassificationResolveResponse'
         '404':
           description: Unknown category or product type (tax.profile-not-found)
+  /v1/tax/listing-decisions/status:
+    post:
+      tags:
+      - Tax classification
+      summary: Is the stored tax decision of these variants RESOLVED? Batched, read-only (tax:classify)
+      description: |
+        The catalog publish gate's authority. Reads the same classification record and rules checkout's quote reads (record APPROVED and the
+        rules resolve to a chargeable outcome under the seller's behaviour), without a ship-to, without creating a record and without storing
+        anything. A variant with no record is MISSING_FACTS. Only RESOLVED may be listed or sold. At most 500 variants per call.
+      operationId: listingDecisionStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingDecisionStatusRequest'
+      responses:
+        '200':
+          description: One answer per requested ATIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingDecisionStatusResponse'
   /v1/tax/profiles:
     get:
       tags:
@@ -2347,6 +2370,34 @@ components:
     ClassificationRecordStatus:
       type: string
       enum: [DRAFT, MISSING_FACTS, PENDING_REVIEW, APPROVED, REJECTED, STALE]
+    ListingDecisionStatusRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: {$ref: '#/components/schemas/ListingDecisionStatusItem'}
+    ListingDecisionStatusItem:
+      type: object
+      required: [atin]
+      properties:
+        atin: {type: string}
+        sellerOrgId: {type: string, description: The seller whose behaviour the decision is read under (the listing owner)}
+    ListingDecisionStatusResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ListingDecisionStatusAnswer'}
+    ListingDecisionStatusAnswer:
+      type: object
+      properties:
+        atin: {type: string}
+        decisionStatus: {type: string, enum: [RESOLVED, MISSING_FACTS, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN], description: Only RESOLVED may be listed or sold}
+        recordStatus: {type: string, nullable: true, description: The classification record's status (APPROVED, PENDING_REVIEW...); null when none}
+        reason: {type: string, nullable: true, description: Why it is not resolved, plain words}
     ClassificationResolveRequest:
       type: object
       required: [categoryCode, facts]

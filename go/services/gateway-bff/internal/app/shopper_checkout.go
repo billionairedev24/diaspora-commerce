@@ -189,6 +189,11 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	}
 	s.priceLocalDelivery(ctx, &sum, addr)
 	if s.d.Delivery == nil || addr == nil || len(addr.PostalCode) < 5 {
+		for i := range sum.Packages {
+			if len(sum.Packages[i].Preorder) == 0 {
+				sum.Packages[i].PickupUnavailableReason = domain.PickupWhyNeedsAddress
+			}
+		}
 		applyCheckoutShipping(&sum, packageDelivery)
 		s.blockUndeliverable(&sum, packageDelivery)
 		recalcCheckoutTotal(&sum)
@@ -199,9 +204,9 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	log := s.d.log()
 
 	outside := outsideDeliveryArea(ctx, s.d.Delivery, addr, log)
-	platformPoints, err := platformPickupLocations(ctx, s.d.Delivery, zip)
-	if err != nil {
-		log.WarnContext(ctx, "pickup locations unavailable", "error", err)
+	platformPoints, platformErr := platformPickupLocations(ctx, s.d.Delivery, zip)
+	if platformErr != nil {
+		log.WarnContext(ctx, "pickup locations unavailable", "error", platformErr)
 	}
 
 	var offers []port.PromiseOffer
@@ -212,19 +217,23 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		}
 		isFC := p.Fulfilment == domain.FulfilledByAfroTransact
 		var own []port.PickupLocation
+		lookupFailed := isFC && platformErr != nil
 		if !isFC {
 			if own, err = s.d.Delivery.PickupLocations(ctx, p.Seller.ID, ""); err != nil {
 				log.WarnContext(ctx, "seller pickup locations unavailable", "error", err)
+				lookupFailed = true
 			}
 		}
 		points := pickupPointsFor(*p, platformPoints, own, addr, zip)
+		addPickupOption(p, points)
+		p.PickupUnavailableReason = pickupReason(*p, platformPoints, own, addr, zip, lookupFailed)
 		if len(points) == 0 && !isFC && len(p.Preorder) == 0 {
 			// Why a seller's package shows no pickup: the seller has not turned on "customers can pick up here" in Seller
 			// Center (no active SELLER place), or the place is farther than pickupRadiusMiles / has no position and
 			// another ZIP area. Logged so support can answer "where is my pickup option?" without guessing.
-			log.InfoContext(ctx, "no store pickup offered for the package", "seller", p.Seller.ID, "sellerPickupPlaces", len(own), "zip", zip)
+			log.InfoContext(ctx, "no store pickup offered for the package", "seller", p.Seller.ID, "sellerPickupPlaces", len(own), "zip", zip,
+				"reason", p.PickupUnavailableReason)
 		}
-		addPickupOption(p, points)
 		if outside {
 			p.DeliveryOptions = quoteRequiredOptions(*p)
 			p.LocalDelivery = nil

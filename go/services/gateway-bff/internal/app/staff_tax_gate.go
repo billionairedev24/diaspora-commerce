@@ -23,6 +23,8 @@ var taxVariantStatusLabel = map[string]string{
 	"REFINE_CODE":    "Needs a verified code",
 	"CONFLICT_OPEN":  "Category on hold",
 	"REJECTED":       "Sent back to the seller",
+	// tax-returns, the decision checkout reads, has no record of the variant at all.
+	"NO_DECISION": "Tax review has no record yet",
 }
 
 func (s *staffTaxImpl) LiveWithoutDecision(ctx context.Context, c *domain.Caller, q url.Values) (any, error) {
@@ -52,7 +54,15 @@ func (s *staffTaxImpl) LiveWithoutDecision(ctx context.Context, c *domain.Caller
 	if list.total != nil {
 		total = *list.total
 	}
-	return jobj{"items": rows, "total": total, "page": page, "size": size}, nil
+	// taxReturnsChecked is false when catalog could not ask tax-returns: the list is then only catalog's own check and may be
+	// incomplete, so the console must not read an empty list as "all clear".
+	checked := true
+	if m, ok := raw.(map[string]any); ok {
+		if v, present := m["taxReturnsChecked"].(bool); present {
+			checked = v
+		}
+	}
+	return jobj{"items": rows, "total": total, "page": page, "size": size, "taxReturnsChecked": checked}, nil
 }
 
 func liveWithoutDecisionRow(it jobj) jobj {

@@ -8,6 +8,7 @@ import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
+import com.afrotransact.catalog.domain.tax.TaxNotReady;
 import com.afrotransact.catalog.domain.tax.TaxReadiness;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -89,8 +90,14 @@ class SellingGatedProductWriter implements ProductWriter {
         if (!readiness.ready()) {
             return p;
         }
-        // Through the live gate (which re-checks the tax decision of every variant), never Product.approve directly.
-        Product live = products.update(liveGate.approve(p, Instant.now(clock)));
+        // Through the live gate (which re-checks the tax decision of every variant, tax-returns' included), never
+        // Product.approve directly. A listing tax-returns has not approved yet (or cannot be asked) waits for review.
+        Product live;
+        try {
+            live = products.update(liveGate.approve(p, Instant.now(clock)));
+        } catch (TaxNotReady ex) {
+            return p;
+        }
         events.publish(CatalogEvents.PRODUCT_APPROVED, live);
         return live;
     }

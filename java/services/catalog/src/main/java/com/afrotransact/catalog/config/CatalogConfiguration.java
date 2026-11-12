@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.afrotransact.catalog.adapter.out.tax.DisabledTaxDecisionAuthority;
+import com.afrotransact.catalog.adapter.out.tax.HttpTaxDecisionAuthority;
 import com.afrotransact.catalog.adapter.out.tax.HttpTaxResolver;
 import com.afrotransact.catalog.adapter.out.tax.LocalDatasetTaxResolver;
 import com.afrotransact.catalog.application.ImageSettings;
@@ -32,8 +34,10 @@ import com.afrotransact.catalog.domain.prefill.DefaultCategoryHintPolicy;
 import com.afrotransact.catalog.domain.sizing.DefaultSizeChartPolicy;
 import com.afrotransact.catalog.domain.sizing.SizeChartPolicy;
 import com.afrotransact.catalog.port.ServiceTokens;
+import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxResolver;
 import com.afrotransact.catalog.port.TaxonomySource;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -53,6 +57,24 @@ class CatalogConfiguration {
                             @Value("${at.catalog.tax.timeout:5s}") Duration timeout) {
         return "local".equals(mode) ? new LocalDatasetTaxResolver(source)
                 : new HttpTaxResolver(builder, tokens, baseUrl, timeout);
+    }
+
+    /**
+     * The one authority on whether a listing has a clear tax decision: tax-returns' stored decision (what checkout reads).
+     * {@code at.catalog.tax.authority=off} switches it off for tests and stacks without tax-returns only; never in dev,
+     * uat or prod.
+     */
+    @Bean
+    TaxDecisionAuthority taxDecisionAuthority(RestClient.Builder builder, ServiceTokens tokens,
+                                              @Value("${at.catalog.tax.authority:tax-returns}") String mode,
+                                              @Value("${at.catalog.tax.base-url:http://localhost:8111}") String baseUrl,
+                                              @Value("${at.catalog.tax.authority-timeout:4s}") Duration timeout) {
+        if ("off".equals(mode)) {
+            LoggerFactory.getLogger(CatalogConfiguration.class).warn("at.catalog.tax.authority=off: listings are NOT "
+                    + "checked against tax-returns' stored decisions. Never use this outside tests.");
+            return new DisabledTaxDecisionAuthority();
+        }
+        return new HttpTaxDecisionAuthority(builder, tokens, baseUrl, timeout);
     }
 
     @Bean

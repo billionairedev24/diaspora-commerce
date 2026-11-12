@@ -2523,7 +2523,13 @@ export const sellerHandlers = [
         throw new SellerProblem(422, 'PICKUP_INVALID_HOURS', 'Check the pickup hours', 'Add 1 to 14 pickup windows that don’t overlap, each opening before it closes.', hourErrors);
       require(ctx, 'orders', 'EDIT', 'SELLER');
       const a = findShipFrom(ctx, p.id);
-      a.customerPickup = { enabled: b.enabled, hours: b.hours, readyHours: b.readyHours ?? 0 };
+      a.customerPickup = {
+        enabled: b.enabled,
+        hours: b.hours,
+        readyHours: b.readyHours ?? 0,
+        ready: b.enabled && b.hours.length > 0,
+        issues: b.enabled ? [] : [{ code: 'NOT_ENABLED', blocking: true, message: 'Customers can’t pick up here yet. Turn on pickup and add the hours you’re open.' }]
+      };
       return a;
     })
   ),

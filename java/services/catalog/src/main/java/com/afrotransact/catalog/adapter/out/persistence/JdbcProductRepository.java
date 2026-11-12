@@ -226,6 +226,17 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findLiveAfter(UUID afterId, int limit) {
+        String sql = SELECT + " where status = 'LIVE' " + (afterId == null ? "" : "and id > :after ")
+                + "order by id limit :limit";
+        JdbcClient.StatementSpec spec = jdbc.sql(sql).param("limit", limit);
+        if (afterId != null) {
+            spec = spec.param("after", afterId);
+        }
+        return withVariants(spec.query(this::mapProduct).list());
+    }
+
+    @Override
     public long countLiveWithoutTaxDecision() {
         return jdbc.sql("select count(*) from product where " + LIVE_WITHOUT_DECISION).query(Long.class).single();
     }

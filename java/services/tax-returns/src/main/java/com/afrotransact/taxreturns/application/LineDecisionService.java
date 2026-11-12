@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
 import com.afrotransact.taxreturns.domain.tax.LineDecision;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 
@@ -16,6 +17,22 @@ public interface LineDecisionService {
 
     /** One decision per request key. Never throws for a line that cannot be decided: it comes back blocked. */
     Map<String, LineDecision> decide(List<Request> lines, TaxAddress shipTo, LocalDate saleDate);
+
+    /**
+     * What the stored decision of each (variant ATIN, seller) is right now, read-only: the same record and rules the
+     * quote reads, without a ship-to, without ingesting a missing record and without storing anything. The catalog
+     * publish gate asks this, so tax-returns' stored decision is the one authority for "may this be listed". An ATIN
+     * with no record is MISSING_FACTS: never guessed. Keyed by request key.
+     */
+    Map<String, ListingStatus> status(List<Request> items, LocalDate saleDate);
+
+    /** @param status RESOLVED is the only chargeable status; {@code reason} is plain words (null when resolved) */
+    record ListingStatus(ResolveStatus status, String recordStatus, String reason) {
+
+        public boolean resolved() {
+            return status == ResolveStatus.RESOLVED;
+        }
+    }
 
     /**
      * @param key             caller's key (the line id)

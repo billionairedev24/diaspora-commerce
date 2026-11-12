@@ -2,9 +2,14 @@ package com.afrotransact.taxreturns.adapter.in.web;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ApproveRequest;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.InformationRequestBody;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ListingStatusAnswer;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ListingStatusRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ListingStatusResponse;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProfileDetail;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProfileSummary;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProviderCodeEntry;
@@ -17,6 +22,8 @@ import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.StatusCh
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.VariantDto;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.VariantPage;
 import com.afrotransact.taxreturns.application.ClassificationResolveService;
+import com.afrotransact.taxreturns.application.LineDecisionService;
+import com.afrotransact.taxreturns.application.ListingDecisionStatusService;
 import com.afrotransact.taxreturns.application.ProviderCodeService;
 import com.afrotransact.taxreturns.application.TaxProfileService;
 import com.afrotransact.taxreturns.application.TaxShadowService;
@@ -51,8 +58,9 @@ class TaxClassificationApiController {
     private final ProviderCodeService providerCodes;
     private final VariantClassificationService variants;
     private final TaxShadowService shadow;
+    private final ListingDecisionStatusService listingStatus;
 
-    TaxClassificationApiController(ClassificationResolveService resolve, TaxProfileService profiles,
+    TaxClassificationApiController(ListingDecisionStatusService listingStatus, ClassificationResolveService resolve, TaxProfileService profiles,
                                    ProviderCodeService providerCodes, VariantClassificationService variants,
                                    TaxShadowService shadow) {
         this.resolve = resolve;
@@ -60,6 +68,7 @@ class TaxClassificationApiController {
         this.providerCodes = providerCodes;
         this.variants = variants;
         this.shadow = shadow;
+        this.listingStatus = listingStatus;
     }
 
     @Operation(summary = "Resolve the tax outcome of a category and its facts, without charging (tax:classify)",
@@ -68,6 +77,19 @@ class TaxClassificationApiController {
     @PostMapping("/v1/tax/classifications/resolve")
     ResolveResponse resolve(@Valid @RequestBody ResolveRequest body) {
         return ResolveResponse.of(resolve.resolve(body.toCommand()));
+    }
+
+    @Operation(summary = "Is the stored tax decision of these variants RESOLVED? Batched, read-only (tax:classify)",
+            description = "The catalog publish gate's authority: the same classification record and rules checkout's quote reads, "
+                    + "without a ship-to, without creating a record and without storing anything. A variant with no record is "
+                    + "MISSING_FACTS. Only RESOLVED may be listed or sold. At most 500 variants.")
+    @PostMapping("/v1/tax/listing-decisions/status")
+    ListingStatusResponse listingStatus(@Valid @RequestBody ListingStatusRequest body) {
+        Map<String, LineDecisionService.ListingStatus> found = listingStatus.statusOf(body.items().stream()
+                .map(i -> new ListingDecisionStatusService.Item(i.atin().trim().toUpperCase(Locale.ROOT), i.sellerOrgId()))
+                .toList());
+        return new ListingStatusResponse(found.entrySet().stream().map(e -> new ListingStatusAnswer(e.getKey(),
+                e.getValue().status().name(), e.getValue().recordStatus(), e.getValue().reason())).toList());
     }
 
     @Operation(summary = "Category tax profiles with their status (tax:read)")

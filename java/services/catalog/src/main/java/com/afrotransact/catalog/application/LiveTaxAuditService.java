@@ -6,7 +6,8 @@ import java.util.UUID;
 
 /**
  * The audit behind the owner's rule "never live without a tax decision": the live listings that have a variant without a
- * stored, resolved tax decision. It is always empty when the gate holds; the staff console shows a banner when it is not,
+ * stored, resolved tax decision. A listing is OK only if tax-returns (the decision checkout reads) answers RESOLVED for
+ * every variant; catalog's own copy alone is never enough. It is always empty when the gate holds; the staff console shows a banner when it is not,
  * and {@code catalog_live_without_tax_decision} pages. Needs the staff tax permission ({@code tax:read}).
  */
 public interface LiveTaxAuditService {
@@ -18,9 +19,11 @@ public interface LiveTaxAuditService {
     long count();
 
     /**
-     * @param total the number of live listings that fail the gate
+     * @param total             the number of live listings that fail the gate
+     * @param authorityChecked  false when tax-returns could not be asked: only catalog's own check is shown, and the
+     *                          list may be incomplete (never read it as "all clear")
      */
-    record Audit(List<Item> items, long total, int page, int size) {
+    record Audit(List<Item> items, long total, int page, int size, boolean authorityChecked) {
 
         public Audit {
             items = List.copyOf(items);

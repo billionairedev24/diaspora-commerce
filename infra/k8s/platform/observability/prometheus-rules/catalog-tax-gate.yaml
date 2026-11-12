@@ -45,3 +45,38 @@ spec:
         summary: catalog_live_without_tax_decision is not reported
         description: The catalog service is down or its database count fails, so the live-without-tax-decision alert cannot fire.
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
+    - alert: CatalogTaxReturnsDisagreement
+      expr: |
+        sum by (env) (increase(catalog_tax_gate_disagreement_total[30m])) > 0
+      for: 0m
+      labels:
+        severity: ticket
+        team: catalog
+      annotations:
+        summary: '{{ $value }} live listing(s) were closed because tax-returns does not resolve them but catalog said OK'
+        description: 'Catalog''s own tax state and tax-returns'' stored decision (the one checkout uses) disagreed. The listings were closed and announced, so search and carts dropped them. Check the Tax
+          review queue and the tax.classification.changed consumer (catalog-tax-classification): a missed event is the usual cause.'
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
+    - alert: CatalogTaxReturnsUnreachable
+      expr: |
+        sum by (env) (increase(catalog_tax_gate_authority_unreachable_total[15m])) > 0
+      for: 10m
+      labels:
+        severity: ticket
+        team: catalog
+      annotations:
+        summary: The catalog tax gate could not ask tax-returns for 10 minutes
+        description: Listings keep their current state and nothing is marked OK, but no new listing can go live and nothing is verified until tax-returns answers. Check tax-returns health and catalog's
+          tax:classify token.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
+    - alert: CatalogTaxReturnsCheckStale
+      expr: |
+        time() - max by (env) (catalog_tax_gate_authority_last_check_timestamp_seconds) > 1800
+      for: 5m
+      labels:
+        severity: ticket
+        team: catalog
+      annotations:
+        summary: Live listings were last checked against tax-returns more than 30 minutes ago
+        description: The sweep against tax-returns' stored decisions has not succeeded for 30 minutes (value 0 means never since start). Run POST /v1/tax-gate/sweep and read the catalog log.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
