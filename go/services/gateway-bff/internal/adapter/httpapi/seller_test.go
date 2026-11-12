@@ -297,6 +297,7 @@ func TestSellerContractConformance(t *testing.T) {
 	exerciseSellerSizeCharts(t, bff, b)
 	exerciseSellerProductTax(t, b)
 	exerciseSellerScope(t, b)
+	exerciseSellerMatch(t, bff, b)
 	exerciseSellerSelling(t, b)
 	// Money.
 	// S298: plan invoices paid from sales are listed as "Plan fee (invoice …)" deductions; DECLINED ones took nothing.

@@ -287,6 +287,9 @@ type ImageLibraryItem struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UsedBy    []string  `json:"usedBy"`
 	SKUKnown  bool      `json:"skuKnown"`
+	// Verdict and Checks are the image rules' answer, shown with the same messages as the product form (S388, S391).
+	Verdict *string      `json:"verdict"`
+	Checks  []ImageCheck `json:"checks"`
 }
 
 // ImageLibraryPage is one page of the image library.

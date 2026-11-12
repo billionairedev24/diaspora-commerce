@@ -122,6 +122,9 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	if h.s.SellerScope != nil {
 		h.registerSellerScope(route)
 	}
+	if h.s.SellerMatch != nil {
+		h.registerSellerMatch(route)
+	}
 	if h.s.SellerSelling != nil {
 		h.registerSellerSelling(route)
 	}
@@ -498,17 +501,22 @@ func (h *handlersImpl) downloadLabel(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) requestUpload(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Purpose     string `json:"purpose"`
-		FileName    string `json:"fileName"`
-		ContentType string `json:"contentType"`
-		Size        int64  `json:"size"`
-		Library     bool   `json:"library"`
+		Purpose         string `json:"purpose"`
+		FileName        string `json:"fileName"`
+		ContentType     string `json:"contentType"`
+		Size            int64  `json:"size"`
+		Library         bool   `json:"library"`
+		Slot            string `json:"slot"`
+		Title           string `json:"title"`
+		Brand           string `json:"brand"`
+		ProductTypeCode string `json:"productTypeCode"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	v, err := h.s.SellerCatalog.Upload(r.Context(), callerFrom(r.Context()), b.Purpose, b.FileName, b.ContentType, b.Size, b.Library)
+	v, err := h.s.SellerCatalog.Upload(r.Context(), callerFrom(r.Context()), app.UploadInput{Purpose: b.Purpose, FileName: b.FileName, ContentType: b.ContentType,
+		Size: b.Size, Library: b.Library, Slot: b.Slot, Title: b.Title, Brand: b.Brand, ProductTypeCode: b.ProductTypeCode})
 	h.reply(w, r, http.StatusCreated, v, err)
 }
 

@@ -76,7 +76,8 @@ func (s *sellerImportImpl) ImageLibrary(ctx context.Context, c *domain.Caller, q
 			flags = []string{}
 		}
 		item := domain.ImageLibraryItem{AssetID: i.AssetID, FileName: i.FileName, SKU: i.SKU, Slot: i.Slot, Status: strings.ToUpper(i.Status),
-			URL: i.URL, Width: i.Width, Height: i.Height, Bytes: i.Bytes, Flags: flags, CreatedAt: i.CreatedAt, UsedBy: []string{}}
+			URL: i.URL, Width: i.Width, Height: i.Height, Bytes: i.Bytes, Flags: flags, CreatedAt: i.CreatedAt, UsedBy: []string{},
+			Verdict: strPtr(strings.ToUpper(i.Verdict)), Checks: imageChecksOf(i.Checks)}
 		if i.URL != nil {
 			if u, ok := usedBy[*i.URL]; ok {
 				item.UsedBy = u
@@ -136,6 +137,7 @@ func (s *sellerImportImpl) RenameLibraryImage(ctx context.Context, c *domain.Cal
 	return domain.ImageLibraryItem{
 		AssetID: i.AssetID, FileName: i.FileName, SKU: i.SKU, Slot: i.Slot, Status: strings.ToUpper(i.Status),
 		URL: i.URL, Width: i.Width, Height: i.Height, Bytes: i.Bytes, Flags: flags, CreatedAt: i.CreatedAt, UsedBy: []string{},
+		Verdict: strPtr(strings.ToUpper(i.Verdict)), Checks: imageChecksOf(i.Checks),
 	}, nil
 }
 

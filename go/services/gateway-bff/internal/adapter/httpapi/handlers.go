@@ -58,6 +58,8 @@ type Services struct {
 	SellerProductTax app.SellerProductTaxService
 	// SellerScope is the departments the organisation may sell in and the requests to add one; routes registered when set.
 	SellerScope app.SellerScopeService
+	// SellerMatch is the barcode step, offers on existing pages, change requests and image tasks (S382, S391); routes registered when set.
+	SellerMatch app.SellerMatchService
 	// SellerSelling is the selling approvals (sell / apply / not available, apply with documents); routes registered when set.
 	SellerSelling app.SellerSellingService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.

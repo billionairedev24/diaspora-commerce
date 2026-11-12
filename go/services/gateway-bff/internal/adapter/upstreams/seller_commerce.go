@@ -189,6 +189,12 @@ func (o *offersImpl) List(ctx context.Context, bearer string, page, size int) (p
 	return out, err
 }
 
+func (o *offersImpl) Create(ctx context.Context, bearer, key string, body map[string]any) (port.SellerOfferUp, error) {
+	var out port.SellerOfferUp
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/offers", Bearer: bearer, Header: idem(key), RetryUnsafe: key != "", JSON: body}, &out)
+	return out, err
+}
+
 func (o *offersImpl) Update(ctx context.Context, bearer, id string, body map[string]any) (port.SellerOfferUp, error) {
 	var out port.SellerOfferUp
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/offers/" + url.PathEscape(id), Bearer: bearer, JSON: body}, &out)
@@ -234,6 +240,21 @@ func (m *mediaImpl) RequestLibraryUpload(ctx context.Context, bearer, fileName, 
 	var out port.MediaUpload
 	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer,
 		JSON: map[string]any{"purpose": "product-image", "fileName": fileName, "contentType": contentType, "size": size, "library": true}}, &out)
+	return out, err
+}
+
+func (m *mediaImpl) RequestImageUpload(ctx context.Context, bearer string, in port.MediaImageUpload) (port.MediaUpload, error) {
+	body := map[string]any{"purpose": in.Purpose, "fileName": in.FileName, "contentType": in.ContentType, "size": in.Size}
+	if in.Library {
+		body["library"] = true
+	}
+	for k, v := range map[string]string{"slot": in.Slot, "title": in.Title, "brand": in.Brand, "productTypeCode": in.ProductTypeCode} {
+		if v != "" {
+			body[k] = v
+		}
+	}
+	var out port.MediaUpload
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer, JSON: body}, &out)
 	return out, err
 }
 

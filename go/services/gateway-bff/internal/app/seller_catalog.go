@@ -27,8 +27,9 @@ type SellerCatalogService interface {
 	CheckGTIN(ctx context.Context, c *domain.Caller, code string, isbn bool) (domain.GtinCheck, error)
 	CategoryRequests(ctx context.Context, c *domain.Caller) ([]domain.CategoryRequest, error)
 	RequestCategory(ctx context.Context, c *domain.Caller, in domain.CategoryRequestInput) (domain.CategoryRequest, error)
-	// Upload signs a direct image upload; library adds a product image to the image library (S310).
-	Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64, library bool) (domain.UploadTicket, error)
+	// Upload signs a direct image upload; library adds a product image to the image library (S310). The slot, title, brand
+	// and product type of a product image reach media's image rules (S388).
+	Upload(ctx context.Context, c *domain.Caller, in UploadInput) (domain.UploadTicket, error)
 	CompleteUpload(ctx context.Context, c *domain.Caller, assetID string) (domain.Asset, error)
 	Inventory(ctx context.Context, c *domain.Caller, lowStock bool) (domain.InventoryView, error)
 	AdjustStock(ctx context.Context, c *domain.Caller, idempotencyKey, sku string, quantity int, reason string) (domain.StockAdjustment, error)
@@ -467,21 +468,50 @@ func (s *sellerCatalogImpl) RequestCategory(ctx context.Context, c *domain.Calle
 
 var imageTypes = []string{"image/jpeg", "image/png", "image/webp"}
 
-func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64, library bool) (domain.UploadTicket, error) {
+// UploadInput is a request for a direct image upload. Slot says what a product image is for (MAIN is judged by the strict
+// rules, OTHER is the default); Title and Brand are what the AI check compares the picture with; ProductTypeCode lets
+// apparel show a model where the rules allow it.
+type UploadInput struct {
+	Purpose, FileName, ContentType      string
+	Size                                int64
+	Library                             bool
+	Slot, Title, Brand, ProductTypeCode string
+}
+
+// imageSlots are media's ImageSlot values.
+var imageSlots = []string{"MAIN", "OTHER", "SWATCH", "LABEL"}
+
+func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, in UploadInput) (domain.UploadTicket, error) {
 	errs := map[string]string{}
-	if purpose != "product-image" && purpose != "storefront" {
+	in.Slot = strings.ToUpper(strings.TrimSpace(in.Slot))
+	in.Title, in.Brand, in.ProductTypeCode = strings.TrimSpace(in.Title), strings.TrimSpace(in.Brand), strings.TrimSpace(in.ProductTypeCode)
+	if in.Purpose != "product-image" && in.Purpose != "storefront" {
 		errs["purpose"] = "Unknown purpose"
-	} else if library && purpose != "product-image" {
+	} else if in.Library && in.Purpose != "product-image" {
 		errs["library"] = "Only product images go into the image library"
 	}
-	if strings.TrimSpace(fileName) == "" {
+	if strings.TrimSpace(in.FileName) == "" {
 		errs["fileName"] = "Required"
 	}
-	if !slices.Contains(imageTypes, contentType) {
+	if !slices.Contains(imageTypes, in.ContentType) {
 		errs["contentType"] = "Use JPG, PNG or WebP"
 	}
-	if size <= 0 || size > 8<<20 {
+	if in.Size <= 0 || in.Size > 8<<20 {
 		errs["size"] = "Images must be 8 MB or smaller"
+	}
+	if in.Slot != "" && !slices.Contains(imageSlots, in.Slot) {
+		errs["slot"] = "MAIN, OTHER, SWATCH or LABEL"
+	} else if in.Slot != "" && in.Purpose != "product-image" {
+		errs["slot"] = "Only product images have a slot"
+	}
+	if len([]rune(in.Title)) > 200 {
+		errs["title"] = "At most 200 characters"
+	}
+	if len([]rune(in.Brand)) > 80 {
+		errs["brand"] = "At most 80 characters"
+	}
+	if len([]rune(in.ProductTypeCode)) > 80 {
+		errs["productTypeCode"] = "At most 80 characters"
 	}
 	if len(errs) > 0 {
 		return domain.UploadTicket{}, domain.ValidationProblem(errs)
@@ -489,12 +519,15 @@ func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpos
 	if err := requireCustomer(c); err != nil {
 		return domain.UploadTicket{}, err
 	}
+	fileName, contentType, size := in.FileName, in.ContentType, in.Size
 	var u port.MediaUpload
 	var err error
-	if library {
-		u, err = s.r.d.Media.RequestLibraryUpload(ctx, c.BearerToken, fileName, contentType, size)
-	} else {
-		u, err = s.r.d.Media.RequestUpload(ctx, c.BearerToken, purpose, fileName, contentType, size)
+	switch {
+	case in.Purpose == "product-image":
+		u, err = s.r.d.Media.RequestImageUpload(ctx, c.BearerToken, port.MediaImageUpload{Purpose: in.Purpose, FileName: fileName, ContentType: contentType,
+			Size: size, Library: in.Library, Slot: in.Slot, Title: in.Title, Brand: in.Brand, ProductTypeCode: in.ProductTypeCode})
+	default:
+		u, err = s.r.d.Media.RequestUpload(ctx, c.BearerToken, in.Purpose, fileName, contentType, size)
 	}
 	if err != nil {
 		return domain.UploadTicket{}, mapErr("media", err)
@@ -516,7 +549,21 @@ func (s *sellerCatalogImpl) CompleteUpload(ctx context.Context, c *domain.Caller
 		return domain.Asset{}, mapErr("media", err)
 	}
 	return domain.Asset{ID: a.ID, URL: a.URL, Width: a.Width, Height: a.Height, Bytes: a.Bytes, ContentType: a.ContentType,
-		Status: firstNonEmpty(strings.ToUpper(a.Status), "READY")}, nil
+		Status: firstNonEmpty(strings.ToUpper(a.Status), "READY"), Slot: strPtr(strings.ToUpper(a.ImageSlot)), Verdict: strPtr(strings.ToUpper(a.Verdict)),
+		Checks: imageChecksOf(a.Checks)}, nil
+}
+
+// imageChecksOf maps media's findings; the list is never null.
+func imageChecksOf(in []port.MediaImageCheck) []domain.ImageCheck {
+	out := make([]domain.ImageCheck, 0, len(in))
+	for _, c := range in {
+		params := c.Params
+		if params == nil {
+			params = map[string]any{}
+		}
+		out = append(out, domain.ImageCheck{Code: c.Code, Level: strings.ToUpper(c.Level), Params: params, Message: c.Message})
+	}
+	return out
 }
 
 func (s *sellerCatalogImpl) Inventory(ctx context.Context, c *domain.Caller, lowStock bool) (domain.InventoryView, error) {

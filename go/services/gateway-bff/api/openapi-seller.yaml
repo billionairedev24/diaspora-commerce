@@ -74,6 +74,21 @@ tags:
       `NOT_AVAILABLE` (prohibited or disqualified, with the reason; not appealable). The product form shows the answer as a chip.
       Documents are uploaded to media first (`/v1/seller/media`) and referenced by asset id with the dates read off them.
       Needs the Listings module (View to read, Edit to apply).
+  - name: Matching
+    description: |
+      "Add a product" starts with the barcode (docs/engineering/bulk-upload-and-images.md, section 3.3). One lookup tells
+      whether a page already exists (MATCH), may be created (NO_MATCH), or the number is not a product barcode (INVALID,
+      RESTRICTED). On a MATCH the seller sells an offer (price, quantity, condition, shipping) and never changes the
+      page: title, photos, attributes, brand and category belong to the page, so an offer that carries them is refused
+      with 422 `PAGE_CONTENT_LOCKED`. A seller who sees something wrong files a change request ("Suggest a change",
+      "This is the wrong product", "This is a duplicate"); staff decide. An offer is `TAX_HELD` until the seller's own tax
+      decision for the item is resolved. Needs the Listings module (View to read, Edit to look up, offer and report);
+      the department scope and selling approvals are enforced by catalog and offers (403
+      `catalog.department-not-allowed`, 422 `SELLING_APPROVAL_REQUIRED`).
+  - name: Image quality
+    description: |
+      The "Improve your image" tasks of live listings (section 6.7): listings stay live; the reasons are in plain words
+      and a failing one shows the end of the grace period. Per-image verdicts come with the upload (`Asset.verdict`).
   - name: Catalog scope
     description: |
       The catalog departments the organisation may sell in: the ones chosen at onboarding (and later approved requests).
@@ -855,6 +870,34 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Matching]
+      operationId: createOfferOnPage
+      security: [{sessionCookie: []}]
+      summary: Sell an item whose product page already exists (offer only)
+      description: |
+        offers `POST /v1/offers` (Listings: EDIT; Idempotency-Key relayed). Only offer terms are accepted: price, list
+        price, quantity, condition (with a note unless New), shipping, fulfilment, handling days, ship-from location, seller
+        SKU (generated when blank) and, for Fulfilled by AfroTransact, the package. Any page content (title, description,
+        attributes, brand, category, product type, barcode, options, images, tax facts) is refused with 422
+        `PAGE_CONTENT_LOCKED` ("That detail belongs to the product page. Suggest a change instead.") and `errors` names
+        each field. The offer is `ACTIVE`, or `TAX_HELD` ("We are checking the tax details for this item.") until the
+        seller's own tax decision is resolved. 409 `OFFER_EXISTS`; 422 `SELLING_APPROVAL_REQUIRED`, `BRAND_UNAVAILABLE`,
+        `LISTING_LIMIT_REACHED`.
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OfferOnlyInput'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/OfferOnlyResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/offers/{offerId}/fulfilment:
     put:
@@ -1640,6 +1683,108 @@ paths:
       responses:
         '200': {description: Check, content: {application/json: {schema: {$ref: '#/components/schemas/GtinCheck'}}}}
         '401': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/matches:
+    post:
+      tags: [Matching]
+      operationId: matchCatalog
+      security: [{sessionCookie: []}]
+      summary: Does a product page already exist for this barcode, or brand and part number?
+      description: |
+        catalog `POST /v1/catalog/matches` for the active organisation (Listings: EDIT), the first step of "Add a product".
+        Send a barcode (UPC, EAN, GTIN, ISBN; spaces and dashes allowed) or a brand with its part number. A barcode that
+        is too short is answered `INVALID` with a plain message, not an error. `sellerCount` is read from offers (null
+        when it cannot be read). `canOffer` is false with `blockers` when the seller may not sell the item (page not
+        live, department or brand approval); `canCreate` is false when a new page with this barcode must not be made.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MatchRequest'}}}
+      responses:
+        '200': {description: The answer, content: {application/json: {schema: {$ref: '#/components/schemas/CatalogMatch'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/products/{atin}/change-requests:
+    post:
+      tags: [Matching]
+      operationId: fileChangeRequest
+      security: [{sessionCookie: []}]
+      summary: Suggest a change, report the wrong product or a duplicate page
+      description: |
+        catalog `POST /v1/products/{atin}/change-requests` (Listings: EDIT). The page is never changed by the request;
+        staff decide and the seller reads Waiting, Applied or Not applied because ... in `GET /v1/seller/change-requests`.
+        Suggest a change (TITLE, DESCRIPTION, BRAND: `payload.value`; ATTRIBUTE: `payload.key` and `payload.value`;
+        CATEGORY: `payload.categoryId`) needs an offer on the page (403 `NOT_YOUR_OFFER`). WRONG_MATCH
+        (`payload.variantAtin`, optional `correctGtin`) and DUPLICATE_PAGE (`payload.duplicateOfAtin`) need none. 409
+        `CHANGE_REQUEST_EXISTS` for the same request twice; 409 `WRONG_MATCH_OPEN` when creating a page with a barcode
+        that has an open wrong-match report.
+      parameters:
+        - {name: atin, in: path, required: true, schema: {type: string, pattern: '^AT[0-9A-Z]{8}$'}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChangeRequestInput'}}}
+      responses:
+        '201': {description: Filed, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeRequest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/change-requests:
+    get:
+      tags: [Matching]
+      operationId: listChangeRequests
+      security: [{sessionCookie: []}]
+      summary: The organisation's change requests with the decision and its reason
+      description: 'catalog `GET /v1/change-requests/mine` (Listings). Newest first.'
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ChangeRequestStatus'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: Requests, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeRequestPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/change-requests/{requestId}/withdraw:
+    post:
+      tags: [Matching]
+      operationId: withdrawChangeRequest
+      security: [{sessionCookie: []}]
+      summary: Withdraw a request that is still waiting
+      description: 'catalog `POST /v1/change-requests/{id}/withdraw` (Listings, EDIT). 409 `CHANGE_REQUEST_DECIDED` once staff decided.'
+      parameters:
+        - {name: requestId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Withdrawn, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeRequest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/image-tasks:
+    get:
+      tags: [Image quality]
+      operationId: listImageTasks
+      security: [{sessionCookie: []}]
+      summary: Improve your image tasks of the live listings
+      description: |
+        catalog `GET /v1/products/image-tasks` (Listings). The listings whose main image passes with a warning (IMPROVE) or
+        breaks a rule (FAIL), failing ones first, with the reasons by code and in plain English. A failing listing shows the
+        end of the grace period (`hideAfter`, `daysLeft`); the listing stays live and can be edited, and a new main image
+        must pass the rules.
+      responses:
+        '200': {description: Tasks, content: {application/json: {schema: {$ref: '#/components/schemas/ImageTaskList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/category-requests:
@@ -5412,6 +5557,14 @@ components:
         createdAt: {type: string, format: date-time}
         usedBy: {type: array, items: {type: string}, description: SKUs of listings that use this image}
         skuKnown: {type: boolean, description: The SKU in the file name belongs to one of the organisation's listings}
+        verdict:
+          oneOf:
+            - {$ref: '#/components/schemas/ImageVerdict'}
+            - {type: 'null'}
+        checks:
+          type: array
+          description: What the image rules found (translate by `code`, the same messages as the product form)
+          items: {$ref: '#/components/schemas/ImageCheck'}
     ImageLibraryPage:
       type: object
       required: [items, total, page, size]
@@ -5484,6 +5637,12 @@ components:
         contentType: {type: string, enum: [image/jpeg, image/png, image/webp]}
         size: {type: integer, minimum: 1, maximum: 8388608}
         library: {type: boolean, default: false, description: 'product-image only: add it to the image library (matched to SKUs by file name)'}
+        slot:
+          description: 'product-image only: what the image is for; MAIN is judged by the strict main-image rules (default OTHER). Sent on to media.'
+          $ref: '#/components/schemas/ProductImageSlot'
+        title: {type: string, maxLength: 200, description: 'The listing title media''s AI check compares the picture with (optional)'}
+        brand: {type: string, maxLength: 80, description: 'The brand media''s AI check compares the picture with (optional)'}
+        productTypeCode: {type: string, maxLength: 80, description: 'The product type: apparel may show a model where the rules allow it (optional)'}
     UploadTicket:
       type: object
       required: [assetId, method, url, headers, publicUrl, expiresAt]
@@ -5505,6 +5664,191 @@ components:
         bytes: {type: [integer, 'null']}
         contentType: {type: string}
         status: {type: string, enum: [PENDING, READY, FLAGGED, REJECTED]}
+        slot:
+          oneOf:
+            - {$ref: '#/components/schemas/ProductImageSlot'}
+            - {type: 'null'}
+        verdict:
+          description: 'Product images: PASS and WARN publish, HOLD keeps the image private for review (status FLAGGED), REJECT deletes it (status REJECTED). Null for other uploads.'
+          oneOf:
+            - {$ref: '#/components/schemas/ImageVerdict'}
+            - {type: 'null'}
+        checks:
+          type: array
+          description: What the image rules found, in plain words by code (translate by `code`)
+          items: {$ref: '#/components/schemas/ImageCheck'}
+    ProductImageSlot:
+      type: string
+      enum: [MAIN, OTHER, SWATCH, LABEL]
+      description: What a product image is used for; MAIN is judged by the strict main-image rules
+    ImageVerdict:
+      type: string
+      enum: [PASS, WARN, HOLD, REJECT]
+    ImageCheck:
+      type: object
+      required: [code, level, params, message]
+      properties:
+        code:
+          type: string
+          description: 'MAIN_TOO_SMALL, TOO_SMALL, LOW_RES, LARGER_BETTER, NOT_WHITE, FILL_LOW, FILL_OK_NEAR, BORDER, PLACEHOLDER, FORMAT, FILE_TOO_BIG, NOT_AN_IMAGE, BLUR, ASPECT, HELD_TEXT, HELD_MISMATCH, HELD_DUPLICATE, HELD_PROPS, HELD_REVIEW, PROHIBITED, MAIN_PROPS, REVIEW_REJECTED, NOT_VERIFIED, FETCH_FAILED, FETCH_PRIVATE'
+        level: {type: string, enum: [INFO, WARN, HOLD, REJECT]}
+        params: {type: object, additionalProperties: true, description: 'Numbers the text needs: w, h, px, min, mb, fill, actual'}
+        message: {type: string, description: Plain English for API readers}
+    MatchRequest:
+      type: object
+      description: A barcode, or a brand with its manufacturer part number
+      properties:
+        gtin: {type: string, maxLength: 20, description: 'UPC, EAN, GTIN or ISBN; spaces and dashes are allowed', example: '012345678905'}
+        brand: {type: string, maxLength: 120}
+        mpn: {type: string, maxLength: 80, description: Manufacturer part number}
+    MatchResultKind: {type: string, enum: [MATCH, NO_MATCH, INVALID, RESTRICTED]}
+    Blocker:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string, description: 'For example catalog.page-not-live, offers.selling-approval-required, catalog.brand-unavailable, catalog.wrong-match-open'}
+        message: {type: string}
+    MatchImage:
+      type: object
+      required: [url]
+      properties:
+        url: {type: string}
+        width: {type: [integer, 'null']}
+        height: {type: [integer, 'null']}
+    MatchVariant:
+      type: object
+      required: [atin, options]
+      properties:
+        atin: {type: string}
+        options: {type: object, additionalProperties: {type: string}}
+    CatalogMatch:
+      type: object
+      required: [result, canOffer, blockers, canCreate, createBlockers, variants]
+      properties:
+        result: {$ref: '#/components/schemas/MatchResultKind'}
+        matchedOn: {type: [string, 'null'], enum: [GTIN, BRAND_MPN, null]}
+        digits: {type: [string, 'null'], description: The cleaned barcode digits}
+        atin: {type: [string, 'null'], description: 'The matched variant; offers attach to it (never shown to the seller)'}
+        parentAtin: {type: [string, 'null']}
+        productStatus: {type: [string, 'null']}
+        title: {type: [string, 'null']}
+        brand: {type: [string, 'null']}
+        image: {oneOf: [{$ref: '#/components/schemas/MatchImage'}, {type: 'null'}]}
+        category: {type: [string, 'null'], description: Category path}
+        variantOptions: {type: [object, 'null'], additionalProperties: {type: string}}
+        variants:
+          type: array
+          description: Every child of the matched page (size, colour); each is its own item with its own offer
+          items: {$ref: '#/components/schemas/MatchVariant'}
+        sellerCount: {type: [integer, 'null'], description: How many sellers list the matched item (null when not known)}
+        canOffer: {type: boolean}
+        blockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
+        canCreate: {type: boolean, description: False when a new page with this barcode must not be created}
+        createBlockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
+        suggestion: {type: [string, 'null'], description: A corrected barcode when only the check digit is wrong}
+        message: {type: [string, 'null'], description: Plain words for INVALID and RESTRICTED}
+    OfferCondition: {type: string, enum: [NEW, RENEWED, USED_LIKE_NEW, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE]}
+    OfferOnlyInput:
+      type: object
+      description: Offer terms only. Page content (title, description, attributes, brand, category, images, barcode, options) is refused with 422 PAGE_CONTENT_LOCKED.
+      required: [atin, priceMinor, fulfilment]
+      additionalProperties: false
+      properties:
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$', description: The matched variant}
+        sellerSku: {type: string, maxLength: 40, description: Generated when blank}
+        condition: {$ref: '#/components/schemas/OfferCondition'}
+        conditionNote: {type: string, maxLength: 200, description: Required for any condition other than NEW}
+        priceMinor: {type: integer, format: int64, minimum: 1}
+        listPriceMinor: {type: integer, format: int64, minimum: 1, description: 'Strike-through price, not below the price'}
+        shippingMinor: {type: integer, format: int64, minimum: 0}
+        fulfilment: {type: string, enum: [SELLER, AFROTRANSACT, AFROTRANSACT_DELIVERY]}
+        quantity: {type: integer, minimum: 0, maximum: 100000, description: Required when the seller ships it}
+        handlingDays: {type: integer, minimum: 0, maximum: 30, default: 2}
+        shipFromLocationId: {type: string, maxLength: 64, description: 'One of the ship-from locations; required for AfroTransact pickup'}
+        packaging:
+          type: object
+          description: The box this seller ships the item in (Fulfilled by AfroTransact only)
+          required: [lengthIn, widthIn, heightIn, weightLb]
+          properties:
+            lengthIn: {type: number, exclusiveMinimum: 0, maximum: 108}
+            widthIn: {type: number, exclusiveMinimum: 0, maximum: 108}
+            heightIn: {type: number, exclusiveMinimum: 0, maximum: 108}
+            weightLb: {type: number, exclusiveMinimum: 0, maximum: 150}
+    OfferOnlyResult:
+      type: object
+      required: [offerId, atin, sellerSku, status, message]
+      properties:
+        offerId: {type: string}
+        atin: {type: string}
+        sellerSku: {type: string}
+        status: {type: string, enum: [ACTIVE, TAX_HELD, PAUSED, WITHDRAWN]}
+        heldReason: {type: [string, 'null'], description: 'Why a TAX_HELD offer waits, for example TAX_DECISION_MISSING'}
+        message: {type: string, description: 'Plain English; Seller Center translates by status. TAX_HELD: "We are checking the tax details for this item."'}
+    ChangeRequestType:
+      type: string
+      enum: [IMAGE_ADD, IMAGE_REPLACE, TITLE, ATTRIBUTE, DESCRIPTION, CATEGORY, BRAND, NEW_VARIANT, WRONG_MATCH, DUPLICATE_PAGE]
+    ChangeRequestStatus:
+      type: string
+      description: PENDING is Waiting, APPLIED is Applied, REJECTED is "Not applied, because ..."
+      enum: [PENDING, APPLIED, REJECTED, WITHDRAWN]
+    ChangeRequestInput:
+      type: object
+      required: [type]
+      properties:
+        type: {$ref: '#/components/schemas/ChangeRequestType'}
+        field: {type: string, maxLength: 60}
+        payload: {type: object, additionalProperties: true}
+        note: {type: string, maxLength: 1000, description: 'Why, in the seller''s words (shown to staff)'}
+    ChangeRequest:
+      type: object
+      required: [id, atin, type, status, requestedAt]
+      properties:
+        id: {type: string, format: uuid}
+        atin: {type: string, description: The page the request is about}
+        title: {type: [string, 'null']}
+        type: {$ref: '#/components/schemas/ChangeRequestType'}
+        field: {type: [string, 'null']}
+        payload: {type: [object, 'null'], additionalProperties: true}
+        note: {type: [string, 'null']}
+        status: {$ref: '#/components/schemas/ChangeRequestStatus'}
+        requestedAt: {type: string, format: date-time}
+        slaDueAt: {type: [string, 'null'], format: date-time}
+        decidedAt: {type: [string, 'null'], format: date-time}
+        reason: {type: [string, 'null'], description: 'Staff reason, shown to the seller'}
+        resolution: {type: [string, 'null']}
+    ChangeRequestPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ChangeRequest'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    ImageTaskReason:
+      type: object
+      required: [code, level, message]
+      properties:
+        code: {type: string, description: 'Media''s check codes plus NO_MAIN_IMAGE'}
+        level: {type: string}
+        message: {type: string}
+    ImageTask:
+      type: object
+      required: [productId, title, state, reasons, hidden]
+      properties:
+        productId: {type: string}
+        atin: {type: [string, 'null']}
+        title: {type: string}
+        state: {type: string, enum: [IMPROVE, FAIL]}
+        reasons: {type: array, items: {$ref: '#/components/schemas/ImageTaskReason'}}
+        failingSince: {type: [string, 'null'], format: date-time}
+        hideAfter: {type: [string, 'null'], format: date-time, description: End of the grace period (failing listings only)}
+        daysLeft: {type: [integer, 'null'], description: Whole days left of the grace period}
+        hidden: {type: boolean, description: The hide step has limited the listing}
+    ImageTaskList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ImageTask'}}
     StockPosition:
       type: object
       required: [sku, nodeId, onHand, reserved, available, inbound, lowStock]

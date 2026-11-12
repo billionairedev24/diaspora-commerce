@@ -27,9 +27,11 @@ type SellerDeps struct {
 	Catalog   port.SellerCatalogClient
 	Stock     port.StockClient
 	Offers    port.OffersClient
-	Media     port.MediaClient
-	Orders    port.SellerOrdersClient
-	Carrier   port.CarrierClient
+	// OfferListings is offers' public buy boxes: how many sellers list a matched item (S382); optional.
+	OfferListings port.StorefrontOffersClient
+	Media         port.MediaClient
+	Orders        port.SellerOrdersClient
+	Carrier       port.CarrierClient
 	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).
 	ProofLinks port.ProofLinks
 	Payouts    port.PayoutsClient

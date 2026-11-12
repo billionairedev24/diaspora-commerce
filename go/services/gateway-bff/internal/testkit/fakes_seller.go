@@ -88,6 +88,7 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 	u.sizeChartRoutes(mux)
 	u.productTaxRoutes(mux)
 	u.scopeRoutes(mux)
+	u.matchRoutes(mux)
 	u.sellingRoutes(mux)
 	u.moneyRoutes(mux)
 	u.libraryRoutes(mux)
@@ -929,9 +930,18 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		u.mu.Lock()
 		u.LastUploadPurpose, _ = body["purpose"].(string)
+		u.LastImageUpload = body
 		u.mu.Unlock()
-		writeJSON(w, 201, map[string]any{"asset": map[string]any{"id": "asset-1", "status": "PENDING"}, "upload": map[string]any{"method": "PUT",
-			"url": "https://uploads.example/asset-1", "headers": map[string]string{"Content-Type": "image/webp"}, "publicUrl": "https://img.example/asset-1.webp", "expiresAt": "2026-10-10T12:15:00Z"}})
+		// A file named reject-*, warn-* or held-* gets the verdict of that name when it is completed (S388).
+		id := "asset-1"
+		name, _ := body["fileName"].(string)
+		for _, kind := range []string{"reject", "warn", "held"} {
+			if strings.HasPrefix(name, kind+"-") {
+				id = "asset-" + kind
+			}
+		}
+		writeJSON(w, 201, map[string]any{"asset": map[string]any{"id": id, "status": "PENDING"}, "upload": map[string]any{"method": "PUT",
+			"url": "https://uploads.example/" + id, "headers": map[string]string{"Content-Type": "image/webp"}, "publicUrl": "https://img.example/asset-1.webp", "expiresAt": "2026-10-10T12:15:00Z"}})
 	})
 	mux.HandleFunc("GET /v1/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("id") {
@@ -949,7 +959,21 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 			problem(w, 404, "media.asset-not-found", "No such upload", nil)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"id": r.PathValue("id"), "url": "https://img.example/asset-1.webp", "contentType": "image/webp", "bytes": 182000, "width": 1600, "height": 1600, "status": "READY"})
+		asset := map[string]any{"id": r.PathValue("id"), "url": "https://img.example/asset-1.webp", "contentType": "image/webp", "bytes": 182000, "width": 1600, "height": 1600, "status": "READY"}
+		switch r.PathValue("id") {
+		case "asset-reject":
+			asset["status"], asset["url"], asset["width"], asset["height"] = "REJECTED", "", 640, 480
+			asset["imageSlot"], asset["verdict"] = "MAIN", "REJECT"
+			asset["checks"] = []map[string]any{{"code": "MAIN_TOO_SMALL", "level": "REJECT", "params": map[string]any{"w": 640, "h": 480}, "message": "This photo is too small."}}
+		case "asset-warn":
+			asset["imageSlot"], asset["verdict"] = "MAIN", "WARN"
+			asset["checks"] = []map[string]any{{"code": "FILL_OK_NEAR", "level": "WARN", "params": map[string]any{"fill": 80}, "message": "The product could fill more of the photo."}}
+		case "asset-held":
+			asset["status"], asset["url"] = "FLAGGED", ""
+			asset["imageSlot"], asset["verdict"] = "MAIN", "HOLD"
+			asset["checks"] = []map[string]any{{"code": "HELD_TEXT", "level": "HOLD", "params": map[string]any{}, "message": "We are checking this photo."}}
+		}
+		writeJSON(w, 200, asset)
 	})
 	mux.HandleFunc("POST /v1/rates", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {

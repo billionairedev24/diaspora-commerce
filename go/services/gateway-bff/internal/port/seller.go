@@ -853,6 +853,8 @@ type OffersClient interface {
 	SetStock(ctx context.Context, bearer, idempotencyKey, sku string, quantity int, reason string) (domain.StockAdjustment, error)
 	// List is GET /v1/offers (the token's organisation), one page.
 	List(ctx context.Context, bearer string, page, size int) (OfferPage, error)
+	// Create is POST /v1/offers: an offer on an existing page (S383). key is relayed as Idempotency-Key.
+	Create(ctx context.Context, bearer, key string, body map[string]any) (SellerOfferUp, error)
 	// Update is PATCH /v1/offers/{id} (only the fields present change).
 	Update(ctx context.Context, bearer, id string, body map[string]any) (SellerOfferUp, error)
 	// ListCoupons is GET /v1/coupons (seller-funded for the token's organisation).
@@ -899,7 +901,9 @@ type SellerOfferUp struct {
 	} `json:"shipFrom"`
 	ShipsFrom string `json:"shipsFrom"`
 	Status    string `json:"status"`
-	Version   int64  `json:"version"`
+	// HeldReason says why a TAX_HELD offer waits (TAX_DECISION_MISSING ...); empty otherwise.
+	HeldReason string `json:"heldReason"`
+	Version    int64  `json:"version"`
 }
 
 // OfferPage is offers' OfferPage.
@@ -920,6 +924,30 @@ type MediaAsset struct {
 	Width       *int   `json:"width"`
 	Height      *int   `json:"height"`
 	Status      string `json:"status"`
+	// ImageSlot, Verdict and Checks are media's image rules for a product image (S388): the slot the image was judged for,
+	// PASS, WARN, HOLD or REJECT, and every finding with its code, parameters and English message.
+	ImageSlot string            `json:"imageSlot"`
+	Verdict   string            `json:"verdict"`
+	Checks    []MediaImageCheck `json:"checks"`
+	Flags     []string          `json:"flags"`
+}
+
+// MediaImageCheck is media's ImageCheck: one finding of the image rules.
+type MediaImageCheck struct {
+	Code    string         `json:"code"`
+	Level   string         `json:"level"`
+	Params  map[string]any `json:"params"`
+	Message string         `json:"message"`
+}
+
+// MediaImageUpload is a signed upload request for an image with the context media's image rules need: the slot the
+// image is for (MAIN, OTHER, SWATCH, LABEL), the listing title and brand its AI check compares the picture with, and
+// the product type (apparel may show a model).
+type MediaImageUpload struct {
+	Purpose, FileName, ContentType      string
+	Size                                int64
+	Library                             bool
+	Slot, Title, Brand, ProductTypeCode string
 }
 
 // MediaUpload is media's upload answer.
@@ -947,6 +975,9 @@ type MediaLibraryImage struct {
 	Bytes     int64     `json:"bytes"`
 	Flags     []string  `json:"flags"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Verdict and Checks are the image rules' answer for the image (S388).
+	Verdict string            `json:"verdict"`
+	Checks  []MediaImageCheck `json:"checks"`
 }
 
 // MediaLibraryPage is media's LibraryPage.
@@ -962,6 +993,8 @@ type MediaClient interface {
 	RequestUpload(ctx context.Context, bearer, purpose, fileName, contentType string, size int64) (MediaUpload, error)
 	// RequestLibraryUpload is RequestUpload of a product image that also goes into the image library.
 	RequestLibraryUpload(ctx context.Context, bearer, fileName, contentType string, size int64) (MediaUpload, error)
+	// RequestImageUpload is RequestUpload with the image slot, title, brand and product type media's image rules use (S388).
+	RequestImageUpload(ctx context.Context, bearer string, in MediaImageUpload) (MediaUpload, error)
 	Complete(ctx context.Context, bearer, assetID string) (MediaAsset, error)
 	// Asset reads one asset's metadata with the caller's token (their own upload); a public image has its URL once media
 	// has published it (S324 review photos).

@@ -703,6 +703,11 @@ type Asset struct {
 	Bytes       *int64 `json:"bytes"`
 	ContentType string `json:"contentType"`
 	Status      string `json:"status"`
+	// Slot, Verdict and Checks are the image rules' answer for a product image (S388): the slot it was judged for,
+	// PASS, WARN, HOLD or REJECT, and every finding by code with its parameters. Verdict is empty for other uploads.
+	Slot    *string      `json:"slot,omitempty"`
+	Verdict *string      `json:"verdict,omitempty"`
+	Checks  []ImageCheck `json:"checks,omitempty"`
 }
 
 // InventoryLowStockThreshold flags positions with this many or fewer units available (inventory's rule).

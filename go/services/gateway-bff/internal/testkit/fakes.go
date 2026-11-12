@@ -181,6 +181,10 @@ type Upstreams struct {
 	// PlanFeeCollectionOff makes the seller service answer 409 to plan fee collection changes (S298 kill switch off).
 	PlanFeeCollectionOff bool
 	LastUploadPurpose    string
+	// LastImageUpload is the whole body of media's last POST /v1/uploads (slot, title, brand, productTypeCode reach it, S388).
+	LastImageUpload map[string]any
+	// LastOfferBody is the body of offers' last POST /v1/offers (S382).
+	LastOfferBody map[string]any
 
 	// LastProductBody is the body of catalog's last PUT /v1/products/{id}; LastUpload the last bulk upload
 	// (name, contentType, mode, productType, uploadedByName, body) — S307/S308.
