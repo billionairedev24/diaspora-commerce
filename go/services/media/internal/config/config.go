@@ -23,17 +23,26 @@ type Store struct {
 	// EndpointEnv names an env var that, when set, replaces Endpoint. Local LAN mode (make up MOBILE_HOST=lan) points
 	// it at http://<LAN IP>:9000 so presigned upload and download links work from a phone on the Wi-Fi; the public
 	// URLs stored with assets keep PublicBaseURL (localhost), which gateway-bff rewrites for the phone.
-	EndpointEnv  string `yaml:"endpointEnv"`
+	EndpointEnv string `yaml:"endpointEnv"`
+	// AccountIDEnv names an env var holding the Cloudflare account id; when set and EndpointEnv does not resolve,
+	// the endpoint is https://<account id>.r2.cloudflarestorage.com.
+	AccountIDEnv string `yaml:"accountIdEnv"`
 	AccessKeyEnv string `yaml:"accessKeyEnv"` // names of env vars holding credentials
 	SecretKeyEnv string `yaml:"secretKeyEnv"`
 	Account      string `yaml:"account"` // azure
 }
 
-// ResolvedEndpoint is the value of EndpointEnv when that variable is set and not blank, else Endpoint.
+// ResolvedEndpoint is the value of EndpointEnv when that variable is set and not blank, else the R2 endpoint built
+// from AccountIDEnv, else Endpoint.
 func (s Store) ResolvedEndpoint(getenv func(string) string) string {
 	if s.EndpointEnv != "" {
 		if v := strings.TrimSpace(getenv(s.EndpointEnv)); v != "" {
 			return v
+		}
+	}
+	if s.AccountIDEnv != "" {
+		if v := strings.TrimSpace(getenv(s.AccountIDEnv)); v != "" {
+			return "https://" + v + ".r2.cloudflarestorage.com"
 		}
 	}
 	return s.Endpoint
@@ -67,6 +76,10 @@ type Config struct {
 	} `yaml:"uploadthing"`
 	Stores   map[string]Store  `yaml:"stores"`   // named stores
 	Purposes map[string]string `yaml:"purposes"` // purpose → store name
+	// QuarantineStore names the private store that holds unmoderated public images until they are released. Unset,
+	// quarantine/ lives in the purpose's own store (local, dev, uat); prod requires it so the public bucket never
+	// contains an unreleased image.
+	QuarantineStore string `yaml:"quarantineStore"`
 	// Links bounds signed download links of private assets.
 	Links struct {
 		DefaultTTL time.Duration `yaml:"defaultTtl" env:"SIGNED_URL_DEFAULT_TTL"`

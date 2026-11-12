@@ -155,6 +155,44 @@ func TestCleanProductImageIsStrippedAndPublishedAfterModeration(t *testing.T) {
 	}
 }
 
+func TestQuarantineStoreKeepsUnreleasedImagesOutOfThePublicStore(t *testing.T) {
+	pub := &memStore{objects: map[string][]byte{}}
+	hold := &memStore{objects: map[string][]byte{}}
+	repo := &memRepo{assets: map[string]domain.Asset{}}
+	stores := map[domain.Purpose]port.ObjectStore{domain.PurposeProductImage: pub, domain.PurposeStorefront: pub}
+	svc := app.NewMediaService(stores, repo, inspect.New(40_000_000), domain.LinkPolicy{},
+		app.WithModeration(imageproc.New(40_000_000), &fakeModerator{verdict: allow}, domain.ModerationPolicy{DuplicateDistance: 6}, time.Second),
+		app.WithQuarantine(hold))
+	ctx := context.Background()
+	a, up, err := svc.RequestUpload(ctx, sellerMember, domain.PurposeProductImage, "dress.jpg", "image/jpeg", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(up.Key, domain.QuarantinePrefix) {
+		t.Fatalf("upload key %s", up.Key)
+	}
+	// The browser PUTs into the quarantine store; the public store never sees the upload.
+	hold.objects[up.Key] = withGPS(productPhoto(t, 1))
+	done, err := svc.Complete(ctx, sellerMember, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != domain.StatusReady || strings.HasPrefix(done.Key, domain.QuarantinePrefix) {
+		t.Fatalf("published asset %+v", done)
+	}
+	if _, ok := pub.objects[done.Key]; !ok {
+		t.Fatal("the cleaned image must be written to the public store")
+	}
+	if _, ok := hold.objects[up.Key]; ok {
+		t.Fatal("the quarantined upload must be deleted from the quarantine store")
+	}
+	for k := range pub.objects {
+		if strings.HasPrefix(k, domain.QuarantinePrefix) {
+			t.Fatalf("public store holds a quarantine key %s", k)
+		}
+	}
+}
+
 func TestAIReviewHoldsTheImageUntilStaffRelease(t *testing.T) {
 	f := newModeration(domain.ModerationPolicy{DuplicateDistance: 6},
 		&fakeModerator{verdict: domain.AIVerdict{Decision: domain.AIReview, Labels: []string{"WATERMARK"}}})

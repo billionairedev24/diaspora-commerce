@@ -206,7 +206,8 @@ type Asset struct {
 var ErrConflict = errors.New("asset changed concurrently")
 
 // QuarantinePrefix starts the object key of a public image until moderation releases it: the public store serves
-// only the purpose prefixes, never quarantine/ (bucket policy), and UploadThing keeps such files private.
+// only the purpose prefixes, never quarantine/ (bucket policy, or in prod a separate private quarantine store), and
+// UploadThing keeps such files private.
 const QuarantinePrefix = "quarantine/"
 
 // ErrRejected marks uploads that break the purpose rules.

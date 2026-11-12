@@ -50,6 +50,10 @@ func New(o Options) port.ObjectStore {
 			opt.BaseEndpoint = aws.String(o.Endpoint)
 		}
 		opt.UsePathStyle = o.PathStyle
+		// R2, GCS and MinIO reject the default CRC32 trailer / checksum headers newer SDKs add to every request,
+		// including presigned PUTs a browser cannot compute; only send checksums an operation requires.
+		opt.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+		opt.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 	})
 	return &storeImpl{opts: o, client: client, presign: s3.NewPresignClient(client)}
 }

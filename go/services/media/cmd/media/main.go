@@ -57,6 +57,9 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 	cfg.Resolve(loader.Env())
+	if err := cfg.Validate(loader.Env(), os.Getenv); err != nil {
+		return fmt.Errorf("invalid %s configuration: %w", loader.Env(), err)
+	}
 	log := logging.New(serviceName, loader.Env())
 	slog.SetDefault(log)
 	if err := resolveUploadThing(&cfg); err != nil {
@@ -98,6 +101,13 @@ func run() error {
 	// S308: catalog-service imports the images of bulk product uploads from their URLs (public addresses only).
 	opts := []app.Option{app.WithLogger(log), moderation(cfg, log), app.WithFetcher(urlfetch.New(urlfetch.Options{})),
 		app.WithLibrary(repo)}
+	if cfg.QuarantineStore != "" {
+		qs, ok := named[cfg.QuarantineStore]
+		if !ok {
+			return fmt.Errorf("quarantineStore refers to unknown store %s", cfg.QuarantineStore)
+		}
+		opts = append(opts, app.WithQuarantine(qs))
+	}
 	if o, err := links(cfg, log); err != nil {
 		return err
 	} else if o != nil {
