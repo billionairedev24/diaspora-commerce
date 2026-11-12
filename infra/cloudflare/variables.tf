@@ -125,3 +125,17 @@ variable "developers_enabled" {
   type        = bool
   default     = true
 }
+
+variable "google_site_verification" {
+  description = <<-EOT
+    Google Search Console domain verification: the token AFTER "google-site-verification=" of the TXT record Search Console shows
+    (docs/runbooks/seo-and-search-console.md). The owner pastes it into envs/prod.tfvars; it is a public DNS value, not a secret.
+    Only the prod run creates the record (the apex of the zone); empty (default) = no record.
+  EOT
+  type        = string
+  default     = ""
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{0,100}$", var.google_site_verification))
+    error_message = "google_site_verification is the bare token (letters, digits, - and _), without the google-site-verification= prefix."
+  }
+}

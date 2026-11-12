@@ -4,7 +4,24 @@
 import { buildCspHeaders } from '@afrotransact/ui/csp';
 import { type NextRequest,NextResponse } from 'next/server';
 
+import { indexingPolicy, robotsHeaderFor, seoEnvFromProcess, wwwRedirectTarget } from '@/lib/seo/policy';
+
+/** Crawler directives on EVERY response this middleware sees (pages, 404s, route handlers, the BFF proxy): a non-prod host,
+    or a private path anywhere, always carries X-Robots-Tag: noindex (docs/engineering/seo.md, test/seo-env-safety.test.ts). */
+function withRobots(request: NextRequest, response: NextResponse): NextResponse {
+  const tag = robotsHeaderFor(indexingPolicy(seoEnvFromProcess(), request.headers.get('host')), request.nextUrl.pathname);
+  if (tag) response.headers.set('X-Robots-Tag', tag);
+  return response;
+}
+
 export function middleware(request: NextRequest): NextResponse {
+  // One canonical host: www.<canonical> (not in the host map; a stray DNS record) 301s to the canonical origin.
+  const www = wwwRedirectTarget(seoEnvFromProcess(), request.nextUrl);
+  if (www) return NextResponse.redirect(www, 301);
+  return withRobots(request, withCsp(request));
+}
+
+function withCsp(request: NextRequest): NextResponse {
   // NEXT_PUBLIC_* are inlined at build time, so each variable is named literally here.
   const csp = buildCspHeaders('storefront', {
     NODE_ENV: process.env.NODE_ENV,

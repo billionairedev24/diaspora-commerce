@@ -22,6 +22,19 @@ resource "cloudflare_workers_route" "web" {
   script   = "${each.key}-${var.environment}"
 }
 
+# Google Search Console domain verification (DNS TXT at the zone apex). Prod only: the trial and the other environments stay
+# unverified on purpose (they are noindex). Covers every subdomain of the zone once verified.
+resource "cloudflare_dns_record" "google_site_verification" {
+  count   = var.environment == "prod" && var.google_site_verification != "" ? 1 : 0
+  zone_id = local.zone_id
+  name    = local.zone
+  type    = "TXT"
+  content = "\"google-site-verification=${var.google_site_verification}\""
+  ttl     = 1
+  comment = "Google Search Console domain verification (docs/runbooks/seo-and-search-console.md)"
+  tags    = local.tags
+}
+
 # ------------------------------------------------------------------------------ API origins
 resource "cloudflare_dns_record" "origin_ingress" {
   for_each = var.origin_mode == "ingress" ? toset(local.origin_apps) : toset([])

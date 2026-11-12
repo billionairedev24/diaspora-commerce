@@ -1,0 +1,3 @@
+.nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--at-space-4); padding: var(--at-space-4) var(--at-page-gutter); font-size: var(--at-text-sm); }
+.link { color: var(--at-color-link); min-height: var(--at-size-control-sm); display: inline-flex; align-items: center; }
+.status { color: var(--at-color-text-muted); }

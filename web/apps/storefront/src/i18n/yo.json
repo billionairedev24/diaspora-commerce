@@ -1937,5 +1937,22 @@
   "pwa.offline.title": "O kò sí lórí íńtánẹ́ẹ̀tì",
   "pwa.offline.heading": "O kò sí lórí íńtánẹ́ẹ̀tì",
   "pwa.offline.body": "AfroTransact nílò ìsopọ̀ láti fi àwọn ọjà, àpò rẹ àti àwọn ìbéèrè rẹ hàn. Ṣàyẹ̀wò ìsopọ̀ rẹ kí o tún gbìyànjú.",
-  "pwa.offline.retry": "Gbìyànjú lẹ́ẹ̀kan sí i"
+  "pwa.offline.retry": "Gbìyànjú lẹ́ẹ̀kan sí i",
+  "seo.product.desc": "{title} láti ọwọ́ {brand} · {community}. {highlights}",
+  "seo.product.descNoBrand": "{title} · {community}. {highlights}",
+  "seo.product.outOfStock": "Kò sí báyìí.",
+  "seo.category.desc": "Ra {name}: ọjà {count} láti ọwọ́ àwọn olùtajà tí a ti ṣàyẹ̀wò.",
+  "seo.category.descNone": "Ra {name} láti ọwọ́ àwọn olùtajà tí a ti ṣàyẹ̀wò.",
+  "seo.category.page": "{name} · ojú-ìwé {page}",
+  "seo.service.desc": "{name} láti ọwọ́ {provider}, {category}. {summary}",
+  "seo.provider.title": "{provider} · àwọn iṣẹ́",
+  "seo.provider.desc": "Béèrè iṣẹ́ láti ọwọ́ {provider}: {services}.",
+  "seo.notFound.title": "A kò rí ojú-ìwé náà",
+  "seo.search.title": "Wá",
+  "seo.search.titleFor": "Wá: {subject}",
+  "seo.breadcrumb.home": "Ilé",
+  "seo.pagination.label": "Àwọn ojú-ìwé èsì",
+  "seo.pagination.prev": "Ojú-ìwé tẹ́lẹ̀",
+  "seo.pagination.next": "Ojú-ìwé tó kàn",
+  "seo.pagination.status": "Ojú-ìwé {page} nínú {count}"
 }

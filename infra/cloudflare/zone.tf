@@ -54,6 +54,31 @@ locals {
     for env in var.edge_response_header_environments :
     env => "http.host in {${join(" ", [for h in local.env_all_hosts[env] : "\"${h}\""])}}"
   }
+
+  # Crawler directives (docs/engineering/seo.md), all derived from hosts.json: only the prod storefront is indexable.
+  #  - every host of every NON-prod environment (storefront, seller, admin, api, auth, media, developers, ...): X-Robots-Tag noindex
+  #    on every response, static assets included (the Worker's own middleware covers dynamic responses; this covers the rest);
+  #  - prod seller / admin / api / auth / grafana / mcp: noindex always (back offices and machine endpoints);
+  #  - prod media: noindex for everything that is not an image (images stay indexable for Google Images).
+  noindex_value      = "noindex, nofollow, noarchive"
+  prod_zone          = lookup(local.hostmap.envs["prod"], "zone", local.hostmap.zone)
+  noindex_hosts_all  = flatten([for env, hosts in local.env_all_hosts : hosts if env != "prod"])
+  prod_noindex_hosts = [for r in local.all_roles : "${r}.${local.prod_zone}" if !contains(["media", "developers"], r)]
+  prod_media_host    = "media.${local.prod_zone}"
+  noindex_rules = [
+    {
+      description = "non-prod hosts: X-Robots-Tag noindex"
+      expression  = "http.host in {${join(" ", [for h in local.noindex_hosts_all : "\"${h}\""])}}"
+    },
+    {
+      description = "prod back offices and machine endpoints: X-Robots-Tag noindex"
+      expression  = "http.host in {${join(" ", [for h in local.prod_noindex_hosts : "\"${h}\""])}}"
+    },
+    {
+      description = "prod media origin: X-Robots-Tag noindex except images"
+      expression  = "http.host eq \"${local.prod_media_host}\" and not starts_with(http.response.content_type.media_type, \"image/\")"
+    },
+  ]
 }
 
 resource "cloudflare_ruleset" "response_headers" {
@@ -62,20 +87,36 @@ resource "cloudflare_ruleset" "response_headers" {
   name    = "baseline response headers"
   kind    = "zone"
   phase   = "http_response_headers_transform"
-  rules = [for env, host_expression in local.edge_header_host_expressions : {
-    description = "${env}: Referrer-Policy when the origin sent none"
-    expression  = "${host_expression} and not any(http.response.headers.names[*] eq \"referrer-policy\")"
-    action      = "rewrite"
-    enabled     = true
-    action_parameters = {
-      headers = {
-        "Referrer-Policy" = {
-          operation = "set"
-          value     = "strict-origin-when-cross-origin"
+  rules = concat(
+    [for r in local.noindex_rules : {
+      description = r.description
+      expression  = r.expression
+      action      = "rewrite"
+      enabled     = true
+      action_parameters = {
+        headers = {
+          "X-Robots-Tag" = {
+            operation = "set"
+            value     = local.noindex_value
+          }
         }
       }
-    }
-  }]
+    }],
+    [for env, host_expression in local.edge_header_host_expressions : {
+      description = "${env}: Referrer-Policy when the origin sent none"
+      expression  = "${host_expression} and not any(http.response.headers.names[*] eq \"referrer-policy\")"
+      action      = "rewrite"
+      enabled     = true
+      action_parameters = {
+        headers = {
+          "Referrer-Policy" = {
+            operation = "set"
+            value     = "strict-origin-when-cross-origin"
+          }
+        }
+      }
+    }]
+  )
 }
 
 # Authenticated Origin Pulls (zone-level, Cloudflare origin-pull CA): the cluster ingress (Envoy) must

@@ -22,3 +22,7 @@ workers_routes_enabled = true
 admin_allowlist                   = [] # e.g. ["203.0.113.10/32"] office / VPN egress
 auth_rate_limit                   = { requests = 20, period = 60, timeout = 600 }
 checkout_rate_limit               = { requests = 30, period = 60, timeout = 300 }
+
+# Google Search Console domain verification (owner): paste the token Search Console shows after "google-site-verification=",
+# then apply. A public DNS value, not a secret. docs/runbooks/seo-and-search-console.md
+# google_site_verification = "REPLACE_WITH_TOKEN"

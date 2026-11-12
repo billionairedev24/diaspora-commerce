@@ -22,11 +22,14 @@ import { CONSENT_COOKIE, headerGpc, parseConsent } from '@/lib/consent/consent';
 import { ConsentGate } from '@/lib/consent/ConsentProvider';
 import { maintenanceNow } from '@/lib/maintenance';
 import { Providers } from '@/lib/query/Providers';
+import { getIndexingPolicy } from '@/lib/seo/server';
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getT();
+  const [t, policy] = await Promise.all([getT(), getIndexingPolicy()]);
   return {
     title: { default: t('meta.title'), template: '%s · AfroTransact' },
+    // Fail closed: a host that is not the prod canonical host is noindex in the markup too (the X-Robots-Tag header says the same).
+    ...(policy.indexable ? {} : { robots: { index: false, follow: false } }),
     description: t('meta.description'),
     metadataBase: publicWebUrl(),
     applicationName: 'AfroTransact',
@@ -34,7 +37,8 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: '/manifest.webmanifest',
     icons: { icon: '/logo-mark.svg', apple: '/icons/apple-touch-icon.png' },
     appleWebApp: { capable: true, title: 'AfroTransact', statusBarStyle: 'default' },
-    openGraph: { siteName: 'AfroTransact', type: 'website' }
+    openGraph: { siteName: 'AfroTransact', type: 'website', title: t('meta.title'), description: t('meta.description') },
+    twitter: { card: 'summary', title: t('meta.title'), description: t('meta.description') }
   };
 }
 

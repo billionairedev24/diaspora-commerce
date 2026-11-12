@@ -1930,5 +1930,22 @@
   "pwa.offline.title": "You are offline",
   "pwa.offline.heading": "You are offline",
   "pwa.offline.body": "AfroTransact needs a connection to show products, your cart and your orders. Check your connection and try again.",
-  "pwa.offline.retry": "Try again"
+  "pwa.offline.retry": "Try again",
+  "seo.product.desc": "{title} by {brand} · {community}. {highlights}",
+  "seo.product.descNoBrand": "{title} · {community}. {highlights}",
+  "seo.product.outOfStock": "Currently unavailable.",
+  "seo.category.desc": "Shop {name}: {count} products from verified diaspora sellers.",
+  "seo.category.descNone": "Shop {name} from verified diaspora sellers.",
+  "seo.category.page": "{name} · page {page}",
+  "seo.service.desc": "{name} by {provider}, {category}. {summary}",
+  "seo.provider.title": "{provider} · services",
+  "seo.provider.desc": "Book services from {provider}: {services}.",
+  "seo.notFound.title": "Page not found",
+  "seo.search.title": "Search",
+  "seo.search.titleFor": "Search: {subject}",
+  "seo.breadcrumb.home": "Home",
+  "seo.pagination.label": "Result pages",
+  "seo.pagination.prev": "Previous page",
+  "seo.pagination.next": "Next page",
+  "seo.pagination.status": "Page {page} of {count}"
 }

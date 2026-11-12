@@ -8,6 +8,8 @@ import { getT } from '@/i18n/server';
 import { helpQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
+import { pageMetadata } from '@/lib/seo/metadata';
+import { getIndexingPolicy } from '@/lib/seo/server';
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -30,7 +32,7 @@ const load = cache(async (raw: string): Promise<HelpArticle> => {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await load((await params).slug);
   const t = await getT();
-  return { title: `${article.title} · ${t('title.help')}`, description: article.summary, alternates: { canonical: helpHref(article.slug) } };
+  return pageMetadata({ title: `${article.title} · ${t('title.help')}`, description: article.summary, canonicalPath: helpHref(article.slug), index: true, ogType: 'article' }, await getIndexingPolicy());
 }
 
 /** A help page (shipping & delivery, returns, Fulfilled by AfroTransact, advertising, press…) from content-service. */

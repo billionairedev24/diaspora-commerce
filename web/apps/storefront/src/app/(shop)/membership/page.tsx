@@ -5,7 +5,7 @@ import { getT } from '@/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
-  return { title: t('title.membership') };
+  return { title: t('title.membership'), alternates: { canonical: '/membership' } };
 }
 
 /** Public: anyone can see the tiers; joining needs a signed-in shopper with a saved card. */

@@ -10,7 +10,7 @@ import { getQueryClient } from '@/lib/query/getQueryClient';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
-  return { title: t('title.about'), description: t('about.intro') };
+  return { title: t('title.about'), description: t('about.intro'), alternates: { canonical: '/about' } };
 }
 
 export default async function AboutPage() {

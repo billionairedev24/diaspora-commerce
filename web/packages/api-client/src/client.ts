@@ -99,6 +99,12 @@ export function createApiClient(options: ApiClientOptions) {
 
     /* Search */
     search: (query: SearchQuery, signal?: AbortSignal): Promise<SearchPage> => request('/v1/search', SearchPageSchema, { query: toApiSearchParams(query), signal }),
+    /** The same search without sponsored slots (`ads=false`): machine-made queries (sitemap generation) must neither show nor charge ads. */
+    searchOrganic: (query: SearchQuery, signal?: AbortSignal): Promise<SearchPage> => {
+      const params = toApiSearchParams(query);
+      params.set('ads', 'false');
+      return request('/v1/search', SearchPageSchema, { query: params, signal });
+    },
     suggest: (q: string, signal?: AbortSignal): Promise<Suggestions> => request('/v1/search/suggestions', SuggestionsSchema, { query: { q }, signal }),
 
     /* Catalogue */

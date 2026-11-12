@@ -30,8 +30,8 @@ export function staffConsoleUrl(): string {
   return (env('STAFF_CONSOLE_URL') ?? 'http://localhost:3002').replace(/\/+$/, '');
 }
 
-/** The storefront's own canonical origin (PUBLIC_WEB_URL: https://www.<domain> in prod, the apex elsewhere; the host rule is
-    global.storefrontHost, docs/engineering/environments.md). Base of canonical URLs and Open Graph URLs; undefined when
+/** The storefront's own canonical origin (PUBLIC_WEB_URL: the base host of the environment (the bare zone in prod,
+    <suffix>.<zone> elsewhere, never www: infra/cloudflare/hosts.json, docs/engineering/environments.md). Base of canonical URLs and Open Graph URLs; undefined when
     unset or not an absolute URL (local runs), so relative metadata then resolves against the request. */
 export function publicWebUrl(): URL | undefined {
   const raw = env('PUBLIC_WEB_URL');

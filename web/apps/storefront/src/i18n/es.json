@@ -1937,5 +1937,22 @@
   "pwa.offline.title": "Sin conexión",
   "pwa.offline.heading": "Sin conexión",
   "pwa.offline.body": "AfroTransact necesita conexión para mostrar productos, tu carrito y tus pedidos. Revisa tu conexión e inténtalo de nuevo.",
-  "pwa.offline.retry": "Reintentar"
+  "pwa.offline.retry": "Reintentar",
+  "seo.product.desc": "{title} de {brand} · {community}. {highlights}",
+  "seo.product.descNoBrand": "{title} · {community}. {highlights}",
+  "seo.product.outOfStock": "No disponible por ahora.",
+  "seo.category.desc": "Compra {name}: {count} productos de vendedores verificados de la diáspora.",
+  "seo.category.descNone": "Compra {name} de vendedores verificados de la diáspora.",
+  "seo.category.page": "{name} · página {page}",
+  "seo.service.desc": "{name} de {provider}, {category}. {summary}",
+  "seo.provider.title": "{provider} · servicios",
+  "seo.provider.desc": "Reserva servicios de {provider}: {services}.",
+  "seo.notFound.title": "Página no encontrada",
+  "seo.search.title": "Buscar",
+  "seo.search.titleFor": "Buscar: {subject}",
+  "seo.breadcrumb.home": "Inicio",
+  "seo.pagination.label": "Páginas de resultados",
+  "seo.pagination.prev": "Página anterior",
+  "seo.pagination.next": "Página siguiente",
+  "seo.pagination.status": "Página {page} de {count}"
 }

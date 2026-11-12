@@ -29,6 +29,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}/api/bff/v1/site-config`,
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,
-    env: { NEXT_PUBLIC_API_MOCKS: '1', NEXT_TELEMETRY_DISABLED: '1' }
+    // PUBLIC_WEB_URL gives the pages an absolute canonical origin (as every deployed environment has); APP_ENV stays unset, so this
+    // server is a NON-prod one and e2e/seo.spec.ts can prove it is noindex.
+    env: { NEXT_PUBLIC_API_MOCKS: '1', NEXT_TELEMETRY_DISABLED: '1', PUBLIC_WEB_URL: `http://localhost:${PORT}` }
   }
 });

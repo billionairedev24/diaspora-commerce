@@ -20,7 +20,7 @@ const SORTS: SearchSort[] = ['relevance', 'price_asc', 'price_desc', 'rating', '
 const countOf = (buckets: FacetBucket[] | undefined, value: string) => buckets?.find((b) => b.value === value)?.count;
 
 /** Search results: URL-synced filters and sort, facet counts from the API; more results load as the shopper scrolls. */
-export function SearchResults() {
+export function SearchResults({ heading }: { heading?: string } = {}) {
   const t = useT();
   const fmt = useFormatters();
   const params = useSearchParams();
@@ -208,7 +208,7 @@ export function SearchResults() {
           </aside>
         </div>
         <div className={styles.main}>
-          <h1 className={styles.title}>{t('results.title')}</h1>
+          <h1 className={styles.title}>{heading ?? t('results.title')}</h1>
           <p className={styles.note}>{t('results.note', { location: location?.label ?? data?.deliverToLabel ?? '' })}</p>
           {data?.services.length ? (
             <section className={styles.services} aria-labelledby="results-services">

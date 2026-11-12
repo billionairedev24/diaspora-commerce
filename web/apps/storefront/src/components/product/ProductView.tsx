@@ -106,7 +106,7 @@ export function ProductView({ atin }: { atin: string }) {
           ))}
         </ul>
         <div className={styles.main}>
-          <ImagePlaceholder src={current?.url} alt={current?.alt ?? p.title} />
+          <ImagePlaceholder src={current?.url} alt={current?.alt?.trim() || p.title} loading="eager" fetchPriority="high" />
         </div>
         <div className={styles.info}>
           <h1 className={styles.title}>{p.title}</h1>

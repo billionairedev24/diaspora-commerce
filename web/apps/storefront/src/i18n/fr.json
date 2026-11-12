@@ -1937,5 +1937,22 @@
   "pwa.offline.title": "Vous êtes hors ligne",
   "pwa.offline.heading": "Vous êtes hors ligne",
   "pwa.offline.body": "AfroTransact a besoin d’une connexion pour afficher les produits, votre panier et vos commandes. Vérifiez votre connexion et réessayez.",
-  "pwa.offline.retry": "Réessayer"
+  "pwa.offline.retry": "Réessayer",
+  "seo.product.desc": "{title} par {brand} · {community}. {highlights}",
+  "seo.product.descNoBrand": "{title} · {community}. {highlights}",
+  "seo.product.outOfStock": "Actuellement indisponible.",
+  "seo.category.desc": "Achetez {name} : {count} produits de vendeurs vérifiés de la diaspora.",
+  "seo.category.descNone": "Achetez {name} auprès de vendeurs vérifiés de la diaspora.",
+  "seo.category.page": "{name} · page {page}",
+  "seo.service.desc": "{name} par {provider}, {category}. {summary}",
+  "seo.provider.title": "{provider} · services",
+  "seo.provider.desc": "Réservez des services chez {provider} : {services}.",
+  "seo.notFound.title": "Page introuvable",
+  "seo.search.title": "Recherche",
+  "seo.search.titleFor": "Recherche : {subject}",
+  "seo.breadcrumb.home": "Accueil",
+  "seo.pagination.label": "Pages de résultats",
+  "seo.pagination.prev": "Page précédente",
+  "seo.pagination.next": "Page suivante",
+  "seo.pagination.status": "Page {page} sur {count}"
 }

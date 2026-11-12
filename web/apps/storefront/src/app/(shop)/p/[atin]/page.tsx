@@ -5,9 +5,13 @@ import { notFound } from 'next/navigation';
 
 import { ProductView } from '@/components/product/ProductView';
 import { TrackView } from '@/components/product/TrackView';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { getT } from '@/i18n/server';
 import { productQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
+import { productSeo } from '@/lib/seo/pages';
+import { getIndexingPolicy } from '@/lib/seo/server';
 
 type Props = { params: Promise<{ atin: string }> };
 
@@ -26,35 +30,22 @@ async function load(atin: string): Promise<{ qc: ReturnType<typeof getQueryClien
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { atin } = await params;
   const r = await load(atin);
-  if (!r) return { title: 'Product not found' };
-  const p = r.detail.product;
-  return { title: p.title, description: `${p.bullets.join('. ')}. ${p.community} · ${p.unit}.`, alternates: { canonical: `/p/${p.atin}` } };
+  // Next adds noindex to a not-found response; a product the catalog no longer has answers 404 and leaves the sitemap.
+  if (!r) return { title: (await getT())('seo.notFound.title'), robots: { index: false, follow: false } };
+  return productSeo(r.detail, await getIndexingPolicy(), await getT()).metadata;
 }
 
-/** Product detail page — server-rendered with Product structured data. */
+/** Product detail page: server-rendered with Product + Offer and BreadcrumbList structured data in the first HTML response. */
 export default async function ProductPage({ params }: Props) {
   const { atin } = await params;
   const r = await load(atin);
   if (!r) notFound();
-  const { product: p, buyBox } = r.detail;
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    name: p.title,
-    sku: p.atin,
-    brand: { '@type': 'Brand', name: p.brand },
-    description: p.bullets.join(' '),
-    // Only verified-purchase reviews count (S324); schema.org wants no aggregateRating without any.
-    ...(p.reviewCount > 0 ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: p.rating, reviewCount: p.reviewCount } } : {}),
-    offers: buyBox
-      ? { '@type': 'Offer', price: (buyBox.priceMinor / 100).toFixed(2), priceCurrency: buyBox.currency, availability: 'https://schema.org/InStock', seller: { '@type': 'Organization', name: buyBox.seller.name } }
-      : { '@type': 'Offer', availability: 'https://schema.org/OutOfStock' }
-  };
+  const seo = productSeo(r.detail, await getIndexingPolicy(), await getT());
   return (
     <HydrationBoundary state={dehydrate(r.qc)}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
-      <TrackView atin={p.atin} />
-      <ProductView atin={p.atin} />
+      <JsonLd data={seo.jsonLd} />
+      <TrackView atin={r.detail.product.atin} />
+      <ProductView atin={r.detail.product.atin} />
     </HydrationBoundary>
   );
 }

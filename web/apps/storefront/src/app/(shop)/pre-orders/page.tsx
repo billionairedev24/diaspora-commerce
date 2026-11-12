@@ -5,7 +5,7 @@ import { getT } from '@/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
-  return { title: t('preorder.off.title') };
+  return { title: t('preorder.off.title'), alternates: { canonical: '/pre-orders' } };
 }
 
 /** /pre-orders (S273): the shopper's pre-order window, or the open and upcoming ones elsewhere. ?place=US/TX/Lubbock

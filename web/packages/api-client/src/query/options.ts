@@ -58,7 +58,8 @@ export const searchQueries = {
     infiniteQueryOptions({
       queryKey: searchKeys.infinite(query),
       queryFn: ({ pageParam, signal }) => api.search({ ...query, page: pageParam }, signal),
-      initialPageParam: 0,
+      // /s?dept=Fashion&page=3 (a crawlable pagination link) starts at its own page; scrolling loads the pages after it.
+      initialPageParam: query.page,
       getNextPageParam: (last) => (last.page + 1 < last.pageCount ? last.page + 1 : undefined),
       staleTime: 30_000
     }),

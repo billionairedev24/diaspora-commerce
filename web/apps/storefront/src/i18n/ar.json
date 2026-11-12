@@ -1937,5 +1937,22 @@
   "pwa.offline.title": "أنت غير متصل بالإنترنت",
   "pwa.offline.heading": "أنت غير متصل بالإنترنت",
   "pwa.offline.body": "يحتاج AfroTransact إلى اتصال لعرض المنتجات وسلتك وطلباتك. تحقق من اتصالك وحاول مرة أخرى.",
-  "pwa.offline.retry": "حاول مرة أخرى"
+  "pwa.offline.retry": "حاول مرة أخرى",
+  "seo.product.desc": "{title} من {brand} · {community}. {highlights}",
+  "seo.product.descNoBrand": "{title} · {community}. {highlights}",
+  "seo.product.outOfStock": "غير متوفر حاليًا.",
+  "seo.category.desc": "تسوّق {name}: {count} منتجًا من بائعين موثّقين من الجالية.",
+  "seo.category.descNone": "تسوّق {name} من بائعين موثّقين من الجالية.",
+  "seo.category.page": "{name} · الصفحة {page}",
+  "seo.service.desc": "{name} من {provider}، {category}. {summary}",
+  "seo.provider.title": "{provider} · الخدمات",
+  "seo.provider.desc": "احجز خدمات من {provider}: {services}.",
+  "seo.notFound.title": "الصفحة غير موجودة",
+  "seo.search.title": "بحث",
+  "seo.search.titleFor": "بحث: {subject}",
+  "seo.breadcrumb.home": "الرئيسية",
+  "seo.pagination.label": "صفحات النتائج",
+  "seo.pagination.prev": "الصفحة السابقة",
+  "seo.pagination.next": "الصفحة التالية",
+  "seo.pagination.status": "الصفحة {page} من {count}"
 }

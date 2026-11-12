@@ -15,13 +15,15 @@ export interface ImagePlaceholderProps {
   stripe?: number;
   /** `eager` for above-the-fold images (the home hero); lazy otherwise. */
   loading?: 'eager' | 'lazy';
+  /** `high` for the page's LCP image (the product's main photo); the browser then fetches it before everything else. */
+  fetchPriority?: 'high' | 'low' | 'auto';
   className?: string;
   style?: CSSProperties;
 }
 
 /** Product / campaign / tile image: renders `src` whenever the API sends one and falls back to the design's striped
     placeholder when there is none or it fails to load. */
-export function ImagePlaceholder({ src, alt, caption, ratio = '1 / 1', loading = 'lazy', className, style }: ImagePlaceholderProps) {
+export function ImagePlaceholder({ src, alt, caption, ratio = '1 / 1', loading = 'lazy', fetchPriority, className, style }: ImagePlaceholderProps) {
   const [failed, setFailed] = useState<string | null>(null);
   const showImage = !!src && failed !== src;
   // A server-rendered <img> can fail before hydration, when React's onError never fires: check it on mount too.
@@ -36,7 +38,7 @@ export function ImagePlaceholder({ src, alt, caption, ratio = '1 / 1', loading =
   const a11y = showImage ? {} : decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': alt };
   return (
     <span className={cx(styles.placeholder, showImage && styles.withImage, className)} style={{ aspectRatio: ratio, ...style }} {...a11y}>
-      {showImage && <img ref={check} src={src} alt={alt} loading={loading} decoding="async" onError={() => setFailed(src)} />}
+      {showImage && <img ref={check} src={src} alt={alt} loading={loading} fetchPriority={fetchPriority} decoding="async" onError={() => setFailed(src)} />}
       {!showImage && caption && (
         <span className={styles.placeholderCaption} aria-hidden>
           {caption}

@@ -6,7 +6,8 @@ import { parseRadius } from '@/lib/services/radius';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
-  return { title: t('title.services'), description: t('title.servicesDescription') };
+  // ?category=, ?q=, ?radius= are views of the hub: one canonical.
+  return { title: t('title.services'), description: t('title.servicesDescription'), alternates: { canonical: '/services' } };
 }
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';

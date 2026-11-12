@@ -1,0 +1,44 @@
+# SEO drift probe (docs/runbooks/seo-and-search-console.md). Hand-written (tools/ci/gen_workflows.py generates only the per-service, web and promote workflows).
+#   pull_request : the probe's own unit tests (fake network)
+#   schedule     : every morning, probes the DEPLOYED hosts from infra/cloudflare/hosts.json:
+#                  non-prod storefronts (uat, dev, the 8-day trial on test.<zone>) must be noindex with no sitemap, every back
+#                  office / api / auth host noindex, prod robots + sitemap index + children + a sample of URLs valid, and the
+#                  prod sitemap URL count not below the floor (repository variable SEO_MIN_SITEMAP_URLS) = the "sitemap URL
+#                  count drop" alert. A failing run is the alert (GitHub notifies the workflow owner).
+name: seo-probe
+
+on:
+  pull_request:
+    paths: [tools/ci/seo_probe.py, tools/ci/test_seo_probe.py, infra/cloudflare/hosts.json, .github/workflows/seo-probe.yml]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: "Fail when an environment does not answer"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: probe unit tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -m unittest tools/ci/test_seo_probe.py
+
+  probe:
+    name: probe deployed hosts
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Probe
+        env:
+          MIN_URLS: ${{ vars.SEO_MIN_SITEMAP_URLS || '1' }}
+          STRICT: ${{ inputs.strict && '--strict' || '' }}
+        run: python3 tools/ci/seo_probe.py --min-urls "$MIN_URLS" $STRICT

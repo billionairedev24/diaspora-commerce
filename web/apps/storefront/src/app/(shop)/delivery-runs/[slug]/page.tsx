@@ -7,7 +7,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const t = await getT();
   const { slug } = await params;
   const place = slug.replace(/-[a-z]{2}$/, '').replace(/-/g, ' ');
-  return { title: t('runs.location.metaTitle', { place: place.replace(/\b\w/g, (c) => c.toUpperCase()) }) };
+  return { title: t('runs.location.metaTitle', { place: place.replace(/\b\w/g, (c) => c.toUpperCase()) }), alternates: { canonical: `/delivery-runs/${slug}` } };
 }
 
 /** /delivery-runs/<slug> (S262, S263): a location's page. UTM parameters on the link are kept on the alert sign-up. */
