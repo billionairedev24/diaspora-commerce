@@ -1,6 +1,6 @@
 # Catalog matching, bulk upload and enforced main-image rules (SPEC, proposed)
 
-**Status:** proposed, waiting for the owner decisions in section 11. Nothing in this page is built yet; section 2 says what exists today.
+**Status:** proposed, waiting for the owner decisions in section 11. Section 6 (main-image rules, S388 to S392) was decided by the owner on 2026-11-12 (longest side >= 1000 px enforced, pure white background, product fill under 75% rejected, secondary images warn, extra photos recommended, WebP and 8 MB kept, on-model apparel off by default, existing listings grandfathered with a task and hidden only after 60 days behind a flag that is off) and built; the rest of this page is not built yet. Section 2 says what existed before.
 Reference: Amazon Seller Central practice. Amazon's own help pages could not be reached from this environment (host not allowed), so every
 Amazon number below comes from third-party seller guides and is marked **[verify]** until someone checks it on Seller Central.
 

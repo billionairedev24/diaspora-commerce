@@ -1358,7 +1358,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Setting LANGUAGE_SWITCH_ENABLED=true shows it again
 - Pages render English whatever the browser language
 - Result recorded for each app","E31","","Medium","1","web i18n verify","legal","In Progress"
-"S361","Story","Verify the image rule","The 1000 x 1000 px minimum for the main image was dropped (product form, API publish check, bulk import, image library). Confirm the rule that replaced it.","- A smaller image is accepted on the form, the API and the bulk import
+"S361","Story","Verify the image rule","The 1000 x 1000 px minimum for the main image was dropped (product form, API publish check, bulk import, image library). Confirm the rule that replaced it. Superseded by S388 to S392 (owner decision 2026-11-12: the main-image minimum is enforced again, on the longest side). Closed as superseded, not Done.","- A smaller image is accepted on the form, the API and the bulk import
 - A file that is not an image, or over the size limit, is refused with a message
 - Uploads reach the public R2 bucket and show on the listing
 - Result recorded","E03","","High","2","catalog images verify","catalog","In Progress"
@@ -1504,7 +1504,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - OTHER images warn under 1000 px and reject under 500
 - Asset carries verdict and checks [{code, level, params}]; REJECT is deleted from quarantine; nothing public before the checks pass
 - Table tests over the sample image set in section 6.3 and thresholds in config images.main.*
-- contracts/openapi/media.yaml updated with conformance tests; migration backfills existing assets as PASS","E03","","High","8","media images go","catalog","To Do"
+- contracts/openapi/media.yaml updated with conformance tests; migration backfills existing assets as PASS","E03","","High","8","media images go","catalog","Done"
 "S389","Story","Image moderation labels for text, watermark, props and mismatch","Spec: docs/engineering/bulk-upload-and-images.md. Section 6.2. Extend the ai-gateway image moderation hook so what a program cannot judge goes to staff.","- Hook returns labels TEXT_OVERLAY, WATERMARK, PLACEHOLDER, BORDER, PROPS, MANNEQUIN, NOT_PRODUCT and a title and brand mismatch score
 - Main image with text, logo or watermark is HELD with the plain message HELD_TEXT
 - Mismatch with title and brand is HELD with HELD_MISMATCH

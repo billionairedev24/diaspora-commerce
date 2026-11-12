@@ -191,7 +191,7 @@
    "id": "images",
    "group": "Content",
    "name": "At least one image",
-   "note": "Main image size rule is relaxed. First image is the main one.",
+   "note": "First image is the main one. The main image is checked by media-service and enforced: at least 1000 px on its longest side, a pure white background and the product filling at least 75% of the frame (thresholds are media configuration that staff can edit). Other images warn under 1000 px and are rejected under 500 px.",
    "byKind": {
     "PKG": "required",
     "PER": "required",

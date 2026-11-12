@@ -54,7 +54,7 @@ so no bucket policy or WAF rule is needed; elsewhere the bucket policy must make
 never `quarantine/*`; UploadThing uploads are `private`) and
 are published only when moderation passes:
 
-1. **Rules**: real type, size, minimum edge, white background / main-image eligibility (quality flags never block).
+1. **Rules**: real type and size (8 MB, staff-editable), then the slot-aware image checks above (verdict `PASS`, `WARN`, `HOLD` or `REJECT`; a rejected image is deleted).
 2. **Metadata stripping** (`internal/adapter/imageproc`): EXIF (GPS, camera), XMP, IPTC, comments and PNG/WebP text
    chunks are removed losslessly; a JPEG with an EXIF orientation is rotated and re-encoded so it still displays
    upright. Images over `moderation.maxPixels` (40 MP) are rejected.
@@ -74,7 +74,7 @@ concurrent completions publish once. Tests use fakes and httptest servers: Uploa
 
 | Purpose | Store (dev/uat/prod) | Visibility | Rules |
 |---|---|---|---|
-| `product-image` | **UploadThing** (R2 as alternative) | public CDN | JPG/PNG/WebP ≤ 8 MB, ≥ 500 px; flags non-white backgrounds; ≥ 1000 px marked "eligible as main image" |
+| `product-image` | **UploadThing** (R2 as alternative) | public CDN | JPG/PNG/WebP ≤ 8 MB; per-slot checks: the main image needs ≥ 1000 px on its longest side, a pure white background and the product filling ≥ 75 % of the frame (see "Image checks") |
 | `storefront` | UploadThing | public | JPG/PNG/WebP ≤ 8 MB |
 | `proof-photo`, `return-photo` | private bucket | 5-minute signed URLs | images ≤ 10 MB |
 | `kyc-document` | private, object-locked bucket on the primary cloud | 5-minute signed URLs, owner or staff only | images or PDF ≤ 15 MB |

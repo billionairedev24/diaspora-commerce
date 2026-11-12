@@ -92,9 +92,20 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
 
 ### D15. What about the main image size and image count?
 
-- **Decision:** Already relaxed: any size, at least one image. A label photo is added for food, supplements and pet food.
-- **Amazon standard:** Amazon requires a main image on a plain background, with size minimums.
-- **Why:** No change beyond the label photo.
+- **Decision (supersedes the relaxed rule of 2026-11-11, owner decision 2026-11-12):** the main image is **enforced** again, using the
+  longest side as Amazon does (the old rule asked for both edges): at least **1000 px on the longest side** (2000 px recommended) and
+  500 px on the shortest, a **pure white background**, and the product filling at least **75%** of the frame (a warning from 75% to
+  85%). Other images warn under 1000 px and are rejected under 500 px. At least one image is required; the "7 extra photos" are a
+  recommendation shown as a quality meter, never required. A label photo is added for food, supplements and pet food. WebP and the
+  8 MB cap stay. Apparel main images on a model are not allowed by default (a setting). Every threshold is media-service
+  configuration (`images.*`), staff can change the main ones at run time, and a "warn only" switch turns the appearance rejects
+  (not white, fill, border) into warnings per environment.
+- **Existing listings:** grandfathered. They stay live with an "Improve your image" task; after 60 days (staff-editable) listings that
+  still fail may be limited in search and the buy box, but only when a separate flag is on (off until the owner switches it on).
+  Nothing is deleted. See `docs/engineering/bulk-upload-and-images.md` section 6.
+- **Amazon standard:** Amazon requires a main image on a plain white background, at least 1000 px on the longest side for zoom, filling
+  about 85% of the frame (third-party sources; the Amazon numbers are still **[verify]**).
+- **Why:** Zoom sells, and a consistent white main image makes the catalog look trustworthy.
 
 ### D16. Who sets the shopper's shipping charge at launch?
 
