@@ -41,6 +41,10 @@ operations:
       open offer on a variant of the merged page moves to the mapped variant of the surviving page (same offer id, new ATIN).
       A seller who already has the same offer there keeps that one and the moved one is withdrawn. A moved offer is on a
       different ATIN, so it waits as TAX_HELD until the seller's decision on the new ATIN is confirmed (S384).
+      catalog.variant.moved (S385, consumer offers-catalog-variant-moved, inbox-deduplicated): staff moved a variant to another
+      page or split it onto a page of its own. The variant keeps its ATIN, so every open offer on it stays (same offer id and
+      ATIN) and only its page, category and live flag change; an active offer waits as TAX_HELD until the seller's decision is
+      confirmed again (the page's category may be taxed differently).
   consumeOffersTaxClassificationEvents:
     action: receive
     channel: {$ref: '#/channels/taxReturnsEvents'}

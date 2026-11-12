@@ -28,3 +28,9 @@ Catalog's own tax state is only a cache; **tax-returns' stored decision is the a
 - **Unreachable** (ticket after 10 minutes): catalog could not ask tax-returns; every listing keeps its state and nothing is marked OK, but no listing can go live. Check tax-returns health and the `tax:classify` scope of catalog's client.
 - **Stale check**: no successful check against tax-returns for 30 minutes. Run `make tax-gate-sweep` (or `POST /v1/tax-gate/sweep`, permission `tax:classify-admin`) and read the catalog log line "Tax gate sweep".
 - Never write a decision by hand to clear an alert.
+
+## Offers without a tax decision (`OffersActiveWithoutTaxDecision`, `OffersTaxGateMetricMissing`)
+`offers_active_without_tax_decision` counts ACTIVE offers that carry no tax basis (S384): the seller has no verified RESOLVED decision in tax-returns for that ATIN. It must be 0. Page severity, because an offer like that is buyable-looking while checkout blocks the line.
+- A seller who offers an item on a page another seller created gets an offer that is `TAX_HELD` (not buyable, not in search, not in the buy box) until tax-returns holds that seller's RESOLVED decision; the tax release component (and its sweep) moves it to ACTIVE. An offer that was moved by a page merge, or by staff moving a variant, waits the same way.
+- Diagnose: the offers log for `tax release`, the `tax.classification.changed` consumer lag, and which path set the offer ACTIVE (`TaxGateArchitectureTest` in offers should have refused a new one). Never write a decision or a basis by hand to clear it.
+- `OffersTaxGateMetricMissing`: the offers service is down or its count fails.

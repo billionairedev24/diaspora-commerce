@@ -20,10 +20,16 @@ import com.afrotransact.catalog.domain.brand.Brand;
 import com.afrotransact.catalog.domain.brand.BrandKeys;
 import com.afrotransact.catalog.domain.brand.BrandNames;
 import com.afrotransact.catalog.domain.brand.BrandStatus;
+import com.afrotransact.catalog.domain.images.ImageCheckResult;
 import com.afrotransact.catalog.port.BrandRepository;
 import com.afrotransact.catalog.port.CategoryRepository;
+import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
+import com.afrotransact.catalog.port.ImageVerifier;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.web.error.BusinessRuleException;
+import com.afrotransact.platform.web.error.ConflictException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,18 +37,25 @@ class ChangeRequestApplierImpl implements ChangeRequestApplier {
 
     static final String NEEDS_TAX_REVIEW = "catalog.change-request-needs-tax-review";
     static final String IMAGE_REJECTED = "catalog.change-request-image-rejected";
+    static final String IMAGE_HELD = "catalog.change-request-image-held";
+
+    private static final Logger LOG = LoggerFactory.getLogger(ChangeRequestApplierImpl.class);
 
     private final ProductRepository products;
     private final CategoryRepository categories;
     private final BrandRepository brands;
     private final ProductEvents events;
+    private final ImageVerifier verifier;
+    private final ImageSettings imageSettings;
 
     ChangeRequestApplierImpl(ProductRepository products, CategoryRepository categories, BrandRepository brands,
-                             ProductEvents events) {
+                             ProductEvents events, ImageVerifier verifier, ImageSettings imageSettings) {
         this.products = products;
         this.categories = categories;
         this.brands = brands;
         this.events = events;
+        this.verifier = verifier;
+        this.imageSettings = imageSettings;
     }
 
     @Override
@@ -78,14 +91,15 @@ class ChangeRequestApplierImpl implements ChangeRequestApplier {
                     "The brand is changed with a BRAND request, not as a detail");
         }
         ProductType type = categories.findProductType(page.productTypeCode()).orElse(null);
+        // A tax fact is not one of the plain details (ProductType.attribute leaves it out): look at it first.
+        if (type != null && type.taxFacts().stream().anyMatch(a -> a.key().equals(key))) {
+            throw new BusinessRuleException(NEEDS_TAX_REVIEW, "'" + key + "' decides how the item is taxed, so a change "
+                    + "goes through tax review, not through a page edit");
+        }
         AttributeDefinition definition = type == null ? null : type.attribute(key).orElse(null);
         if (definition == null) {
             throw new BusinessRuleException("catalog.change-request-unknown-detail",
                     "'" + key + "' is not a detail of this kind of product");
-        }
-        if (definition.taxFact()) {
-            throw new BusinessRuleException(NEEDS_TAX_REVIEW, "'" + key + "' decides how the item is taxed, so a change "
-                    + "goes through tax review, not through a page edit");
         }
         Map<String, String> next = new LinkedHashMap<>(page.attributes());
         next.put(key, definition.normalise(ChangeRequestPolicy.text(payload, "value")));
@@ -118,29 +132,71 @@ class ChangeRequestApplierImpl implements ChangeRequestApplier {
         return page.withCategory(target.id(), target.productTypeCode(), now);
     }
 
-    private static List<ProductImage> withImage(Product page, ProductChangeRequest r, boolean replace) {
-        ProductImage image = ChangeRequestPolicy.imageOf(r.payload());
-        if (!image.allowedType() || image.bytes() > ProductImage.MAX_BYTES || image.width() <= 0 || image.height() <= 0
-                || !image.url().startsWith("https://")) {
+    private List<ProductImage> withImage(Product page, ProductChangeRequest r, boolean replace) {
+        ProductImage asked = ChangeRequestPolicy.imageOf(r.payload());
+        if (!asked.allowedType() || asked.bytes() > ProductImage.MAX_BYTES || asked.width() <= 0 || asked.height() <= 0
+                || !asked.url().startsWith("https://")) {
             throw new BusinessRuleException(IMAGE_REJECTED, "This picture does not pass the image checks");
         }
         List<ProductImage> pictures = new ArrayList<>(page.images().stream().filter(i -> !i.isLabel()).toList());
         List<ProductImage> labels = page.images().stream().filter(ProductImage::isLabel).toList();
-        if (replace) {
-            int position = ChangeRequestPolicy.number(r.payload(), "position");
-            if (position < 0 || position >= pictures.size()) {
-                throw new BusinessRuleException(IMAGE_REJECTED, "There is no picture at position " + position);
-            }
-            pictures.set(position, image);
-        } else if (pictures.size() >= ProductDraftPolicy.MAX_IMAGES) {
+        int position = replace ? ChangeRequestPolicy.number(r.payload(), "position") : -1;
+        if (replace && (position < 0 || position >= pictures.size())) {
+            throw new BusinessRuleException(IMAGE_REJECTED, "There is no picture at position " + position);
+        }
+        if (!replace && pictures.size() >= ProductDraftPolicy.MAX_IMAGES) {
             throw new BusinessRuleException(IMAGE_REJECTED, "The page already has " + ProductDraftPolicy.MAX_IMAGES
                     + " pictures");
-        } else if ("MAIN".equals(r.field())) {
+        }
+        boolean main = replace ? position == 0 : "MAIN".equals(r.field());
+        ProductImage image = judged(asked, main, page.productTypeCode());
+        if (replace) {
+            pictures.set(position, image);
+        } else if (main) {
             pictures.addFirst(image);
         } else {
             pictures.add(image);
         }
         pictures.addAll(labels);
         return pictures;
+    }
+
+    /**
+     * The picture as media judges it for the slot it takes (S390), never on the width and height the seller sent. A
+     * picture media rejects is refused with media's plain message. One held for staff stays in the image review queue and
+     * the request cannot be applied until that is decided (409). While the image rules are enforced, media being
+     * unreachable also refuses, so a picture is never applied unchecked.
+     */
+    private ProductImage judged(ProductImage asked, boolean main, String productTypeCode) {
+        if (!imageSettings.checking()) {
+            return asked;
+        }
+        ImageCheckResult result;
+        try {
+            result = verifier.verify(List.of(new ImageVerifier.Item(asked.url(), main ? "MAIN" : "OTHER",
+                    productTypeCode))).getFirst();
+        } catch (ImageServiceUnavailable ex) {
+            if (imageSettings.enforcing()) {
+                throw ex;
+            }
+            LOG.warn("Image rules (shadow): media could not be asked about a change request picture: {}", ex.getMessage());
+            return asked;
+        }
+        if (result.blocked() && !imageSettings.enforcing()) {
+            LOG.info("Image rules (shadow): a change request picture would be refused ({})", result.verdict());
+            return asked;
+        }
+        if (result.blocked()) {
+            if (result.found() && "HOLD".equals(result.verdict())) {
+                throw new ConflictException(IMAGE_HELD, "This photo is waiting in the held image review queue. Decide "
+                        + "it there first, then approve this request. " + result.message());
+            }
+            throw new BusinessRuleException(IMAGE_REJECTED, result.message());
+        }
+        if (!result.found() || result.width() <= 0) {
+            return asked;
+        }
+        return new ProductImage(asked.url(), result.width(), result.height(), result.bytes(),
+                result.contentType().isBlank() ? asked.contentType() : result.contentType(), asked.alt(), asked.role());
     }
 }

@@ -32,6 +32,8 @@ class CatalogEventListener {
     static final String TERMS_CHANGED = "catalog.product.terms_changed";
     /** S386: two duplicate pages were merged; the offers of the merged page's variants move to the surviving page. */
     static final String MERGED = "catalog.product.merged";
+    /** A variant moved to another page, or was split onto a page of its own (staff, after a wrong-match report). */
+    static final String VARIANT_MOVED = "catalog.variant.moved";
     static final Set<String> STATUS_EVENTS = Set.of("catalog.product.approved", "catalog.product.rejected",
             "catalog.product.paused", "catalog.product.resumed", "catalog.product.taken_down",
             "catalog.product.reinstated");
@@ -61,6 +63,11 @@ class CatalogEventListener {
                          Map<String, String> variantMap) {
     }
 
+    /** Wire format of catalog's catalog.variant.moved payload. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record MovedMessage(String variantAtin, UUID toProductId, String toAtin, UUID toCategoryId, String toStatus) {
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record VariantMessage(String atin, String sellerSku, String gtin, long priceMinor, String currency,
                           int quantity, Long compareAtMinor) {
@@ -85,13 +92,28 @@ class CatalogEventListener {
                 m.survivorAtin(), m.survivorCategoryId(), m.variantMap()));
     }
 
+    private void variantMoved(UUID eventId, ConsumerRecord<String, String> rec, String type) {
+        MovedMessage m;
+        try {
+            m = json.readValue(rec.value(), MovedMessage.class);
+        } catch (JacksonException | IllegalArgumentException ex) {
+            throw MalformedEvent.of(type, ex);
+        }
+        if (m == null || m.variantAtin() == null || m.toAtin() == null || m.toProductId() == null) {
+            LOG.warn("Skipping {} event {} without a variant or the page it moved to", type, eventId);
+            return;
+        }
+        relocation.variantMoved(eventId, new OfferRelocationService.VariantMoved(m.variantAtin(), m.toProductId(),
+                m.toAtin(), m.toCategoryId(), "LIVE".equals(m.toStatus())));
+    }
+
     @KafkaListener(id = "offers-catalog-products", groupId = "${spring.kafka.consumer.group-id:offers-service}",
             topics = "${at.offers.consumers.catalog-topic:at.product.events}",
             autoStartup = "${at.consumers.enabled:true}")
     void onMessage(ConsumerRecord<String, String> rec) {
         String type = EventHeaders.text(rec, EventHeaders.EVENT_TYPE).orElse("");
         if (!CREATED.equals(type) && !TERMS_CHANGED.equals(type) && !MERGED.equals(type)
-                && !STATUS_EVENTS.contains(type)) {
+                && !VARIANT_MOVED.equals(type) && !STATUS_EVENTS.contains(type)) {
             return;
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
@@ -100,6 +122,10 @@ class CatalogEventListener {
         }
         if (MERGED.equals(type)) {
             merged(eventId.get(), rec, type);
+            return;
+        }
+        if (VARIANT_MOVED.equals(type)) {
+            variantMoved(eventId.get(), rec, type);
             return;
         }
         ProductMessage m;

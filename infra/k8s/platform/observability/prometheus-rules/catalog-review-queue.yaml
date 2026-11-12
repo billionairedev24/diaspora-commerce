@@ -1,0 +1,36 @@
+# GENERATED from infra/observability/rules/catalog-review-queue.yaml by generate_rules.py — do not edit by hand.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: afrotransact-catalog-review-queue
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/part-of: afrotransact
+spec:
+  groups:
+  - name: afrotransact-catalog-review-queue
+    rules:
+    - alert: CatalogReviewQueueOverdue
+      expr: |
+        max by (env) (catalog_change_request_alert_breached) > 0
+      for: 30m
+      labels:
+        severity: ticket
+        team: catalog
+      annotations:
+        summary: A catalog request has waited for staff longer than 3 business days
+        description: The oldest change request or no-barcode exemption is past the alert limit. The seller sees Waiting, and an exemption keeps the page off sale. Staff console > Catalog > Review queue,
+          oldest first.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogReviewQueue.md
+    - alert: CatalogReviewQueueMetricMissing
+      expr: |
+        absent(catalog_change_request_oldest_age_seconds)
+      for: 15m
+      labels:
+        severity: ticket
+        team: catalog
+      annotations:
+        summary: catalog_change_request_oldest_age_seconds is not reported
+        description: The catalog service is down or its database read fails (the gauge reports no data then), so the overdue alert cannot fire.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogReviewQueue.md

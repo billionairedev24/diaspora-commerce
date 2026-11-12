@@ -72,6 +72,19 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
   - *Drafts* (`/v1/product-drafts`, table `product_draft`) store the form's input as JSON (≤ 256 KB). They are
     versioned for autosave (409 on a stale version) and there is one per product for edits. Submitting with
     `draftId` deletes the draft in the same transaction.
+- **Shared pages, matches and review queues (S381 to S387)**:
+  - **Before deploying `V5__gtin14_and_mpn.sql`** run `psql "$CATALOG_DB_URL" -f tools/catalog/gtin-duplicates.sql` (read-only).
+    V5 gives every 14-digit barcode one unique claim (UPC-A, EAN-13 and GTIN-14 of one item meet) and never deletes or changes a
+    product: when two live pages share a barcode it stops, rolls back and lists them. Fix them with a `MERGE` or
+    `CORRECT_GTIN` decision, run the query until it is empty, then deploy. See
+    [CatalogReviewQueue](../../../docs/runbooks/CatalogReviewQueue.md).
+  - Sellers do not edit a page they did not create: `POST /v1/products/{atin}/change-requests` (title, details, description,
+    category, brand, pictures, new variant, wrong match, duplicate page); staff decide in the staff console (Catalog > Review
+    queue, `catalog:moderate`) with a reason. Approving a content change never changes the page's status; a new variant on a page
+    that is on sale needs staff to accept that the page leaves sale until tax review approves it (`holdPageForTax`).
+    `MOVE_VARIANT` and `SPLIT_VARIANT` keep the variant's ATIN and publish `catalog.variant.moved` (offers follow).
+  - No-barcode items: `PENDING_EXEMPTION` pages and `gtin_exemption_request`; metrics `catalog_change_request_open`,
+    `catalog_change_request_oldest_age_seconds`, `catalog_change_request_alert_breached` (alert `CatalogReviewQueueOverdue`).
 - **Taxonomy administration (S325)** (`/v1/taxonomy/**`, guide: [docs/engineering/taxonomy.md](../../../docs/engineering/taxonomy.md)):
   - Staff create, rename, move, reorder, retire and restore departments, categories and product types, and edit a
     product type's schema (label, identifier rule, traits, attributes with kind, units, choices, section, required and

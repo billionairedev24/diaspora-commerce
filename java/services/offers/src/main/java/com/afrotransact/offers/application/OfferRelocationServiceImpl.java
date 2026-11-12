@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 class OfferRelocationServiceImpl implements OfferRelocationService {
 
     static final String CONSUMER = "offers-catalog-merge";
+    static final String MOVE_CONSUMER = "offers-catalog-variant-moved";
     private static final Logger LOG = LoggerFactory.getLogger(OfferRelocationServiceImpl.class);
 
     private final OfferRepository offers;
@@ -85,6 +86,33 @@ class OfferRelocationServiceImpl implements OfferRelocationService {
             buyBox.recompute(touched, "catalog.product.merged");
         }
         return moved;
+    }
+
+    @Override
+    @Transactional
+    public int variantMoved(UUID eventId, VariantMoved moved) {
+        if (!inbox.firstDelivery(MOVE_CONSUMER, eventId)) {
+            return 0;
+        }
+        Instant now = Instant.now(clock);
+        int followed = 0;
+        for (Offer o : offers.findOpenByAtins(List.of(moved.variantAtin()))) {
+            try {
+                Offer relocated = offers.relocate(o.relocatedTo(moved.variantAtin(), moved.toAtin(), moved.toProductId(),
+                        moved.toCategoryId() != null ? moved.toCategoryId() : o.categoryId(), moved.toLive(), now));
+                events.publish(OffersEvents.OFFER_UPDATED, OffersEvents.AGGREGATE, relocated.atin(),
+                        OfferEventPayload.of(relocated));
+                followed++;
+            } catch (ConflictException | IllegalStateException ex) {
+                // Changed meanwhile: the next page event or the status sweep brings it in line; the offer is never lost.
+                LOG.warn("Offer {} on {} did not follow the variant to {}: {}", o.id(), moved.variantAtin(), moved.toAtin(),
+                        ex.getMessage());
+            }
+        }
+        if (followed > 0) {
+            buyBox.recompute(Set.of(moved.variantAtin()), "catalog.variant.moved");
+        }
+        return followed;
     }
 
     private void withdraw(Offer o, Instant now) {

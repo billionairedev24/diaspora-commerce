@@ -127,6 +127,8 @@ channels:
         $ref: '#/components/messages/catalogProductRatingChanged'
       catalogProductMerged:
         $ref: '#/components/messages/catalogProductMerged'
+      catalogVariantMoved:
+        $ref: '#/components/messages/catalogVariantMoved'
       catalogListingImageTask:
         $ref: '#/components/messages/catalogListingImageTask'
   catalogChangeRequestEvents:
@@ -1246,6 +1248,16 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/CatalogProductMerged'
+    catalogVariantMoved:
+      name: catalog.variant.moved
+      title: Staff moved a variant to another page, or split it onto a page of its own (S385)
+      summary: Key = the product id of the page the variant joined. The variant keeps its ATIN. Offers keep every open offer
+        on it and change its page; an active offer waits as TAX_HELD until the seller's decision is confirmed again. A split
+        page starts in review and is never live (toStatus IN_REVIEW).
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogVariantMoved'
     catalogChangeRequestCreated:
       name: catalog.change_request.created
       title: A seller filed a change request on a product page
@@ -4005,6 +4017,61 @@ components:
         occurredAt:
           type: string
           format: date-time
+    CatalogVariantMoved:
+      type: object
+      required:
+      - kind
+      - variantAtin
+      - fromProductId
+      - fromAtin
+      - toProductId
+      - toAtin
+      - toStatus
+      - movedBy
+      - occurredAt
+      properties:
+        kind:
+          type: string
+          enum:
+          - MOVE
+          - SPLIT
+        variantAtin:
+          type: string
+          pattern: ^AT[0-9A-Z]{8}$
+          description: The moved variant's ATIN (unchanged by the move)
+        fromProductId:
+          type: string
+          format: uuid
+        fromAtin:
+          type: string
+          pattern: ^AT[0-9A-Z]{8}$
+        toProductId:
+          type: string
+          format: uuid
+        toAtin:
+          type: string
+          pattern: ^AT[0-9A-Z]{8}$
+        toCategoryId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: The category of the page it joined
+        toStatus:
+          type: string
+          description: Status of the page it joined (a split page is IN_REVIEW)
+        movedBy:
+          type: string
+        reason:
+          type: string
+        changeRequestId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
     CatalogChangeRequestEvent:
       type: object
       required:
@@ -4074,6 +4141,12 @@ components:
           - 'null'
           format: int64
           description: The page version after an applied change
+        resultAtin:
+          type:
+          - string
+          - 'null'
+          pattern: ^AT[0-9A-Z]{8}$
+          description: The child ATIN a NEW_VARIANT approval created (decided events)
         occurredAt:
           type: string
           format: date-time
@@ -13107,7 +13180,10 @@ operations:
       offers-catalog-merge, inbox-deduplicated): two duplicate pages were merged; every open offer on a variant of the merged
       page moves to the mapped variant of the surviving page (same offer id, new ATIN). A seller who already has the same
       offer there keeps that one and the moved one is withdrawn. A moved offer is on a different ATIN, so it waits as TAX_HELD
-      until the seller''s decision on the new ATIN is confirmed (S384).'
+      until the seller''s decision on the new ATIN is confirmed (S384). catalog.variant.moved (S385, consumer offers-catalog-variant-moved,
+      inbox-deduplicated): staff moved a variant to another page or split it onto a page of its own. The variant keeps its
+      ATIN, so every open offer on it stays (same offer id and ATIN) and only its page, category and live flag change; an
+      active offer waits as TAX_HELD until the seller''s decision is confirmed again (the page''s category may be taxed differently).'
   consumeOffersTaxClassificationEvents:
     action: receive
     channel:

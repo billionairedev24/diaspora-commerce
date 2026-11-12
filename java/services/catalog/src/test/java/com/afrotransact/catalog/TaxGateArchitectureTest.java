@@ -96,12 +96,15 @@ class TaxGateArchitectureTest {
     }
 
     @Test
-    void mergesAndExemptionDecisionsNeverPutAPageOnSale() {
-        // S386/S387: merging, and approving a no-barcode exemption, only ever lead to review, never to LIVE.
+    void mergesExemptionDecisionsAndVariantMovesNeverPutAPageOnSale() {
+        // S385-S387: merging, approving a no-barcode exemption, adding, moving or splitting a variant only ever lead to
+        // review (a split page) or leave sale through the gate, never to LIVE.
         ArchRule rule = ArchRuleDefinition.noClasses()
                 .that().haveSimpleNameStartingWith("PageMergerImpl")
                 .or().haveSimpleNameStartingWith("GtinExemptionServiceImpl")
                 .or().haveSimpleNameStartingWith("ReviewQueueServiceImpl")
+                .or().haveSimpleNameStartingWith("PageVariantServiceImpl")
+                .or().haveSimpleNameStartingWith("ChangeRequestServiceImpl")
                 .should().callMethodWhere(callsToProduct(LIVE_TRANSITIONS))
                 .because("only ProductLiveGate may put a product on sale");
         rule.check(CLASSES);

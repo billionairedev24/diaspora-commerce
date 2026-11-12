@@ -1,0 +1,33 @@
+# The staff review queue of the shared product catalog (S385-S387): change requests (suggest an edit, wrong match, duplicate
+# page) and no-barcode exemptions wait for staff with a two business day service level. Catalog exposes
+#   catalog_change_request_open                    requests and exemptions waiting
+#   catalog_change_request_oldest_age_seconds      age of the oldest one, in calendar seconds
+#   catalog_change_request_alert_breached          1 when the oldest is older than the alert business days (3 by default, set by
+#                                                  staff in Catalog settings), counted Monday to Friday; 0 otherwise
+# The alert uses the last one so that a request filed on a Friday does not page on Monday.
+groups:
+  - name: afrotransact-catalog-review-queue
+    rules:
+      - alert: CatalogReviewQueueOverdue
+        expr: |
+          max by (env) (catalog_change_request_alert_breached) > 0
+        for: 30m
+        labels:
+          severity: ticket
+          team: catalog
+        annotations:
+          summary: "A catalog request has waited for staff longer than 3 business days"
+          description: "The oldest change request or no-barcode exemption is past the alert limit. The seller sees Waiting, and an exemption keeps the page off sale. Staff console > Catalog > Review queue, oldest first."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogReviewQueue.md
+
+      - alert: CatalogReviewQueueMetricMissing
+        expr: |
+          absent(catalog_change_request_oldest_age_seconds)
+        for: 15m
+        labels:
+          severity: ticket
+          team: catalog
+        annotations:
+          summary: "catalog_change_request_oldest_age_seconds is not reported"
+          description: "The catalog service is down or its database read fails (the gauge reports no data then), so the overdue alert cannot fire."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogReviewQueue.md

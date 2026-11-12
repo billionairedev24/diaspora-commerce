@@ -174,6 +174,17 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
     }
 
     /**
+     * A new page for one variant of this page (staff split it off after a wrong-match report): same owner, category and
+     * content, the variant as its only one. It starts in review and is never live: it goes through listing review and
+     * the tax gate like any new page.
+     */
+    public Product splitOff(UUID newId, Atin newAtin, Variant variant, Instant now) {
+        return new Product(newId, newAtin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
+                images, variationTheme, List.of(variant), ProductStatus.IN_REVIEW, null, now, now, 0, preorderEligible,
+                shipsNow, details);
+    }
+
+    /**
      * The same page with other content, applied by staff from a change request. The status is never touched here:
      * putting a page on sale or taking it off stays with the live gate and moderation.
      */

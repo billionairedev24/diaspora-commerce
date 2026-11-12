@@ -19,6 +19,11 @@ public final class CatalogEvents {
     public static final String GTIN_EXEMPTION_DECIDED = "catalog.gtin_exemption.decided";
     /** Two duplicate pages were merged (aggregate product, key = the surviving product id). */
     public static final String PRODUCT_MERGED = "catalog.product.merged";
+    /**
+     * Staff moved a variant to another page, or split it onto a page of its own, after a wrong-match report (aggregate
+     * product, key = the product id of the page it joined). The variant keeps its ATIN; offers on it follow.
+     */
+    public static final String VARIANT_MOVED = "catalog.variant.moved";
 
     public static final String PRODUCT_CREATED = "catalog.product.created";
     public static final String PRODUCT_APPROVED = "catalog.product.approved";

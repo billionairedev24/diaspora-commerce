@@ -15,6 +15,21 @@ public interface OfferRelocationService {
     int pagesMerged(UUID eventId, Merged merged);
 
     /**
+     * Follows staff moving a variant to another page, or splitting it onto a page of its own
+     * ({@code catalog.variant.moved}). The variant keeps its ATIN, so every open offer on it stays and only its page changes; an
+     * active offer waits as TAX_HELD until the tax release component has confirmed the seller's decision again (the page, and
+     * with it the category's tax profile, may differ). Idempotent per event id (inbox). Returns how many offers followed.
+     */
+    int variantMoved(UUID eventId, VariantMoved moved);
+
+    /**
+     * @param variantAtin the moved variant's ATIN (unchanged)
+     * @param toLive      whether the page it joined is on sale (its status is LIVE)
+     */
+    record VariantMoved(String variantAtin, UUID toProductId, String toAtin, UUID toCategoryId, boolean toLive) {
+    }
+
+    /**
      * @param variantMap loser variant ATIN to the surviving page's variant ATIN
      * @param survivorCategoryId the surviving page's category (null when not known)
      */

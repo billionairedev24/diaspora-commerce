@@ -78,3 +78,31 @@ groups:
           summary: "Live listings were last checked against tax-returns more than 30 minutes ago"
           description: "The sweep against tax-returns' stored decisions has not succeeded for 30 minutes (value 0 means never since start). Run POST /v1/tax-gate/sweep and read the catalog log."
           runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
+
+      # S384: the second-seller gap. An offer on a page another seller created is live only when tax-returns holds a RESOLVED
+      # decision for that seller on that ATIN (Offer.taxBasis). The offers service exposes offers_active_without_tax_decision:
+      # ACTIVE offers with no tax basis. It must always be 0; the release component and the sweep hold or release offers, so a
+      # value above 0 means a code path made an offer ACTIVE without asking tax-returns.
+      - alert: OffersActiveWithoutTaxDecision
+        expr: |
+          max by (env) (offers_active_without_tax_decision) > 0
+        for: 0m
+        labels:
+          severity: page
+          team: offers
+        annotations:
+          summary: "{{ $value }} active offer(s) have no tax decision for their seller"
+          description: "An offer is active (buyable, in search, in the buy box) although tax-returns holds no RESOLVED decision for that seller on that ATIN. Checkout still blocks the line, but shoppers see an offer they cannot buy. Find the path that set it ACTIVE (runbook); never write a decision by hand."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
+
+      - alert: OffersTaxGateMetricMissing
+        expr: |
+          absent(offers_active_without_tax_decision)
+        for: 15m
+        labels:
+          severity: ticket
+          team: offers
+        annotations:
+          summary: "offers_active_without_tax_decision is not reported"
+          description: "The offers service is down or its database count fails, so the alert on active offers without a tax decision cannot fire."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md

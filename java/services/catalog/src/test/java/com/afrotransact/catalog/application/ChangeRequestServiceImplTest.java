@@ -60,6 +60,7 @@ class ChangeRequestServiceImplTest {
     private final CatalogSettingsService settings = mock(CatalogSettingsService.class);
     private final ChangeRequestApplier applier = mock(ChangeRequestApplier.class);
     private final PageMerger merger = mock(PageMerger.class);
+    private final PageVariantService pageVariants = mock(PageVariantService.class);
     private final ChangeRequestEvents events = mock(ChangeRequestEvents.class);
     private final ProductEvents productEvents = mock(ProductEvents.class);
     private final PermissionChecker permissions = mock(PermissionChecker.class);
@@ -75,7 +76,7 @@ class ChangeRequestServiceImplTest {
         when(products.findById(page.id())).thenReturn(Optional.of(page));
         when(requests.insert(any())).thenAnswer(i -> i.getArgument(0));
         when(requests.update(any())).thenAnswer(i -> i.getArgument(0));
-        service = new ChangeRequestServiceImpl(requests, products, sellerOffers, settings, applier, merger, events,
+        service = new ChangeRequestServiceImpl(requests, products, sellerOffers, settings, applier, merger, pageVariants, events,
                 productEvents, permissions, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -191,7 +192,7 @@ class ChangeRequestServiceImplTest {
         assertThat(view.request().status()).isEqualTo(ChangeRequestStatus.APPLIED);
         assertThat(view.request().decidedBy()).isEqualTo("staff_1");
         assertThat(view.request().reason()).isEqualTo("Matches the pack photo");
-        verify(events).decided(eq(view.request()), eq(page), eq(0L), any());
+        verify(events).decided(eq(view.request()), eq(page), eq(0L), eq((String) null), any());
     }
 
     @Test
@@ -233,10 +234,29 @@ class ChangeRequestServiceImplTest {
     }
 
     @Test
-    void aNewVariantOnALivePageIsNotAppliedBecauseItNeedsItsOwnTaxDecision() {
+    void aNewVariantIsAddedThroughThePageVariantServiceAndTheNewAtinIsInTheAuditEvent() {
         as(staff());
         ProductChangeRequest waiting = pending(ChangeRequestType.NEW_VARIANT, "org_b");
         when(requests.findById(waiting.id())).thenReturn(Optional.of(waiting));
+        when(pageVariants.addVariant(eq(waiting), eq(page), eq(true), any()))
+                .thenReturn(new PageVariantService.Added(page, "AT00000042"));
+
+        ChangeRequestView view = service.decide(waiting.id(), new DecisionCommand(true, "A real size", null,
+                Map.of("holdPageForTax", true), null));
+
+        assertThat(view.request().status()).isEqualTo(ChangeRequestStatus.APPLIED);
+        assertThat(view.request().resolution()).isEqualTo("NEW_VARIANT");
+        verify(events).decided(any(), eq(page), eq(page.version()), eq("AT00000042"), any());
+        verify(applier, never()).apply(any(), any(), any());
+    }
+
+    @Test
+    void aNewVariantTheTaxGateRefusesLeavesTheRequestWaiting() {
+        as(staff());
+        ProductChangeRequest waiting = pending(ChangeRequestType.NEW_VARIANT, "org_b");
+        when(requests.findById(waiting.id())).thenReturn(Optional.of(waiting));
+        when(pageVariants.addVariant(any(), any(), eq(false), any())).thenThrow(new BusinessRuleException(
+                ChangeRequestApplierImpl.NEEDS_TAX_REVIEW, "The page is on sale"));
 
         assertThatThrownBy(() -> service.decide(waiting.id(), new DecisionCommand(true, "A real size", null, null, null)))
                 .isInstanceOfSatisfying(BusinessRuleException.class,
@@ -264,15 +284,56 @@ class ChangeRequestServiceImplTest {
     }
 
     @Test
-    void aWrongMatchWithAnUnsupportedResolutionIsNotApplied() {
+    void aWrongMatchWithAnUnknownResolutionIsNotApplied() {
         as(staff());
-        ProductChangeRequest waiting = ProductChangeRequest.filed(page.id(), "AT00000001", "AT00000002", "00012345678905",
-                ChangeRequestType.WRONG_MATCH, "", Map.of(), null, "org_b", "user", NOW, NOW);
+        ProductChangeRequest waiting = wrongMatch();
         when(requests.findById(waiting.id())).thenReturn(Optional.of(waiting));
 
-        assertThatThrownBy(() -> service.decide(waiting.id(), new DecisionCommand(true, "Split it", "SPLIT_VARIANT", null,
+        assertThatThrownBy(() -> service.decide(waiting.id(), new DecisionCommand(true, "Do it", "DELETE_PAGE", null,
                 null))).isInstanceOfSatisfying(BusinessRuleException.class,
                 e -> assertThat(e.code()).isEqualTo("catalog.resolution-not-supported"));
+        verify(requests, never()).update(any());
+    }
+
+    @Test
+    void aWrongMatchCanMoveTheVariantToAnotherPage() {
+        as(staff());
+        Product target = page("AT00000005", "org_c");
+        when(products.findByAtin(new Atin("AT00000005"))).thenReturn(Optional.of(target));
+        ProductChangeRequest waiting = wrongMatch();
+        when(requests.findById(waiting.id())).thenReturn(Optional.of(waiting));
+
+        ChangeRequestView view = service.decide(waiting.id(), new DecisionCommand(true, "It is a size of the other page",
+                "MOVE_VARIANT", Map.of("targetAtin", "at00000005", "holdPageForTax", "true"), null));
+
+        assertThat(view.request().resolution()).isEqualTo("MOVE_VARIANT");
+        verify(pageVariants).moveVariant(eq(page), eq("AT00000002"), eq(target), eq(true), eq("staff_1"),
+                eq("It is a size of the other page"), eq(waiting.id()), any());
+    }
+
+    @Test
+    void aMoveNeedsTheTargetPage() {
+        as(staff());
+        ProductChangeRequest waiting = wrongMatch();
+        when(requests.findById(waiting.id())).thenReturn(Optional.of(waiting));
+
+        assertThatThrownBy(() -> service.decide(waiting.id(), new DecisionCommand(true, "Move it", "MOVE_VARIANT",
+                Map.of(), null))).isInstanceOf(CatalogRuleViolation.class);
+        verify(pageVariants, never()).moveVariant(any(), any(), any(), eq(false), any(), any(), any(), any());
+    }
+
+    @Test
+    void aWrongMatchCanSplitTheVariantOntoAPageOfItsOwn() {
+        as(staff());
+        ProductChangeRequest waiting = wrongMatch();
+        when(requests.findById(waiting.id())).thenReturn(Optional.of(waiting));
+
+        ChangeRequestView view = service.decide(waiting.id(), new DecisionCommand(true, "It is a different product",
+                "SPLIT_VARIANT", null, null));
+
+        assertThat(view.request().resolution()).isEqualTo("SPLIT_VARIANT");
+        verify(pageVariants).splitVariant(eq(page), eq("AT00000002"), eq("staff_1"), eq("It is a different product"),
+                eq(waiting.id()), any());
     }
 
     @Test
@@ -303,6 +364,12 @@ class ChangeRequestServiceImplTest {
 
         as(seller("org_b", CatalogPermissions.WRITE));
         assertThat(service.withdraw(waiting.id()).request().status()).isEqualTo(ChangeRequestStatus.WITHDRAWN);
+    }
+
+    private ProductChangeRequest wrongMatch() {
+        return ProductChangeRequest.filed(page.id(), "AT00000001", "AT00000002", "00012345678905",
+                ChangeRequestType.WRONG_MATCH, "", Map.of("gtin", "012345678905", "variantAtin", "AT00000002"), null,
+                "org_b", "user", NOW, NOW);
     }
 
     private void as(Actor actor) {

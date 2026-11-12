@@ -29,6 +29,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 
 | Alert | Severity |
 |---|---|
+| [CatalogReviewQueue](CatalogReviewQueue.md) | ticket |
 | [CheckoutSuccessBudgetBurn](CheckoutSuccessBudgetBurn.md) | page / ticket |
 | [DatabasePoolSaturation](DatabasePoolSaturation.md) | ticket |
 | [ElasticsearchClusterRed](ElasticsearchClusterRed.md) | page |

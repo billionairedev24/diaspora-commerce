@@ -4,6 +4,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - external-secrets.yaml
+  - prometheus-rules/catalog-review-queue.yaml
   - prometheus-rules/catalog-tax-gate.yaml
   - prometheus-rules/checkout-tax-estimate.yaml
   - prometheus-rules/elasticsearch.yaml

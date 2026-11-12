@@ -46,6 +46,7 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
     private final CatalogSettingsService settings;
     private final ChangeRequestApplier applier;
     private final PageMerger merger;
+    private final PageVariantService pageVariants;
     private final ChangeRequestEvents events;
     private final ProductEvents productEvents;
     private final PermissionChecker permissions;
@@ -53,7 +54,7 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
 
     ChangeRequestServiceImpl(ChangeRequestRepository requests, ProductRepository products, SellerOffers sellerOffers,
                              CatalogSettingsService settings, ChangeRequestApplier applier, PageMerger merger,
-                             ChangeRequestEvents events, ProductEvents productEvents, PermissionChecker permissions,
+                             PageVariantService pageVariants, ChangeRequestEvents events, ProductEvents productEvents, PermissionChecker permissions,
                              Clock clock) {
         this.requests = requests;
         this.products = products;
@@ -61,6 +62,7 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
         this.settings = settings;
         this.applier = applier;
         this.merger = merger;
+        this.pageVariants = pageVariants;
         this.events = events;
         this.productEvents = productEvents;
         this.permissions = permissions;
@@ -201,6 +203,7 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
         Product page = products.findById(r.productId()).orElseThrow(() -> notFound(id));
         Instant now = Instant.now(clock);
         Long pageVersion = null;
+        String resultAtin = null;
         ProductChangeRequest decided;
         if (!cmd.approve()) {
             decided = r.rejected(actor.subject(), reason, now);
@@ -208,32 +211,55 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
             String resolution = null;
             switch (r.type()) {
                 case WRONG_MATCH -> {
-                    resolution = correctGtin(r, page, cmd, now);
+                    resolution = resolveWrongMatch(r, page, cmd, actor.subject(), reason, now);
                     pageVersion = products.findById(page.id()).map(Product::version).orElse(null);
                 }
                 case DUPLICATE_PAGE -> {
                     resolution = merge(r, page, cmd, actor.subject(), reason, now);
                     pageVersion = products.findById(page.id()).map(Product::version).orElse(null);
                 }
-                case NEW_VARIANT -> throw new BusinessRuleException(ChangeRequestApplierImpl.NEEDS_TAX_REVIEW,
-                        "A new size or colour on a page that is on sale needs its own tax decision first. Ask the page "
-                                + "owner to add it, or reject this request with that reason.");
+                case NEW_VARIANT -> {
+                    PageVariantService.Added added = pageVariants.addVariant(r, page,
+                            flag(cmd.resolutionParams(), "holdPageForTax"), now);
+                    resolution = "NEW_VARIANT";
+                    pageVersion = added.page().version();
+                    resultAtin = added.atin();
+                }
                 default -> pageVersion = applier.apply(r, page, now).version();
             }
             decided = r.applied(actor.subject(), reason, resolution, now);
         }
         ProductChangeRequest saved = stored(decided);
-        events.decided(saved, page, pageVersion, now);
+        events.decided(saved, page, pageVersion, resultAtin, now);
         return view(saved, page, now);
     }
 
-    /** WRONG_MATCH: the barcode on the variant was wrong; staff correct it (a barcode another page has is a merge). */
-    private String correctGtin(ProductChangeRequest r, Product page, DecisionCommand cmd, Instant now) {
+    /**
+     * WRONG_MATCH: staff say what was wrong. CORRECT_GTIN (the barcode on the variant was wrong), MOVE_VARIANT (the variant
+     * belongs on the page {@code targetAtin}) or SPLIT_VARIANT (the variant is a product of its own).
+     */
+    private String resolveWrongMatch(ProductChangeRequest r, Product page, DecisionCommand cmd, String by, String reason,
+                                     Instant now) {
         String resolution = cmd.resolution();
+        if ("MOVE_VARIANT".equals(resolution)) {
+            String target = ChangeRequestPolicy.text(cmd.resolutionParams(), "targetAtin").toUpperCase(Locale.ROOT);
+            if (target.isEmpty()) {
+                throw new CatalogRuleViolation("Say which page the variant belongs on",
+                        Map.of("resolutionParams.targetAtin", "The ATIN of the page it moves to"));
+            }
+            pageVariants.moveVariant(page, r.variantAtin(), pageByAtin(target),
+                    flag(cmd.resolutionParams(), "holdPageForTax"), by, reason, r.id(), now);
+            return resolution;
+        }
+        if ("SPLIT_VARIANT".equals(resolution)) {
+            pageVariants.splitVariant(page, r.variantAtin(), by, reason, r.id(), now);
+            return resolution;
+        }
         if (!"CORRECT_GTIN".equals(resolution)) {
             throw new BusinessRuleException("catalog.resolution-not-supported", resolution == null
-                    ? "Say how the wrong match is resolved: CORRECT_GTIN" : resolution + " is not available yet; "
-                    + "correct the barcode (CORRECT_GTIN) or reject the report");
+                    ? "Say how the wrong match is resolved: CORRECT_GTIN, MOVE_VARIANT or SPLIT_VARIANT"
+                    : resolution + " is not a way to resolve a wrong match; use CORRECT_GTIN, MOVE_VARIANT or "
+                    + "SPLIT_VARIANT, or reject the report");
         }
         GtinReader.Reading reading = GtinReader.read(ChangeRequestPolicy.text(cmd.resolutionParams(), "gtin"),
                 settings.current().reservedPrefixes());
@@ -248,6 +274,10 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
                 page.attributes(), page.images(), page.details(), now));
         productEvents.publish(CatalogEvents.PRODUCT_UPDATED, saved);
         return resolution;
+    }
+
+    private static boolean flag(Map<String, Object> params, String key) {
+        return params != null && Boolean.parseBoolean(String.valueOf(params.get(key)));
     }
 
     /** DUPLICATE_PAGE: merge the pages; the survivor is named in the decision (either of the two). */

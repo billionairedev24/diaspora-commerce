@@ -3364,8 +3364,14 @@ paths:
         the change to the page, increases its `version`, publishes `catalog.product.updated` and notifies the owner.
         Image changes pass the image checks first (422 `catalog.change-request-image-rejected`). **Applying never changes
         the product's status** (the live gate stays the only way to LIVE); a `CATEGORY` change to a different tax profile
-        is refused with 422 `catalog.change-request-needs-tax-review`. `WRONG_MATCH` is resolved with `CORRECT_GTIN`,
-        `MOVE_VARIANT` or `SPLIT_VARIANT` (or rejected); `DUPLICATE_PAGE` with `MERGE` (offers move to the surviving
+        is refused with 422 `catalog.change-request-needs-tax-review`. An image that media holds for staff cannot be applied
+        until the held image review queue decided it (409 `catalog.change-request-image-held`). `NEW_VARIANT` adds a child ATIN
+        to the page (its tax facts are copied from the page's first variant and evaluated again); on a page that is on sale it
+        is refused with `catalog.change-request-needs-tax-review` unless `resolutionParams.holdPageForTax` is true, which takes
+        the page off sale through the live gate until tax review approves the new variant; the new ATIN is in the decided
+        event (`resultAtin`). `WRONG_MATCH` is resolved with `CORRECT_GTIN`, `MOVE_VARIANT` (the variant keeps its ATIN and
+        joins another page; its offers follow) or `SPLIT_VARIANT` (the variant keeps its ATIN and becomes the only variant of a
+        new page in review) or rejected; `DUPLICATE_PAGE` with `MERGE` (offers move to the surviving
         page, the old ATIN redirects) or rejected. Deciding twice is 409 `catalog.change-request-decided`. Publishes
         `catalog.change_request.decided` (who, what, why).
       operationId: decideChangeRequest
@@ -7706,7 +7712,7 @@ components:
           maxLength: 1000
         resolution:
           type: string
-          description: Required to approve WRONG_MATCH or DUPLICATE_PAGE
+          description: Required to approve WRONG_MATCH or DUPLICATE_PAGE (NEW_VARIANT and the content types need none)
           enum:
           - CORRECT_GTIN
           - MOVE_VARIANT
@@ -7714,7 +7720,7 @@ components:
           - MERGE
         resolutionParams:
           type: object
-          description: 'CORRECT_GTIN: {gtin}. MOVE_VARIANT: {variantAtin, targetPageAtin}. SPLIT_VARIANT: {variantAtin}. MERGE: {survivorAtin, variantMap?}'
+          description: 'NEW_VARIANT: {holdPageForTax?}. CORRECT_GTIN: {gtin}. MOVE_VARIANT: {targetAtin, holdPageForTax?}. SPLIT_VARIANT: none (the variant is the one in the report). MERGE: {survivorAtin, variantMap?}'
           additionalProperties: {}
         expectedVersion:
           type: integer

@@ -175,4 +175,4 @@ classification, the listing comes back on its own. Running it twice changes noth
 - Integration tests that need a database (Docker was not available here): `V4` applied to a database with LIVE rows, the audit
   SQL, the persistence guard against a real insert, and `recheckAll` paging. See the verification notes in the change description.
 
-Metric: `offers_active_without_tax_decision` (gauge) counts active offers with no tax basis; it must be 0 after the first sweep.
+Metric: `offers_active_without_tax_decision` (gauge) counts active offers with no tax basis; it must be 0 after the first sweep. Alert `OffersActiveWithoutTaxDecision` (page, `infra/observability/rules/catalog-tax-gate.yaml`), runbook [CatalogLiveWithoutTaxDecision](../runbooks/CatalogLiveWithoutTaxDecision.md).

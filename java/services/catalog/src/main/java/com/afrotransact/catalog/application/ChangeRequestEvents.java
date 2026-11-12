@@ -29,8 +29,15 @@ class ChangeRequestEvents {
     }
 
     void decided(ProductChangeRequest r, Product page, Long pageVersion, Instant now) {
+        decided(r, page, pageVersion, null, now);
+    }
+
+    /** @param resultAtin the ATIN a NEW_VARIANT approval created (null otherwise) */
+    void decided(ProductChangeRequest r, Product page, Long pageVersion, String resultAtin, Instant now) {
+        Map<String, Object> payload = changeRequest(r, page, pageVersion, now);
+        payload.put("resultAtin", resultAtin);
         events.publish(CatalogEvents.CHANGE_REQUEST_DECIDED, CatalogEvents.AGGREGATE_CHANGE_REQUEST, r.id().toString(),
-                changeRequest(r, page, pageVersion, now));
+                payload);
     }
 
     void exemptionRequested(GtinExemptionRequest r, Instant now) {
