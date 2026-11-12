@@ -1,0 +1,14 @@
+# Edge for the 8-day trial: prod's edge (the shared base plus prod's routes, Tunnel, no load balancer, no open port) with the two
+# public hostnames replaced by the flat trial hosts. Only api-test.<zone> and auth-test.<zone> are routed: no mcp, no grafana.
+# Hostnames come from infra/cloudflare/hosts.json (`python3 tools/ci/env_hosts.py check` proves they match).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../prod
+patches:
+  - target: {kind: HTTPRoute, name: api}
+    patch: |-
+      - {op: replace, path: /spec/hostnames, value: [api-test.afrotransact.com]}
+  - target: {kind: HTTPRoute, name: auth}
+    patch: |-
+      - {op: replace, path: /spec/hostnames, value: [auth-test.afrotransact.com]}

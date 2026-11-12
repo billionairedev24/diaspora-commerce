@@ -19,6 +19,7 @@ stores:
     accountIdEnv: R2_ACCOUNT_ID
     region: auto
     bucket: afrotransact-prod-media
+    bucketEnv: R2_PUBLIC_BUCKET          # trial overlay: afrotransact-trial-media (docs/runbooks/r2-buckets.md); unset in prod
     publicBaseUrl: https://media.afrotransact.com
     publicBaseUrlEnv: MEDIA_PUBLIC_URL   # shared media CDN URL from the Helm library wins when set
     accessKeyEnv: R2_ACCESS_KEY_ID
@@ -31,6 +32,7 @@ stores:
     accountIdEnv: R2_ACCOUNT_ID
     region: auto
     bucket: afrotransact-prod-kyc-evidence   # no publicBaseUrl: never served publicly
+    bucketEnv: R2_PRIVATE_BUCKET             # trial overlay: afrotransact-trial-kyc-evidence; unset in prod
     accessKeyEnv: R2_PRIVATE_ACCESS_KEY_ID
     secretKeyEnv: R2_PRIVATE_SECRET_ACCESS_KEY
 # Unreleased public images (quarantine/...) are uploaded to the PRIVATE bucket and copied into the public bucket only

@@ -33,8 +33,8 @@ def main():
         doc = yaml.load(f, Loader=_NoSexagesimalLoader)  # noqa: S506 - SafeLoader subclass
     doc["servers"] = [
         {"url": "http://localhost:%s" % port, "description": "local"},
-        {"url": "https://api.dev.afrotransact.com/%s" % service, "description": "dev"},
-        {"url": "https://api.uat.afrotransact.com/%s" % service, "description": "uat"},
+        {"url": "https://api-dev.afrotransact.com/%s" % service, "description": "dev"},
+        {"url": "https://api-uat.afrotransact.com/%s" % service, "description": "uat"},
         {"url": "https://api.afrotransact.com/%s" % service, "description": "prod"},
     ]
     doc["paths"] = dict(sorted(doc.get("paths", {}).items()))

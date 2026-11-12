@@ -80,7 +80,7 @@ Local numbers validate the scripts and catch gross regressions; budgets are only
 ## Run against dev
 
 ```bash
-export BASE_URL=https://api.dev.afrotransact.com  # gateway BFF in dev (api.${DEV_BASE_DOMAIN}, as in security.yml)
+export BASE_URL=https://api-dev.afrotransact.com  # gateway BFF in dev (api.${DEV_BASE_DOMAIN}, as in security.yml)
 export TOKENS=$(paste -sd, load-test-tokens.txt)  # tokens of dedicated load-test customers (never real users)
 k6 run -e SCENARIO=smoke tests/load/search.js
 k6 run -e SCENARIO=load  -e RATE=200 tests/load/search.js            # S200: p95 < 150 ms at target load

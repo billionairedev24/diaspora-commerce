@@ -10,9 +10,9 @@ info:
 servers:
 - url: http://localhost:8110
   description: local
-- url: https://api.dev.afrotransact.com/trust-ops
+- url: https://api-dev.afrotransact.com/trust-ops
   description: dev
-- url: https://api.uat.afrotransact.com/trust-ops
+- url: https://api-uat.afrotransact.com/trust-ops
   description: uat
 - url: https://api.afrotransact.com/trust-ops
   description: prod

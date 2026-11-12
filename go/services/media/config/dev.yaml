@@ -4,7 +4,7 @@
 port: 8080
 # Public API base (shared API_BASE_URL, injected by the Helm library); publicBaseUrl defaults to <apiBaseUrl>/media,
 # the base of media-hosted long-lived links.
-apiBaseUrl: https://api.dev.afrotransact.com
+apiBaseUrl: https://api-dev.afrotransact.com
 docsEnabled: true
 uploadthing:
   appId: afrotransact-dev
@@ -17,7 +17,7 @@ stores:
     endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
     region: auto
     bucket: afrotransact-dev-media
-    publicBaseUrl: https://media.dev.afrotransact.com
+    publicBaseUrl: https://media-dev.afrotransact.com
     publicBaseUrlEnv: MEDIA_PUBLIC_URL   # shared media CDN URL from the Helm library wins when set
     accessKeyEnv: R2_ACCESS_KEY_ID
     secretKeyEnv: R2_SECRET_ACCESS_KEY
@@ -47,7 +47,7 @@ links:
   redirectTtl: 5m
 auth:
   enabled: true
-  issuer: https://auth.dev.afrotransact.com
+  issuer: https://auth-dev.afrotransact.com
   audience: media
   # S250: user tokens the BFF forwards (minted for gateway-bff) act as that user.
   forwardedAudiences: [gateway-bff]

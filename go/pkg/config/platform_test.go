@@ -8,8 +8,8 @@ import (
 
 func TestTokenURL(t *testing.T) {
 	cases := map[string]string{
-		"https://auth.dev.afrotransact.com":  "https://auth.dev.afrotransact.com/oauth2/token",
-		"https://auth.dev.afrotransact.com/": "https://auth.dev.afrotransact.com/oauth2/token",
+		"https://auth-dev.afrotransact.com":  "https://auth-dev.afrotransact.com/oauth2/token",
+		"https://auth-dev.afrotransact.com/": "https://auth-dev.afrotransact.com/oauth2/token",
 		"http://localhost:8100":              "http://localhost:8100/oauth2/token",
 		"":                                   "",
 		"   ":                                "",
@@ -22,7 +22,7 @@ func TestTokenURL(t *testing.T) {
 }
 
 func TestJoinURL(t *testing.T) {
-	if got := config.JoinURL("https://api.uat.afrotransact.com/", "/notifications"); got != "https://api.uat.afrotransact.com/notifications" {
+	if got := config.JoinURL("https://api-uat.afrotransact.com/", "/notifications"); got != "https://api-uat.afrotransact.com/notifications" {
 		t.Fatalf("JoinURL = %q", got)
 	}
 	if got := config.JoinURL("http://localhost:3001", ""); got != "http://localhost:3001" {

@@ -12,13 +12,19 @@
 #                  Every container gets PLATFORM_ENV, PLATFORM_DOMAIN and the derived PUBLIC_WEB_URL,
 #                  SELLER_CENTER_URL, STAFF_CONSOLE_URL, API_BASE_URL, AUTH_ISSUER_URL and MEDIA_PUBLIC_URL
 #                  (templates/_helpers.tpl "at-service.platformEnvVars"; docs/engineering/environments.md).
-#   global.storefrontHost  www | apex (default www): the customer storefront's canonical host, www.<domain> in EVERY environment
+#   (Legacy, one-server test box only: the four environments set the explicit hosts below, generated from infra/cloudflare/hosts.json.)
+#   global.storefrontHost  www | apex (default www): the customer storefront's canonical host, www.<domain> without global.webHost
 #                  (PUBLIC_WEB_URL = https://www.<domain>; the apex only 301-redirects to it). apex is an explicit opt-out
 #                  (PUBLIC_WEB_URL = https://<domain>). Every other app keeps its sub-domain (docs/engineering/environments.md,
 #                  "Storefront host rule"). global.urls.PUBLIC_WEB_URL still wins over it.
 #   global.sellerHost / global.adminHost  optional FULL host names (default empty = seller.<domain> / admin.<domain>):
 #                  SELLER_CENTER_URL / STAFF_CONSOLE_URL = https://<host>. For the free Cloudflare certificate layout
 #                  (docs/engineering/environments.md, "Free certificate layout (flat web hosts)"), e.g. seller-test.example.com.
+#   global.webHost / global.apiHost / global.authHost / global.mediaHost  optional FULL host names for the storefront, the
+#                  public API, identity and the public media CDN (default empty = the derived hosts above). The trial's flat
+#                  layout (test.<zone>, api-test.<zone>, auth-test.<zone>, media-test.<zone>): one label under the zone, covered
+#                  by Cloudflare's free certificate. webHost replaces the storefront host rule (www | apex) entirely.
+#                  global.domain then stays the ZONE (PLATFORM_DOMAIN, the WebAuthn relying-party suffix).
 #   global.urls    optional {ENV_NAME: value} overrides of a derived URL for the whole environment.
 # A service's extraEnv entry of the same name wins over both. Unset global.domain renders PLATFORM_ENV only.
 #

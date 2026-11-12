@@ -66,7 +66,26 @@ put the date in the calendar) and **copy the `glc_...` value once**.
 | `afrotransact-alloy-prod` | `metrics:write`, `logs:write` **only** | `GRAFANA_ALLOY_TOKEN` in the prod `secrets.local.env` (-> Secret key `GRAFANA_TOKEN`) | the prod cluster |
 | `afrotransact-alloy-trial` | `metrics:write`, `logs:write` **only** | `GRAFANA_ALLOY_TOKEN` in the trial `secrets.local.env` | the trial cluster only; delete the policy when the trial ends |
 | `afrotransact-rules-deploy` | `rules:read`, `rules:write` | env var `MIMIR_API_KEY` on **your machine** when you run the loader | never in the cluster |
-| (existing) OTLP traces | `traces:write` (and the OTLP gateway as Grafana shows it) | `GRAFANA_API_TOKEN` (Secret `grafana-cloud-otlp`) | the cluster |
+| `afrotransact-otlp-prod` / `afrotransact-otlp-trial` | `traces:write` (+ `metrics:write`, `logs:write`, see 3.4) | `GRAFANA_API_TOKEN` (Secret `grafana-cloud-otlp`) | the cluster of that env |
+
+### 3.4 Traces: the OTLP credential (endpoint, instance id, token)
+
+Traces do not use the Alloy credential: the OTel collector (`opentelemetry-collector-gateway`) exports to Grafana Cloud's **OTLP gateway** with HTTP basic auth, instance id as the user
+and an access-policy token as the password. Three values, one per `secrets.local.env` key (they become the Secret `grafana-cloud-otlp` in namespace `observability`, rendered by `secrets.sh platform`):
+
+| `secrets.local.env` key | Where to read it | Example shape |
+|---|---|---|
+| `GRAFANA_OTLP_ENDPOINT` | **grafana.com** > your organisation > **Stacks** > `afrotransact` > **Details** > the **OpenTelemetry** tile > **Configure**: field **OTLP Endpoint** (US East: `otlp-gateway-prod-us-east-0`) | `https://otlp-gateway-prod-us-east-0.grafana.net/otlp` (use exactly what the page shows, **no** `/v1/traces` suffix: the exporter appends it) |
+| `GRAFANA_INSTANCE_ID` | the same page: **Instance ID** (a number; it is the stack's id, not the Prometheus or Loki user id of 3.1 and 3.2) | `123456` |
+| `GRAFANA_API_TOKEN` | the same page, **Generate now**, or create a policy by hand (below). The token starts with `glc_` and is shown once | `glc_...` |
+
+By hand (preferred, so the policy has our name and only the scopes we want): **Administration > Cloud access policies > Create access policy**, name `afrotransact-otlp-trial` (and `afrotransact-otlp-prod` for
+production), **Realm: this stack only**, scopes **`traces:write`**; because the collector's pipelines in `infra/k8s/platform/envs/prod/opentelemetry-collector-gateway.yaml` also export metrics and logs over OTLP,
+tick **`metrics:write`** and **`logs:write`** as well (or delete those two pipelines and keep traces only; the service metrics and logs already come from Alloy). **Add token**, expiry 1 year (trial: 10 days), copy `glc_...`.
+UNVERIFIED: the page and scope names are written from memory of the Grafana Cloud UI; if they differ, the OTLP gateway needs a token that may write traces and an instance id from the same page.
+
+Check: the collector pod logs no `401` or `403` from the exporter (`kubectl -n observability logs deploy/opentelemetry-collector-gateway | tail`), and in Grafana **Explore** > the Tempo data source,
+a search `{ resource.deployment.environment = "trial" }` (prod: `"prod"`) returns traces of `gateway-bff` within a few minutes of browsing the storefront (10 percent of normal traces are kept, all slow and failed ones).
 
 Dashboards use a Grafana **service account**, not an access policy: **Administration > Users and access > Service accounts > Add service
 account** `afrotransact-dashboards`, role **Editor**, then **Add service account token** (expiry set). -> env var `GRAFANA_SA_TOKEN` on your machine.
@@ -186,7 +205,7 @@ No real address is in the repository: the placeholder is `ops-alerts@example.inv
 5. Where the loaded rules deliver (Grafana Alertmanager or the Mimir Alertmanager) is UNVERIFIED: **Alerting > Admin** lists the Alertmanagers.
    `infra/observability/grafana-cloud/alertmanager.yaml` holds the same routing as code for the Mimir one (`grafana-cloud-load.sh alertmanager`).
 6. Add an **external uptime check** (Grafana Synthetic Monitoring if the free tier has it (UNVERIFIED), or any outside service) for
-   `https://www.afrotransact.com/`, the BFF health path (`/bff/healthz` on the API host) and the OIDC discovery URL: metrics alerts cannot see a dead
+   `https://afrotransact.com/`, the BFF health path (`/bff/healthz` on the API host) and the OIDC discovery URL: metrics alerts cannot see a dead
    Cloudflare Tunnel from outside, and TLS certificates are managed by Cloudflare (there is no cert-manager in the cluster).
 
 ## 9. Alert reference

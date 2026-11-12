@@ -9,6 +9,9 @@
 # PROFILE=prod (production secrets, run on an OPERATOR machine, never on a shared server):
 #   PROFILE=prod STATE_DIR=$HOME/.afrotransact-prod SECRETS_OUT=./out DB_MODE=external ./secrets.sh services|platform
 #   - the launch set only (services.launch.conf), APP_ENV=prod, no OpenFGA (FGA_ENABLED=false in prod), namespace afrotransact-prod
+#   - the 8-day TRIAL is the same profile (PROFILE=prod: APP_ENV=prod, seed guard on) with GRAFANA_ENV=trial and its own bucket and
+#     Stripe TEST keys: start from secrets.trial.env.example (docs/runbooks/ovh-production.md, "Trial"). LINK_SIGNING_KEY and every
+#     other internal secret is generated here (never typed); only third-party values come from secrets.local.env
 #   - SECRETS_OUT writes the Secrets as YAML files for SOPS instead of applying them (infra/ops/secrets/README.md)
 #   - STATE_DIR holds the generated values (IDENTITY_DATA_KEY, signing key ...): back it up OFFLINE, separately from the database
 #   - `databases` is for a self-hosted Postgres only in dev; for Layerbase run infra/tofu/scripts/postgres-bootstrap.sh
@@ -75,7 +78,7 @@ platform() {
     secret ops pg-backup "PGHOST=$PG_HOST" "PGPORT=5432" "PGUSER=$PG_ADMIN" "PGPASSWORD=$(pg_admin_password)" "PGSSLMODE=$PG_SSL" \
       "AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}" "B2_KEY_ID=${BACKUP_B2_KEY_ID:-}" "B2_APPLICATION_KEY=${BACKUP_B2_APPLICATION_KEY:-}" \
       "B2_BUCKET=${BACKUP_B2_BUCKET:-afrotransact-prod-backups}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
-      "RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}" "RETENTION_MODE=${BACKUP_RETENTION_MODE:-sweep}" "BACKUP_ENV=prod" \
+      "RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}" "RETENTION_MODE=${BACKUP_RETENTION_MODE:-sweep}" "BACKUP_ENV=${GRAFANA_ENV:-prod}" \
       "PUSHGATEWAY_URL=${BACKUP_PUSHGATEWAY_URL:-}" "HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-}"
     return 0
   fi

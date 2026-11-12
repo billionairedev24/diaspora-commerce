@@ -17,8 +17,17 @@ output "tunnel_id" {
   value = var.origin_mode == "tunnel" ? cloudflare_zero_trust_tunnel_cloudflared.this[0].id : null
 }
 
-output "r2_media_bucket" {
-  value = cloudflare_r2_bucket.media.name
+output "r2_buckets" {
+  description = "Both R2 buckets (public media, private kyc-evidence). The only definition: docs/runbooks/r2-buckets.md follows it."
+  value = {
+    media        = cloudflare_r2_bucket.media.name
+    kyc_evidence = cloudflare_r2_bucket.kyc_evidence.name
+  }
+}
+
+output "web_origins" {
+  description = "The three web origins: the AllowedOrigins of the private bucket's CORS policy (docs/runbooks/r2-buckets.md section 3)."
+  value       = local.web_origins
 }
 
 output "pages_projects" {

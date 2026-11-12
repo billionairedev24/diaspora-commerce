@@ -16,11 +16,11 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "dev",
         "EXPO_PUBLIC_MOCKS": "0",
-        "EXPO_PUBLIC_BFF_URL": "https://api.dev.afrotransact.com/bff",
-        "EXPO_PUBLIC_FULFILMENT_URL": "https://api.dev.afrotransact.com/fulfilment",
-        "EXPO_PUBLIC_MEDIA_URL": "https://api.dev.afrotransact.com/media",
-        "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.dev.afrotransact.com",
-        "EXPO_PUBLIC_IDENTITY_URL": "https://api.dev.afrotransact.com/identity"
+        "EXPO_PUBLIC_BFF_URL": "https://api-dev.afrotransact.com/bff",
+        "EXPO_PUBLIC_FULFILMENT_URL": "https://api-dev.afrotransact.com/fulfilment",
+        "EXPO_PUBLIC_MEDIA_URL": "https://api-dev.afrotransact.com/media",
+        "EXPO_PUBLIC_OIDC_ISSUER": "https://auth-dev.afrotransact.com",
+        "EXPO_PUBLIC_IDENTITY_URL": "https://api-dev.afrotransact.com/identity"
       },
       "android": {
         "buildType": "apk"
@@ -52,11 +52,11 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "uat",
         "EXPO_PUBLIC_MOCKS": "0",
-        "EXPO_PUBLIC_BFF_URL": "https://api.uat.afrotransact.com/bff",
-        "EXPO_PUBLIC_FULFILMENT_URL": "https://api.uat.afrotransact.com/fulfilment",
-        "EXPO_PUBLIC_MEDIA_URL": "https://api.uat.afrotransact.com/media",
-        "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.uat.afrotransact.com",
-        "EXPO_PUBLIC_IDENTITY_URL": "https://api.uat.afrotransact.com/identity"
+        "EXPO_PUBLIC_BFF_URL": "https://api-uat.afrotransact.com/bff",
+        "EXPO_PUBLIC_FULFILMENT_URL": "https://api-uat.afrotransact.com/fulfilment",
+        "EXPO_PUBLIC_MEDIA_URL": "https://api-uat.afrotransact.com/media",
+        "EXPO_PUBLIC_OIDC_ISSUER": "https://auth-uat.afrotransact.com",
+        "EXPO_PUBLIC_IDENTITY_URL": "https://api-uat.afrotransact.com/identity"
       },
       "android": {
         "buildType": "apk"

@@ -152,6 +152,7 @@ observability-check: ## Check generated rules are fresh, promtool-check rules, v
 # ------------------------------------------------------------------------------------------------ environments (S188)
 env-check: ## Environment guards: no hard-coded hosts, profiles + docs pages + trace sampling + sizing per env
 	python3 tools/ci/check_env_urls.py
+	python3 tools/ci/env_hosts.py check
 	python3 tools/ci/check_env_config.py
 	python3 tools/ci/check_webhook_routes.py
 

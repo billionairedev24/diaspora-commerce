@@ -11,9 +11,9 @@ info:
 servers:
 - url: http://localhost:8106
   description: local
-- url: https://api.dev.afrotransact.com/seller
+- url: https://api-dev.afrotransact.com/seller
   description: dev
-- url: https://api.uat.afrotransact.com/seller
+- url: https://api-uat.afrotransact.com/seller
   description: uat
 - url: https://api.afrotransact.com/seller
   description: prod

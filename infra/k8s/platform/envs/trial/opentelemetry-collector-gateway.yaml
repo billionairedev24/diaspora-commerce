@@ -1,0 +1,8 @@
+# OTel gateway - trial: prod's values (envs/prod) plus the environment tag on every trace, metric and log, so the one Grafana Cloud
+# stack can tell the trial from production (docs/runbooks/observability-grafana-cloud.md). Alloy's `env` label comes from the
+# Secret key CLUSTER_ENV (GRAFANA_ENV=trial in secrets.local.env), not from this file.
+config:
+  processors:
+    resource/env:
+      attributes:
+        - {key: deployment.environment, value: trial, action: insert}

@@ -22,7 +22,7 @@ class TargetGuard(unittest.TestCase):
 
     def test_production_hosts_are_refused_even_with_the_remote_flag(self) -> None:
         for url in ("https://api.afrotransact.com", "https://auth.afrotransact.com", "https://afrotransact.com",
-                    "https://www.afrotransact.com/x", "https://api.uat.afrotransact.com", "https://catalog.afrotransact.com:443",
+                    "https://afrotransact.com/x", "https://api-uat.afrotransact.com", "https://catalog.afrotransact.com:443",
                     "https://API.AFROTRANSACT.COM.", "https://user:pw@api.afrotransact.com"):
             with self.subTest(url=url):
                 problem = seed.target_problem({"CATALOG_URL": url, "SEED_ALLOW_REMOTE": "1"})
@@ -36,9 +36,11 @@ class TargetGuard(unittest.TestCase):
                 self.assertIsNotNone(seed.target_problem({"SELLER_URL": url}))
 
     def test_other_remote_hosts_need_the_explicit_flag(self) -> None:
-        env = {"CATALOG_URL": "https://catalog.dev.afrotransact.com", "ORDERS_URL": "https://orders.trial.afrotransact.com"}
+        env = {"CATALOG_URL": "https://api-dev.afrotransact.com", "ORDERS_URL": "https://auth-dev.afrotransact.com"}
         self.assertIn("SEED_ALLOW_REMOTE", seed.target_problem(env))
         self.assertIsNone(seed.target_problem({**env, "SEED_ALLOW_REMOTE": "1"}))
+        # the trial runs the prod profile: demo data is refused even with the flag
+        self.assertIsNotNone(seed.target_problem({"CATALOG_URL": "https://api-test.afrotransact.com", "SEED_ALLOW_REMOTE": "1"}))
         self.assertIn("SEED_ALLOW_REMOTE", seed.target_problem({"CATALOG_URL": "https://staging.example.org"}))
 
     def test_an_unreadable_url_stops_the_run(self) -> None:

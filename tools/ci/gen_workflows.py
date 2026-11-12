@@ -196,10 +196,11 @@ jobs:
 
 def promote_workflow(services: list[tuple[str, str]]) -> str:
     options = ", ".join(name for name, _ in services)
-    return f"""{HEADER}# Promote an already-built, signed image of ONE service to uat or prod (prod waits for the
+    return f"""{HEADER}# Promote an already-built, signed image of ONE service to uat, trial or prod (prod waits for the
 # `production` reviewers configured on the GitHub environment `prod`). Only launch-set services can be promoted
-# (infra/argocd/launch-set). uat: empty tag = what dev runs now. prod: the tag is REQUIRED (the full sha of a build that
-# passed CI on main): the single production has no uat to copy from (ADR 0004, ADR 0008).
+# (infra/argocd/launch-set). uat: empty tag = what dev runs now. trial and prod: the tag is REQUIRED (the full sha of a build that
+# passed CI on main): the single production has no uat to copy from (ADR 0004, ADR 0008). Each environment has its OWN pin file
+# (values-uat.yaml, values-trial.yaml, values-prod.yaml in the service's chart): promoting to the trial never edits the prod pin.
 name: promote
 
 on:
@@ -212,10 +213,10 @@ on:
       environment:
         description: Target environment
         type: choice
-        options: [uat, prod]
+        options: [uat, trial, prod]
         default: prod
       tag:
-        description: Image tag (full git sha). Required for prod. Empty (uat only) = the tag in values-dev.yaml.
+        description: Image tag (full git sha). Required for trial and prod. Empty (uat only) = the tag in values-dev.yaml.
         type: string
         default: ""
 
@@ -236,12 +237,12 @@ jobs:
           TAG: ${{{{ inputs.tag }}}}
         run: |
           dir=$([[ -d "java/services/$SERVICE" ]] && echo "java/services/$SERVICE" || echo "go/services/$SERVICE")
-          # uat and prod run the launch set only; a service outside it has no Application there.
+          # uat, trial and prod run the launch set only; a service outside it has no Application there.
           if ! grep -qx " *- path: $dir/deploy/helm" infra/argocd/launch-set/kustomization.yaml; then
             echo "::error::$SERVICE is not in the launch set (infra/argocd/launch-set): nothing deploys it to $TARGET"; exit 1
           fi
           if [[ -z "$TAG" ]]; then
-            [[ "$TARGET" == prod ]] && {{ echo "::error::prod needs an explicit tag (full git sha of a green main build)"; exit 1; }}
+            [[ "$TARGET" == uat ]] || {{ echo "::error::$TARGET needs an explicit tag (full git sha of a green main build)"; exit 1; }}
             TAG="$(yq '.image.tag // ""' "$dir/deploy/helm/values-dev.yaml")"
           fi
           [[ "$TAG" =~ ^[0-9a-f]{{40}}$ ]] || {{ echo "::error::no deployable tag for $SERVICE ($TAG)"; exit 1; }}

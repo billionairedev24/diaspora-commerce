@@ -18,7 +18,7 @@ on:
         type: string
         required: true
       environment:
-        description: dev | uat | prod
+        description: dev | uat | trial | prod (trial has its own GitHub environment and writes values-trial.yaml, never values-prod.yaml)
         type: string
         required: true
       cloud:
@@ -68,7 +68,7 @@ jobs:
     steps:
       - name: Validate inputs
         run: |
-          case "$ENVIRONMENT" in dev|uat|prod) ;; *) echo "::error::bad environment $ENVIRONMENT"; exit 1 ;; esac
+          case "$ENVIRONMENT" in dev|uat|trial|prod) ;; *) echo "::error::bad environment $ENVIRONMENT"; exit 1 ;; esac
           if [[ -z "$CLOUD" ]]; then
             # The GitHub environment has no CLOUD variable yet: nothing to deploy to (S249).
             echo "::notice::No CLOUD set for the $ENVIRONMENT environment; $SERVICE is built and signed but not deployed."

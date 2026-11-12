@@ -7,7 +7,7 @@ elasticsearch:
   urls: [http://elasticsearch:9200]
 auth:
   enabled: true
-  issuer: https://auth.dev.afrotransact.com
+  issuer: https://auth-dev.afrotransact.com
   audience: search
 aiGatewayUrl: http://ai-gateway:8080
 # S036 hybrid retrieval: 3+ word queries are embedded by ai-gateway (client search-service, scope ai:use) within

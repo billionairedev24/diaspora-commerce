@@ -14,32 +14,6 @@ resource "cloudflare_dns_record" "web" {
   tags     = local.tags
 }
 
-# The base domain is not a second storefront: a proxied placeholder so the redirect rule (zone.tf) answers it with a 301 to
-# www.<base>. Nothing is served from it, the IP is never contacted.
-resource "cloudflare_dns_record" "storefront_redirect" {
-  count   = var.storefront_host == "www" ? 1 : 0
-  zone_id = local.zone_id
-  name    = local.base
-  type    = "AAAA"
-  content = "100::"
-  proxied = true
-  ttl     = 1
-  comment = "${local.base} -> 301 to https://${local.storefront_host} (redirect rule)"
-  tags    = local.tags
-}
-
-# State moves from before the host rule (the storefront was the base domain, prod also had a "www" redirect record): the
-# existing apex record becomes the redirect placeholder and prod's www record becomes the storefront's own record.
-moved {
-  from = cloudflare_dns_record.web["storefront"]
-  to   = cloudflare_dns_record.storefront_redirect[0]
-}
-
-moved {
-  from = cloudflare_dns_record.www[0]
-  to   = cloudflare_dns_record.web["storefront"]
-}
-
 # Worker scripts are uploaded by .github/workflows/_web-app.yml (wrangler deploy --name <app>-<env>).
 resource "cloudflare_workers_route" "web" {
   for_each = var.workers_routes_enabled ? toset(local.web_apps) : toset([])
@@ -115,11 +89,22 @@ resource "cloudflare_turnstile_widget" "this" {
   region     = "world"
 }
 
-# ------------------------------------------------------------------------------ R2 public media
-# Product/seller images only. KYC evidence never goes to R2 (object-locked bucket on the primary cloud).
+# ------------------------------------------------------------------------------ R2 buckets (media service)
+# Two buckets, names from local.r2_buckets (the one source of truth; the media service takes them from config/prod.yaml, or from
+# R2_PUBLIC_BUCKET / R2_PRIVATE_BUCKET in the trial). The module does not manage CORS or the API tokens: both are dashboard steps
+# in docs/runbooks/r2-buckets.md (sections 3 and 4). Do not also create the buckets by hand.
+# Public bucket: released product and storefront images, served only through the custom domain below.
 resource "cloudflare_r2_bucket" "media" {
   account_id = var.account_id
-  name       = "afrotransact-media-${var.environment}"
+  name       = local.r2_buckets.media
+  location   = "enam"
+}
+
+# Private bucket: quarantine (uploads waiting for moderation), KYC documents, proof and return photos, purchase orders,
+# shipping documents, resumes and exports. NO custom domain and r2.dev stays off: it is only ever reached with presigned URLs.
+resource "cloudflare_r2_bucket" "kyc_evidence" {
+  account_id = var.account_id
+  name       = local.r2_buckets.kyc_evidence
   location   = "enam"
 }
 

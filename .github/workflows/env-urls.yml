@@ -7,10 +7,10 @@ name: env-urls
 on:
   push:
     branches: [main]
-    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py,
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py, tools/ci/env_hosts.py,
             .github/workflows/env-urls.yml]
   pull_request:
-    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py,
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py, tools/ci/env_hosts.py,
             .github/workflows/env-urls.yml]
 
 permissions:
@@ -24,6 +24,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: No hard-coded environment hosts
         run: python3 tools/ci/check_env_urls.py --format github
+      - name: Every host is in the map infra/cloudflare/hosts.json, one label below the zone
+        run: python3 tools/ci/env_hosts.py check
 
   env-config:
     name: environment configuration guard

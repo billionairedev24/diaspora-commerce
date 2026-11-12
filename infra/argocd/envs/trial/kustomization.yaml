@@ -1,0 +1,54 @@
+# Everything Argo CD manages for the 8-day TRIAL on its own OVH cluster: AppProjects (afrotransact-trial, platform-trial) and the
+# three lean ApplicationSets pointed at envs/trial/platform-values.yaml. Synced by bootstrap/root-trial.yaml (app of apps).
+#
+# The trial is a VALUES OVERLAY OF PROD, not a new profile: the same 21 launch-set charts, the same lean platform, the prod
+# profile (each chart's values-prod.yaml: env: prod -> SPRING_PROFILES_ACTIVE=prod / APP_ENV=prod, so the seed guards still
+# refuse demo data) and the same namespaces (afrotransact-prod, data, kafka, temporal, ops, observability, ingress: the cluster is
+# dedicated, so the secret script, the MCP private URL and every kubectl line of docs/runbooks/ovh-production.md apply unchanged).
+# What differs from prod is exactly this list:
+#   1. names: Applications are <component>-trial, projects afrotransact-trial / platform-trial, label afrotransact.com/env=trial
+#   2. platform-values.yaml: global.domain (the ZONE) + the flat hosts test. / seller-test. / admin-test. / api-test. / auth-test. /
+#      media-test., no storefrontHost rule, argocd.env trial
+#   3. services: every launch-set chart has a values-trial.yaml, read after values-prod.yaml: the trial's own image pin (written by
+#      the promote workflow, so trial and prod pins are separate files) and, for media only, the trial R2 bucket names
+#   4. edge: overlays/trial (the HTTPRoute hostnames)
+#   5. the OTel collector tags traces deployment.environment=trial (envs/trial/opentelemetry-collector-gateway.yaml)
+#   6. secrets: Stripe TEST keys, GRAFANA_ENV=trial, the trial backup bucket (infra/ovh-vps/secrets.trial.env.example)
+# Hosts: infra/cloudflare/hosts.json (env trial, suffix test); another zone: `python3 tools/ci/env_hosts.py set-trial-zone <zone>`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+nameSuffix: -trial
+resources:
+  - ../../projects
+  - ../../applicationsets/lean
+components:
+  - ../../launch-set          # only the launch-set services get an Application (launch-set/kustomization.yaml)
+patches:
+  - target: {kind: ApplicationSet}
+    patch: |-
+      - op: replace
+        path: /spec/generators/0/matrix/generators/0/git/files/0/path
+        value: infra/argocd/envs/trial/platform-values.yaml
+  # services: prod chart values, then the trial's pin file, the trial's platform values last; one namespace (see the header).
+  - target: {kind: ApplicationSet, name: services}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/sources/0/helm/valueFiles
+        value:
+          - values.yaml
+          - values-prod.yaml
+          - values-trial.yaml
+          - '$values/infra/argocd/envs/trial/platform-values.yaml'
+      - op: replace
+        path: /spec/template/spec/destination/namespace
+        value: afrotransact-prod
+  # platform charts: prod's per-component values, then the trial's (only the OTel collector has one).
+  - target: {kind: ApplicationSet, name: platform-charts}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/sources/0/helm/valueFiles
+        value:
+          - '$values/infra/k8s/platform/values/{{ .component }}.yaml'
+          - '$values/infra/k8s/platform/envs/prod/{{ .component }}.yaml'
+          - '$values/infra/k8s/platform/envs/trial/{{ .component }}.yaml'
+          - '$values/infra/k8s/platform/clouds/{{ .cloud }}/{{ .component }}.yaml'

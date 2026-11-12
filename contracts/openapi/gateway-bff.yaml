@@ -40,9 +40,9 @@ info:
 servers:
   - url: http://localhost:8200
     description: local
-  - url: https://api.dev.afrotransact.com/bff
+  - url: https://api-dev.afrotransact.com/bff
     description: dev
-  - url: https://api.uat.afrotransact.com/bff
+  - url: https://api-uat.afrotransact.com/bff
     description: uat
   - url: https://api.afrotransact.com/bff
     description: prod

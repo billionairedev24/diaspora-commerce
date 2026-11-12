@@ -13,8 +13,8 @@ info:
     the service issues on first use; signed-in customers by their access token.
 servers:
   - {url: 'http://localhost:8203', description: local}
-  - {url: 'https://api.dev.afrotransact.com/cart', description: dev}
-  - {url: 'https://api.uat.afrotransact.com/cart', description: uat}
+  - {url: 'https://api-dev.afrotransact.com/cart', description: dev}
+  - {url: 'https://api-uat.afrotransact.com/cart', description: uat}
   - {url: 'https://api.afrotransact.com/cart', description: prod}
 security: [{}, {bearer: []}]
 tags:

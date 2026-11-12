@@ -2,17 +2,20 @@
 
 **Owner decision:** the nightly database backups go to **Backblaze B2**, through its S3-compatible API, with `rclone`. **Cloudflare R2 is not
 used for backups**: the backups must survive a problem with the Cloudflare account. One **private bucket per environment**
-(`afrotransact-test-backups`, `afrotransact-prod-backups`), one **application key per bucket**, restricted to that bucket, Read and Write.
+(`afrotransact-test-backups` for the one-server test box, **`afrotransact-trial-backups`** for the 8-day OVH trial, `afrotransact-prod-backups`), one **application key per bucket**, restricted to that bucket, Read and Write.
 The files are age-encrypted before they leave the cluster, so Backblaze only ever holds ciphertext (the private age key is offline:
 `restore-drill.md`).
+
+> **What is and is not backed up.** Only the **Postgres dumps** (and their globals) reach B2. The **two Cloudflare R2 buckets (media and kyc-evidence) are NOT copied**: the nightly R2 to B2 copy is not built
+> (backlog story S380), so a deleted or overwritten R2 object, KYC documents included, is not recoverable today. Valkey and the search index are rebuilt, not backed up.
 
 > **UNVERIFIED.** Everything below that describes Backblaze (screen names, limits, lifecycle behaviour, what an S3 delete does, what a key
 > can do) is written from memory and has not been checked against Backblaze's current documentation or a live account. The repository's
 > scripts were run only against a local rclone remote. The first real run (section 5) is the check; correct this page with what you see.
 
-| Item | Test (OVH server) | Production (OVH node + Layerbase) |
+| Item | Test (OVH server) | Trial and production (OVH node + Layerbase) |
 |---|---|---|
-| Bucket | `afrotransact-test-backups` | `afrotransact-prod-backups` |
+| Bucket | `afrotransact-test-backups` | trial `afrotransact-trial-backups`, production `afrotransact-prod-backups` (set `BACKUP_B2_BUCKET`; the metric label `env` follows `GRAFANA_ENV`) |
 | What runs | `infra/ovh-vps/backup.sh` (cron on the server, also dumps the generated secrets, passphrase-encrypted) | CronJob `pg-backup` in namespace `ops`, 03:15 UTC (`infra/k8s/platform/lean/backup`, age-encrypted) |
 | Where the key lives | GitHub Environment `ovh-vps`: secrets `B2_KEY_ID`, `B2_APPLICATION_KEY`, variables `B2_BUCKET`, `B2_ENDPOINT` | SOPS Secret `ops/pg-backup` (`infra/ovh-vps/secrets.sh` writes it from `secrets.local.env`) |
 

@@ -49,14 +49,10 @@ resource "cloudflare_zone_setting" "hsts" {
 # sent none (the three Next.js apps and identity send strict-origin-when-cross-origin themselves), so an app's own stricter
 # value always wins. A zone has one response-header ruleset, so the manage_zone run owns the rules of all environments.
 locals {
-  # Hosts of an environment: <base> and *.<base>. Prod's base is the zone apex, so it excludes the dev. and uat. hosts.
+  # Hosts of an environment, from the map (hosts.json): flat names, so the list is exact (no wildcard).
   edge_header_host_expressions = {
     for env in var.edge_response_header_environments :
-    env => env == "prod" ? join(" and ", [
-      "(http.host eq \"${var.zone_name}\" or ends_with(http.host, \".${var.zone_name}\"))",
-      "not (http.host eq \"dev.${var.zone_name}\" or ends_with(http.host, \".dev.${var.zone_name}\"))",
-      "not (http.host eq \"uat.${var.zone_name}\" or ends_with(http.host, \".uat.${var.zone_name}\"))",
-    ]) : "(http.host eq \"${env}.${var.zone_name}\" or ends_with(http.host, \".${env}.${var.zone_name}\"))"
+    env => "http.host in {${join(" ", [for h in local.env_all_hosts[env] : "\"${h}\""])}}"
   }
 }
 
@@ -88,18 +84,6 @@ resource "cloudflare_authenticated_origin_pulls_settings" "this" {
   count   = local.zone_count
   zone_id = local.zone_id
   enabled = true
-}
-
-# Two-level hostnames (seller.dev.afrotransact.com) need an advanced certificate.
-resource "cloudflare_certificate_pack" "env" {
-  for_each              = var.manage_zone ? toset(var.advanced_certificate_environments) : toset([])
-  zone_id               = local.zone_id
-  type                  = "advanced"
-  hosts                 = ["${each.key}.${var.zone_name}", "*.${each.key}.${var.zone_name}"]
-  validation_method     = "txt"
-  validity_days         = 90
-  certificate_authority = "google"
-  cloudflare_branding   = false
 }
 
 # ------------------------------------------------------------------------------ admin allow-list
@@ -149,39 +133,6 @@ resource "cloudflare_ruleset" "managed_waf" {
   ]
 }
 
-# ------------------------------------------------------------------------------ storefront host rule: apex -> www
-# The storefront is www.<base> in every environment. The base domain of each environment (afrotransact.com,
-# dev.afrotransact.com, uat.afrotransact.com) redirects (301, path and query kept) to it, so the BFF's origin checks, CSRF and
-# OAuth callbacks only ever see the www host. A zone has one ruleset per phase, so this run owns the rules of all environments;
-# each environment's own run creates the proxied placeholder record (environment.tf).
-resource "cloudflare_ruleset" "storefront_redirect" {
-  count   = local.zone_count
-  zone_id = local.zone_id
-  name    = "apex to www"
-  kind    = "zone"
-  phase   = "http_request_dynamic_redirect"
-  rules = [for env, base in local.apex_redirects : {
-    description = "${base} -> www.${base}"
-    expression  = "(http.host eq \"${base}\")"
-    action      = "redirect"
-    enabled     = true
-    action_parameters = {
-      from_value = {
-        status_code           = 301
-        preserve_query_string = true
-        target_url = {
-          expression = "concat(\"https://www.${base}\", http.request.uri.path)"
-        }
-      }
-    }
-  }]
-}
-
-moved {
-  from = cloudflare_ruleset.www_redirect[0]
-  to   = cloudflare_ruleset.storefront_redirect[0]
-}
-
 # ------------------------------------------------------------------------------ WAF: custom rules
 resource "cloudflare_ruleset" "custom_waf" {
   count       = local.zone_count
@@ -199,7 +150,7 @@ resource "cloudflare_ruleset" "custom_waf" {
     },
     {
       description = "Challenge the staff console from outside the allow-list"
-      expression  = "starts_with(http.host, \"admin.\") and not ip.src in $afrotransact_admin_allowlist"
+      expression  = "(starts_with(http.host, \"admin.\") or starts_with(http.host, \"admin-\")) and not ip.src in $afrotransact_admin_allowlist"
       action      = "managed_challenge"
       enabled     = true
     },

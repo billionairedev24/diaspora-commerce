@@ -11,9 +11,9 @@ info:
 servers:
 - url: http://localhost:8103
   description: local
-- url: https://api.dev.afrotransact.com/inventory
+- url: https://api-dev.afrotransact.com/inventory
   description: dev
-- url: https://api.uat.afrotransact.com/inventory
+- url: https://api-uat.afrotransact.com/inventory
   description: uat
 - url: https://api.afrotransact.com/inventory
   description: prod

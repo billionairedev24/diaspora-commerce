@@ -12,9 +12,9 @@ info:
 servers:
 - url: http://localhost:8109
   description: local
-- url: https://api.dev.afrotransact.com/bookings
+- url: https://api-dev.afrotransact.com/bookings
   description: dev
-- url: https://api.uat.afrotransact.com/bookings
+- url: https://api-uat.afrotransact.com/bookings
   description: uat
 - url: https://api.afrotransact.com/bookings
   description: prod

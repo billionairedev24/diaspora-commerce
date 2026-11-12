@@ -29,7 +29,7 @@ import tempfile
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-ENVS = ["dev", "uat", "prod"]
+ENVS = ["dev", "uat", "prod", "trial"]
 HELM = shutil.which("helm") or os.path.expanduser("~/go/bin/helm")
 KUBECONFORM = shutil.which("kubeconform") or os.path.expanduser("~/go/bin/kubeconform")
 KUSTOMIZE = shutil.which("kustomize")
@@ -245,6 +245,8 @@ def main():
     pdir = out / "platform"
     pdir.mkdir(exist_ok=True)
     for layer in layers:
+        if not (ROOT / "infra/k8s/platform" / layer).is_dir():
+            continue                     # e.g. elasticsearch/overlays/trial: the trial has an edge overlay only
         built, err = kustomize_build(ROOT / "infra/k8s/platform" / layer)
         if built is None:
             print(f"[platform] {layer}: {err.strip()}")

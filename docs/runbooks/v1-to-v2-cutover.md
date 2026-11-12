@@ -471,7 +471,7 @@ If any step fails, go to section 11 (rollback) rather than fixing live.
 Hostnames, provider and TTLs are open question 4. The shape, following [cloudflare-setup.md](cloudflare-setup.md) and the
 "Storefront host rule" in the readiness checklist:
 
-- Before the window: v2's Workers routes (`www.afrotransact.com/*` for the storefront, seller and admin hosts) exist but are
+- Before the window: v2's Workers routes (`afrotransact.com/*` for the storefront, seller and admin hosts) exist but are
   **not yet routed** from the live names, or sit on a preview host; `api.afrotransact.com` points at the OVH load balancer
   with a valid certificate; apex "redirect to www" rule is prepared and disabled. Identity's issuer and the redirect URIs
   must be the production origins.

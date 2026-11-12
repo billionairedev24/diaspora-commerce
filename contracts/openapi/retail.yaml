@@ -11,9 +11,9 @@ info:
 servers:
 - url: http://localhost:8107
   description: local
-- url: https://api.dev.afrotransact.com/retail
+- url: https://api-dev.afrotransact.com/retail
   description: dev
-- url: https://api.uat.afrotransact.com/retail
+- url: https://api-uat.afrotransact.com/retail
   description: uat
 - url: https://api.afrotransact.com/retail
   description: prod

@@ -29,8 +29,8 @@ info:
     links.
 servers:
   - {url: 'http://localhost:8207', description: local}
-  - {url: 'https://api.dev.afrotransact.com/media', description: dev}
-  - {url: 'https://api.uat.afrotransact.com/media', description: uat}
+  - {url: 'https://api-dev.afrotransact.com/media', description: dev}
+  - {url: 'https://api-uat.afrotransact.com/media', description: uat}
   - {url: 'https://api.afrotransact.com/media', description: prod}
 security: [{bearer: []}]
 tags:

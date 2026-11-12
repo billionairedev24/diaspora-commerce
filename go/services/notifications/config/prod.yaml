@@ -62,7 +62,7 @@ attachments:
   timeout: 10s
 # Shared PUBLIC_WEB_URL / SELLER_CENTER_URL (Helm library); Provider Hub is the Seller Center app.
 links:
-  storefront: https://www.afrotransact.com
+  storefront: https://afrotransact.com
   sellerCenter: https://seller.afrotransact.com
 auth:
   enabled: true
@@ -103,9 +103,9 @@ breaker:
 quietHours: {start: "21:00", end: "08:00"}
 marketTimeZones: {us: America/New_York, ca: America/Toronto, uk: Europe/London}
 email:
-  from: AfroTransact <no-reply@mail.afrotransact.com>
+  from: AfroTransact <no-reply@afrotransact.com>
   replyTo: support@afrotransact.com
-  unsubscribeMailto: unsubscribe@mail.afrotransact.com
+  unsubscribeMailto: unsubscribe@afrotransact.com
 webhooks:
   verify: true
 smsCompliance:

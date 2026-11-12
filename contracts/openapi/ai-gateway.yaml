@@ -12,9 +12,9 @@ info:
 servers:
 - url: http://localhost:8113
   description: local
-- url: https://api.dev.afrotransact.com/ai-gateway
+- url: https://api-dev.afrotransact.com/ai-gateway
   description: dev
-- url: https://api.uat.afrotransact.com/ai-gateway
+- url: https://api-uat.afrotransact.com/ai-gateway
   description: uat
 - url: https://api.afrotransact.com/ai-gateway
   description: prod

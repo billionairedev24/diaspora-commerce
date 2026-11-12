@@ -19,6 +19,7 @@ resource "cloudflare_pages_project" "this" {
 
 # developers.<base> -> the docs project (the CNAME target is the project's pages.dev subdomain).
 resource "cloudflare_pages_domain" "developers" {
+  count        = var.developers_enabled ? 1 : 0
   account_id   = var.account_id
   project_name = local.docs_project
   name         = local.hosts["developers"]
@@ -26,6 +27,7 @@ resource "cloudflare_pages_domain" "developers" {
 }
 
 resource "cloudflare_dns_record" "developers" {
+  count   = var.developers_enabled ? 1 : 0
   zone_id = local.zone_id
   name    = local.hosts["developers"]
   type    = "CNAME"

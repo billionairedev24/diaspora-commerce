@@ -6,35 +6,41 @@ environment supplies its own values. `tools/ci/check_env_urls.py` enforces this.
 
 ## Hosts per environment
 
-The edge is defined once in `infra/cloudflare` (`local.hosts` in `main.tf`): the base domain is
-`<env>.afrotransact.com` outside prod and the bare zone in prod; every public host is `<name>.<base>`, except the
-customer storefront, whose host follows the **storefront host rule** (below): `www.<base>` in every environment
-(`www.dev.afrotransact.com`, `www.uat.afrotransact.com`, `www.afrotransact.com`); the base itself only redirects to it.
+**One map, one label below the zone.** Every public hostname comes from `infra/cloudflare/hosts.json` and is generated from it (Terraform/OpenTofu in `infra/cloudflare`, the Argo CD host values by
+`python3 tools/ci/env_hosts.py sync`, the Worker `wrangler.jsonc` and mobile `eas.json` files are checked against it by `python3 tools/ci/env_hosts.py check`). Cloudflare's **free** Universal
+certificate covers the zone apex and **one** label below it (`*.afrotransact.com`); nested names such as `api.uat.afrotransact.com` need the paid Advanced Certificate Manager and are **not used**. The rule:
 
-| Purpose | local | dev | uat | prod |
-|---|---|---|---|---|
-| Storefront (`PUBLIC_WEB_URL`) | `http://localhost:3000` | `https://www.dev.afrotransact.com` | `https://www.uat.afrotransact.com` | `https://www.afrotransact.com` (the base domain of each environment, e.g. `https://dev.afrotransact.com`, 301-redirects to it, see below) |
-| Seller Center & Provider Hub (`SELLER_CENTER_URL`) | `http://localhost:3010` | `https://seller.dev.afrotransact.com` | `https://seller.uat.afrotransact.com` | `https://seller.afrotransact.com` |
-| Staff console (`STAFF_CONSOLE_URL`) | `http://localhost:3002` | `https://admin.dev.afrotransact.com` | `https://admin.uat.afrotransact.com` | `https://admin.afrotransact.com` |
-| Public API, gateway-bff (`API_BASE_URL`) | `http://localhost:8200` | `https://api.dev.afrotransact.com` | `https://api.uat.afrotransact.com` | `https://api.afrotransact.com` |
-| Identity / OIDC issuer (`AUTH_ISSUER_URL`) | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |
-| Public media CDN (`MEDIA_PUBLIC_URL`) | `http://localhost:9000/media` (MinIO) | `https://media.dev.afrotransact.com` | `https://media.uat.afrotransact.com` | `https://media.afrotransact.com` |
-| MCP server (`MCP_PUBLIC_URL`; private, ClusterIP, no public host) | `http://localhost:8114` | `http://mcp-server.afrotransact-dev.svc.cluster.local` | `http://mcp-server.afrotransact-uat.svc.cluster.local` | `http://mcp-server.afrotransact-prod.svc.cluster.local` |
-| Developer portal | `http://localhost:3100` | `https://developers.dev.afrotransact.com` | `https://developers.uat.afrotransact.com` | `https://developers.afrotransact.com` |
-| Grafana | `http://localhost:3200` | `https://grafana.dev.afrotransact.com` | `https://grafana.uat.afrotransact.com` | `https://grafana.afrotransact.com` |
-| Email sending domain | Mailpit | `mail.dev.afrotransact.com` | `mail.uat.afrotransact.com` | `mail.afrotransact.com` |
+- **prod**: the storefront is the apex `afrotransact.com`; every other host is `<role>.afrotransact.com`.
+- **any other environment E** (`dev`, `uat`, `test` for the 8-day trial): the storefront is `E.afrotransact.com` and every other host is `<role>-E.afrotransact.com`.
+- There is **no `www.` host and no apex redirect**; mail is sent from the bare domain (`no-reply@afrotransact.com`, Resend verified it), no `mail.` host.
 
-The staff console is `admin.<base>` (the Cloudflare Worker route and the WAF admin allow-list rule both use
-`admin.`). `staff.`, `sell.`, `provider.`, `identity.` and `www.<env>.` hosts do not exist; Provider Hub is served
-by the Seller Center app. `grafana.` (kube-prometheus-stack, dev and uat only) is an origin host like `api.` and
-`auth.` (Cloudflare Tunnel or AOP ingress -> the edge Gateway -> HTTPRoutes in `infra/k8s/platform/edge/overlays/<env>`);
-mcp-server has no public host (private, cluster-internal, bearer tokens required) and prod Grafana is in Grafana Cloud;
-`developers.` is the docs portal on Cloudflare Pages (`infra/cloudflare/pages.tf`).
-In every environment the storefront is `https://www.<base>` and the base domain itself (`afrotransact.com`,
-`dev.afrotransact.com`, `uat.afrotransact.com`) must redirect (301, path and query kept) to it; `www.` is the only storefront origin (gateway-bff CORS/CSRF, OIDC callback, identity redirect URIs,
-universal links). Every other app keeps its sub-domain. See "Storefront host rule" below.
+| env | storefront | seller | admin | api | auth | media | developers |
+|---|---|---|---|---|---|---|---|
+| prod | afrotransact.com | seller.afrotransact.com | admin.afrotransact.com | api.afrotransact.com | auth.afrotransact.com | media.afrotransact.com | developers.afrotransact.com |
+| uat | uat.afrotransact.com | seller-uat.afrotransact.com | admin-uat.afrotransact.com | api-uat.afrotransact.com | auth-uat.afrotransact.com | media-uat.afrotransact.com | developers-uat.afrotransact.com |
+| dev | dev.afrotransact.com | seller-dev.afrotransact.com | admin-dev.afrotransact.com | api-dev.afrotransact.com | auth-dev.afrotransact.com | media-dev.afrotransact.com | developers-dev.afrotransact.com |
+| trial | test.afrotransact.com | seller-test.afrotransact.com | admin-test.afrotransact.com | api-test.afrotransact.com | auth-test.afrotransact.com | media-test.afrotransact.com | developers-test.afrotransact.com |
 
-Public API paths on `api.<base>` (edge HTTPRoute `api`, prefix stripped before the service sees it): `/bff` gateway-bff,
+| Purpose | local | host of the table above |
+|---|---|---|
+| Storefront (`PUBLIC_WEB_URL`) | `http://localhost:3000` | `storefront` |
+| Seller Center & Provider Hub (`SELLER_CENTER_URL`) | `http://localhost:3010` | `seller` |
+| Staff console (`STAFF_CONSOLE_URL`) | `http://localhost:3002` | `admin` |
+| Public API, gateway-bff (`API_BASE_URL`) | `http://localhost:8200` | `api` |
+| Identity / OIDC issuer (`AUTH_ISSUER_URL`) | `http://localhost:8100` | `auth` |
+| Public media CDN (`MEDIA_PUBLIC_URL`) | `http://localhost:9000/media` (MinIO) | `media` |
+| MCP server (`MCP_PUBLIC_URL`; private, ClusterIP, **no public host**) | `http://localhost:8114` | `http://mcp-server.afrotransact-<env>.svc.cluster.local` (trial and prod: namespace `afrotransact-prod`) |
+| Developer portal | `http://localhost:3100` | `developers` (not attached to the trial) |
+| Grafana | `http://localhost:3200` | dev and uat only, `grafana-dev` / `grafana-uat` (an origin host like `api`); prod and the trial use Grafana Cloud, no public Grafana |
+| Email sending domain | Mailpit | the bare zone, `afrotransact.com`, in every environment |
+
+The staff console is `admin` (the Worker route and the WAF admin rule cover `admin.` and `admin-*`). `staff.`, `sell.`, `provider.`, `identity.` and `www.` hosts do not exist; Provider Hub is served
+by the Seller Center app. `api` and `auth` are origin hosts (Cloudflare Tunnel or AOP ingress -> the edge Gateway -> HTTPRoutes in `infra/k8s/platform/edge/overlays/<env>`); mcp-server has no public
+host (private, cluster-internal, bearer tokens required); `developers` is the docs portal on Cloudflare Pages (`infra/cloudflare/pages.tf`).
+`PLATFORM_DOMAIN` is the **zone** in every environment (`afrotransact.com`), which is also the WebAuthn relying-party id: it must be a suffix of every web origin, and the zone is.
+A different trial zone is possible (`python3 tools/ci/env_hosts.py set-trial-zone <zone>`): the host rule, not the zone, is what the guard enforces.
+
+Public API paths on `api` (edge HTTPRoute `api`, prefix stripped before the service sees it): `/bff` gateway-bff,
 `/identity`, `/bookings`, `/fulfilment`, `/media`, `/notifications`, `/carrier-gateway`, and `/payments/v1/webhooks`
 (Stripe webhooks only). Other services are internal.
 Local ports come from `infra/local/PORTS.md`.
@@ -44,10 +50,9 @@ Local ports come from `infra/local/PORTS.md`.
 | Setting | Meaning | Main consumers |
 |---|---|---|
 | `PLATFORM_ENV` | `local` / `dev` / `uat` / `prod` (same as `APP_ENV`) | everything |
-| `PLATFORM_DOMAIN` | the environment's base domain (`dev.afrotransact.com`, ..., `afrotransact.com`), never `www.` | identity WebAuthn RP id, mcp-server docs-portal origin |
-| `global.storefrontHost` (Helm, not an env var) | `www` (default, set explicitly in dev, uat and prod) or `apex` (explicit opt-out): where the storefront lives | the at-service library, which derives `PUBLIC_WEB_URL` from it |
-| `global.sellerHost`, `global.adminHost` (Helm, optional) | a FULL host name (e.g. `seller-test.example.com`) replacing `seller.<domain>` / `admin.<domain>`; default empty = unchanged. Only the OVH test pipeline sets them (`OVH_SELLER_HOST`, `OVH_ADMIN_HOST`) | the at-service library, which derives `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL` from them |
-| `PUBLIC_WEB_URL` | storefront origin: `https://www.<domain>` when `storefrontHost: www` (default), else `https://<domain>` | identity (home, redirect URIs, CORS, WebAuthn), content newsletter links, bookings manage link, notifications links, storefront cache purges, ai-gateway OpenRouter referer, mcp-server allowed origins |
+| `PLATFORM_DOMAIN` | the ZONE (`afrotransact.com`) in every environment, never a host with a label | identity WebAuthn RP id, mcp-server docs-portal origin |
+| `global.webHost`, `global.sellerHost`, `global.adminHost`, `global.apiHost`, `global.authHost`, `global.mediaHost` (Helm) | FULL host names, generated from `hosts.json` into every `infra/argocd/envs/<env>/platform-values.yaml` (`tools/ci/env_hosts.py sync`); they replace the legacy derivation from `global.domain` | the at-service library, which derives every URL below from them |
+| `PUBLIC_WEB_URL` | storefront origin: `https://<storefront host>` | identity (home, redirect URIs, CORS, WebAuthn), content newsletter links, bookings manage link, notifications links, storefront cache purges, ai-gateway OpenRouter referer, mcp-server allowed origins |
 | `SELLER_CENTER_URL` | Seller Center & Provider Hub origin | identity (invitation link, redirect URIs, CORS), notifications links |
 | `STAFF_CONSOLE_URL` | staff console origin | identity (redirect URIs, CORS) |
 | `API_BASE_URL` | public API origin (gateway-bff) | identity BFF redirect URI, notifications and carrier-gateway public base (`<API_BASE_URL>/<service>`) |
@@ -85,26 +90,26 @@ Local ports come from `infra/local/PORTS.md`.
 
 | App | Setting | local default | dev / uat / prod value | Used for |
 |---|---|---|---|---|
-| storefront | `BFF_ORIGIN` | `http://localhost:8200` | `<API_BASE_URL>/bff` (`https://api.<base>/bff`) | `/api/bff` proxy, server components |
-| storefront | `SELLER_CENTER_URL` (`NEXT_PUBLIC_SELLER_CENTER_URL` still read) | `http://localhost:3010` | `https://seller.<base>` | `/sell`, `/provide` redirects |
+| storefront | `BFF_ORIGIN` | `http://localhost:8200` | `<API_BASE_URL>/bff` (`https://<api host>/bff`) | `/api/bff` proxy, server components |
+| storefront | `SELLER_CENTER_URL` (`NEXT_PUBLIC_SELLER_CENTER_URL` still read) | `http://localhost:3010` | `https://<seller host>` | `/sell`, `/provide` redirects |
 | storefront | `API_MOCKS` / `NEXT_PUBLIC_API_MOCKS` | `1` in `.env.example` | `0` (`1` on PR previews) | in-process MSW mock BFF |
-| seller-center, staff-console | `BFF_ORIGIN` | `http://localhost:8200` | `https://api.<base>/bff` | `/api/bff` proxy |
-| storefront | `PUBLIC_WEB_URL` | unset (relative metadata) | `https://www.<base>` | `metadataBase`: canonical and Open Graph URLs |
-| seller-center, staff-console | `PUBLIC_WEB_URL` (`NEXT_PUBLIC_STOREFRONT_URL` still read) | `http://localhost:3000` | `https://www.<base>` | sign-in, sign-out, "view my public page" links |
-| customer app | `EXPO_PUBLIC_WEB_URL` | `http://<dev host>:3000` | `https://www.<base>` | legal/help/account pages, share links, universal links (`applinks:<host>`, Android `https://<host>/app`) |
-| customer app | `EXPO_PUBLIC_BFF_URL` | `http://<dev host>:8200` | `https://api.<base>/bff` | screen API |
-| customer app | `EXPO_PUBLIC_OIDC_ISSUER` | `http://<dev host>:8100` | `https://auth.<base>` (`AUTH_ISSUER_URL`) | sign-in |
-| customer app | `EXPO_PUBLIC_IDENTITY_URL` | `http://<dev host>:8100` | `https://api.<base>/identity` | devices, notification preferences |
-| customer app | `EXPO_PUBLIC_BOOKINGS_URL` | `http://<dev host>:8109` | `https://api.<base>/bookings` | bookings |
-| driver app | `EXPO_PUBLIC_BFF_URL` | `http://<dev host>:8200` | `https://api.<base>/bff` | in-app sign-in |
-| driver app | `EXPO_PUBLIC_FULFILMENT_URL` | `http://<dev host>:8108` | `https://api.<base>/fulfilment` | driver API |
-| driver app | `EXPO_PUBLIC_MEDIA_URL` | `http://<dev host>:8207` | `https://api.<base>/media` | proof photos, signatures |
-| driver app | `EXPO_PUBLIC_OIDC_ISSUER` | `http://<dev host>:8100` | `https://auth.<base>` | sign-in |
-| driver app | `EXPO_PUBLIC_IDENTITY_URL` | `http://<dev host>:8100` | `https://api.<base>/identity` | push devices |
+| seller-center, staff-console | `BFF_ORIGIN` | `http://localhost:8200` | `https://<api host>/bff` | `/api/bff` proxy |
+| storefront | `PUBLIC_WEB_URL` | unset (relative metadata) | the storefront host (`PUBLIC_WEB_URL`) | `metadataBase`: canonical and Open Graph URLs |
+| seller-center, staff-console | `PUBLIC_WEB_URL` (`NEXT_PUBLIC_STOREFRONT_URL` still read) | `http://localhost:3000` | the storefront host (`PUBLIC_WEB_URL`) | sign-in, sign-out, "view my public page" links |
+| customer app | `EXPO_PUBLIC_WEB_URL` | `http://<dev host>:3000` | the storefront host (`PUBLIC_WEB_URL`) | legal/help/account pages, share links, universal links (`applinks:<host>`, Android `https://<host>/app`) |
+| customer app | `EXPO_PUBLIC_BFF_URL` | `http://<dev host>:8200` | `https://<api host>/bff` | screen API |
+| customer app | `EXPO_PUBLIC_OIDC_ISSUER` | `http://<dev host>:8100` | `https://<auth host>` (`AUTH_ISSUER_URL`) | sign-in |
+| customer app | `EXPO_PUBLIC_IDENTITY_URL` | `http://<dev host>:8100` | `https://<api host>/identity` | devices, notification preferences |
+| customer app | `EXPO_PUBLIC_BOOKINGS_URL` | `http://<dev host>:8109` | `https://<api host>/bookings` | bookings |
+| driver app | `EXPO_PUBLIC_BFF_URL` | `http://<dev host>:8200` | `https://<api host>/bff` | in-app sign-in |
+| driver app | `EXPO_PUBLIC_FULFILMENT_URL` | `http://<dev host>:8108` | `https://<api host>/fulfilment` | driver API |
+| driver app | `EXPO_PUBLIC_MEDIA_URL` | `http://<dev host>:8207` | `https://<api host>/media` | proof photos, signatures |
+| driver app | `EXPO_PUBLIC_OIDC_ISSUER` | `http://<dev host>:8100` | `https://<auth host>` | sign-in |
+| driver app | `EXPO_PUBLIC_IDENTITY_URL` | `http://<dev host>:8100` | `https://<api host>/identity` | push devices |
 | both apps | `EXPO_PUBLIC_APP_ENV` | `local` | `dev` / `uat` / `prod` | app name, bundle id suffix, mocks |
 | both apps | `EXPO_PUBLIC_DEV_HOST` | `localhost` | - | local stack host: the dev machine's LAN IP for a device, `10.0.2.2` for the Android emulator |
 
-`<base>` is `dev.afrotransact.com`, `uat.afrotransact.com` or `afrotransact.com`. The gateway-bff derives its CORS/CSRF
+`<api host>`, `<seller host>`, `<auth host>` are the hosts of that role for the environment, from the table above. The gateway-bff derives its CORS/CSRF
 origins, storefront origin, OIDC issuer and callback (`<PUBLIC_WEB_URL>/api/bff/v1/auth/oidc/callback`) from
 `PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL` and `AUTH_ISSUER_URL` (`Config.Resolve`); `WEB_ORIGINS`,
 `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override the derived values.
@@ -163,132 +168,34 @@ Renamed in this change (old names are no longer read): `AUTH_ISSUER_URI` and ide
 - **Kubernetes label / taint keys** (`afrotransact.com/env`, `afrotransact.com/spot`).
 - Seeded content uses relative links (`/legal/`, `/search?...`); external social profile URLs are not ours.
 
-## Storefront host rule
+## Host rule, cookies, passkeys and sessions
 
-One setting decides where the customer storefront lives; everything else follows from it.
-
-| | `www` (default; dev, uat, prod, OVH) | `apex` (explicit opt-out) |
-|---|---|---|
-| Storefront | `https://www.<base>` | `https://<base>` |
-| Other apps | `seller.`, `admin.`, `api.`, `auth.`, `grafana.`, `media.`, `developers.` `<base>` | unchanged |
-| The other name | `<base>` 301 -> `https://www.<base>`, path and query kept (`dev.afrotransact.com` -> `www.dev.afrotransact.com`) | none |
-| Helm (`infra/argocd/envs/<env>/platform-values.yaml`) | `global.storefrontHost: www` (or unset) | `global.storefrontHost: apex` |
-| Cloudflare (`infra/cloudflare/envs/<env>.tfvars`) | `storefront_host = "www"` (default) | `storefront_host = "apex"` |
-| Worker route (`web/apps/storefront/wrangler.jsonc`) | `www.<base>/*` (`www.dev.`, `www.uat.`, `www.afrotransact.com`); the base has no route, the redirect is at the edge | `<base>/*` |
-| OVH test environment | both `www` (the default): `www.<domain>`, the apex redirects | variable `OVH_STOREFRONT_HOST` = `apex` and ovh-web input `storefront-host` = `apex` (Seller Center and staff console hosts: `OVH_SELLER_HOST` / `OVH_ADMIN_HOST`, see "Free certificate layout (flat web hosts)") |
-
-Keep the four in step: the Helm value, the Cloudflare variable, the Worker route and (OVH) the two switches. The precedence
-for `PUBLIC_WEB_URL` in a pod is: a service's own `extraEnv` > `global.urls.PUBLIC_WEB_URL` > `global.storefrontHost` with
-`global.domain`. `PLATFORM_DOMAIN` stays the base domain.
-
-What derives from it, with no per-service change: gateway-bff CORS/CSRF origins, storefront origin and OIDC callback;
-identity redirect and post-logout URIs, CORS, hosted-page links and WebAuthn allowed origins; links in emails and SMS
-(content, bookings, notifications, delivery-runs); the storefront's `metadataBase` (canonical and Open Graph URLs); the
-seller-center and staff-console "view my public page" and sign-out links; mcp-server allowed origins. The config
-fallbacks in each environment's files (`application-<env>.yml`, `config/<env>.yaml`) name that environment's `www.` host, and
-`check_env_urls.py` rejects a `https://<base>` URL anywhere (the base only redirects). Local stays `http://localhost:3000`.
-
-**WebAuthn.** The relying-party id is `PLATFORM_DOMAIN` (the base domain). A passkey's RP id only has to be the origin's
-host or a registrable parent of it, so `afrotransact.com` is valid for the origins `https://www.afrotransact.com`,
-`https://seller.afrotransact.com`, `https://admin.afrotransact.com` and `https://auth.afrotransact.com`; passkeys
-registered before the switch keep working because the RP id does not change. The origins that may run the ceremony are
-listed in identity's `allowed-origins` (`PUBLIC_WEB_URL`, `AUTH_ISSUER_URL`, and the apex for safety).
-Not verified against a live browser: check one passkey sign-in on `www.` after the first prod rollout.
-
-**OIDC / sessions.** The OIDC callback is `https://www.<base>/api/bff/v1/auth/oidc/callback`; the clients' registered
-redirect URIs come from `PUBLIC_WEB_URL`, so identity and gateway-bff must roll out together with the edge change (a
-mismatch shows as `redirect_uri` errors). Session cookies are host-only (no `Domain=` attribute), so users signed in on the
-apex are signed out once; the redirect lands them on `www.` and they sign in again.
-
-**Mobile.** Universal links (`applinks:www.afrotransact.com`) and Android verified app links use the host of
-`EXPO_PUBLIC_WEB_URL`, which is `www.` in prod. The associated-domains entitlement, `apple-app-site-association` and
-`assetlinks.json` must be served at `https://www.afrotransact.com/.well-known/` (not at the apex, which only redirects, and
-Apple does not follow redirects for the association file). A new app build is needed for the entitlement to change; links
-that still point at the apex open in the browser and reach `www.` through the redirect.
-
-**Edge.** HSTS (1 y, subdomains; preload only once `hsts_preload` is set) is zone-wide and covers both names. The apex needs a proxied DNS record for the
-redirect rule to answer (`infra/cloudflare/environment.tf` creates it). The redirect ruleset is zone-wide (one per zone and phase), so the prod (`manage_zone`)
-run owns the rules for every environment's base domain (`apex_redirect_environments`); each environment's run creates its
-own proxied placeholder record. Certificates: `www.dev.` and `www.uat.` are covered by the existing `*.dev` / `*.uat` advanced certificates.
-
-## Free certificate layout (flat web hosts)
-
-Cloudflare's free Universal certificate covers the zone apex and **one** label under it. The platform builds every public host as
-`<name>.<base>`; for a base that is itself below the zone (the OVH test environment at `test.afrotransact.com`, zone `afrotransact.com`) the
-web hosts `www.`/`seller.`/`admin.<base>` are two labels deep and get no free certificate. Owner decision: flat names for the **three web apps
-only**; the backend keeps `<name>.<base>` (grey-cloud DNS-only records, Let's Encrypt on the server). Nothing changes for dev, uat, prod, local or
-anyone who does not set the new variables.
-
-| Setting | Where | Value for `test.afrotransact.com` |
-|---|---|---|
-| `OVH_DOMAIN` (`PLATFORM_DOMAIN`, `global.domain`) | GitHub Environment `ovh-vps` | `test.afrotransact.com` |
-| `CLOUDFLARE_ZONE` | same | `afrotransact.com` |
-| `OVH_STOREFRONT_HOST` (`global.storefrontHost`) | same | `apex` |
-| `OVH_SELLER_HOST` (`global.sellerHost`) | same | `seller-test.afrotransact.com` |
-| `OVH_ADMIN_HOST` (`global.adminHost`) | same | `admin-test.afrotransact.com` |
-| `OVH_MEDIA_PUBLIC_URL` (`global.urls.MEDIA_PUBLIC_URL`, Workers `MEDIA_PUBLIC_URL`) | same, optional | `https://media-test.afrotransact.com` (default `https://media.<domain>`) |
-
-| Host | Value |
-|---|---|
-| Storefront (`PUBLIC_WEB_URL`) | `https://test.afrotransact.com` |
-| Seller Center & Provider Hub (`SELLER_CENTER_URL`) | `https://seller-test.afrotransact.com` |
-| Staff console (`STAFF_CONSOLE_URL`) | `https://admin-test.afrotransact.com` |
-| API / identity / Grafana | `https://api.test.afrotransact.com`, `https://auth.test.afrotransact.com`, `https://grafana.test.afrotransact.com` |
-
-**Where the explicit host is read.** One place derives everything: the Helm library chart (`at-service.platformEnvVars`) turns `global.sellerHost` /
-`global.adminHost` into `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL`; the OVH pipeline gives the Workers the same three origins as Worker vars
-(`ovh-web.yml`, host logic and validation in `tools/ovh/web-hosts.sh`, shared with `ovh-vps.yml`, `render-config.sh`, `infra/ovh-vps/lib.sh`,
-`deploy.sh` and the deploy wizard). Everything below was already driven by those three URLs, so it needed no code change and now simply follows
-them: gateway-bff CORS/CSRF origins, per-app OIDC callback and post-logout URIs (`Config.Resolve`, `RedirectURIs`, `AppOrigins`); identity's
-`gateway-bff` client redirect and post-logout URIs, `cors-allowed-origins`, `pages.*`, invitation link, `home-url`; links in emails (notifications,
-content, bookings, delivery-runs); storefront `/sell` and staff-console links; CSP. Origin allowlists stay **exact**: only the explicit origins are
-registered; the default `seller.<base>` / `admin.<base>` stop being registered once an explicit host is set; nothing is a wildcard or suffix match
-(tests: gateway-bff `flat_hosts_test.go`, identity `ExplicitWebHostsConfigurationTest`, `tools/ovh/test/web-hosts.test.sh`).
-`infra/cloudflare`, `infra/argocd/envs/*` and `infra/tofu` (dev/uat/prod) are untouched: they keep `seller.<base>` / `admin.<base>`; an Argo
-environment that wants flat names could set `global.sellerHost` / `global.adminHost` in its `platform-values.yaml`, but would then also need its Worker
-routes (`wrangler.jsonc`), the WAF admin allow-list rule and the R2 CORS list (`infra/tofu/envs/*`, derived from `web_domain`) changed by hand.
-
-**Verified (code and tests, no browser).**
-- *Cookies.* The only session cookie is gateway-bff's `at_session`, set with `Domain=` = `SESSION_COOKIE_DOMAIN`, which is empty in every
-  `config/<env>.yaml` and not set by Helm: host-only. Each web app keeps its session on its **own** origin (the browser calls `<app>/api/bff`, proxied to
-  the BFF), so nothing depends on a cookie shared across `<base>`; `seller-test.` and `admin-test.` need none on the base domain. Nothing in the web
-  apps or services sets a cookie with `Domain=<PLATFORM_DOMAIN>`.
-- *OIDC.* Each app starts the login on its own origin and gets its own callback `<origin>/api/bff/v1/auth/oidc/callback`; identity registers exactly
-  those three for the `gateway-bff` client (and the matching post-logout URIs), from the same three variables, so the redirect works per origin.
-  Identity's hosted sign-in form's CSP `form-action` allows only `'self'`, the home origin and the registered redirect target of the pending request,
-  so it follows the explicit origins and an unregistered origin never widens it (`SecurityHeadersTest`, `ExplicitWebHostsConfigurationTest`).
-- *SameSite.* `seller-test.`, `admin-test.`, `test.` and `auth.test.afrotransact.com` are all the same *site* (`afrotransact.com`, the registrable
-  domain), so `SameSite=Lax` (and `Strict` for same-site navigations) behave exactly as with `seller.<base>`; they are different *origins*, which the exact
-  CORS/CSRF lists handle. The BFF's CSRF check is an Origin check against the exact list, not a cookie property.
-- *WebAuthn.* `PLATFORM_DOMAIN` is only used as identity's default RP id and for the mcp-server docs-portal origin. It stays `test.afrotransact.com`.
-  The RP id must be the origin's host or a parent of it: `auth.test.afrotransact.com` (hosted sign-in, where passkeys are used) and the storefront at
-  `test.afrotransact.com` satisfy it; `seller-test.` / `admin-test.` do **not** (they are not below `test.afrotransact.com`), so they are deliberately not in
-  identity's `webauthn.allowed-origins`, and no web app calls `navigator.credentials` (adding a passkey in account settings opens an identity-hosted page on `auth.` in a new tab; browser sign-in is the OIDC
-  redirect to `auth.`). If a passkey ceremony is ever added to the Seller Center or the staff console, set `WEBAUTHN_RP_ID=afrotransact.com` (the zone) so all hosts share it,
-  and add their origins to `allowed-origins`; passkeys already registered with RP id `test.afrotransact.com` would then not work, so decide before users enrol.
-- *CSP.* `connect-src` is `'self'` (+ telemetry and Stripe), `form-action` is `'self'`, nothing names another app host, so no per-host allowance is
-  needed; the report endpoint is a relative path. `img-src`/`media-src` need the media origin: `ovh-web` now sets `MEDIA_PUBLIC_URL` on the Workers.
-- *Mobile.* Not affected: the OVH test environment has no app build, and the apps use the storefront host (`apex` here) and the API/auth hosts, none of which changed.
-
-**Not verifiable without a real browser and real Cloudflare/OVH.** That the three Custom Domains get the free certificate and serve; that a full
-sign-in round trip on `seller-test.` and `admin-test.` lands back on the right app and that sign-out returns to the right page; that the browsers keep
-the host-only cookie across the redirect to `auth.test.`; that a passkey sign-in on `auth.test.afrotransact.com` still succeeds (same RP id as before, expected
-to); that product images load from the media host under the enforced (not report-only) CSP. The deploy wizard's certificate check and the first
-sign-in on each host are the manual checks.
-
-**A two-label web host on the free plan** has no certificate: use this layout or buy an Advanced Certificate (`docs/runbooks/cloudflare-setup.md`).
+- **Why flat:** see "Hosts per environment". A host is one label below the zone or it has no free certificate; the guard below fails CI otherwise.
+- **Storefront = the apex in prod, `E.<zone>` elsewhere:** `PUBLIC_WEB_URL` is `https://afrotransact.com` (prod), `https://uat.afrotransact.com`, `https://dev.afrotransact.com`, `https://test.afrotransact.com` (trial).
+  It is the only storefront origin of gateway-bff CORS/CSRF, the OIDC callback and identity's redirect URIs; every other app has its own origin and its own callback.
+- **Cookies:** the BFF session cookie `at_session` is host-only (no `Domain`: `cookieDomain: ""`, `SESSION_COOKIE_DOMAIN` unset), `Secure`, `HttpOnly`, `SameSite=Lax`, set on the app's own origin
+  (each web app proxies `/api/bff`); identity's own session cookie is host-only on the `auth` host. Flat hosts therefore need no cookie-domain setting and no host shares a cookie with another.
+  All hosts share the registrable domain, so they are same-site.
+- **WebAuthn:** `rp-id` = `PLATFORM_DOMAIN` = the zone, a suffix of every host; identity's allowed origins are the auth host and the storefront (and the bare zone). Passkeys of a non-prod environment
+  carry the same rp id as production: never reuse non-prod accounts.
+- **Mobile:** universal links and associated domains use the storefront host (`afrotransact.com` in prod, `<suffix>.afrotransact.com` in the others); `apple-app-site-association` and
+  `assetlinks.json` are served on it. (Native apps are not part of the launch.)
+- **Edge:** HSTS (1 y, subdomains; preload only once `hsts_preload` is set) is zone-wide; the baseline Referrer-Policy rule lists every host of the environments in `edge_response_header_environments`.
+  Each environment's run creates its own DNS records and Workers routes; the prod run (`manage_zone`) owns the zone-wide objects. The trial never touches the apex.
+- **Legacy test box:** `infra/ovh-vps` and the `ovh-web` workflow (one server on the dev profile, `OVH_DOMAIN`) keep their own free-form host variables (`OVH_SELLER_HOST`, ...); they are not one of
+  the four environments of the map and their hosts are DNS-only (Let's Encrypt), so the certificate rule does not apply to them.
 
 ## The guard
 
-`python3 tools/ci/check_env_urls.py [paths...] [--exclude PATH] [--format github]` fails when
+`python3 tools/ci/check_env_urls.py [paths...] [--exclude PATH] [--format github]` and `python3 tools/ci/env_hosts.py check` (the Argo CD host values, edge routes, Worker and mobile build files must equal the map) fail when
 
 - a shared default or non-test source file (`application.yml`, `application-local.yml`, Go `config/local.yaml`,
   Helm `values.yaml`, `.java`/`.go`/`.ts`/`.sql`/...) names any AfroTransact host;
-- a dev or uat file (`application-<env>.yml`, `config/<env>.yaml`, `values-<env>.yaml`,
+- a dev, uat or trial file (`application-<env>.yml`, `config/<env>.yaml`, `values-<env>.yaml`,
   `infra/argocd/envs/<env>/`, `infra/k8s/platform/envs/<env>/`) names another environment's host, prod included;
-- a prod file names a dev or uat host;
-- any file names a base domain as a URL (`https://afrotransact.com`, `https://dev.afrotransact.com`): the storefront is `https://www.<base>`;
-- any host is not one of the public hosts above (`staff.`, `sell.` ...);
+- a prod file names a non-prod host;
+- any host is **more than one label below the zone** (`api.uat.afrotransact.com`): Cloudflare's free certificate does not cover it;
+- any host is **not derived from the map** `infra/cloudflare/hosts.json` (`staff.`, `sell.`, `www.`, `mail.` ...);
 - a problem type uses another base than the one above.
 
 Files that hold every environment side by side (`wrangler.jsonc` / `wrangler.toml`, `eas.json`) may name any

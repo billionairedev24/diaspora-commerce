@@ -18,8 +18,8 @@ info:
     cannot be promised come back with `available: false` and a `reason`.
 servers:
   - {url: 'http://localhost:8204', description: local}
-  - {url: 'https://api.dev.afrotransact.com/promise', description: dev}
-  - {url: 'https://api.uat.afrotransact.com/promise', description: uat}
+  - {url: 'https://api-dev.afrotransact.com/promise', description: dev}
+  - {url: 'https://api-uat.afrotransact.com/promise', description: uat}
   - {url: 'https://api.afrotransact.com/promise', description: prod}
 security: [{}, {bearer: []}]
 tags:

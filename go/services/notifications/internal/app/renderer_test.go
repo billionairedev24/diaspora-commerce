@@ -59,7 +59,7 @@ func TestRenderCompiledReactEmailHTML(t *testing.T) {
 }
 
 func TestUnsubscribeTokens(t *testing.T) {
-	u := app.NewUnsubscriber("https://api.afrotransact.com/notifications", "unsubscribe@mail.afrotransact.com", []byte("k"))
+	u := app.NewUnsubscriber("https://api.afrotransact.com/notifications", "unsubscribe@afrotransact.com", []byte("k"))
 	h := u.Headers("user-1", "Ada@Example.com", domain.CategoryMarketing, time.Now())
 	if h["List-Unsubscribe-Post"] != "List-Unsubscribe=One-Click" {
 		t.Fatal(h)

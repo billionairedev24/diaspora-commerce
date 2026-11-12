@@ -11,9 +11,9 @@ info:
 servers:
 - url: http://localhost:8108
   description: local
-- url: https://api.dev.afrotransact.com/fulfilment
+- url: https://api-dev.afrotransact.com/fulfilment
   description: dev
-- url: https://api.uat.afrotransact.com/fulfilment
+- url: https://api-uat.afrotransact.com/fulfilment
   description: uat
 - url: https://api.afrotransact.com/fulfilment
   description: prod

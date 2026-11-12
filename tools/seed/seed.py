@@ -48,9 +48,11 @@ SEEDED_URL_VARIABLES = ("CATALOG_URL", "OFFERS_URL", "INVENTORY_URL", "MEDIA_URL
                         "FULFILMENT_URL", "TRUST_OPS_URL", "TAX_RETURNS_URL", "CART_URL", "GEO_URL",
                         "CARRIER_GATEWAY_URL", "AUTH_ISSUER_URL", "SEED_TOKEN_URL")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
-# Only these subdomains of the platform domain may ever receive demo data (with SEED_ALLOW_REMOTE=1): the shared dev
-# cluster and the throwaway trial environment. The apex, www, api., auth., uat. and every other name are production.
-DEMO_SUBDOMAINS = (".dev.afrotransact.com", ".trial.afrotransact.com")
+# Only the shared dev cluster's hosts may ever receive demo data (with SEED_ALLOW_REMOTE=1). Hosts are flat, one label below the zone
+# (infra/cloudflare/hosts.json): dev.<zone> (storefront) and <role>-dev.<zone>. The apex, api., auth., uat, the 8-day trial (test, which runs
+# the prod profile and must never get demo data) and every other name are treated as production.
+DEMO_SUFFIXES = ("-dev.afrotransact.com",)
+DEMO_HOSTS = ("dev.afrotransact.com",)
 PLATFORM_DOMAIN = "afrotransact.com"
 
 
@@ -70,7 +72,7 @@ def is_production_host(host: str) -> bool:
     """A name under the platform domain that is not a dev or trial environment, so possibly production or UAT."""
     if host != PLATFORM_DOMAIN and not host.endswith("." + PLATFORM_DOMAIN):
         return False
-    return not any(host.endswith(sub) for sub in DEMO_SUBDOMAINS)
+    return host not in DEMO_HOSTS and not any(host.endswith(sub) for sub in DEMO_SUFFIXES)
 
 
 def target_problem(env: Mapping[str, str]) -> str | None:

@@ -9,14 +9,14 @@ import (
 )
 
 func TestResolvedPublicBaseURL(t *testing.T) {
-	s := config.Store{PublicBaseURL: "https://media.dev.afrotransact.com", PublicBaseURLEnv: "MEDIA_PUBLIC_URL"}
+	s := config.Store{PublicBaseURL: "https://media-dev.afrotransact.com", PublicBaseURLEnv: "MEDIA_PUBLIC_URL"}
 	env := map[string]string{}
 	getenv := func(k string) string { return env[k] }
-	if got := s.ResolvedPublicBaseURL(getenv); got != "https://media.dev.afrotransact.com" {
+	if got := s.ResolvedPublicBaseURL(getenv); got != "https://media-dev.afrotransact.com" {
 		t.Fatalf("fallback = %q", got)
 	}
-	env["MEDIA_PUBLIC_URL"] = "https://media.uat.afrotransact.com"
-	if got := s.ResolvedPublicBaseURL(getenv); got != "https://media.uat.afrotransact.com" {
+	env["MEDIA_PUBLIC_URL"] = "https://media-uat.afrotransact.com"
+	if got := s.ResolvedPublicBaseURL(getenv); got != "https://media-uat.afrotransact.com" {
 		t.Fatalf("env = %q", got)
 	}
 	if got := (config.Store{PublicBaseURL: "http://localhost:9000/media"}).ResolvedPublicBaseURL(getenv); got != "http://localhost:9000/media" {

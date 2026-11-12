@@ -7,7 +7,7 @@ and keep a terminal beside it. Timestamps are targets, not rules. Lines in quote
 Rules for the recording:
 
 - Never show a secret value. Show secret **names** only. Blur or skip any vendor page that displays a key. Pause the recording when you copy one.
-- Use placeholders on screen (`<domain>`, `<project id>`). Do not show real addresses, account ids or tokens.
+- The trial hosts are public and fixed (`test.afrotransact.com`, `seller-test.`, `admin-test.`, `api-test.`, `auth-test.`, `media-test.afrotransact.com`), so they may be shown. Use placeholders for everything private (`<project id>`, account ids). Do not show real addresses or tokens.
 - Everything marked **check** in the guide is a vendor fact nobody has verified on a live account (menu names, prices, free-tier limits). Say so when you reach one.
 - Nothing in these runbooks has run against a live OVH, Layerbase or Cloudflare account yet. Say that early.
 
@@ -17,7 +17,7 @@ Rules for the recording:
 
 **Open:** the Trial Setup Guide, top of the page. Scroll slowly past the title, the legend and the yellow strip.
 
-"This is the setup for the 8-day trial. The trial runs the whole production stack once, in a throwaway OVH project, so that we find
+"This is the setup for the 8-day trial. The trial runs the whole production stack once, with the production profile, in a throwaway OVH project, on the zone afrotransact.com, so that we find
 every problem and every number before we spend real money. At the end of day 8 we decide go or no-go for production."
 
 "The page is the checklist. Every step has a tick box, the exact command or page, how to tell it worked, and what to do if it did
@@ -53,14 +53,15 @@ Secret values are never pasted into chat, an issue or a commit."
 
 **Run:** the gate command from the guide (`check_launch_set.py`). Show the output.
 
-"It must say OK with 21 services and 5 platform Applications for prod. If it does not, we stop and fix the repository first."
+"It must say OK with 21 services and 5 platform Applications for prod and for the trial, and the host check must print one table where every host is one label under the zone. If it does not, we stop and fix the repository first."
 
 **Point at** "Choose the trial names".
 
-"One decision here matters. The trial domain should be a registered domain on my Cloudflare account, so that every host is one
-label under it, like `api.<domain>`. Cloudflare's free certificate covers only one label. A name like `api.trial.afrotransact.com`
-has no free certificate while it is proxied. Also tell the agent which mail domain your Resend DNS already covers, because the
-sender address must be on it."
+"Nothing to decide here, it is already decided. The zone is afrotransact.com, our real zone. Every trial host is one label under it,
+because Cloudflare's free certificate covers only the apex and one label: `test.afrotransact.com` for the storefront, then
+`seller-test`, `admin-test`, `api-test`, `auth-test` and `media-test`. One file, `infra/cloudflare/hosts.json`, defines the hosts of every
+environment, production, uat, dev and the trial, and a check fails if any file names another host. Mail is sent from the bare domain
+afrotransact.com, which Resend has already verified, so the sender is `no-reply@afrotransact.com` here too."
 
 ## 04:30 Phase 1: accounts and tokens (6 min)
 
@@ -78,8 +79,9 @@ databases: we need 19. The two I care about most are whether the admin can creat
 mandatory. Credit applications for OVH and Layerbase happen after launch, not now."
 
 **Cloudflare, four cards.**
-"Cloudflare is four jobs. One: the zone, with SSL mode Full strict and Always HTTPS. Two: R2, with two buckets, public media and
-private evidence, a custom domain on the public one only, CORS on the private one, and two tokens, one per bucket, ten-day expiry.
+"Cloudflare is four jobs. One: the zone, with SSL mode Full strict and Always HTTPS. Two: R2. The two buckets, public media and
+private evidence, are created by the same tofu module as the DNS, so there is one definition of their names. I add CORS on the private
+one and make two tokens, one per bucket, ten-day expiry.
 Never one token for both, and never an account-wide admin token. Three: an API token for tofu and Workers. Four: the tunnel, which
 tofu creates in phase 3, so we only note the token name now."
 
@@ -94,8 +96,9 @@ webhook. Notifications refuses to start in production mode without both the key 
 
 **Grafana Cloud.**
 "One stack, afrotransact.grafana.net, US East. I copy the metrics and logs addresses and the two numeric user ids, create an access
-policy for the trial with only metrics-write and logs-write, one more policy for loading rules from my laptop, and a service account
-for dashboards. Every series and log line carries env=trial, so trial alerts never mail anyone."
+policy for the trial with only metrics-write and logs-write, one more for loading rules from my laptop, and a service account
+for dashboards. For traces I read the OTLP endpoint and the instance id from the OpenTelemetry tile and make a third policy that may
+write traces. Every series and log line carries env=trial, so trial alerts never mail anyone."
 
 **Stripe.**
 "Stripe: same account, test mode. I copy the test keys and create three webhook endpoints with Snapshot payloads and the API version
@@ -106,8 +109,8 @@ on the page. Each endpoint has its own secret. The v1 live endpoints are not tou
 day in code, and this key limit is the backstop. I also turn off prompt logging and training and record the date."
 
 **GitHub.**
-"GitHub: a token that can only read packages, the prod environment with reviewers, and the first admin's real mailbox and a password
-of at least sixteen characters."
+"GitHub: a token that can only read packages, a GitHub environment called trial with the Cloudflare secrets, and the first admin's real
+mailbox and a password of at least sixteen characters. These go in the secrets file, next to the other keys."
 
 "That is every account. Every secret name is on the page. We never read values aloud."
 
@@ -154,9 +157,9 @@ offline, in two places, separately from the database backups, and I test the res
 3. "Expected result: one free-plan cluster, one b3-16 node, a private network, some object storage buckets. No load balancer, no gateway, no database."
 4. "Download the kubeconfig. If I cannot connect, my IP changed. Compare allocatable memory with the thirteen gigabytes we assumed. Test a one-gigabyte volume. Set the maintenance window to a quiet hour, because one node means every upgrade is downtime."
 5. "Layerbase. First measure latency from a pod on the node. A few milliseconds is expected. Above ten, stop and ask which data centre it is. Then create the 19 databases and roles. The script also creates PostGIS in geo and fulfilment, and btree_gist in bookings, as the admin. Fulfilment's migration would fail on a managed server without it. I verify with `select postgis_version()`."
-6. "Cloudflare Tunnel. Only api and auth are exposed. There is no mcp host and no grafana host, and there must never be. One caveat: the Cloudflare module only accepts dev, uat or prod today, so the trial needs its own settings file. The page flags this."
+6. "Cloudflare Tunnel. Only api and auth are exposed. There is no mcp host and no grafana host, and there must never be. The Cloudflare module now knows the trial: its own settings file, flat hosts, no apex touched, and the two R2 buckets. It has never been applied to a real account, and the page says so."
 7. "Apply the encrypted secrets. The script refuses any secret whose mandatory keys are empty."
-8. "Pin the images. Every launch service needs a full commit sha in its prod values, from a green main build. The gate must say OK."
+8. "Pin the images. Every launch service needs a full commit sha, from a green main build, in its own trial values file, so the trial pin and the production pin are separate. The gate must say OK."
 9. "Bootstrap Argo CD, trimmed, with auto-sync off everywhere. The check: 26 Applications, all OutOfSync, none syncing by themselves."
 
 ## 17:30 Phases 4 and 5: first sync and web apps (3 min)
@@ -176,9 +179,10 @@ Stripe publishable key."
 
 **Click:** chip **5**.
 
-"The three web apps are Cloudflare Workers. The normal pipelines are wired to the production hostnames, so the trial uses the
-workflow that takes its hosts from the domain I give it. The backend and the Workers must agree on the hosts, or sign-in loops with a
-redirect mismatch. The page flags that the trial override of the domain is not written down anywhere yet."
+"The three web apps are Cloudflare Workers, in every environment. The trial has its own workflow, called trial, which uploads
+storefront-trial, seller-center-trial and staff-console-trial for the flat hosts; Cloudflare's tofu module owns the DNS records and the
+routes. The backend and the Workers get their hosts from the same map, and the host check proves it, so there is nothing to type and
+nothing to disagree. Cookies need no setting: the session cookie belongs to each app's own host, and the passkey id is the zone."
 
 "There are no native apps. On a phone I open the storefront, tap Share, then Add to Home Screen. That is the installable web app."
 
@@ -210,8 +214,8 @@ first drill gives the real numbers."
 matters: I boot identity against the restored copy with the escrowed secrets and sign in. That proves the key escrow works. I write
 one row in the drill log."
 
-"One gap I will say out loud: the images in the two R2 buckets are not covered by the database job. The nightly copy to OVH object
-storage is still to do."
+"One gap I will say out loud: the images in the two R2 buckets are not covered by the database job. The nightly copy of those
+buckets to Backblaze is not built yet, it is a backlog story, so a deleted image or evidence document cannot be restored today."
 
 **Click:** chip **8**.
 

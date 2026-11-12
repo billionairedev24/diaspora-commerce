@@ -16,7 +16,7 @@ sellerNames:
   org_afrotransact_retail: AfroTransact Retail
 # Shared AUTH_ISSUER_URL (Helm library); the seller directory token endpoint is <authIssuer>/oauth2/token
 # unless AUTH_TOKEN_URL / sellerDirectory.tokenUrl is set.
-authIssuer: https://auth.uat.afrotransact.com
+authIssuer: https://auth-uat.afrotransact.com
 sellerDirectory:
   enabled: true
   baseUrl: http://seller

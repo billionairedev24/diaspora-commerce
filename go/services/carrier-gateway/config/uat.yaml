@@ -7,7 +7,7 @@ docsEnabled: true
 databaseUrl: ""
 redisUrl: ""
 # Public API base (shared API_BASE_URL, injected by the Helm library); publicBaseUrl defaults to <apiBaseUrl>/carrier-gateway.
-apiBaseUrl: https://api.uat.afrotransact.com
+apiBaseUrl: https://api-uat.afrotransact.com
 kafka:
   enabled: true
   brokers: [kafka.kafka:9092]
@@ -120,7 +120,7 @@ billing:
   handlingFixedMinor: 0
 auth:
   enabled: true
-  issuer: https://auth.uat.afrotransact.com
+  issuer: https://auth-uat.afrotransact.com
   audience: carrier-gateway
 telemetry:
   otlpEndpoint: otel-collector.observability:4318

@@ -9,28 +9,25 @@ or the log in prod. No secret goes in the repo.
 Resend plan limits change; check the current free-tier daily and monthly limits on the Resend pricing page before the
 trial and before launch, and upgrade before the volume gets near them.
 
-## 1. Account and sending domain (once per environment)
+## 1. Account and sending domain (once, for every environment)
 
-Use the sending subdomain `mail.afrotransact.com` (the `email.from` in `config/prod.yaml` is
-`AfroTransact <no-reply@mail.afrotransact.com>`). A subdomain keeps the transactional reputation apart from the main domain.
-Trial: use `mail.trial.afrotransact.com` and override `EMAIL_FROM` and `EMAIL_UNSUBSCRIBE_MAILTO` for the trial deployment.
+**Owner decision: the sending domain is the bare zone `afrotransact.com`, in every environment** (prod, uat, dev and the trial). There is no `mail.` sub-domain: the sender is
+`AfroTransact <no-reply@afrotransact.com>` (the `email.from` of every `config/<env>.yaml` of notifications), the reply-to `support@afrotransact.com` and the unsubscribe mailbox
+`unsubscribe@afrotransact.com`. Resend has already **verified `afrotransact.com`**, so nothing in the trial needs an `EMAIL_FROM` override and the trial sends from the same address.
+(Trade-off to know: transactional and any future marketing mail now share one domain reputation; keep marketing off the trial.)
 
 1. Sign in at `https://resend.com` (create the team account with a shared mailbox, not a personal one).
-2. Left menu **Domains** > **Add Domain**. Name `mail.afrotransact.com`. Region: the closest to your recipients (for example
-   US East). Click **Add**.
-3. Resend shows DNS records: an **MX** and a **TXT (SPF)** record for the `send` subdomain and a **TXT (DKIM)** record
-   `resend._domainkey`. Add them in the Cloudflare dashboard: select the `afrotransact.com` zone > **DNS** > **Records** >
-   **Add record**, type, name and value exactly as Resend shows, **Proxy status: DNS only** (grey cloud), TTL Auto. Save each.
-4. Back in Resend click **Verify DNS Records**. Wait until the domain shows **Verified** (minutes, up to a day).
-5. Add DMARC once on the root: **Add record**, type TXT, name `_dmarc`, value `v=DMARC1; p=none; rua=mailto:dmarc@afrotransact.com`.
-   Tighten to `p=quarantine` after a month of clean reports.
-6. In the domain's settings turn **Click tracking** and **Open tracking** off (transactional mail, and tracking rewrites
+2. Left menu **Domains**: confirm `afrotransact.com` shows **Verified** (region: US East). If it ever has to be added again: **Add Domain**, name `afrotransact.com`.
+3. The DNS records Resend shows (an **MX** and a **TXT (SPF)** for the `send` sub-domain and a **TXT (DKIM)** `resend._domainkey`) are already in the Cloudflare zone, **Proxy status:
+   DNS only** (grey cloud). Do not change them. Email addresses and these records are not web hosts: the one-label host rule of `infra/cloudflare/hosts.json` does not apply to them.
+4. DMARC once on the root: a TXT record named `_dmarc`, value `v=DMARC1; p=none; rua=mailto:dmarc@afrotransact.com`. Tighten to `p=quarantine` after two clean weeks.
+5. In the domain's settings turn **Click tracking** and **Open tracking** off (transactional mail, and tracking rewrites
    the links in security emails). Leave **TLS** on **Opportunistic** or stricter.
 
 ## 2. API key (sending access, that domain only)
 
 1. **API Keys** > **Create API Key**.
-2. Name `notifications-prod` (trial: `notifications-trial`). **Permission: Sending access**. **Domain: mail.afrotransact.com**
+2. Name `notifications-prod` (trial: `notifications-trial`). **Permission: Sending access**. **Domain: `afrotransact.com`**
    (never **Full access**). Click **Add**.
 3. Copy the key (`re_...`) now; it is shown once. Store it as `RESEND_API_KEY` (section 4).
 
@@ -40,31 +37,31 @@ Permanent bounces and spam complaints must reach the service so the address is s
 domain's reputation suffers.
 
 1. **Webhooks** > **Add Webhook**.
-2. Endpoint URL: `https://api.afrotransact.com/notifications/v1/webhooks/resend` (trial: `https://api.trial.afrotransact.com/notifications/v1/webhooks/resend`).
+2. Endpoint URL: `https://api.afrotransact.com/notifications/v1/webhooks/resend` (trial: `https://api-test.afrotransact.com/notifications/v1/webhooks/resend`).
 3. Events: `email.delivered`, `email.bounced`, `email.complained` (add `email.delivery_delayed` if you want it logged).
 4. **Add**. Open the webhook and copy the **Signing Secret** (`whsec_...`). Store it as `RESEND_WEBHOOK_SECRET`.
 5. The service verifies the Svix signature on every call; a webhook without the secret answers 503, never open.
 
 ## 4. Where each value goes
 
-Secrets go to the cloud secret store at `afrotransact/<env>/notifications` with `infra/tofu/scripts/secret-set.sh`
+On the OVH path secrets are **not** put in a cloud secret store: put the two Resend values in `secrets.local.env` (the trial: `infra/ovh-vps/secrets.trial.env.example`), render the Secret `notifications-secrets` with `infra/ovh-vps/secrets.sh` (`PROFILE=prod`), encrypt it with SOPS and apply it with `infra/ops/secrets/apply.sh` (`infra/ops/secrets/README.md`). `UNSUBSCRIBE_SIGNING_KEY` is **generated by `secrets.sh`**, never typed. (`infra/tofu/scripts/secret-set.sh` is the cloud-secret-store path of the other clouds.)
 (External Secrets syncs them into the pod); nothing is committed.
 
 | Value | Secret / env var | Notes |
 |---|---|---|
 | API key `re_...` | `RESEND_API_KEY` | sending access, one domain |
 | Webhook signing secret `whsec_...` | `RESEND_WEBHOOK_SECRET` | from the webhook page |
-| Unsubscribe link signing key | `UNSUBSCRIBE_SIGNING_KEY` | at least 32 random characters: `openssl rand -base64 48`; rotating it invalidates old unsubscribe links |
-| Sender | `EMAIL_FROM` (optional) | default `AfroTransact <no-reply@mail.afrotransact.com>`; must be on the verified domain |
+| Unsubscribe link signing key | `UNSUBSCRIBE_SIGNING_KEY` | generated by `secrets.sh` (at least 32 random characters); rotating it invalidates old unsubscribe links |
+| Sender | `EMAIL_FROM` (optional) | default `AfroTransact <no-reply@afrotransact.com>` in every environment; must be on the verified domain `afrotransact.com` |
 | Reply-to | `EMAIL_REPLY_TO` (optional) | default `support@afrotransact.com` |
 
 ```bash
-infra/tofu/scripts/secret-set.sh afrotransact/prod/notifications RESEND_API_KEY
-infra/tofu/scripts/secret-set.sh afrotransact/prod/notifications RESEND_WEBHOOK_SECRET
-infra/tofu/scripts/secret-set.sh afrotransact/prod/notifications UNSUBSCRIBE_SIGNING_KEY
+cd infra/ovh-vps          # secrets.local.env holds RESEND_API_KEY and RESEND_WEBHOOK_SECRET
+export PROFILE=prod STATE_DIR=$HOME/.afrotransact-trial SECRETS_OUT=$(mktemp -d)
+./secrets.sh services     # renders notifications-secrets (UNSUBSCRIBE_SIGNING_KEY generated), then SOPS + apply.sh
 ```
 
-Restart the notifications deployment after changing a secret. The service logs the exact missing item and exits if
+Restart the notifications deployment after changing a secret (`kubectl -n afrotransact-prod rollout restart deploy/notifications`). The service logs the exact missing item and exits if
 something required is absent.
 
 Attachments: purchase orders and similar documents are fetched from media's private R2 bucket links
@@ -83,8 +80,8 @@ curl -sS -X POST https://api.afrotransact.com/notifications/v1/templates/$KEY/te
 
    The subject is prefixed `[TEST]`. A real flow also works: sign up with an address you own, the verification email goes
    through Resend. In Resend **Emails** the message shows status **Delivered**.
-2. Open the received email's headers: `dkim=pass`, `spf=pass`, `dmarc=pass` for `mail.afrotransact.com`.
-3. Bounce and complaint path: in Resend **Emails** > **Send email**, send from `no-reply@mail.afrotransact.com` to
+2. Open the received email's headers: `dkim=pass`, `spf=pass`, `dmarc=pass` for `afrotransact.com`.
+3. Bounce and complaint path: in Resend **Emails** > **Send email**, send from `no-reply@afrotransact.com` to
    `bounced@resend.dev`, then to `complained@resend.dev` (Resend's test addresses). **Webhooks** > your webhook > **Logs**
    must show `email.bounced` and `email.complained` answered 200 by our endpoint. Our suppression list
    (`GET /v1/suppressions?address=...`, needs `notifications:read`) only gains an address for messages the service itself
@@ -94,9 +91,9 @@ curl -sS -X POST https://api.afrotransact.com/notifications/v1/templates/$KEY/te
 
 ## Trial notes (8 days)
 
-Same steps with the trial domain. Revoke the trial API key and delete the trial webhook at teardown; remove the
-`mail.trial` DNS records. Do not email real customers from the trial: use your own mailboxes and `*@resend.dev` test
-addresses.
+Same steps and the same verified domain: nothing to add to DNS for the trial. The webhook URL is the trial API host, `https://api-test.afrotransact.com/notifications/v1/webhooks/resend`.
+Revoke the trial API key and delete the trial webhook at teardown; the domain and its DNS records stay (production uses them). Do not email real customers from the trial: use your own
+mailboxes and `*@resend.dev` test addresses.
 
 ## Adding a failover later
 

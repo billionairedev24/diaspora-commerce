@@ -20,8 +20,8 @@ info:
     Money is in minor units (cents). Errors are RFC 9457 problem documents with codes `carrier-gateway.<problem>`.
 servers:
   - {url: 'http://localhost:8209', description: local}
-  - {url: 'https://api.dev.afrotransact.com/carrier-gateway', description: dev}
-  - {url: 'https://api.uat.afrotransact.com/carrier-gateway', description: uat}
+  - {url: 'https://api-dev.afrotransact.com/carrier-gateway', description: dev}
+  - {url: 'https://api-uat.afrotransact.com/carrier-gateway', description: uat}
   - {url: 'https://api.afrotransact.com/carrier-gateway', description: prod}
 security: [{bearer: []}]
 tags:

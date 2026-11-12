@@ -9,14 +9,17 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "observability": { "enabled": true },
-  "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media.dev.afrotransact.com", "BFF_ORIGIN": "https://api.dev.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://www.dev.afrotransact.com"},
+  "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-dev.afrotransact.com", "BFF_ORIGIN": "https://api-dev.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://dev.afrotransact.com"},
   "env": {
     // PR previews: a version of staff-console-dev on the in-process mock BFF.
     "preview": {
       "name": "staff-console-dev",
-      "vars": { "CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media.dev.afrotransact.com", "API_MOCKS": "1", "BFF_ORIGIN": "", "PUBLIC_WEB_URL": "https://www.dev.afrotransact.com" }
+      "vars": { "CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-dev.afrotransact.com", "API_MOCKS": "1", "BFF_ORIGIN": "", "PUBLIC_WEB_URL": "https://dev.afrotransact.com" }
     },
-    "uat": { "name": "staff-console-uat", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media.uat.afrotransact.com", "BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://www.uat.afrotransact.com"} },
-    "prod": { "name": "staff-console-prod", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media.afrotransact.com", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://www.afrotransact.com"} }
+    "uat": { "name": "staff-console-uat", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-uat.afrotransact.com", "BFF_ORIGIN": "https://api-uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://uat.afrotransact.com"} },
+    "prod": { "name": "staff-console-prod", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media.afrotransact.com", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://afrotransact.com"} },
+    // trial: the 8-day OVH run (prod profile, flat single-label hosts under the zone, docs/runbooks/ovh-production.md "Trial").
+    // The hosts below are the default zone; the trial workflow writes the same shape for the zone you give it. Routes: infra/cloudflare.
+    "trial": { "name": "staff-console-trial", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-test.afrotransact.com", "BFF_ORIGIN": "https://api-test.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://test.afrotransact.com"} }
   }
 }

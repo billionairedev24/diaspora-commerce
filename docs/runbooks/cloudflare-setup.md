@@ -1,5 +1,9 @@
 # Cloudflare for the OVH test environment: step by step
 
+> **Scope.** This page is for the **one-server test box** (`ovh-vps` + `ovh-web`, free-form `OVH_*` host variables, hosts that are DNS-only for Let's Encrypt). The four real
+> environments (prod, uat, dev and the 8-day trial) do **not** use these variables: their hosts come from the single map `infra/cloudflare/hosts.json`, always one label below the zone
+> (`infra/cloudflare/README.md`, `docs/engineering/environments.md`), and the trial's web apps are deployed by the `trial` workflow. For those, follow `docs/runbooks/ovh-production.md`.
+
 > **Start here: run `make deploy-guide`.** A guided, resumable wizard walks through everything below, asks for each value with its
 > help, checks each step and prints PASS/FAIL ([deploy-guide.md](deploy-guide.md)). The manual steps on this page stay as the reference.
 

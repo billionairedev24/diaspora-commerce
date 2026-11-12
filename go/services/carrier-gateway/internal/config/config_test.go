@@ -45,14 +45,14 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 
 // API_BASE_URL (injected by the Helm library chart) drives the webhook base unless PUBLIC_BASE_URL is set.
 func TestPublicBaseURLFollowsAPIBaseURL(t *testing.T) {
-	env := map[string]string{"API_BASE_URL": "https://api.uat.afrotransact.com/"}
+	env := map[string]string{"API_BASE_URL": "https://api-uat.afrotransact.com/"}
 	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	var cfg config.Config
 	if err := pkgconfig.NewLoaderFor(carriergateway.Files, "uat", lookup).Load(&cfg); err != nil {
 		t.Fatal(err)
 	}
 	cfg.Resolve()
-	if cfg.PublicBaseURL != "https://api.uat.afrotransact.com/carrier-gateway" {
+	if cfg.PublicBaseURL != "https://api-uat.afrotransact.com/carrier-gateway" {
 		t.Fatalf("publicBaseUrl = %q", cfg.PublicBaseURL)
 	}
 	env["PUBLIC_BASE_URL"] = "https://hooks.example.test"

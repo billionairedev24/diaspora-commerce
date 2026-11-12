@@ -1,0 +1,9 @@
+# TRIAL image pin: the promote workflow (environment = trial) writes image.tag here (.github/workflows/_deploy.yml), a full git sha.
+# Read after values-prod.yaml by the trial Applications only (infra/argocd/envs/trial), so promoting to the trial never touches the
+# production pin in values-prod.yaml, and the reverse. Nothing else belongs in this file except trial-only overrides.
+image: {}
+# The trial runs the prod profile against its own Cloudflare R2 buckets; the names are the ones infra/cloudflare creates for
+# environment = trial (the single definition, docs/runbooks/r2-buckets.md). Not secrets, so they live here, not in media-secrets.
+extraEnv:
+  R2_PUBLIC_BUCKET: afrotransact-trial-media
+  R2_PRIVATE_BUCKET: afrotransact-trial-kyc-evidence

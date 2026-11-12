@@ -23,7 +23,7 @@ carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets 
 
 `seed.py` stops before any step when `APP_ENV`, `ENVIRONMENT`, `DEPLOY_ENV`, `SPRING_PROFILES_ACTIVE` or `ENV` names prod,
 production, uat or staging; when any service URL it uses (`CATALOG_URL`, `AUTH_ISSUER_URL`, ...) has a host under
-afrotransact.com other than `*.dev.afrotransact.com` and `*.trial.afrotransact.com` (this holds even with
+afrotransact.com other than the dev environment's (`dev.afrotransact.com`, `*-dev.afrotransact.com`; never the trial's `*-test.`, which runs the prod profile) (this holds even with
 `SEED_ALLOW_REMOTE=1`); and when a URL is not on this machine unless `SEED_ALLOW_REMOTE=1` is set. Hosts are parsed, so
 `localhost.example.com` or a path containing `localhost` is not local. `tests/test_guard.py` covers it.
 

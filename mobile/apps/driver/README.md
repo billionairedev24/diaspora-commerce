@@ -48,11 +48,11 @@ prod build that leaves one of the URL variables unset.
 | Variable | local | dev | uat | prod |
 |---|---|---|---|---|
 | `EXPO_PUBLIC_APP_ENV` | `local` | `dev` | `uat` | `prod` |
-| `EXPO_PUBLIC_BFF_URL` | `http://localhost:8200` | `https://api.dev.afrotransact.com/bff` | `…uat…/bff` | `https://api.afrotransact.com/bff` |
-| `EXPO_PUBLIC_FULFILMENT_URL` | `http://localhost:8108` | `https://api.dev.afrotransact.com/fulfilment` | `…uat…/fulfilment` | `https://api.afrotransact.com/fulfilment` |
-| `EXPO_PUBLIC_MEDIA_URL` | `http://localhost:8207` | `https://api.dev.afrotransact.com/media` | `…uat…/media` | `https://api.afrotransact.com/media` |
-| `EXPO_PUBLIC_OIDC_ISSUER` | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |
-| `EXPO_PUBLIC_IDENTITY_URL` (push devices) | `http://localhost:8100` | `https://api.dev.afrotransact.com/identity` | `…uat…/identity` | `https://api.afrotransact.com/identity` |
+| `EXPO_PUBLIC_BFF_URL` | `http://localhost:8200` | `https://api-dev.afrotransact.com/bff` | `…uat…/bff` | `https://api.afrotransact.com/bff` |
+| `EXPO_PUBLIC_FULFILMENT_URL` | `http://localhost:8108` | `https://api-dev.afrotransact.com/fulfilment` | `…uat…/fulfilment` | `https://api.afrotransact.com/fulfilment` |
+| `EXPO_PUBLIC_MEDIA_URL` | `http://localhost:8207` | `https://api-dev.afrotransact.com/media` | `…uat…/media` | `https://api.afrotransact.com/media` |
+| `EXPO_PUBLIC_OIDC_ISSUER` | `http://localhost:8100` | `https://auth-dev.afrotransact.com` | `https://auth-uat.afrotransact.com` | `https://auth.afrotransact.com` |
+| `EXPO_PUBLIC_IDENTITY_URL` (push devices) | `http://localhost:8100` | `https://api-dev.afrotransact.com/identity` | `…uat…/identity` | `https://api.afrotransact.com/identity` |
 | `EXPO_PUBLIC_OIDC_CLIENT_ID` | `driver-app` | `driver-app` | `driver-app` | `driver-app` |
 | `EXPO_PUBLIC_MOCKS` | `1` (default) | `0` | `0` | always off |
 | `EXPO_PUBLIC_DEV_HOST` (local stack host) | `localhost` | - | - | - |

@@ -230,7 +230,7 @@ Argo CD sync) with three honest differences:
 `_web-app.yml` builds with OpenNext (`opennextjs-cloudflare build`) and deploys with Wrangler: PRs upload a
 version of `<app>-dev` with preview alias `pr-<n>` (URL commented on the PR); main deploys `<app>-dev`;
 dispatch deploys `<app>-uat` / `<app>-prod` (prod approval). Worker names match the Workers routes in
-`infra/cloudflare` (`seller.dev.afrotransact.com/*` -> `seller-center-dev`). Each app needs `wrangler.jsonc`
+`infra/cloudflare` (`seller-dev.afrotransact.com/*` -> `seller-center-dev`). Each app needs `wrangler.jsonc`
 (or `.toml`) and the `@opennextjs/cloudflare` dev dependency (web agent). With `vercel: true` (input or
 `VERCEL_FALLBACK=true`) the same app is also deployed with the Vercel CLI.
 

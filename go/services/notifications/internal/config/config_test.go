@@ -79,9 +79,9 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 // The shared platform URLs injected by the Helm library chart drive the links; explicit settings still win.
 func TestSharedPlatformURLsDriveLinks(t *testing.T) {
 	env := map[string]string{
-		"API_BASE_URL": "https://api.uat.afrotransact.com", "PUBLIC_WEB_URL": "https://uat.afrotransact.com",
-		"SELLER_CENTER_URL": "https://seller.uat.afrotransact.com", "MEDIA_PUBLIC_URL": "https://media.uat.afrotransact.com",
-		"AUTH_ISSUER_URL": "https://auth.uat.afrotransact.com",
+		"API_BASE_URL": "https://api-uat.afrotransact.com", "PUBLIC_WEB_URL": "https://uat.afrotransact.com",
+		"SELLER_CENTER_URL": "https://seller-uat.afrotransact.com", "MEDIA_PUBLIC_URL": "https://media-uat.afrotransact.com",
+		"AUTH_ISSUER_URL": "https://auth-uat.afrotransact.com",
 	}
 	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
 	var c config.Config
@@ -89,18 +89,18 @@ func TestSharedPlatformURLsDriveLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Resolve()
-	if c.PublicBaseURL != "https://api.uat.afrotransact.com/notifications" || c.Auth.Issuer != "https://auth.uat.afrotransact.com" {
+	if c.PublicBaseURL != "https://api-uat.afrotransact.com/notifications" || c.Auth.Issuer != "https://auth-uat.afrotransact.com" {
 		t.Fatalf("public base / issuer: %q %q", c.PublicBaseURL, c.Auth.Issuer)
 	}
-	if c.Links.Storefront != "https://uat.afrotransact.com" || c.Links.ProviderHub != "https://seller.uat.afrotransact.com" {
+	if c.Links.Storefront != "https://uat.afrotransact.com" || c.Links.ProviderHub != "https://seller-uat.afrotransact.com" {
 		t.Fatalf("links: %+v", c.Links)
 	}
-	if !slices.Contains(c.Attachments.AllowedHosts, "media.uat.afrotransact.com") {
+	if !slices.Contains(c.Attachments.AllowedHosts, "media-uat.afrotransact.com") {
 		t.Fatalf("media CDN host must be allowed: %v", c.Attachments.AllowedHosts)
 	}
 	// S250: media-hosted long-lived links (PO PDFs) are fetched from the API host, but only under /media/v1/l/.
-	if !slices.Contains(c.Attachments.AllowedHosts, "api.uat.afrotransact.com/media/v1/l/") ||
-		slices.Contains(c.Attachments.AllowedHosts, "api.uat.afrotransact.com") {
+	if !slices.Contains(c.Attachments.AllowedHosts, "api-uat.afrotransact.com/media/v1/l/") ||
+		slices.Contains(c.Attachments.AllowedHosts, "api-uat.afrotransact.com") {
 		t.Fatalf("media link prefix (not the whole API host) must be allowed: %v", c.Attachments.AllowedHosts)
 	}
 

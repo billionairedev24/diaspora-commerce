@@ -1,0 +1,12 @@
+{
+  "_comment": "THE single source of truth for every public hostname (owner decision). Cloudflare's FREE Universal certificate covers the zone apex and ONE label below it, so no host is ever more than one label under the zone. prod: afrotransact.com (storefront) and <role>.afrotransact.com. Any other env E: <suffix>.afrotransact.com (storefront) and <role>-<suffix>.afrotransact.com. Read by infra/cloudflare (tofu), tools/ci/env_hosts.py (sync + check) and tools/ci/check_env_urls.py (CI). Nothing else names a host.",
+  "zone": "afrotransact.com",
+  "envs": {
+    "prod": { "suffix": "" },
+    "uat": { "suffix": "uat" },
+    "dev": { "suffix": "dev" },
+    "trial": { "suffix": "test" }
+  },
+  "roles": ["seller", "admin", "api", "auth", "media", "developers"],
+  "other_roles": ["grafana", "mcp"]
+}

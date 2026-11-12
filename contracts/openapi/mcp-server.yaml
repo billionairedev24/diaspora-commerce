@@ -13,9 +13,9 @@ info:
 servers:
 - url: http://localhost:8114
   description: local
-- url: https://api.dev.afrotransact.com/mcp-server
+- url: https://api-dev.afrotransact.com/mcp-server
   description: dev
-- url: https://api.uat.afrotransact.com/mcp-server
+- url: https://api-uat.afrotransact.com/mcp-server
   description: uat
 - url: https://api.afrotransact.com/mcp-server
   description: prod

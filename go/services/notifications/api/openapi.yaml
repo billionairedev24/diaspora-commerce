@@ -30,9 +30,9 @@ info:
 servers:
   - url: http://localhost:8208
     description: local
-  - url: https://api.dev.afrotransact.com/notifications
+  - url: https://api-dev.afrotransact.com/notifications
     description: dev
-  - url: https://api.uat.afrotransact.com/notifications
+  - url: https://api-uat.afrotransact.com/notifications
     description: uat
   - url: https://api.afrotransact.com/notifications
     description: prod

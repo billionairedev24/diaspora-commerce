@@ -12,9 +12,9 @@ info:
 servers:
 - url: http://localhost:8104
   description: local
-- url: https://api.dev.afrotransact.com/orders
+- url: https://api-dev.afrotransact.com/orders
   description: dev
-- url: https://api.uat.afrotransact.com/orders
+- url: https://api-uat.afrotransact.com/orders
   description: uat
 - url: https://api.afrotransact.com/orders
   description: prod

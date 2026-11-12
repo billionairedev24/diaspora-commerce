@@ -101,12 +101,12 @@ class ExplicitWebHostsConfigurationTest {
     @Test
     void withoutTheVariablesTheDevHostsAreUnchanged() throws IOException {
         IdentityProperties props = bind(Map.of());
-        assertThat(props.pages().sellerCenterUrl()).isEqualTo("https://seller.dev.afrotransact.com");
-        assertThat(props.pages().staffConsoleUrl()).isEqualTo("https://admin.dev.afrotransact.com");
+        assertThat(props.pages().sellerCenterUrl()).isEqualTo("https://seller-dev.afrotransact.com");
+        assertThat(props.pages().staffConsoleUrl()).isEqualTo("https://admin-dev.afrotransact.com");
         assertThat(gatewayBff(props).redirectUris()).containsExactlyInAnyOrder(
-                "https://www.dev.afrotransact.com/api/bff/v1/auth/oidc/callback",
-                "https://seller.dev.afrotransact.com/api/bff/v1/auth/oidc/callback",
-                "https://admin.dev.afrotransact.com/api/bff/v1/auth/oidc/callback");
+                "https://dev.afrotransact.com/api/bff/v1/auth/oidc/callback",
+                "https://seller-dev.afrotransact.com/api/bff/v1/auth/oidc/callback",
+                "https://admin-dev.afrotransact.com/api/bff/v1/auth/oidc/callback");
         assertThat(props.webauthn().rpId()).isEqualTo("dev.afrotransact.com");
     }
 

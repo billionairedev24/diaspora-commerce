@@ -12,8 +12,8 @@ info:
     Provider keys never reach clients: browsers and apps call this API.
 servers:
   - {url: 'http://localhost:8205', description: local}
-  - {url: 'https://api.dev.afrotransact.com/geo', description: dev}
-  - {url: 'https://api.uat.afrotransact.com/geo', description: uat}
+  - {url: 'https://api-dev.afrotransact.com/geo', description: dev}
+  - {url: 'https://api-uat.afrotransact.com/geo', description: uat}
   - {url: 'https://api.afrotransact.com/geo', description: prod}
 tags:
   - name: Addresses

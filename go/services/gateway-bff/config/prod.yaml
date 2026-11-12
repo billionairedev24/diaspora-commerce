@@ -9,7 +9,7 @@ market: us
 # the storefront origin, the OIDC issuer and (outside local) the OIDC redirect URI are derived from them; WEB_ORIGINS,
 # WEB_PUBLIC_ORIGIN, OIDC_ISSUER and OIDC_REDIRECT_URI override the derived values.
 platform:
-  publicWebUrl: https://www.afrotransact.com
+  publicWebUrl: https://afrotransact.com
   sellerCenterUrl: https://seller.afrotransact.com
   staffConsoleUrl: https://admin.afrotransact.com
   authIssuerUrl: https://auth.afrotransact.com

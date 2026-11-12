@@ -50,12 +50,12 @@ func TestPlatformURLsPerEnvironment(t *testing.T) {
 	cases := map[string]struct{ web, seller, staff, issuer, redirect string }{
 		"local": {"http://localhost:3000", "http://localhost:3010", "http://localhost:3002", "http://localhost:8100",
 			"http://localhost:3000/api/bff/v1/auth/oidc/callback"},
-		"dev": {"https://www.dev.afrotransact.com", "https://seller.dev.afrotransact.com", "https://admin.dev.afrotransact.com",
-			"https://auth.dev.afrotransact.com", "https://www.dev.afrotransact.com/api/bff/v1/auth/oidc/callback"},
-		"uat": {"https://www.uat.afrotransact.com", "https://seller.uat.afrotransact.com", "https://admin.uat.afrotransact.com",
-			"https://auth.uat.afrotransact.com", "https://www.uat.afrotransact.com/api/bff/v1/auth/oidc/callback"},
-		"prod": {"https://www.afrotransact.com", "https://seller.afrotransact.com", "https://admin.afrotransact.com",
-			"https://auth.afrotransact.com", "https://www.afrotransact.com/api/bff/v1/auth/oidc/callback"},
+		"dev": {"https://dev.afrotransact.com", "https://seller-dev.afrotransact.com", "https://admin-dev.afrotransact.com",
+			"https://auth-dev.afrotransact.com", "https://dev.afrotransact.com/api/bff/v1/auth/oidc/callback"},
+		"uat": {"https://uat.afrotransact.com", "https://seller-uat.afrotransact.com", "https://admin-uat.afrotransact.com",
+			"https://auth-uat.afrotransact.com", "https://uat.afrotransact.com/api/bff/v1/auth/oidc/callback"},
+		"prod": {"https://afrotransact.com", "https://seller.afrotransact.com", "https://admin.afrotransact.com",
+			"https://auth.afrotransact.com", "https://afrotransact.com/api/bff/v1/auth/oidc/callback"},
 	}
 	for env, want := range cases {
 		c := load(t, env, nil)

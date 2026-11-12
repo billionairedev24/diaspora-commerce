@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Guard: environment-specific AfroTransact hosts must come from per-environment configuration.
 
-Public hosts follow infra/cloudflare (local.hosts): <name>.dev.afrotransact.com, <name>.uat.afrotransact.com and
-<name>.afrotransact.com in prod (docs/engineering/environments.md). Code and shared defaults must not hard-code
-any of them; each environment's own files may only name that environment's hosts.
+Public hosts come from ONE map, infra/cloudflare/hosts.json (docs/engineering/environments.md): prod is afrotransact.com and
+<role>.afrotransact.com, every other env E is <suffix>.afrotransact.com and <role>-<suffix>.afrotransact.com (dev, uat, test).
+Cloudflare's FREE certificate covers the apex and ONE label below the zone, so a host more than one label below it
+(api.uat.afrotransact.com) fails, and so does a host that the map does not derive. Code and shared defaults must not hard-code any
+of them; each environment's own files may only name that environment's hosts.
 
 File classes (anything else is not scanned):
 
@@ -20,14 +22,12 @@ File classes (anything else is not scanned):
            public hosts and the canonical problem-type base
 
 Always allowed (identifiers, not environment hosts):
-  - email addresses (support@afrotransact.com, no-reply@mail.dev.afrotransact.com, ...)
+  - email addresses (support@afrotransact.com, no-reply@afrotransact.com, ...)
   - RFC 9457 problem types under https://developers.afrotransact.com/problems/ (one stable base everywhere)
   - Kubernetes label / annotation / taint keys (afrotransact.com/env, afrotransact.com/spot)
   - the documented exceptions in EXCEPTIONS below
 
-Every host must also be a real public host (KNOWN_LABELS): <base>, seller., admin., api., auth., media.,
-developers., mcp., grafana., mail., and www. (the STOREFRONT host of every environment, www.dev.<zone> included; the bare
-base only redirects to it, so a URL https://<base> is a violation: storefront host rule, docs/engineering/environments.md); staff., sell., provider. ... fail anywhere.
+Every host must be derived from the map and be at most one label below the zone; staff., sell., provider. ... fail anywhere.
 
 Tests and fixtures are skipped (src/test/, *_test.go, *.test.*, *.spec.*, __tests__/, e2e/, tests/, testdata/,
 fixtures/), as are generated clients (*/generated/*) and build output.
@@ -51,8 +51,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ZONE = "afrotransact.com"
-ENVS = ("dev", "uat", "prod")
-
+ENVS = ("dev", "uat", "trial", "prod")
 SKIP_DIRS = {
     "node_modules", ".git", "design", "target", ".next", ".next-e2e", ".open-next", "dist", "build", "coverage",
     ".turbo", ".gradle", ".idea", ".vscode", "vendor", ".expo", ".wrangler", "storybook-static",
@@ -81,6 +80,8 @@ class Exception_:
 
 # Documented exceptions: identifiers that look like hosts. Keep this list short and explain every entry.
 EXCEPTIONS: tuple[Exception_, ...] = (
+    Exception_("infra/argocd/envs/*/platform-values.yaml", r"^\s*domain: afrotransact\.com\s*$",
+               "global.domain is the ZONE in every environment (PLATFORM_DOMAIN, the WebAuthn rp id), not a host"),
     Exception_("java/services/identity/src/main/resources/application.yml",
                r"IDENTITY_STAFF_EMAIL_DOMAINS:afrotransact\.com\}",
                "staff email domain (an email domain, not a host); overridable with IDENTITY_STAFF_EMAIL_DOMAINS"),
@@ -105,30 +106,27 @@ class Violation:
     message: str
 
 
-# Public host names per environment: <label>.<base> where <base> is dev.<zone>, uat.<zone> or <zone> (prod).
-# infra/cloudflare local.hosts: www (storefront, every environment; the bare base only redirects), seller, admin (staff
-# console), api, auth, media.
-# Also in use: developers (docs portal), mcp (mcp-server), grafana, mail (email sending domain). Anything else
-# (staff., sell., provider., identity., ...) is not served by the edge.
-KNOWN_LABELS = {"", "www", "seller", "admin", "api", "auth", "media", "developers", "mcp", "grafana", "mail", "*"}
-PROD_ONLY_LABELS: set[str] = set()
+# Public host names per environment, from infra/cloudflare/hosts.json (the single source of truth; tools/ci/env_hosts.py).
+import json  # noqa: E402
+
+_MAP = json.loads((ROOT / "infra/cloudflare/hosts.json").read_text())
+HOST_ENV: dict[str, str] = {}
+for _env, _cfg in _MAP["envs"].items():
+    _sfx = _cfg["suffix"]
+    for _role in ["storefront", *_MAP["roles"], *_MAP["other_roles"]]:
+        if _role == "storefront":
+            _h = f"{_sfx}.{ZONE}" if _sfx else ZONE
+        else:
+            _h = f"{_role}-{_sfx}.{ZONE}" if _sfx else f"{_role}.{ZONE}"
+        HOST_ENV[_h] = _env
 
 
-def host_label(host: str) -> str:
-    """The service label of a host: the part before the environment base ('' for the base itself)."""
-    rest = host[: -len(ZONE)].rstrip(".") if host != ZONE else ""
-    labels = rest.split(".") if rest else []
-    if labels and labels[-1] in ("dev", "uat"):
-        labels = labels[:-1]
-    return ".".join(labels)
+def labels_below(host: str) -> int:
+    return 0 if host == ZONE else host[: -len(ZONE) - 1].count(".") + 1
 
 
 def host_env(host: str) -> str:
-    """Environment a host belongs to: dev / uat when that label sits right before the zone, else prod."""
-    labels = host[: -len(ZONE)].rstrip(".").split(".") if host != ZONE else []
-    if labels and labels[-1] in ("dev", "uat"):
-        return labels[-1]
-    return "prod"
+    return HOST_ENV.get(host, "")
 
 
 def classify(rel: str) -> str | None:
@@ -150,8 +148,8 @@ def classify(rel: str) -> str | None:
     m = re.fullmatch(r"values-(\w+)\.ya?ml", name)
     if m:
         return m.group(1) if m.group(1) in ENVS else None
-    m = re.match(r"infra/argocd/envs/(dev|uat|prod)/", rel) or \
-        re.match(r"infra/k8s/platform/(?:envs|[\w-]+/overlays)/(dev|uat|prod)/", rel)
+    m = re.match(r"infra/argocd/envs/(dev|uat|trial|prod)/", rel) or \
+        re.match(r"infra/k8s/platform/(?:envs|[\w-]+/overlays)/(dev|uat|trial|prod)/", rel)
     if m and rel.endswith((".yaml", ".yml")):
         return m.group(1)
     if rel.startswith("infra/k8s/platform/values/") and rel.endswith((".yaml", ".yml")):
@@ -207,15 +205,13 @@ def scan_file(path: Path, rel: str, cls: str) -> list[Violation]:
             if host.startswith("errors."):
                 out.append(Violation(rel, no, host, "non-canonical RFC 9457 problem type base: use "
                                      f"{PROBLEM_TYPE_PREFIX}<code> (go/pkg/problem.TypeURI, ProblemTypes.of)"))
-            elif host_label(host) == "" and before_is_url(line, m.start()):
-                out.append(Violation(rel, no, host, "the storefront is www.<base> in every environment (storefront host "
-                                     "rule: global.storefrontHost = www, docs/engineering/environments.md); the base domain "
-                                     "only 301-redirects to it, so no config may name https://<base> as a URL"))
-            elif host_label(host) not in KNOWN_LABELS and not (
-                    host_label(host) in PROD_ONLY_LABELS and env == "prod"):
-                out.append(Violation(rel, no, host, "not a public host of the platform (see infra/cloudflare "
-                                     "local.hosts and docs/engineering/environments.md: <base>, seller., admin., "
-                                     "api., auth., media., www.)"))
+            elif labels_below(host) > 1:
+                out.append(Violation(rel, no, host, "more than one label below the zone: Cloudflare's free certificate covers only "
+                                     "the apex and one label (api-uat.<zone>, not api.uat.<zone>); hosts come from "
+                                     "infra/cloudflare/hosts.json"))
+            elif not env:
+                out.append(Violation(rel, no, host, "not a host of the map infra/cloudflare/hosts.json (prod: <role>.<zone>; other "
+                                     "envs: <role>-<suffix>.<zone>, storefront <suffix>.<zone>)"))
             elif cls == "multi":
                 continue
             elif cls == "neutral":

@@ -1387,7 +1387,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - It asks for the word wipe and does nothing otherwise
 - After it, make up and make seed give a working stack
 - Documented in local-development.md","E33","","Medium","2","tooling dev verify","quality","In Progress"
-"S368","Story","Verify the website given to Stripe","The business website sent to Stripe at connected-account creation is configurable (local uses Stripe's test website). Production must send the storefront base https://www.afrotransact.com.","- In prod the value equals the public storefront URL and is not localhost
+"S368","Story","Verify the website given to Stripe","The business website sent to Stripe at connected-account creation is configurable (local uses Stripe's test website). Production must send the storefront base https://afrotransact.com.","- In prod the value equals the public storefront URL and is not localhost
 - A test-mode connected account is created with it and Stripe accepts it
 - The business page URL shown to sellers matches
 - The config key is listed in secrets-and-configuration.md","E14","","High","2","seller stripe launch","billing","In Progress"
@@ -1441,3 +1441,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Each Stripe behaviour claim in the runbook is marked verified with the test or Stripe's answer, or stays UNVERIFIED
 - The owner's decision A, B or C is recorded
 - The test account is cleaned up","E14","","Highest","3","stripe seller launch","billing","To Do"
+"S380","Story","Nightly copy of the two R2 buckets to Backblaze B2","Today only the Postgres dump reaches Backblaze B2 (infra/k8s/platform/lean/backup). Nothing copies the Cloudflare R2 objects (media and kyc-evidence), so a deleted or overwritten R2 object, KYC documents included, cannot be recovered. Add a small rclone CronJob in the ops namespace: R2 to B2, one bucket-scoped read-only R2 key per bucket, one bucket-scoped B2 write key, the private bucket age-encrypted, sync with no delete (or versioned), nothing public.","- A CronJob copies afrotransact-<env>-media and afrotransact-<env>-kyc-evidence to the B2 backup bucket every night; the private copy is age-encrypted
+- BackupStale-style alert fires when the last successful R2 copy is older than 26 hours
+- A restore of one media object and one KYC object from B2 is done once and timed (restore drill)
+- docs/runbooks/backups-backblaze.md and production-readiness.md section 9 say the copy exists; trial and prod use their own buckets","E29","","High","3","backups r2 launch","infra","To Do"

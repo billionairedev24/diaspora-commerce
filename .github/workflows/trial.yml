@@ -1,0 +1,114 @@
+# Deploys the three web apps (storefront, Seller Center, staff console) to Cloudflare Workers for the 8-day TRIAL, on the zone you
+# give it, with the flat single-label hosts (Cloudflare's free certificate covers the apex and one label only):
+#
+#   storefront     -> Worker storefront-trial     https://test.<zone>
+#   Seller Center  -> Worker seller-center-trial  https://seller-test.<zone>
+#   staff console  -> Worker staff-console-trial  https://admin-test.<zone>
+#   backend        -> https://api-test.<zone>/bff   (gateway-bff through the Cloudflare Tunnel, infra/cloudflare environment = trial)
+#
+# Run it BEFORE `tofu apply -var-file=envs/trial.tfvars` with workers_routes_enabled = true: infra/cloudflare owns the DNS records and
+# the Workers routes (pattern <host>/*), this workflow only uploads the scripts. No custom domains are created here (a custom domain
+# refuses to overwrite the DNS record tofu makes). The zone is an input; empty = the TRIAL_ZONE variable of the GitHub environment
+# `trial`, else the zone of infra/cloudflare/hosts.json. The backend must have been deployed with the SAME zone
+# (infra/argocd/envs/trial/platform-values.yaml: `python3 tools/ci/env_hosts.py check`).
+#
+# Needs, as secrets of the GitHub environment `trial`: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+# MANUAL ONLY: never add push, pull_request or schedule triggers.
+name: trial
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "Which apps (space separated: storefront seller-center staff-console)"
+        type: string
+        default: "storefront seller-center staff-console"
+      zone:
+        description: "Cloudflare zone of the trial (empty = the TRIAL_ZONE variable, else the zone of infra/cloudflare/hosts.json)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trial-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    environment: trial
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [storefront, seller-center, staff-console]
+    env:
+      APP: ${{ matrix.app }}
+      APP_DIR: web/apps/${{ matrix.app }}
+      WANTED: ${{ inputs.apps }}
+      ZONE_INPUT: ${{ inputs.zone }}
+      ZONE_VAR: ${{ vars.TRIAL_ZONE }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Decide
+        id: d
+        run: |
+          set -euo pipefail
+          zone="${ZONE_INPUT:-$ZONE_VAR}"
+          # Hosts from the map infra/cloudflare/hosts.json (env trial); an empty zone = the map's. Prints KEY=value lines.
+          hosts=$(python3 tools/ci/env_hosts.py env trial "$zone")
+          while IFS='=' read -r k v; do echo "$k=$v" >> "$GITHUB_OUTPUT"; echo "$k=$v"; done <<< "$hosts"
+          if [[ " $WANTED " != *" $APP "* ]]; then echo "run=false" >> "$GITHUB_OUTPUT"; echo "::notice::$APP skipped"; exit 0; fi
+          [[ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" && -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]] || { echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be secrets of the trial environment"; exit 1; }
+          echo "run=true" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v6
+        if: steps.d.outputs.run == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.d.outputs.run == 'true'
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install
+        if: steps.d.outputs.run == 'true'
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Next.js build
+        if: steps.d.outputs.run == 'true'
+        working-directory: web
+        run: pnpm --filter "./apps/${APP}" run build
+      - name: OpenNext build (Cloudflare Workers)
+        if: steps.d.outputs.run == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        run: pnpm exec opennextjs-cloudflare build
+      - name: Write the Worker config for this zone
+        if: steps.d.outputs.run == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          WEB: ${{ steps.d.outputs.storefront_url }}
+          SELLER: ${{ steps.d.outputs.seller_url }}
+          ADMIN: ${{ steps.d.outputs.admin_url }}
+          MEDIA: ${{ steps.d.outputs.media_url }}
+          BFF: ${{ steps.d.outputs.bff_origin }}
+        run: |
+          set -euo pipefail
+          # Same vars as the "trial" environment of wrangler.jsonc, for the zone given. No routes: infra/cloudflare owns them.
+          vars=$(jq -nc --arg w "$WEB" --arg s "$SELLER" --arg a "$ADMIN" --arg m "$MEDIA" --arg b "$BFF" --arg app "$APP" '
+            {API_MOCKS:"0", CSP_MODE:"report-only", MEDIA_PUBLIC_URL:$m, BFF_ORIGIN:$b, PUBLIC_WEB_URL:$w}
+            + (if $app=="storefront" then {SELLER_CENTER_URL:$s, STAFF_CONSOLE_URL:$a} else {} end)')
+          jq -n --arg name "${APP}-trial" --argjson vars "$vars" '
+            {name:$name, main:".open-next/worker.js", compatibility_date:"2026-09-01",
+             compatibility_flags:["nodejs_compat","global_fetch_strictly_public"],
+             assets:{directory:".open-next/assets", binding:"ASSETS"}, observability:{enabled:true}, vars:$vars}' > wrangler.trial.json
+          cat wrangler.trial.json
+      - name: Deploy
+        if: steps.d.outputs.run == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ env.APP_DIR }}
+          command: deploy -c wrangler.trial.json

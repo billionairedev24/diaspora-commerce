@@ -61,9 +61,10 @@ specifics, a restore drill.
 - [ ] `ENGINEERING · Open` Image tags are pinned (never `latest`); Helm templates render no `latest` tag.
 - [ ] `ENGINEERING · Open` `tools/dev/secrets_check.py --check` passes (undocumented keys are listed and documented).
 - [ ] `ENGINEERING · Open` `tools/dev/check_migrations.sh` passes: no Flyway version is used twice in a service.
-- [ ] **blocker** `ENGINEERING · Open` OVH production path exists and is rehearsed: Managed Kubernetes cluster, ingress and
-  load balancer, certificates, Argo CD (or the chosen deploy path), secret delivery, and the Helm values for the launch stack
-  (FGA off, no native-app services). The existing OVH document describes a **test** server (`ovh-vps.md`), not production.
+- [ ] **blocker** `ENGINEERING · Open` OVH production path exists and is rehearsed in the 8-day trial: Managed Kubernetes cluster, the Cloudflare **Tunnel**
+  (cloudflared + Envoy Gateway; there is **no load balancer and no ingress certificate**, Cloudflare terminates TLS), Argo CD with manual sync, SOPS/age secret
+  delivery, and the Helm values for the launch stack (21 services, FGA off, no native-app services). The path is [ovh-production.md](ovh-production.md)
+  (its "Trial" section for the 8-day run); `ovh-vps.md` is a one-server **test** box on the dev profile, not production.
 - [ ] **blocker** `ENGINEERING · Open` Services that are off at launch are confirmed off and not routed: FGA (`FGA_ENABLED=false`
   explicitly set on catalog, offers, orders, payments and the others that read it), authz-sync not deployed or idle, native-app
   push, WhatsApp. With FGA off, access control is RBAC plus organisation checks; run the cross-organisation access tests once
@@ -111,24 +112,27 @@ specifics, a restore drill.
   Semgrep, govulncheck, osv-scanner, gitleaks); `pnpm audit` clean apart from documented exceptions.
 - [ ] `ENGINEERING · Open` Documented exceptions are reviewed: the `node-forge` advisory in the Expo dev tool (no upstream fix; dev tooling only, not shipped).
 - [ ] `ENGINEERING · Open` Images are built reproducibly, signed, and carry an SBOM; the cluster admits signed images only.
-- [ ] `ENGINEERING · Open` TLS everywhere; HSTS on; Cloudflare in front of the OVH origin with Authenticated Origin Pulls (or an origin firewall that
-  admits Cloudflare ranges only); the origin load balancer is not reachable directly.
-- [ ] **Storefront host rule:** the storefront is `https://www.<base>` in every environment (prod `https://www.afrotransact.com`, dev and uat `www.dev.` / `www.uat.afrotransact.com`); every other app keeps its sub-domain. The checks below are written for prod; dev and uat are the same with their base. `ENGINEERING · Open`
-  - DNS: `www` is a proxied record served by the `storefront-prod` Worker route `www.afrotransact.com/*`; the apex
-    `afrotransact.com` is a proxied placeholder (`AAAA 100::`) with no origin and no Worker route, answered by the dynamic
-    redirect rule "apex to www" (one rule per environment, `afrotransact.com`, `dev.afrotransact.com`, `uat.afrotransact.com`; 301, `https://www.afrotransact.com` + path, query kept). Both are created by `infra/cloudflare`
-    with `storefront_host = "www"`. Check: `curl -sI "https://afrotransact.com/p/x?a=1"` returns `301` with
-    `location: https://www.afrotransact.com/p/x?a=1`; no A/CNAME record of the old (v1) setup is left on the apex or on `www`.
-  - Certificates: Universal SSL covers `afrotransact.com` and `*.afrotransact.com` (apex, `www`, `seller`, `admin`, `api`, ...); nothing extra for `www`.
-  - Config: `global.storefrontHost: www` in `infra/argocd/envs/prod/platform-values.yaml` (so `PUBLIC_WEB_URL` is `https://www.afrotransact.com` in every
-    pod, identity redirect URIs and CORS follow) and the seller-center / staff-console `PUBLIC_WEB_URL` Worker vars; roll identity and gateway-bff
-    together with the edge change, then verify a sign-in on `www`, a passkey sign-in (RP id stays `afrotransact.com`) and a sign-out round trip.
+- [ ] `ENGINEERING · Open` TLS everywhere; HSTS on. The origin is reached only through the **Cloudflare Tunnel** (`cloudflared` in the cluster makes an outbound
+  connection): the node has **no load balancer, no public listener and no open inbound port** (`nmap` the node's public IP from outside: nothing open), so
+  **Authenticated Origin Pulls do not apply** (they belong to the unused `origin_mode = "ingress"`). Only `api.` and `auth.` are routed through the Tunnel; there is
+  **no `mcp.` and no `grafana.` host** (Grafana is Grafana Cloud).
+- [ ] **Host rule (one label below the zone):** every host is generated from the single map `infra/cloudflare/hosts.json`, because Cloudflare's **free** Universal
+  certificate covers only the apex and **one** label (`*.afrotransact.com`). Prod: `afrotransact.com` (storefront), `seller.`, `admin.`, `api.`, `auth.`, `media.`;
+  any other environment E (`dev`, `uat`, `test` for the trial): `E.afrotransact.com` and `seller-E.`, `admin-E.`, `api-E.`, `auth-E.`, `media-E.afrotransact.com`.
+  There is no `www.` host and no apex redirect. `python3 tools/ci/env_hosts.py check` and `tools/ci/check_env_urls.py` (both in `make env-check`) fail CI on a host that is
+  more than one label below the zone or not in the map. `ENGINEERING · Open`
+  - DNS: the storefront is a proxied record served by the `storefront-prod` Worker route `afrotransact.com/*`, the other web apps by their own routes; all created by `infra/cloudflare`.
+    No A/CNAME record of the old (v1) setup is left on the apex.
+  - Certificates: Universal SSL covers `afrotransact.com` and `*.afrotransact.com`: nothing extra, no Advanced Certificate Manager, for any environment.
+  - Config: `global.domain` (the zone) and `global.webHost / sellerHost / adminHost / apiHost / authHost / mediaHost` in `infra/argocd/envs/<env>/platform-values.yaml`
+    are generated from the map (`tools/ci/env_hosts.py sync`), so `PUBLIC_WEB_URL` is `https://afrotransact.com` in every prod pod and identity redirect URIs and CORS follow;
+    verify a sign-in on the storefront, a passkey sign-in (RP id stays `afrotransact.com`, a suffix of every host) and a sign-out round trip.
   - HSTS preload: the zone setting is `max-age` 1 year, `includeSubDomains` and, once `hsts_preload = true` is applied (`infra/cloudflare/envs/prod.tfvars`; it is `false` today), `preload`, so one submission of `afrotransact.com` at
-    hstspreload.org covers `www` and every sub-domain. Submit it only when every sub-domain (including `mail.`, `developers.`, `grafana.`) is HTTPS-only;
+    hstspreload.org covers every sub-domain. Submit it only when every sub-domain (including `developers.` and the dev, uat and trial hosts) is HTTPS-only;
     removal from the preload list takes months. Leave it off until every sub-domain is confirmed HTTPS-only.
-  - Search engines: canonical URLs are `https://www.afrotransact.com/...` (storefront `metadataBase` from `PUBLIC_WEB_URL`), a Search Console property
+  - Search engines: canonical URLs are `https://afrotransact.com/...` (storefront `metadataBase` from `PUBLIC_WEB_URL`), a Search Console property
     is added, and old v1 URLs are covered by redirects where they differ.
-- [ ] `ENGINEERING · Open` CORS and cookies (`Secure`, `HttpOnly`, `SameSite`) checked on the three web apps.
+- [ ] `ENGINEERING · Open` CORS and cookies (`Secure`, `HttpOnly`, `SameSite`) checked on the three web apps. Checked in code: the session cookie `at_session` is host-only (no `Domain`), `Secure`, `HttpOnly`, `SameSite=Lax` and set on the app's own origin (each app proxies `/api/bff`), so the flat hosts need no cookie-domain setting; CORS and CSRF origins are the exact three web origins, never a wildcard.
 - [ ] `ENGINEERING · Open` Security headers and CSP (`docs/engineering/security-headers.md`): identity serves its enforced CSP (check `curl -sI https://auth.<base>/login | grep -i content-security` and a full sign-in in Chrome and Firefox); each web app has run `CSP_MODE=report-only` in uat for 7 days with every `csp.violation` pair fixed, allowed or dismissed, then `CSP_MODE=enforce` in uat for 2 days; prod ran 7 days report-only, then `enforce` set in `web/apps/*/wrangler.jsonc` `env.prod.vars` (date: ____); HSTS 1 y + `includeSubDomains` at the edge (`curl -sI https://www.<base> | grep -i strict-transport`), preload still off; runbook `docs/runbooks/csp-violations-spike.md`.
 - [ ] `ENGINEERING · Open` Rate limits and the WAF ruleset are on for sign-in, checkout and the public APIs.
 - [ ] `OWNER · Open` Penetration test or an equivalent review done for sign-in, payments, uploads and the staff console.
@@ -235,8 +239,11 @@ specifics, a restore drill.
   service pools (one database per service; count them against the plan), failover behaviour is documented. Confirm with Layerbase in writing.
 - [ ] **blocker** `ENGINEERING · Open` **Restore drill**: restore a production-shaped backup into a scratch database, start the services against it, and read an order and a payment
   back. Record the date, the minutes it took and who did it. Repeat monthly in launch quarter.
-- [ ] `ENGINEERING · Open` Valkey, search index (Meilisearch or Elasticsearch) and object-storage (R2, including the KYC bucket) backups or rebuild procedures are known;
-  search can be rebuilt from the databases (`kafka-replay.md`).
+- [ ] `ENGINEERING · Open` Valkey and the search index are rebuilt, not backed up (search can be rebuilt from the databases, `kafka-replay.md`).
+- [ ] **blocker** `ENGINEERING · Open` **Nightly copy of the two R2 buckets (media and kyc-evidence) to Backblaze B2: NOT BUILT.** What exists today is the Postgres dump to B2
+  (`infra/k8s/platform/lean/backup`); nothing copies the R2 objects, so a deleted or overwritten R2 object (including a KYC document) is **not recoverable**.
+  Backlog story **S380 "Nightly copy of the two R2 buckets to Backblaze B2"** (an `rclone` CronJob, bucket-scoped read keys on R2 and a write key on B2, age-encrypting the private bucket). Until it ships the
+  restore drill proves the databases only; enable R2 versioning or object lock on the private bucket if the owner wants a stopgap, and write that decision here.
 - [ ] `ENGINEERING · Open` Kafka retention covers the events consumers need to rebuild state.
 - [ ] `ENGINEERING · Open` Rollback is rehearsed: previous image tags are kept, Flyway migrations are backward compatible for one release.
 - [ ] `OWNER · Open` The v1 database dump and the Stripe inventory are kept encrypted for 30 days, then destroyed (keep the `ledger.*` finance archive).
@@ -252,13 +259,10 @@ specifics, a restore drill.
   account-level privacy / zero-data-retention (ZDR) policy; restrict the allowed providers to those that do not train on
   prompts. Check that `AI_PROVIDER_DATA_COLLECTION` is `deny` (or unset) and `AI_PROVIDER_ZDR` is `true` on ai-gateway in prod. Record the date and who checked:
   ______ (date), ______ (name), re-check every quarter and whenever a model id in `at.ai.routes` changes.
-- [ ] **blocker** `OWNER · Open` **ai-gateway spend cap: 2 US dollars a day, cheapest model** (owner decision). The gateway has per-user and per-feature daily budgets
-  in configuration (`at.ai.budgets` in `java/services/ai-gateway/src/main/resources/application.yml`); I found no single global daily cap, and the
-  shipped feature caps add up to roughly 1,200 US dollars a day. Before launch: (a) `ENGINEERING`: set the prod per-feature caps so they **sum to at
-  most 2 US dollars**, route every task to the cheapest capable model, keep `degrade-on-exceed` on, or add a global daily cap of 2 (story S376);
-  (b) `VENDOR`: set the OpenRouter account credit limit and the prod key's limit to match (for example 60 US dollars a month) so spend cannot exceed
-  it whatever the code does; (c) an alert fires at 50 and 80 percent of the day's cap; (d) the owner names who gets it. Test: exceed the cap in a
-  test and see the degrade then `429 ai.budget-exceeded`.
+- [ ] **blocker** `OWNER · Open` **ai-gateway spend cap: USD 2.00 per UTC day, enforced in code** (owner decision; `docs/runbooks/ai-spend-and-mcp-access.md`). The gateway rejects
+  every call with `429 ai.budget-exceeded` once the day's total reaches `AI_GLOBAL_DAILY_COST_USD=2.00` (and one caller's share at `AI_CALLER_DAILY_COST_USD=0.50`), both pinned in
+  `java/services/ai-gateway/deploy/helm/values-prod.yaml`, on the cheapest model. Still open: (a) `VENDOR`: set a credit limit on the OpenRouter key itself (for example USD 60 a
+  month) as the second, independent guard; (b) an alert at 50 and 80 percent of the day's cap and the owner names who gets it; (c) one test: exceed the cap and see `429`.
 - [ ] **blocker** `OWNER/internal · Open` Data processing agreements are signed with OpenRouter and with each model provider we route to (for example
   Google and OpenAI) if we process EU or UK personal data; the signed copies are filed and the subprocessor list is current.
 - [ ] `OWNER · Open` Support inbox, customer support console and escalation contacts are staffed for launch week.
@@ -269,7 +273,7 @@ specifics, a restore drill.
   and wait for the domain to show **Verified**. Set the production `RESEND_API_KEY` (sending access only) in the secret store. Send a test to Gmail,
   Outlook and Yahoo and check the headers show SPF, DKIM and DMARC pass. Check the From address matches the verified domain. Templates reviewed in every language
   you ship; machine-translated strings were reviewed by a native speaker.
-- [ ] **blocker** `ENGINEERING · Open` **R2 buckets: public versus private.** Product and listing images use the **public** media bucket (custom domain, e.g. `media.<base>`,
+- [ ] **blocker** `ENGINEERING · Open` **R2 buckets: public versus private.** Both are created by `infra/cloudflare` (`afrotransact-<env>-media`, `afrotransact-<env>-kyc-evidence`; `docs/runbooks/r2-buckets.md`). Product and listing images use the **public** media bucket (custom domain `media.afrotransact.com`, `media-<suffix>.afrotransact.com` elsewhere,
   read-only to the world, no listing). Identity and seller **KYC documents** use a **private** bucket: no public access, no custom domain, no
   `r2.dev` URL, access only through the media service with short-lived signed URLs, and the `kyc-document` upload purpose pointed at it
   (`docs/runbooks/selling-approvals.md`; `docs/engineering/cloud-cost.md` says the KYC bucket stays private). Check: fetch a KYC object URL

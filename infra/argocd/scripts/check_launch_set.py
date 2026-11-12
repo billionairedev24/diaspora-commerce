@@ -6,6 +6,7 @@ render_apps.py uses, and compares the service Applications with the expected set
 
   dev          every chart under java/services/* and go/services/*  (26: dev can run everything)
   uat, prod    exactly the 21 launch-set services (launch-set/kustomization.yaml)
+  trial        the same 21 services and the same 5 lean platform Applications as prod (a values overlay of prod)
 
 It also fails when prod (lean) would create an Application for something that must not run there (OpenFGA, cert-manager,
 Kyverno, Rollouts, Prometheus, Loki, Tempo, Elasticsearch, External Secrets).
@@ -68,30 +69,42 @@ def main():
         if svc != expected:
             bad += 1
             print(f"  FAIL [{env}] service Applications differ from the expected set\n    missing: {sorted(set(expected) - set(svc))}\n    extra:   {sorted(set(svc) - set(expected))}")
-        if env in ("prod", "uat"):
+        if env in ("prod", "uat", "trial"):
             leaked = [n for n in NOT_LAUNCHED if n in svc]
             if leaked:
                 bad += 1
                 print(f"  FAIL [{env}] not-launched services got an Application: {leaked}")
-        if env == "prod":
+        if env in ("prod", "trial"):
             if platform != sorted(EXPECTED_PLATFORM_PROD):
                 bad += 1
-                print(f"  FAIL [prod] platform Applications are {platform}, expected {sorted(EXPECTED_PLATFORM_PROD)}")
+                print(f"  FAIL [{env}] platform Applications are {platform}, expected {sorted(EXPECTED_PLATFORM_PROD)}")
             leaked = [p for p in platform if p in FORBIDDEN_PLATFORM]
             if leaked:
                 bad += 1
-                print(f"  FAIL [prod] forbidden platform Applications: {leaked}")
+                print(f"  FAIL [{env}] forbidden platform Applications: {leaked}")
             if pv["argocd"].get("autoSync"):
                 bad += 1
-                print("  FAIL [prod] autoSync must be false (manual sync in prod)")
+                print(f"  FAIL [{env}] autoSync must be false (manual sync in prod and in the trial)")
             if pv.get("cloud") != "ovh":
                 bad += 1
-                print(f"  FAIL [prod] platform-values cloud is {pv.get('cloud')!r}, expected 'ovh'")
+                print(f"  FAIL [{env}] platform-values cloud is {pv.get('cloud')!r}, expected 'ovh'")
+        if env == "trial":
+            g = pv.get("global", {})
+            for key in ("domain", "webHost", "sellerHost", "adminHost", "apiHost", "authHost", "mediaHost"):
+                if not g.get(key):
+                    bad += 1
+                    print(f"  FAIL [trial] global.{key} is not set (the flat hosts, docs/runbooks/ovh-production.md Trial)")
+            for key in ("webHost", "sellerHost", "adminHost", "apiHost", "authHost", "mediaHost"):
+                h, z = str(g.get(key, "")), str(g.get("domain", ""))
+                if h and h != z and (not h.endswith("." + z) or h[: -len(z) - 1].count(".")):
+                    bad += 1
+                    print(f"  FAIL [trial] global.{key} {h!r} must be ONE label under the zone {z!r} (free Cloudflare certificate)")
     if args.require_tags:
         import re
         for env in [e for e in (args.env or ra.ENVS) if e != "dev"]:
             for svc in LAUNCH:
                 chart = next(iter(glob.glob(str(ra.ROOT / f"*/services/{svc}/deploy/helm"))))
+                # prod pins live in values-prod.yaml, trial pins in values-trial.yaml: two files, promoted separately
                 values = yaml.safe_load((pathlib.Path(chart) / f"values-{env}.yaml").read_text()) or {}
                 tag = values.get("image", {}).get("tag", "")
                 if not re.fullmatch(r"[0-9a-f]{40}", str(tag)):

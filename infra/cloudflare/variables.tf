@@ -1,32 +1,14 @@
 variable "environment" {
-  description = "dev | uat | prod"
-  type        = string
-  validation {
-    condition     = contains(["dev", "uat", "prod"], var.environment)
-    error_message = "environment must be dev, uat or prod."
-  }
-}
-
-variable "storefront_host" {
   description = <<-EOT
-    Canonical host of the customer storefront (docs/engineering/environments.md, "Storefront host rule"):
-      www  - www.<base> serves the storefront (DNS record, Workers route) in every environment; <base> gets a proxied
-             placeholder record and a 301 to www.<base> (the zone-wide redirect ruleset, owned by the manage_zone run)
-      apex - explicit opt-out: <base> serves the storefront and nothing redirects
-    Every other app keeps its sub-domain. Keep it equal to global.storefrontHost of infra/argocd/envs/<env>/platform-values.yaml.
+    dev | uat | trial | prod. Every host comes from the map infra/cloudflare/hosts.json (see main.tf): prod is <zone> and <role>.<zone>,
+    any other env is <suffix>.<zone> and <role>-<suffix>.<zone> (Cloudflare's free certificate covers the apex and one label only).
+    trial is the 8-day OVH run of the prod profile (docs/runbooks/ovh-production.md, "Trial"); its suffix is test.
   EOT
   type        = string
-  default     = "www"
   validation {
-    condition     = contains(["www", "apex"], var.storefront_host)
-    error_message = "storefront_host must be www or apex."
+    condition     = contains(["dev", "uat", "trial", "prod"], var.environment)
+    error_message = "environment must be dev, uat, trial or prod."
   }
-}
-
-variable "apex_redirect_environments" {
-  description = "Environments whose base domain (<zone>, dev.<zone>, uat.<zone>) 301-redirects to www.<base>. The redirect ruleset is zone-wide (one per zone and phase), so the manage_zone run owns the rules of all of them; drop an environment here when it sets storefront_host = apex."
-  type        = list(string)
-  default     = ["dev", "uat", "prod"]
 }
 
 variable "account_id" {
@@ -35,9 +17,9 @@ variable "account_id" {
 }
 
 variable "zone_name" {
-  description = "Apex zone."
+  description = "Zone override. Empty (default) = the zone of the environment in infra/cloudflare/hosts.json."
   type        = string
-  default     = "afrotransact.com"
+  default     = ""
 }
 
 variable "manage_zone" {
@@ -48,7 +30,7 @@ variable "manage_zone" {
 
 variable "origin_mode" {
   description = <<-EOT
-    How api./auth. reach the cluster:
+    How the api and auth hosts reach the cluster (trial: always tunnel, there is no load balancer):
       ingress - proxied DNS record to the cluster ingress load balancer (origin_target), Authenticated Origin Pulls
       tunnel  - Cloudflare Tunnel (cloudflared in-cluster); no public load balancer at all
   EOT
@@ -104,12 +86,6 @@ variable "checkout_rate_limit" {
   default = { requests = 30, period = 60, timeout = 300 }
 }
 
-variable "advanced_certificate_environments" {
-  description = "Non-prod environments needing an ACM certificate for *.<env>.<zone> (two-level names are not covered by Universal SSL)."
-  type        = list(string)
-  default     = ["dev", "uat"]
-}
-
 variable "hsts_enabled" {
   description = "Send Strict-Transport-Security from the edge (zone-wide Cloudflare setting, owned by the manage_zone run). Over HTTPS only."
   type        = bool
@@ -131,10 +107,10 @@ variable "hsts_preload" {
 variable "edge_response_header_environments" {
   description = "Environments whose hosts get the edge baseline Referrer-Policy (when the origin sends none). One zone-wide ruleset, owned by the manage_zone run; remove an environment to switch it off there."
   type        = list(string)
-  default     = ["dev", "uat", "prod"]
+  default     = ["dev", "uat", "trial", "prod"]
   validation {
-    condition     = alltrue([for e in var.edge_response_header_environments : contains(["dev", "uat", "prod"], e)])
-    error_message = "edge_response_header_environments may only contain dev, uat, prod."
+    condition     = alltrue([for e in var.edge_response_header_environments : contains(["dev", "uat", "trial", "prod"], e)])
+    error_message = "edge_response_header_environments may only contain dev, uat, trial, prod."
   }
 }
 
@@ -142,4 +118,10 @@ variable "pages_projects_owner" {
   description = "This run creates the account-wide Cloudflare Pages projects (afrotransact-docs, afrotransact-storybook). Exactly one environment sets it (dev, the first one applied); every run attaches its own developers.<base> domain to the docs project."
   type        = bool
   default     = false
+}
+
+variable "developers_enabled" {
+  description = "Attach developers.<host> (the docs portal on Cloudflare Pages) to this environment. false for the trial."
+  type        = bool
+  default     = true
 }

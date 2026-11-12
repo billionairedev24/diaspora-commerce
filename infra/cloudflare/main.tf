@@ -21,37 +21,57 @@ terraform {
 provider "cloudflare" {}
 
 locals {
-  env_prefix = var.environment == "prod" ? "" : "${var.environment}."
-  base       = "${local.env_prefix}${var.zone_name}"
+  # THE host map (infra/cloudflare/hosts.json): the single source of truth for every public hostname, also read by
+  # tools/ci/env_hosts.py and tools/ci/check_env_urls.py. Cloudflare's FREE Universal certificate covers the zone apex and ONE label
+  # below it, so every host is flat:
+  #   prod:  afrotransact.com (storefront)         <role>.afrotransact.com
+  #   other: <suffix>.afrotransact.com (storefront) <role>-<suffix>.afrotransact.com      (suffix: dev | uat | test for the trial)
+  hostmap   = jsondecode(file("${path.module}/hosts.json"))
+  env_cfg   = local.hostmap.envs[var.environment]
+  suffix    = local.env_cfg.suffix
+  zone      = var.zone_name != "" ? var.zone_name : lookup(local.env_cfg, "zone", local.hostmap.zone)
+  all_roles = concat(local.hostmap.roles, local.hostmap.other_roles)
 
-  # Customer storefront host: the apex (<base>) or www.<base>, one explicit setting (variables.tf).
-  storefront_host = var.storefront_host == "www" ? "www.${local.base}" : local.base
+  # role -> host for ONE environment (same formula as tools/ci/env_hosts.py)
+  role_hosts      = { for r in local.all_roles : r => local.suffix == "" ? "${r}.${local.zone}" : "${r}-${local.suffix}.${local.zone}" }
+  storefront_host = local.suffix == "" ? local.zone : "${local.suffix}.${local.zone}"
 
-  # Base domains of the environments whose apex redirects to www.<base> (the manage_zone run owns the ruleset).
-  apex_redirects = {
-    for e in var.apex_redirect_environments :
-    e => e == "prod" ? var.zone_name : "${e}.${var.zone_name}"
-  }
-
-  # Public hostnames for this environment.
+  # Public hostnames for this environment (keys are the names the rest of the module uses).
   hosts = {
-    storefront    = local.storefront_host      # www.afrotransact.com | www.dev.afrotransact.com (apex: <base>)
-    seller-center = "seller.${local.base}"     # seller.afrotransact.com
-    staff-console = "admin.${local.base}"      # admin.afrotransact.com
-    api           = "api.${local.base}"        # gateway-bff (BFF for web + mobile)
-    auth          = "auth.${local.base}"       # identity (Spring Authorization Server)
-    media         = "media.${local.base}"      # R2 public media
-    developers    = "developers.${local.base}" # docs portal (Cloudflare Pages, pages.tf)
+    storefront    = local.storefront_host          # afrotransact.com | dev.afrotransact.com | test.afrotransact.com
+    seller-center = local.role_hosts["seller"]     # seller.afrotransact.com | seller-uat.afrotransact.com
+    staff-console = local.role_hosts["admin"]      # admin.afrotransact.com
+    api           = local.role_hosts["api"]        # gateway-bff (BFF for web + mobile)
+    auth          = local.role_hosts["auth"]       # identity (Spring Authorization Server)
+    media         = local.role_hosts["media"]      # R2 public media
+    developers    = local.role_hosts["developers"] # docs portal (Cloudflare Pages, pages.tf)
   }
   web_apps    = ["storefront", "seller-center", "staff-console"]
   origin_apps = ["api", "auth"]
+
+  # Hosts of EVERY environment (for the zone-wide rules owned by the manage_zone run).
+  env_all_hosts = {
+    for e, cfg in local.hostmap.envs : e => concat(
+      [lookup(cfg, "suffix", "") == "" ? lookup(cfg, "zone", local.hostmap.zone) : "${cfg.suffix}.${lookup(cfg, "zone", local.hostmap.zone)}"],
+      [for r in local.all_roles : lookup(cfg, "suffix", "") == "" ? "${r}.${lookup(cfg, "zone", local.hostmap.zone)}" : "${r}-${cfg.suffix}.${lookup(cfg, "zone", local.hostmap.zone)}"]
+    )
+  }
+
+  # R2 buckets, the ONE source of truth (docs/runbooks/r2-buckets.md, go/services/media/config/prod.yaml): afrotransact-<env>-media
+  # (public, custom domain hosts["media"]) and afrotransact-<env>-kyc-evidence (private: no custom domain, r2.dev off).
+  r2_buckets = {
+    media        = "afrotransact-${var.environment}-media"
+    kyc_evidence = "afrotransact-${var.environment}-kyc-evidence"
+  }
+  # Web origins that may call the private bucket from a browser (presigned PUT into quarantine/): the three web apps.
+  web_origins = [for k in ["storefront", "seller-center", "staff-console"] : "https://${local.hosts[k]}"]
 
   tags = ["env:${var.environment}", "managed-by:opentofu"]
 }
 
 data "cloudflare_zone" "this" {
   filter = {
-    name = var.zone_name
+    name = local.zone
   }
 }
 

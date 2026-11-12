@@ -10,11 +10,15 @@ import (
 
 // Store configures one object store.
 type Store struct {
-	Kind          string `yaml:"kind"` // uploadthing | s3 | azure-blob
-	Name          string `yaml:"name"` // r2 | s3 | gcs | minio (s3 kind)
-	Endpoint      string `yaml:"endpoint"`
-	Region        string `yaml:"region"`
-	Bucket        string `yaml:"bucket"`
+	Kind     string `yaml:"kind"` // uploadthing | s3 | azure-blob
+	Name     string `yaml:"name"` // r2 | s3 | gcs | minio (s3 kind)
+	Endpoint string `yaml:"endpoint"`
+	Region   string `yaml:"region"`
+	Bucket   string `yaml:"bucket"`
+	// BucketEnv names an env var that, when set, replaces Bucket (ResolvedBucket). The 8-day trial runs the prod profile
+	// against its own buckets (afrotransact-trial-media, afrotransact-trial-kyc-evidence): its Helm overlay sets
+	// R2_PUBLIC_BUCKET / R2_PRIVATE_BUCKET; unset, the prod bucket names of config/prod.yaml apply.
+	BucketEnv     string `yaml:"bucketEnv"`
 	PathStyle     bool   `yaml:"pathStyle"`
 	PublicBaseURL string `yaml:"publicBaseUrl"`
 	// PublicBaseURLEnv names an env var that, when set, replaces PublicBaseURL: deployed public stores use
@@ -46,6 +50,16 @@ func (s Store) ResolvedEndpoint(getenv func(string) string) string {
 		}
 	}
 	return s.Endpoint
+}
+
+// ResolvedBucket is the value of BucketEnv when that variable is set and not blank, else Bucket.
+func (s Store) ResolvedBucket(getenv func(string) string) string {
+	if s.BucketEnv != "" {
+		if v := strings.TrimSpace(getenv(s.BucketEnv)); v != "" {
+			return v
+		}
+	}
+	return s.Bucket
 }
 
 // ResolvedPublicBaseURL is the value of PublicBaseURLEnv when that variable is set and not blank, else PublicBaseURL.

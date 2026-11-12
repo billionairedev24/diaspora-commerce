@@ -11,9 +11,9 @@ info:
 servers:
 - url: http://localhost:8105
   description: local
-- url: https://api.dev.afrotransact.com/payments
+- url: https://api-dev.afrotransact.com/payments
   description: dev
-- url: https://api.uat.afrotransact.com/payments
+- url: https://api-uat.afrotransact.com/payments
   description: uat
 - url: https://api.afrotransact.com/payments
   description: prod

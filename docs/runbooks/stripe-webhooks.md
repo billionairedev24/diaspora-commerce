@@ -91,7 +91,7 @@ Both end the same way: you get a URL, an event list and a **Signing secret**.
 ### 4.1 Endpoint 1: platform payments webhook (`STRIPE_WEBHOOK_SECRET`)
 
 URL: `https://api.test.afrotransact.com/payments/v1/webhooks/stripe` (real environments:
-`https://api.<base>/payments/v1/webhooks/stripe`, for example `https://api.dev.afrotransact.com/...`).
+`https://api.<base>/payments/v1/webhooks/stripe`, for example `https://api-dev.afrotransact.com/...`).
 
 | Setting | Value |
 |---|---|

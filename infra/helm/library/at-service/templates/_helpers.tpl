@@ -103,8 +103,9 @@ azure.workload.identity/client-id: {{ required "workloadIdentity.azure.clientId 
 {{- end -}}
 
 {{/*
-Environment-wide public URLs, derived from global.domain (set once per environment in
-infra/argocd/envs/<env>/platform-values.yaml) so no service hard-codes a host:
+Environment-wide public URLs. The four environments (prod, uat, dev, trial) set global.domain (the ZONE) AND the full hosts global.webHost / sellerHost / adminHost / apiHost /
+authHost / mediaHost in infra/argocd/envs/<env>/platform-values.yaml, generated from infra/cloudflare/hosts.json (one label below the zone: Cloudflare's free certificate); the
+legacy derivation below from global.domain alone (and global.storefrontHost www | apex) is kept for the one-server test box (infra/ovh-vps) and plain renders:
   PLATFORM_ENV       .Values.env                      always
   PLATFORM_DOMAIN    <domain>                         dev.afrotransact.com | uat.afrotransact.com | afrotransact.com
   PUBLIC_WEB_URL     https://www.<domain>             storefront (global.storefrontHost: www, the default; the apex 301-redirects to it)
@@ -116,7 +117,10 @@ infra/argocd/envs/<env>/platform-values.yaml) so no service hard-codes a host:
   MEDIA_PUBLIC_URL   https://media.<domain>           public media CDN (R2 custom domain)
 global.sellerHost / global.adminHost (optional, default empty) are FULL host names that replace seller.<domain> / admin.<domain>
 (e.g. seller-test.example.com: one label under the Cloudflare zone, covered by the free certificate); the whole origin
-is then https://<host>. Origin allowlists stay exact: only these origins are derived, never a wildcard.
+is then https://<host>. global.webHost / global.apiHost / global.authHost / global.mediaHost do the same for the storefront (it
+replaces the www | apex rule), the public API, identity and the media CDN: the trial's flat layout is
+test.<zone> / api-test.<zone> / auth-test.<zone> / media-test.<zone> with global.domain = <zone>.
+Origin allowlists stay exact: only these origins are derived, never a wildcard.
 Host names match infra/cloudflare (local.hosts). global.storefrontHost (www | apex, default www) is the one
 switch for the customer storefront's canonical host; every other app keeps its sub-domain. global.urls.<NAME> overrides one derived value for the whole
 environment; a service's own extraEnv.<NAME> wins over both (the derived entry is then not rendered, so a name
@@ -133,7 +137,11 @@ services fall back to their config/<env>.yaml / application-<env>.yml values.
 {{- end -}}
 {{- $sellerHost := trim (toString ($g.sellerHost | default "")) -}}
 {{- $adminHost := trim (toString ($g.adminHost | default "")) -}}
-{{- range $k, $h := (dict "sellerHost" $sellerHost "adminHost" $adminHost) -}}
+{{- $webHost := trim (toString ($g.webHost | default "")) -}}
+{{- $apiHost := trim (toString ($g.apiHost | default "")) -}}
+{{- $authHost := trim (toString ($g.authHost | default "")) -}}
+{{- $mediaHost := trim (toString ($g.mediaHost | default "")) -}}
+{{- range $k, $h := (dict "sellerHost" $sellerHost "adminHost" $adminHost "webHost" $webHost "apiHost" $apiHost "authHost" $authHost "mediaHost" $mediaHost) -}}
 {{- if and $h (not (regexMatch "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}$" $h)) -}}
 {{- fail (printf "at-service: global.%s %q must be a full lower-case host name such as seller-test.example.com (no scheme, port, path or wildcard)" $k $h) -}}
 {{- end -}}
@@ -145,11 +153,14 @@ services fall back to their config/<env>.yaml / application-<env>.yml values.
 {{- end -}}
 {{- $_ := set $vars "PLATFORM_DOMAIN" $domain -}}
 {{- $_ := set $vars "PUBLIC_WEB_URL" (ternary (printf "https://www.%s" $domain) (printf "https://%s" $domain) (eq $storefrontHost "www")) -}}
+{{- if $webHost -}}
+{{- $_ := set $vars "PUBLIC_WEB_URL" (printf "https://%s" $webHost) -}}
+{{- end -}}
 {{- $_ := set $vars "SELLER_CENTER_URL" (printf "https://%s" (default (printf "seller.%s" $domain) $sellerHost)) -}}
 {{- $_ := set $vars "STAFF_CONSOLE_URL" (printf "https://%s" (default (printf "admin.%s" $domain) $adminHost)) -}}
-{{- $_ := set $vars "API_BASE_URL" (printf "https://api.%s" $domain) -}}
-{{- $_ := set $vars "AUTH_ISSUER_URL" (printf "https://auth.%s" $domain) -}}
-{{- $_ := set $vars "MEDIA_PUBLIC_URL" (printf "https://media.%s" $domain) -}}
+{{- $_ := set $vars "API_BASE_URL" (printf "https://%s" (default (printf "api.%s" $domain) $apiHost)) -}}
+{{- $_ := set $vars "AUTH_ISSUER_URL" (printf "https://%s" (default (printf "auth.%s" $domain) $authHost)) -}}
+{{- $_ := set $vars "MEDIA_PUBLIC_URL" (printf "https://%s" (default (printf "media.%s" $domain) $mediaHost)) -}}
 {{- end -}}
 {{- range $k, $v := ($g.urls | default dict) -}}
 {{- $_ := set $vars $k (toString $v) -}}

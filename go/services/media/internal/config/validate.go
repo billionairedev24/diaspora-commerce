@@ -56,7 +56,7 @@ func (c Config) Validate(env string, getenv func(string) string) error {
 		} else if u, err := url.Parse(public); err != nil || u.Scheme != "https" {
 			fail("public store %s: public URL must be https", name)
 		}
-		publicBuckets = append(publicBuckets, st.Bucket)
+		publicBuckets = append(publicBuckets, st.ResolvedBucket(getenv))
 		publicKeys = append(publicKeys, st.AccessKeyEnv)
 	}
 	for _, p := range privatePurposes {
@@ -68,7 +68,7 @@ func (c Config) Validate(env string, getenv func(string) string) error {
 		if st.PublicBaseURL != "" || st.PublicBaseURLEnv != "" {
 			fail("private purpose %s uses store %s that has a public URL", p, name)
 		}
-		privateBuckets = append(privateBuckets, st.Bucket)
+		privateBuckets = append(privateBuckets, st.ResolvedBucket(getenv))
 		privateKeys = append(privateKeys, st.AccessKeyEnv)
 	}
 	if c.QuarantineStore == "" {
@@ -77,7 +77,7 @@ func (c Config) Validate(env string, getenv func(string) string) error {
 		fail("quarantineStore refers to unknown store %s", c.QuarantineStore)
 	} else {
 		used[c.QuarantineStore] = true
-		if st.PublicBaseURL != "" || st.PublicBaseURLEnv != "" || slices.Contains(publicBuckets, st.Bucket) ||
+		if st.PublicBaseURL != "" || st.PublicBaseURLEnv != "" || slices.Contains(publicBuckets, st.ResolvedBucket(getenv)) ||
 			slices.Contains(publicKeys, st.AccessKeyEnv) {
 			fail("quarantineStore %s must be a private store with its own bucket and credential", c.QuarantineStore)
 		}
@@ -116,8 +116,8 @@ func validateR2Store(name string, st Store, getenv func(string) string) []error 
 	if st.PathStyle {
 		fail("store %s: pathStyle is for MinIO, not R2", name)
 	}
-	if st.Bucket == "" || strings.Contains(strings.ToLower(st.Bucket), "minio") {
-		fail("store %s: bucket %q is not a prod bucket", name, st.Bucket)
+	if bucket := st.ResolvedBucket(getenv); bucket == "" || strings.Contains(strings.ToLower(bucket), "minio") {
+		fail("store %s: bucket %q is not a prod bucket", name, bucket)
 	}
 	ep := st.ResolvedEndpoint(getenv)
 	u, err := url.Parse(ep)

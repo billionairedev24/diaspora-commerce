@@ -131,10 +131,10 @@ describe('violation reports', () => {
   it('reduces a legacy report to a compact line without query strings or samples', () => {
     const lines = violationLines('storefront', {
       'csp-report': {
-        'document-uri': 'https://www.afrotransact.com/s?q=secret&email=a@b.c#frag',
+        'document-uri': 'https://afrotransact.com/s?q=secret&email=a@b.c#frag',
         'effective-directive': 'script-src-elem',
         'blocked-uri': 'https://evil.test/x.js?token=1',
-        'source-file': 'https://www.afrotransact.com/_next/static/a.js?v=2',
+        'source-file': 'https://afrotransact.com/_next/static/a.js?v=2',
         'line-number': 10,
         'column-number': 4,
         'script-sample': 'alert("pii")',
@@ -150,7 +150,7 @@ describe('violation reports', () => {
         disposition: 'report',
         blocked: 'https://evil.test',
         page: '/s',
-        source: 'https://www.afrotransact.com/_next/static/a.js',
+        source: 'https://afrotransact.com/_next/static/a.js',
         line: 10,
         column: 4
       }

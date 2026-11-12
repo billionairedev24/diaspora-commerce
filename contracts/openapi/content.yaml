@@ -14,9 +14,9 @@ info:
 servers:
 - url: http://localhost:8112
   description: local
-- url: https://api.dev.afrotransact.com/content
+- url: https://api-dev.afrotransact.com/content
   description: dev
-- url: https://api.uat.afrotransact.com/content
+- url: https://api-uat.afrotransact.com/content
   description: uat
 - url: https://api.afrotransact.com/content
   description: prod

@@ -111,3 +111,29 @@ func TestProdYamlNeverSelectsUploadThingOrMinio(t *testing.T) {
 		}
 	}
 }
+
+// The 8-day trial runs the prod profile against its own buckets (docs/runbooks/r2-buckets.md): R2_PUBLIC_BUCKET and
+// R2_PRIVATE_BUCKET replace the prod names, and the public and private bucket still must differ.
+func TestTrialBucketsOverrideTheProdNames(t *testing.T) {
+	c := loadEnv(t, pkgconfig.EnvProd)
+	env := prodEnv()
+	env["R2_PUBLIC_BUCKET"] = "afrotransact-trial-media"
+	env["R2_PRIVATE_BUCKET"] = "afrotransact-trial-kyc-evidence"
+	if err := c.Validate(pkgconfig.EnvProd, lookup(env)); err != nil {
+		t.Fatalf("trial buckets refused: %v", err)
+	}
+	r2, priv := c.Stores["r2"], c.Stores["private"]
+	if got := r2.ResolvedBucket(lookup(env)); got != "afrotransact-trial-media" {
+		t.Errorf("public bucket = %q", got)
+	}
+	if got := priv.ResolvedBucket(lookup(env)); got != "afrotransact-trial-kyc-evidence" {
+		t.Errorf("private bucket = %q", got)
+	}
+	if got := r2.ResolvedBucket(lookup(prodEnv())); got != "afrotransact-prod-media" {
+		t.Errorf("without the override the prod bucket applies, got %q", got)
+	}
+	env["R2_PRIVATE_BUCKET"] = "afrotransact-trial-media"
+	if err := c.Validate(pkgconfig.EnvProd, lookup(env)); err == nil {
+		t.Error("the private bucket must not equal the public bucket")
+	}
+}

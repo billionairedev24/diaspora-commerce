@@ -9,9 +9,9 @@ info:
 servers:
 - url: http://localhost:8101
   description: local
-- url: https://api.dev.afrotransact.com/catalog
+- url: https://api-dev.afrotransact.com/catalog
   description: dev
-- url: https://api.uat.afrotransact.com/catalog
+- url: https://api-uat.afrotransact.com/catalog
   description: uat
 - url: https://api.afrotransact.com/catalog
   description: prod

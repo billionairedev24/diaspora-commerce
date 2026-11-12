@@ -5,7 +5,7 @@
 port: 8080
 docsEnabled: true
 # Public API base (shared API_BASE_URL, injected by the Helm library); publicBaseUrl defaults to <apiBaseUrl>/notifications.
-apiBaseUrl: https://api.uat.afrotransact.com
+apiBaseUrl: https://api-uat.afrotransact.com
 database:
   url: ""
   migrate: true
@@ -55,18 +55,18 @@ identity:
 attachments:
   enabled: true
   mediaBaseUrl: http://media
-  mediaPublicUrl: https://media.uat.afrotransact.com
+  mediaPublicUrl: https://media-uat.afrotransact.com
   allowedHosts: [afrotransact-uat-kyc-evidence.s3.us-east-1.amazonaws.com]
   maxBytes: 10485760
   maxTotalBytes: 20971520
   timeout: 10s
 # Shared PUBLIC_WEB_URL / SELLER_CENTER_URL (Helm library); Provider Hub is the Seller Center app.
 links:
-  storefront: https://www.uat.afrotransact.com
-  sellerCenter: https://seller.uat.afrotransact.com
+  storefront: https://uat.afrotransact.com
+  sellerCenter: https://seller-uat.afrotransact.com
 auth:
   enabled: true
-  issuer: https://auth.uat.afrotransact.com
+  issuer: https://auth-uat.afrotransact.com
   audience: notifications
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
@@ -100,9 +100,9 @@ breaker:
 quietHours: {start: "21:00", end: "08:00"}
 marketTimeZones: {us: America/New_York, ca: America/Toronto, uk: Europe/London}
 email:
-  from: AfroTransact <no-reply@mail.uat.afrotransact.com>
+  from: AfroTransact <no-reply@afrotransact.com>
   replyTo: support@afrotransact.com
-  unsubscribeMailto: unsubscribe@mail.uat.afrotransact.com
+  unsubscribeMailto: unsubscribe@afrotransact.com
 webhooks:
   verify: true
 smsCompliance:

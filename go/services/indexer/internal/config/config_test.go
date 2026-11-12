@@ -24,8 +24,8 @@ func TestSellerDirectoryTokenURL(t *testing.T) {
 		t.Fatalf("local runs without a token, got %q", got)
 	}
 	want := map[string]string{
-		pkgconfig.EnvDev:  "https://auth.dev.afrotransact.com/oauth2/token",
-		pkgconfig.EnvUAT:  "https://auth.uat.afrotransact.com/oauth2/token",
+		pkgconfig.EnvDev:  "https://auth-dev.afrotransact.com/oauth2/token",
+		pkgconfig.EnvUAT:  "https://auth-uat.afrotransact.com/oauth2/token",
 		pkgconfig.EnvProd: "https://auth.afrotransact.com/oauth2/token",
 	}
 	for env, w := range want {

@@ -1,0 +1,18 @@
+# Root "app of apps" for the 8-day trial. Apply once per trial cluster after installing Argo CD:
+#   kubectl apply -n argocd -f infra/argocd/bootstrap/root-trial.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-trial
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+    targetRevision: HEAD
+    path: infra/argocd/envs/trial
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  # trial: manual, like prod. Sync the root (and then each app) after review: argocd app sync root-trial

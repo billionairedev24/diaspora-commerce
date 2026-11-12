@@ -10,9 +10,9 @@ info:
 servers:
 - url: http://localhost:8100
   description: local
-- url: https://api.dev.afrotransact.com/identity
+- url: https://api-dev.afrotransact.com/identity
   description: dev
-- url: https://api.uat.afrotransact.com/identity
+- url: https://api-uat.afrotransact.com/identity
   description: uat
 - url: https://api.afrotransact.com/identity
   description: prod

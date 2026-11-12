@@ -11,9 +11,9 @@ info:
 servers:
 - url: http://localhost:8111
   description: local
-- url: https://api.dev.afrotransact.com/tax-returns
+- url: https://api-dev.afrotransact.com/tax-returns
   description: dev
-- url: https://api.uat.afrotransact.com/tax-returns
+- url: https://api-uat.afrotransact.com/tax-returns
   description: uat
 - url: https://api.afrotransact.com/tax-returns
   description: prod

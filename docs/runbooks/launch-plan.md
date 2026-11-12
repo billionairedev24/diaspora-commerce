@@ -53,7 +53,7 @@ build machine (no Docker, no live Stripe, Kafka, Elasticsearch, browsers or devi
 | OpenRouter: logging and training off, ZDR policy, DPAs | you | checklist items in production-readiness section 10 |
 | Sales tax: registrations in each launch state, remittance process (S318/S319 tools), marketplace facilitator position | you + accountant | |
 | Carriers: production accounts and rates after sandbox passes (S204) | you | |
-| Domains, DNS, Cloudflare, email addresses named in the legal text | you | storefront is `https://www.<base>` in every environment (prod `https://www.afrotransact.com`) and the base domain 301-redirects to it ("Storefront host rule", `docs/engineering/environments.md`): `storefront_host = "www"` in `infra/cloudflare/envs/prod.tfvars`, `global.storefrontHost: www` in the prod platform values, HSTS preload submitted for the apex, associated-domains / `apple-app-site-association` / `assetlinks.json` served at `www.` |
+| Domains, DNS, Cloudflare, email addresses named in the legal text | you | storefront is the apex `https://afrotransact.com` in prod and `https://<suffix>.afrotransact.com` elsewhere, every host one label below the zone (`infra/cloudflare/hosts.json`) (host rule, `docs/engineering/environments.md`; no `www.` and no redirect), the generated `global.*Host` values in the prod platform values, HSTS preload submitted for the apex, associated-domains / `apple-app-site-association` / `assetlinks.json` served at the apex |
 
 ## Phase 4: hardening before real money
 

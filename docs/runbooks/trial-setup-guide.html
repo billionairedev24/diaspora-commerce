@@ -194,13 +194,16 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
   var DECISIONS = [
     ["Cluster", "OVH Managed Kubernetes free plan, one b3-16 node, OVH US us-east-va (US entity)"],
     ["Postgres", "Layerbase, PostGIS yes, 19 databases, written questions first"],
-    ["Edge", "Cloudflare Tunnel, no load balancer; web apps on Cloudflare Workers"],
-    ["Images", "Cloudflare R2, two buckets (public media, private evidence)"],
-    ["Backups", "Backblaze B2, free tier, age-encrypted, never R2"],
-    ["Email", "Resend (DNS already done)"],
-    ["Monitoring", "Grafana Cloud stack afrotransact.grafana.net, US East, one stack, label env=trial or env=prod"],
+    ["Profile", "The trial is the PROD profile as a values overlay (Argo CD environment trial, values-trial.yaml per chart): APP_ENV=prod, the seed guard still refuses demo data"],
+    ["Hosts", "Flat, one label under the zone (free Cloudflare certificate): test.afrotransact.com, seller-test., admin-test., api-test., auth-test., media-test.afrotransact.com. One map for every environment: infra/cloudflare/hosts.json"],
+    ["Edge", "Cloudflare Tunnel, no load balancer, no Authenticated Origin Pulls; web apps on Cloudflare Workers (workflow trial); mcp private; no public Grafana"],
+    ["Images", "Cloudflare R2, two buckets created by infra/cloudflare: afrotransact-trial-media (public) and afrotransact-trial-kyc-evidence (private)"],
+    ["Backups", "Backblaze B2 afrotransact-trial-backups, free tier, age-encrypted, never R2. The R2 buckets themselves are NOT copied yet (story S380)"],
+    ["Email", "Resend, bare domain afrotransact.com already verified: sender no-reply@afrotransact.com in every environment"],
+    ["Monitoring", "Grafana Cloud stack afrotransact.grafana.net, US East, one stack, label env=trial (prod: env=prod)"],
     ["Payments", "Stripe, same account. Webhooks created fresh, v1 deleted at the freeze. Connect account shape: open"],
-    ["AI", "Cap USD 2 a day, MCP private with auth"],
+    ["AI", "Cap USD 2 per UTC day, enforced in code (USD 0.50 per caller); MCP private with auth"],
+    ["Payments in the trial", "Stripe TEST mode only"],
     ["Product", "No sign-up gate, no native apps (installable web app), 21 launch services, promise off, FGA off"],
     ["Secrets and deploy", "SOPS and age; Argo CD with manual sync"],
     ["Credits", "OVH and Layerbase credit applications happen after launch"],
@@ -210,15 +213,15 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
   var PROD = [
     "Stripe live keys and live webhooks (v1 endpoints deleted at the freeze), not test mode",
     "Real OVH project: not disposable, monthly node billing, deletion protection, 7-year KYC lock",
-    "The real domain, and the trial domain and hosts are gone",
+    "Production hosts afrotransact.com, seller., admin., api., auth., media.; the -test hosts and the trial are torn down",
     "Fresh secrets only: new STATE_DIR, new age keys, never reuse trial values",
     "GRAFANA_ENV=prod: only env=prod alerts reach the on-call mailbox",
     "New R2 buckets or tokens with no expiry (trial tokens expire in 10 days)",
-    "New Resend key, webhook and sender on the production mail domain",
+    "New Resend key and webhook; the sender stays no-reply@afrotransact.com",
     "Backups: prod bucket afrotransact-prod-backups, retention 14 days (7 allowed), restore drill monthly",
     "Images pinned by the promote workflow with prod reviewers approving",
     "A real small payment, a refund and a payout test instead of test cards",
-    "CSP report-only for 7 days, then enforce; apex redirects to www",
+    "CSP report-only for 7 days, then enforce; the storefront is the apex afrotransact.com (hosts: seller., admin., api., auth., media.)",
     "Layerbase and OVH quotes in writing, monthly budget set from the real quote",
     "OpenRouter key limit set by you, privacy settings recorded with a date",
     "No seed data and no *.test users anywhere"
@@ -249,22 +252,24 @@ python3 -c "import yaml; print('pyyaml ok')"`)],
       fail: "Install the missing tool and run the block again. A psql older than 17 can fail to read the dumps." },
 
     { id: "0-gate", t: "Run the offline launch-set gate", who: "agent",
-      do: ["This works with no cloud account. It proves the repository produces exactly the 21 launch services plus 5 platform Applications for prod."],
+      do: ["This works with no cloud account. It proves the repository produces exactly the 21 launch services plus 5 platform Applications for prod and for the trial, and that every hostname agrees with the single map."],
       cmds: [c("From the repository root", String.raw`python3 infra/argocd/scripts/check_launch_set.py
-python3 infra/argocd/scripts/render_apps.py --env prod --no-crd-schemas`)],
-      ok: "The first command ends with OK and shows 21 services and 5 platform Applications for prod.",
+python3 infra/argocd/scripts/render_apps.py --env trial --no-crd-schemas
+python3 tools/ci/env_hosts.py check
+python3 tools/ci/check_env_urls.py`)],
+      ok: "The first command ends with OK and shows 21 services and 5 platform Applications for trial and for prod. env_hosts prints the host table (every host one label under the zone).",
       fail: "Do not continue. A mismatch means the repository and the runbook disagree: tell the agent to fix the launch set first." },
 
-    { id: "0-names", t: "Choose the trial names and write them down", who: "owner",
+    { id: "0-names", t: "Write down the trial names (nothing to choose)", who: "owner",
       do: [
-        "<code>&lt;domain&gt;</code>: the trial domain. Use a registered domain that is a zone on your Cloudflare account, so every host is one label under it (<code>api.&lt;domain&gt;</code>, <code>auth.&lt;domain&gt;</code>, <code>media.&lt;domain&gt;</code>). [[check]] Cloudflare's free certificate covers the apex and one label only, so a name like <code>api.trial.afrotransact.com</code> has no free certificate while it is proxied.",
-        "<code>&lt;mail-domain&gt;</code>: the sending domain where your Resend DNS is already verified. The sender address in the trial must be on it.",
-        "OVH project name <code>afrotransact-trial</code>, state key <code>prod-trial</code>, Grafana label <code>env=trial</code>, B2 bucket <code>afrotransact-trial-backups</code>.",
+        "<b>Zone:</b> <code>afrotransact.com</code>, the real zone, on your Cloudflare account. The trial uses flat hosts, each ONE label under it, because Cloudflare's free certificate covers the apex and one label only: <code>test.afrotransact.com</code> (storefront), <code>seller-test.</code>, <code>admin-test.</code>, <code>api-test.</code>, <code>auth-test.</code> and <code>media-test.afrotransact.com</code>. They come from one map for all environments, <code>infra/cloudflare/hosts.json</code> (prod: afrotransact.com and <code>seller.</code>, <code>admin.</code>, <code>api.</code>, <code>auth.</code>, <code>media.</code>; uat and dev: <code>uat.</code> / <code>dev.afrotransact.com</code> and <code>seller-uat.</code> ...). The trial never touches the apex, which is production's storefront.",
+        "<b>Mail:</b> Resend verified the bare domain <code>afrotransact.com</code>. The sender is <code>no-reply@afrotransact.com</code> everywhere, trial included. There is no mail sub-domain.",
+        "OVH project name <code>afrotransact-trial</code>, state key <code>prod-trial</code>, Grafana label <code>env=trial</code>, B2 bucket <code>afrotransact-trial-backups</code>, R2 buckets <code>afrotransact-trial-media</code> and <code>afrotransact-trial-kyc-evidence</code>, GitHub environment <code>trial</code>.",
         "Keep a note with these names open for the whole trial."
       ],
       ok: "You have one note that lists every name above.",
-      fail: "If you cannot use a separate domain, ask the agent to choose flat host names (for example <code>api-trial.&lt;zone&gt;</code>) before you create any DNS." ,
-      unv: "Which name your existing Resend DNS covers is not recorded in the repository. Resend runbook assumes mail.trial.<zone>." },
+      fail: "If you ever want another zone for the trial, tell the agent: it runs python3 tools/ci/env_hosts.py set-trial-zone and the check, before any DNS exists.",
+      unv: "Whether Cloudflare's free plan limits apply to this account (Workers, rules): read them on the plan page." },
 
     { id: "0-people", t: "Create the two operator keys and two logins", who: "owner",
       do: ["Production needs two people able to operate: two age keys and two OVH users. In the trial, create both so the recovery path is rehearsed. If you are alone, the second person is a second key kept on a different device."],
@@ -316,44 +321,43 @@ export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...`)],
 
     { id: "1-cf-zone", t: "Cloudflare: account, zone and zone settings", who: "owner",
       do: [
-        "Sign up, turn on two-factor sign-in, add <code>&lt;domain&gt;</code> on the Free plan and move its nameservers at the registrar. Wait for the zone to show Active.",
+        "Sign in, turn on two-factor sign-in and confirm <code>afrotransact.com</code> is a zone on the Free plan and Active (it already serves Resend's DNS).",
         "SSL/TLS: mode Full (strict), Always Use HTTPS on. Rules > Settings > Managed Transforms: turn on Add visitor location headers (the home page uses them). [[check]]",
-        "Delete any old A, AAAA or CNAME on the bare domain, www, seller and admin: Workers custom domains refuse to overwrite them."
+        "Do not touch the bare apex: it is production's storefront. Make sure there is no old A, AAAA or CNAME record named <code>test</code>, <code>seller-test</code>, <code>admin-test</code>, <code>api-test</code>, <code>auth-test</code> or <code>media-test</code>: tofu creates those and refuses to overwrite."
       ],
       urls: [["Cloudflare dashboard", "https://dash.cloudflare.com"]],
-      sec: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE"],
+      sec: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE (= afrotransact.com)"],
       ok: "The zone is Active, SSL mode is Full (strict), and the Account ID (Workers & Pages, right column) is copied.",
-      fail: "Zone stuck Pending: nameservers not changed or not propagated yet, wait and press Check nameservers.",
-      prod: "The real afrotransact.com zone, with HSTS, WAF and rate limits from infra/cloudflare (manage_zone = true).",
+      fail: "A name already exists: delete that one record, then apply again.",
+      prod: "Same zone. The zone-wide HSTS, WAF and rate limits are owned by the prod run of infra/cloudflare (manage_zone = true); the trial run does not own them, and the staff-console challenge already covers admin-test.",
       unv: "Menu names in the Cloudflare dashboard." },
 
-    { id: "1-cf-r2", t: "Cloudflare R2: two buckets, custom domain, CORS, two tokens", who: "owner",
+    { id: "1-cf-r2", t: "Cloudflare R2: enable it, CORS and two tokens (tofu makes the buckets)", who: "owner",
       do: [
-        "R2 object storage > Overview: enable R2 (a payment method is needed) and copy the Account ID.",
-        "Create the public bucket <code>afrotransact-prod-media</code> and the private bucket <code>afrotransact-prod-kyc-evidence</code> in the trial account. Location Automatic. In each bucket Settings confirm r2.dev subdomain is Disabled. The bucket names are fixed by the prod config, so the trial account must be a separate Cloudflare account, or you delete them at teardown.",
-        "Public bucket > Settings > Custom Domains > Add <code>media.&lt;domain&gt;</code>. Wait for Active. Do not add a domain to the private bucket.",
-        "Private bucket > Settings > CORS Policy > JSON: allow the trial web origins with methods PUT, GET, HEAD, headers *, expose ETag, max age 3600. Never use * as an origin.",
-        "Create two Account API tokens, Object Read and Write, one per bucket only: <code>media-trial-public</code> and <code>media-trial-private</code>. TTL 10 days. Copy each Access Key ID and Secret now, they show once."
+        "R2 object storage > Overview: enable R2 (a payment method is needed) and copy the Account ID. This is the only place the buckets are defined: <b>infra/cloudflare creates both</b> (step 3.6), so do not create them by hand. The names are <code>afrotransact-trial-media</code> (public, custom domain <code>media-test.afrotransact.com</code>) and <code>afrotransact-trial-kyc-evidence</code> (private, no domain, r2.dev off).",
+        "After step 3.6: private bucket > Settings > CORS Policy > JSON: the origins are the output of <code>tofu output web_origins</code> (the three trial web hosts), methods PUT, GET, HEAD, headers *, expose ETag, max age 3600. Never use * as an origin. The module does not manage CORS.",
+        "Create two Account API tokens, Object Read and Write, one per bucket only: <code>media-trial-public</code> and <code>media-trial-private</code>. TTL 10 days. Copy each Access Key ID and Secret now, they show once.",
+        "The media service finds the trial bucket names in values-trial.yaml (R2_PUBLIC_BUCKET, R2_PRIVATE_BUCKET); you set nothing for them."
       ],
       urls: [["R2 overview", "https://dash.cloudflare.com/?to=/:account/r2/overview"]],
-      sec: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PRIVATE_ACCESS_KEY_ID", "R2_PRIVATE_SECRET_ACCESS_KEY", "MEDIA_PUBLIC_URL"],
-      cmds: [c("CORS JSON for the private bucket (replace the origins)", String.raw`[
+      sec: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PRIVATE_ACCESS_KEY_ID", "R2_PRIVATE_SECRET_ACCESS_KEY"],
+      cmds: [c("CORS JSON for the private bucket", String.raw`[
   {
-    "AllowedOrigins": ["https://www.<domain>", "https://seller.<domain>", "https://admin.<domain>"],
+    "AllowedOrigins": ["https://test.afrotransact.com", "https://seller-test.afrotransact.com", "https://admin-test.afrotransact.com"],
     "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3600
   }
 ]`)],
-      ok: "Two buckets exist, media.<domain> shows Active, two tokens exist with different access keys. The media service refuses to start in prod if the two stores share a credential, so they must differ.",
-      fail: "A CORS error in the browser during upload means the web origin is missing from the private bucket policy. A token that can read both buckets is wrong: delete it and create one per bucket.",
-      prod: "Fresh buckets and tokens with no expiry (rotation reminder every 6 months). Never reuse the trial tokens.",
-      unv: "R2 free tier size (10 GB assumed) and whether the private bucket can hold a retention lock." },
+      ok: "Two buckets exist (after 3.6), media-test.afrotransact.com shows Active, two tokens exist with different access keys. The media service refuses to start in prod if the two stores share a credential or a bucket, so they must differ.",
+      fail: "A CORS error in the browser during upload means a web origin is missing from the private bucket policy. A token that can read both buckets is wrong: delete it and create one per bucket.",
+      prod: "afrotransact-prod-media and afrotransact-prod-kyc-evidence from the prod run, tokens with no expiry (rotation reminder every 6 months). Never reuse the trial tokens.",
+      unv: "R2 free tier size (10 GB assumed), whether the private bucket can hold a retention lock, and that there is no nightly copy of either bucket to B2 yet (story S380): a deleted object is gone." },
 
     { id: "1-cf-token", t: "Cloudflare: API token for tofu, Tunnel and Workers", who: "owner",
       do: [
-        "Profile > API Tokens > Create Custom Token. Scopes: Account Workers Scripts Edit, Account Settings Read, Zone Workers Routes Edit, Zone DNS Edit, Zone Read. infra/cloudflare also needs Zone WAF/SSL/Settings, and Account Turnstile, R2, Tunnel and Lists. Limit Zone Resources to <code>&lt;domain&gt;</code>. [[check]]",
+        "Profile > API Tokens > Create Custom Token. Scopes: Account Workers Scripts Edit, Account Settings Read, Zone Workers Routes Edit, Zone DNS Edit, Zone Read. infra/cloudflare also needs Zone WAF/SSL/Settings, and Account Turnstile, R2, Tunnel and Lists. Limit Zone Resources to <code>afrotransact.com</code>. [[check]]",
         "Check the Workers plan: the apps may exceed the free Workers size limit. If the first deploy says the Worker is too large, upgrade to Workers Paid (about 5 USD a month). [[check]]"
       ],
       sec: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE", "CLOUDFLARED_TUNNEL_TOKEN", "TURNSTILE secrets (sign-in, sign-up, checkout)"],
@@ -386,16 +390,16 @@ rclone delete "$B/_test" --s3-no-check-bucket`)],
 
     { id: "1-resend", t: "Resend: domain check, sending key and webhook", who: "owner",
       do: [
-        "Your DNS is done. Confirm in Resend > Domains that <code>&lt;mail-domain&gt;</code> shows Verified, and that Click tracking and Open tracking are off.",
-        "API Keys > Create API Key: name <code>notifications-trial</code>, permission Sending access, domain <code>&lt;mail-domain&gt;</code> only, never Full access. Copy the <code>re_...</code> value once.",
-        "Webhooks > Add Webhook: URL <code>https://api.&lt;domain&gt;/notifications/v1/webhooks/resend</code>, events email.delivered, email.bounced, email.complained. Copy the Signing Secret <code>whsec_...</code>. Notifications refuses to start in prod without both values. [[check]]",
-        "The trial sender must be on the verified domain: set <code>EMAIL_FROM</code> and <code>EMAIL_UNSUBSCRIBE_MAILTO</code> for the trial. Do not email real customers; use your own mailboxes and resend.dev test addresses."
+        "Resend already verified the bare domain <code>afrotransact.com</code> and its DNS is done: confirm in Resend > Domains that it shows Verified, and that Click tracking and Open tracking are off. There is no mail sub-domain and nothing to override: the sender is <code>no-reply@afrotransact.com</code> in the trial too.",
+        "API Keys > Create API Key: name <code>notifications-trial</code>, permission Sending access, domain <code>afrotransact.com</code> only, never Full access. Copy the <code>re_...</code> value once.",
+        "Webhooks > Add Webhook: URL <code>https://api-test.afrotransact.com/notifications/v1/webhooks/resend</code>, events email.delivered, email.bounced, email.complained. Copy the Signing Secret <code>whsec_...</code>. Notifications refuses to start in prod without both values. [[check]]",
+        "Do not email real customers; use your own mailboxes and resend.dev test addresses."
       ],
       urls: [["Resend", "https://resend.com"]],
-      sec: ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "UNSUBSCRIBE_SIGNING_KEY (generated by secrets.sh)", "EMAIL_FROM (optional)"],
+      sec: ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "UNSUBSCRIBE_SIGNING_KEY (generated by secrets.sh, you never type it)"],
       ok: "Domain Verified, key and webhook secret saved. The webhook test event is answered 200 later, in step 6.2.",
-      fail: "A webhook secret that is wrong shows 401 in the delivery log. Unverified domain: re-check the three DNS records are DNS only (grey cloud).",
-      prod: "Production mail domain and a new key and webhook. DMARC moves from p=none to p=quarantine after two clean weeks.",
+      fail: "A webhook secret that is wrong shows 401 in the delivery log. Unverified domain: re-check the DNS records are DNS only (grey cloud).",
+      prod: "A new key and a new webhook at https://api.afrotransact.com/...; the domain and sender are the same. DMARC moves from p=none to p=quarantine after two clean weeks.",
       unv: "Resend free daily and monthly limits, whether the webhook can be saved before the URL answers." },
 
     { id: "1-grafana", t: "Grafana Cloud: endpoints, users and scoped tokens", who: "owner",
@@ -404,10 +408,10 @@ rclone delete "$B/_test" --s3-no-check-bucket`)],
         "Connections > Hosted Prometheus metrics > Send metrics: copy the remote write URL and the numeric Username or Instance ID. Connections > Hosted logs: copy the URL and the other numeric user. Also note the query base URL (the remote write URL without <code>/api/prom/push</code>).",
         "Administration > Cloud access policies: create <code>afrotransact-alloy-trial</code> (scopes metrics:write and logs:write only, realm this stack only) and add a token with an expiry. Create <code>afrotransact-rules-deploy</code> (rules:read, rules:write) for your laptop only.",
         "Administration > Users and access > Service accounts: <code>afrotransact-dashboards</code>, role Editor, with a token.",
-        "Traces: you also need the OTLP gateway endpoint, instance id and a traces:write token. The runbook calls this the existing OTLP credential and does not say how to create it. [[check]]"
+        "Traces: grafana.com > your organisation > Stacks > afrotransact > Details > the OpenTelemetry tile > Configure shows the <b>OTLP Endpoint</b> (https://otlp-gateway-prod-us-east-0.grafana.net/otlp, no /v1/traces suffix) and the <b>Instance ID</b> (a number: the stack id, not the Prometheus or Loki user). Create the policy <code>afrotransact-otlp-trial</code> by hand (scope traces:write, plus metrics:write and logs:write because the collector also exports those over OTLP; realm this stack only), add a token with a 10-day expiry and copy it once. Runbook: observability-grafana-cloud.md section 3.4. [[check]]"
       ],
       sec: ["GRAFANA_ENV=trial", "GRAFANA_PROM_URL", "GRAFANA_PROM_USER", "GRAFANA_LOKI_URL", "GRAFANA_LOKI_USER", "GRAFANA_ALLOY_TOKEN", "GRAFANA_OTLP_ENDPOINT", "GRAFANA_INSTANCE_ID", "GRAFANA_API_TOKEN", "MIMIR_ADDRESS (laptop)", "MIMIR_TENANT_ID (laptop)", "MIMIR_API_KEY (laptop)", "GRAFANA_SA_TOKEN (laptop)"],
-      ok: "You hold six values for Alloy, three for traces and four for your laptop, all in the password manager.",
+      ok: "You hold six values for Alloy, three for traces (endpoint, instance id, token) and four for your laptop, all in the password manager.",
       fail: "If a menu has moved, use grafana.com > organisation > Access Policies. The Alloy token cannot read data, so a leak means delete that one token and make a new one.",
       prod: "GRAFANA_ENV=prod and its own policy afrotransact-alloy-prod. Delete afrotransact-alloy-trial when the trial ends.",
       unv: "Every menu name, default data source uid, the free limits and alert rule quotas." },
@@ -417,9 +421,9 @@ rclone delete "$B/_test" --s3-no-check-bucket`)],
         "Use the same Stripe account, switched to test mode. The v1 live endpoints are untouched. v1 is deleted at the freeze, not now.",
         "Copy the test secret key <code>sk_test_</code> and publishable key <code>pk_test_</code>. The gateway-bff will not start without the publishable key.",
         "Create three endpoints with Snapshot payloads and API version <code>2026-09-30.endive</code>, one secret each, never shared. Use Workbench (or Developers > Webhooks in the older layout).",
-        "Endpoint 1, Your account, <code>https://api.&lt;domain&gt;/payments/v1/webhooks/stripe</code>: payment_intent.succeeded, payment_intent.amount_capturable_updated, payment_intent.payment_failed, payment_intent.requires_action, payment_intent.canceled, charge.refunded, charge.dispute.created, charge.dispute.closed, transfer.reversed, payout.paid, payout.failed, setup_intent.succeeded, setup_intent.requires_action, payment_method.attached, payment_method.detached.",
-        "Endpoint 2, Connected accounts, <code>https://api.&lt;domain&gt;/seller/v1/webhooks/stripe-connect</code>: account.updated, capability.updated, person.created, person.updated, account.external_account.created, account.external_account.updated, account.external_account.deleted, payout.failed, account.application.deauthorized.",
-        "Endpoint 3, Your account, <code>https://api.&lt;domain&gt;/seller/v1/webhooks/stripe-billing</code>: payment_intent.succeeded and payment_intent.payment_failed. Only needed if sellers pay plan fees by US bank debit, so optional in the trial."
+        "Endpoint 1, Your account, <code>https://api-test.afrotransact.com/payments/v1/webhooks/stripe</code>: payment_intent.succeeded, payment_intent.amount_capturable_updated, payment_intent.payment_failed, payment_intent.requires_action, payment_intent.canceled, charge.refunded, charge.dispute.created, charge.dispute.closed, transfer.reversed, payout.paid, payout.failed, setup_intent.succeeded, setup_intent.requires_action, payment_method.attached, payment_method.detached.",
+        "Endpoint 2, Connected accounts, <code>https://api-test.afrotransact.com/seller/v1/webhooks/stripe-connect</code>: account.updated, capability.updated, person.created, person.updated, account.external_account.created, account.external_account.updated, account.external_account.deleted, payout.failed, account.application.deauthorized.",
+        "Endpoint 3, Your account, <code>https://api-test.afrotransact.com/seller/v1/webhooks/stripe-billing</code>: payment_intent.succeeded and payment_intent.payment_failed. Only needed if sellers pay plan fees by US bank debit, so optional in the trial."
       ],
       urls: [["Stripe dashboard", "https://dashboard.stripe.com/test/workbench/webhooks"]],
       sec: ["STRIPE_SECRET_KEY (sk_test_)", "STRIPE_PUBLISHABLE_KEY (pk_test_)", "STRIPE_WEBHOOK_SECRET", "STRIPE_CONNECT_WEBHOOK_SECRET", "STRIPE_BILLING_WEBHOOK_SECRET (optional)"],
@@ -443,11 +447,11 @@ rclone delete "$B/_test" --s3-no-check-bucket`)],
     { id: "1-ghcr", t: "GitHub: image pull token and the deploy environment", who: "owner",
       do: [
         "Create a token that can only read packages (<code>read:packages</code>) for the account that owns the images. The cluster uses it as the pull secret named ghcr. [[check]]",
-        "Make sure the GitHub environment <code>prod</code> exists with reviewers, and the repository variables <code>CLOUD=ovh</code> and <code>REGISTRY_URL=ghcr.io/&lt;owner&gt;/&lt;repo&gt;</code>. Images are built on every green push to main.",
+        "Make sure the GitHub environment <code>trial</code> exists (add yourself as reviewer if you want a gate) with the variables <code>CLOUD=ovh</code> and <code>REGISTRY_URL=ghcr.io/&lt;owner&gt;/&lt;repo&gt;</code> and the secrets <code>CLOUDFLARE_API_TOKEN</code> and <code>CLOUDFLARE_ACCOUNT_ID</code> (the trial workflow and the promote workflow run in it). The <code>prod</code> environment (with reviewers) is for production. Images are built on every green push to main.",
         "Choose the first admin: your own mailbox as <code>ADMIN_EMAIL</code> (a real address, not example or .test, or secrets.sh refuses) and a password of at least 16 characters."
       ],
       urls: [["GitHub tokens", "https://github.com/settings/tokens"]],
-      sec: ["GHCR_USER", "GHCR_TOKEN", "BOOTSTRAP_ADMIN_EMAIL (from ADMIN_EMAIL)", "BOOTSTRAP_ADMIN_PASSWORD (from ADMIN_PASSWORD)", "BOOTSTRAP_ADMIN_PHONE (from ADMIN_PHONE)"],
+      sec: ["GHCR_USER", "GHCR_TOKEN", "ADMIN_EMAIL (becomes BOOTSTRAP_ADMIN_EMAIL)", "ADMIN_PASSWORD (becomes BOOTSTRAP_ADMIN_PASSWORD)", "ADMIN_PHONE (becomes BOOTSTRAP_ADMIN_PHONE)"],
       ok: "The token has only read:packages. A green main build exists whose full commit sha you can quote.",
       fail: "Pods in ImagePullBackOff later: the token, user or the tag is wrong.",
       prod: "Same shape, but the promote workflow waits for the prod environment reviewers." }
@@ -472,18 +476,19 @@ grep '^# public key' ~/.config/sops/age/keys.txt ~/age-backup-key.txt`)],
 
     { id: "2-fill", t: "Fill the two local files", who: "owner",
       do: [
-        "Copy the examples. Both files are never committed. Use a new, empty <code>STATE_DIR</code> for the trial so nothing from dev leaks in.",
-        "<code>config.env</code>: DOMAIN, IMAGE_TAG (the sha), DB_MODE=external, EXTERNAL_PG_HOST, EXTERNAL_PG_ADMIN_USER, EXTERNAL_PG_ADMIN_PASSWORD, EXTERNAL_PG_SSLMODE, GHCR_USER, GHCR_TOKEN, ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PHONE, STOREFRONT_HOST, MEDIA_PUBLIC_URL.",
-        "<code>secrets.local.env</code>: the Stripe, Resend, OpenRouter, R2, tunnel, Grafana and backup names from phase 1 with <code>GRAFANA_ENV=trial</code>. Leave the carrier, Google, Smarty and UploadThing keys empty unless the agent says a launch service needs one. [[check]]"
+        "Copy the TRIAL examples. Both files are never committed. Use a new, empty <code>STATE_DIR</code> for the trial so nothing from dev leaks in. The profile stays <code>PROFILE=prod</code>.",
+        "<code>config.env</code> (from config.trial.env.example): DOMAIN=afrotransact.com, IMAGE_TAG (any 40-character sha, the real pins are values-trial.yaml), DB_MODE=external, EXTERNAL_PG_HOST, EXTERNAL_PG_ADMIN_USER, EXTERNAL_PG_ADMIN_PASSWORD, EXTERNAL_PG_SSLMODE. The hosts are not set here: they come from infra/cloudflare/hosts.json.",
+        "<code>secrets.local.env</code> (from secrets.trial.env.example): GHCR_USER, GHCR_TOKEN, ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PHONE, then the Stripe test keys, Resend, OpenRouter, R2, tunnel, Grafana (<code>GRAFANA_ENV=trial</code>) and backup names from phase 1. LINK_SIGNING_KEY and every internal secret are generated, never typed.",
+        "<b>Geo and tax keys: none is mandatory.</b> geo starts with no key (it falls back to OpenStreetMap Nominatim, 1 request per second, and a geodesic estimate for routes); GOOGLE_MAPS_API_KEY (Places and Routes) and SMARTY_AUTH_ID / SMARTY_AUTH_TOKEN (USPS address validation) are optional and recommended for a better demo. tax-returns runs TAX_PROVIDER=RULES (our own table), so no tax vendor key is needed; what IS needed is tax data: the tax-returns profiles must be ACTIVE or checkout fails (smoke test, step 6). The carrier, UploadThing and other keys belong to services that are not launched and are commented out of the example."
       ],
       cmds: [c("Copy the templates", String.raw`cd infra/ovh-vps
-cp config.env.example config.env
-cp secrets.local.env.example secrets.local.env
+cp config.trial.env.example config.env
+cp secrets.trial.env.example secrets.local.env
 chmod 600 config.env secrets.local.env`)],
       ok: "Every name from phase 1 is filled except CLOUDFLARED_TUNNEL_TOKEN (step 3.6).",
-      fail: "Which geo and tax data keys are mandatory is not written down. If a service later refuses to start, the log names the missing key.",
-      prod: "A new file and a new STATE_DIR. Stripe LIVE keys. GRAFANA_ENV=prod. Never reuse any trial value.",
-      unv: "Which optional keys a launch service refuses to start without." },
+      fail: "If a service later refuses to start, its log names the missing key.",
+      prod: "A new file and a new STATE_DIR from secrets.local.env.example. Stripe LIVE keys. GRAFANA_ENV=prod. Never reuse any trial value.",
+      unv: "Which optional keys a launch service refuses to start without: read from the services' config, not run." },
 
     { id: "2-render", t: "Render the Secrets for the 21 services", who: "agent",
       do: ["<code>secrets.sh</code> generates every internal secret once and keeps it in STATE_DIR, so a re-run changes nothing. It needs no cluster in SECRETS_OUT mode."],
@@ -595,21 +600,22 @@ psql "host=<host> user=<admin> sslmode=require" -Atc "select count(*) from pg_da
       prod: "The same scripts, on the real server, with Layerbase backups and point-in-time recovery confirmed in writing first.",
       unv: "Layerbase latency, extension permissions and connection limits." },
 
-    { id: "3-edge", t: "Cloudflare Tunnel and DNS for api and auth only", who: "agent",
+    { id: "3-edge", t: "Cloudflare: buckets, DNS, Workers routes and the Tunnel for api and auth", who: "agent",
       do: [
-        "Run <code>infra/cloudflare</code> with <code>origin_mode = \"tunnel\"</code>. It creates the tunnel and DNS for api and auth, the Workers routes, the Turnstile widgets and the media custom domain. The environment variable only accepts dev, uat or prod today, so the trial needs its own tfvars and a code change. [[check]]",
+        "Do step 5.1 first (the trial workflow uploads the three Worker scripts), then run <code>infra/cloudflare</code> with <code>envs/trial.tfvars</code> (environment trial, origin_mode tunnel). It creates the DNS records for the three web hosts, the Workers routes, the tunnel with api-test and auth-test, the Turnstile widgets and the two R2 buckets with the media custom domain. Every host comes from infra/cloudflare/hosts.json.",
         "Take the token with <code>cloudflared tunnel token &lt;tunnel id&gt;</code> into CLOUDFLARED_TUNNEL_TOKEN and render the Secrets again.",
-        "Only api and auth are exposed (BFF, identity, bookings, fulfilment, media, notifications and the three Stripe webhook paths). There is no mcp host and no grafana host, and there must never be."
+        "Only api-test and auth-test are exposed (BFF, identity, bookings, fulfilment, media, notifications and the three Stripe webhook paths). There is no mcp host and no grafana host, and there must never be. There is no load balancer, so no origin certificate and no Authenticated Origin Pulls."
       ],
       cmds: [c("Tunnel", String.raw`cd infra/cloudflare
 export CLOUDFLARE_API_TOKEN=...
 tofu init -backend-config=backend.hcl -backend-config="key=cloudflare/trial.tfstate"
 tofu apply -var-file=envs/trial.tfvars
-tofu output -json turnstile_site_keys
+tofu output r2_buckets        # the two bucket names (the only definition)
+tofu output web_origins       # the CORS origins of step 1.4
 cloudflared tunnel token <tunnel id>`)],
-      ok: "DNS shows api.<domain> and auth.<domain> as proxied records. dig mcp.<domain> and dig grafana.<domain> return nothing.",
-      fail: "tofu rejects environment trial: ask the agent to add it or to run with environment prod and trial values. The infra/cloudflare media bucket name differs from the R2 runbook, so do not create both.",
-      unv: "A trial tfvars file does not exist yet." },
+      ok: "DNS shows test, seller-test, admin-test, api-test, auth-test and media-test as proxied records. dig mcp-test.afrotransact.com and dig grafana-test.afrotransact.com return nothing. The trial run created nothing on the bare apex.",
+      fail: "A record already exists: delete that one record and re-run. A Workers route that points at a missing script means step 5.1 was skipped: set workers_routes_enabled = false, apply, run the workflow, then set it back.",
+      unv: "tofu validate and apply were never run against Cloudflare with this module (no tofu was available when it was written): expect first-run provider-schema errors." },
 
     { id: "3-apply-secrets", t: "Apply the encrypted Secrets to the cluster", who: "agent",
       do: ["apply.sh decrypts with SOPS, refuses Secrets whose mandatory keys are empty (Stripe, Resend, OpenRouter, tunnel, backup), applies them and labels the namespaces."],
@@ -621,32 +627,33 @@ kubectl get secret -A | grep -E 'ghcr|cloudflared|pg-backup|grafana-cloud|valkey
       fail: "apply.sh stops naming an empty key: fill it in secrets.local.env, render and encrypt again." },
 
     { id: "3-pin", t: "Pin the images to a green sha", who: "both",
-      do: ["Every launch-set chart's values-prod.yaml must pin image.tag to a full 40-character commit sha of a green main build. The base value dev does not exist in GHCR. Use the promote workflow once per service with environment prod and tag set to the sha; prod waits for the prod reviewers. It refuses services outside the launch set.",
-           "The pins live in the repository, so the trial and production share them."],
-      cmds: [c("Gate", String.raw`python3 infra/argocd/scripts/check_launch_set.py --env prod --require-tags`)],
-      ok: "The gate prints OK for 21 services pinned to a 40-character sha.",
+      do: ["Every launch-set chart pins image.tag to a full 40-character commit sha of a green main build. The base value dev does not exist in GHCR. <b>The trial and production have separate pin files</b>: values-trial.yaml (the trial Applications read values.yaml, values-prod.yaml, then values-trial.yaml) and values-prod.yaml. Use the promote workflow once per service with environment trial and tag set to the sha (GitHub environment trial). It refuses services outside the launch set.",
+           "Promoting to the trial therefore never changes the production pin."],
+      cmds: [c("Gate", String.raw`python3 infra/argocd/scripts/check_launch_set.py --env trial --require-tags`)],
+      ok: "The gate prints OK for 21 services pinned to a 40-character sha in values-trial.yaml.",
       fail: "A service without a pin: run the promote workflow for it. Do not continue until the gate is green." },
 
     { id: "3-argo", t: "Install a trimmed Argo CD and bootstrap the app of apps", who: "agent",
       do: ["Argo CD with the dex server and notifications controller scaled to zero (about 0.3 GiB saved). Auto-sync is off everywhere: a human approves every step. If the repository is private, add its credential out of band."],
       cmds: [c("Install and bootstrap", String.raw`kubectl create namespace argocd
-kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/<pin a 3.x release tag>/manifests/install.yaml
+export ARGOCD_VERSION=<the 3.x tag you pin>
+kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_VERSION/manifests/install.yaml
 kubectl -n argocd scale deploy argocd-dex-server argocd-notifications-controller --replicas=0
-kubectl apply -n argocd -f infra/argocd/bootstrap/root-prod.yaml
-argocd app sync root-prod
+kubectl apply -n argocd -f infra/argocd/bootstrap/root-trial.yaml
+argocd app sync root-trial
 argocd app list`)],
       ok: "argocd app list shows 26 Applications, all OutOfSync, none syncing by themselves. kubectl -n argocd top pods shows about 1 GiB or less.",
       fail: "Pods Pending: not enough memory, check kubectl describe node. A private repo that cannot be read needs the repository credential." ,
-      unv: "The exact Argo CD 3.x tag to pin." }
+      unv: "The exact Argo CD 3.x tag. The repository pins nothing (this install line is the only place), and I could not read the releases page: pick the latest stable 3.x tag on the day, write it in your notes, and use the same one for production." }
     ]},
 
   /* ================= 4 ================= */
-  { id: "p4", n: "4", title: "First sync order", intro: "Sync by Application name, <code>&lt;component&gt;-prod</code>, and wait for Healthy before the next step. Three Java services at a time, because JVM start-up spikes CPU. After each wave run the memory check.",
+  { id: "p4", n: "4", title: "First sync order", intro: "Sync by Application name, <code>&lt;component&gt;-trial</code>, and wait for Healthy before the next step. Three Java services at a time, because JVM start-up spikes CPU. After each wave run the memory check.",
     steps: [
     { id: "4-platform", t: "Platform, in order", who: "both",
       do: ["namespaces (wave -10), envoy-gateway (-4), opentelemetry-collector-gateway (-2), edge (-1: Gateway, routes, cloudflared) and then lean (0: Kafka, Temporal, Valkey, Meilisearch, the DLQ topic job, the backup CronJob, Grafana Alloy and kube-state-metrics). lean needs the temporal, valkey, meilisearch, grafana-cloud-otlp, grafana-cloud-alloy and pg-backup Secrets."],
       cmds: [c("Sync and check", String.raw`for a in namespaces envoy-gateway opentelemetry-collector-gateway edge lean; do
-  argocd app sync $a-prod && argocd app wait $a-prod --health --timeout 600
+  argocd app sync $a-trial && argocd app wait $a-trial --health --timeout 600
 done
 kubectl -n kafka get pods
 kubectl -n temporal logs deploy/temporal | tail
@@ -658,15 +665,15 @@ kubectl -n observability get pods`)],
 
     { id: "4-identity", t: "identity first", who: "both",
       do: ["Identity issues the tokens every other service needs and runs its Flyway migrations on its own database."],
-      cmds: [c("Sync and prove it", String.raw`argocd app sync identity-prod && argocd app wait identity-prod --health --timeout 600
-curl -s https://auth.<domain>/.well-known/openid-configuration | head -c 300`)],
+      cmds: [c("Sync and prove it", String.raw`argocd app sync identity-trial && argocd app wait identity-trial --health --timeout 600
+curl -s https://auth-test.afrotransact.com/.well-known/openid-configuration | head -c 300`)],
       ok: "The OIDC discovery document answers through the tunnel and names the issuer.",
       fail: "Pod CrashLoop: read kubectl logs. A failed Flyway migration leaves the pod crash-looping: fix forward, never edit an applied migration. A refusal naming the bootstrap admin means the password is too short or the address is example or .test." },
 
     { id: "4-wave2", t: "Wave 2: the Java services, three at a time", who: "both",
       do: ["Order: catalog, offers, inventory. Then orders, payments, seller. Then fulfilment, bookings, trust-ops. Then tax-returns, content, ai-gateway, mcp-server."],
-      cmds: [c("One group", String.raw`argocd app sync catalog-prod offers-prod inventory-prod
-argocd app wait catalog-prod offers-prod inventory-prod --health --timeout 900
+      cmds: [c("One group", String.raw`argocd app sync catalog-trial offers-trial inventory-trial
+argocd app wait catalog-trial offers-trial inventory-trial --health --timeout 900
 kubectl top node && kubectl top pods -A | sort -k4 -h | tail -5`),
               c("Memory and CPU check after every wave", String.raw`kubectl top pods -A
 kubectl describe node | grep -A12 "Allocated resources"`)],
@@ -675,9 +682,9 @@ kubectl describe node | grep -A12 "Allocated resources"`)],
 
     { id: "4-wave3", t: "Wave 3: the Go services, gateway-bff last", who: "both",
       do: ["cart, geo, media, notifications, search, indexer, then gateway-bff. gateway-bff refuses to start without REDIS_URL, SESSION_SIGNING_KEY and STRIPE_PUBLISHABLE_KEY. media refuses to start in prod without both R2 tokens. notifications refuses without RESEND_API_KEY and RESEND_WEBHOOK_SECRET."],
-      cmds: [c("Sync", String.raw`argocd app sync cart-prod geo-prod media-prod notifications-prod search-prod indexer-prod
-argocd app wait cart-prod geo-prod media-prod notifications-prod search-prod indexer-prod --health
-argocd app sync gateway-bff-prod && argocd app wait gateway-bff-prod --health
+      cmds: [c("Sync", String.raw`argocd app sync cart-trial geo-trial media-trial notifications-trial search-trial indexer-trial
+argocd app wait cart-trial geo-trial media-trial notifications-trial search-trial indexer-trial --health
+argocd app sync gateway-bff-trial && argocd app wait gateway-bff-trial --health
 argocd app list | grep -c Healthy`)],
       ok: "All 26 Applications are Healthy. The service logs show the profile is prod.",
       fail: "A service that exits at start-up logs the exact missing item: add it to the Secret, re-render, encrypt, apply and restart that deployment." },
@@ -691,28 +698,28 @@ kubectl -n afrotransact-prod logs -f job/reindex-1`)],
     ]},
 
   /* ================= 5 ================= */
-  { id: "p5", n: "5", title: "Web apps deploy", intro: "The three web apps (storefront, Seller Center, staff console) are Cloudflare Workers. The per-app pipelines are wired to the afrotransact.com hosts, so the trial uses the ovh-web workflow, which takes the hosts from the domain you give it. [[check]]",
+  { id: "p5", n: "5", title: "Web apps deploy", intro: "The three web apps (storefront, Seller Center, staff console) are Cloudflare Workers in every environment. The trial uses the <b>trial</b> workflow: it uploads Workers named storefront-trial, seller-center-trial and staff-console-trial with the flat trial hosts; infra/cloudflare (step 3.6) owns the DNS and the routes. Run it before the tofu apply.",
     steps: [
     { id: "5-gh", t: "Give GitHub the Cloudflare values", who: "owner",
-      do: ["Run the setup once and enter the three Cloudflare values. They go to the GitHub environment <code>ovh-vps</code>."],
-      cmds: [c("One-time", String.raw`make ovh-gh-setup`)],
-      sec: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE", "OVH_DOMAIN"],
-      ok: "The GitHub environment lists those secrets and variables.",
-      fail: "The ovh-web run stops at Decide: OVH_DOMAIN or a secret is missing." },
+      do: ["In the GitHub environment <code>trial</code> add the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. The zone is not a secret: the workflow's zone input is empty by default, which means the map's zone afrotransact.com (set the variable TRIAL_ZONE to override)."],
+      sec: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+      ok: "The trial environment lists those two secrets.",
+      fail: "The trial run stops at Decide: a secret is missing." },
 
     { id: "5-domain", t: "Make the backend and the Workers agree on the hosts", who: "agent",
-      do: ["The prod values name afrotransact.com: <code>global.domain</code> and <code>global.storefrontHost</code> in <code>infra/argocd/envs/prod/platform-values.yaml</code>. For the trial they must equal the trial domain and storefront host, or identity's redirect URIs, CORS and email links are wrong. Deploy the Workers with the same host choice. [[check]]"],
-      ok: "Redirect URIs in identity and the Worker vars name the same hosts.",
-      fail: "Sign-in loops or redirect_uri mismatch means the app host differs from the backend's. Make them equal, sync identity and gateway-bff, redeploy the app.",
-      unv: "There is no written trial override of global.domain; the runbooks do not cover it." },
+      do: ["Nothing to edit by hand: the backend's hosts (infra/argocd/envs/trial/platform-values.yaml: global.domain, webHost, sellerHost, adminHost, apiHost, authHost, mediaHost) and the Worker vars are generated from the same map. Run the check; if the trial zone ever changes, set-trial-zone moves every file. Cookies need no setting: the session cookie is host-only on each app's own origin; the passkey relying-party id is the zone afrotransact.com, a suffix of every host."],
+      cmds: [c("Prove they agree", String.raw`python3 tools/ci/env_hosts.py check
+python3 tools/ci/env_hosts.py show trial`)],
+      ok: "env_hosts prints OK and the trial row: test, seller-test, admin-test, api-test, auth-test, media-test.",
+      fail: "Sign-in loops or redirect_uri mismatch means an app host differs from the backend's: run the check, fix the file it names, sync identity and gateway-bff, redeploy the app." },
 
-    { id: "5-deploy", t: "Run ovh-web for all three apps", who: "both",
-      do: ["GitHub > Actions > ovh-web > Run workflow on main. Leave the inputs empty to deploy all three apps on OVH_DOMAIN. Approve the run if asked. Each app takes about 5 to 10 minutes."],
-      cmds: [c("Open and check", String.raw`curl -sI "https://<domain>/p/x?a=1" | grep -i -E '^(HTTP|location)'
-curl -i https://api.<domain>/bff/healthz
-open https://www.<domain>   # then https://seller.<domain> and https://admin.<domain>`)],
-      ok: "The three hosts load over https. The bare domain answers 301 to https://www.<domain>/p/x?a=1. /bff/healthz returns 200.",
-      fail: "Worker too large: upgrade to Workers Paid. Custom domain already has a DNS record: delete that record and re-run. A certificate error on a host two labels under the zone: use flat host names. A CSP report-only log naming a blocked host usually means MEDIA_PUBLIC_URL is wrong.",
+    { id: "5-deploy", t: "Run the trial workflow for all three apps", who: "both",
+      do: ["GitHub > Actions > trial > Run workflow on main. Leave the inputs empty to deploy all three apps on the zone afrotransact.com. Approve the run if asked. Each app takes about 5 to 10 minutes. After it, run the tofu apply of step 3.6."],
+      cmds: [c("Open and check", String.raw`curl -sI https://test.afrotransact.com | head -3
+curl -i https://api-test.afrotransact.com/bff/healthz
+open https://test.afrotransact.com   # then https://seller-test.afrotransact.com and https://admin-test.afrotransact.com`)],
+      ok: "The three hosts load over https with the free certificate. There is no www and no redirect. /bff/healthz returns 200.",
+      fail: "Worker too large: upgrade to Workers Paid. A certificate error means a host is more than one label under the zone: it is not in the map, run env_hosts check. A CSP report-only log naming a blocked host usually means MEDIA_PUBLIC_URL (media-test) is wrong.",
       prod: "The per-app web-* pipelines deploy to the afrotransact.com Workers; CSP_MODE stays report-only for 7 days and then moves to enforce." },
 
     { id: "5-pwa", t: "Check the installable web app on a phone", who: "owner",
@@ -725,10 +732,10 @@ open https://www.<domain>   # then https://seller.<domain> and https://admin.<do
   { id: "p6", n: "6", title: "Smoke test", intro: "Walk the whole product once. Use test cards and your own mailboxes. Replace prod with trial in any Grafana query: the label is env=trial.",
     steps: [
     { id: "6-edge", t: "Edge, profile and no demo data", who: "agent",
-      cmds: [c("Edge", String.raw`curl -s -o /dev/null -w '%{http_code}\n' https://auth.<domain>/.well-known/openid-configuration
-curl -s -o /dev/null -w '%{http_code}\n' https://api.<domain>/bff/healthz
+      cmds: [c("Edge", String.raw`curl -s -o /dev/null -w '%{http_code}\n' https://auth-test.afrotransact.com/.well-known/openid-configuration
+curl -s -o /dev/null -w '%{http_code}\n' https://api-test.afrotransact.com/bff/healthz
 for p in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing; do
-  printf '%s -> ' "$p"; curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://api.<domain>/$p" -H 'Content-Type: application/json' -d '{}'
+  printf '%s -> ' "$p"; curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://api-test.afrotransact.com/$p" -H 'Content-Type: application/json' -d '{}'
 done`),
              c("Profile and seed data", String.raw`kubectl -n afrotransact-prod exec deploy/orders -- env | grep -E 'APP_ENV|SPRING_PROFILES'
 kubectl -n afrotransact-prod exec deploy/orders -- env | grep -c SEED_ALLOW_REMOTE`)],
@@ -744,7 +751,7 @@ kubectl -n kafka get pods`)],
       prod: "A test to Gmail, Outlook and Yahoo with SPF, DKIM and DMARC all passing, and a native speaker reads each language's templates." },
 
     { id: "6-staff", t: "Staff sign-in with MFA, change the password", who: "owner",
-      do: ["Sign in at <code>https://admin.&lt;domain&gt;</code> as the bootstrap admin. Staff MFA is mandatory: the first sign-in forces setup of an authenticator or email codes. Change the password, then create one more staff account with only the permissions it needs."],
+      do: ["Sign in at <code>https://admin-test.afrotransact.com</code> as the bootstrap admin. Staff MFA is mandatory: the first sign-in forces setup of an authenticator or email codes. Change the password, then create one more staff account with only the permissions it needs."],
       ok: "You reach the console after MFA, and the second staff account signs in.",
       fail: "No code arrives for email MFA: same cause as the sign-up check." },
 
@@ -773,19 +780,19 @@ kubectl -n kafka get pods`)],
 
     { id: "6-image", t: "Image upload through R2", who: "both",
       do: ["Upload a product image in the Seller Center. The browser gets a presigned PUT into the private bucket under quarantine/. On complete, media inspects it, strips EXIF, moderates it and copies it into the public bucket."],
-      cmds: [c("The same flow by hand (get a seller token first)", String.raw`curl -sS -X POST https://api.<domain>/media/v1/uploads -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      cmds: [c("The same flow by hand (get a seller token first)", String.raw`curl -sS -X POST https://api-test.afrotransact.com/media/v1/uploads -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"purpose":"product-image","fileName":"test.jpg","contentType":"image/jpeg","size":'"$(stat -c%s test.jpg)"'}'
 curl -sS -X PUT "$UPLOAD_URL" -H "Content-Type: image/jpeg" --data-binary @test.jpg -w '%{http_code}\n'
-curl -sS -X POST https://api.<domain>/media/v1/assets/$ID/complete -H "Authorization: Bearer $TOKEN"
+curl -sS -X POST https://api-test.afrotransact.com/media/v1/assets/$ID/complete -H "Authorization: Bearer $TOKEN"
 curl -I <returned url>
-curl -I https://media.<domain>/quarantine/anything`)],
-      ok: "The upload returns 200, complete returns status ready with a url under media.<domain>, curl -I on it returns 200 with content-type image/jpeg, and the quarantine path returns 404.",
+curl -I https://media-test.afrotransact.com/quarantine/anything`)],
+      ok: "The upload returns 200, complete returns status ready with a url under media-test.afrotransact.com, curl -I on it returns 200 with content-type image/jpeg, and the quarantine path returns 404.",
       fail: "403 SignatureDoesNotMatch: send every returned header. A CORS error in the browser: the web origin is missing in the private bucket policy. status flagged: staff must release it.",
       prod: "Check that fetching a KYC object URL without credentials returns 403 and that each token cannot read the other bucket." },
 
     { id: "6-mcp", t: "MCP is private and refuses calls without a token", who: "agent",
       do: ["There must be no public route: no mcp host, no tunnel rule, no HTTPRoute. The Service is ClusterIP. From inside the cluster an unauthenticated call gets 401."],
-      cmds: [c("Prove it", String.raw`dig +short mcp.<domain>
+      cmds: [c("Prove it", String.raw`dig +short mcp-test.afrotransact.com
 kubectl -n afrotransact-prod get svc mcp-server
 kubectl -n afrotransact-prod run curl --rm -it --restart=Never --image=curlimages/curl -- \
   curl -i -X POST http://mcp-server/mcp -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
@@ -833,11 +840,11 @@ kubectl -n ops logs -f job/first-backup`)],
       fail: "A FAILED line names the database or upload and the job exits 1. An access error means the key or bucket is wrong. pg_dump failures mean Layerbase blocked the node IP." ,
       unv: "rclone and age are installed with apk at run time, which needs outbound network." },
 
-    { id: "7-ping", t: "Set the dead-man's switch and the key scoping", who: "owner",
-      do: ["Create a healthchecks.io style check with a 26-hour grace and put its URL in BACKUP_HEALTHCHECK_URL. Also prove that the trial key is refused on any other bucket."],
-      ok: "A ping arrives after the first run, and listing another bucket with this key is refused.",
+    { id: "7-ping", t: "Optional: a dead-man's switch (heartbeat), and the key scoping", who: "owner",
+      do: ["Optional and vendor-neutral: if you want an alarm that fires when the nightly backup does not run at all, use either a Grafana Cloud Synthetic Monitoring check on the storefront and /bff/healthz, or a heartbeat URL from a ping service (a healthchecks-style check with a 26-hour grace) and put it in BACKUP_HEALTHCHECK_URL. The in-cluster BackupStale alert (26 hours) already covers the common case. Always prove that the trial key is refused on any other bucket."],
+      ok: "If you set one up: a ping or probe result arrives after the first run. Either way, listing another bucket with the trial key is refused.",
       fail: "No ping: the URL is empty or the node cannot reach it.",
-      unv: "Free limits of the ping service." },
+      unv: "Which vendor you pick, and its free limits: nothing is chosen in the repository." },
 
     { id: "7-restore", t: "Restore into a scratch server", who: "agent",
       do: ["Use a scratch server only: a local postgis/postgis:17-3.5 container or a second Layerbase database. Never restore over the trial databases to test. The age private key stays on your machine and never goes to the cluster."],
@@ -866,7 +873,7 @@ date -u +%T`)],
     { id: "7-log", t: "Write the result in the drill log", who: "owner",
       do: ["Add one row to the result log in restore-drill.md: date, who, backup age restored, dump to restored in minutes, B2 download time of the largest dump, cluster rebuild minutes (if you did it), problems, whether 24 hours and 4 hours were met."],
       ok: "The row is committed. Production gets the same drill monthly.",
-      fail: "Product images and the private evidence bucket are not covered by the database job. The nightly copy of the two R2 buckets to OVH Object Storage is marked as still to do in the drill runbook, so say so in the row.",
+      fail: "Product images and the private evidence bucket are not covered by the database job. The nightly copy of the two R2 buckets to Backblaze B2 is NOT built (backlog story S380), so say so in the row: a deleted R2 object, a KYC document included, cannot be restored today.",
       unv: "Object Lock stays off until this drill has passed. Hidden versions in B2 count as storage until the lifecycle rule removes them: check the bucket size in the B2 console." }
     ]},
 
@@ -916,7 +923,7 @@ stripe account_links create --account acct_TEST -d type=account_onboarding \
       ["Day 5", "Phases 7 and 8", "First backup, scratch restore drill with timing, data usability proof. Stripe option A test in test mode."],
       ["Day 6", "Measure", "RSS per JVM idle and under a k6 run (tools/perf, 50 concurrent shoppers), node requests versus allocatable, CPU during a 3-service sync, downtime of a rolling update and of a node reboot, pg_stat_activity peak, migration times, Layerbase round trip time."],
       ["Day 7", "Measure and rehearse", "Kafka disk growth, Grafana series and log volume against the free limits, backup run time and size, a second restore or a cluster rebuild rehearsal, rollback by reverting an image tag, a bad tag that fails safe. Cost per day times 30."],
-      ["Day 8", "Phase 10", "Fill the go or no-go sheet, read the numbers, decide. If no-go keep the notes. Tear down trial resources you will not keep: revoke trial tokens, delete the trial Grafana policy, empty and delete the trial buckets, destroy the disposable project."]
+      ["Day 8", "Phase 10", "Fill the go or no-go sheet, read the numbers, decide. If no-go keep the notes. Tear down trial resources you will not keep: revoke trial tokens, delete the trial Grafana policy, tofu destroy the trial Cloudflare run (envs/trial.tfvars) after emptying the two R2 buckets, destroy the disposable project."]
     ],
     steps: [
     { id: "9-d1", t: "Day 1 done", who: "both", do: ["Phases 0, 1 and 2 are ticked."], ok: "Secrets are encrypted and the escrow restore test passed." },

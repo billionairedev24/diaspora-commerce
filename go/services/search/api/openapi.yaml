@@ -27,9 +27,9 @@ info:
 servers:
   - url: http://localhost:8201
     description: local
-  - url: https://api.dev.afrotransact.com/search
+  - url: https://api-dev.afrotransact.com/search
     description: dev
-  - url: https://api.uat.afrotransact.com/search
+  - url: https://api-uat.afrotransact.com/search
     description: uat
   - url: https://api.afrotransact.com/search
     description: prod
