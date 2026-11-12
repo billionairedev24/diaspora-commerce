@@ -3,6 +3,8 @@ package pgrepo_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -20,8 +22,38 @@ import (
 // image is the local PostgreSQL image (Docker Hub is rate-limited; never pull another tag in CI).
 const image = "postgres:17"
 
+// freshDatabase gives a test its own database on the PostgreSQL server of MEDIA_TEST_DB_URL (an admin connection
+// string, e.g. postgres://postgres@127.0.0.1:5499/postgres?sslmode=disable), for machines without Docker.
+func freshDatabase(t *testing.T, adminURL string) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+	admin, err := pgxpool.New(ctx, adminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	name := fmt.Sprintf("media_test_%d", time.Now().UnixNano())
+	if _, err := admin.Exec(ctx, "create database "+name); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := pgxpool.ParseConfig(adminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ConnConfig.Database = name
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
 func startPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	if admin := os.Getenv("MEDIA_TEST_DB_URL"); admin != "" {
+		return freshDatabase(t, admin)
+	}
 	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, image,
