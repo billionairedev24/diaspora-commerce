@@ -19,6 +19,8 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Offer settings
+  description: Staff-editable thresholds of matched offers and the tax release (S383, S384)
 - name: Coupons
   description: 'Coupons & promotions: manage, clip, validate and redeem'
 - name: Offers
@@ -367,6 +369,47 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Offer'
+  /v1/offers/settings:
+    get:
+      tags:
+      - Offer settings
+      summary: Matched-offer and tax release settings (staff)
+      description: Every threshold of S383 and S384 lives here and is editable by staff; nothing is hard-coded. Defaults come from configuration until staff save a value.
+      operationId: getOfferSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPolicySettings'
+        '403':
+          description: offers.staff-only
+    put:
+      tags:
+      - Offer settings
+      summary: Save the settings (staff; audited by updatedBy and version)
+      description: 409 offers.concurrent-update when version is stale; 422 for an invalid value.
+      operationId: updateOfferSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferPolicySettings'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPolicySettings'
+        '403':
+          description: offers.staff-only
+        '409':
+          description: offers.concurrent-update
+        '422':
+          description: Invalid value
   /v1/offers/presence:
     get:
       tags:
@@ -835,6 +878,45 @@ components:
           items:
             type: string
             format: uuid
+    OfferPolicySettings:
+      type: object
+      description: Thresholds of matched offers and the tax release, editable by staff
+      required:
+      - conditionNoteMaxLength
+      - packageMaxEdgeIn
+      - packageMaxWeightLb
+      - taxSweepBatchSize
+      properties:
+        conditionNoteMaxLength:
+          type: integer
+          format: int32
+          description: The longest note on a used or renewed item
+          minimum: 20
+          maximum: 1000
+          default: 200
+        packageMaxEdgeIn:
+          type: number
+          format: double
+          description: The longest edge of a Fulfilled by AfroTransact box, in inches
+          default: 108
+        packageMaxWeightLb:
+          type: number
+          format: double
+          description: The heaviest Fulfilled by AfroTransact box, in pounds
+          default: 150
+        taxSweepBatchSize:
+          type: integer
+          format: int32
+          description: How many held or unverified offers one tax release run looks at
+          default: 200
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     OfferPresence:
       type: object
       required:
@@ -927,6 +1009,10 @@ components:
           maxLength: 200
         packaging:
           $ref: '#/components/schemas/OfferPackage'
+        sellerBehaviour:
+          type: object
+          description: The seller's own answers about how the item is sold (sold_heated, utensils_provided ...), for the seller's tax decision. Kept on the offer so the decision can be asked again while it is missing. Never a default.
+          additionalProperties: {}
         shipFrom:
           $ref: '#/components/schemas/ShipFrom'
       required:

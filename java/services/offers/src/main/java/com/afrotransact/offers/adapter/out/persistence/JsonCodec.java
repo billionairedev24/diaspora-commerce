@@ -1,6 +1,7 @@
 package com.afrotransact.offers.adapter.out.persistence;
 
 import java.util.List;
+import java.util.Map;
 
 import com.afrotransact.offers.domain.BuyBoxReason;
 import com.afrotransact.offers.domain.LineDiscount;
@@ -17,6 +18,7 @@ class JsonCodec {
     private static final TypeReference<List<BuyBoxReason>> REASONS = new TypeReference<>() { };
     private static final TypeReference<List<AuditedOffer>> AUDITED = new TypeReference<>() { };
     private static final TypeReference<List<LineDiscount>> LINES = new TypeReference<>() { };
+    private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() { };
 
     private final JsonMapper mapper;
 
@@ -30,6 +32,10 @@ class JsonCodec {
 
     ShipFrom shipFrom(String json) {
         return json == null ? null : mapper.readValue(json, ShipFrom.class);
+    }
+
+    Map<String, Object> objectMap(String json) {
+        return json == null || json.isBlank() ? Map.of() : mapper.readValue(json, OBJECT_MAP);
     }
 
     List<BuyBoxReason> reasons(String json) {

@@ -13053,8 +13053,8 @@ operations:
       TAX_HELD offer on that ATIN: it asks tax-returns for each seller''s decision (GET /v1/tax/listing-decisions) and moves
       the offer to ACTIVE only when the answer is RESOLVED (the event is a trigger, never the proof). Idempotent: an offer
       that is already ACTIVE is left alone; offers.offer.tax_released and offers.offer.updated are published for each release
-      and the buy box is recomputed. A periodic sweep does the same for held offers whose event was missed. Consumer offers-tax-decisions,
-      inbox-deduplicated.'
+      and the buy box is recomputed. A periodic sweep does the same for held offers whose event was missed. Idempotent (a
+      redelivered event does nothing more), so no inbox is needed.'
   consumeOffersInventoryStockEvents:
     action: receive
     channel:

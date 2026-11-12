@@ -11,17 +11,22 @@ import java.util.UUID;
 import java.util.function.UnaryOperator;
 
 import com.afrotransact.offers.domain.Fulfilment;
+import com.afrotransact.offers.domain.OfferPackage;
+import com.afrotransact.offers.domain.OfferPolicy;
+import com.afrotransact.offers.domain.PageContentLocked;
 import com.afrotransact.offers.domain.Offer;
 import com.afrotransact.offers.domain.OfferCondition;
 import com.afrotransact.offers.domain.OfferRuleViolation;
 import com.afrotransact.offers.domain.OfferStatus;
 import com.afrotransact.offers.domain.SellerKind;
 import com.afrotransact.offers.domain.ShipFrom;
+import com.afrotransact.offers.application.OfferTaxGate.Verdict;
 import com.afrotransact.offers.port.CatalogClient;
 import com.afrotransact.offers.port.CatalogClient.CatalogVariant;
 import com.afrotransact.offers.port.OfferRepository;
 import com.afrotransact.offers.port.OfferRepository.OfferPage;
 import com.afrotransact.offers.port.OfferRepository.OfferQuery;
+import com.afrotransact.offers.port.OfferTaxMetrics;
 import com.afrotransact.offers.port.ListingEntitlementsClient;
 import com.afrotransact.offers.port.PickupLocationClient;
 import com.afrotransact.offers.port.PickupLocationClient.PickupLocation;
@@ -32,6 +37,7 @@ import com.afrotransact.platform.security.relationship.FgaObject;
 import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
 import com.afrotransact.platform.web.error.BusinessRuleException;
 import com.afrotransact.platform.web.error.ConflictException;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,11 +57,17 @@ class OfferServiceImpl implements OfferService {
     private final ResourceAccessChecker access;
     private final DomainEventPublisher events;
     private final OffersSettings settings;
+    private final OfferTaxGate taxGate;
+    private final TaxHoldService taxHold;
+    private final OfferSettingsService policy;
+    private final OfferTaxMetrics taxMetrics;
     private final Clock clock;
 
     OfferServiceImpl(OfferRepository offers, CatalogClient catalog, PickupLocationClient pickupLocations,
                      ListingEntitlementsClient entitlements, BuyBoxService buyBox, BuyBoxEvaluator evaluator, PermissionChecker permissions,
-                     ResourceAccessChecker access, DomainEventPublisher events, OffersSettings settings, Clock clock) {
+                     ResourceAccessChecker access, DomainEventPublisher events, OffersSettings settings,
+                     OfferTaxGate taxGate, TaxHoldService taxHold, OfferSettingsService policy,
+                     OfferTaxMetrics taxMetrics, Clock clock) {
         this.offers = offers;
         this.catalog = catalog;
         this.pickupLocations = pickupLocations;
@@ -66,6 +78,10 @@ class OfferServiceImpl implements OfferService {
         this.access = access;
         this.events = events;
         this.settings = settings;
+        this.taxGate = taxGate;
+        this.taxHold = taxHold;
+        this.policy = policy;
+        this.taxMetrics = taxMetrics;
         this.clock = clock;
     }
 
@@ -75,13 +91,21 @@ class OfferServiceImpl implements OfferService {
         Actor actor = permissions.require(OffersPermissions.WRITE);
         String org = sellerOrg(actor, cmd.sellerOrgId());
         access.requireForOrg(OffersPermissions.WRITE, OffersRelations.ORG_MANAGE_PRODUCTS, org);
+        // An offer carries offer terms only: the page's content is the page's (S383).
+        PageContentLocked.refuse(cmd.unknownFields());
         validateCreate(cmd);
         requireListingRoom(org);
         ShipFrom shipFrom = cmd.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY
                 ? pickupShipFrom(org, cmd.shipFrom()) : cmd.shipFrom();
 
         CatalogVariant variant = resolve(cmd);
+        // The same checks the product writer applies to a listing: page on sale, brand, department, selling approval.
+        CatalogClient.Eligibility eligibility = catalog.eligibility(variant.variantAtin(), org);
+        requireEligible(eligibility);
+        OfferPolicy limits = policy.current();
         OfferCondition condition = cmd.condition() == null ? OfferCondition.NEW : cmd.condition();
+        String conditionNote = checkCondition(condition, cmd.conditionNote(), eligibility, limits);
+        OfferPackage box = checkPackage(cmd.fulfilment(), cmd.packaging(), limits);
         boolean fba = cmd.fulfilment().fulfilledByAfroTransact();
         offers.findOpen(org, variant.variantAtin(), condition, fba).ifPresent(existing -> {
             throw new ConflictException("offers.offer-exists", "You already have a " + condition + " "
@@ -93,6 +117,8 @@ class OfferServiceImpl implements OfferService {
             throw new ConflictException("offers.sku-taken",
                     "SKU " + sku + " is already used by another of your " + channel(fba) + " offers");
         }
+        // The tax rule (S384): live only with this seller's own RESOLVED decision on the ATIN, else held. Never a default.
+        Verdict verdict = taxGate.check(variant.variantAtin(), org, cmd.sellerBehaviour());
         Instant now = Instant.now(clock);
         String inventorySku = cmd.inventorySku() == null || cmd.inventorySku().isBlank() ? sku
                 : cmd.inventorySku().trim().toUpperCase(Locale.ROOT);
@@ -101,10 +127,84 @@ class OfferServiceImpl implements OfferService {
                 condition, cmd.priceMinor(), cmd.listPriceMinor(), currency(cmd.currency()), cmd.shippingMinor(),
                 cmd.fulfilment(), cmd.quantity() == null ? 0 : cmd.quantity(),
                 cmd.handlingDays() == null ? settings.defaultHandlingDays() : cmd.handlingDays(), shipFrom,
-                OfferStatus.ACTIVE, true, now, now, 0));
+                verdict.resolved() ? OfferStatus.ACTIVE : OfferStatus.TAX_HELD, true, now, now, 0, conditionNote, box,
+                cmd.sellerBehaviour(), verdict.resolved() ? null : verdict.holdReason(),
+                verdict.resolved() ? Offer.TAX_BASIS_SELLER_DECISION : null));
         publish(OffersEvents.OFFER_CREATED, offer);
+        if (!verdict.resolved()) {
+            publish(OffersEvents.OFFER_TAX_HELD, offer);
+            taxMetrics.held(verdict.holdReason());
+        }
         buyBox.recompute(List.of(offer.atin()), OffersEvents.OFFER_CREATED);
         return evaluator.view(offer);
+    }
+
+    /** Maps what catalog says about the page to the offers error codes of the contract. */
+    private static void requireEligible(CatalogClient.Eligibility eligibility) {
+        if (eligibility.canOffer()) {
+            return;
+        }
+        CatalogClient.Blocker blocker = eligibility.blockers().isEmpty()
+                ? new CatalogClient.Blocker("offers.not-allowed", "You cannot add an offer to this product.")
+                : eligibility.blockers().getFirst();
+        String message = blocker.message();
+        switch (blocker.code()) {
+            case "offers.selling-approval-required" ->
+                    throw new BusinessRuleException("offers.selling-approval-required", message);
+            case "catalog.brand-unavailable" -> throw new BusinessRuleException("offers.brand-unavailable", message);
+            case "catalog.department-not-allowed", "catalog.no-departments" ->
+                    throw new ForbiddenActionException(blocker.code(), message);
+            case "catalog.page-not-live" -> throw new NotFoundException("offers.product-not-found", message);
+            case "catalog.selling-unavailable" -> throw new CatalogClient.CatalogUnavailableException(message, null);
+            default -> throw new BusinessRuleException("offers.not-allowed", message);
+        }
+    }
+
+    /**
+     * A used or renewed item needs a category that allows it and a short note on what is different (the longest note is a
+     * setting). A new item keeps no note. Returns the note to store.
+     */
+    private static String checkCondition(OfferCondition condition, String note, CatalogClient.Eligibility eligibility,
+                                         OfferPolicy limits) {
+        if (condition == OfferCondition.NEW) {
+            return null;
+        }
+        if (!eligibility.allowedConditions().contains(condition.name())) {
+            throw new BusinessRuleException("offers.condition-not-allowed",
+                    "Used or renewed items cannot be sold in this category. Sell it as new.");
+        }
+        String trimmed = note == null ? "" : note.strip();
+        if (trimmed.isEmpty()) {
+            throw new BusinessRuleException("offers.condition-note-required",
+                    "Say what is different about this item, for example any marks or what is missing.");
+        }
+        if (trimmed.length() > limits.conditionNoteMaxLength()) {
+            throw new OfferRuleViolation("The offer is not valid", Map.of("conditionNote",
+                    "At most " + limits.conditionNoteMaxLength() + " characters"));
+        }
+        return trimmed;
+    }
+
+    /** The box of a Fulfilled by AfroTransact offer; no other offer carries one. Returns the package to store. */
+    private static OfferPackage checkPackage(Fulfilment fulfilment, OfferPackage box, OfferPolicy limits) {
+        if (box == null) {
+            return null;
+        }
+        if (fulfilment != Fulfilment.AFROTRANSACT) {
+            throw new BusinessRuleException("offers.package-not-allowed", "Package size and weight are only for "
+                    + "Fulfilled by AfroTransact offers. For other offers the page already has the item's package.");
+        }
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (box.longestEdgeIn() > limits.packageMaxEdgeIn()) {
+            errors.put("packaging", "Each side must be at most " + limits.packageMaxEdgeIn() + " in");
+        }
+        if (box.weightLb() > limits.packageMaxWeightLb()) {
+            errors.put("packaging.weightLb", "Weight must be at most " + limits.packageMaxWeightLb() + " lb");
+        }
+        if (!errors.isEmpty()) {
+            throw new OfferRuleViolation("The offer is not valid", errors);
+        }
+        return box;
     }
 
     /** The plan's listing cap: one more live listing must fit (there is no limit on shops or users). */
@@ -124,6 +224,7 @@ class OfferServiceImpl implements OfferService {
     @Override
     @Transactional
     public OfferView update(UUID id, UpdateOfferCommand cmd, Long expectedVersion) {
+        PageContentLocked.refuse(cmd.unknownFields());
         return change(id, expectedVersion, o -> {
             Offer.Terms t = o.terms();
             Long listPrice = cmd.listPriceMinor() == null ? t.listPriceMinor()
@@ -165,7 +266,19 @@ class OfferServiceImpl implements OfferService {
                             + " is already used by another of your " + channel(fba) + " offers");
                 }
             }
-            return o.revise(checked, Instant.now(clock));
+            Instant now = Instant.now(clock);
+            Offer revised = o.revise(checked, now);
+            String note = o.conditionNote();
+            if (checked.condition() != t.condition() || cmd.conditionNote() != null) {
+                String sent = cmd.conditionNote() != null ? cmd.conditionNote() : o.conditionNote();
+                note = checkCondition(checked.condition(), sent, catalog.eligibility(o.atin(), o.sellerOrgId()),
+                        policy.current());
+            }
+            OfferPackage box = checkPackage(checked.fulfilment(), cmd.packaging(), policy.current());
+            if (cmd.packaging() == null && checked.fulfilment() == Fulfilment.AFROTRANSACT) {
+                box = o.packaging();
+            }
+            return revised.withDetails(note, box, now);
         }, OffersEvents.OFFER_UPDATED);
     }
 
@@ -202,10 +315,16 @@ class OfferServiceImpl implements OfferService {
     @Override
     @Transactional
     public OfferView resume(UUID id, Long expectedVersion) {
-        return change(id, expectedVersion, o -> {
+        OfferView resumed = change(id, expectedVersion, o -> {
             requireListingRoom(o.sellerOrgId());
             return o.resume(Instant.now(clock));
         }, OffersEvents.OFFER_UPDATED);
+        if (resumed.offer().status() != OfferStatus.TAX_HELD) {
+            return resumed;
+        }
+        // Not verified yet (it was paused before the tax check existed): ask now, and release it if the seller has a decision.
+        taxHold.releaseFor(resumed.offer().atin());
+        return evaluator.view(offers.findById(id).orElseThrow());
     }
 
     @Override
@@ -250,6 +369,17 @@ class OfferServiceImpl implements OfferService {
             buyBox.recompute(List.of(updated.atin()), OffersEvents.OFFER_UPDATED);
         }
         return new StockUpdate(sku, quantity, reason, ids);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasOpenOffer(String sellerOrgId, String atin) {
+        Actor actor = permissions.require(OffersPermissions.READ);
+        if (!Actors.isStaff(actor) && !actor.orgId().map(sellerOrgId::equals).orElse(false)) {
+            throw new ForbiddenActionException("offers.not-your-organisation",
+                    "You can only ask about your own organisation's offers");
+        }
+        return offers.hasOpenOffer(sellerOrgId, atin == null ? "" : atin.trim().toUpperCase(Locale.ROOT));
     }
 
     @Override

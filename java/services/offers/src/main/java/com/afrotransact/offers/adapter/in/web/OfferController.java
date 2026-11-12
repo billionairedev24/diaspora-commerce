@@ -13,6 +13,7 @@ import com.afrotransact.offers.application.OfferService;
 import com.afrotransact.offers.application.OfferView;
 import com.afrotransact.offers.domain.OfferStatus;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -41,12 +42,29 @@ class OfferController {
     @Operation(summary = "Create an offer on an existing live variant (by ATIN or GTIN)",
             description = "The seller organisation is the token's org claim. 404 offers.product-not-found when the "
                     + "ATIN/GTIN has no live product page; 409 offers.offer-exists when you already offer the same "
-                    + "ATIN in that condition. Triggers a buy box recomputation.")
+                    + "ATIN in that condition. 422 offers.page-content-locked for page content, "
+                    + "offers.selling-approval-required, offers.brand-unavailable, offers.condition-not-allowed, "
+                    + "offers.condition-note-required, offers.package-not-allowed. The offer is ACTIVE only when the "
+                    + "seller has a RESOLVED tax decision on the ATIN, otherwise TAX_HELD (S384). Triggers a buy box "
+                    + "recomputation.")
     @PostMapping
     ResponseEntity<OfferResponse> create(@Valid @RequestBody CreateOfferRequest body) {
         OfferView created = offers.create(body.toCommand());
         return ResponseEntity.created(URI.create("/v1/offers/" + created.offer().id()))
                 .body(OfferResponse.of(created));
+    }
+
+    @Operation(operationId = "presence", summary = "Does this organisation have an open offer on a product page? "
+            + "(service clients, S385)",
+            description = "atin may be the page ATIN or any variant ATIN of it. Withdrawn offers do not count; paused "
+                    + "and tax-held ones do. Needs offers:read.")
+    @GetMapping("/presence")
+    OfferPresenceResponse presence(@RequestParam String atin, @RequestParam String sellerOrgId) {
+        return new OfferPresenceResponse(atin, sellerOrgId, offers.hasOpenOffer(sellerOrgId, atin));
+    }
+
+    @Schema(name = "OfferPresence")
+    record OfferPresenceResponse(String atin, String sellerOrgId, boolean hasOpenOffer) {
     }
 
     @Operation(summary = "List offers (own organisation; staff may filter by org)")

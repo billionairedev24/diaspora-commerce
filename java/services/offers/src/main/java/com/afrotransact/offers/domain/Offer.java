@@ -18,13 +18,45 @@ import java.util.regex.Pattern;
  * @param sellerQuantity seller-declared quantity, used only for {@link Fulfilment#SELLER}
  * @param shippingMinor  standard shipping charge per order line added to the price (landed price)
  * @param productLive    false while the catalog product is in review, rejected or paused
+ * @param conditionNote  what is different about a used or renewed item (null for new)
+ * @param packaging      the box this seller ships it in, only for Fulfilled by AfroTransact (S383); null otherwise
+ * @param sellerBehaviour the seller's own answers about how the item is sold (the tax behaviour facts), kept so the tax
+ *                       decision can be asked again when it is still missing (S384)
+ * @param heldReason     why a TAX_HELD offer waits (TAX_DECISION_MISSING, TAX_UNAVAILABLE ...), else null
+ * @param taxBasis       why the offer may be live as far as tax goes: {@link #TAX_BASIS_OWNER_PAGE} (the offer of the page's
+ *                       owner, covered by the page's own gate) or {@link #TAX_BASIS_SELLER_DECISION} (tax-returns holds a
+ *                       RESOLVED decision for this seller on this ATIN); null means not verified yet, and an unverified
+ *                       offer is never live (S384)
  */
 public record Offer(UUID id, String atin, String productAtin, UUID productId, String gtin, UUID categoryId,
                     String sellerOrgId, SellerKind sellerKind, String sellerSku, String inventorySku,
                     OfferCondition condition, long priceMinor, Long listPriceMinor, String currency,
                     long shippingMinor, Fulfilment fulfilment, int sellerQuantity, int handlingDays,
                     ShipFrom shipFrom, OfferStatus status, boolean productLive, Instant createdAt, Instant updatedAt,
-                    long version) {
+                    long version, String conditionNote, OfferPackage packaging, Map<String, Object> sellerBehaviour,
+                    String heldReason, String taxBasis) {
+
+    /** The offer of the page's owner: the page's own tax decision and live gate cover it. */
+    public static final String TAX_BASIS_OWNER_PAGE = "OWNER_PAGE";
+    /** tax-returns holds a stored, RESOLVED decision for this seller on this ATIN. */
+    public static final String TAX_BASIS_SELLER_DECISION = "SELLER_DECISION";
+    /** The seller has no RESOLVED decision on this ATIN yet. */
+    public static final String HOLD_DECISION_MISSING = "TAX_DECISION_MISSING";
+    /** tax-returns could not be asked: the offer waits rather than going live unchecked. */
+    public static final String HOLD_UNAVAILABLE = "TAX_UNAVAILABLE";
+    /** A paused offer without a verified basis came back: it waits for the check. */
+    public static final String HOLD_UNVERIFIED = "TAX_DECISION_UNVERIFIED";
+
+    /** An offer without condition note, package, behaviour or tax basis (not verified: never live until it is). */
+    public Offer(UUID id, String atin, String productAtin, UUID productId, String gtin, UUID categoryId,
+                 String sellerOrgId, SellerKind sellerKind, String sellerSku, String inventorySku,
+                 OfferCondition condition, long priceMinor, Long listPriceMinor, String currency, long shippingMinor,
+                 Fulfilment fulfilment, int sellerQuantity, int handlingDays, ShipFrom shipFrom, OfferStatus status,
+                 boolean productLive, Instant createdAt, Instant updatedAt, long version) {
+        this(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku, inventorySku,
+                condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment, sellerQuantity, handlingDays,
+                shipFrom, status, productLive, createdAt, updatedAt, version, null, null, Map.of(), null, null);
+    }
 
     public static final int MAX_HANDLING_DAYS = 30;
     public static final int MAX_SKU = 40;
@@ -35,6 +67,8 @@ public record Offer(UUID id, String atin, String productAtin, UUID productId, St
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(sellerKind, "sellerKind");
         Objects.requireNonNull(status, "status");
+        conditionNote = conditionNote == null || conditionNote.isBlank() ? null : conditionNote.strip();
+        sellerBehaviour = sellerBehaviour == null ? Map.of() : Map.copyOf(sellerBehaviour);
         Map<String, String> errors = new LinkedHashMap<>();
         if (atin == null || !ATIN.matcher(atin).matches()) {
             errors.put("atin", "Must be an ATIN (AT + 8 letters or digits)");
@@ -97,7 +131,8 @@ public record Offer(UUID id, String atin, String productAtin, UUID productId, St
         return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,
                 terms.inventorySku(), terms.condition(), terms.priceMinor(), terms.listPriceMinor(), currency,
                 terms.shippingMinor(), terms.fulfilment(), terms.sellerQuantity(), terms.handlingDays(),
-                terms.shipFrom(), status, productLive, createdAt, now, version);
+                terms.shipFrom(), status, productLive, createdAt, now, version, conditionNote, packaging,
+                sellerBehaviour, heldReason, taxBasis);
     }
 
     public Terms terms() {
@@ -112,9 +147,16 @@ public record Offer(UUID id, String atin, String productAtin, UUID productId, St
         return withStatus(OfferStatus.PAUSED, now);
     }
 
+    /**
+     * A paused offer comes back. One whose tax basis is not verified does not go live: it waits as TAX_HELD
+     * ({@link #HOLD_UNVERIFIED}) until the tax check has run.
+     */
     public Offer resume(Instant now) {
         if (status != OfferStatus.PAUSED) {
             throw new IllegalStateException("Only a paused offer can be resumed");
+        }
+        if (taxBasis == null) {
+            return heldFor(HOLD_UNVERIFIED, now);
         }
         return withStatus(OfferStatus.ACTIVE, now);
     }
@@ -126,16 +168,70 @@ public record Offer(UUID id, String atin, String productAtin, UUID productId, St
         return withStatus(OfferStatus.WITHDRAWN, now);
     }
 
+    /**
+     * The offering seller has no RESOLVED tax decision on this ATIN (or tax-returns could not be asked): the offer is not
+     * buyable, not in search and not in the buy box until {@link #releasedFromTaxHold}. Only an active offer is held; a
+     * paused one stays paused (it is checked when it comes back).
+     */
+    public Offer heldForTax(String reason, Instant now) {
+        if (status != OfferStatus.ACTIVE) {
+            throw new IllegalStateException("Only an active offer can be held for tax (was " + status + ")");
+        }
+        return heldFor(reason, now);
+    }
+
+    /**
+     * The seller now has a RESOLVED tax decision: the held offer is active. Only the tax release component calls this
+     * (checked by {@code TaxGateArchitectureTest}); it never invents a basis.
+     */
+    public Offer releasedFromTaxHold(String basis, Instant now) {
+        if (status != OfferStatus.TAX_HELD) {
+            throw new IllegalStateException("Only an offer held for tax can be released (was " + status + ")");
+        }
+        if (basis == null || basis.isBlank()) {
+            throw new IllegalArgumentException("A release needs the tax basis it rests on");
+        }
+        return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,
+                inventorySku, condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment,
+                sellerQuantity, handlingDays, shipFrom, OfferStatus.ACTIVE, productLive, createdAt, now, version,
+                conditionNote, packaging, sellerBehaviour, null, basis);
+    }
+
+    /** Records that tax-returns holds a RESOLVED decision (an offer that was live before the check existed). */
+    public Offer withTaxBasis(String basis, Instant now) {
+        return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,
+                inventorySku, condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment,
+                sellerQuantity, handlingDays, shipFrom, status, productLive, createdAt, now, version, conditionNote,
+                packaging, sellerBehaviour, heldReason, basis);
+    }
+
+    /** The same offer with a note on its condition and the box it ships in. */
+    public Offer withDetails(String newConditionNote, OfferPackage newPackaging, Instant now) {
+        return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,
+                inventorySku, condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment,
+                sellerQuantity, handlingDays, shipFrom, status, productLive, createdAt, now, version, newConditionNote,
+                newPackaging, sellerBehaviour, heldReason, taxBasis);
+    }
+
     public Offer withProductLive(boolean live, Instant now) {
         return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,
                 inventorySku, condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment,
-                sellerQuantity, handlingDays, shipFrom, status, live, createdAt, now, version);
+                sellerQuantity, handlingDays, shipFrom, status, live, createdAt, now, version, conditionNote, packaging,
+                sellerBehaviour, heldReason, taxBasis);
     }
 
     private Offer withStatus(OfferStatus next, Instant now) {
         return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,
                 inventorySku, condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment,
-                sellerQuantity, handlingDays, shipFrom, next, productLive, createdAt, now, version);
+                sellerQuantity, handlingDays, shipFrom, next, productLive, createdAt, now, version, conditionNote,
+                packaging, sellerBehaviour, null, taxBasis);
+    }
+
+    private Offer heldFor(String reason, Instant now) {
+        return new Offer(id, atin, productAtin, productId, gtin, categoryId, sellerOrgId, sellerKind, sellerSku,
+                inventorySku, condition, priceMinor, listPriceMinor, currency, shippingMinor, fulfilment,
+                sellerQuantity, handlingDays, shipFrom, OfferStatus.TAX_HELD, productLive, createdAt, now, version,
+                conditionNote, packaging, sellerBehaviour, reason, null);
     }
 
     /** The seller-editable commercial terms of an offer. */

@@ -5,6 +5,7 @@ import com.afrotransact.offers.domain.BuyBoxPolicy;
 import com.afrotransact.offers.domain.BuyBoxWeights;
 import com.afrotransact.offers.domain.CouponPolicy;
 import com.afrotransact.offers.domain.DefaultBuyBoxPolicy;
+import com.afrotransact.offers.domain.OfferPolicy;
 import com.afrotransact.offers.domain.DefaultCouponPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -23,6 +24,17 @@ class OffersConfiguration {
                                   @Value("${at.offers.afrotransact-delivery-transit-days:1}") int deliveryTransitDays) {
         return new OffersSettings(retailOrgId, defaultHandlingDays, afrotransactTransitDays, sellerTransitDays,
                 lowStockThreshold, deliveryTransitDays);
+    }
+
+    /** S383, S384: the configured starting values of the thresholds staff edit; the stored copy wins. */
+    @Bean
+    OfferPolicy offerPolicyDefaults(
+            @Value("${at.offers.policy.condition-note-max-length}") int conditionNoteMaxLength,
+            @Value("${at.offers.policy.package-max-edge-in}") double packageMaxEdgeIn,
+            @Value("${at.offers.policy.package-max-weight-lb}") double packageMaxWeightLb,
+            @Value("${at.offers.policy.tax-sweep-batch-size}") int taxSweepBatchSize) {
+        return new OfferPolicy(conditionNoteMaxLength, packageMaxEdgeIn, packageMaxWeightLb, taxSweepBatchSize, null,
+                null, 0);
     }
 
     @Bean

@@ -1,5 +1,6 @@
 package com.afrotransact.offers.it;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,10 +25,32 @@ public class StubCatalog {
         return v;
     }
 
+    private static final Map<String, CatalogClient.Eligibility> ELIGIBILITY = new ConcurrentHashMap<>();
+
+    /** Every condition allowed, nothing in the way: what catalog answers for an ordinary page. */
+    private static final CatalogClient.Eligibility OPEN = new CatalogClient.Eligibility(true, List.of(),
+            List.of("NEW", "RENEWED", "USED_LIKE_NEW", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"));
+
+    /** Catalog refuses offers on this variant (for example a gated brand without approval). */
+    public static void refuse(String variantAtin, String code, String message) {
+        ELIGIBILITY.put(variantAtin, new CatalogClient.Eligibility(false, List.of(new CatalogClient.Blocker(code,
+                message)), List.of("NEW")));
+    }
+
+    /** Catalog allows only these conditions on this variant. */
+    public static void allowOnly(String variantAtin, String... conditions) {
+        ELIGIBILITY.put(variantAtin, new CatalogClient.Eligibility(true, List.of(), List.of(conditions)));
+    }
+
     @Bean
     @Primary
     CatalogClient stubCatalogClient() {
         return new CatalogClient() {
+            @Override
+            public Eligibility eligibility(String variantAtin, String sellerOrgId) {
+                return ELIGIBILITY.getOrDefault(variantAtin, OPEN);
+            }
+
             @Override
             public Optional<CatalogVariant> liveVariant(String atin) {
                 return Optional.ofNullable(BY_ATIN.get(atin));

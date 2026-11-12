@@ -101,6 +101,18 @@ at:
     # S255: AfroTransact Delivery from the seller's store (local, collected and delivered by our driver).
     afrotransact-delivery-transit-days: 1
     low-stock-threshold: 5
+    # S383, S384: starting values of the thresholds staff edit under PUT /v1/offers/settings (the saved copy wins).
+    policy:
+      condition-note-max-length: 200
+      package-max-edge-in: 108
+      package-max-weight-lb: 150
+      tax-sweep-batch-size: 200
+    # S384: tax-returns decides whether the offering seller has a RESOLVED tax decision on an ATIN; an offer is live only
+    # with one. The release job re-checks held offers (and offers from before the check) every sweep-interval.
+    tax:
+      base-url: ${TAX_URL:http://localhost:8111}
+      timeout: ${TAX_TIMEOUT:5s}
+      sweep-interval: 60s
     catalog:
       base-url: ${CATALOG_URL:http://localhost:8101}
       timeout: ${CATALOG_TIMEOUT:3s}
@@ -115,9 +127,11 @@ at:
       token-path: /oauth2/token
       client-id: ${OFFERS_CLIENT_ID:offers-service}
       client-secret: ${OFFERS_CLIENT_SECRET:local-offers-service-secret}
-      scopes: catalog:read sellers:ship-from.read sellers:entitlements.read
+      scopes: catalog:read sellers:ship-from.read sellers:entitlements.read tax:read tax:classify
     consumers:
       catalog-topic: at.product.events
+      # S384: tax.classification.changed (a variant's decision was made or changed) releases offers held for tax.
+      tax-topic: at.taxreturns.events
       inventory-topic: at.inventory.events
       # S257: inventory.inbound.received (FBA stock received at a fulfilment centre) → Fulfilled by AfroTransact offer
       inventory-inbound-topic: at.inventory-inbound.events

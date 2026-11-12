@@ -1,7 +1,11 @@
 package com.afrotransact.offers.adapter.in.web;
 
+import java.util.Map;
+import java.util.TreeMap;
+
 import com.afrotransact.offers.domain.CouponNotApplicable;
 import com.afrotransact.offers.domain.OfferRuleViolation;
+import com.afrotransact.offers.domain.PageContentLocked;
 import com.afrotransact.offers.port.CatalogClient.CatalogUnavailableException;
 import com.afrotransact.offers.port.PickupLocationClient.SellerUnavailableException;
 import com.afrotransact.platform.web.error.ProblemTypes;
@@ -26,6 +30,21 @@ class OffersErrorAdvice {
         ProblemDetail pd = problem(HttpStatus.UNPROCESSABLE_CONTENT, "offers.rule-violation", ex.getMessage());
         pd.setTitle("Offers rule violated");
         pd.setProperty("fieldErrors", ex.fieldErrors());
+        return pd;
+    }
+
+    @ExceptionHandler(PageContentLocked.class)
+    ProblemDetail pageContentLocked(PageContentLocked ex) {
+        boolean content = ex.aboutPageContent();
+        String code = content ? "offers.page-content-locked" : "offers.unknown-field";
+        ProblemDetail pd = problem(HttpStatus.UNPROCESSABLE_CONTENT, code, content ? PageContentLocked.MESSAGE
+                : "An offer does not have " + String.join(", ", ex.otherFields()) + ".");
+        pd.setTitle(content ? "That detail belongs to the product page" : "Unknown field");
+        Map<String, String> errors = new TreeMap<>();
+        ex.contentFields().forEach(f -> errors.put(f, PageContentLocked.MESSAGE));
+        ex.otherFields().forEach(f -> errors.put(f, "An offer does not have this field"));
+        pd.setProperty("errors", errors);
+        pd.setProperty("fieldErrors", errors);
         return pd;
     }
 

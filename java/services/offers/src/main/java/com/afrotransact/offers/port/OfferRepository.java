@@ -38,6 +38,24 @@ public interface OfferRepository {
     /** Every open offer of a seller on a variant (both channels, every condition), oldest first. */
     List<Offer> findOpenBySellerAndAtin(String sellerOrgId, String atin);
 
+    /**
+     * Offers waiting for the seller's tax decision (TAX_HELD), oldest first, at most {@code limit}; with {@code atin}
+     * only those on that variant.
+     */
+    List<Offer> findTaxHeld(String atin, int limit);
+
+    /** Active offers whose tax basis is not verified yet (offers from before the check existed), oldest first. */
+    List<Offer> findActiveWithoutTaxBasis(int limit);
+
+    /** How many offers are ACTIVE without a tax basis: the gauge {@code offers_active_without_tax_decision}. */
+    long countActiveWithoutTaxBasis();
+
+    /** How many offers wait for a tax decision. */
+    long countTaxHeld();
+
+    /** Whether the organisation has an open (not withdrawn) offer on this page ATIN or variant ATIN. */
+    boolean hasOpenOffer(String sellerOrgId, String atin);
+
     /** Whether another open offer of the seller in the same channel already uses this seller SKU. */
     /** Live listings of the seller: offers shoppers can buy now (paused and withdrawn ones don't count). */
     long countActive(String sellerOrgId);

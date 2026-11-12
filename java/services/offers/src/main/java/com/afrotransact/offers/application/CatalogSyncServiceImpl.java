@@ -73,7 +73,8 @@ class CatalogSyncServiceImpl implements CatalogSyncService {
                         condition(p), v.priceMinor(), listPrice(v),
                         v.currency() == null ? "USD" : v.currency().toUpperCase(Locale.ROOT), 0,
                         fulfilment, fulfilment.sellerStock() ? Math.max(0, v.quantity()) : 0, handlingDays(p),
-                        shipFrom(p, fulfilment), OfferStatus.ACTIVE, LIVE.equals(p.status()), now, now, 0));
+                        shipFrom(p, fulfilment), OfferStatus.ACTIVE, LIVE.equals(p.status()), now, now, 0, null, null,
+                        null, null, Offer.TAX_BASIS_OWNER_PAGE));
                 events.publish(OffersEvents.OFFER_CREATED, OffersEvents.AGGREGATE, offer.atin(),
                         OfferEventPayload.of(offer));
                 touched.add(offer.atin());

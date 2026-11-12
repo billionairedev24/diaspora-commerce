@@ -89,7 +89,10 @@ class FbaOfferServiceImpl implements FbaOfferService {
                 Offer offer = offers.insert(new Offer(UUID.randomUUID(), t.atin(), t.productAtin(), t.productId(),
                         t.gtin(), t.categoryId(), t.sellerOrgId(), t.sellerKind(), sellerSku, sku, t.condition(),
                         t.priceMinor(), t.listPriceMinor(), t.currency(), 0, Fulfilment.AFROTRANSACT, 0,
-                        settings.defaultHandlingDays(), null, OfferStatus.ACTIVE, t.productLive(), now, now, 0));
+                        settings.defaultHandlingDays(), null,
+                        t.taxBasis() == null ? OfferStatus.TAX_HELD : OfferStatus.ACTIVE, t.productLive(), now, now, 0,
+                        t.conditionNote(), null, t.sellerBehaviour(),
+                        t.taxBasis() == null ? Offer.HOLD_UNVERIFIED : null, t.taxBasis()));
                 events.publish(OffersEvents.OFFER_CREATED, OffersEvents.AGGREGATE, offer.atin(),
                         OfferEventPayload.of(offer));
                 created.add(offer.id());

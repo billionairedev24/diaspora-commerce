@@ -55,6 +55,29 @@ class HttpCatalogClient implements CatalogClient {
     record GtinCheckJson(String digits, boolean valid, String existingAtin) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record BlockerJson(String code, String message) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record EligibilityJson(boolean canOffer, List<BlockerJson> blockers, List<String> allowedConditions) {
+    }
+
+    record EligibilityRequestJson(String atin, String sellerOrgId) {
+    }
+
+    @Override
+    public Eligibility eligibility(String variantAtin, String sellerOrgId) {
+        EligibilityJson body = get(() -> client.post().uri("/v1/catalog/offer-eligibility")
+                .headers(h -> h.setBearerAuth(tokens.token())).body(new EligibilityRequestJson(variantAtin, sellerOrgId))
+                .retrieve().body(EligibilityJson.class));
+        if (body == null) {
+            throw new CatalogUnavailableException("catalog-service gave no eligibility answer for " + variantAtin, null);
+        }
+        return new Eligibility(body.canOffer(), body.blockers() == null ? List.of() : body.blockers().stream()
+                .map(b -> new Blocker(b.code(), b.message())).toList(), body.allowedConditions());
+    }
+
     @Override
     public Optional<CatalogVariant> liveVariant(String atin) {
         PublicVariantJson body = get(() -> client.get().uri("/v1/public/variants/{atin}", atin)

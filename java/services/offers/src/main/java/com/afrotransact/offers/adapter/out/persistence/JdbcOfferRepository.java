@@ -13,6 +13,8 @@ import java.util.UUID;
 import com.afrotransact.offers.domain.Fulfilment;
 import com.afrotransact.offers.domain.Offer;
 import com.afrotransact.offers.domain.OfferCondition;
+import com.afrotransact.offers.domain.OfferPackage;
+import com.afrotransact.offers.domain.OfferRequiresTax;
 import com.afrotransact.offers.domain.OfferStatus;
 import com.afrotransact.offers.domain.SellerKind;
 import com.afrotransact.offers.port.OfferRepository;
@@ -28,7 +30,8 @@ class JdbcOfferRepository implements OfferRepository {
             select id, atin, product_atin, product_id, gtin, category_id, seller_org, seller_kind, seller_sku,
                    inventory_sku, item_condition, price_minor, list_price_minor, currency, shipping_minor, fulfilment,
                    seller_quantity, handling_days, ship_from::text as ship_from, status, product_live, created_at,
-                   updated_at, version
+                   updated_at, version, condition_note, package_length_in, package_width_in, package_height_in,
+                   package_weight_lb, seller_behaviour::text as seller_behaviour, held_reason, tax_basis
             from offer
             """;
     private static final String OPEN = " status <> 'WITHDRAWN' ";
@@ -45,15 +48,22 @@ class JdbcOfferRepository implements OfferRepository {
 
     @Override
     public Offer insert(Offer o) {
+        // The write guard of the tax rule (docs/engineering/tax-gate-paths.md): an offer is never stored ACTIVE without the
+        // basis that says why it may be live.
+        OfferRequiresTax.require(o);
         try {
             jdbc.sql("""
                     insert into offer (id, atin, product_atin, product_id, gtin, category_id, seller_org, seller_kind,
                                        seller_sku, inventory_sku, item_condition, price_minor, list_price_minor,
                                        currency, shipping_minor, fulfilment, seller_quantity, handling_days, ship_from,
-                                       status, product_live, created_at, updated_at, version)
+                                       status, product_live, created_at, updated_at, version, condition_note,
+                                       package_length_in, package_width_in, package_height_in, package_weight_lb,
+                                       seller_behaviour, held_reason, tax_basis)
                     values (:id, :atin, :productAtin, :productId, :gtin, :categoryId, :org, :kind, :sku, :invSku,
                             :condition, :price, :listPrice, :currency, :shipping, :fulfilment, :qty, :handling,
-                            cast(:shipFrom as jsonb), :status, :live, :createdAt, :updatedAt, 0)
+                            cast(:shipFrom as jsonb), :status, :live, :createdAt, :updatedAt, 0, :conditionNote,
+                            :pkgLength, :pkgWidth, :pkgHeight, :pkgWeight, cast(:behaviour as jsonb), :heldReason,
+                            :taxBasis)
                     """)
                     .params(params(o))
                     .update();
@@ -72,7 +82,10 @@ class JdbcOfferRepository implements OfferRepository {
                     update offer set item_condition = :condition, price_minor = :price, list_price_minor = :listPrice,
                            shipping_minor = :shipping, fulfilment = :fulfilment, seller_quantity = :qty,
                            handling_days = :handling, ship_from = cast(:shipFrom as jsonb), inventory_sku = :invSku,
-                           status = :status, product_live = :live, updated_at = :updatedAt, version = version + 1
+                           status = :status, product_live = :live, updated_at = :updatedAt, version = version + 1,
+                           condition_note = :conditionNote, package_length_in = :pkgLength,
+                           package_width_in = :pkgWidth, package_height_in = :pkgHeight, package_weight_lb = :pkgWeight,
+                           held_reason = :heldReason, tax_basis = :taxBasis
                     where id = :id and version = :version
                     """)
                     .params(params(o))
@@ -113,6 +126,15 @@ class JdbcOfferRepository implements OfferRepository {
         p.put("live", o.productLive());
         p.put("createdAt", Timestamp.from(o.createdAt()));
         p.put("updatedAt", Timestamp.from(o.updatedAt()));
+        p.put("conditionNote", o.conditionNote());
+        OfferPackage box = o.packaging();
+        p.put("pkgLength", box == null ? null : box.lengthIn());
+        p.put("pkgWidth", box == null ? null : box.widthIn());
+        p.put("pkgHeight", box == null ? null : box.heightIn());
+        p.put("pkgWeight", box == null ? null : box.weightLb());
+        p.put("behaviour", json.write(o.sellerBehaviour()));
+        p.put("heldReason", o.heldReason());
+        p.put("taxBasis", o.taxBasis());
         return p;
     }
 
@@ -158,6 +180,42 @@ class JdbcOfferRepository implements OfferRepository {
     public List<Offer> findOpenBySellerAndAtin(String sellerOrgId, String atin) {
         return jdbc.sql(SELECT + " where seller_org = :org and atin = :atin and" + OPEN + "order by created_at, id")
                 .param("org", sellerOrgId).param("atin", atin).query(this::map).list();
+    }
+
+    @Override
+    public List<Offer> findTaxHeld(String atin, int limit) {
+        String where = atin == null ? "" : " and atin = :atin";
+        JdbcClient.StatementSpec spec = jdbc.sql(SELECT + " where status = 'TAX_HELD'" + where
+                + " order by updated_at, id limit :limit").param("limit", limit);
+        if (atin != null) {
+            spec = spec.param("atin", atin);
+        }
+        return spec.query(this::map).list();
+    }
+
+    @Override
+    public List<Offer> findActiveWithoutTaxBasis(int limit) {
+        return jdbc.sql(SELECT + " where status = 'ACTIVE' and tax_basis is null order by created_at, id limit :limit")
+                .param("limit", limit).query(this::map).list();
+    }
+
+    @Override
+    public long countActiveWithoutTaxBasis() {
+        return jdbc.sql("select count(*) from offer where status = 'ACTIVE' and tax_basis is null")
+                .query(Long.class).single();
+    }
+
+    @Override
+    public long countTaxHeld() {
+        return jdbc.sql("select count(*) from offer where status = 'TAX_HELD'").query(Long.class).single();
+    }
+
+    @Override
+    public boolean hasOpenOffer(String sellerOrgId, String atin) {
+        return jdbc.sql("""
+                select exists(select 1 from offer where seller_org = :org and (atin = :atin or product_atin = :atin)
+                              and status <> 'WITHDRAWN')
+                """).param("org", sellerOrgId).param("atin", atin).query(Boolean.class).single();
     }
 
     @Override
@@ -230,6 +288,17 @@ class JdbcOfferRepository implements OfferRepository {
                 rs.getInt("handling_days"), json.shipFrom(rs.getString("ship_from")),
                 OfferStatus.valueOf(rs.getString("status")), rs.getBoolean("product_live"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
-                rs.getLong("version"));
+                rs.getLong("version"), rs.getString("condition_note"), packaging(rs),
+                json.objectMap(rs.getString("seller_behaviour")), rs.getString("held_reason"),
+                rs.getString("tax_basis"));
+    }
+
+    private static OfferPackage packaging(ResultSet rs) throws SQLException {
+        double length = rs.getDouble("package_length_in");
+        if (rs.wasNull()) {
+            return null;
+        }
+        return new OfferPackage(length, rs.getDouble("package_width_in"), rs.getDouble("package_height_in"),
+                rs.getDouble("package_weight_lb"));
     }
 }

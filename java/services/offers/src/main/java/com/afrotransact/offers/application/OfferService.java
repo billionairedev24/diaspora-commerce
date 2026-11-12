@@ -38,6 +38,13 @@ public interface OfferService {
     OfferView get(UUID id);
 
     /**
+     * Whether the organisation has an open (not withdrawn) offer on a page or one of its variants: catalog asks before it
+     * accepts a seller's suggestion to change a page. Staff and service callers ask about any organisation, sellers only
+     * about their own.
+     */
+    boolean hasOpenOffer(String sellerOrgId, String atin);
+
+    /**
      * Sets the declared quantity of the caller's seller-fulfilled offers with this seller SKU (seller center stock
      * adjustments). Only the owning organisation (or staff naming it) can change it; Fulfilled-by-AfroTransact stock
      * comes from inventory and is refused. Setting an absolute quantity is idempotent.

@@ -1,7 +1,10 @@
 package com.afrotransact.offers.adapter.in.web;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.offers.application.CreateOfferCommand;
@@ -12,10 +15,12 @@ import com.afrotransact.offers.application.UpdateOfferCommand;
 import com.afrotransact.offers.domain.Fulfilment;
 import com.afrotransact.offers.domain.Offer;
 import com.afrotransact.offers.domain.OfferCondition;
+import com.afrotransact.offers.domain.OfferPackage;
 import com.afrotransact.offers.domain.OfferStatus;
 import com.afrotransact.offers.domain.SellerKind;
 import com.afrotransact.offers.domain.ShipFrom;
 import com.afrotransact.offers.domain.StockStatus;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -53,7 +58,23 @@ final class OfferDtos {
         }
     }
 
-    @Schema(name = "CreateOfferRequest", description = "Exactly one of atin (variant ATIN) or gtin")
+    @Schema(name = "OfferPackage", description = "The box this seller ships the item in, stored on the offer. Only for "
+            + "Fulfilled by AfroTransact (fulfilment AFROTRANSACT); inches and pounds like the catalog package.")
+    record PackagingDto(@Positive @Max(108) double lengthIn, @Positive @Max(108) double widthIn,
+                        @Positive @Max(108) double heightIn, @Positive @Max(150) double weightLb) {
+
+        OfferPackage toDomain() {
+            return new OfferPackage(lengthIn, widthIn, heightIn, weightLb);
+        }
+
+        static PackagingDto of(OfferPackage p) {
+            return p == null ? null : new PackagingDto(p.lengthIn(), p.widthIn(), p.heightIn(), p.weightLb());
+        }
+    }
+
+    @Schema(name = "CreateOfferRequest", description = "Exactly one of atin (variant ATIN) or gtin. Offer terms only: "
+            + "page content (title, images, attributes, brand, category) is refused with 422 "
+            + "offers.page-content-locked.")
     record CreateOfferRequest(
             @Pattern(regexp = "AT[0-9A-Z]{8}") @Schema(example = "AT0000ABCD") String atin,
             @Pattern(regexp = "[0-9 -]{8,17}") @Schema(example = "4006381333931") String gtin,
@@ -73,12 +94,23 @@ final class OfferDtos {
             Integer quantity,
             @Min(0) @Max(30) @Schema(description = "Days to hand the order to the carrier", defaultValue = "2")
             Integer handlingDays,
-            @Valid ShipFromDto shipFrom) {
+            @Valid ShipFromDto shipFrom,
+            @Size(max = 1000) @Schema(description = "Required for any condition other than NEW; at most 200 characters "
+                    + "(a setting)") String conditionNote,
+            @Valid PackagingDto packaging,
+            @Schema(description = "The seller's own answers about how the item is sold (sold_heated, "
+                    + "utensils_provided ...), for the tax decision") Map<String, Object> sellerBehaviour,
+            @JsonAnySetter @Schema(hidden = true) Map<String, Object> unknown) {
+
+        public CreateOfferRequest {
+            unknown = unknown == null ? new HashMap<>() : unknown;
+        }
 
         CreateOfferCommand toCommand() {
             return new CreateOfferCommand(atin, gtin, sellerOrgId, sellerSku, inventorySku, condition, priceMinor,
                     listPriceMinor, currency, shippingMinor, fulfilment, quantity, handlingDays,
-                    shipFrom == null ? null : shipFrom.toDomain());
+                    shipFrom == null ? null : shipFrom.toDomain(), conditionNote,
+                    packaging == null ? null : packaging.toDomain(), sellerBehaviour, Set.copyOf(unknown.keySet()));
         }
     }
 
@@ -88,13 +120,22 @@ final class OfferDtos {
                               Fulfilment fulfilment, @PositiveOrZero Integer quantity,
                               @Min(0) @Max(30) Integer handlingDays, @Valid ShipFromDto shipFrom,
                               @Size(max = 40) String inventorySku,
+                              @Size(max = 1000) @Schema(description = "Needed when the condition changes to anything "
+                                      + "but NEW (200 characters at most)") String conditionNote,
+                              @Valid PackagingDto packaging,
                               @Schema(description = "Version you edited (alternative to If-Match); a newer stored "
                                       + "version answers 409 offers.version-mismatch")
-                              @PositiveOrZero Long version) {
+                              @PositiveOrZero Long version,
+                              @JsonAnySetter @Schema(hidden = true) Map<String, Object> unknown) {
+
+        public UpdateOfferRequest {
+            unknown = unknown == null ? new HashMap<>() : unknown;
+        }
 
         UpdateOfferCommand toCommand() {
             return new UpdateOfferCommand(condition, priceMinor, listPriceMinor, shippingMinor, fulfilment, quantity,
-                    handlingDays, shipFrom == null ? null : shipFrom.toDomain(), inventorySku);
+                    handlingDays, shipFrom == null ? null : shipFrom.toDomain(), inventorySku, conditionNote,
+                    packaging == null ? null : packaging.toDomain(), Set.copyOf(unknown.keySet()));
         }
     }
 
@@ -106,7 +147,11 @@ final class OfferDtos {
                          @Schema(description = "Seller-declared quantity (SELLER fulfilment)") int quantity,
                          @Schema(description = "Sellable units now") int availableQty, StockStatus stockStatus,
                          int handlingDays, int deliveryDays, ShipFromDto shipFrom, String shipsFrom,
-                         OfferStatus status, boolean productLive,
+                         @Schema(description = "TAX_HELD means the seller has no RESOLVED tax decision on this ATIN yet; "
+                                 + "the offer is not buyable, not in search and not in the buy box") OfferStatus status,
+                         @Schema(description = "Why a TAX_HELD offer waits (TAX_DECISION_MISSING, TAX_PENDING_REVIEW, "
+                                 + "TAX_UNAVAILABLE ...); null otherwise") String heldReason,
+                         String conditionNote, PackagingDto packaging, boolean productLive,
                          @Schema(description = "Hidden by seller enforcement or restriction") boolean suppressed,
                          Instant createdAt, Instant updatedAt, long version) {
 
@@ -116,8 +161,9 @@ final class OfferDtos {
                     o.sellerOrgId(), v.sellerName(), o.sellerKind(), o.sellerSku(), o.inventorySku(), o.condition(),
                     o.priceMinor(), o.listPriceMinor(), o.shippingMinor(), o.landedPriceMinor(), o.currency(),
                     o.fulfilment(), o.sellerQuantity(), v.availableQty(), v.stockStatus(), o.handlingDays(),
-                    v.deliveryDays(), ShipFromDto.of(o.shipFrom()), shipsFromLabel(o), o.status(), o.productLive(),
-                    v.suppressed(), o.createdAt(), o.updatedAt(), o.version());
+                    v.deliveryDays(), ShipFromDto.of(o.shipFrom()), shipsFromLabel(o), o.status(), o.heldReason(),
+                    o.conditionNote(), PackagingDto.of(o.packaging()), o.productLive(), v.suppressed(), o.createdAt(),
+                    o.updatedAt(), o.version());
         }
     }
 
