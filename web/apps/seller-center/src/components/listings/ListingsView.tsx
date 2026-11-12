@@ -23,6 +23,7 @@ import { exportTable, pollExport, runForEach } from '@/lib/table-export';
 import { DraftsTable } from './DraftsTable';
 import { priceMinor } from './form-model';
 import { FulfilmentSheet } from './FulfilmentSheet';
+import { ImageTasksBanner } from './ImageTasksBanner';
 import { QuickStockSheet } from './QuickStockSheet';
 import { useSavePrice } from './useSavePrice';
 
@@ -67,6 +68,7 @@ export function ListingsView() {
         </>
       ) : null}
     >
+      <ImageTasksBanner />
       {editable ? (
         <Tabs
           label={t('sc.listings.tabs')}

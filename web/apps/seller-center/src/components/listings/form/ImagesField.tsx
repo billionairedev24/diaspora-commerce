@@ -1,13 +1,15 @@
 'use client';
 
-import { cx, fieldStyles } from '@afrotransact/ui';
-import { ArrowLeft, ArrowRight, Star, Trash, UploadSimple } from '@phosphor-icons/react/ssr';
+import { cx } from '@afrotransact/ui';
+import { UploadSimple } from '@phosphor-icons/react/ssr';
 import { type DragEvent, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 
-import { fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES } from '../form-model';
+import { fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES, MIN_IMAGE_PX } from '../form-model';
+import { ImageCard } from './ImageCard';
+import { ExtraPhotoMeter, MainImageRules } from './ImageGuidance';
 
 const dims = (file: File) =>
   new Promise<{ w: number; h: number }>((resolve) => {
@@ -17,13 +19,19 @@ const dims = (file: File) =>
     img.src = URL.createObjectURL(file);
   });
 
+/** What media's AI check compares a picture with, and the product type (apparel may show a model). */
+export interface ImageContext {
+  title?: string;
+  brand?: string;
+  productTypeCode?: string;
+}
+
 interface Props {
   images: FormImage[];
   update: (fn: (prev: FormImage[]) => FormImage[]) => void;
   error?: string;
+  context?: ImageContext;
 }
-
-const iconButton = 'grid size-9 place-items-center rounded-xs border-0 bg-surface-muted disabled:opacity-40 sm:size-8';
 
 const move = (list: FormImage[], from: number, to: number) => {
   const next = [...list];
@@ -32,8 +40,9 @@ const move = (list: FormImage[], from: number, to: number) => {
   return next;
 };
 
-/** Images: drop or browse (signed upload, scanned and resized by media), drag or arrow buttons to reorder, star to make main. */
-export function ImagesField({ images, update, error }: Props) {
+/** Images: the main photo rules, then drop or browse (signed upload, judged by media's image rules), one card per image with its verdict in words,
+    drag or arrow buttons to reorder, star to make main, and the extra-photo meter (a recommendation). */
+export function ImagesField({ images, update, error, context }: Props) {
   const t = useT();
   const api = sellerApi();
   const [note, setNote] = useState('');
@@ -59,16 +68,28 @@ export function ImagesField({ images, update, error }: Props) {
         message = t('sc.pf.images.size', { name: file.name });
         continue;
       }
+      // The first picture is the main one and is judged by the strict main photo rules; media answers with the verdict and every finding.
+      const slot = count === 0 ? 'MAIN' : 'OTHER';
       count++;
       const id = `${Date.now()}-${count}-${file.name}`;
       const { w, h } = await dims(file);
-      update((list) => [...list, { id, previewUrl: URL.createObjectURL(file), url: null, width: w, height: h, bytes: file.size, contentType: file.type, status: 'uploading', alt: '' }]);
+      update((list) => [...list, { id, previewUrl: URL.createObjectURL(file), url: null, width: w, height: h, bytes: file.size, contentType: file.type, status: 'uploading', alt: '', slot }]);
       try {
-        const ticket = await api.requestUpload({ purpose: 'product-image', fileName: file.name, contentType: file.type as (typeof IMAGE_TYPES)[number], size: file.size });
+        const ticket = await api.requestUpload({ purpose: 'product-image', fileName: file.name, contentType: file.type as (typeof IMAGE_TYPES)[number], size: file.size, slot,
+          ...(context?.title?.trim() ? { title: context.title.trim().slice(0, 200) } : {}), ...(context?.brand?.trim() ? { brand: context.brand.trim().slice(0, 80) } : {}),
+          ...(context?.productTypeCode ? { productTypeCode: context.productTypeCode } : {}) });
         const put = await fetch(ticket.url, { method: ticket.method, headers: ticket.headers, body: file });
         if (!put.ok) throw new Error('upload failed');
         const asset = await api.completeUpload(ticket.assetId);
-        patch(id, { url: asset.url, status: 'ready' });
+        const verdict = asset.verdict ?? null;
+        const width = asset.width ?? w;
+        const height = asset.height ?? h;
+        const rejected = verdict === 'REJECT' || asset.status === 'REJECTED';
+        const held = !rejected && (verdict === 'HOLD' || asset.status === 'FLAGGED');
+        // An answer without a verdict (an older media): the size rule is the one we can still read from the picture.
+        const small = !verdict && slot === 'MAIN' && Math.max(width, height) < MIN_IMAGE_PX;
+        patch(id, { url: rejected ? null : asset.url || ticket.publicUrl || null, width, height, bytes: asset.bytes ?? file.size, status: rejected ? 'rejected' : held ? 'held' : small ? 'low' : 'ready',
+          slot, verdict, checks: asset.checks });
       } catch {
         patch(id, { status: 'error' });
       }
@@ -83,15 +104,11 @@ export function ImagesField({ images, update, error }: Props) {
     void add(e.dataTransfer.files);
   };
 
-  const status = (im: FormImage, i: number) => {
-    if (im.status === 'uploading') return t('sc.pf.images.uploading');
-    if (im.status === 'error') return t('sc.pf.images.failed');
-    return `${im.width}×${im.height}`;
-  };
   const empty = images.length === 0;
 
   return (
     <div id={fieldId.images} tabIndex={-1} className="flex flex-col gap-4 outline-none">
+      <MainImageRules main={images[0]} />
       <label
         onDragOver={(e) => {
           e.preventDefault();
@@ -113,62 +130,38 @@ export function ImagesField({ images, update, error }: Props) {
       {images.length ? (
         <>
           <p className="m-0 text-xs text-muted">{t('sc.pf.images.reorderHint')}</p>
-          <ul aria-label={t('sc.pf.images.list')} className="m-0 grid list-none grid-cols-2 gap-3 p-0 @lg:grid-cols-3 @3xl:grid-cols-4 @5xl:grid-cols-5">
+          <ul aria-label={t('sc.pf.images.list')} className="m-0 flex list-none flex-col p-0 border-t border-border">
             {images.map((im, i) => (
-              <li
+              <ImageCard
                 key={im.id}
-                draggable
-                onDragStart={() => setDragging(im.id)}
-                onDragEnd={() => { setDragging(null); setTarget(null); }}
-                onDragOver={(e) => { e.preventDefault(); if (dragging) setTarget(im.id); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const from = images.findIndex((x) => x.id === dragging);
-                  if (from >= 0 && from !== i) update((list) => move(list, from, i));
-                  setDragging(null);
-                  setTarget(null);
+                image={im}
+                index={i}
+                count={images.length}
+                onAlt={(alt) => patch(im.id, { alt })}
+                onMakeMain={() => update((list) => move(list, i, 0))}
+                onMove={(to) => update((list) => move(list, i, to))}
+                onRemove={() => update((list) => list.filter((x) => x.id !== im.id))}
+                dragState={{ dragging: dragging === im.id, target: target === im.id && dragging !== im.id }}
+                itemProps={{
+                  draggable: true,
+                  'data-main': i === 0 ? 'true' : undefined,
+                  onDragStart: () => setDragging(im.id),
+                  onDragEnd: () => { setDragging(null); setTarget(null); },
+                  onDragOver: (e) => { e.preventDefault(); if (dragging) setTarget(im.id); },
+                  onDrop: (e) => {
+                    e.preventDefault();
+                    const from = images.findIndex((x) => x.id === dragging);
+                    if (from >= 0 && from !== i) update((list) => move(list, from, i));
+                    setDragging(null);
+                    setTarget(null);
+                  }
                 }}
-                className={cx('flex min-w-0 flex-col gap-2 rounded-md border bg-surface p-2', dragging === im.id && 'opacity-50', target === im.id && dragging !== im.id ? 'border-gold-500 bg-gold-50' : 'border-border',
-                  i === 0 && 'ring-2 ring-gold-500')}
-                data-main={i === 0 ? 'true' : undefined}
-              >
-                <div className="relative">
-                  <img src={im.previewUrl} alt={im.alt || t('sc.pf.images.alt', { n: i + 1 })} className="aspect-square w-full cursor-grab rounded-sm bg-surface-muted object-cover" />
-                  {i === 0 ? <span className="absolute top-1.5 left-1.5 rounded-xs bg-gold-500 px-1.5 py-0.5 text-2xs font-bold">{t('sc.pf.images.main')}</span> : null}
-                </div>
-                <input
-                  type="text"
-                  maxLength={200}
-                  value={im.alt}
-                  placeholder={t('sc.pf.images.altPlaceholder')}
-                  aria-label={t('sc.pf.images.altLabel', { n: i + 1 })}
-                  onChange={(e) => patch(im.id, { alt: e.target.value })}
-                  className={`${fieldStyles.control} h-9 text-sm`}
-                />
-                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className={cx('text-2xs', im.status === 'error' || (im.status === 'low' && i === 0) ? 'text-danger' : 'text-muted')}>{status(im, i)}</span>
-                  <span className="ml-auto flex items-center gap-1">
-                    {i > 0 ? (
-                      <button type="button" className={iconButton} aria-label={t('sc.pf.images.makeMain', { n: i + 1 })} title={t('sc.pf.images.setMain')} onClick={() => update((list) => move(list, i, 0))}>
-                        <Star size={14} aria-hidden />
-                      </button>
-                    ) : null}
-                    <button type="button" disabled={i === 0} className={iconButton} aria-label={t('sc.pf.images.left', { n: i + 1 })} onClick={() => update((list) => move(list, i, i - 1))}>
-                      <ArrowLeft size={14} aria-hidden />
-                    </button>
-                    <button type="button" disabled={i === images.length - 1} className={iconButton} aria-label={t('sc.pf.images.right', { n: i + 1 })} onClick={() => update((list) => move(list, i, i + 1))}>
-                      <ArrowRight size={14} aria-hidden />
-                    </button>
-                    <button type="button" className={cx(iconButton, 'text-danger')} aria-label={t('sc.pf.images.remove', { n: i + 1 })} onClick={() => update((list) => list.filter((x) => x.id !== im.id))}>
-                      <Trash size={14} aria-hidden />
-                    </button>
-                  </span>
-                </span>
-              </li>
+              />
             ))}
           </ul>
         </>
       ) : null}
+      <ExtraPhotoMeter images={images} />
     </div>
   );
 }

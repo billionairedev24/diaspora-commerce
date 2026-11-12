@@ -771,7 +771,18 @@ export interface paths {
          */
         get: operations["listSellerOffers"];
         put?: never;
-        post?: never;
+        /**
+         * Sell an item whose product page already exists (offer only)
+         * @description offers `POST /v1/offers` (Listings: EDIT; Idempotency-Key relayed). Only offer terms are accepted: price, list
+         *     price, quantity, condition (with a note unless New), shipping, fulfilment, handling days, ship-from location, seller
+         *     SKU (generated when blank) and, for Fulfilled by AfroTransact, the package. Any page content (title, description,
+         *     attributes, brand, category, product type, barcode, options, images, tax facts) is refused with 422
+         *     `PAGE_CONTENT_LOCKED` ("That detail belongs to the product page. Suggest a change instead.") and `errors` names
+         *     each field. The offer is `ACTIVE`, or `TAX_HELD` ("We are checking the tax details for this item.") until the
+         *     seller's own tax decision is resolved. 409 `OFFER_EXISTS`; 422 `SELLING_APPROVAL_REQUIRED`, `BRAND_UNAVAILABLE`,
+         *     `LISTING_LIMIT_REACHED`.
+         */
+        post: operations["createOfferOnPage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1547,6 +1558,119 @@ export interface paths {
          * @description catalog `GET /v1/identifiers/gtin/{code}`.
          */
         get: operations["checkGtin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Does a product page already exist for this barcode, or brand and part number?
+         * @description catalog `POST /v1/catalog/matches` for the active organisation (Listings: EDIT), the first step of "Add a product".
+         *     Send a barcode (UPC, EAN, GTIN, ISBN; spaces and dashes allowed) or a brand with its part number. A barcode that
+         *     is too short is answered `INVALID` with a plain message, not an error. `sellerCount` is read from offers (null
+         *     when it cannot be read). `canOffer` is false with `blockers` when the seller may not sell the item (page not
+         *     live, department or brand approval); `canCreate` is false when a new page with this barcode must not be made.
+         */
+        post: operations["matchCatalog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/products/{atin}/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest a change, report the wrong product or a duplicate page
+         * @description catalog `POST /v1/products/{atin}/change-requests` (Listings: EDIT). The page is never changed by the request;
+         *     staff decide and the seller reads Waiting, Applied or Not applied because ... in `GET /v1/seller/change-requests`.
+         *     Suggest a change (TITLE, DESCRIPTION, BRAND: `payload.value`; ATTRIBUTE: `payload.key` and `payload.value`;
+         *     CATEGORY: `payload.categoryId`) needs an offer on the page (403 `NOT_YOUR_OFFER`). WRONG_MATCH
+         *     (`payload.variantAtin`, optional `correctGtin`) and DUPLICATE_PAGE (`payload.duplicateOfAtin`) need none. 409
+         *     `CHANGE_REQUEST_EXISTS` for the same request twice; 409 `WRONG_MATCH_OPEN` when creating a page with a barcode
+         *     that has an open wrong-match report.
+         */
+        post: operations["fileChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's change requests with the decision and its reason
+         * @description catalog `GET /v1/change-requests/mine` (Listings). Newest first.
+         */
+        get: operations["listChangeRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/change-requests/{requestId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw a request that is still waiting
+         * @description catalog `POST /v1/change-requests/{id}/withdraw` (Listings, EDIT). 409 `CHANGE_REQUEST_DECIDED` once staff decided.
+         */
+        post: operations["withdrawChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/image-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Improve your image tasks of the live listings
+         * @description catalog `GET /v1/products/image-tasks` (Listings). The listings whose main image passes with a warning (IMPROVE) or
+         *     breaks a rule (FAIL), failing ones first, with the reasons by code and in plain English. A failing listing shows the
+         *     end of the grace period (`hideAfter`, `daysLeft`); the listing stays live and can be edited, and a new main image
+         *     must pass the rules.
+         */
+        get: operations["listImageTasks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5243,6 +5367,9 @@ export interface components {
             usedBy: string[];
             /** @description The SKU in the file name belongs to one of the organisation's listings */
             skuKnown: boolean;
+            verdict?: components["schemas"]["ImageVerdict"] | null;
+            /** @description What the image rules found (translate by `code`, the same messages as the product form) */
+            checks?: components["schemas"]["ImageCheck"][];
         };
         ImageLibraryPage: {
             items: components["schemas"]["ImageLibraryItem"][];
@@ -5315,6 +5442,14 @@ export interface components {
              * @default false
              */
             library: boolean;
+            /** @description product-image only: what the image is for; MAIN is judged by the strict main-image rules (default OTHER). Sent on to media. */
+            slot?: components["schemas"]["ProductImageSlot"];
+            /** @description The listing title media's AI check compares the picture with (optional) */
+            title?: string;
+            /** @description The brand media's AI check compares the picture with (optional) */
+            brand?: string;
+            /** @description The product type: apparel may show a model where the rules allow it (optional) */
+            productTypeCode?: string;
         };
         UploadTicket: {
             assetId: string;
@@ -5336,6 +5471,212 @@ export interface components {
             contentType: string;
             /** @enum {string} */
             status: "PENDING" | "READY" | "FLAGGED" | "REJECTED";
+            slot?: components["schemas"]["ProductImageSlot"] | null;
+            /** @description Product images: PASS and WARN publish, HOLD keeps the image private for review (status FLAGGED), REJECT deletes it (status REJECTED). Null for other uploads. */
+            verdict?: components["schemas"]["ImageVerdict"] | null;
+            /** @description What the image rules found, in plain words by code (translate by `code`) */
+            checks?: components["schemas"]["ImageCheck"][];
+        };
+        /**
+         * @description What a product image is used for; MAIN is judged by the strict main-image rules
+         * @enum {string}
+         */
+        ProductImageSlot: "MAIN" | "OTHER" | "SWATCH" | "LABEL";
+        /** @enum {string} */
+        ImageVerdict: "PASS" | "WARN" | "HOLD" | "REJECT";
+        ImageCheck: {
+            /** @description MAIN_TOO_SMALL, TOO_SMALL, LOW_RES, LARGER_BETTER, NOT_WHITE, FILL_LOW, FILL_OK_NEAR, BORDER, PLACEHOLDER, FORMAT, FILE_TOO_BIG, NOT_AN_IMAGE, BLUR, ASPECT, HELD_TEXT, HELD_MISMATCH, HELD_DUPLICATE, HELD_PROPS, HELD_REVIEW, PROHIBITED, MAIN_PROPS, REVIEW_REJECTED, NOT_VERIFIED, FETCH_FAILED, FETCH_PRIVATE */
+            code: string;
+            /** @enum {string} */
+            level: "INFO" | "WARN" | "HOLD" | "REJECT";
+            /** @description Numbers the text needs: w, h, px, min, mb, fill, actual */
+            params: {
+                [key: string]: unknown;
+            };
+            /** @description Plain English for API readers */
+            message: string;
+        };
+        /** @description A barcode, or a brand with its manufacturer part number */
+        MatchRequest: {
+            /**
+             * @description UPC, EAN, GTIN or ISBN; spaces and dashes are allowed
+             * @example 012345678905
+             */
+            gtin?: string;
+            brand?: string;
+            /** @description Manufacturer part number */
+            mpn?: string;
+        };
+        /** @enum {string} */
+        MatchResultKind: "MATCH" | "NO_MATCH" | "INVALID" | "RESTRICTED";
+        Blocker: {
+            /** @description For example catalog.page-not-live, offers.selling-approval-required, catalog.brand-unavailable, catalog.wrong-match-open */
+            code: string;
+            message: string;
+        };
+        MatchImage: {
+            url: string;
+            width?: number | null;
+            height?: number | null;
+        };
+        MatchVariant: {
+            atin: string;
+            options: {
+                [key: string]: string;
+            };
+        };
+        CatalogMatch: {
+            result: components["schemas"]["MatchResultKind"];
+            /** @enum {string|null} */
+            matchedOn?: "GTIN" | "BRAND_MPN" | null;
+            /** @description The cleaned barcode digits */
+            digits?: string | null;
+            /** @description The matched variant; offers attach to it (never shown to the seller) */
+            atin?: string | null;
+            parentAtin?: string | null;
+            productStatus?: string | null;
+            title?: string | null;
+            brand?: string | null;
+            image?: components["schemas"]["MatchImage"] | null;
+            /** @description Category path */
+            category?: string | null;
+            variantOptions?: {
+                [key: string]: string;
+            } | null;
+            /** @description Every child of the matched page (size, colour); each is its own item with its own offer */
+            variants: components["schemas"]["MatchVariant"][];
+            /** @description How many sellers list the matched item (null when not known) */
+            sellerCount?: number | null;
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
+            /** @description False when a new page with this barcode must not be created */
+            canCreate: boolean;
+            createBlockers: components["schemas"]["Blocker"][];
+            /** @description A corrected barcode when only the check digit is wrong */
+            suggestion?: string | null;
+            /** @description Plain words for INVALID and RESTRICTED */
+            message?: string | null;
+        };
+        /** @enum {string} */
+        OfferCondition: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
+        /** @description Offer terms only. Page content (title, description, attributes, brand, category, images, barcode, options) is refused with 422 PAGE_CONTENT_LOCKED. */
+        OfferOnlyInput: {
+            /** @description The matched variant */
+            atin: string;
+            /** @description Generated when blank */
+            sellerSku?: string;
+            condition?: components["schemas"]["OfferCondition"];
+            /** @description Required for any condition other than NEW */
+            conditionNote?: string;
+            /** Format: int64 */
+            priceMinor: number;
+            /**
+             * Format: int64
+             * @description Strike-through price, not below the price
+             */
+            listPriceMinor?: number;
+            /** Format: int64 */
+            shippingMinor?: number;
+            /** @enum {string} */
+            fulfilment: "SELLER" | "AFROTRANSACT" | "AFROTRANSACT_DELIVERY";
+            /** @description Required when the seller ships it */
+            quantity?: number;
+            /** @default 2 */
+            handlingDays: number;
+            /** @description One of the ship-from locations; required for AfroTransact pickup */
+            shipFromLocationId?: string;
+            /** @description The box this seller ships the item in (Fulfilled by AfroTransact only) */
+            packaging?: {
+                lengthIn: number;
+                widthIn: number;
+                heightIn: number;
+                weightLb: number;
+            };
+        };
+        OfferOnlyResult: {
+            offerId: string;
+            atin: string;
+            sellerSku: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "TAX_HELD" | "PAUSED" | "WITHDRAWN";
+            /** @description Why a TAX_HELD offer waits, for example TAX_DECISION_MISSING */
+            heldReason?: string | null;
+            /** @description Plain English; Seller Center translates by status. TAX_HELD: "We are checking the tax details for this item." */
+            message: string;
+        };
+        /** @enum {string} */
+        ChangeRequestType: "IMAGE_ADD" | "IMAGE_REPLACE" | "TITLE" | "ATTRIBUTE" | "DESCRIPTION" | "CATEGORY" | "BRAND" | "NEW_VARIANT" | "WRONG_MATCH" | "DUPLICATE_PAGE";
+        /**
+         * @description PENDING is Waiting, APPLIED is Applied, REJECTED is "Not applied, because ..."
+         * @enum {string}
+         */
+        ChangeRequestStatus: "PENDING" | "APPLIED" | "REJECTED" | "WITHDRAWN";
+        ChangeRequestInput: {
+            type: components["schemas"]["ChangeRequestType"];
+            field?: string;
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** @description Why, in the seller's words (shown to staff) */
+            note?: string;
+        };
+        ChangeRequest: {
+            /** Format: uuid */
+            id: string;
+            /** @description The page the request is about */
+            atin: string;
+            title?: string | null;
+            type: components["schemas"]["ChangeRequestType"];
+            field?: string | null;
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            note?: string | null;
+            status: components["schemas"]["ChangeRequestStatus"];
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            slaDueAt?: string | null;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            /** @description Staff reason, shown to the seller */
+            reason?: string | null;
+            resolution?: string | null;
+        };
+        ChangeRequestPage: {
+            items: components["schemas"]["ChangeRequest"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        ImageTaskReason: {
+            /** @description Media's check codes plus NO_MAIN_IMAGE */
+            code: string;
+            level: string;
+            message: string;
+        };
+        ImageTask: {
+            productId: string;
+            atin?: string | null;
+            title: string;
+            /** @enum {string} */
+            state: "IMPROVE" | "FAIL";
+            reasons: components["schemas"]["ImageTaskReason"][];
+            /** Format: date-time */
+            failingSince?: string | null;
+            /**
+             * Format: date-time
+             * @description End of the grace period (failing listings only)
+             */
+            hideAfter?: string | null;
+            /** @description Whole days left of the grace period */
+            daysLeft?: number | null;
+            /** @description The hide step has limited the listing */
+            hidden: boolean;
+        };
+        ImageTaskList: {
+            items: components["schemas"]["ImageTask"][];
         };
         StockPosition: {
             sku: string;
@@ -7648,6 +7989,40 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    createOfferOnPage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferOnlyInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOnlyResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     setOfferFulfilment: {
         parameters: {
             query?: never;
@@ -8894,6 +9269,149 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    matchCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatchRequest"];
+            };
+        };
+        responses: {
+            /** @description The answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogMatch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    fileChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRequestInput"];
+            };
+        };
+        responses: {
+            /** @description Filed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listChangeRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ChangeRequestStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    withdrawChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdrawn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listImageTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tasks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

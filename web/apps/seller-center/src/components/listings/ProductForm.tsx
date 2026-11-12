@@ -28,6 +28,7 @@ import { DocumentsField } from './form/DocumentsField';
 import { FactField } from './form/FactField';
 import { FormSection, GRID, GRID_SHORT } from './form/FormSection';
 import { ImagesField } from './form/ImagesField';
+import { ImprovePrompt } from './form/ImprovePrompt';
 import { LabelPhotoField } from './form/LabelPhotoField';
 import { ListingPreview } from './form/ListingPreview';
 import { PackageInputs, PackageUnitsSelect } from './form/PackageFields';
@@ -63,6 +64,7 @@ import {
   previewAttributes,
   priceMinor,
   type Problems,
+  type ProductFormStart,
   qualityItems,
   qualityScore,
   rowsOf,
@@ -81,6 +83,7 @@ import {
   variantCount,
   variantQuestions,
   withCategory,
+  withStart,
   worthSaving
 } from './form-model';
 
@@ -90,7 +93,7 @@ const HANDLING_DAYS = [1, 2, 3, 4, 5, 7, 10, 14, 21, 30];
 /** One-step product form (S307): Add and Edit on one page. The category decides the product type, which decides the
     fields and the conditional sections (a field the type does not define is not shown); a sticky section navigator shows
     each section's completion, a sticky quality panel lists what is missing and previews the listing, and the form autosaves as a draft. */
-export function ProductForm({ productId }: { productId?: string }) {
+export function ProductForm({ productId, start }: { productId?: string; start?: ProductFormStart }) {
   const api = sellerApi();
   const t = useT();
   const qc = useQueryClient();
@@ -109,7 +112,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   const savedDraft = useQuery(sellerQueries.productDraft(api, orgId, draftParam));
   const drafts = useQuery({ ...sellerQueries.productDrafts(api, orgId), enabled: editing && !draftParam });
 
-  const [s, setS] = useState<FormState>(emptyForm);
+  const [s, setS] = useState<FormState>(() => withStart(emptyForm(), start));
   const [ready, setReady] = useState(!editing && !draftParam);
   const typeCode = s.productType ?? detail.data?.productType ?? '';
   const typeQ = useQuery(sellerQueries.productType(api, typeCode));
@@ -428,7 +431,9 @@ export function ProductForm({ productId }: { productId?: string }) {
           </FormSection>
 
           <FormSection {...section('images')} hint={t('sc.pf.s.imagesHint')}>
-            <ImagesField images={s.images} update={(fn) => update((prev) => ({ ...prev, images: fn(prev.images) }))} error={err(fieldId.images)} />
+            <ImagesField images={s.images} update={(fn) => update((prev) => ({ ...prev, images: fn(prev.images) }))} error={err(fieldId.images)}
+              context={{ title: s.title, brand: s.attrs.brand, productTypeCode: s.productType ?? undefined }} />
+            {editing && productId ? <ImprovePrompt productId={productId} /> : null}
             {labelStatus && labelStatus !== 'hidden' ? (
               <LabelPhotoField image={s.labelImage} optional={labelStatus === 'optional'} error={err(fieldId.labelPhoto)} onChange={(img) => patch({ labelImage: img })} />
             ) : null}

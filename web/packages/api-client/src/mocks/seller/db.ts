@@ -43,6 +43,7 @@ import {
 import { chargeTermsOf, planFeatureList } from '../../staff-plans';
 import { MOCK_FASHION_ORG, MOCK_FOOD_ORG } from './departments';
 import { type MockDraft, type MockImport } from './listing-form';
+import { type MockMatchingState } from './matching';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
 import { type MockApplication } from './onboarding';
 import { seedRunPickups } from './run-pickups';
@@ -124,6 +125,8 @@ export interface MockSellerDb {
   sizeCharts: MockSizeChart[];
   /** Proof files uploaded for tax questions, by `<variant ATIN>:<fact id>`. */
   taxEvidence?: Record<string, string>;
+  /** Product pages, offers on them and change requests (S382); created on first use. */
+  matching?: MockMatchingState;
   /** Autosaved drafts of the product form (S307). */
   drafts: MockDraft[];
   /** Bulk uploads with their validated rows (S308). */

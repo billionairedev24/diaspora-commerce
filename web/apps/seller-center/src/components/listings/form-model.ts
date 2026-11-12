@@ -8,6 +8,7 @@ import {
   checkFacts,
   type FactValue,
   type FitNote,
+  type ImageCheck,
   type ItemCondition,
   type ListingDocument,
   type ListingFulfilment,
@@ -40,9 +41,14 @@ export interface FormImage {
   height: number;
   bytes: number;
   contentType: string;
-  status: 'uploading' | 'ready' | 'low' | 'error';
+  /** `rejected`: the image rules did not accept it (deleted by media, no URL); `held`: waiting for our review; `low`: under the main image size. */
+  status: 'uploading' | 'ready' | 'low' | 'error' | 'rejected' | 'held';
   /** Optional alternative text (what the picture shows), stored with the image. */
   alt: string;
+  /** The slot media judged it for (MAIN is strict) and what the image rules found, by code (S388). Absent for images stored before the rules. */
+  slot?: 'MAIN' | 'OTHER';
+  verdict?: 'PASS' | 'WARN' | 'HOLD' | 'REJECT' | null;
+  checks?: ImageCheck[];
 }
 
 export interface VariantRow {
@@ -139,7 +145,23 @@ export const emptyForm = (): FormState => ({
   pkgUnits: { size: 'in', weight: 'lb' }, dangerousGoods: '', exemptions: {}, labelImage: null, documents: {}, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: '', facts: {}, behaviour: {}
 });
 
+/** What the barcode step (S382) hands to a new product: the barcode that found no page, or "no barcode", and the brand typed on the way. */
+export interface ProductFormStart {
+  gtin?: string;
+  noGtin?: boolean;
+  brand?: string;
+}
+/** A new form that starts from the barcode step: the barcode (or "I don't have one") and the brand are filled in. */
+export function withStart(s: FormState, start?: ProductFormStart): FormState {
+  if (!start) return s;
+  return { ...s, noGtin: start.noGtin === true, attrs: start.brand?.trim() ? { ...s.attrs, brand: start.brand.trim() } : s.attrs, single: { ...s.single, gtin: start.noGtin ? '' : (start.gtin ?? '') } };
+}
+
 export const MAX_IMAGES = 10;
+/** The main image: its longest side in pixels (shoppers zoom), the share of the frame the product fills, and how many extra photos sell best. */
+export const MIN_IMAGE_PX = 1000;
+export const MAIN_FILL_PERCENT = 85;
+export const EXTRA_PHOTOS_TARGET = 7;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 export const MAX_KEYWORDS = 20;
@@ -482,9 +504,14 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   if (kws.length > MAX_KEYWORDS) add(fieldId.keywords, 'basics', 'sc.pf.field.keywords', 'sc.pf.err.keywordsMany');
   else if (kws.some((k) => k.length > 40)) add(fieldId.keywords, 'basics', 'sc.pf.field.keywords', 'sc.pf.err.keywordLong');
 
+  const main = s.images[0];
   if (!s.images.length) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesNone');
   else if (s.images.some((i) => i.status === 'uploading')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesUploading');
   else if (s.images.some((i) => i.status === 'error')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesFailed');
+  // The main image decides: a rejected one blocks Submit, one under 1000 px says so, one we are still checking and cannot attach yet waits.
+  else if (main?.status === 'rejected') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainRejected');
+  else if (main?.status === 'low') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainSmall', { px: MIN_IMAGE_PX });
+  else if (main?.status === 'held' && !main.url) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesHeldNoUrl');
 
   // The label photo is its own typed slot: product pictures never stand in for it.
   const label = statusOf(rules, 'label_photo');
@@ -770,7 +797,7 @@ function attrValue(a: AttributeDef | undefined, v: string, unit: string | undefi
 
 /** The catalog submission (call when validateForm is empty). Answers to questions the category does not ask are not sent. */
 export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null, rules?: ListingRules): ProductDraft {
-  const image = (id: string) => s.images.find((i) => i.id === id && i.url);
+  const image = (id: string) => s.images.find((i) => i.id === id && i.url && i.status !== 'rejected');
   const imageInput = (i: FormImage) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType, ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) });
   const defs = taxQuestionsOf(type?.attributes ?? []);
   const factsOf = (index: number): Record<string, FactValue> => checkFacts(defs.filter((d) => d.owner !== 'OFFER'), answersOf(s, index)).facts;

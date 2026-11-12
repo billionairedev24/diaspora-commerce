@@ -13,14 +13,18 @@ import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill, type Tone } from '@/components/ui/StatusPill';
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
+import { checkVars } from '../form/image-rules';
 import { baseName, droppedFiles, expandFiles, LIBRARY_TYPES, type LibraryType, LibraryZipError, type LibraryZipErrorCode, MAX_FILES_PER_DROP, MAX_LIBRARY_BYTES, parseLibraryName, typeOf } from './library-files';
 
 type Progress = { name: string; state: 'queued' | 'uploading' | 'done' | 'failed' | 'skipped'; note: string };
+
+/** The findings worth showing on a library image: INFO ones never change the verdict. */
+const imageFindings = (i: ImageLibraryItem) => i.checks.filter((c) => c.level !== 'INFO');
 
 const STATUS_TONE: Record<ImageLibraryItem['status'], Tone> = { READY: 'good', FLAGGED: 'warn', REJECTED: 'bad' };
 const PARALLEL = 4;
@@ -179,7 +183,12 @@ export function ImageLibraryView() {
       cell: ({ row }) => (
         <span className="flex flex-col gap-0.5">
           <StatusPill tone={STATUS_TONE[row.original.status]}>{t(`sc.img.status.${row.original.status}`)}</StatusPill>
-          {row.original.flags.length ? <span className="text-2xs text-muted">{row.original.flags.join(' · ')}</span> : null}
+          {imageFindings(row.original).length ? (
+            // The same words as the product form's image cards (S391): translated by code, with the numbers media measured.
+            <span className="flex flex-col text-2xs text-muted">
+              {imageFindings(row.original).map((c) => <span key={c.code}>{t(`sc.img.check.${c.code}` as MessageKey, checkVars(c))}</span>)}
+            </span>
+          ) : row.original.flags.length ? <span className="text-2xs text-muted">{row.original.flags.join(' · ')}</span> : null}
         </span>
       )
     },

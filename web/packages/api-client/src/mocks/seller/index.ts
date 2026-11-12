@@ -3,6 +3,7 @@ export { endMockSession, MOCK_SESSION_COOKIE, resetMockSession, setMockSessionPo
 export { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, PENDING_ORG, plansFor, PRODUCT_TYPES, PROVIDER_ORG, resetSellerDb, SELLER_ORG } from './db';
 export { MOCK_DEPARTMENTS, MOCK_FASHION_ORG, MOCK_FOOD_ORG, MOCK_ORG_DEPARTMENTS } from './departments';
 export { gtinValid, MOCK_ROLE_COOKIE, sellerHandlers } from './handlers';
+export { approveMockPage, decideMockChange, gtinWith, MOCK_GTIN, verdictForFile } from './matching';
 export { allows, describePolicy, navigation, roleCards, takeHome } from './model';
 export { MOCK_RUN_AMARILLO, MOCK_RUN_LUBBOCK } from './run-pickups';
 export { decideSellingMock, resetSellingMocks } from './selling';

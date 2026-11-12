@@ -1660,7 +1660,10 @@ export const ImageLibraryItemSchema = z.object({
   flags: z.array(z.string()),
   createdAt: z.string(),
   usedBy: z.array(z.string()),
-  skuKnown: z.boolean()
+  skuKnown: z.boolean(),
+  /** What the image rules decided and why, by code (the same messages as the product form). */
+  verdict: z.enum(['PASS', 'WARN', 'HOLD', 'REJECT']).nullish(),
+  checks: z.array(z.object({ code: z.string(), level: z.enum(['INFO', 'WARN', 'HOLD', 'REJECT']), params: z.record(z.string(), z.unknown()).default({}), message: z.string() })).default([])
 });
 export type ImageLibraryItem = z.infer<typeof ImageLibraryItemSchema>;
 export const ImageLibraryPageSchema = z.object({
@@ -1734,7 +1737,13 @@ export const UploadRequestSchema = z.object({
   contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   size: z.number().int().min(1).max(8 * 1024 * 1024),
   /** product-image only: also add it to the image library (matched to SKUs by file name). */
-  library: z.boolean().optional()
+  library: z.boolean().optional(),
+  /** product-image only: what the picture is for; MAIN is judged by the strict main-image rules (default OTHER). */
+  slot: z.enum(['MAIN', 'OTHER', 'SWATCH', 'LABEL']).optional(),
+  /** What the AI check compares the picture with, and the product type (apparel may show a model). */
+  title: z.string().max(200).optional(),
+  brand: z.string().max(80).optional(),
+  productTypeCode: z.string().max(80).optional()
 });
 export type UploadRequest = z.infer<typeof UploadRequestSchema>;
 export const UploadTicketSchema = z.object({
@@ -1753,7 +1762,11 @@ export const AssetSchema = z.object({
   height: z.number().int().nullable(),
   bytes: z.number().int().nullable(),
   contentType: z.string(),
-  status: z.enum(['PENDING', 'READY', 'FLAGGED', 'REJECTED'])
+  status: z.enum(['PENDING', 'READY', 'FLAGGED', 'REJECTED']),
+  /** Product images: what media's image rules decided (PASS and WARN publish, HOLD waits for review, REJECT is deleted) and why, by code. */
+  slot: z.enum(['MAIN', 'OTHER', 'SWATCH', 'LABEL']).nullish(),
+  verdict: z.enum(['PASS', 'WARN', 'HOLD', 'REJECT']).nullish(),
+  checks: z.array(z.object({ code: z.string(), level: z.enum(['INFO', 'WARN', 'HOLD', 'REJECT']), params: z.record(z.string(), z.unknown()).default({}), message: z.string() })).default([])
 });
 export type Asset = z.infer<typeof AssetSchema>;
 

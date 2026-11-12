@@ -219,6 +219,7 @@ import {
   type UploadTicket,
   UploadTicketSchema,  type VariantTaxEvidence,
   VariantTaxEvidenceSchema} from './schemas/seller';
+import { createSellerMatchingApi } from './seller-matching';
 import { tableSearchParams } from './table-query';
 
 /** Server-driven orders table query: one search over every column, the sort (`<column>,asc|desc`), cursor, limit. */
@@ -644,7 +645,10 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/provider/earnings', EarningsSchema, { query: { from, to }, signal }),
 
     /* Send to AfroTransact (S281): inbound plans, labels, lots and expiry for the active organisation */
-    fba: createSellerFbaApi(request, options)
+    fba: createSellerFbaApi(request, options),
+
+    /* Add a product starts with the barcode (S382): lookup, offer-only offers, change requests, Improve your image tasks (S391) */
+    matching: createSellerMatchingApi(request)
   };
 }
 

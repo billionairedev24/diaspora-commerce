@@ -4,6 +4,12 @@ import { handleSellerMockRequest } from '@afrotransact/api-client/mocks/seller-r
 
 let role: string | null = null;
 
+/** Every request the seller screens made to the in-process BFF, as "METHOD /path" (a test that must see no upload reads it). */
+export const bffCalls: string[] = [];
+const seen = (req: Request) => {
+  bffCalls.push(`${req.method} ${new URL(req.url).pathname}`);
+};
+
 /** Act as another role on the active organisation (the mocks read the `at_mock_role` cookie). */
 export function asRole(r: string | null): void {
   role = r;
@@ -13,7 +19,10 @@ export function mockApi(): SellerApiClient {
   return createSellerApiClient({
     baseUrl: 'http://seller.test/api/bff',
     headers: role ? { cookie: `${MOCK_ROLE_COOKIE}=${role}` } : {},
-    fetch: (req) => handleSellerMockRequest(req)
+    fetch: (req) => {
+      seen(req);
+      return handleSellerMockRequest(req);
+    }
   });
 }
 

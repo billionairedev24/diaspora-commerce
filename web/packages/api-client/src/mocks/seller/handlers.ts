@@ -63,6 +63,7 @@ import {
   UploadRequestSchema,
   validatePickupHours
 } from '../../schemas/seller';
+import { ChangeRequestInputSchema, ChangeRequestStatusSchema, MatchRequestSchema, type ProductImageSlot } from '../../seller-matching';
 import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { miles } from '../delivery';
@@ -94,6 +95,17 @@ import {
   validateSheet
 } from './listing-form';
 import { listingRulesFor } from './listing-rules';
+import {
+  changeRequestsOf,
+  createOffer as createMockOffer,
+  fileChange,
+  imageTasksOf,
+  matchCatalog,
+  MatchingMockError,
+  registerPage,
+  verdictForFile,
+  withdrawChange
+} from './matching';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
 import {
   accountForm,
@@ -129,9 +141,14 @@ interface MockLibraryImage {
   bytes: number;
   flags: string[];
   createdAt: string;
+  /** What media's image rules decided and why (S388), by code. */
+  verdict?: 'PASS' | 'WARN' | 'HOLD' | 'REJECT';
+  checks?: { code: string; level: 'INFO' | 'WARN' | 'HOLD' | 'REJECT'; params: Record<string, unknown>; message: string }[];
 }
 const MOCK_LIBRARY: MockLibraryImage[] = [];
 const MOCK_PENDING_LIBRARY = new Map<string, { orgId: string; fileName: string; bytes: number }>();
+/** Product images in flight: what media's image rules judge when the upload completes (S388). */
+const MOCK_IMAGE_UPLOADS = new Map<string, { fileName: string; slot: ProductImageSlot }>();
 const LIBRARY_NAME = /^(.+?)[._\- ](MAIN|PT0[1-8]|SWCH)\.(?:jpe?g|png|webp)$/i;
 
 class SellerProblem extends Error {
@@ -284,6 +301,16 @@ function sellingMock<T>(run: () => T): T {
     return run();
   } catch (e) {
     if (e instanceof SellingMockError) throw new SellerProblem(e.status, e.status === 422 ? 'VALIDATION_FAILED' : e.code, e.status === 404 ? 'Not found' : e.status === 409 ? 'Invalid state' : 'Validation failed', e.message, e.errors);
+    throw e;
+  }
+}
+
+/** Runs a matching mock and turns its refusal into the BFF's problem answer. */
+function matchingMock<T>(run: () => T): T {
+  try {
+    return run();
+  } catch (e) {
+    if (e instanceof MatchingMockError) throw new SellerProblem(e.status, e.code, e.status === 404 ? 'Not found' : e.status === 409 ? 'Conflict' : e.status === 403 ? 'Forbidden' : 'Validation failed', e.message, e.errors);
     throw e;
   }
 }
@@ -1509,6 +1536,9 @@ export const sellerHandlers = [
         updatedAt: ctx.now.toISOString()
       };
       ctx.db.listings.unshift({ ...row, variants: d.variants.map((v) => ({ sku: (v.sellerSku ?? '').toUpperCase(), quantity: v.quantity })) });
+      // The page this seller creates is found by its barcode when another seller adds a product (S382); it waits for review like the listing.
+      registerPage(ctx.db, ctx.org.id, { title: d.title, brand: d.attributes.brand ?? '', imageUrl: d.images[0]?.url ?? null, category: leaf?.path ?? '',
+        gtins: d.variants.filter((v) => v.gtin && !v.gtinExempt).map((v) => ({ gtin: v.gtin ?? '', options: v.options })) });
       ctx.db.productDetails[row.productId] = detailOf(row.productId, d, row, 1, leaf?.path ?? 'Requested category', leaf?.productType ?? 'custom');
       if (d.draftId) ctx.db.drafts = ctx.db.drafts.filter((x) => x.id !== d.draftId);
       return row;
@@ -1858,6 +1888,60 @@ export const sellerHandlers = [
         message: valid ? (code === '4006381333931' ? 'This barcode already has a product page — your listing joins it.' : 'Valid barcode') : 'The check digit doesn’t match. Check the number on the pack.' };
     })
   ),
+  http.post(
+    `${W}/catalog/matches`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, MatchRequestSchema);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return matchingMock(() => matchCatalog(ctx.db, ctx.org.id, b));
+    })
+  ),
+  http.post(
+    `${W}/offers`,
+    route(async (ctx) => {
+      let raw: unknown = {};
+      try {
+        raw = JSON.parse((await ctx.request.text()) || '{}');
+      } catch {
+        throw new SellerProblem(400, 'MALFORMED_JSON', 'Malformed request', 'The request body is not valid JSON.');
+      }
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw invalid({ _: 'Send the offer as a JSON object' });
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return matchingMock(() => createMockOffer(ctx.db, ctx.org.id, raw as Record<string, unknown>));
+    }, 201)
+  ),
+  http.post(
+    `${W}/products/:atin/change-requests`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, ChangeRequestInputSchema);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return matchingMock(() => fileChange(ctx.db, ctx.org.id, p.atin ?? '', b, ctx.now));
+    }, 201)
+  ),
+  http.get(
+    `${W}/change-requests`,
+    route((ctx) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const status = query(ctx).get('status');
+      if (status && !ChangeRequestStatusSchema.safeParse(status).success) throw invalid({ status: 'PENDING, APPLIED, REJECTED or WITHDRAWN' });
+      const items = changeRequestsOf(ctx.db, ctx.org.id).filter((r) => !status || r.status === status);
+      return { items, total: items.length, page: 0, size: 25 };
+    })
+  ),
+  http.post(
+    `${W}/change-requests/:requestId/withdraw`,
+    route((ctx, p) => {
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return matchingMock(() => withdrawChange(ctx.db, ctx.org.id, p.requestId ?? ''));
+    })
+  ),
+  http.get(
+    `${W}/image-tasks`,
+    route((ctx) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      return { items: imageTasksOf(ctx.db.listings, ctx.now) };
+    })
+  ),
   http.get(`${W}/category-requests`, route((ctx) => ctx.db.categoryRequests)),
   http.post(
     `${W}/category-requests`,
@@ -1961,6 +2045,7 @@ export const sellerHandlers = [
       const b = await body(ctx.request, UploadRequestSchema);
       const id = nextId(ctx.db, 'asset');
       if (b.library === true) MOCK_PENDING_LIBRARY.set(id, { orgId: ctx.org.id, fileName: b.fileName, bytes: b.size });
+      if (b.purpose === 'product-image') MOCK_IMAGE_UPLOADS.set(id, { fileName: b.fileName, slot: b.slot ?? 'OTHER' });
       return { assetId: id, method: 'PUT', url: `${new URL(ctx.request.url).origin}/api/bff/mock-uploads/${id}`, headers: { 'Content-Type': b.contentType },
         publicUrl: `https://img.afrotransact.dev/${id}.webp`, expiresAt: new Date(ctx.now.getTime() + 15 * 60_000).toISOString() };
     }, 201)
@@ -1974,9 +2059,21 @@ export const sellerHandlers = [
       if (pending) {
         MOCK_PENDING_LIBRARY.delete(id);
         const m = LIBRARY_NAME.exec(pending.fileName);
+        const slot = (m?.[2]?.toUpperCase() as MockLibraryImage['slot']) ?? null;
+        // The image rules judge a library image for its slot too (MAIN is strict).
+        const v = verdictForFile(pending.fileName, slot === 'MAIN' ? 'MAIN' : 'OTHER');
+        const status = v.verdict === 'REJECT' ? 'REJECTED' : v.verdict === 'HOLD' ? 'FLAGGED' : 'READY';
         MOCK_LIBRARY.unshift({ assetId: id, orgId: pending.orgId, fileName: pending.fileName, sku: m?.[1]?.toUpperCase() ?? null,
-          slot: (m?.[2]?.toUpperCase() as MockLibraryImage['slot']) ?? null, status: 'READY', url: `https://img.afrotransact.dev/${id}.webp`,
-          width: 1600, height: 1600, bytes: pending.bytes, flags: [], createdAt: ctx.now.toISOString() });
+          slot, status, url: status === 'READY' ? `https://img.afrotransact.dev/${id}.webp` : null,
+          width: v.width, height: v.height, bytes: pending.bytes, flags: v.checks.filter((c) => c.level !== 'INFO').map((c) => c.message), createdAt: ctx.now.toISOString(),
+          verdict: v.verdict, checks: v.checks });
+      }
+      const image = MOCK_IMAGE_UPLOADS.get(id);
+      if (image) {
+        const v = verdictForFile(image.fileName, image.slot);
+        const status = v.verdict === 'REJECT' ? 'REJECTED' : v.verdict === 'HOLD' ? 'FLAGGED' : 'READY';
+        return { id, url: status === 'READY' ? `https://img.afrotransact.dev/${id}.webp` : '', width: v.width, height: v.height, bytes: 182000, contentType: 'image/webp', status,
+          slot: image.slot, verdict: v.verdict, checks: v.checks };
       }
       return { id, url: `https://img.afrotransact.dev/${id}.webp`, width: 1600, height: 1600, bytes: 182000, contentType: 'image/webp', status: 'READY' };
     })
