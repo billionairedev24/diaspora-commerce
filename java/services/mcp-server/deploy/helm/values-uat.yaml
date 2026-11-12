@@ -16,8 +16,8 @@ telemetry:
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
-  # External URL MCP clients use (resource indicator in the OAuth protected-resource metadata).
-  MCP_PUBLIC_URL: https://mcp.uat.afrotransact.com
+  # Private service (ClusterIP, no public hostname): in-cluster address, the resource indicator in the OAuth metadata.
+  MCP_PUBLIC_URL: http://mcp-server.afrotransact-uat.svc.cluster.local
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080
   CART_URL: http://cart:8080

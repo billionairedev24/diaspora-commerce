@@ -1,5 +1,5 @@
 output "ipv4" {
-  description = "The server's public IPv4: point api./auth./mcp.<domain> at it."
+  description = "The server's public IPv4: point api./auth.<domain> at it."
   value       = one([for a in ovh_cloud_project_instance.box.addresses : a.ip if a.version == 4])
 }
 

@@ -141,8 +141,8 @@ billing**), `destroy`.
 
 ### 6. DNS and certificates
 
-Four A records, **DNS only** (grey cloud at Cloudflare, so Let's Encrypt's HTTP-01 check reaches port 80), all pointing at the
-server's IPv4 from the summary: `api.<domain>`, `auth.<domain>`, `mcp.<domain>`, `grafana.<domain>`. The pipeline makes them if you gave it a Cloudflare
+Three A records, **DNS only** (grey cloud at Cloudflare, so Let's Encrypt's HTTP-01 check reaches port 80), all pointing at the
+server's IPv4 from the summary: `api.<domain>`, `auth.<domain>`, `grafana.<domain>` (there is no `mcp.` name: mcp-server is private, cluster-internal only). The pipeline makes them if you gave it a Cloudflare
 token and zone. Remove any `CAA` record that does not allow `letsencrypt.org`. cert-manager retries by itself; once DNS resolves the
 certificates become Ready in a few minutes (`status` action shows them). Then:
 
@@ -205,7 +205,7 @@ the only thing that bills.
 
 Cloudflare's free certificate covers the zone apex and one label under it. With `OVH_DOMAIN=test.afrotransact.com` the default web hosts
 (`www.`, `seller.`, `admin.` of it) are two labels deep and would need a paid certificate, so use flat names for the three web apps only.
-The backend (`api.`, `auth.`, `mcp.`, `grafana.`) stays under the base domain with Let's Encrypt on the server.
+The backend (`api.`, `auth.`, `grafana.`) stays under the base domain with Let's Encrypt on the server.
 
 '''+TABLE+'''
 `ovh-vps` validates the hosts before it creates anything (`tools/ovh/web-hosts.sh`, warns about hosts deeper than one label under the zone),

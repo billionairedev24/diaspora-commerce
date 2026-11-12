@@ -257,7 +257,7 @@ jobs:
             echo "### ovh-vps: $ACTION  (${{ job.status }})"
             echo "Images: \`$IMAGE_TAG\`"
             [[ -z "${SERVER_IP:-}" ]] || echo "Server: \`$SERVER_IP\` · \`ssh -i .ovh/ovh-vps-deploy-key ubuntu@$SERVER_IP\`"
-            echo "API: https://api.$OVH_DOMAIN/bff · Auth: https://auth.$OVH_DOMAIN · MCP: https://mcp.$OVH_DOMAIN"
+            echo "API: https://api.$OVH_DOMAIN/bff · Auth: https://auth.$OVH_DOMAIN"
             echo "Storefront: ${storefront_url:-https://$OVH_DOMAIN} · Seller Center: ${seller_url:-https://seller.$OVH_DOMAIN} · Staff console: ${admin_url:-https://admin.$OVH_DOMAIN}"
             if [[ "$OVH_STOREFRONT_HOST" == www ]]; then echo "(the apex redirects to www; deploy the web apps with ovh-web, storefront-host=www)"; else echo "(deploy the web apps with ovh-web, storefront-host=apex; the hosts above are read from the same variables)"; fi
             echo "**Billing: the server is billed by the hour until you run destroy, even when stopped or scaled down.**"

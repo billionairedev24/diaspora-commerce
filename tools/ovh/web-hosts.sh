@@ -5,7 +5,7 @@
 #   tools/ovh/web-hosts.sh            prints KEY=value lines (storefront_host, seller_host, admin_host, *_url), warnings on stderr
 #
 # Inputs (environment variables):
-#   OVH_DOMAIN           base domain, required: the backend is api./auth./mcp./grafana./media.<OVH_DOMAIN>
+#   OVH_DOMAIN           base domain, required: the backend is api./auth./grafana./media.<OVH_DOMAIN>
 #   OVH_STOREFRONT_HOST  www (default) | apex
 #   OVH_SELLER_HOST      optional FULL hostname of the Seller Center & Provider Hub, default seller.<OVH_DOMAIN>
 #   OVH_ADMIN_HOST       optional FULL hostname of the staff console, default admin.<OVH_DOMAIN>
@@ -47,7 +47,7 @@ check_explicit() { # NAME VALUE: only for hosts the owner chose
     [[ "$h" == *".$ZONE" ]] || die "$name '$h' must sit under the Cloudflare zone '$ZONE' (a Worker custom domain needs a DNS record in that zone)"
   fi
   case "$h" in
-    api."$DOMAIN"|auth."$DOMAIN"|mcp."$DOMAIN"|grafana."$DOMAIN"|media."$DOMAIN"|developers."$DOMAIN")
+    api."$DOMAIN"|auth."$DOMAIN"|grafana."$DOMAIN"|media."$DOMAIN"|developers."$DOMAIN")
       die "$name '$h' is a backend host of this environment" ;;
   esac
 }

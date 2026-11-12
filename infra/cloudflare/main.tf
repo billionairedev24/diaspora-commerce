@@ -41,12 +41,10 @@ locals {
     api           = "api.${local.base}"        # gateway-bff (BFF for web + mobile)
     auth          = "auth.${local.base}"       # identity (Spring Authorization Server)
     media         = "media.${local.base}"      # R2 public media
-    mcp           = "mcp.${local.base}"        # mcp-server (own host, MCP clients)
-    grafana       = "grafana.${local.base}"    # kube-prometheus-stack Grafana
     developers    = "developers.${local.base}" # docs portal (Cloudflare Pages, pages.tf)
   }
   web_apps    = ["storefront", "seller-center", "staff-console"]
-  origin_apps = ["api", "auth", "mcp", "grafana"]
+  origin_apps = ["api", "auth"]
 
   tags = ["env:${var.environment}", "managed-by:opentofu"]
 }

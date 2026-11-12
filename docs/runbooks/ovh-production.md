@@ -69,10 +69,9 @@ These modules were never applied: expect to fix first-run provider errors (the O
 `infra/cloudflare` with `origin_mode = "tunnel"` creates the tunnel and the DNS records for `api.`, `auth.` (and the web hosts for the
 Workers). Take the token: `cloudflared tunnel token <tunnel id>` into `CLOUDFLARED_TUNNEL_TOKEN` (step 6). The prod routes in
 `infra/k8s/platform/edge/overlays/prod/routes.yaml` expose **api** (BFF, identity, bookings, fulfilment, media, notifications and the three
-Stripe webhook paths) and **auth** only. **There is no `mcp.` route and no `grafana.` route**: `infra/cloudflare` still lists them in
-`origin_apps`, so those two hostnames reach the tunnel and get a 404 from Envoy. Remove them there if you do not want the names.
-mcp-server is cluster-internal and requires OAuth bearer tokens (`AT_SECURITY_ENABLED=true`). `docs/runbooks/ai-spend-and-mcp-access.md` records the owner decision that
-MCP is public eventually: the launch default here is no public route; the commented route in `routes.yaml` plus the `mcp.` name in `infra/cloudflare` publish it.
+Stripe webhook paths) and **auth** only. **There is no `mcp.` route and no `grafana.` route**, and neither name is in `infra/cloudflare` (`origin_apps` is `api`, `auth`).
+mcp-server is private by owner decision: cluster-internal (`ClusterIP`), no public hostname, OAuth bearer tokens on every call
+(`AT_SECURITY_ENABLED=true`); see `docs/runbooks/ai-spend-and-mcp-access.md`. Grafana lives in Grafana Cloud.
 The web apps (Workers) are not part of this runbook.
 
 ## 5. Layerbase PostgreSQL

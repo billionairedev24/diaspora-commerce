@@ -19,15 +19,16 @@ customer storefront, whose host follows the **storefront host rule** (below): `w
 | Public API, gateway-bff (`API_BASE_URL`) | `http://localhost:8200` | `https://api.dev.afrotransact.com` | `https://api.uat.afrotransact.com` | `https://api.afrotransact.com` |
 | Identity / OIDC issuer (`AUTH_ISSUER_URL`) | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |
 | Public media CDN (`MEDIA_PUBLIC_URL`) | `http://localhost:9000/media` (MinIO) | `https://media.dev.afrotransact.com` | `https://media.uat.afrotransact.com` | `https://media.afrotransact.com` |
-| MCP server (`MCP_PUBLIC_URL`, own host) | `http://localhost:8114` | `https://mcp.dev.afrotransact.com` | `https://mcp.uat.afrotransact.com` | `https://mcp.afrotransact.com` |
+| MCP server (`MCP_PUBLIC_URL`; private, ClusterIP, no public host) | `http://localhost:8114` | `http://mcp-server.afrotransact-dev.svc.cluster.local` | `http://mcp-server.afrotransact-uat.svc.cluster.local` | `http://mcp-server.afrotransact-prod.svc.cluster.local` |
 | Developer portal | `http://localhost:3100` | `https://developers.dev.afrotransact.com` | `https://developers.uat.afrotransact.com` | `https://developers.afrotransact.com` |
 | Grafana | `http://localhost:3200` | `https://grafana.dev.afrotransact.com` | `https://grafana.uat.afrotransact.com` | `https://grafana.afrotransact.com` |
 | Email sending domain | Mailpit | `mail.dev.afrotransact.com` | `mail.uat.afrotransact.com` | `mail.afrotransact.com` |
 
 The staff console is `admin.<base>` (the Cloudflare Worker route and the WAF admin allow-list rule both use
 `admin.`). `staff.`, `sell.`, `provider.`, `identity.` and `www.<env>.` hosts do not exist; Provider Hub is served
-by the Seller Center app. `mcp.` (mcp-server) and `grafana.` (kube-prometheus-stack) are origin hosts like `api.` and
+by the Seller Center app. `grafana.` (kube-prometheus-stack, dev and uat only) is an origin host like `api.` and
 `auth.` (Cloudflare Tunnel or AOP ingress -> the edge Gateway -> HTTPRoutes in `infra/k8s/platform/edge/overlays/<env>`);
+mcp-server has no public host (private, cluster-internal, bearer tokens required) and prod Grafana is in Grafana Cloud;
 `developers.` is the docs portal on Cloudflare Pages (`infra/cloudflare/pages.tf`).
 In every environment the storefront is `https://www.<base>` and the base domain itself (`afrotransact.com`,
 `dev.afrotransact.com`, `uat.afrotransact.com`) must redirect (301, path and query kept) to it; `www.` is the only storefront origin (gateway-bff CORS/CSRF, OIDC callback, identity redirect URIs,
@@ -169,7 +170,7 @@ One setting decides where the customer storefront lives; everything else follows
 | | `www` (default; dev, uat, prod, OVH) | `apex` (explicit opt-out) |
 |---|---|---|
 | Storefront | `https://www.<base>` | `https://<base>` |
-| Other apps | `seller.`, `admin.`, `api.`, `auth.`, `mcp.`, `grafana.`, `media.`, `developers.` `<base>` | unchanged |
+| Other apps | `seller.`, `admin.`, `api.`, `auth.`, `grafana.`, `media.`, `developers.` `<base>` | unchanged |
 | The other name | `<base>` 301 -> `https://www.<base>`, path and query kept (`dev.afrotransact.com` -> `www.dev.afrotransact.com`) | none |
 | Helm (`infra/argocd/envs/<env>/platform-values.yaml`) | `global.storefrontHost: www` (or unset) | `global.storefrontHost: apex` |
 | Cloudflare (`infra/cloudflare/envs/<env>.tfvars`) | `storefront_host = "www"` (default) | `storefront_host = "apex"` |
@@ -232,7 +233,7 @@ anyone who does not set the new variables.
 | Storefront (`PUBLIC_WEB_URL`) | `https://test.afrotransact.com` |
 | Seller Center & Provider Hub (`SELLER_CENTER_URL`) | `https://seller-test.afrotransact.com` |
 | Staff console (`STAFF_CONSOLE_URL`) | `https://admin-test.afrotransact.com` |
-| API / identity / MCP / Grafana | `https://api.test.afrotransact.com`, `https://auth.test.afrotransact.com`, `https://mcp.test.afrotransact.com`, `https://grafana.test.afrotransact.com` |
+| API / identity / Grafana | `https://api.test.afrotransact.com`, `https://auth.test.afrotransact.com`, `https://grafana.test.afrotransact.com` |
 
 **Where the explicit host is read.** One place derives everything: the Helm library chart (`at-service.platformEnvVars`) turns `global.sellerHost` /
 `global.adminHost` into `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL`; the OVH pipeline gives the Workers the same three origins as Worker vars

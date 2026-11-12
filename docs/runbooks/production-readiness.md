@@ -101,7 +101,7 @@ specifics, a restore drill.
 - [ ] **blocker** `ENGINEERING · Open` Identity signing key is **RSA** (3072); `SIGNING_KEY_PEM` is set; the identity data key (`IDENTITY_DATA_KEY`) is set
   and backed up separately from the database.
 - [ ] `ENGINEERING · Open` Client secrets for every first-party service client are set (`*_CLIENT_SECRET`), and the BFF client redirect URIs are the
-  production origins only (including the three web apps and the MCP public client).
+  production origins only (including the three web apps and the MCP client).
 - [ ] `ENGINEERING · Open` Identity admin console works for a Super Admin and is hidden for others (see `docs/engineering/identity-admin-dev-test.md`).
 - [ ] `ENGINEERING · Open` Staff MFA is required at sign-in; sign-up MFA behaves as decided (backlog story).
 
@@ -132,10 +132,10 @@ specifics, a restore drill.
 - [ ] `ENGINEERING · Open` Security headers and CSP (`docs/engineering/security-headers.md`): identity serves its enforced CSP (check `curl -sI https://auth.<base>/login | grep -i content-security` and a full sign-in in Chrome and Firefox); each web app has run `CSP_MODE=report-only` in uat for 7 days with every `csp.violation` pair fixed, allowed or dismissed, then `CSP_MODE=enforce` in uat for 2 days; prod ran 7 days report-only, then `enforce` set in `web/apps/*/wrangler.jsonc` `env.prod.vars` (date: ____); HSTS 1 y + `includeSubDomains` at the edge (`curl -sI https://www.<base> | grep -i strict-transport`), preload still off; runbook `docs/runbooks/csp-violations-spike.md`.
 - [ ] `ENGINEERING · Open` Rate limits and the WAF ruleset are on for sign-in, checkout and the public APIs.
 - [ ] `OWNER · Open` Penetration test or an equivalent review done for sign-in, payments, uploads and the staff console.
-- [ ] **blocker** `ENGINEERING · Open` **MCP exposure.** Owner decision: the MCP server is **public with authenticated tools** (OAuth 2.1 bearer tokens from
+- [ ] **blocker** `ENGINEERING · Open` **MCP exposure.** Owner decision: the MCP server is **private** (cluster-internal, no public hostname, authenticated tools: OAuth 2.1 bearer tokens from
   identity, tool lists filtered by scope and permission, a global rate limit of 30 burst and 30 per minute in prod, a durable audit
-  of every call: `java/services/mcp-server/README.md`). Before launch: (a) the public edge route and WAF rules cover `POST /mcp` and the
-  `/.well-known/oauth-protected-resource` document, with unauthenticated calls getting `401`; (b) the OAuth client's redirect URIs
+  of every call: `java/services/mcp-server/README.md`). Before launch: (a) **no public route exists**: no `mcp.` DNS name or tunnel rule, no HTTPRoute, the Service is `ClusterIP`; from inside the cluster
+  an unauthenticated `POST /mcp` gets `401`; (b) the OAuth client's redirect URIs
   are the allowed MCP clients only; (c) **no tool works without a token**, staff tools need a staff principal, and tools that
   change data need an explicit scope: test with a no-scope token (`-32003`) and a seller token against another seller's data;
   (d) Valkey is reachable (the rate limit fails open to a per-pod bucket otherwise; decide on `MCP_RATE_FAILURE_MODE=closed`);

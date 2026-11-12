@@ -95,8 +95,8 @@ relays the caller's bearer token; the MCP server never reads a database.
 
 | Method | Path | Who |
 |---|---|---|
-| GET | `/v1/tools` (`?mine=true` for the caller's own) | public — developer portal catalogue with JSON schemas |
-| GET | `/.well-known/oauth-protected-resource` | public — RFC 9728 metadata |
+| GET | `/v1/tools` (`?mine=true` for the caller's own) | in-cluster only (no public route) — developer portal catalogue with JSON schemas |
+| GET | `/.well-known/oauth-protected-resource` | in-cluster only (no public route) — RFC 9728 metadata |
 | POST | `/mcp` | MCP clients (bearer token) |
 
 Contract: [`contracts/openapi/mcp-server.yaml`](../../../contracts/openapi/mcp-server.yaml) (REST only; the MCP
@@ -122,7 +122,7 @@ register a public MCP client, for example:
 | Env var | Purpose |
 |---|---|
 | `AUTH_ISSUER_URL` | identity issuer (JWT validation, advertised authorization server) |
-| `MCP_PUBLIC_URL` | external URL of this server (resource indicator) |
+| `MCP_PUBLIC_URL` | this server's own URL (resource indicator). Private service: in cluster `http://mcp-server.<namespace>.svc.cluster.local` (no public host); `McpExposureGuard` accepts that form only with security on |
 | `MCP_ALLOWED_ORIGINS` | browser origins allowed to call `/mcp` (DNS-rebinding protection) |
 | `MCP_RATE_CAPACITY`, `MCP_RATE_PER_MINUTE` | token bucket |
 | `MCP_RATE_STORE` | `valkey` (default, global) or `memory` (per pod) |

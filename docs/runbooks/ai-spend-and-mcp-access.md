@@ -1,11 +1,11 @@
-# AI spend ceiling and public MCP access
+# AI spend ceiling and private MCP access
 
 Owner decisions, enforced in code:
 
 1. **AI spend is capped at USD 2.00 per UTC day in total**, on the cheapest suitable model, with a clear 429 when reached
    and a per-caller limit so one caller cannot use up the day for everyone.
-2. **The MCP server is public** (reachable from the internet at `mcp.afrotransact.com`), but every tool call needs
-   authentication and a scoped token. No staff tool is reachable with a shopper token. AI-calling tools count against the
+2. **The MCP server is private**: no public hostname and no route through the Cloudflare Tunnel or Envoy, reachable only
+   inside the cluster (staff through an authenticated path later if needed). Every tool call needs authentication and a scoped token. No staff tool is reachable with a shopper token. AI-calling tools count against the
    same budget and per-caller limit.
 
 ## 1. AI spend ceiling (ai-gateway)
@@ -60,16 +60,20 @@ To raise the ceiling for a day, set `AI_GLOBAL_DAILY_COST_USD` and restart ai-ga
 * Check usage: `select * from ai_usage_daily where usage_day = current_date and scope = 'GLOBAL';` (cost in micro-dollars,
   2,000,000 = USD 2). Metrics: `ai_budget_decisions_total{verdict=~"deny_global|deny_caller|rate_limited"}`.
 
-## 2. Public MCP server
+## 2. Private MCP server
 
-### What is public and what is not
+The service is `ClusterIP` only. Consumers (ai-gateway or any other in-cluster caller) use its service name,
+`http://mcp-server.afrotransact-<env>.svc.cluster.local` (port 80, or `http://mcp-server` from the same namespace). Do not add an
+HTTPRoute, tunnel ingress rule or `mcp.<domain>` DNS name for it; that would reverse this owner decision.
+
+### Which paths exist and how they are protected
 
 | Path | Access |
 |---|---|
 | `POST /mcp` (all JSON-RPC: `initialize`, `tools/list`, `tools/call`) | **bearer token required** (OAuth 2.1 from the identity service); no anonymous tool |
-| `GET /.well-known/oauth-protected-resource` | public (RFC 9728 metadata, so clients find the issuer) |
-| `GET /v1/tools` | public, but without a token it lists the **shopper toolset only**; seller and staff tools appear only for a token that may call them (`?mine=true` filters further) |
-| `/actuator/health`, `/actuator/prometheus`, `/actuator/info` | public per platform rules; restrict `/actuator/prometheus` at the edge |
+| `GET /.well-known/oauth-protected-resource` | open inside the cluster (RFC 9728 metadata, so clients find the issuer) |
+| `GET /v1/tools` | open inside the cluster, but without a token it lists the **shopper toolset only**; seller and staff tools appear only for a token that may call them (`?mine=true` filters further) |
+| `/actuator/health`, `/actuator/prometheus`, `/actuator/info` | cluster-internal only (no edge route exists) |
 
 No tool is anonymous. Even the read-only shopper catalogue tools need a token, so that rate limits, audit and the AI
 budget attach to an identity.
@@ -87,10 +91,11 @@ budget attach to an identity.
 
 Tools call the platform APIs with the caller's own relayed token, so each downstream service applies its own checks again.
 
-### Safety nets added for the public deployment
+### Safety nets
 
 * **Startup guard** (`McpExposureGuard`, every profile except `local`): the service refuses to start if `at.security.enabled` is
-  false, if `MCP_PUBLIC_URL` is not https or if `AUTH_ISSUER_URL` is not an https non-local address. So a stray
+  false, if `MCP_PUBLIC_URL` is neither https nor an in-cluster service URL (`http://mcp-server.<ns>.svc.cluster.local`), or if
+  `AUTH_ISSUER_URL` is not an https non-local address. The in-cluster URL is accepted only with auth on. So a stray
   `AT_SECURITY_ENABLED=false` cannot make production anonymous.
 * **AI budget:** the MCP server has no model client and a test (`ArchitectureTest.toolsNeverCallModelProvidersDirectly`) keeps it that
   way. A tool that needs a model must call the ai-gateway with the caller's relayed token; the gateway then applies the
@@ -99,8 +104,8 @@ Tools call the platform APIs with the caller's own relayed token, so each downst
 
 ### Operating it
 
-* To switch the public exposure off quickly, remove the `mcp.afrotransact.com` route (Cloudflare tunnel or ingress); the
-  service itself keeps running.
+* There is no public exposure to switch off. If a route or `mcp.` DNS name ever appears, remove it (Cloudflare tunnel ingress,
+  HTTPRoute, `infra/cloudflare`); the service itself keeps running.
 * To block one client or user, revoke their token / client in identity; tokens are short-lived.
 * Watch `mcp_*` metrics and the audit topic for `denied` and `rate_limited` outcomes; a spike from one client is the signal.
 * MCP clients need an identity client with the scopes they should have; give shoppers `mcp:shopper` only. Staff-only

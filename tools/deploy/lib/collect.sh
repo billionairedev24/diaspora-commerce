@@ -114,7 +114,7 @@ h_webhosts() { # flat web hosts: offered when OVH_DOMAIN is not the zone itself 
   fi
   label=${dom%".$zone"}; label=$(printf '%s' "$label" | tr . -)
   { echo "$dom is below your Cloudflare zone ($zone). Cloudflare's free certificate covers only the zone and ONE label under it, so www.$dom, seller.$dom and admin.$dom (two labels) would get a certificate error unless you pay for an Advanced Certificate."
-    echo "The flat layout keeps the web apps one label under the zone: storefront https://$dom, Seller Center https://seller-$label.$zone, staff console https://admin-$label.$zone. The backend (api., auth., mcp., grafana.) stays on $dom with Let's Encrypt."; } | panel "FREE CERTIFICATE LAYOUT" yellow
+    echo "The flat layout keeps the web apps one label under the zone: storefront https://$dom, Seller Center https://seller-$label.$zone, staff console https://admin-$label.$zone. The backend (api., auth., grafana.) stays on $dom with Let's Encrypt."; } | panel "FREE CERTIFICATE LAYOUT" yellow
   choose "Which layout?" 1 "Flat (free certificate): storefront-host apex, seller-$label.$zone, admin-$label.$zone" "Nested (www./seller./admin.$dom; needs a paid Advanced Certificate)"
   if [ "$CHOICE" = 1 ]; then
     gh_put var OVH_STOREFRONT_HOST apex && gh_put var OVH_SELLER_HOST "seller-$label.$zone" && gh_put var OVH_ADMIN_HOST "admin-$label.$zone" \

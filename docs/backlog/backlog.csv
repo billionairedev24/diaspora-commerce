@@ -1426,7 +1426,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - OpenRouter account and prod key credit limits are set to match
 - An alert fires at 50 and 80 percent of the day's cap
 - Exceeding the cap degrades then returns 429 ai.budget-exceeded in a test","E21","","High","3","ai launch cost","ai","To Do"
-"S377","Story","MCP server public: authenticated tools check","Owner decision: the MCP server is public with authenticated tools. Verify nothing works without a token and that exposure is limited to what tokens allow.","- POST /mcp without a token gets 401 with the protected-resource metadata
+"S377","Story","MCP server private: authenticated tools check","Owner decision: the MCP server stays private: no public hostname, no route through the Cloudflare Tunnel or Envoy, reachable only inside the cluster. Every call needs a scoped token. Verify nothing works without a token, that exposure is limited to what tokens allow, and that no public route or mcp. DNS name exists.","- No mcp. DNS name, tunnel rule or HTTPRoute exists; the mcp-server Service is ClusterIP
+- POST /mcp without a token (from inside the cluster) gets 401 with the protected-resource metadata
 - A token without scope gets -32003 for tools outside its scope
 - A seller token cannot read another seller's data through any tool
 - Staff tools need a staff principal; data-changing tools need an explicit scope

@@ -84,7 +84,7 @@ Set these variables (`make ovh-gh-setup`, or the deploy wizard, which offers the
 | `test.afrotransact.com` (storefront) | Worker `storefront-ovh`, Custom Domain | Cloudflare free Universal (`*.afrotransact.com`) |
 | `seller-test.afrotransact.com` (Seller Center & Provider Hub) | Worker `seller-center-ovh` | Cloudflare free Universal (`*.afrotransact.com`) |
 | `admin-test.afrotransact.com` (staff console) | Worker `staff-console-ovh` | Cloudflare free Universal (`*.afrotransact.com`) |
-| `api.test.afrotransact.com`, `auth.test.afrotransact.com`, `mcp.test.afrotransact.com`, `grafana.test.afrotransact.com` | the OVH server (grey-cloud A records made by `ovh-vps`) | Let's Encrypt on the server (cert-manager), not Cloudflare |
+| `api.test.afrotransact.com`, `auth.test.afrotransact.com`, `grafana.test.afrotransact.com` | the OVH server (grey-cloud A records made by `ovh-vps`) | Let's Encrypt on the server (cert-manager), not Cloudflare |
 | `media-test.afrotransact.com` (optional) | R2 custom domain / CDN | Cloudflare free Universal |
 
 Nothing changes when `OVH_SELLER_HOST` and `OVH_ADMIN_HOST` are empty (defaults `seller.<domain>`, `admin.<domain>`) and nothing changes for
@@ -152,7 +152,7 @@ domain of the environment: the storefront will be at `https://www.<OVH_DOMAIN>` 
 ## 6. Order of operations
 
 1. **Backend first.** Run the `ovh-vps` workflow (`plan`, then `provision-and-deploy`). With `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE`
-   set, it creates the A records `api.`, `auth.`, `mcp.` and `grafana.<domain>` (DNS only, grey cloud). Check:
+   set, it creates the A records `api.`, `auth.` and `grafana.<domain>` (DNS only, grey cloud). Check:
 
    ```bash
    curl -i https://api.<domain>/bff/healthz

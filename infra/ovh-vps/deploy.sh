@@ -90,7 +90,7 @@ spec:
       - http01: {ingress: {ingressClassName: traefik}}
 YAML
   local host
-  for host in api auth mcp; do
+  for host in api auth; do
     kubectl apply -f - <<YAML
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -108,7 +108,7 @@ YAML
   # seller Stripe webhooks: these two exact paths only (docs/runbooks/stripe-webhooks.md); the service verifies Stripe-Signature
   route api /seller/v1/webhooks/stripe-connect seller "/v1/webhooks/stripe-connect"
   route api /seller/v1/webhooks/stripe-billing seller "/v1/webhooks/stripe-billing"
-  route auth / identity "" ; route mcp / mcp-server ""
+  route auth / identity ""   # no mcp. route: mcp-server is private (ClusterIP, bearer tokens required)
 }
 
 route() { # route HOST_PREFIX PATH SERVICE [REWRITE]
@@ -167,7 +167,7 @@ install_service() { # install_service SERVICE RUNTIME
   [[ -z "$MEDIA_PUBLIC_URL" ]] || media=(--set-string "global.urls.MEDIA_PUBLIC_URL=$MEDIA_PUBLIC_URL")
   [[ -n "${GHCR_USER:-}" && -n "${GHCR_TOKEN:-}" ]] && pull=(--set "imagePullSecrets[0].name=ghcr")
   [[ -f "$HERE/overrides/$svc.yaml" ]] && extra+=(-f "$HERE/overrides/$svc.yaml")
-  [[ "$svc" != mcp-server ]] || extra+=(--set-string "extraEnv.MCP_PUBLIC_URL=https://mcp.${DOMAIN}")
+  [[ "$svc" != mcp-server ]] || extra+=(--set-string "extraEnv.MCP_PUBLIC_URL=http://mcp-server.${NS}.svc.cluster.local")
   # Prometheus Operator CRDs exist once `observability` ran: then every service is scraped.
   kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1 && extra+=(--set monitoring.serviceMonitor=true)
   helm upgrade --install "$svc" "$dir" -n "$NS" \
@@ -202,7 +202,7 @@ status() {
   kubectl get pods -A --no-headers | awk '$4!="Running" && $4!="Completed"{print}' | head -40 || true
   kubectl -n "$NS" get pods
   kubectl -n "$NS" get certificate 2>/dev/null || true
-  echo "API: https://api.$DOMAIN/bff   Auth: https://auth.$DOMAIN   MCP: https://mcp.$DOMAIN"
+  echo "API: https://api.$DOMAIN/bff   Auth: https://auth.$DOMAIN"
 }
 
 deploy_observability() {

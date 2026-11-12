@@ -62,7 +62,7 @@ phase_what() {
     (database) echo "Choose where PostgreSQL runs: in a pod on the server (cluster: data dies with the server) or a managed Postgres you keep (external, for example Layerbase)." ;;
     (flavor) echo "Shows the region and the server size you chose and asks you to read the hourly price in the OVHcloud console before anything is created." ;;
     (server) echo "Runs the ovh-vps workflow: first plan (nothing created), then provision-and-deploy: creates the Public Cloud instance, the DNS records (if a Cloudflare token is set), installs k3s and deploys the 26 services. You approve each run on GitHub." ;;
-    (dns) echo "Proves the four backend host names (api, auth, mcp, grafana) point at the server, the Let's Encrypt certificates are real and valid, and the API and sign-in answer over https." ;;
+    (dns) echo "Proves the four backend host names (api, auth, grafana) point at the server, the Let's Encrypt certificates are real and valid, and the API and sign-in answer over https." ;;
     (cloudflare) echo "Checks the Cloudflare zone settings the apps rely on (Add visitor location headers, Always Use HTTPS, SSL Full strict), asks about the Workers plan, then runs the ovh-web workflow that deploys storefront, Seller Center and staff console as Workers on your domain and the apex redirect." ;;
     (smoke) echo "Checks health endpoints, that the three Stripe webhook URLs exist and enforce the signature (an unsigned POST must answer 400), the sign-in page and its enforced CSP, the web apps' Report-Only CSP header, the CSP report endpoint, rebuilds the search index, and tells you how seeding works for this environment." ;;
     (stop) echo "Explains how to stop the billing (destroy the server, not scale it down) and what is kept; can run the destroy for you after a typed confirmation." ;;
@@ -118,7 +118,7 @@ phase_dry() {
     (database) echo "show cluster vs external; require typing 'throwaway' for cluster|gh variable set DB_MODE; collect EXTERNAL_PG_* for external" ;;
     (flavor) echo "show location and flavor; ask for the hourly price you read in the console|gh variable set OVH_INSTANCE_FLAVOR" ;;
     (server) echo "completeness gate: refuse while a required value is missing|gh workflow run ovh-vps.yml -f action=plan (after typing 'plan')|gh workflow run ovh-vps.yml -f action=provision-and-deploy -f image-tag=<sha> (after typing 'create'): BILLING STARTS|wait for your approval on GitHub, poll the run, summarise a failure from its log|read the server IPv4 from the run log" ;;
-    (dns) echo "A lookup for api/auth/mcp/grafana vs the server IP|openssl s_client: issuer, expiry|curl https://api.<domain>/bff/healthz and auth openid-configuration" ;;
+    (dns) echo "A lookup for api/auth/grafana vs the server IP|openssl s_client: issuer, expiry|curl https://api.<domain>/bff/healthz and auth openid-configuration" ;;
     (cloudflare) echo "optionally read zone settings with your token (managed transform, always HTTPS, SSL mode)|ask about the Workers plan|gh workflow run ovh-web.yml -f apps=... -f domain=... -f storefront-host=... (after typing 'deploy')|curl www/seller/admin and the apex redirect" ;;
     (smoke) echo "curl health, sign-in page (CSP header), web CSP-Report-Only header|POST an UNSIGNED body to each Stripe webhook URL (expects 400)|POST a labelled sample to /api/csp-report (expects 204)|gh workflow run ovh-vps.yml -f action=reindex-search (after typing 'reindex')|explain seeding" ;;
     (stop) echo "print how to destroy and what is kept|optionally: gh workflow run ovh-vps.yml -f action=destroy -f confirm-destroy=ovh-vps (after typing the word)" ;;
@@ -222,7 +222,7 @@ match_hint() { # match_hint LOG 'regex => hint'...: every hint whose regex match
 
 # ---- checks shared by the phases and --doctor (each prints its own PASS/FAIL line and returns 0/1) -------------------------------
 quiet() { "$@" >/dev/null 2>&1; }
-BACKEND_HOSTS="api auth mcp grafana"
+BACKEND_HOSTS="api auth grafana"
 chk_dns() {
   local h ips bad=0 line=''
   [ -n "$SERVER_IP" ] || { verdict_warn "server address unknown: cannot compare DNS (run the server phase)"; return 1; }
@@ -230,7 +230,7 @@ chk_dns() {
     ips=$(a_lookup "$h.$DOMAIN" | tr '\n' ' ')
     case " $ips " in (*" $SERVER_IP "*) ;; (*) bad=1; line="$line $h.$DOMAIN->${ips:-nothing}" ;; esac
   done
-  if [ "$bad" = 0 ]; then verdict_pass "api, auth, mcp and grafana .$DOMAIN all resolve to $SERVER_IP"; return 0; fi
+  if [ "$bad" = 0 ]; then verdict_pass "api, auth and grafana .$DOMAIN all resolve to $SERVER_IP"; return 0; fi
   verdict_fail "not pointing at $SERVER_IP:$line"
   hint "Fix: type A, DNS only (grey cloud), content $SERVER_IP, in Cloudflare DNS; remove a CAA record that excludes letsencrypt.org (ovh-vps.md step 6). DNS can take minutes."
   return 1
@@ -647,7 +647,7 @@ p_dns() {
   local rc=0
   chk_cert "api.$DOMAIN" || rc=1
   chk_cert "auth.$DOMAIN" || rc=1
-  for h in mcp grafana; do chk_cert "$h.$DOMAIN" || verdict_warn "$h is not essential for the first test"; done
+  for h in grafana; do chk_cert "$h.$DOMAIN" || verdict_warn "$h is not essential for the first test"; done
   [ "$rc" = 0 ] || return 1
   chk_api || return 1
   verdict_pass "DNS, certificates and API are fine"; return 0
@@ -779,7 +779,7 @@ print_summary() {
   sf="https://$(web_host storefront)"
   blank; rule; bold "  Summary"; rule
   printf '  %-22s %s\n' "Storefront" "$sf" "Seller Center" "https://$(web_host seller)" "Staff console" "https://$(web_host admin)" \
-    "API (gateway-bff)" "https://api.$DOMAIN/bff" "Sign-in (identity)" "https://auth.$DOMAIN" "MCP" "https://mcp.$DOMAIN" "Grafana" "https://grafana.$DOMAIN"
+    "API (gateway-bff)" "https://api.$DOMAIN/bff" "Sign-in (identity)" "https://auth.$DOMAIN" "Grafana" "https://grafana.$DOMAIN"
   [ -z "$(state_get server.ip)" ] || { printf '  %-22s %s\n' "Server" "$(state_get server.ip)  (ssh -i .ovh/ovh-vps-deploy-key ubuntu@$(state_get server.ip))"; printf '  %s%s%s\n' "$C_YELLOW" "  Billing: the server bills by the hour until destroyed." "$C_RESET"; }
   [ -z "$SHA" ] || printf '  %-22s %s\n' "Images" "$(printf '%s' "$SHA" | cut -c1-12)"
   blank; bold "  Next three things"

@@ -198,7 +198,7 @@ delete the old token (**Manage API Tokens** > the token > **Delete**).
 Empty both buckets (**Objects** > select all > **Delete**), delete the buckets, delete the custom domain, revoke both
 tokens, delete the trial secret path.
 
-## AI spend ceiling and the public MCP server
+## AI spend ceiling and the private MCP server
 
 Both are owner decisions and are enforced in code, not only in runbooks. See the ai-gateway and mcp-server sections of
 `docs/runbooks/ai-spend-and-mcp-access.md`.

@@ -1,5 +1,5 @@
 # Cloudflare Tunnel connector (infra/cloudflare origin_mode = "tunnel", the default): outbound-only connection from the
-# cluster to Cloudflare, so api./auth./mcp./grafana.<base> need no public load balancer. The tunnel and its ingress
+# cluster to Cloudflare, so api./auth.<base> need no public load balancer. The tunnel and its ingress
 # rules (hostname -> http://envoy-gateway.ingress.svc.cluster.local:80) are managed remotely by infra/cloudflare
 # (config_src = cloudflare); the pod only needs the tunnel token, synced from the secret store by the overlay's
 # ExternalSecret (key afrotransact/<env>/cloudflared, property token: `cloudflared tunnel token <tunnel_id>`).

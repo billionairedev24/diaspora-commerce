@@ -293,7 +293,7 @@ must define those three profiles with matching channels.
    `tofu output platform_values["external-secrets"]`; Envoy gateway must require Cloudflare's origin-pull
    client certificate (Authenticated Origin Pulls) when `origin_mode = ingress`. Done (S249): `cloudflared` with the
    tunnel token, the EnvoyProxy `edge` (Service `envoy-gateway` in `ingress`, deploy type GatewayNamespace) and the
-   per-environment HTTPRoutes for `api.` / `auth.` / `mcp.` / `grafana.` (`infra/k8s/platform/edge`); Kyverno with
+   per-environment HTTPRoutes for `api.` / `auth.` (prod) and dev/uat `grafana.`; mcp-server has no public route (`infra/k8s/platform/edge`); Kyverno with
    the `verifyImages` policy for the keyless identity
    `https://github.com/billionairedev24/diaspora-commerce/.github/workflows/_(java|go)-service.yml@refs/heads/main`
    (`infra/k8s/platform/policies`; Kyverno needs registry read access on the cloud, see the first-environment runbook).

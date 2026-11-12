@@ -194,7 +194,7 @@ Answered by the owner:
 | Webhooks | The owner creates v2's endpoints **fresh**; v1's endpoints are **stopped and deleted at the freeze step, not before**. | Section 7 follows this. |
 | Sign-up gate | **None**: v1 sign-ups stay open until cutover; v2 is a full cutover, no invite-only beta. | Every v1 user migrates and signs in on v2 with no invite. Registrations on v1 are blocked at the freeze. The gate story (S355) is closed as not needed. |
 | AI spend | **2 US dollars a day** ceiling, cheapest model. | Readiness item and story S376 use that figure. |
-| MCP | The MCP server is **public, with authenticated tools**. | Readiness item and story S377 follow this. |
+| MCP | The MCP server is **private** (cluster-internal, no public hostname) and every call needs a scoped token. | Readiness item and story S377 follow this. |
 | Sign-offs | Tax professional and counsel review are **handled internally by the owner**. | Marked OWNER internal and not blocking engineering. |
 | Live Stripe key | **Not requested.** | The owner reads the state in the dashboard (section 1). |
 

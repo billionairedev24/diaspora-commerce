@@ -149,7 +149,7 @@ webhook_fake() { # webhook_fake PATH CODE: what api.example.com answers to an un
 dns_fake() { echo "$2" > "$F/dns/A_$1"; }
 healthy_world() {
   local h a
-  for h in api auth mcp grafana; do dns_fake "$h.example.com" 203.0.113.10; done
+  for h in api auth grafana; do dns_fake "$h.example.com" 203.0.113.10; done
   HTTP_BODY=ok http_fake https://api.example.com/bff/healthz 200 'server: traefik'
   for h in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing; do webhook_fake "$h" 400; done
   HTTP_BODY='{"issuer":"https://auth.example.com"}' http_fake https://auth.example.com/.well-known/openid-configuration 200
