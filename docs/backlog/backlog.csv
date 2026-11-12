@@ -160,7 +160,7 @@
 - Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","Done"
 "S043","Story","Other sellers on product page","Product page lists other offers for the same item with price, delivery and seller rating.","- All eligible offers listed with landed price
 - Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","Done"
-"E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","Done"
+"E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","In Progress"
 "S044","Story","Cart service (Redis + Postgres)","Carts with price snapshots, save for later and merge on login.","- Quantities can never exceed sellable stock
 - Lines that lose stock are flagged and excluded from checkout
 - Guest cart merges into the account cart on sign-in
@@ -185,7 +185,7 @@
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","Done"
-"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","In Progress"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
 - Declined test card returns a clear error
@@ -208,7 +208,7 @@
 - Finance can approve, hold or release payout requests","E07","","High","8","payments java stripe","payments","Done"
 "S057","Story","Refund and chargeback reversals","Partial refunds reverse matching transfer and commission; chargebacks debit the responsible seller.","- Partial refund per line updates the ledger
 - Chargeback debits the seller's balance and notifies them","E07","","High","5","payments java","payments","Done"
-"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","Done"
+"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","In Progress"
 "S058","Story","Order and sub-order model","One order, one shipment per seller/fulfilment node, each cancellable separately.","- Order totals equal the sum of shipments plus tax
 - Each shipment can be cancelled before it is packed","E08","","Highest","5","orders java","orders","Done"
 "S059","Story","Shipment state machine with actor rules","placed → confirmed → packed → ready → picked_up → in_transit → out_for_delivery → delivered (+ failed, returned, cancelled).","- Seller-fulfilled: only the seller confirms, packs and marks ready
@@ -220,7 +220,7 @@
 - Right panel shows recommendations / delivery map / help instead of blank space","E08","","Medium","5","orders web","orders","Done"
 "S061","Story","Driver events update order status live","Driver pickup/delivery scans move shipment statuses in the back office immediately.","- 'Picked up' and 'Delivered' scans update the shipment within 5 seconds
 - Staff console reflects updates without refresh (SSE)","E08","","High","5","orders delivery","orders","Done"
-"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","Done"
+"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","In Progress"
 "S062","Story","Inventory positions and append-only ledger","inventory_position(sku, node, on_hand, reserved, inbound, damaged, version) + ledger.","- available = on_hand − reserved is published via events, never computed in clients
 - Every movement writes a ledger row with actor and reason
 - Nightly job reconciles ledger sums to positions and alerts on drift","E09","","Highest","8","inventory java","inventory","Done"
@@ -342,7 +342,7 @@
 - Collection runs credit, then earnings opt-in, then card, with retry and dunning; Remaining: a test that metered usage lands on a generated invoice","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
 - Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
-"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","Done"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","In Progress"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
 - Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","Done"
 "S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
@@ -356,7 +356,7 @@
 - Commission taken only on what the customer paid","E15","","High","5","bookings java payments","bookings","Done"
 "S110","Story","Provider team roles","Owner, Manager, Practitioner, Finance with what each can and can't do.","- Practitioners edit only their own calendar and hours
 - View-only roles cannot change data (enforced server-side)","E15","","Medium","3","bookings rbac","bookings","Done"
-"E16","Epic","Storefront builder & provider public pages","Sellers and providers design their own pages within contrast-vetted themes.","","","Storefront builder & provider public pages","High","","storefront","storefront","Done"
+"E16","Epic","Storefront builder & provider public pages","Sellers and providers design their own pages within contrast-vetted themes.","","","Storefront builder & provider public pages","High","","storefront","storefront","In Progress"
 "S111","Story","Seller storefront builder","Store name, tagline (AI suggestion), accent colour and section order with live preview.","- Sections can be toggled and reordered
 - Checkout, prices and header stay platform-styled","E16","","Medium","5","storefront go web","storefront","Done"
 "S112","Story","Theme contrast vetting (WCAG 2.2 AA)","Seller colours generate OKLCH ramps; publishing blocked if button labels would be unreadable.","- Contrast computed server-side as well as in the UI
@@ -372,7 +372,7 @@
 - Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","Done"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
 - Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","Done"
-"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","Done"
+"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","In Progress"
 "S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
 - Decisions are audited","E18","","High","5","trust java","trust","Done"
 "S118","Story","Disputes and A-to-z claims","Customers open claims; staff decide with refund or deny.","- Claims have SLAs and escalation
@@ -409,7 +409,7 @@
 - Changes appear in shop, app and legal pages immediately","E20","","High","3","content legal","content","Done"
 "S130","Story","Feature flags (OpenFeature + Unleash)","Rollout percentages and kill switches.","- Flags evaluated server-side and in web/mobile
 - Kill switch takes effect within 30 seconds","E20","","Medium","3","content platform","content","Done"
-"E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","Done"
+"E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","In Progress"
 "S131","Story","AI gateway on Spring AI with OpenRouter","Spring AI ChatClient against OpenRouter's OpenAI-compatible API with model routing per task.","- Fast model for intent, strong model for planning, configurable per environment
 - Per-user and per-feature budgets enforced
 - Provider fallback on errors
@@ -438,7 +438,7 @@
 - No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","Done"
 "S140","Story","Service areas and delivery zones (PostGIS)","Zones for AfroTransact Delivery, FC catchments and provider service areas.","- Point-in-zone checks for delivery eligibility
 - Provider distance search ('within 15 miles')","E22","","Medium","5","geo go","geo","Done"
-"E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","Done"
+"E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","In Progress"
 "S141","Story","Next.js storefront app with tokens and white canvas","App shell on Next.js 16 with @afrotransact/tokens, Figtree, white background and no visible scrollbars.","- All colours come from tokens; lint bans raw hex
 - No visible scrollbars anywhere; no horizontal page scroll
 - Builds for Cloudflare Workers via OpenNext","E23","","Highest","5","storefront-web web","storefront-web","Done"
@@ -568,7 +568,7 @@
 - Dates and currency localised","E31","","Medium","8","legal i18n","legal","In Progress"
 "S194","Story","Accessibility WCAG 2.2 AA","Skip links, focus management, live regions, 44px targets and reduced motion.","- axe checks pass in CI with no serious violations
 - Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","Done"
-"E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","Done"
+"E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","In Progress"
 "S195","Story","Dashboard data feeds per portal","One dashboard endpoint per portal returning chart series.","- Feeds are cached for 60 seconds
 - Respect the caller's org and permissions","E32","","Medium","5","exports","exports","Done"
 "S196","Story","Export service (PDF, CSV, XLSX with native charts)","Server-side generation for tables and dashboards.","- XLSX includes native Excel charts linked to data
@@ -1583,3 +1583,37 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - If built: identity or seller preference endpoint, TourProgressRemote implementation, no personal data in the payload","E24","","Low","2","decision seller-center staff-console","seller-center","To Do"
 "S402","Story","Warn before Picked up in the staff order dialog","The staff order sheet asks for a note when a shipment is set to Picked up but does not say that this charges the customer's card for that package. The tour says it; the confirm dialog should too.","- The Set shipment to Picked up confirmation says the customer's card is charged for the package
 - Text in en, fr, es, ar, yo","E25","","Medium","1","staff-console orders payments","staff-console","To Do"
+"S403","Story","Storefront: only prod is indexable (noindex everywhere else)","Fail-closed indexing policy derived from APP_ENV + PUBLIC_WEB_URL (host map), Worker middleware, meta, robots, edge rule. docs/engineering/seo.md section 2.","- Every non-prod host (uat, dev, trial on test.<zone>, workers.dev, previews, www) answers X-Robots-Tag noindex on every dynamic response and robots.txt Disallow: / with no sitemap (404)
+- Seller center, staff console, api, auth and media non-image responses are noindex at the edge from hosts.json
+- A missing or odd APP_ENV is noindex; only the prod Worker block of wrangler.jsonc says prod and its PUBLIC_WEB_URL host equals the host map
+- Unit and e2e tests prove a non-prod build can never emit an indexable page and prod robots does not block /_next/static or images","E23","","Highest","5","seo security storefront","storefront-web","In Review"
+"S404","Story","Storefront: robots.txt and chunked sitemap index from live data","robots.txt, /sitemap.xml index and /sitemaps/<kind>-N.xml children generated from the gateway, cached, regenerated on TTL or call. docs/engineering/seo.md 3.4 and 3.7.","- Prod robots allows crawl, disallows cart/checkout/account/facet and tracking parameters and names the sitemap index
+- Children hold at most 50,000 URLs and 49 MB each, image entries for main photos, index lists only non-empty kinds
+- Only live, in stock, real-photo, non-sponsored products are listed; removed products drop out on the next generation; never cart/checkout/account/search/filter URLs
+- A failing source keeps its previous version and a collapsing kind is held back, both reported
+- Unit tests and a route test against the mock gateway validate the XML","E23","","Highest","8","seo storefront sitemap","storefront-web","Done"
+"S405","Story","Storefront: page SEO metadata and structured data","Unique title/description, one canonical, OG/Twitter and JSON-LD per template, server-rendered. docs/engineering/seo.md 3.1 to 3.5.","- Product, category, service, provider, business, help and home pages have unique metadata from real data and exactly one canonical (variants to the parent, facets noindex)
+- Product + Offer, BreadcrumbList, Organization + WebSite(SearchAction) and Service JSON-LD are in the first HTML and pass the schema.org validator test
+- AggregateRating only with real reviews; no tax claim, carrier name or delivery statement in structured data; no condition, shipping or return data is invented
+- Out of stock stays 200 and indexable with OutOfStock; removed products and services are 404
+- Category pages have crawlable Previous/Next links; page= is honoured
+- Main product photo is eager with high fetch priority and the image box reserves its ratio","E23","","High","8","seo storefront i18n","storefront-web","In Review"
+"S406","Story","SEO operations: runbook, Search Console DNS variable, daily probe","docs/runbooks/seo-and-search-console.md, tofu google_site_verification TXT (prod only), tools/ci/seo_probe.py and workflow seo-probe.","- Runbook covers Search Console domain verification, sitemap submission, Bing, URL inspection, monitoring, pre-launch checklist and the trial-safe note
+- Tofu variable creates the apex TXT record in prod only, no secrets
+- Daily probe fails when a non-prod host is indexable or serves a sitemap, a back office lacks noindex, prod robots/sitemap/sample URLs are invalid or the URL count drops below the floor
+- Probe unit tests pass on a fake network","E23","","High","3","seo ops runbook","storefront-web","In Review"
+"S407","Story","Sitemap feed with real update times (lastmod) and keyset paging","The search index has no update time and a bounded result window. Add updatedAt to the index and a GET /v1/seo/sitemap-entries keyset feed (products, categories, services) so lastmod is real and every live product is reachable. docs/engineering/seo.md 4.","- Indexer stores catalog updated time per product and search returns it
+- Gateway exposes a keyset-paged sitemap feed of eligible products (in stock, real photo, live) with updatedAt
+- Storefront sitemap uses it: lastmod real, no result-window cap
+- Contract and tests updated","E04","","Medium","5","seo search sitemap","search","To Do"
+"S408","Story","Catalog data for SEO: parent id, item condition, structured shipping and returns, slug history","Product detail lacks a parent product id (variant canonical), item condition, structured shipping and return terms; no slug history (URLs are ATIN-only). docs/engineering/seo.md 3.1, 3.5, 4.","- Product detail exposes parentAtin and the storefront canonical uses it instead of the smallest sibling ATIN
+- Item condition (new, used, refurbished) stored and emitted as Offer.itemCondition
+- Structured shipping and return terms stored per seller and emitted only when present (no carrier names, no delivery claims)
+- If slugs are introduced, a slug history table answers 301 for renamed slugs","E03","","Medium","5","seo catalog","catalog","To Do"
+"S409","Story","Store and provider listings for sitemaps; LocalBusiness for physical stores","No endpoint lists approved seller and provider pages, so the stores sitemap is empty; physical stores have no page or address data. docs/engineering/seo.md 4.","- Gateway lists approved indexable business pages (slug, updatedAt)
+- Storefront stores sitemap lists them
+- Physical stores with a real street address get a page and LocalBusiness JSON-LD (builder exists)","E16","","Low","3","seo storefront","storefront","To Do"
+"S410","Story","Localised URLs and hreflang for en, fr, es, ar, yo","The five locales share one URL, so hreflang cannot be emitted. Distinct locale paths, hreflang alternates in page metadata and sitemap, translator-reviewed strings. docs/engineering/seo.md 3.8.","- Locale paths (/fr/...) serve the localised page with its own canonical
+- hreflang alternates (and x-default) in metadata and sitemap xhtml:link
+- Non-English SEO strings reviewed by native translators
+- Review JSON-LD items from stored reviews","E31","","Low","8","seo i18n","legal","To Do"
