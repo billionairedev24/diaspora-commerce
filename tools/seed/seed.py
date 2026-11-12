@@ -26,8 +26,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -37,19 +40,69 @@ from seedlib.seeder import STEPS, Seeder, load_env
 ROOT = Path(__file__).resolve().parents[2]
 
 
+PRODUCTION_ENV_NAMES = ("prod", "production", "prd", "live", "uat", "staging", "stage")
+# Variables other tools use to say which environment they run in; any of them naming production or UAT stops the seeder.
+ENV_NAME_VARIABLES = ("APP_ENV", "ENVIRONMENT", "DEPLOY_ENV", "SPRING_PROFILES_ACTIVE", "ENV")
+SEEDED_URL_VARIABLES = ("CATALOG_URL", "OFFERS_URL", "INVENTORY_URL", "MEDIA_URL", "CONTENT_URL", "DELIVERY_RUNS_URL",
+                        "SELLER_URL", "BOOKINGS_URL", "SEARCH_URL", "ORDERS_URL", "PAYMENTS_URL", "RETAIL_URL",
+                        "FULFILMENT_URL", "TRUST_OPS_URL", "TAX_RETURNS_URL", "CART_URL", "GEO_URL",
+                        "CARRIER_GATEWAY_URL", "AUTH_ISSUER_URL", "SEED_TOKEN_URL")
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
+# Only these subdomains of the platform domain may ever receive demo data (with SEED_ALLOW_REMOTE=1): the shared dev
+# cluster and the throwaway trial environment. The apex, www, api., auth., uat. and every other name are production.
+DEMO_SUBDOMAINS = (".dev.afrotransact.com", ".trial.afrotransact.com")
+PLATFORM_DOMAIN = "afrotransact.com"
+
+
+def url_host(url: str) -> str:
+    """The lower-case host of an http(s) URL ('' when it has none)."""
+    try:
+        return (urlparse(url.strip()).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return ""
+
+
+def is_local_host(host: str) -> bool:
+    return host in LOCAL_HOSTS or host.endswith(".localhost")
+
+
+def is_production_host(host: str) -> bool:
+    """A name under the platform domain that is not a dev or trial environment, so possibly production or UAT."""
+    if host != PLATFORM_DOMAIN and not host.endswith("." + PLATFORM_DOMAIN):
+        return False
+    return not any(host.endswith(sub) for sub in DEMO_SUBDOMAINS)
+
+
+def target_problem(env: Mapping[str, str]) -> str | None:
+    """Why this environment must not be seeded, or None. Demo sellers, products, orders and test users are for local,
+    dev and trial stacks only: production and UAT are refused in every case, `SEED_ALLOW_REMOTE` or not."""
+    for name in ENV_NAME_VARIABLES:
+        for part in re.split(r"[\s,;]+", env.get(name, "").lower()):
+            if part in PRODUCTION_ENV_NAMES:
+                return f"refusing to run with {name}={env[name].strip()}: demo data is for local, dev and trial stacks only"
+    remote = []
+    for key in SEEDED_URL_VARIABLES:
+        value = env.get(key, "").strip()
+        if not value.lower().startswith(("http://", "https://")):
+            continue
+        host = url_host(value)
+        if not host:
+            return f"{key} is not a valid URL ({value!r}): refusing to seed"
+        if is_production_host(host):
+            return f"{key} points at {host}, a production or UAT name: demo data is never written there"
+        if not is_local_host(host):
+            remote.append(key)
+    if remote and env.get("SEED_ALLOW_REMOTE") != "1":
+        return (", ".join(sorted(remote)) + " point away from this machine; set SEED_ALLOW_REMOTE=1 only for a dev or "
+                "trial environment you mean to fill with demo data")
+    return None
+
+
 def guard_not_production() -> None:
     """The seeder writes demo sellers, products, orders and test users: it must never run against production or UAT."""
-    env = os.environ.get("APP_ENV", "local").lower()
-    if env in ("prod", "production", "uat"):
-        sys.exit(f"seed: refusing to run with APP_ENV={env}: demo data is for local and dev stacks only")
-    seeded = ("CATALOG_URL", "OFFERS_URL", "INVENTORY_URL", "MEDIA_URL", "CONTENT_URL", "DELIVERY_RUNS_URL", "SELLER_URL",
-              "BOOKINGS_URL", "SEARCH_URL", "ORDERS_URL", "PAYMENTS_URL", "RETAIL_URL", "FULFILMENT_URL", "TRUST_OPS_URL",
-              "TAX_RETURNS_URL", "CART_URL", "GEO_URL", "CARRIER_GATEWAY_URL", "AUTH_ISSUER_URL")
-    remote = [k for k in seeded if os.environ.get(k, "").startswith("http")
-              and not any(h in os.environ[k] for h in ("localhost", "127.0.0.1", "host.docker.internal"))]
-    if remote and os.environ.get("SEED_ALLOW_REMOTE") != "1":
-        sys.exit("seed: " + ", ".join(sorted(remote)) + " point away from this machine; set SEED_ALLOW_REMOTE=1 only "
-                 "for a dev environment you mean to fill with demo data")
+    problem = target_problem(os.environ)
+    if problem:
+        sys.exit("seed: " + problem)
 
 
 def main(argv: list[str] | None = None) -> int:

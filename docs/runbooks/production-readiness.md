@@ -18,8 +18,15 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
 ## 2. Data
 
 - [ ] **blocker** No demo data: the production databases contain no rows from `tools/seed` (demo sellers, products, orders,
-  test users such as `customer.houston`, `driver@afrotransact.test`, `seller.owner`). The seeder refuses `APP_ENV=prod|uat` and
-  remote targets, but check the data too: search for the `src=demo-seed` order attribution and `*.test` email addresses.
+  test users such as `customer.houston`, `driver@afrotransact.test`, `seller.owner`). Guards that keep it out, all enforced
+  in code or CI: `tools/seed/seed.py` refuses `APP_ENV`/`ENVIRONMENT`/`SPRING_PROFILES_ACTIVE` naming prod, uat or staging, refuses any
+  service URL under afrotransact.com except `*.dev.` and `*.trial.` (even with `SEED_ALLOW_REMOTE=1`), parses hostnames (no
+  `localhost` look-alikes) and needs `SEED_ALLOW_REMOTE=1` for any non-local target (`make seed-test`, `tools/seed/tests/test_guard.py`);
+  identity creates test users only on local (dev by opt-in with its own password) and refuses to start on uat/prod with the
+  published bootstrap-admin password, a `.test` admin address or a password under 16 characters; delivery-runs' demo areas are
+  local-only; `python3 tools/ci/check_env_config.py` fails the build when a uat/prod config enables any of it or contains
+  `afrotransact.test`, `LocalAdmin2026`, `Test1234!Local`, `demo-seed` or `SEED_ALLOW_REMOTE`. Still check the data once before
+  launch: search for the `src=demo-seed` order attribution and `*.test` email addresses.
 - [ ] **blocker** Reference data is present and reviewed: product taxonomy, plans, review reason codes, markets, fee schedule,
   sales tax rate tables and tax codes, legal documents, cookie banner config.
 - [ ] Markets, states and cities for launch are switched on in Settings → Markets & locations (nothing outside them is offered a

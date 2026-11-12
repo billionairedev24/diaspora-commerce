@@ -63,6 +63,15 @@ class LocalDevelopmentConfiguration {
         return new TestUserSettings(true, password == null ? LocalDevelopmentPolicy.LOCAL_TEST_PASSWORD : password);
     }
 
+    /** Start-up fails when the bootstrap administrator uses a published password or a made-up address on a deployed profile. */
+    static void checkedBootstrapAdmin(LocalDevelopmentPolicy policy, Set<String> profiles, String email, String password) {
+        if (!policy.bootstrapAdminAllowed(profiles, email, password)) {
+            throw new IllegalStateException("The bootstrap administrator (BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD) "
+                    + "uses a published local password, a .test address or, on uat and prod, a password under "
+                    + LocalDevelopmentPolicy.MIN_ADMIN_PASSWORD_LENGTH + " characters (active profiles " + profiles + ")");
+        }
+    }
+
     /** The configured code sender, or start-up fails when it may not run on these profiles. */
     static String checkedSender(LocalDevelopmentPolicy policy, String sender, Set<String> profiles) {
         if (!policy.verificationSenderAllowed(sender, profiles)) {

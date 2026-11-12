@@ -48,6 +48,31 @@ class DefaultLocalDevelopmentPolicyTest {
     }
 
     @Test
+    void bootstrapAdminOnUatAndProdNeedsARealAddressAndALongOwnPassword() {
+        String strong = "correct-horse-battery-staple";
+        for (String env : new String[] {"uat", "prod", "Prod"}) {
+            assertThat(policy.bootstrapAdminAllowed(Set.of(env), "ops@afrotransact.com", strong)).as(env).isTrue();
+            assertThat(policy.bootstrapAdminAllowed(Set.of(env), "ops@afrotransact.com", "LocalAdmin2026!")).as(env)
+                    .isFalse();
+            assertThat(policy.bootstrapAdminAllowed(Set.of(env), "ops@afrotransact.com", "Test1234!Local")).as(env)
+                    .isFalse();
+            assertThat(policy.bootstrapAdminAllowed(Set.of(env), "ops@afrotransact.com", "short-pass1!")).as(env)
+                    .isFalse();
+            assertThat(policy.bootstrapAdminAllowed(Set.of(env), "admin@afrotransact.test", strong)).as(env).isFalse();
+            assertThat(policy.bootstrapAdminAllowed(Set.of("local", env), "ops@afrotransact.com", "LocalAdmin2026!"))
+                    .as("local + " + env).isFalse();
+        }
+        assertThat(policy.bootstrapAdminAllowed(Set.of("prod"), "ops@afrotransact.com", null)).isFalse();
+    }
+
+    @Test
+    void bootstrapAdminOnDevMayNotUseThePublishedPasswordsAndLocalIsUnrestricted() {
+        assertThat(policy.bootstrapAdminAllowed(Set.of("dev"), "admin@afrotransact.com", "LocalAdmin2026!")).isFalse();
+        assertThat(policy.bootstrapAdminAllowed(Set.of("dev"), "admin@afrotransact.com", "a-dev-secret-1")).isTrue();
+        assertThat(policy.bootstrapAdminAllowed(Set.of("local"), "admin@afrotransact.com", "LocalAdmin2026!")).isTrue();
+    }
+
+    @Test
     void testUserEmailsUseTheReservedDomainOnly() {
         assertThat(policy.isTestUserEmail("customer.houston@afrotransact.test")).isTrue();
         assertThat(policy.isTestUserEmail(" Staff.Admin@AfroTransact.TEST ")).isTrue();
