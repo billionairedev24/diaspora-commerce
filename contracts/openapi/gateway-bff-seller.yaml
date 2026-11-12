@@ -76,13 +76,12 @@ tags:
       Needs the Listings module (View to read, Edit to apply).
   - name: Catalog scope
     description: |
-      The catalog departments the organisation may sell in: the ones chosen at onboarding (and later approved requests).
-      Seller Center shows only these in every category picker and hides screens that do not apply (Size charts when no
-      allowed department sells sized goods). catalog-service enforces the same on the server: creating or changing a
-      product, draft, bulk-upload row, size chart or category request in another department answers 403
-      `catalog.department-not-allowed` (or `catalog.no-departments` when none are recorded yet) with a plain message
-      that says how to add the department; 503 `catalog.scope-unavailable` when the scope cannot be checked.
-      AfroTransact Retail and staff are exempt.
+      Departments are no longer a restriction: a seller may sell in any department or category, whatever departments it
+      registered for. What still limits a listing is its category's risk (selling approvals, see the Selling approvals
+      tag) and the tax gate. The registered departments are kept as an optional profile hint only, and the scope answer
+      is always `exempt: true` (every department, no requests). The one separate application is services (a Provider
+      Hub organisation on the same sign-in). catalog-service no longer answers 403 `catalog.department-not-allowed` or
+      `catalog.no-departments`, and never calls seller-service to build the category tree.
   - name: Image library
     description: The organisation's product image library (files, folders, ZIPs) matched to listings by SKU file names (S310)
   - name: Returns & disputes
@@ -1410,7 +1409,7 @@ paths:
       operationId: getCategoryTree
       security: [{sessionCookie: []}]
       summary: Category tree (department › category › product type) for the product form's category picker
-      description: catalog `GET /v1/categories?forSeller=true`, nested. Only the departments the organisation may sell in.
+      description: catalog `GET /v1/categories?forSeller=true`, nested. Every department, whatever the organisation registered for, so it cannot fail because of them.
       responses:
         '200': {description: Tree, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -1421,11 +1420,11 @@ paths:
       tags: [Catalog scope]
       operationId: getSellerCatalogScope
       security: [{sessionCookie: []}]
-      summary: The departments the organisation may sell in, whether any sells sized goods, and its department requests
+      summary: The departments the organisation may sell in (every department) and whether any sells sized goods
       description: |
-        catalog `GET /v1/seller/catalog-scope`. `hasSizing` is true when an allowed department has a product type with
-        the sizing trait: Seller Center shows Size charts only then. `exempt` (AfroTransact Retail) means every
-        department. One cached query (`useSellerScope`) feeds the pickers, the sidebar and the page guards.
+        catalog `GET /v1/seller/catalog-scope`. Always `exempt: true` with every department and no requests: a seller is
+        not limited to the departments it registered for. `hasSizing` is true when a department has a product type with
+        the sizing trait. Seller Center no longer needs this call (`useSellerScope` is constant).
       responses:
         '200': {description: Scope, content: {application/json: {schema: {$ref: '#/components/schemas/SellerCatalogScope'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -1452,8 +1451,10 @@ paths:
       tags: [Catalog scope]
       operationId: requestSellerDepartment
       security: [{sessionCookie: []}]
-      summary: Ask to sell in another department
+      summary: Ask to sell in another department (deprecated, no longer needed)
+      deprecated: true
       description: |
+        Deprecated: a seller may sell in any department, so Seller Center no longer shows this request.
         seller-service `POST /v1/orgs/{orgId}/department-requests` for the active organisation (Listings: EDIT).
         Staff approve or reject; approving adds the department at once. `needs` lists what the seller still has to
         provide for it (a food permit, beauty labelling). Asking again while one is pending returns it. 409 when the

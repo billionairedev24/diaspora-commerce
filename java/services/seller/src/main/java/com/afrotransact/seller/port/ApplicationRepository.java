@@ -12,7 +12,7 @@ import com.afrotransact.seller.domain.TimelineEntry;
 /** Onboarding applications, their timeline and the document / PII access log. */
 public interface ApplicationRepository {
 
-    /** Inserts unless the applicant already has an application; returns false on that conflict. */
+    /** Inserts unless the applicant already has an application of this kind; returns false on that conflict. */
     boolean insert(Application application);
 
     /** Optimistic update on {@code version}. */
@@ -20,7 +20,11 @@ public interface ApplicationRepository {
 
     Optional<Application> findById(String id);
 
+    /** The applicant's working application: the one still open to them, else in review, else the newest. */
     Optional<Application> findByApplicant(String userId);
+
+    /** The applicant's application of this kind (one per kind). */
+    Optional<Application> findByApplicant(String userId, OrgKind kind);
 
     Optional<Application> findByOrg(String orgId);
 
@@ -28,6 +32,8 @@ public interface ApplicationRepository {
     Optional<Application> lockById(String id);
 
     Optional<Application> lockByApplicant(String userId);
+
+    Optional<Application> lockByApplicant(String userId, OrgKind kind);
 
     Page<Application> search(List<ApplicationStatus> statuses, OrgKind kind, int page, int size);
 

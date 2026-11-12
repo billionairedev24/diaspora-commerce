@@ -120,8 +120,9 @@ See the [runbook](../../../runbooks/selling-approvals.md).
 
 ## Department requests
 
-A seller can only sell in the catalog departments recorded for its organisation. When a seller asks for another one
-(*Need another department? Request it* in Seller Center), the request appears under **Partners, Department requests**
+Sellers can sell in any department; the departments recorded for an organisation are only a profile hint (restricted
+categories still need a selling approval). Seller Center no longer offers *Need another department? Request it*, so you will
+only see requests made earlier. A request appears under **Partners, Department requests**
 (you see it with the `applications:review` permission; deciding needs `applications:approve`: Super Admin, Operations
 Manager and Trust & Safety). The number of requests waiting is the badge on the sidebar entry.
 
@@ -134,11 +135,11 @@ Manager and Trust & Safety). The number of requests waiting is the badge on the 
 - One person decides; unlike applications there is no second approver. Every decision is audited (who, what, why).
 
 To change an organisation's departments yourself, open it under **Partners, Sellers & providers**: the **Departments**
-section lists them by name, and **Edit** (with `applications:approve`) lets you choose from the catalog's departments.
+section lists them by name, and **Edit** (with `applications:approve`) lets you choose from the catalog's departments. This changes the hint only; it does not allow or block selling.
 A reason of at least 10 characters is required. While it is shorter, the field says how many characters are still missing
 ("Add a few more words: at least 10 characters (7 of 10)"), and when nothing is ticked or unticked yet the dialog says so; **Save**
-is only off for one of those two reasons. Every reason box in the console works the same way. Live products in a
-department you remove stay live, but their category cannot be changed.
+is only off for one of those two reasons. Every reason box in the console works the same way. Removing a department does
+not affect live products.
 
 ## Suspend or reinstate a seller or provider
 

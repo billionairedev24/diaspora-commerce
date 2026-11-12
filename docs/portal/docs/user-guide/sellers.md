@@ -112,17 +112,19 @@ first, and the product form tells you as soon as you pick the category and brand
 
 ### Which departments you sell in
 
-You choose your **departments** (Groceries, Fashion, Beauty and so on) when you apply, and AfroTransact records them when
-your application is approved. From then on Seller Center shows only those departments: in the product form, the bulk
-upload and its template, brand choices and the size chart pages. **Size charts** appears under Listings only when one of
-your departments sells clothing or shoes. The same rule is enforced on our side, so a listing, draft, upload row or size
-chart in another department is refused with a plain message that tells you how to add it.
+You can sell in **any department or category**, whatever you chose when you applied. The departments you pick at
+onboarding are optional and only a hint on your profile; they never limit what you list. Seller Center shows every
+category in the product form, the bulk upload and its template, brand choices and the size chart pages. **Size charts**
+appears under Listings only when a category you choose sells clothing or shoes.
 
-Need another department? At the bottom of the category list in the product form choose **Don't see your category? Request a
-department** (or use **Departments** on the Preferences page), pick the department and send. AfroTransact reviews the request
-and, when it is approved, the department is added to your store at once. The answer tells you what that department also
-needs, for example confirming full ingredient labelling for Beauty. Groceries needs no food permit; a permit is only asked
-of food services such as catering. Listings you already have stay live and you can keep editing their price, stock and text.
+What still applies is the category's own risk: some categories (for example certain food, beauty or regulated items)
+need a **selling approval** before a listing can go live, whatever departments you registered for. Groceries need no food
+permit; a permit is only asked of food services such as catering. A listing also needs its tax decision before it goes live.
+
+**Offering services is different.** It is a separate application, reviewed by AfroTransact, even if your seller account is
+already approved. From Seller Center open **My account**, **Preferences** and choose **Provide services** (you keep the same sign-in; no new
+account). Once approved, switch to your Provider Hub organisation to manage services, calendar and bookings. Services are
+delivered in person or at the customer's address: there are no virtual services.
 
 ### Service providers: your service area
 

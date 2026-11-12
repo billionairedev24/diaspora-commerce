@@ -1,8 +1,49 @@
-# Seller catalog scope: sellers list only in the departments they chose
+# Seller catalog scope: sellers may sell in any department (decision), registered departments are a hint
 
-A seller that sells food should not see "Size charts", and should not be able to create fashion listings, however it
-asks. Each seller organisation has a set of **departments** it may sell in. The catalog refuses anything else on the
-server; Seller Center only hides what would be refused.
+**Owner decision (final).** A seller may sell in **any department or category**. The departments a seller registers
+for at onboarding are an **optional profile hint** (default filters, analytics), never a restriction. The only separate
+application is **services**: offering services needs its own application and approval (a Provider Hub organisation,
+see "Services" below), even from a current seller account.
+
+What this means in the stack:
+
+| Layer | Now |
+|---|---|
+| catalog-service | `SellerScopeGuardImpl` returns an unrestricted `DepartmentScope` for everyone and never calls seller-service. Product create/edit, drafts, bulk upload, offers, size charts, brands and category requests are not refused for the category's department. `GET /v1/categories?forSeller=true` and `GET /v1/seller/catalog-scope` always answer in full (`exempt: true`, no requests), so they cannot fail because of a seller-service outage. `catalog.department-not-allowed`, `catalog.no-departments` and `catalog.scope-unavailable` are no longer produced for sellers. |
+| Still enforced, by category risk | Selling approvals (catalog V3 holds, `SellingPublishGate`, `GET /v1/orgs/{orgId}/selling-status`): a restricted or regulated category still needs an approval, whatever departments the seller registered. The tax gate is unchanged: nothing goes live without a stored `RESOLVED` tax decision. Products are created by category, nothing is hard-coded per category. Groceries need no food permit. There are no virtual services. |
+| seller-service | Still stores `org_department` and the application's `departments` (optional now: the wizard no longer asks for at least one). The department-request endpoints and staff screens still work for the hint; nothing depends on them. |
+| gateway-bff | Unchanged routes. `GET /v1/seller/catalog-scope` stays for compatibility; `POST /v1/seller/department-requests` is deprecated. |
+| Seller Center | `useSellerScope()` is constant (`exempt: true`): no scope call, no "Request a department" prompts, no Departments settings. The product form loads the category tree on its own; if that call fails the form says **"We couldn't load the categories"** with a retry (it never mentions departments). |
+| Services | My account > Preferences has **Provide services** (`OfferServices`): apply, continue or open Provider Hub. See below. |
+
+### Why the form said "We couldn't check which departments you sell in"
+
+`GET /v1/seller/catalog/categories` (BFF) -> catalog `GET /v1/categories?forSeller=true` -> `CategoryServiceImpl.treeForSeller`
+-> `SellerScopeGuardImpl.scopeOf(actor)` -> `HttpSellerScopes.of(orgId)` -> seller-service
+`GET /v1/orgs/{orgId}/catalog-scope` with catalog's client-credentials token. That call was **fail closed**: any
+non-2xx, timeout, refused connection, missing `sellers:catalog-scope.read` scope on the token or a 404
+`seller.org-not-found` became `ScopeUnavailable` -> `503 catalog.scope-unavailable`, and the product form showed its
+"categories failed" alert (the alert text blamed departments although the failing call was the category tree). So a
+seller with categories and earlier products lost the whole form whenever seller-service could not answer the catalog.
+Removing the lookup removes the failure; the alert text now says what actually failed.
+
+### Services (the one separate application)
+
+* Organisations have a kind: `SELLER` (products, Seller Center) or `PROVIDER` (services, Provider Hub: Services &
+  prices, Calendar, Service area, bookings). Seller roles have no Services module, so a seller organisation never sees
+  the Services section; the BFF module catalogue (`ModulesFor(kind)`) is the gate.
+* Offering services means a **provider application** (`Offering` SERVICES; service licences and insurance in step 7)
+  reviewed by AfroTransact, in its own organisation, **on the same sign-in**: no new account. Seller Center: My account > Preferences >
+  **Provide services**, or `/onboarding?role=provider`. The BFF adds the provider applicant role to the same identity
+  (`POST /v1/me/roles/provider-applicant`) and seller-service starts a second application.
+* Previously seller-service allowed **one application per user** (`application.applicant_user_id` unique), so a seller
+  whose account was approved got `409 seller.application-exists` when applying for services. Migration `V91` makes it
+  **one per user and kind**. Starting the other kind is allowed once the existing application is approved; while one is
+  still a draft, in review or has info requested, finish it first.
+
+---
+
+# History: how the department restriction worked (retired)
 
 ## Source of truth
 

@@ -22,11 +22,10 @@ class SellerCatalogScopeController {
         this.scope = scope;
     }
 
-    @Operation(summary = "Departments my organisation may list in, whether any sells sized goods, and my department requests",
-            description = "Recorded by seller-service from the departments chosen at onboarding (and later approved "
-                    + "requests). exempt is true for AfroTransact Retail and staff: every department. hasSizing is true "
-                    + "when an allowed department has a product type with the sizing trait. 503 "
-                    + "catalog.scope-unavailable when seller-service cannot say.")
+    @Operation(summary = "Departments my organisation may list in (every department), and whether any sells sized goods",
+            description = "A seller may list in any department, so exempt is always true, every department is "
+                    + "returned and there are no requests. hasSizing is true when a department has a product type with "
+                    + "the sizing trait. Never calls seller-service.")
     @GetMapping("/v1/seller/catalog-scope")
     SellerScopeResponse sellerCatalogScope() {
         return SellerScopeResponse.of(scope.mine());

@@ -511,7 +511,6 @@ export function validateCompliance(v: ComplianceValues, offering: OnboardingOffe
   const requires = requirementsOf(v.departments, departments);
   const iso = today.toISOString().slice(0, 10);
   if (sellsProducts(offering)) {
-    if (!v.departments.length) e.departments = 'Pick at least one department';
     if (requires.has('FOOD_PERMIT')) {
       if (!v.permitType) e.permitType = 'Choose the permit type';
       if (!v.permitNumber.trim()) e.permitNumber = 'Enter the permit number';

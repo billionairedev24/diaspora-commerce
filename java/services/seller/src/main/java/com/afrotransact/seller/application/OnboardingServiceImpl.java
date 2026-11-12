@@ -112,15 +112,17 @@ class OnboardingServiceImpl implements OnboardingService {
     public StartResult start(OrgKind kind, ApplicationPrefill prefill) {
         Actor actor = access.applicant();
         Known known = known(profiles.current(), prefill == null ? ApplicationPrefill.none() : prefill);
-        Optional<Application> existing = apps.lockByApplicant(actor.subject());
+        Optional<Application> existing = apps.lockByApplicant(actor.subject(), kind);
         if (existing.isPresent()) {
-            Application app = existing.get();
-            if (app.kind() != kind) {
-                throw new SellerStateConflict("seller.application-exists",
-                        "You already have a " + app.kind().name().toLowerCase(Locale.ROOT)
-                                + " application; continue that one");
-            }
-            return new StartResult(applicantView(resumeFilled(app, known)), false);
+            return new StartResult(applicantView(resumeFilled(existing.get(), known)), false);
+        }
+        // One application per kind: a seller whose account is approved applies for services on that same account.
+        // Another kind still being prepared or reviewed must be finished first.
+        Optional<Application> other = apps.findByApplicant(actor.subject());
+        if (other.isPresent() && other.get().status() != ApplicationStatus.APPROVED) {
+            throw new SellerStateConflict("seller.application-exists",
+                    "You already have a " + other.get().kind().name().toLowerCase(Locale.ROOT)
+                            + " application in progress; continue that one first");
         }
         Instant now = Instant.now(clock);
         Set<String> prefilled = new HashSet<>();

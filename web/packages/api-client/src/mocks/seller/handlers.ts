@@ -263,10 +263,9 @@ function allowedCodes(ctx: Ctx): Set<string> {
   return new Set(MOCK_ORG_DEPARTMENTS[ctx.org.id] ?? []);
 }
 
-/** The category tree limited to the active organisation's departments, as catalog's `?forSeller=true` tree. */
-function scopedTree(ctx: Ctx): CategoryNode[] {
-  const allowed = allowedCodes(ctx);
-  const ids = new Set(MOCK_DEPARTMENTS.filter((d) => allowed.has(d.code)).map((d) => d.id));
+/** The seller's category tree: every mock department, whatever the store registered for (no department restriction). */
+function scopedTree(_ctx: Ctx): CategoryNode[] {
+  const ids = new Set(MOCK_DEPARTMENTS.map((d) => d.id));
   return CATEGORY_TREE.filter((d) => ids.has(d.id));
 }
 
@@ -276,8 +275,7 @@ function hasSizingNode(n: CategoryNode): boolean {
 
 function catalogScope(ctx: Ctx) {
   const departments = scopedTree(ctx).map((d) => ({ id: d.id, code: MOCK_DEPARTMENTS.find((m) => m.id === d.id)?.code ?? d.id, name: d.name, hasSizing: hasSizingNode(d) }));
-  const requests = (ctx.db.departmentRequests[ctx.org.id] ?? []).map((r) => ({ departmentCode: r.departmentCode, departmentName: r.departmentName ?? r.departmentCode, status: r.status, needs: r.needs, createdAt: r.createdAt }));
-  return { exempt: false, departments, hasSizing: departments.some((d) => d.hasSizing), requests };
+  return { exempt: true, departments, hasSizing: departments.some((d) => d.hasSizing), requests: [] };
 }
 
 /** Runs a selling approvals mock and turns its refusal into the BFF's problem answer. */
@@ -1787,11 +1785,15 @@ export const sellerHandlers = [
       return importView(imp);
     }, 202)
   ),
+  // The category tree never depends on the department lookup: `scopeUnavailable` only breaks the (optional) hint below.
   http.get(`${W}/catalog/categories`, route((ctx) => {
-    if (ctx.db.scopeUnavailable) throw new SellerProblem(503, 'catalog.scope-unavailable', 'Service unavailable', 'We could not work out which departments this store sells in.');
+    if (ctx.db.categoriesUnavailable) throw new SellerProblem(503, 'catalog.unavailable', 'Service unavailable', 'We could not load the categories.');
     return scopedTree(ctx);
   })),
-  http.get(`${W}/catalog-scope`, route((ctx) => catalogScope(ctx))),
+  http.get(`${W}/catalog-scope`, route((ctx) => {
+    if (ctx.db.scopeUnavailable) throw new SellerProblem(503, 'catalog.scope-unavailable', 'Service unavailable', 'We could not work out which departments this store sells in.');
+    return catalogScope(ctx);
+  })),
   http.get(`${W}/selling-status`, route((ctx) => {
     require(ctx, 'listings', 'VIEW', 'SELLER');
     const q = new URL(ctx.request.url).searchParams;

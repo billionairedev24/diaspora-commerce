@@ -327,9 +327,8 @@ describe('Catalog, permits & licences', () => {
   };
 
   it('asks for a food permit and beauty labelling only when departments that ask for them are chosen', () => {
-    expect(validateCompliance(base, 'PRODUCTS', DEPARTMENTS, TODAY)).toEqual({
-      departments: 'Pick at least one department'
-    });
+    // Departments are optional: a seller may sell in any category, so choosing none is fine.
+    expect(validateCompliance(base, 'PRODUCTS', DEPARTMENTS, TODAY)).toEqual({});
     expect(Object.keys(validateCompliance({ ...base, departments: ['groceries', 'beauty'] }, 'PRODUCTS', DEPARTMENTS, TODAY)).sort()).toEqual([
       'beautyLabellingConfirmed',
       'permitDocumentAssetId',

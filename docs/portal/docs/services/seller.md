@@ -273,20 +273,21 @@ it while it still holds that role. Mirroring was chosen over dropping the table 
 back to the member list when a token's org/roles are stale, and the applicant must be a member before identity
 knows the organisation.
 
-## Catalog scope: the departments an organisation may sell in
+## Catalog scope: departments are a hint, not a limit
 
-Recorded when an application is finally approved, from the `departments` chosen in step 7 (`catalog-compliance`:
-catalog department node codes, validated against catalog-service's tree and compliance data); changed by staff or by an
-approved department request. catalog-service reads them with `GET /v1/orgs/{orgId}/catalog-scope` (scope
-`sellers:catalog-scope.read`) and enforces them. Members and staff can read the same endpoint. `GET /v1/departments` lists
-the catalog's departments with `requires` (FOOD_PERMIT / BEAUTY_LABELLING, data on the department node). Members with the
-owner, admin or catalog role ask for another department with `POST /v1/orgs/{orgId}/department-requests`; staff
-(applications:review to list, applications:approve to decide) use `GET /v1/department-requests`,
-`POST /v1/department-requests/{id}/decision` and `PUT /v1/orgs/{orgId}/catalog-scope/departments`. AfroTransact Retail is
-exempt. Provisioning (`POST /v1/orgs`, local/dev) accepts `departments`. Details: `docs/engineering/seller-catalog-scope.md`.
+A seller may sell in any department or category (owner decision). The `departments` chosen in step 7
+(`catalog-compliance`, catalog department node codes) are now **optional**; when the application is approved they are
+recorded as the organisation's profile hint (`org_department`). catalog-service no longer reads them to allow or refuse
+a listing, so `GET /v1/orgs/{orgId}/catalog-scope` (scope `sellers:catalog-scope.read`) is no longer on the listing path.
+Members and staff can still read it, `GET /v1/departments` still lists the catalog's departments with `requires`, and the
+department-request endpoints and staff screens still work for the hint. What gates a listing is the category's risk
+(selling approvals, `GET /v1/orgs/{orgId}/selling-status`) and the tax gate. Applications are **one per applicant and
+kind** (migration `V91`): an approved seller applies for services (`POST /v1/onboarding`-style start of kind `PROVIDER`)
+on the same sign-in while another kind still in progress must be finished first (`409 seller.application-exists`).
+Details: `docs/engineering/seller-catalog-scope.md`.
 Config: `at.seller.catalog.base-url` (default `http://localhost:8101`), `timeout`, `departments-ttl` (60 s). When the
 catalog cannot be reached the departments step answers 503 `seller.departments-unavailable` (the last answer is served
-while it is down).
+when there is one), and the step no longer requires a department.
 
 ## Events (outbox → Kafka, `contracts/asyncapi/fragments/seller.yaml`)
 

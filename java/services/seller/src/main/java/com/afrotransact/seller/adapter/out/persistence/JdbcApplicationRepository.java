@@ -31,6 +31,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcApplicationRepository implements ApplicationRepository {
 
+    /**
+     * An applicant can have one application per kind (a seller applying for services too). The one the wizard works on
+     * is the one still open to the applicant (draft or info requested), then one in review, then the newest.
+     */
+    private static final String WORKING_ORDER = " order by case when status in ('DRAFT', 'INFO_REQUESTED') then 0"
+            + " when status in ('APPROVED', 'REJECTED') then 2 else 1 end, created_at desc limit 1";
+
+
     private final JdbcClient jdbc;
     private final JsonCodec json;
     private final RowMapper<Application> mapper;
@@ -49,7 +57,7 @@ class JdbcApplicationRepository implements ApplicationRepository {
                                          created_at, updated_at, version)
                 values (:id, :ref, :org, :user, :kind, :status, :step, cast(:data as jsonb),
                         cast(:prefilled as jsonb), '[]', '[]', 0, :created, :updated, 0)
-                on conflict (applicant_user_id) do nothing
+                on conflict (applicant_user_id, kind) do nothing
                 """)
                 .param("id", a.id()).param("ref", a.reference()).param("org", a.orgId())
                 .param("user", a.applicantUserId()).param("kind", a.kind().name()).param("status", a.status().name())
@@ -93,8 +101,14 @@ class JdbcApplicationRepository implements ApplicationRepository {
 
     @Override
     public Optional<Application> findByApplicant(String userId) {
-        return jdbc.sql("select * from application where applicant_user_id = :u").param("u", userId).query(mapper)
-                .optional();
+        return jdbc.sql("select * from application where applicant_user_id = :u" + WORKING_ORDER).param("u", userId)
+                .query(mapper).optional();
+    }
+
+    @Override
+    public Optional<Application> findByApplicant(String userId, OrgKind kind) {
+        return jdbc.sql("select * from application where applicant_user_id = :u and kind = :k")
+                .param("u", userId).param("k", kind.name()).query(mapper).optional();
     }
 
     @Override
@@ -110,8 +124,14 @@ class JdbcApplicationRepository implements ApplicationRepository {
 
     @Override
     public Optional<Application> lockByApplicant(String userId) {
-        return jdbc.sql("select * from application where applicant_user_id = :u for update").param("u", userId)
-                .query(mapper).optional();
+        return jdbc.sql("select * from application where applicant_user_id = :u" + WORKING_ORDER + " for update")
+                .param("u", userId).query(mapper).optional();
+    }
+
+    @Override
+    public Optional<Application> lockByApplicant(String userId, OrgKind kind) {
+        return jdbc.sql("select * from application where applicant_user_id = :u and kind = :k for update")
+                .param("u", userId).param("k", kind.name()).query(mapper).optional();
     }
 
     @Override

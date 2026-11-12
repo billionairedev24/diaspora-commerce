@@ -149,12 +149,11 @@ at:
       client-id: ${CATALOG_CLIENT_ID:catalog-service}
       client-secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
       scopes: media:import orders:purchase-check sellers:catalog-scope.read tax:classify offers:read
-    # Which departments an organisation may sell in: seller-service GET /v1/orgs/{orgId}/catalog-scope (scope
-    # sellers:catalog-scope.read). Unreachable = the catalog refuses non-exempt organisations (fail closed).
+    # Selling approvals (and the registered-department hint): seller-service, scope
+    # sellers:catalog-scope.read. Departments are no longer a restriction: only selling approvals fail closed.
     seller:
       base-url: ${SELLER_URL:http://localhost:8106}
       timeout: ${SELLER_TIMEOUT:3s}
-      scope-ttl: ${SELLER_SCOPE_TTL:15s}
       selling-ttl: ${SELLER_SELLING_TTL:10s}
     # S385: only a seller with an open offer on a page may suggest an edit to it (offers-service GET /v1/offers/presence).
     offers:

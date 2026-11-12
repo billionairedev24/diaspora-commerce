@@ -1721,3 +1721,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Checkout says in plain words when a seller does not offer pickup, with no internal reasons
 - Copy exists in en, fr, es, ar and yo (non-English are machine drafts needing native review)
 - Unit, server-side and Playwright tests pass","E12","","High","5","seller-center pickup carrier-gateway i18n","delivery","Done"
+"S432","Story","Sellers sell in any department; only services need a separate application","Owner decision: the department restriction (S327) is retired. Registered departments are an optional profile hint. Restricted categories still need selling approvals; the tax gate is unchanged. Offering services stays a separate application on the same sign-in. Fixes the product form failing with 'We could not check which departments you sell in' when seller-service could not answer the catalog.","- catalog never refuses or fails a seller's category tree, draft, product, bulk row or offer because of registered departments
+- seller category tree and form load when seller-service is down
+- selling approvals and the tax gate still apply by category
+- onboarding department choice is optional
+- an approved seller can start a services application on the same account (one application per user and kind)
+- Services section stays Provider Hub only
+- docs, contracts and five locales updated
+- end-to-end run against live catalog and seller-service and a Playwright run (not run here)","E13","","High","5","seller catalog services","onboarding","In Review"

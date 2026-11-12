@@ -1,8 +1,8 @@
-import { getSellerDb, MOCK_FASHION_ORG, MOCK_FOOD_ORG, MOCK_ORG_DEPARTMENTS, resetSellerDb, SELLER_ORG } from '@afrotransact/api-client/mocks/seller';
+import { getSellerDb, MOCK_FASHION_ORG, MOCK_FOOD_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { DepartmentsSettings } from '@/components/account/DepartmentsSettings';
+import { OfferServices } from '@/components/account/OfferServices';
 import { BulkUploadView } from '@/components/listings/bulk/BulkUploadView';
 import { ProductForm } from '@/components/listings/ProductForm';
 import { PortalShell } from '@/components/shell/PortalShell';
@@ -42,94 +42,58 @@ describe('size charts are a step of the product form, not a page', () => {
   });
 });
 
-describe('Departments in the product form', () => {
-  it('always ends the category list with a row to request a department', async () => {
-    await mockApi().setActiveOrg(MOCK_FASHION_ORG);
+describe('A seller is not limited to the departments it registered for', () => {
+  it('shows a food-only store the Fashion categories too, with no request-a-department row', async () => {
+    await mockApi().setActiveOrg(MOCK_FOOD_ORG);
     await renderScreen(<ProductForm />);
     const box = await screen.findByRole('combobox', { name: 'Category' });
-    fireEvent.focus(box);
-    const rows = await screen.findAllByRole('option');
-    expect(rows.at(-1)).toHaveTextContent('Don’t see your category? Request a department');
     fireEvent.change(box, { target: { value: 'kaftans' } });
-    const typed = await screen.findAllByRole('option');
-    expect(typed.at(-1)).toHaveTextContent('Request a department');
-    fireEvent.click(typed.at(-1) as HTMLElement);
-    expect(await screen.findByRole('dialog', { name: 'Request another department' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /Kaftans & shirts/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Request a department/)).not.toBeInTheDocument();
   });
 
-  it('is the main action when the store has no department yet', async () => {
-    await mockApi().setActiveOrg(MOCK_FOOD_ORG);
-    const saved = MOCK_ORG_DEPARTMENTS[MOCK_FOOD_ORG];
-    MOCK_ORG_DEPARTMENTS[MOCK_FOOD_ORG] = [];
-    try {
-      await renderScreen(<ProductForm />);
-      expect(await screen.findByText(/Your store has no department yet/)).toBeInTheDocument();
-      expect(screen.queryByRole('combobox', { name: 'Category' })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Request a department' }));
-      expect(await screen.findByRole('dialog', { name: 'Request another department' })).toBeInTheDocument();
-    } finally {
-      MOCK_ORG_DEPARTMENTS[MOCK_FOOD_ORG] = saved ?? [];
-    }
-  });
-
-  it('says plainly that the departments could not be checked, and retries', async () => {
+  it('still loads the categories when the department lookup is down', async () => {
     getSellerDb().scopeUnavailable = true;
     await renderScreen(<ProductForm />);
-    expect(await screen.findByText('We couldn’t check which departments you sell in')).toBeInTheDocument();
-    expect(screen.queryByText('Loading the product form…')).not.toBeInTheDocument();
-    getSellerDb().scopeUnavailable = false;
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByRole('combobox', { name: 'Category' })).toBeInTheDocument();
+    expect(screen.queryByText('We couldn’t load the categories')).not.toBeInTheDocument();
   });
-});
 
-describe('Settings › Departments', () => {
-  it('lists approved, pending and declined departments and lets the seller request another', async () => {
+  it('has no Departments settings, only the separate way to apply for services', async () => {
     await mockApi().setActiveOrg(MOCK_FASHION_ORG);
-    await mockApi().requestDepartment({ departmentCode: 'groceries' });
-    getSellerDb().departmentRequests[MOCK_FASHION_ORG]?.push({ departmentCode: 'books', departmentName: 'Books', status: 'REJECTED', needs: [] });
-    await renderScreen(<DepartmentsSettings />);
-    const section = within(await screen.findByRole('region', { name: 'Departments' }));
-    const rowOf = (name: string) => section.getByText(name).closest('li') as HTMLElement;
-    await waitFor(() => expect(within(rowOf('Fashion')).getByText('Approved')).toBeInTheDocument());
-    expect(within(rowOf('Groceries')).getByText('Pending')).toBeInTheDocument();
-    expect(within(rowOf('Books')).getByText('Declined')).toBeInTheDocument();
-    fireEvent.click(section.getByRole('button', { name: 'Request a department' }));
-    expect(await screen.findByRole('dialog', { name: 'Request another department' })).toBeInTheDocument();
+    await renderScreen(<OfferServices />);
+    expect(screen.queryByRole('region', { name: 'Departments' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Provide services' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Provider Hub' })).toBeInTheDocument();
+    expect((await mockApi().getCatalogScope()).exempt).toBe(true);
   });
-});
 
-describe('category pickers show only the store’s departments', () => {
-  it('bulk upload offers the categories of Groceries to a food-only store, and Fashion as well to a multi-department one', async () => {
+  it('a seller with no services account is offered the separate application on the same sign-in', async () => {
+    getSellerDb().orgs = getSellerDb().orgs.filter((o) => o.kind === 'SELLER');
+    await mockApi().setActiveOrg(MOCK_FASHION_ORG);
+    await renderScreen(<OfferServices />);
+    expect(await screen.findByRole('button', { name: 'Apply to provide services' })).toBeInTheDocument();
+  });
+
+  it('offers a food-only store every department’s upload template in bulk upload', async () => {
     await mockApi().setActiveOrg(MOCK_FOOD_ORG);
-    const food = await renderScreen(<BulkUploadView />);
+    await renderScreen(<BulkUploadView />);
     const select = await screen.findByLabelText('Template for');
     await waitFor(() => expect(within(select).getAllByRole('option').length).toBeGreaterThan(1));
     const labels = within(select).getAllByRole('option').map((o) => o.textContent ?? '');
     expect(labels.some((l) => l.startsWith('Groceries'))).toBe(true);
-    expect(labels.some((l) => l.startsWith('Fashion') || l.startsWith('Beauty') || l.startsWith('Books'))).toBe(false);
-    food.unmount();
-
-    await mockApi().setActiveOrg(SELLER_ORG);
-    await renderScreen(<BulkUploadView />);
-    const multi = await screen.findByLabelText('Template for');
-    await waitFor(() => expect(within(multi).getAllByRole('option').some((o) => (o.textContent ?? '').startsWith('Fashion'))).toBe(true));
+    expect(labels.some((l) => l.startsWith('Fashion'))).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Need another department? Request it' })).not.toBeInTheDocument();
   });
 });
 
-describe('Need another department? Request it', () => {
-  it('sends a request for a department the store does not have and says what it will also need', async () => {
-    await mockApi().setActiveOrg(MOCK_FASHION_ORG);
-    await renderScreen(<BulkUploadView />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Need another department? Request it' }));
-    const dialog = within(await screen.findByRole('dialog'));
-    const choose = await dialog.findByLabelText('Department');
-    await waitFor(() => expect(within(choose).getAllByRole('option').length).toBeGreaterThan(1));
-    // A department it already has is not offered.
-    expect(within(choose).queryByRole('option', { name: 'Fashion' })).not.toBeInTheDocument();
-    fireEvent.change(choose, { target: { value: 'beauty' } });
-    fireEvent.click(dialog.getByRole('button', { name: 'Send request' }));
-    expect(await dialog.findByText("To sell beauty products you will also need to confirm full ingredient labelling.")).toBeInTheDocument();
-    expect((await mockApi().getCatalogScope()).requests).toMatchObject([{ departmentCode: 'beauty', status: 'PENDING' }]);
+describe('the category list fails on its own, in words about categories', () => {
+  it('says the categories could not be loaded, and retries', async () => {
+    getSellerDb().categoriesUnavailable = true;
+    await renderScreen(<ProductForm />);
+    expect(await screen.findByText('We couldn’t load the categories')).toBeInTheDocument();
+    getSellerDb().categoriesUnavailable = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('combobox', { name: 'Category' })).toBeInTheDocument();
   });
 });

@@ -143,7 +143,7 @@ export function ComplianceStep({ status, ref }: StepProps) {
           ) : (
             <Chips
               id="departments"
-              title="What will you sell?"
+              title="What do you plan to sell? (optional, you can sell in any category)"
               options={departments.map((d) => ({ key: d.code, label: d.name }))}
               selected={v.departments}
               disabled={disabled || departmentsQuery.isPending}

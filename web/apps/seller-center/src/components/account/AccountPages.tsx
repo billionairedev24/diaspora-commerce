@@ -6,7 +6,7 @@ import { useToast } from '@afrotransact/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 
-import { DepartmentsSettings } from '@/components/account/DepartmentsSettings';
+import { OfferServices } from '@/components/account/OfferServices';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 
@@ -52,7 +52,7 @@ export function SellerPreferencesPage() {
   return (
     <AccountShell active="preferences">
       <PreferencesScreen heading={false} showDensity onLanguageChanged={() => router.refresh()} />
-      <DepartmentsSettings />
+      <OfferServices />
     </AccountShell>
   );
 }
