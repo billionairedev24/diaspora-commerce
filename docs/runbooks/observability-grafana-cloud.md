@@ -191,16 +191,39 @@ the cluster-wide jobs (Kafka, Valkey, kube-state-metrics) are collected twice.
 
 ## 8. Contact points and routing (owner, in the UI)
 
-No real address is in the repository: the placeholder is `ops-alerts@example.invalid`.
+**Recipients (owner decision):** `hello@afrotransact.com` and `so.oluwfemi@gmail.com`. The list lives in ONE place,
+`infra/observability/grafana-cloud/alert-recipients.env` (`ALERT_EMAIL_RECIPIENTS`); use the same two addresses in the UI contact point below.
+**OWNER TO CONFIRM: `so.oluwfemi@gmail.com` is spelled exactly as given and may contain a typo (`oluwafemi`?).** A wrong address means one
+mailbox silently never gets alerts, so send the test notification (step 1) and confirm both inboxes received it.
+The placeholder `example.invalid` is gone; CI (`.github/workflows/observability-config.yml`, which runs `grafana-cloud-load.sh check`) fails
+if a placeholder or malformed recipient comes back into the routing.
 
-1. **Alerting > Contact points > Add contact point**: name `afrotransact-prod-email`, integration **Email**, address = the on-call mailbox
-   (use a shared mailbox plus a phone-notification rule rather than one person's inbox). Click **Test**: an email must arrive.
+Routing chosen (consistent with the earlier prod -> email, trial -> quiet design; the one extension is that a trial page is now mailed):
+
+| env | severity | result |
+|---|---|---|
+| `prod` | `page` | email to both, repeat every 1h |
+| `prod` | `ticket` | email to both, repeat every 4h |
+| `trial` | `page` (critical) | email to both, repeat every 4h; the subject carries `(trial)` |
+| `trial` | `ticket` | nobody (`trial-quiet`), visible only in the alert list |
+| `dev`, `uat` | any | unchanged (not in this stack) |
+| no `env` label | any | email, so a mis-labelled alert is not lost |
+
+Grouping: `alertname`, `env`, `service`; group wait 30s, group interval 5m, default repeat 4h.
+
+1. **Alerting > Contact points > Add contact point**: name `afrotransact-ops-email`, integration **Email**, addresses
+   `hello@afrotransact.com;so.oluwfemi@gmail.com` (the UI separates addresses with `;` or `,`).
+   **Send a test notification**: in the contact point form click **Test** (or **Alerting > Contact points**, the contact point's **More > Test**),
+   choose "Predefined", **Send test notification**. An email titled like a test alert must arrive in BOTH inboxes (check spam on first delivery).
+   Grafana Cloud's built-in email delivery works on the free tier [verify: confirm on the stack by the test above; if it is refused, the
+   limit is shown in the contact point's error]. The Mimir Alertmanager file path below needs an SMTP smarthost and is the less certain one.
 2. Optional second contact point for urgent pages (Grafana IRM / OnCall, Slack, or a phone push; UNVERIFIED what the free tier includes).
-3. **Alerting > Notification policies**: set the **default policy** to `afrotransact-prod-email`; group by `alertname`, `env`, `service`.
-   Add a **nested policy**: matcher `env` `=` `trial` -> contact point `trial-quiet` (create it empty: a contact point with no integration), or attach a mute timing
-   "always". Add a nested policy `env` `=` `prod` and `severity` `=` `page` with a repeat interval of 1 hour (tickets: 4 hours).
+3. **Alerting > Notification policies**: set the **default policy** to `afrotransact-ops-email`; group by `alertname`, `env`, `service`.
+   Nested policies, in this order: (a) `env` `=` `trial` AND `severity` `=` `page` -> `afrotransact-ops-email`, repeat interval 4h;
+   (b) `env` `=` `trial` -> `trial-quiet` (create it empty: a contact point with no integration), or attach a mute timing "always";
+   (c) `env` `=` `prod` AND `severity` `=` `page` with a repeat interval of 1 hour (tickets: 4 hours). (a) must come before (b).
 4. **Alerting > Alert rules**: confirm the loaded rules are in state Normal, not "no data" noise. Trigger one on purpose in the trial (scale a trial
-   service to 0: `DeploymentUnavailable` for `env="trial"`) and check that **nothing** is mailed; then check prod routing with a test notification
+   service to 0: `DeploymentUnavailable` for `env="trial"`) and check that a ticket-level trial alert mails **nothing** (a page-level trial alert does mail); then check prod routing with a test notification
    on the policy (**More > Test**).
 5. Where the loaded rules deliver (Grafana Alertmanager or the Mimir Alertmanager) is UNVERIFIED: **Alerting > Admin** lists the Alertmanagers.
    `infra/observability/grafana-cloud/alertmanager.yaml` holds the same routing as code for the Mimir one (`grafana-cloud-load.sh alertmanager`).

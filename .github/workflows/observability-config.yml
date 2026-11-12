@@ -1,0 +1,27 @@
+# Offline checks of the Grafana Cloud rules, dashboards and alert routing. Fails if a placeholder recipient (example.invalid etc.)
+# is left in the prod routing, or if prod/trial routes or the recipient list are broken.
+name: observability-config
+
+on:
+  pull_request:
+    paths:
+      - infra/observability/**
+      - .github/workflows/observability-config.yml
+  push:
+    branches: [main]
+    paths:
+      - infra/observability/**
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -m pip install pyyaml
+      - run: bash infra/observability/scripts/grafana-cloud-load.sh check
+      - name: No placeholder addresses anywhere in the routing config
+        run: |
+          if grep -rIn "example\.invalid" infra/observability/grafana-cloud; then echo "placeholder address left in infra/observability/grafana-cloud" >&2; exit 1; fi

@@ -9,6 +9,7 @@
 #   infra/observability/scripts/grafana-cloud-load.sh lokirules          OPTIONAL: sync infra/observability/loki-rules/*.yaml to the Loki ruler (UNVERIFIED against Grafana Cloud)
 #   infra/observability/scripts/grafana-cloud-load.sh alertmanager       OPTIONAL: load alertmanager.yaml into the Mimir Alertmanager
 #   infra/observability/scripts/grafana-cloud-load.sh all                rules + dashboards
+#   (alert e-mail recipients: ONE list in grafana-cloud/alert-recipients.env, or ALERT_EMAIL_RECIPIENTS in the environment)
 #   DRY_RUN=1 ...                                                          print what would be sent, send nothing
 #
 # Credentials come from the environment, never from this repository (the owner's machine, or a CI secret):
@@ -39,6 +40,39 @@ RULE_FILES=(services.yaml kafka.yaml inventory.yaml payments-transfer-recovery.y
 LOKI_RULE_FILES=(backup.yaml)   # LogQL alerts on the backup_metrics log line (infra/observability/loki-rules)
 DASHBOARDS=(launch-platform.json launch-payments.json platform-overview.json jvm.json kafka-consumer-lag.json)
 
+# Renders alertmanager.yaml with the recipient list; fails on a placeholder/invalid address. Prints the rendered file path.
+render_alertmanager() {
+  need python3
+  local out; out="$(mktemp)"
+  python3 - "$obs/grafana-cloud" "$out" <<'PY'
+import os, re, sys, pathlib, yaml
+d, out = pathlib.Path(sys.argv[1]), sys.argv[2]
+rec = os.environ.get("ALERT_EMAIL_RECIPIENTS")
+if not rec:
+    for line in (d / "alert-recipients.env").read_text().splitlines():
+        if line.startswith("ALERT_EMAIL_RECIPIENTS="):
+            rec = line.split("=", 1)[1].strip()
+addrs = [a.strip() for a in (rec or "").split(",") if a.strip()]
+assert addrs, "ALERT_EMAIL_RECIPIENTS is empty"
+for a in addrs:
+    assert re.fullmatch(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}", a), f"invalid recipient {a}"
+    assert not re.search(r"example\.(invalid|com|org)|\.invalid$|\.test$", a, re.I), f"placeholder recipient {a}"
+text = (d / "alertmanager.yaml").read_text().replace("__ALERT_EMAIL_RECIPIENTS__", ",".join(addrs))
+assert "__ALERT" not in text and "example.invalid" not in text.lower(), "placeholder left in alertmanager routing"
+doc = yaml.safe_load(text)
+rcv = {r["name"]: r for r in doc["receivers"]}
+assert rcv["ops-email"]["email_configs"][0]["to"] == ",".join(addrs)
+assert not rcv["trial-quiet"].get("email_configs"), "trial-quiet must stay silent"
+order = [(r["receiver"], tuple(r["matchers"])) for r in doc["route"]["routes"]]
+assert ("ops-email", ('env="prod"',)) in order, "prod must route to email"
+assert ("ops-email", ('env="trial"', 'severity="page"')) in order, "trial page must route to email"
+assert order.index(("ops-email", ('env="trial"', 'severity="page"'))) < order.index(("trial-quiet", ('env="trial"',))), "trial routes out of order"
+pathlib.Path(out).write_text(text)
+print(f"alertmanager routing ok: {len(addrs)} recipients", file=sys.stderr)
+PY
+  echo "$out"
+}
+
 die() { echo "error: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null || die "$1 not found"; }
 req() { [[ -n "${!1:-}" ]] || die "$1 is not set (see the header of this script)"; }
@@ -64,6 +98,7 @@ PY
   local d
   for d in "${DASHBOARDS[@]}"; do python3 -m json.tool "$obs/grafana/dashboards/$d" >/dev/null || die "invalid JSON: $d"; done
   echo "dashboards ok: ${#DASHBOARDS[@]} files"
+  rm -f "$(render_alertmanager)"
   if command -v mimirtool >/dev/null; then
     local args=() f; for f in "${RULE_FILES[@]}"; do args+=("$obs/rules/$f"); done
     mimirtool rules lint "${args[@]}" && mimirtool rules check "${args[@]}" && echo "mimirtool lint/check ok"
@@ -93,8 +128,9 @@ lokirules() {
 
 alertmanager() {
   need mimirtool; req MIMIR_ADDRESS; req MIMIR_TENANT_ID; req MIMIR_API_KEY
-  if [[ -n "$DRY_RUN" ]]; then echo "DRY RUN: mimirtool alertmanager load $obs/grafana-cloud/alertmanager.yaml"; return; fi
-  mimirtool alertmanager load "$obs/grafana-cloud/alertmanager.yaml" --address="$MIMIR_ADDRESS" --id="$MIMIR_TENANT_ID" --key="$MIMIR_API_KEY"
+  local cfg; cfg="$(render_alertmanager)"
+  if [[ -n "$DRY_RUN" ]]; then echo "DRY RUN: mimirtool alertmanager load $cfg"; cat "$cfg"; return; fi
+  mimirtool alertmanager load "$cfg" --address="$MIMIR_ADDRESS" --id="$MIMIR_TENANT_ID" --key="$MIMIR_API_KEY"
 }
 
 dashboards() {

@@ -227,7 +227,7 @@ specifics, a restore drill.
 ## 8. Observability and incident response
 
 - [ ] `ENGINEERING · Open` Metrics (Alloy), logs (Alloy) and traces (OTel collector) reach Grafana Cloud (stack `afrotransact`, `env=prod`; `docs/runbooks/observability-grafana-cloud.md`); the `launch-payments` and `launch-platform` dashboards exist (orders and delivery have only the generic RED/JVM boards: delivery-runs is not deployed).
-- [ ] `ENGINEERING · Open` Alerts are routed to a real person/channel (contact point and `env=prod` notification policy, runbook section 8; a test notification arrived; `env=trial` alerts mail nobody), and every alert has a runbook (`docs/runbooks/`; the launch alerts point at the Alert reference in `observability-grafana-cloud.md`).
+- [ ] `ENGINEERING · Open` Alerts are routed to a real person/channel (contact point and `env=prod` notification policy, runbook section 8; a test notification arrived in BOTH `hello@afrotransact.com` and `so.oluwfemi@gmail.com` (owner: confirm that second spelling); `env=trial` mails page-level alerts only; recipients live in `infra/observability/grafana-cloud/alert-recipients.env`), and every alert has a runbook (`docs/runbooks/`; the launch alerts point at the Alert reference in `observability-grafana-cloud.md`).
 - [ ] `ENGINEERING · Open` Error tracking is on for the web apps.
 - [ ] `ENGINEERING · Open` Health, readiness and `/actuator/prometheus` or `/metrics` endpoints are reachable by monitoring and **not** by the public.
 - [ ] `OWNER · Open` Status page / maintenance page text reviewed.

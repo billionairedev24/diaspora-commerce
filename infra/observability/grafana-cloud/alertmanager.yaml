@@ -1,8 +1,11 @@
 # Alertmanager routing for the Grafana Cloud stack (https://afrotransact.grafana.net/): ONE stack serves trial and prod, so
 # routing is by the `env` label that Alloy puts on every series (and therefore on every alert).
-#   env=prod   -> email contact point (placeholder address below: replace it in the UI or here, never commit a real one)
-#   env=trial  -> receiver "trial-quiet": no notification (the alerts still show in the Grafana alert list for debugging)
+#   env=prod   -> email to the recipient list (every severity)
+#   env=trial  -> email only for severity="page" (our "critical"); ticket-level trial alerts go to "trial-quiet" (no notification,
+#                 still visible in the Grafana alert list for debugging)
 #   anything else (an alert with no env label) -> email, so a mis-labelled alert is not lost
+# Recipients: ONE list in alert-recipients.env (ALERT_EMAIL_RECIPIENTS). This file holds the token __ALERT_EMAIL_RECIPIENTS__, which
+# grafana-cloud-load.sh substitutes; CI (`grafana-cloud-load.sh check`) fails on any placeholder or unrendered recipient.
 #
 # PREFERRED PATH: create the same contact point and notification policy in the Grafana UI (Alerting > Contact points,
 # Alerting > Notification policies), see docs/runbooks/observability-grafana-cloud.md. This file is the config-as-code alternative
@@ -11,18 +14,21 @@
 # Email delivery from the Mimir Alertmanager needs an SMTP smarthost, which Grafana Cloud may not provide: UNVERIFIED. Use the UI
 # contact point (Grafana's own email sender) if it does not.
 route:
-  receiver: prod-email
+  receiver: ops-email
   group_by: [alertname, env, service]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
   routes:
+    - receiver: ops-email
+      matchers: [env="trial", severity="page"]
+      repeat_interval: 4h
     - receiver: trial-quiet
       matchers: [env="trial"]
-    - receiver: prod-email
+    - receiver: ops-email
       matchers: [env="prod", severity="page"]
       repeat_interval: 1h
-    - receiver: prod-email
+    - receiver: ops-email
       matchers: [env="prod"]
 
 inhibit_rules:
@@ -33,9 +39,9 @@ inhibit_rules:
 
 receivers:
   - name: trial-quiet
-  - name: prod-email
+  - name: ops-email
     email_configs:
-      - to: ops-alerts@example.invalid      # PLACEHOLDER: the owner's on-call mailbox, set in the Grafana Cloud UI
+      - to: __ALERT_EMAIL_RECIPIENTS__
         send_resolved: true
         headers:
           Subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} {{ .CommonLabels.service }} ({{ .CommonLabels.env }})'

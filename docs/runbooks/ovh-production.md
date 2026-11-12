@@ -229,7 +229,7 @@ environment `trial` (`infra/argocd/envs/trial`, root `bootstrap/root-trial.yaml`
 | Stripe | **TEST mode** keys and three test-mode webhook endpoints at `api-test.afrotransact.com` | live keys, live endpoints |
 | R2 | `afrotransact-trial-media`, `afrotransact-trial-kyc-evidence`, tokens with a 10-day TTL | `afrotransact-prod-*`, no expiry |
 | Backups | Backblaze B2 `afrotransact-trial-backups`, retention 14 days | `afrotransact-prod-backups` |
-| Observability | `GRAFANA_ENV=trial` (Alloy label `env`, backup metric label), OTel `deployment.environment=trial`, token `afrotransact-alloy-trial` | `env=prod`, token `afrotransact-alloy-prod`; **only `env=prod` alerts reach the on-call mailbox** |
+| Observability | `GRAFANA_ENV=trial` (Alloy label `env`, backup metric label), OTel `deployment.environment=trial`, token `afrotransact-alloy-trial` | `env=prod`, token `afrotransact-alloy-prod`; **`env=prod` alerts (all severities) mail the owner list, trial mails page-level only** |
 | AI | the same code-enforced USD 2 per UTC day and USD 0.50 per caller | same |
 | Cloudflare | `tofu apply -var-file=envs/trial.tfvars`, `manage_zone = false` (the prod run owns the zone-wide WAF), `developers_enabled = false` | `envs/prod.tfvars` |
 | Resend | the same verified domain `afrotransact.com`, sender `no-reply@afrotransact.com`, webhook at the trial API host | same domain |

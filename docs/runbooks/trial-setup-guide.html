@@ -215,7 +215,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
     "Real OVH project: not disposable, monthly node billing, deletion protection, 7-year KYC lock",
     "Production hosts afrotransact.com, seller., admin., api., auth., media.; the -test hosts and the trial are torn down",
     "Fresh secrets only: new STATE_DIR, new age keys, never reuse trial values",
-    "GRAFANA_ENV=prod: only env=prod alerts reach the on-call mailbox",
+    "GRAFANA_ENV=prod: env=prod alerts (all severities) reach hello@afrotransact.com and the second owner address; trial mails only page-level alerts",
     "New R2 buckets or tokens with no expiry (trial tokens expire in 10 days)",
     "New Resend key and webhook; the sender stays no-reply@afrotransact.com",
     "Backups: prod bucket afrotransact-prod-backups, retention 14 days (7 allowed), restore drill monthly",
@@ -810,7 +810,7 @@ nmap -Pn <node public IP>`)],
       do: [
         "Alloy, kube-state-metrics and kafka-exporter run in the observability namespace. Everything carries env=trial.",
         "Load the rules and dashboards from your laptop (needs mimirtool and the four laptop tokens). Check Alerting > Alert rules and the AfroTransact dashboard folder.",
-        "Contact points: create <code>afrotransact-prod-email</code> with your on-call mailbox and press Test. In Notification policies route env=prod to it and env=trial to an empty contact point named trial-quiet. Trial alerts therefore mail nobody on purpose.",
+        "Contact points: create <code>afrotransact-ops-email</code> with the two owner addresses <code>hello@afrotransact.com</code> and <code>so.oluwfemi@gmail.com</code> (owner: confirm the second spelling, it may be a typo), press Test and check both inboxes. Grafana Cloud's built-in email works on the free tier [verify with that test]. In Notification policies route env=trial with severity=page to it first, then env=trial to an empty contact point named trial-quiet, and env=prod to it. Trial ticket-level alerts mail nobody on purpose; trial page alerts do.",
         "Alerts that hard-code env=prod, such as the missing-metric alerts, do not fire in the trial. Test routing with More > Test on the policy."
       ],
       cmds: [c("Alloy", String.raw`kubectl -n observability get pods
@@ -826,7 +826,7 @@ http_server_requests_seconds_count{env="trial", service="orders"}
 count({env="trial"})`)],
       ok: "Within 2 to 3 minutes the up query returns one row per service (21) plus temporal, cloudflared, kafka-exporter, valkey, meilisearch, kube-state-metrics, kubelet, cadvisor and alloy, all 1. The e-mail and bearer searches show only [redacted-...]. The series count is under the free limit you wrote down.",
       fail: "Alloy logs 401 or 403: wrong token, user id or missing scope. 429: ingestion limit reached, follow the tighten-the-allowlist steps. A series with an empty env: CLUSTER_ENV is empty in the Secret. Data source uids in the loader may differ from the real ones: copy them from Connections > Data sources.",
-      prod: "An external uptime check on the storefront, /bff/healthz and the OIDC URL, plus a test notification that reaches the on-call mailbox.",
+      prod: "An external uptime check on the storefront, /bff/healthz and the OIDC URL, plus a test notification that reaches both owner mailboxes.",
       unv: "Data source names and uids, the free tier alert rule quota, whether the free tier includes Synthetic Monitoring." }
     ]},
 
@@ -955,7 +955,7 @@ psql "host=<host> user=<admin> sslmode=require" -c "select count(*) from pg_stat
     { id: "10-cost", t: "Cost per day times 30 is inside your budget", who: "owner", do: ["Node, disks, buckets, Layerbase, Workers, plus Grafana and B2 on their free tiers."], ok: "You can say the monthly number out loud." },
     { id: "10-free", t: "Free tiers held: Grafana series and logs, B2, R2, Resend", who: "both", do: ["Measured volume against the limits you wrote down."], ok: "No usage alert fired, or you have a plan." },
     { id: "10-ai", t: "AI is capped and private", who: "both", do: ["USD 2 per day proven, OpenRouter key limit set, privacy settings recorded, MCP refused without a token and not reachable from outside."], ok: "All four checks are ticked in phase 6." },
-    { id: "10-alerts", t: "Alerts reach a real person for env=prod", who: "owner", do: ["A test notification arrived and trial alerts mailed nobody."], ok: "You received the test." },
+    { id: "10-alerts", t: "Alerts reach a real person for env=prod", who: "owner", do: ["A test notification arrived in both owner mailboxes; a trial ticket-level alert mailed nobody."], ok: "You received the test." },
     { id: "10-clean", t: "Trial leftovers are gone", who: "owner", do: ["Trial tokens revoked, trial Grafana policy deleted, trial buckets emptied and deleted, trial Resend key and webhook removed, trial Stripe test webhooks removed if not reused, no trial secret reused for production."], ok: "A fresh STATE_DIR and fresh keys are planned for production." },
     { id: "10-ext", t: "The outside gates are owned", who: "owner", do: ["Tax professional and counsel review handled internally, legal documents published, the v1 cutover plan and freeze window agreed, credit applications to OVH and Layerbase planned for after launch."], ok: "Each has a name and a date. They do not block engineering, but they block the launch." },
     { id: "10-decide", t: "Decision recorded: go, no-go, or go with conditions", who: "owner", do: ["Write the date, the decision and the conditions at the top of the go or no-go sheet."], ok: "Written down." }

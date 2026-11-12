@@ -173,6 +173,9 @@ Rotate when someone who had it leaves, when it may have leaked, and at least onc
 
 ## Alerts
 
+Backup alerts reach `hello@afrotransact.com` and `so.oluwfemi@gmail.com` (owner: confirm the second spelling) through the routing in
+`observability-grafana-cloud.md` section 8; `page` backup alerts are mailed from the trial too.
+
 Rules: `infra/observability/rules/backup.yaml` (Prometheus rules, loaded as PrometheusRule CRs by `make rules`) and, for the log path without a Pushgateway,
 `infra/observability/loki-rules/backup.yaml` (LogQL, UNVERIFIED). Each run logs exactly one line:
 
