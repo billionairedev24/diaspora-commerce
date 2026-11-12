@@ -83,7 +83,7 @@ describe('seller tour audiences', () => {
   });
 
   it('a person whose application is not approved only gets the welcome tour', () => {
-    const applying = session([['onboarding', 'FULL']], { approved: false, activeOrg: { ...OWNER.activeOrg!, status: 'IN_REVIEW', approved: false } });
+    const applying = session([['onboarding', 'FULL']], { approved: false, activeOrg: { ...OWNER.activeOrg!, status: 'PENDING_REVIEW', approved: false } });
     expect(idsFor(applying)).toEqual(['welcome']);
     expect(sellerGuards(applying).applying?.()).toBe(true);
     expect(sellerGuards(applying).approved?.()).toBe(false);
