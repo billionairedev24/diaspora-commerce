@@ -1333,11 +1333,10 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Staff cannot mark picked up on an order whose authorisation has lapsed without choosing re-authorise or cancel-and-refund
 - Re-authorising on the saved card off-session works in a Stripe test-mode run
 - The runbook states the pickup-within-5-days rule","E07","","Highest","8","payments orders stripe launch","payments","To Do"
-"S355","Story","Invite-only beta gate for customer accounts","Launch is an invite-only beta. No customer sign-up gate was found in identity (only organisation team invitations). Migrated v1 users must still be able to sign in.","- Sign-up without a valid invite is refused with a clear message
-- Staff can create, list and revoke invites
-- A migrated v1 user signs in without an invite
-- The gate can be switched off by one setting for general launch
-- Social sign-in follows the same rule","E02","","Highest","5","identity beta launch","identity","To Do"
+"S355","Story","Open sign-up at cutover: no gate, migrated users sign in","Owner decision 2026-11-12: no invite-only beta and no sign-up gate. v1 sign-ups stay open until the freeze and v2 is a full cutover. Replaces the earlier invite-gate story; nothing is built, this only verifies the open path.","- A new person can sign up on v2 without any invite
+- Every migrated v1 user signs in with the old email and password
+- v1 registrations are blocked from the freeze to the switch
+- No setting or screen mentions an invite for customers","E02","","Medium","2","identity launch verify","identity","To Do"
 "S356","Story","Verify application review workflow","Two-step staff review (claim, assign, approve step 1, final approve, flag, return to applicant, reject) is built and merged. It has not been walked on a real environment.","- One test application passes claim, approve step 1 and final approval in the staff console
 - Return to applicant sends the email and reopens the form
 - A reject keeps the reason and notifies the applicant
@@ -1371,7 +1370,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - A staff approval releases it
 - A hold pauses live listings and the restore sweep brings them back after approval
 - Documents upload to the private KYC bucket and open only for staff","E13","","High","5","seller catalog staff verify","onboarding","In Progress"
-"S364","Story","Risk-based tax review: keep ALL until sign-off","taxReview.mode ALL is the launch setting. RISK_BASED (system approves active-category variants with a 5 percent audit sample) must wait for a Texas tax professional's written agreement.","- Launch setting is ALL and checked on production
+"S364","Story","Risk-based tax review: keep ALL until sign-off","taxReview.mode ALL is the launch setting. RISK_BASED (system approves active-category variants with a 5 percent audit sample) waits for the Texas tax professional's written agreement, which the owner handles internally. Not blocking engineering.","- Launch setting is ALL and checked on production
 - Every new variant waits for a reviewer and the queue is staffed
 - Switching to RISK_BASED requires a change reason that names the sign-off reference
 - The audit sample tab is empty before the switch and a reclassification re-closes the gate in a test
@@ -1404,11 +1403,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - An order and its payment read back correctly
 - Point-in-time recovery to a chosen minute is exercised if Layerbase offers it
 - Minutes taken, date and name recorded in the readiness checklist","E29","","Highest","3","ovh backup launch","infra","To Do"
-"S372","Story","v1 to v2 production cutover (same Stripe account)","Execute docs/runbooks/v1-to-v2-cutover.md: inventory, test-mode rehearsal, freeze, webhook swap, data load, DNS switch, rollback ready.","- Owner questions 1 to 11 in the runbook are answered
+"S372","Story","v1 to v2 production cutover (same Stripe account)","Execute docs/runbooks/v1-to-v2-cutover.md: dashboard inventory, decision on existing connected accounts, test-mode rehearsal, freeze, fresh v2 webhook endpoints with v1's deleted at the freeze, data load with customer ids, DNS switch, rollback ready. Full cutover, no invite gate.","- Connected accounts decision (keep, re-onboard or hybrid) is recorded with the test-mode results and Stripe's written answers
 - Test-mode rehearsal done within 14 days of cutover
 - Go/no-go checklist fully ticked and signed by the owner
 - Three live v2 webhook endpoints return 2xx and a real payment and refund are applied
-- v1 endpoints disabled, not deleted; v1 key rolled after 30 days","E30","","Highest","13","cutover stripe launch blocked-owner","cicd","To Do"
+- v1 endpoints deleted at the freeze after their URLs and events were recorded; v1 key rolled after 30 days","E30","","Highest","13","cutover stripe launch blocked-owner","cicd","To Do"
 "S373","Story","Installable web app (PWA) for the three web apps","No native apps at launch. Web apps must install to the home screen on iPhone and Android.","- Each app serves a valid manifest with icons and a service worker
 - Lighthouse installable check passes on the prod build
 - An offline page shows when the network is down
@@ -1422,12 +1421,22 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Each rule is turned into a testable line before code starts
 - Rules are implemented behind a setting and tested with concurrent orders
 - No oversell in a 50-parallel-checkout test","E09","","Medium","13","inventory blocked-owner","inventory","To Do"
-"S376","Story","ai-gateway spend cap for launch","Shipped per-feature daily caps add up to about 1,200 US dollars a day. The beta needs a hard ceiling that does not depend on code.","- A monthly credit limit is set on the OpenRouter account and on the prod key
-- Prod per-feature daily caps are lowered to the agreed figure in config
-- An alert fires at 50 and 80 percent of the monthly cap
-- Exceeding a cap degrades then returns 429 ai.budget-exceeded in a test","E21","","High","3","ai launch cost","ai","To Do"
-"S377","Story","MCP exposure review for the beta","mcp-server is on: OAuth bearer, tool filtering, rate limit, durable audit. Decide who can reach it during the beta.","- Owner decision recorded: public, partner clients only, or staff only
-- Edge route, WAF and OAuth client redirect URIs match it
-- Staff and data-changing tools are off or need an explicit scope for beta users
-- A token without scope gets -32003 in a test
-- The mcp.tool.invoked audit events are visible in the chosen sink","E21","","High","3","mcp security launch","ai","To Do"
+"S376","Story","ai-gateway spend cap: 2 USD a day","Owner decision: ceiling of 2 US dollars a day, cheapest model. The gateway has per-feature daily caps that add up to about 1,200 USD a day and no single global cap was found.","- Prod per-feature caps sum to at most 2 USD a day, or a global daily cap of 2 USD exists
+- Every task routes to the cheapest capable model in prod
+- OpenRouter account and prod key credit limits are set to match
+- An alert fires at 50 and 80 percent of the day's cap
+- Exceeding the cap degrades then returns 429 ai.budget-exceeded in a test","E21","","High","3","ai launch cost","ai","To Do"
+"S377","Story","MCP server public: authenticated tools check","Owner decision: the MCP server is public with authenticated tools. Verify nothing works without a token and that exposure is limited to what tokens allow.","- POST /mcp without a token gets 401 with the protected-resource metadata
+- A token without scope gets -32003 for tools outside its scope
+- A seller token cannot read another seller's data through any tool
+- Staff tools need a staff principal; data-changing tools need an explicit scope
+- Rate limit applies per client and subject; mcp.tool.invoked audit events reach Kafka","E21","","High","3","mcp security launch","ai","To Do"
+"S378","Story","Tolerate full-dashboard connected accounts","Existing v1 connected accounts have a Full Stripe dashboard; v2 creates accounts with no dashboard and sets a manual payout schedule. Needed only if the test-mode keep-and-test run (cutover runbook, option A) shows Stripe refusing a v2 flow on such an account.","- The seller service reads each account's controller properties before setting a payout schedule or requesting a capability
+- A refused payout-schedule update on a full-dashboard account is recorded, not an error that blocks onboarding sync
+- Transfers, refunds with reversal and the health sync pass on a full-dashboard test account
+- A test covers both account shapes
+- Seller center shows the right payout information for each shape","E14","","High","5","stripe seller launch blocked-owner","billing","To Do"
+"S379","Story","Test v2 flows on a full-dashboard connected account","Stripe test mode: create an account shaped like v1's (Full dashboard, Stripe-hosted onboarding) and run v2's separate charge, transfer, refund with reversal, payout-schedule update and onboarding against it. Output decides keep, re-onboard or hybrid.","- Results table (flow, allowed or refused, error code) is added to the cutover runbook
+- Each Stripe behaviour claim in the runbook is marked verified with the test or Stripe's answer, or stays UNVERIFIED
+- The owner's decision A, B or C is recorded
+- The test account is cleaned up","E14","","Highest","3","stripe seller launch","billing","To Do"

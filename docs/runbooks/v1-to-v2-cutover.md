@@ -12,31 +12,204 @@ not repeat it. The webhook reference is [stripe-webhooks.md](stripe-webhooks.md)
 
 **Launch stack this plan assumes:** OVH Managed Kubernetes, Layerbase Postgres, web apps on Cloudflare Workers, images on R2,
 Resend email, staff run fulfilment by hand, trust-ops on, ai-gateway and mcp-server on, FGA off, no native apps (installable
-web app only), invite-only beta.
+web app only). It is a **full cutover**: there is no invite-only beta and no sign-up gate (v1 sign-ups stay open until the
+freeze, and every v1 user moves to v2).
 
-Examples use the `stripe` CLI. They are examples only: nothing here was run against your account. Use a **restricted,
-read-only live key** for the inventory steps (`--api-key`), never the platform secret key. Never paste a key, a `whsec_`
-secret or a customer's card data into a ticket, chat or this repository.
+Examples use the `stripe` CLI. They are examples only: nothing here was run against your account, and **nobody is asked for a
+live Stripe key**. The owner reads the v1 state in the Stripe dashboard (checklist in section 1); the CLI lines are
+equivalents for someone who already holds a key. Never paste a key, a `whsec_` secret or a customer's card data into a
+ticket, chat or this repository.
 
-## What I cannot know (and need from the owner)
+Stripe behaviour in this runbook that I could not read in Stripe's documentation from the build machine is marked
+**UNVERIFIED**. Treat each such line as a question to prove in test mode or to ask Stripe, not as fact.
 
-The v1 repository and its production database are not available to the build sessions. Everything about v1 below comes from
-the data runbook (written from a local copy of v1's database) and from reading v2's code. Please confirm or supply:
+## Top risk: v1's connected accounts are not shaped like v2's
+
+**Evidence (from the owner's Stripe Connect Platform setup screen, not from code):** v1's connected accounts were created with
+the direct charges business model, losses collector = Stripe, fees collector = the account, dashboard = **Full** (the seller's
+own Stripe dashboard), and Stripe-hosted onboarding. Stripe shows an integration warning that the platform currently creates
+**destination charges**.
+
+**What v2 does** (`StripeConnectAdapter.createAccount`, `java/services/seller/.../adapter/out/stripe/StripeConnectAdapter.java`
+lines 39 to 66): creates accounts with `controller.fees.payer = ACCOUNT`, `controller.losses.payments = STRIPE`,
+`controller.requirement_collection = STRIPE`, `controller.stripe_dashboard.type = NONE`, capabilities `card_payments` and
+`transfers`, and a payout schedule of `MANUAL` set by the platform. Payments uses **separate charges and transfers**: the
+platform owns the charge, handles refunds and disputes, and later transfers each seller's net after the hold
+(`createTransfer` with a destination account).
+
+**Side by side:**
+
+| Controller property | v1 accounts (owner's screen) | v2 accounts (code) | Same? |
+|---|---|---|---|
+| Who pays fees | the account | the account | yes |
+| Who bears losses | Stripe | Stripe | yes |
+| Who collects requirements | Stripe (Stripe-hosted onboarding) | Stripe (platform embeds Stripe's account onboarding component) | same collector, different surface |
+| Dashboard | **Full** | **None** | **no** |
+| Charge model | direct or destination (screen and warning disagree) | separate charges and transfers | differs |
+
+Controller properties on an existing account cannot be changed (the owner's brief; I could not check Stripe's page, so
+**UNVERIFIED** as a general rule), so v1's accounts stay Full-dashboard accounts. Consequences to prove or disprove
+(**all UNVERIFIED**):
+
+1. v2 may be **unable to set the payout schedule** on a Full-dashboard account (`settings.payouts.schedule` update), so
+   `MANUAL` cannot be forced and the seller can pick their own schedule and bank payout timing in their dashboard. The 7-day
+   platform hold is unaffected, because v2 only creates the transfer after the hold; what changes is when the seller's balance
+   leaves Stripe.
+2. The `transfers` capability may not be requestable by the platform on such an account, or may already be on. A v2 transfer
+   to an account without it fails and the seller's net is stuck in the platform balance.
+3. Sellers keep their own dashboard: they can see payments, payouts and balance, change payout and bank settings, and
+   could **disconnect** the platform (`account.application.deauthorized`, which v2's Connect endpoint already handles by
+   marking the seller disconnected). With separate charges and transfers the disputes and refunds belong to the platform; the
+   seller's dashboard shows transfers, not the customer's charge. How a Full-dashboard seller sees or disputes things is
+   unclear.
+4. v2's embedded onboarding and account-health screens (account sessions, `POST /v1/orgs/{orgId}/stripe/account-session`)
+   may not accept a Full-dashboard account, or may show different requirements.
+5. The charge-model mismatch: v1's accounts were set up for direct charges, yet the platform created destination charges.
+   Past v1 charges are not affected by v2's model, but refunds of **v1** charges (section 6) must follow the model they were
+   made under (reverse the transfer on a destination charge; refund on the connected account for a direct charge).
+
+The decision is the next section. Do not start the freeze until it is made and proven.
+
+## Existing connected accounts: keep or re-onboard
+
+First fact to establish: how many connected accounts exist, and each one's real controller properties. The setup screen
+describes how the platform was configured, not each account. Read each account's page (checklist, section 1) and record the
+dashboard type, who collects requirements, `charges_enabled`, `payouts_enabled`, capabilities and any `requirements.currently_due`.
+
+### Option A: keep and test
+
+Keep each v1 account and link it to a v2 organisation. Before deciding, prove in **Stripe test mode** that v2's flows work on
+an account built like v1's. Test mode has its own accounts, so this touches no live data.
+
+1. Create a test account shaped like v1's (examples only):
+
+   ```bash
+   stripe accounts create --country US --business-type company \
+     -d "controller[fees][payer]"=account \
+     -d "controller[losses][payments]"=stripe \
+     -d "controller[requirement_collection]"=stripe \
+     -d "controller[stripe_dashboard][type]"=full \
+     -d "capabilities[card_payments][requested]"=true \
+     -d "capabilities[transfers][requested]"=true
+   stripe account_links create --account acct_TEST -d type=account_onboarding \
+     -d refresh_url=https://example.com/r -d return_url=https://example.com/d   # Stripe-hosted onboarding
+   ```
+
+   Complete onboarding with Stripe's test data until `charges_enabled` and `payouts_enabled` are true.
+2. Link it to a test v2 organisation (`PUT /v1/connected-accounts/{orgId}` on payments and the seller-side row), then run the
+   **v2 flows** against it and write down exactly what Stripe allows or refuses, with the error code:
+   - a **separate charge** on the platform and a **transfer** of the net to the account (with `transfer_group`);
+   - a **refund** of the charge with and without reversing the transfer (v2 reverses; see `TransferReversalRefused.md`), and a
+     refund after the account's balance has been paid out;
+   - a **payout-schedule update** by the platform (`stripe accounts update acct_TEST -d "settings[payouts][schedule][interval]"=manual`)
+     and a platform-initiated **payout** on the account;
+   - `transfers` and `card_payments` capability state, and a request to add a capability from the platform;
+   - v2's **embedded onboarding / account health** (account session) for the account;
+   - the **account.updated**, **capability.updated** and **account.application.deauthorized** events reaching endpoint 2;
+   - a **dispute** (`4000 0000 0000 0259`) on a charge whose net was transferred to it.
+3. Record the results in a table (flow, allowed or refused, error, what the seller sees in their dashboard). Behaviour in
+   test mode may differ from live; the live answer comes from Stripe (questions below).
+4. **Decide:** keep only if every v2 flow the business needs works (charge, transfer, refund with reversal, health sync) and
+   the platform can live with the seller controlling payout timing. A dashboard the seller owns is also a policy question for the owner.
+
+*Cost:* little work and no seller action. *Risk:* a refused transfer in production strands a seller's money; the seller keeps a
+dashboard v2's design assumed they would not have.
+
+### Option B: re-onboard each seller to a v2-style account
+
+Create a new v2-style account for every seller through v2's onboarding (new KYC, the seller redoes verification), link it to
+the organisation, and leave the old account untouched. Payments from then on transfer to the new account.
+
+- Before the switch, settle the old account: pay out its balance, confirm nothing is pending, note any open dispute or
+  recent refund that may need to reverse a transfer on the old account (the old account stays usable for that).
+- The old account is **not deleted or rejected**; it keeps its history and any balance for refunds of v1 orders. Decide with
+  Stripe how long it stays open and who closes it.
+- Sellers are asked to redo onboarding and bank details: an email, a deadline, and a rule for what happens to listings
+  before they finish (v2 hides listings and blocks payouts until the account is verified).
+- Two accounts per seller exist in Stripe afterwards; the `payments.connected_account` row points at the new one only.
+
+*Cost:* seller effort, a day or more of KYC delay per seller (UNVERIFIED), and the cutover cannot sell for a seller whose new
+account is not verified. *Benefit:* identical behaviour to everything v2 tested; platform controls payout schedule.
+
+### Option C: hybrid
+
+Keep v1 accounts that pass the Option A tests **for the sellers who exist today**, and onboard every **new** seller with v2-style
+accounts. Re-onboard (Option B) only a seller whose old account fails a test, or at a time the seller chooses. This keeps launch
+smooth and makes the long-term state uniform. It needs code that tolerates both shapes (for example reading the account's
+controller before trying to set a payout schedule), which is backlog story S378 if Option A (story S379) shows a refusal.
+
+### Recommendation
+
+I recommend running the Option A test in test mode first (it is a few hours), then choosing: A or C if every flow works, B if
+the transfer, refund-with-reversal or health sync is refused. If the owner has **one** connected account (the data runbook says
+one seller), B is cheap and removes the uncertainty; the cost is one seller's KYC. This is a business decision for the owner;
+I have not made it.
+
+### What to ask Stripe support (exact questions)
+
+Send from the account owner's dashboard (Help, then Contact support, topic Connect). Number them so the answers can be matched.
+
+1. Our platform (account ID acct_PLATFORM, owner's to fill) has connected accounts created with: direct charges business model,
+   losses collector Stripe, fees collector account, dashboard Full, Stripe-hosted onboarding. We are moving to **separate charges
+   and transfers** in which the platform owns the charge. Is this supported for connected accounts with a **Full dashboard**? Please
+   confirm in writing.
+2. Can the platform create a **transfer** to a Full-dashboard connected account? Does the account need the `transfers`
+   capability, and can the platform request it on an existing account? What does Stripe do if the capability is inactive?
+3. Can the platform **update `settings.payouts.schedule`** (for example to `manual`) or create **payouts** on a Full-dashboard
+   account? If not, which payout settings does the seller control?
+4. Can any **controller property** (dashboard, losses, fees, requirement collection) of an existing account be changed, by us,
+   by Stripe on request, or by the seller (for example by moving it to a platform-controlled setup)? If not, what is Stripe's
+   recommended path to a different configuration without losing history?
+5. The Connect setup screen shows an integration warning: "the platform currently creates destination charges". Which
+   charge model does Stripe treat as active for our platform (direct or destination), and does this setting affect how
+   **refunds, disputes and fees** work when we create separate charges? Can the warning be cleared?
+6. For **separate charges and transfers**, on a Full-dashboard account: who is the merchant of record on the customer's
+   statement, who is liable for **disputes** and **refunds**, and what does the seller see in their dashboard for a transferred
+   amount?
+7. Can **embedded onboarding** and **account management** components (account sessions) be used for a Full-dashboard account, and
+   for Stripe-hosted onboarding accounts that were already verified?
+8. Can a Full-dashboard seller **disconnect** from our platform in their dashboard, and what happens to their balance, pending
+   transfers and open disputes when they do?
+9. If we onboard a **new** account for an existing seller (same legal entity, same bank), will Stripe reuse their verification
+   or ask for everything again? Is there a supported way to link or migrate the verified identity?
+10. Is a **mixed** platform (some Full-dashboard accounts, some with no dashboard) supported, with the same webhook endpoints and the same
+    transfer code?
+11. Is there any limit on how many connected accounts a platform can have with each configuration, and any fee difference
+    (account fees versus platform fees) between them?
+12. For our account-level settings shared by v1 and v2 (statement descriptor, payout schedule, branding, API version), is
+    anything changed for the connected accounts when we change the platform's Connect settings or API version?
+
+Record each answer with the date and the support case id. Mark an answer UNVERIFIED until it is in writing.
+
+
+## Owner answers (2026-11-12) and what is still open
+
+Answered by the owner:
+
+| Topic | Answer | Effect on this plan |
+|---|---|---|
+| Capture mode | v1 charges **capture immediately** (no authorise-then-capture). | No lingering `requires_capture` PaymentIntents. The risk is removed; section 1 keeps a one-line check. |
+| Stripe Billing | v1 has **no subscriptions** and none are planned. | The subscription inventory and cancel steps are removed; a one-line check remains. |
+| Customer ids and saved cards | The owner **has the Stripe customer ids in the v1 databases and will migrate them**. | The mapping steps stay (section 5). |
+| Webhooks | The owner creates v2's endpoints **fresh**; v1's endpoints are **stopped and deleted at the freeze step, not before**. | Section 7 follows this. |
+| Sign-up gate | **None**: v1 sign-ups stay open until cutover; v2 is a full cutover, no invite-only beta. | Every v1 user migrates and signs in on v2 with no invite. Registrations on v1 are blocked at the freeze. The gate story (S355) is closed as not needed. |
+| AI spend | **2 US dollars a day** ceiling, cheapest model. | Readiness item and story S376 use that figure. |
+| MCP | The MCP server is **public, with authenticated tools**. | Readiness item and story S377 follow this. |
+| Sign-offs | Tax professional and counsel review are **handled internally by the owner**. | Marked OWNER internal and not blocking engineering. |
+| Live Stripe key | **Not requested.** | The owner reads the state in the dashboard (section 1). |
+
+Still open (needed from the owner, with the connected-account decision above):
 
 | # | Question | Why it matters |
 |---|---|---|
-| 1 | Who has **Stripe dashboard owner access**, and can you create a restricted read-only live key for the inventory? | Every inventory step needs it. |
-| 2 | v1's **live webhook endpoints**: URLs, event lists, API version, whether one is a Connect endpoint (export from Workbench or `stripe webhook_endpoints list`). | To switch them off in the right order and to know what v1 depends on. |
-| 3 | How v1 captures: **automatic capture or authorise-then-capture**? Any v1 PaymentIntent left in `requires_capture`? | v2 ignores PaymentIntents it did not create; an uncaptured v1 authorisation would lapse unseen after about 7 days. |
-| 4 | Does v1 use **Stripe Billing subscriptions** for the seller plan (`seller.seller_subscriptions`)? | v2 bills plan fees itself with PaymentIntents. A live v1 subscription would keep charging the seller. |
-| 5 | How the v1 connected account(s) were created: Standard, Express or Custom, or the newer `controller` settings (who bears losses, who collects requirements, which dashboard). | v2 creates its accounts with Stripe liable for negative balances, Stripe collecting verification and no Stripe dashboard for sellers. Existing accounts cannot be switched; v2's onboarding screens may not work for a different type. |
-| 6 | Where v1 keeps the **Stripe customer id** and saved card ids (the data runbook names `profile.user_profiles.stripe_customer_id` and `payment.saved_payment_methods`, marked to confirm), and whether guest checkouts created customers. | Decides whether saved cards carry across (section 5). |
-| 7 | The **current counts**: users, sellers (connected accounts), orders, open orders, saved cards. The data runbook says under 30 users, 1 seller, under 40 orders; it was written before today. | The plan scales down or up on these numbers. |
-| 8 | v1's **domains and DNS**: which hostnames serve v1 (apex, `www`, `auth`, `api`, seller), which DNS provider holds them, what the TTLs are, whether Cloudflare is already in front. | Section 9. |
-| 9 | Whether v1 customers have **refunds, returns or disputes open**, and the policy for refunding a v1 order after cutover (from Stripe by hand, or from v2). | Section 6. |
-| 10 | The **invite-only beta rule**: who may sign in on v2 on day one (all migrated v1 users, or only invited ones), and how an invite is issued. I found no customer sign-up gate in identity (only organisation team invitations), so this may not exist yet; a backlog story is open for it. | Migrated customers must be able to sign in, and strangers must not. |
-| 11 | The **freeze window** you can accept (hours, day of week) and who can approve a no-go. | Section 3. |
-| 12 | Statement descriptor, payout schedule, Connect branding and payment methods currently set on the Stripe account, and whether v2 should keep them. | They are account-level and shared by v1 and v2. |
+| 1 | The **number and real controller properties of every connected account** (read each account page; checklist in section 1) and which option (A, B, C) the owner chooses after the test. | The top risk. |
+| 2 | v1's **live webhook endpoints**: URL, events, API version, for the record before deletion at the freeze. | Recreating them on rollback (section 11). |
+| 3 | The **current counts**: users, sellers, orders, saved cards. The data runbook says under 30 users, 1 seller, under 40 orders; it predates today. | The plan scales on these numbers. |
+| 4 | v1's **domains and DNS**: which hostnames, which provider, TTLs, whether Cloudflare is in front. | Section 9. |
+| 5 | **Refunds, returns or disputes** open on v1, and the policy for refunding a v1 order after cutover. | Section 6. |
+| 6 | The **freeze window** you can accept and who approves a no-go. | Section 3. |
+| 7 | **Statement descriptor, payout schedule, Connect branding and payment methods** on the account, and whether v2 keeps them. | Shared by v1 and v2. |
+| 8 | Stripe's **answers to the support questions** above. | Proves or disproves option A. |
 
 ## Facts from v2's code that shape the plan
 
@@ -55,8 +228,8 @@ the data runbook (written from a local copy of v1's database) and from reading v
   the local Maven cache). Create v2's endpoints with that `api_version` so payloads match what the code parses, even if the
   account's default version (set by v1) is older. Confirm in the test-mode rehearsal that a delivered event is accepted.
 - **v2 ignores PaymentIntents it did not create** (`StripeEventHandlers.intent`: "not an AfroTransact order payment;
-  ignored"). So while both stacks listen to the same account, v2 will not touch v1 payments, but it also will **never
-  capture or cancel a v1 authorisation**. Anything v1 left uncaptured must be dealt with by hand before v1 stops (section 4).
+  ignored"). So while both stacks listen to the same account, v2 will not touch v1 payments. v1 captures immediately, so
+  there should be no v1 authorisation left to capture or cancel; section 1 keeps a one-line check.
 - **Capture is a staff action in v2 at launch.** The capture follow-up task is queued when a shipment first becomes
   picked up (or ready, for pickup orders), so a staff status change moves money (`ShipmentTransitions.enqueueFollowUps`).
   The cutover rehearsal and the go-live smoke test must include one.
@@ -68,12 +241,34 @@ the data runbook (written from a local copy of v1's database) and from reading v
   `payments.customer_payment_method`. `customer_id` is the identity user id as text. When a customer has no row, v2 creates a
   **new Stripe Customer** at first use (`WalletSync.ensureCustomer`), so unmapped users get a second customer and lose
   their saved cards.
-- **Seller plan fees** are v2's own PaymentIntents (metadata `purpose=plan_fee`), not Stripe Billing.
+- **Seller plan fees** are v2's own PaymentIntents (metadata `purpose=plan_fee`), not Stripe Billing. v1 has no Stripe Billing
+  subscriptions, so nothing needs cancelling.
 
 ## 1. Inventory v1 (T-14 to T-7 days, read-only)
 
 Record every result in a private sheet (not in the repository). Dates and counts are what the go/no-go checklist is
-measured against. All examples use a restricted read-only live key in `STRIPE_RO_KEY`.
+measured against. **No live key is requested**: the owner reads the dashboard.
+
+**What to look at in the Stripe dashboard (live mode), owner, about 30 minutes:**
+
+1. **Connect, Accounts:** how many connected accounts exist; for each, open its page and note the account type or dashboard
+   access (Full or none), who collects requirements, whether charges and payouts are enabled, any "restricted" banner or
+   requirements due, its balance and the next payout. This is the data for the top risk above and the section "keep or
+   re-onboard".
+2. **Connect, Settings (platform profile and integration warnings):** copy the text of the warning that says the platform creates
+   destination charges, and the business model, losses, fees, dashboard and onboarding settings shown.
+3. **Payments:** filter by status for anything **Uncaptured** (expect none, because v1 captures immediately), **Processing** or
+   **Requires action**, created in the last 30 days.
+4. **Developers, Webhooks:** every endpoint with its URL, the events it listens to, its API version, and whether it is for
+   your account or connected accounts. Mark which are v1's and which belong to anything else.
+5. **Balances, Payouts and Transfers:** platform available and pending balance; payouts pending or in transit; recent transfers
+   to connected accounts.
+6. **Customers:** the count, and whether each v1 user's customer id matches the v1 database; saved cards on a sample of five.
+7. **Disputes and Refunds:** anything open or recent.
+8. **Settings:** statement descriptor, payout schedule, Connect branding, payment methods enabled, API version default.
+9. **Subscriptions:** confirm none (v1 has no Stripe Billing).
+
+The CLI lines below are the same reads for someone who already holds a key (read-only, in `STRIPE_RO_KEY`).
 
 1. **Webhook endpoints** in the live account, with their event lists and API versions:
    `stripe webhook_endpoints list --api-key "$STRIPE_RO_KEY" --limit 100`. Note which are v1's and which are anything else
@@ -81,11 +276,11 @@ measured against. All examples use a restricted read-only live key in `STRIPE_RO
 2. **Connected accounts:** `stripe accounts list --api-key "$STRIPE_RO_KEY" --limit 100`. For each, retrieve it
    (`stripe accounts retrieve acct_XXXX --api-key "$STRIPE_RO_KEY"`) and record: `type`, the `controller` block, `charges_enabled`,
    `payouts_enabled`, `requirements.currently_due`, `requirements.disabled_reason`, `capabilities`, payout schedule, external
-   account (last four only). This answers owner question 5. Map each to the v1 seller row (`seller.sellers.stripe_account_id`).
+   account (last four only). This is the input to the connected-account decision. Map each to the v1 seller row (`seller.sellers.stripe_account_id`).
 3. **Open money, platform balance:**
    - `stripe payment_intents list --api-key "$STRIPE_RO_KEY" --limit 100` and filter for `status` in `requires_capture`,
-     `processing`, `requires_action`, `requires_payment_method` created in the last 30 days. Each `requires_capture` one is a
-     decision (capture or cancel) before the freeze ends.
+     `processing`, `requires_action`, `requires_payment_method` created in the last 30 days. One-line check: no
+     `requires_capture` should exist, because v1 captures immediately; if one does, capture or cancel it before the freeze ends.
    - `stripe balance retrieve --api-key "$STRIPE_RO_KEY"` (available, pending, and any reserve).
    - `stripe refunds list` for the last 30 days, `stripe disputes list` (any open dispute needs evidence from v1's data
      before v1 is archived).
@@ -96,17 +291,16 @@ measured against. All examples use a restricted read-only live key in `STRIPE_RO
 5. **Customers and saved cards:** count with `stripe customers list --limit 100` (page through) and, for each v1 user with a
    Stripe customer, `stripe payment_methods list --customer cus_XXXX --type card`. Reconcile against v1's own tables
    (`profile.user_profiles.stripe_customer_id`, `payment.saved_payment_methods`). The result is the mapping input for section 5.
-6. **Subscriptions and invoices (Stripe Billing):** `stripe subscriptions list --status active --limit 100`,
-   `stripe invoices list --status open`. Any active subscription is a cutover task (section 6).
+6. **Subscriptions (one-line check):** `stripe subscriptions list --status active --limit 100` returns nothing, as the owner
+   says v1 has no Stripe Billing.
 7. **Account settings:** statement descriptor, payout schedule, Connect branding, payment methods, Radar rules, tax settings,
    email receipt settings, API version default (Dashboard > Settings and Workbench). Screenshot or write them down; v2 inherits
    them.
 8. **Keys:** list which services and tools hold the live secret key (v1's own, bookkeeping tools). v2 gets a **new restricted
    or secret key** from the same account; rolling v1's key at the end is part of decommissioning (section 11).
-9. **A copy of v1's database** restored per the data runbook Part 2 (rehearsal copy), and the counts from owner question 7.
+9. **A copy of v1's database** restored per the data runbook Part 2 (rehearsal copy), and the current counts (open question 3).
 
-Exit criterion: a sheet with one row per connected account, one per open PaymentIntent, one per webhook endpoint, one per
-Billing subscription, and a customer-to-card mapping. Anything surprising (an account type v2 cannot onboard, an unexplained
+Exit criterion: a sheet with one row per connected account, one per open PaymentIntent, one per webhook endpoint, and a customer-to-card mapping. Anything surprising (an account type v2 cannot onboard, an unexplained
 endpoint) goes to the owner before section 2.
 
 ## 2. Test-mode rehearsal (T-10 to T-3 days)
@@ -174,13 +368,11 @@ inside it. Between T-1 day and the end of the window, no other production change
 
 ## 4. Close out v1's money (inside the freeze, before any switch)
 
-1. For every v1 PaymentIntent in `requires_capture` from the inventory: capture it (the order shipped) or cancel it (it did
-   not). Re-list to confirm none remain. v2 will not do this for them.
+1. One-line check: list v1 PaymentIntents in `requires_capture`; there should be none (v1 captures immediately). If one exists,
+   capture or cancel it now. Re-list to confirm none remain.
 2. Let `processing` PaymentIntents (bank debits) settle, or record them as "arrives after cutover, handled by hand". They
    will emit events that v1 no longer receives and v2 ignores; reconcile them in the Stripe dashboard.
-3. Cancel v1's active Stripe Billing subscriptions **if** inventory step 6 found any, after the owner decides on proration:
-   `stripe subscriptions cancel sub_XXXX`. v2 bills the plan itself; leaving the subscription live double-charges the seller.
-   Note which seller customers and payment methods v2's plan billing should reuse (question 4) and set them up in v2.
+3. Billing: v1 has no Stripe subscriptions, so there is nothing to cancel. One-line check: the subscription list is empty.
 4. Note the balances: platform available and pending, and each connected account's pending payouts. Record in the sheet.
    Do not change payout schedules during the window.
 5. Take the **final v1 database dump** (data runbook 2.2, encrypted) after v1 has stopped writing. This is the migration source
@@ -194,9 +386,9 @@ Follow the data runbook Parts 3 to 5 against production v2, with these Stripe sp
 |---|---|---|---|
 | Users, passwords | Keycloak `user_entity`, `credential` | identity `user_account` | `tools/migrate/keycloak_to_identity.py report`, then `sql` (read it), then `apply`. The Keycloak user id carries over and becomes the token `sub`, which is the `customer_id` everywhere. |
 | The seller organisation | `seller.sellers`, `stores` | seller `organisation`, `org_member`, business page, ship-from | By hand in the back office. |
-| Connected account (seller side) | `seller.sellers.stripe_account_id` | `seller.connect_account.account_id` linked to the org | Copy the `acct_` id exactly from the inventory, never retype. Then fetch current status from Stripe (the first `account.updated` or the compliance sync refreshes it) and confirm `charges_enabled`/`payouts_enabled` match the Stripe dashboard. |
+| Connected account (seller side), **only after the keep or re-onboard decision** | `seller.sellers.stripe_account_id` | `seller.connect_account.account_id` linked to the org | Copy the `acct_` id exactly from the inventory, never retype. Then fetch current status from Stripe (the first `account.updated` or the compliance sync refreshes it) and confirm `charges_enabled`/`payouts_enabled` match the Stripe dashboard. |
 | Connected account (payments side) | same | `payments.connected_account(org_id, stripe_account_id)` | Run the payments sync (`POST /v1/compliance/payments-sync`) or `PUT /v1/connected-accounts/{orgId}`. Check by `GET /v1/connected-accounts/{orgId}`. Without this a payout transfer has nowhere to go. |
-| Stripe customer | v1 `stripe_customer_id` (to confirm, question 6) | `payments.stripe_customer(customer_id = identity user id, stripe_customer_id, default_payment_method_id)` | Import one row per user who has a Stripe customer **before** that user's first v2 sign-in. Otherwise v2 creates a duplicate Stripe Customer at first checkout. A short SQL insert, read in full. |
+| Stripe customer | v1 `stripe_customer_id` (to confirm, question 6) | `payments.stripe_customer(customer_id = identity user id, stripe_customer_id, default_payment_method_id)` | The owner has the customer ids in the v1 databases and migrates them: import one row per user who has a Stripe customer **before** that user's first v2 sign-in, otherwise v2 creates a duplicate Stripe Customer at first checkout. A short SQL insert, read in full; check ten rows against the Stripe dashboard. |
 | Saved cards | `payment.saved_payment_methods` and Stripe | `payments.customer_payment_method(id = pm_ id, customer_id, type, brand, last4, exp_month, exp_year, verified)` | Import from the inventory (Stripe is the truth for brand, last4, expiry). Fallback with less risk at this size: do not import cards and tell customers to add a card once; the old customers stay in Stripe unused. Decide in the go/no-go. |
 | Order and payment history | v1 `orders.*`, `payment.*` | `customer_order`, `order_line`, `shipment`, `payments.payment`, refunds, transfers | The reviewed one-off SQL script (data runbook Part 4). Imported payments keep `stripe_payment_intent_id`. |
 | Webhooks | v1 endpoints | v2 endpoints 1 to 3 | Section 7. |
@@ -223,8 +415,10 @@ customer's saved card shows for a mapped user.
 
 ## 7. Webhook endpoint change (the order that avoids double handling)
 
-Both stacks are the same Stripe account, so both receive the same events as long as both endpoints are enabled. v1 and v2
-must not both act on an event. The safe way is to create v2's endpoints early **disabled**, then swap inside the freeze.
+Both stacks are the same Stripe account, so both receive the same events as long as both endpoints exist. v1 and v2
+must not both act on an event. The owner creates v2's endpoints **fresh** (new URLs, new secrets) and **stops and deletes v1's
+endpoints at the freeze step, not before**. Creating v2's endpoints early **disabled** and enabling them after the data load
+keeps v2 quiet until it is ready.
 
 1. **T-3 days** (before the freeze): create v2's three **live** endpoints with the API version above and **disabled**
    (`-d disabled=true` on create or update). Put the three new secrets in the production secret store as
@@ -240,13 +434,15 @@ must not both act on an event. The safe way is to create v2's endpoints early **
 
    Disabled endpoints get no events, so v2 sees nothing yet. Confirm the three URLs answer `400` unsigned
    (`stripe-webhooks.md` section 2); a signed test cannot be sent to a disabled endpoint, so the first proof is step 4.
-2. **At T-0, after section 4:** disable v1's endpoints (`stripe webhook_endpoints update we_V1XXXX -d disabled=true`). Do
-   **not delete them**: they are the rollback. Anything not v1's stays enabled.
+2. **At T-0 (the freeze step), after section 4:** first copy each v1 endpoint's URL, event list, API version and Connect flag
+   into the sheet, then stop and delete v1's endpoints (`stripe webhook_endpoints delete we_V1XXXX`, or the dashboard).
+   **Not before the freeze**: v1 is still serving customers until then. Anything not v1's stays enabled. Deleting removes the
+   rollback shortcut, so the sheet is how v1's endpoints are recreated (section 11).
 3. **After the data load and verification (section 5):** enable v2's three endpoints (`-d disabled=false`).
 4. **Prove them:** in Workbench use **Send test event** on each endpoint and expect `2xx`. Then make one real small payment and
    a refund (go-live smoke, section 8) and confirm the event was delivered and applied (payments `stripe_event` row, order
    status). Stripe's dashboard shows each delivery and the response code.
-5. **Events lost during the gap:** between disabling v1 and enabling v2 nothing is delivered. After enabling, list the events
+5. **Events lost during the gap:** between deleting v1's endpoints and enabling v2's nothing is delivered. After enabling, list the events
    of that window (`stripe events list -d "created[gte]"=<T-0 epoch>`) and re-deliver any that matter from Workbench (the
    event's "Resend" action for that endpoint). Payments are idempotent by event id, so a resend is safe.
 6. Keep payments **reconciliation** (staff console, Payouts & ledger) as the safety net; run it manually at T+1 h and daily.
@@ -272,7 +468,7 @@ If any step fails, go to section 11 (rollback) rather than fixing live.
 
 ## 9. DNS switch
 
-Hostnames, provider and TTLs are owner question 8. The shape, following [cloudflare-setup.md](cloudflare-setup.md) and the
+Hostnames, provider and TTLs are open question 4. The shape, following [cloudflare-setup.md](cloudflare-setup.md) and the
 "Storefront host rule" in the readiness checklist:
 
 - Before the window: v2's Workers routes (`www.afrotransact.com/*` for the storefront, seller and admin hosts) exist but are
@@ -291,7 +487,7 @@ Hostnames, provider and TTLs are owner question 8. The shape, following [cloudfl
 
 | When | To | Content |
 |---|---|---|
-| T-7 days | Customers (v1 email list), sellers | A new AfroTransact is coming on DATE. Same email and password; old orders are kept; you may be asked to add a card again; the beta is invite-only, here is your invite. |
+| T-7 days | Customers (v1 email list), sellers | A new AfroTransact is coming on DATE. Same email and password; old orders are kept; you may be asked to add a card again. |
 | T-48 h | Same, plus staff | The freeze window in the customer's time zone; no orders during it; who to contact. |
 | T-0 | Status banner on v1, staff channel | "We are upgrading. Back by TIME." |
 | After section 8 | Staff channel | Go or no-go with the reason. |
@@ -309,11 +505,11 @@ money that v1 does not know about.
 **Before the point of no return (v1 still has all data):**
 
 1. Disable v2's three webhook endpoints (`-d disabled=true`).
-2. Re-enable v1's endpoints (`-d disabled=false`) and resend any events from the gap (section 7 step 5).
+2. Recreate v1's webhook endpoints from the sheet (URL, events, API version). They are new endpoints with **new signing
+   secrets**, so put the new secrets into v1's configuration and restart v1 before taking it out of maintenance. Re-deliver
+   any events from the gap (section 7 step 5).
 3. Put DNS and Worker routes back (section 9); take v1 out of maintenance mode.
-4. If you cancelled v1 Billing subscriptions (section 4 step 3), recreate them or invoice by hand; note this cannot be
-   undone silently and is the one irreversible Stripe change before the point of no return, so cancel them **last** in section 4
-   if the owner prefers.
+4. If a seller was re-onboarded (option B), the old account is untouched and still the one v1 knows; nothing to undo.
 5. Any v1 PaymentIntent you captured or cancelled in section 4 stays so; this was real state.
 6. Truncate v2's imported data and re-run the rehearsal; tell customers in the status banner and by email.
 
@@ -321,8 +517,8 @@ money that v1 does not know about.
 redeploy the previous image tag. Staff can refund any v2 order from the Stripe dashboard if a service is down. Money is
 never lost: Stripe is the ledger; the reconciliation screen lists any payment v2 and Stripe disagree on.
 
-**Decommissioning v1 (T+30 days, after sign-off):** keep v1 stopped and restorable for 30 days; then delete v1's webhook
-endpoints in Stripe, **roll v1's Stripe secret key** (or revoke the restricted keys v1 held), remove v1's DNS leftovers, delete
+**Decommissioning v1 (T+30 days, after sign-off):** keep v1 stopped and restorable for 30 days; then (v1's webhook endpoints were already
+deleted at the freeze) **roll v1's Stripe secret key** (or revoke the restricted keys v1 held), remove v1's DNS leftovers, delete
 the database copy and the dump (keep the `ledger.*` finance archive), and shut down the v1 cluster. Record the date.
 
 ## 12. Go/no-go checklist
@@ -330,20 +526,20 @@ the database copy and the dump (keep the `ledger.*` finance archive), and shut d
 Tick every line; any "no" on a **blocker** is a no-go. Owner decides; an engineer reads the evidence out.
 
 Inventory and rehearsal
-- [ ] **blocker** Stripe inventory sheet complete (section 1) and every open `requires_capture` PaymentIntent has a decision.
-- [ ] **blocker** Owner questions 1 to 11 answered.
+- [ ] **blocker** Stripe inventory sheet complete (section 1) from the dashboard; one-line check shows no `requires_capture`.
+- [ ] **blocker** Connected accounts: keep, re-onboard or hybrid **decided**, the test-mode option A run recorded, and Stripe's written answers filed (top risk).
+- [ ] **blocker** Open owner questions answered.
 - [ ] **blocker** Test-mode rehearsal done within 14 days of the cutover and after the release being deployed: onboarding,
   authorise, staff pickup capture, cancel, refund, saved card, dispute, settlement and payout, event replay (section 2).
 - [ ] **blocker** Data rehearsal on a restored v1 copy: counts equal, totals equal, every order read, five sign-ins done.
 - [ ] Freeze minutes measured; window set with 50 percent margin.
 
 Stripe
-- [ ] **blocker** v2 live endpoints exist (disabled) with the SDK API version and three distinct secrets in the secret store.
-- [ ] **blocker** v1 endpoint list recorded; the ones to disable identified; nothing else depends on them.
+- [ ] **blocker** v2 live endpoints created fresh (disabled until the data load) with the SDK API version and three distinct secrets in the secret store.
+- [ ] **blocker** v1 endpoint list (URL, events, API version) recorded in the sheet before deletion at the freeze; nothing else depends on them.
 - [ ] **blocker** Every connected account maps to a v2 org and has a `payments.connected_account` row; types are compatible
-  with v2 onboarding (owner question 5).
-- [ ] **blocker** Customer mapping decided and loaded (or "re-add card" chosen and support briefed).
-- [ ] Billing subscriptions found and a cancel/keep decision made.
+  with v2's flows (charge, transfer, refund with reversal, health sync) or have been re-onboarded.
+- [ ] **blocker** Customer ids and saved cards migrated by the owner and ten rows checked against Stripe.
 - [ ] Live key for v2 is a new key; platform account branding, descriptor and payout schedule reviewed.
 
 Platform
@@ -351,8 +547,8 @@ Platform
   no mocks, secrets from the store, CI security workflow green, backup **and a restore drill** done.
 - [ ] **blocker** Staff trained on the pickup step (it captures money) and on the confirmation and reason it asks for.
 - [ ] Resend domain verified (SPF, DKIM, DMARC); a test email arrives.
-- [ ] Legal documents published and reviewed by counsel; terms acceptance on first sign-in works.
-- [ ] Invite-only rule decided and working (owner question 10).
+- [ ] Legal documents published after the owner's internal counsel review; terms acceptance on first sign-in works.
+- [ ] Every v1 user can sign in on v2 with no invite (no sign-up gate); v1 registrations blocked at the freeze.
 - [ ] Maintenance mode tested; rollback steps rehearsed once with a stopwatch.
 - [ ] DNS zone exported; TTLs lowered 48 h ago; certificates valid for every new host.
 

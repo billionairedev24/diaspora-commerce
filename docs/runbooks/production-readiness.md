@@ -6,12 +6,13 @@ and tick. Anything marked **blocker** must be done before launch.
 Updated 2026-11-12 to the launch decisions: v1 is replaced by v2 on the **same Stripe account** (plan:
 [v1-to-v2-cutover.md](v1-to-v2-cutover.md)); OVH Managed Kubernetes with Layerbase Postgres; the web apps on Cloudflare
 Workers; images on R2; Resend for email; staff run fulfilment and update order statuses by hand; trust-ops, ai-gateway and
-mcp-server on; OpenFGA off; no native apps (installable web app only); invite-only beta.
+mcp-server on; OpenFGA off; no native apps (installable web app only); **full cutover, no invite-only beta** (v1 sign-ups stay open until the freeze,
+and every v1 user moves to v2).
 
 **Who** (first tag on each line)
 - `OWNER`: a decision, an account, a signature or a payment only the business owner can give.
 - `ENGINEERING`: work or verification in this repository or on the cluster.
-- `VENDOR`: waits on an outside provider (Stripe, OVH, Layerbase, Cloudflare, Resend, OpenRouter, counsel's firm, an accountant).
+- `VENDOR`: waits on an outside provider (Stripe, OVH, Layerbase, Cloudflare, Resend, OpenRouter, counsel's firm, an accountant). `OWNER/internal` means the owner handles it inside the business (tax professional, counsel); it does not block engineering work.
 
 **Status** (second tag): `Open` (not started), `In progress`, `Blocked: <on what>`, `Checked in code` (read in the source on
 2026-11-12; says nothing about the live system), `Done` (checked on the live system, with date and name written on the line).
@@ -25,8 +26,29 @@ run-announcement approval as a launch step (it stays off, see section 7); push n
 Grafana Cloud as the assumed monitoring stack.
 Added: admin status audit and confirmation, authorisation expiry of manual capture, Stripe fee on post-capture refunds,
 Texas tax professional sign-off, counsel review of legal documents, Resend DNS, R2 bucket visibility (public images versus
-private KYC), ai-gateway spend cap, MCP exposure, same-account Stripe cutover, the invite-only gate, PWA, Layerbase and OVH
+private KYC), ai-gateway spend cap, MCP exposure, same-account Stripe cutover, the existing connected accounts risk, PWA, Layerbase and OVH
 specifics, a restore drill.
+
+## Top risk: existing connected accounts differ from v2's
+
+- [ ] **blocker** `OWNER · Open` **Existing connected accounts: keep or re-onboard.** The owner's Stripe Connect Platform setup screen
+  shows v1's connected accounts were created with the direct charges business model, losses collector Stripe, fees collector the
+  account, dashboard **Full** (the seller's own Stripe dashboard) and Stripe-hosted onboarding, and Stripe shows an integration
+  warning that the platform currently creates destination charges. v2 (`StripeConnectAdapter.createAccount`, lines 39 to 66)
+  creates accounts with fees payer ACCOUNT, losses STRIPE, requirement collection STRIPE, Stripe dashboard **NONE**, capabilities
+  `card_payments` and `transfers`, a platform-set manual payout schedule, and uses separate charges and transfers (the platform owns
+  the charge, refunds and disputes). Controller properties of an existing account cannot be changed (UNVERIFIED), so v1's accounts
+  keep a Full dashboard. UNVERIFIED consequences: the platform may be unable to set the payout schedule or request `transfers` on
+  them; sellers keep their own dashboard and can change payout settings or disconnect; v2's embedded onboarding may not accept them.
+  Evidence is the owner's screen, not an account read: the real type of each account is still to be read from its page. Options A
+  (keep and test in Stripe test mode), B (re-onboard sellers to v2-style accounts) and C (hybrid), the test list and the exact
+  questions for Stripe support are in [v1-to-v2-cutover.md](v1-to-v2-cutover.md), "Existing connected accounts: keep or
+  re-onboard". Nothing else in the cutover starts until this is decided.
+- [ ] **blocker** `VENDOR · Open` Stripe support's written answers to the question list in the cutover runbook (Full dashboard with separate
+  charges and transfers, transfers capability, payout schedule, controller changes, the destination-charge warning), with the case id.
+- [ ] **blocker** `ENGINEERING · Open` Option A test run in Stripe **test mode** against an account created like v1's (full dashboard): separate charge, transfer,
+  refund with reversal, payout-schedule update, capability request, embedded onboarding, deauthorisation event; results recorded.
+  Backlog story S379 (the test) and, if a flow is refused, S378 (tolerate both account shapes).
 
 ## 1. Environment and configuration
 
@@ -62,8 +84,8 @@ specifics, a restore drill.
   you source in are entered (Settings → Exchange rates).
 - [ ] **blocker** `OWNER · Open` v1 data migrated and verified: users and passwords, the seller, order history ([data runbook](afrotransact-v1-to-v2-migration.md)),
   with answers to the open questions in [v1-to-v2-cutover.md](v1-to-v2-cutover.md).
-- [ ] `ENGINEERING · Open` Invite-only beta gate: only invited people (and migrated v1 users) can create or use an account. No customer
-  sign-up gate was found in identity (only organisation team invitations); backlog story S355.
+- [ ] **blocker** `ENGINEERING · Open` Every migrated v1 user can sign in on v2 with no invite: there is **no sign-up gate** (v1 sign-ups stay open until the
+  freeze; v1 registrations are blocked from the freeze; v2 sign-up is open from the switch). Story S355 is closed as not needed.
 
 ## 3. Secrets and identity
 
@@ -96,28 +118,33 @@ specifics, a restore drill.
     together with the edge change, then verify a sign-in on `www`, a passkey sign-in (RP id stays `afrotransact.com`) and a sign-out round trip.
   - HSTS preload: the zone setting is `max-age` 1 year, `includeSubDomains` and, once `hsts_preload = true` is applied (`infra/cloudflare/envs/prod.tfvars`; it is `false` today), `preload`, so one submission of `afrotransact.com` at
     hstspreload.org covers `www` and every sub-domain. Submit it only when every sub-domain (including `mail.`, `developers.`, `grafana.`) is HTTPS-only;
-    removal from the preload list takes months. Leave it off through the beta.
-  - Search engines: the beta is invite-only; set `noindex` (or keep it behind sign-in) until launch, then canonical URLs are `https://www.afrotransact.com/...`
-    (storefront `metadataBase` from `PUBLIC_WEB_URL`) and a Search Console property is added.
+    removal from the preload list takes months. Leave it off until every sub-domain is confirmed HTTPS-only.
+  - Search engines: canonical URLs are `https://www.afrotransact.com/...` (storefront `metadataBase` from `PUBLIC_WEB_URL`), a Search Console property
+    is added, and old v1 URLs are covered by redirects where they differ.
 - [ ] `ENGINEERING · Open` CORS and cookies (`Secure`, `HttpOnly`, `SameSite`) checked on the three web apps.
 - [ ] `ENGINEERING · Open` Security headers and CSP (`docs/engineering/security-headers.md`): identity serves its enforced CSP (check `curl -sI https://auth.<base>/login | grep -i content-security` and a full sign-in in Chrome and Firefox); each web app has run `CSP_MODE=report-only` in uat for 7 days with every `csp.violation` pair fixed, allowed or dismissed, then `CSP_MODE=enforce` in uat for 2 days; prod ran 7 days report-only, then `enforce` set in `web/apps/*/wrangler.jsonc` `env.prod.vars` (date: ____); HSTS 1 y + `includeSubDomains` at the edge (`curl -sI https://www.<base> | grep -i strict-transport`), preload still off; runbook `docs/runbooks/csp-violations-spike.md`.
 - [ ] `ENGINEERING · Open` Rate limits and the WAF ruleset are on for sign-in, checkout and the public APIs.
 - [ ] `OWNER · Open` Penetration test or an equivalent review done for sign-in, payments, uploads and the staff console.
-- [ ] **blocker** `ENGINEERING · Open` **MCP exposure** decided and limited. mcp-server is on: `POST /mcp`, OAuth 2.1 bearer tokens from identity, tool
-  lists filtered by scope and permission, a global rate limit (30 burst, 30 per minute in prod) and a durable audit of every call
-  (`java/services/mcp-server/README.md`). Before launch: (a) the owner decides whether the endpoint is public at all or limited
-  to staff and named partner clients during the beta (`OWNER · Open`); (b) the edge route and WAF rules match that decision; (c) the
-  public OAuth client's redirect URIs are exactly the allowed MCP clients; (d) staff tools and tools that change data are off or need
-  an explicit scope for beta users; (e) Valkey is reachable (the rate limit fails open to a per-pod bucket otherwise, so decide
-  whether `MCP_RATE_FAILURE_MODE=closed` is wanted); (f) the `mcp.tool.invoked` audit events reach Kafka and are read by someone.
+- [ ] **blocker** `ENGINEERING · Open` **MCP exposure.** Owner decision: the MCP server is **public with authenticated tools** (OAuth 2.1 bearer tokens from
+  identity, tool lists filtered by scope and permission, a global rate limit of 30 burst and 30 per minute in prod, a durable audit
+  of every call: `java/services/mcp-server/README.md`). Before launch: (a) the public edge route and WAF rules cover `POST /mcp` and the
+  `/.well-known/oauth-protected-resource` document, with unauthenticated calls getting `401`; (b) the OAuth client's redirect URIs
+  are the allowed MCP clients only; (c) **no tool works without a token**, staff tools need a staff principal, and tools that
+  change data need an explicit scope: test with a no-scope token (`-32003`) and a seller token against another seller's data;
+  (d) Valkey is reachable (the rate limit fails open to a per-pod bucket otherwise; decide on `MCP_RATE_FAILURE_MODE=closed`);
+  (e) `mcp.tool.invoked` audit events reach Kafka and someone reads them; (f) tool descriptions and errors leak no internal
+  detail. Story S377.
 - [ ] `OWNER · Open` PWA: the three web apps install to the home screen (manifest, icons, service worker, offline page), and the install
   instructions for iPhone and Android are on the sign-in help page. No native apps ship at launch. Backlog story S373.
 
 ## 5. Payments and money
 
 - [ ] **blocker** `OWNER · Open` Stripe cutover on the **same account** done per [v1-to-v2-cutover.md](v1-to-v2-cutover.md): inventory, test-mode rehearsal, freeze
-  window, three **new** v2 webhook endpoints (payments, seller Connect, seller plan fees) with the SDK API version and separate secrets,
-  v1's endpoints disabled and kept for 30 days, connected accounts and customers mapped, v1 `requires_capture` PaymentIntents resolved.
+  window, three v2 webhook endpoints (payments, seller Connect, seller plan fees) created fresh by the owner with the SDK API version and
+  separate secrets, v1's endpoints stopped and deleted at the freeze step (not before; their URLs and events are written down
+  first), the connected-account decision above applied, customer ids and saved cards migrated by the owner. v1 captures immediately,
+  so no authorised-but-uncaptured v1 PaymentIntents are expected; keep a one-line check that none exist. v1 has no Stripe Billing
+  subscriptions.
 - [ ] **blocker** `ENGINEERING · Open` Stripe is in **live** mode with live keys and the live webhook secrets; each endpoint verified with **Send test event** (`2xx`);
   Connect settings, payout schedule and the platform's branding reviewed; connected accounts created by v1 are compatible with
   v2's onboarding (account type and who collects verification).
@@ -157,7 +184,7 @@ specifics, a restore drill.
 ## 6. Tax
 
 - [ ] **blocker** `OWNER · Open` Sales tax method chosen (our own rules or Stripe Tax) and rates loaded for every state you ship to.
-- [ ] **blocker** `OWNER · Blocked: tax professional` **Texas tax professional sign-off before `taxReview.mode` is changed from `ALL` to `RISK_BASED`.** At launch every variant's tax classification
+- [ ] `OWNER/internal · Open` **Texas tax professional sign-off (handled internally by the owner, not blocking engineering) before `taxReview.mode` is changed from `ALL` to `RISK_BASED`.** At launch every variant's tax classification
   waits for a reviewer (`ALL`, the default). `RISK_BASED` lets the system approve a variant when its category is active and the rules resolve,
   with a 5 percent audit sample (`docs/runbooks/tax-provider-cutover.md`). Do not switch until a Texas tax professional has agreed in writing
   to the classification rules and the sample rate; record the reference in the change reason, and do not change it in the same window as the
@@ -209,7 +236,7 @@ specifics, a restore drill.
 
 ## 10. Legal, support and launch
 
-- [ ] **blocker** `OWNER · Blocked: counsel` **Counsel review** of every document in `docs/legal`, with each `[[LEGAL: ...]]` placeholder filled (entity, address, governing law, arbitration,
+- [ ] **blocker** `OWNER/internal · Open` **Counsel review** (handled internally by the owner, not blocking engineering) of every document in `docs/legal`, with each `[[LEGAL: ...]]` placeholder filled (entity, address, governing law, arbitration,
   liability caps, DMCA agent, state rules), before they are published. Terms, privacy notice, cookie banner and marketplace-facilitator
   tax disclosures are published and accurate. Translations follow the approved English.
 - [ ] `OWNER · Open` Provider terms (Stripe, Resend, OpenRouter, Cloudflare, OVH, Layerbase, Google) are read and the matrices in `docs/legal` confirmed.
@@ -218,12 +245,14 @@ specifics, a restore drill.
   account-level privacy / zero-data-retention (ZDR) policy; restrict the allowed providers to those that do not train on
   prompts. Check that `AI_PROVIDER_DATA_COLLECTION` is `deny` (or unset) and `AI_PROVIDER_ZDR` is `true` on ai-gateway in prod. Record the date and who checked:
   ______ (date), ______ (name), re-check every quarter and whenever a model id in `at.ai.routes` changes.
-- [ ] **blocker** `OWNER · Open` **ai-gateway spend cap.** The gateway has per-user and per-feature daily budgets in configuration (`at.ai.budgets` in
-  `java/services/ai-gateway/src/main/resources/application.yml`), but the shipped feature caps add up to roughly 1,200 US dollars a day, far above
-  a beta. Before launch: (a) set a monthly credit limit on the OpenRouter account and a limit on the key used by prod (`VENDOR`: OpenRouter
-  settings), so spend cannot exceed it whatever the code does; (b) `ENGINEERING`: lower the per-feature daily caps in the prod profile to the
-  agreed number, and keep `degrade-on-exceed` on; (c) an alert fires at 50 and 80 percent of the monthly cap; (d) the owner names who gets it.
-- [ ] **blocker** `OWNER · Open` Data processing agreements are signed with OpenRouter and with each model provider we route to (for example
+- [ ] **blocker** `OWNER · Open` **ai-gateway spend cap: 2 US dollars a day, cheapest model** (owner decision). The gateway has per-user and per-feature daily budgets
+  in configuration (`at.ai.budgets` in `java/services/ai-gateway/src/main/resources/application.yml`); I found no single global daily cap, and the
+  shipped feature caps add up to roughly 1,200 US dollars a day. Before launch: (a) `ENGINEERING`: set the prod per-feature caps so they **sum to at
+  most 2 US dollars**, route every task to the cheapest capable model, keep `degrade-on-exceed` on, or add a global daily cap of 2 (story S376);
+  (b) `VENDOR`: set the OpenRouter account credit limit and the prod key's limit to match (for example 60 US dollars a month) so spend cannot exceed
+  it whatever the code does; (c) an alert fires at 50 and 80 percent of the day's cap; (d) the owner names who gets it. Test: exceed the cap in a
+  test and see the degrade then `429 ai.budget-exceeded`.
+- [ ] **blocker** `OWNER/internal · Open` Data processing agreements are signed with OpenRouter and with each model provider we route to (for example
   Google and OpenAI) if we process EU or UK personal data; the signed copies are filed and the subprocessor list is current.
 - [ ] `OWNER · Open` Support inbox, customer support console and escalation contacts are staffed for launch week.
 - [ ] `ENGINEERING · Open` Staff console can approve or reject an IN_REVIEW product and decide a seller application (checked in code, no trust-ops needed for
