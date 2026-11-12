@@ -53,6 +53,10 @@ tags:
   description: Who changed which content, when
 - name: Site config
   description: Social links, contacts, app links, locales and legal versions — no deployments
+- name: Home settings
+  description: Thresholds, caps, variety settings and labels of the dynamic home (staff, audited)
+- name: Community registry
+  description: Canonical community keys, aliases, five-locale labels and optional editorial images
 - name: Placement delivery
   description: Public, cacheable placements for storefront, apps and the CDN
 paths:
@@ -1006,6 +1010,148 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/HelpArticleAdmin'
+  /v1/home-settings:
+    get:
+      tags:
+      - Home settings
+      summary: Effective home module settings (defaults merged with the stored version)
+      description: Public read for the gateway (ETag, short cache). With no stored row the documented defaults are returned
+        with version 0. Staff edit with PUT (content:home.edit).
+      operationId: homeSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeSettings'
+      security: []
+    put:
+      tags:
+      - Home settings
+      summary: Save a new version (content:home.edit). A reason is mandatory; the change is audit-logged
+      description: 'Validation (RFC 9457 problem 422): thresholds are zero or more, weight 0 to 100, share and caps are
+        positive, module keys must be known, `dynamic` is off, shadow, on or null. A stale expectedVersion returns 409.'
+      operationId: saveHomeSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveHomeSettingsRequest'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeSettings'
+        '409':
+          description: Stale expectedVersion
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: Invalid value or missing reason
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /v1/home-settings/versions:
+    get:
+      tags:
+      - Home settings
+      summary: Version history with who, when, reason and the changed fields (content:home.view)
+      operationId: homeSettingsVersions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HomeSettingsVersion'
+  /v1/home-settings/revert:
+    post:
+      tags:
+      - Home settings
+      summary: Make an earlier version current again as a new version (content:home.edit); reason mandatory
+      operationId: revertHomeSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toVersion, reason]
+              properties:
+                toVersion: {type: integer, minimum: 1}
+                reason: {type: string, minLength: 3, maxLength: 300}
+      responses:
+        '200':
+          description: Reverted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeSettings'
+  /v1/community-registry:
+    get:
+      tags:
+      - Community registry
+      summary: Registered communities (public read; canonical key, aliases, five-locale labels, optional editorial image)
+      description: A product's free-text community value is matched case-insensitively against `key`, `aliases` and the English
+        label; the match is the canonical community. Values with no entry use the value itself, lower-cased, as the key.
+      operationId: communityRegistry
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommunityEntry'
+      security: []
+  /v1/community-registry/{key}:
+    put:
+      tags:
+      - Community registry
+      summary: Create or replace an entry (content:home.edit); reason mandatory, audit-logged
+      operationId: putCommunity
+      parameters:
+      - {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 60}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [labels, reason]
+              properties:
+                labels: {$ref: '#/components/schemas/LocaleLabels'}
+                aliases: {type: array, maxItems: 20, items: {type: string, maxLength: 60}}
+                imageUrl: {type: [string, 'null'], maxLength: 500, pattern: '^https://', description: Optional editorial image; used only when it passes the real-photo check}
+                reason: {type: string, minLength: 3, maxLength: 300}
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityEntry'
+    delete:
+      tags:
+      - Community registry
+      summary: Remove an entry (content:home.edit); the community then uses its raw value
+      operationId: deleteCommunity
+      parameters:
+      - {name: key, in: path, required: true, schema: {type: string}}
+      - {name: reason, in: query, required: true, schema: {type: string, minLength: 3, maxLength: 300}}
+      responses:
+        '204':
+          description: Removed
   /v1/legal:
     get:
       tags:
@@ -1931,6 +2077,14 @@ paths:
         required: false
         schema:
           type: string
+      - name: at
+        in: query
+        description: 'As-of instant (RFC 3339) for staff previews (S430): placements whose window contains it, instead of now.
+          Such responses are never cached.'
+        required: false
+        schema:
+          type: string
+          format: date-time
       - name: seen
         in: query
         description: 'Impressions per placement: plc_a:2,plc_b:1'
@@ -2247,6 +2401,88 @@ paths:
                   $ref: '#/components/schemas/Slot'
 components:
   schemas:
+    LocaleLabels:
+      type: object
+      required: [en]
+      properties:
+        en: {type: string, minLength: 1, maxLength: 80}
+        fr: {type: string, maxLength: 80}
+        es: {type: string, maxLength: 80}
+        ar: {type: string, maxLength: 80}
+        yo: {type: string, maxLength: 80}
+    CommunityEntry:
+      type: object
+      required: [key, labels, aliases, updatedAt]
+      properties:
+        key: {type: string}
+        labels: {$ref: '#/components/schemas/LocaleLabels'}
+        aliases: {type: array, items: {type: string}}
+        imageUrl: {type: [string, 'null']}
+        updatedAt: {type: string, format: date-time}
+    HomeModuleRule:
+      type: object
+      description: 'One staff-editable module row (home.modules.<key>). Zero means no requirement. Defaults equal DefaultHomeRules in the gateway.'
+      properties:
+        enabled: {type: boolean}
+        minProducts: {type: integer, minimum: 0, maximum: 100000}
+        minSellers: {type: integer, minimum: 0, maximum: 10000}
+        minUnits: {type: integer, minimum: 0, maximum: 50, description: Departments or communities the module needs}
+        unitMinProducts: {type: integer, minimum: 0, maximum: 100000, description: A department or community counts only with this many eligible products}
+        unitMinSellers: {type: integer, minimum: 0, maximum: 10000}
+        maxAgeDays: {type: integer, minimum: 0, maximum: 3650}
+        weight: {type: integer, minimum: 0, maximum: 100, description: Order inside the module's band, higher first}
+        show: {type: integer, minimum: 1, maximum: 24, description: Items the module shows (the variety pool is poolMultiplier times this)}
+        band: {type: string, enum: [hero, personal, discovery, promo, brand], description: 'Order band: bands keep their order, modules inside a discovery band rotate by visit.'}
+    HomeCaps:
+      type: object
+      properties:
+        maxModules: {type: integer, minimum: 3, maximum: 24, default: 12}
+        minModules: {type: integer, minimum: 0, maximum: 12, default: 3}
+        sellerShare: {type: integer, minimum: 1, maximum: 24, default: 2, description: Most items of one seller in one module}
+        sponsoredPerOrganic: {type: integer, minimum: 1, maximum: 10, default: 3, description: 'At most 1 sponsored module per this many organic modules'}
+        poolMultiplier: {type: integer, minimum: 1, maximum: 10, default: 3}
+        noveltyLoads: {type: integer, minimum: 0, maximum: 10, default: 3, description: Previous home loads remembered}
+        noveltyPenalty: {type: number, minimum: 0, maximum: 1, default: 0.6, description: Weight removed from a remembered item (0.6 = 40 percent of its chance)}
+        visitWindowMinutes: {type: integer, minimum: 5, maximum: 240, default: 30}
+        hysteresis: {type: integer, minimum: 0, maximum: 20, default: 2, description: A shown module stays shown until this far below its minimum}
+        dealMinPercent: {type: integer, minimum: 1, maximum: 90, default: 10}
+        navBarSize: {type: integer, minimum: 3, maximum: 12, default: 7}
+    HomeSettings:
+      type: object
+      required: [version, modules, caps, departmentLabels]
+      properties:
+        version: {type: integer, description: 0 = defaults, nothing stored}
+        dynamic: {type: [string, 'null'], enum: [off, shadow, 'on', null], description: 'null follows the environment default (on in local, dev, uat and trial; off in prod until the owner switches it).'}
+        modules: {type: object, additionalProperties: {$ref: '#/components/schemas/HomeModuleRule'}}
+        caps: {$ref: '#/components/schemas/HomeCaps'}
+        departmentLabels: {type: object, additionalProperties: {$ref: '#/components/schemas/LocaleLabels'}, description: 'Staff display-label overrides by department key. Without one the label is derived from the live taxonomy name.'}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+    SaveHomeSettingsRequest:
+      type: object
+      required: [expectedVersion, settings, reason]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        settings: {$ref: '#/components/schemas/HomeSettings'}
+        reason: {type: string, minLength: 3, maxLength: 300}
+    HomeSettingsVersion:
+      type: object
+      required: [version, reason, changedBy, changedAt, changes]
+      properties:
+        version: {type: integer}
+        reason: {type: string}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+        revertOf: {type: [integer, 'null']}
+        changes:
+          type: array
+          items:
+            type: object
+            required: [field, from, to]
+            properties:
+              field: {type: string, examples: ['modules.communities.minProducts']}
+              from: {}
+              to: {}
     SiteAddress:
       type: object
       properties:

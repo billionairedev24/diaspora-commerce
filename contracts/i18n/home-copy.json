@@ -1,0 +1,318 @@
+{
+  "description": "Copy keys of the dynamic home (S426). The gateway sends keys and params (titleKey, titleParams); the storefront resolves them. English is the source; fr, es, ar and yo are machine drafts listed in needsReview until a native speaker signs them off. A missing locale falls back to English, never to a raw key. Placeholders in braces are filled from titleParams. Copy never claims AfroTransact collects, delivers or performs anything and names no carrier.",
+  "locales": ["en", "fr", "es", "ar", "yo"],
+  "keys": {
+    "home.brandHero.title": {
+      "en": "A marketplace for the African and Caribbean diaspora",
+      "fr": "Une place de marché pour la diaspora africaine et caribéenne",
+      "es": "Un mercado para la diáspora africana y caribeña",
+      "ar": "سوق للجاليات الأفريقية والكاريبية",
+      "yo": "Ọjà fún àwọn ará Áfíríkà àti Karibíà tó wà ní àjèjì",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.brandHero.sub": {
+      "en": "Independent sellers and service providers list what they offer here.",
+      "fr": "Des vendeurs et prestataires indépendants présentent ici leurs offres.",
+      "es": "Vendedores y proveedores independientes publican aquí lo que ofrecen.",
+      "ar": "يعرض البائعون ومقدمو الخدمات المستقلون ما لديهم هنا.",
+      "yo": "Àwọn olùtajà àti olùpèsè iṣẹ́ tó dá dúró ń gbé ohun tí wọ́n ní kalẹ̀ níbí.",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.brandHero.cta": {
+      "en": "Sell on AfroTransact",
+      "fr": "Vendre sur AfroTransact",
+      "es": "Vender en AfroTransact",
+      "ar": "ابدأ البيع على AfroTransact",
+      "yo": "Tà lórí AfroTransact",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.sellBand.title": {
+      "en": "Sell on AfroTransact",
+      "fr": "Vendre sur AfroTransact",
+      "es": "Vender en AfroTransact",
+      "ar": "ابدأ البيع على AfroTransact",
+      "yo": "Tà lórí AfroTransact",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.sellBand.body": {
+      "en": "Open a seller account to list your products or services for shoppers in your community.",
+      "fr": "Ouvrez un compte vendeur pour présenter vos produits ou services aux acheteurs de votre communauté.",
+      "es": "Abra una cuenta de vendedor para publicar sus productos o servicios para los compradores de su comunidad.",
+      "ar": "افتح حساب بائع لعرض منتجاتك أو خدماتك على المتسوقين في مجتمعك.",
+      "yo": "Ṣí àkọọ́lẹ̀ olùtajà láti gbé àwọn ọjà tàbí iṣẹ́ rẹ kalẹ̀ fún àwọn oníbàárà ní àdúgbò rẹ.",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.sellBand.cta": {
+      "en": "Start selling",
+      "fr": "Commencer à vendre",
+      "es": "Empezar a vender",
+      "ar": "ابدأ البيع",
+      "yo": "Bẹ̀rẹ̀ sí tà",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.departments.title": {
+      "en": "Shop by department",
+      "fr": "Acheter par rayon",
+      "es": "Comprar por departamento",
+      "ar": "تسوّق حسب القسم",
+      "yo": "Ra ọjà nípasẹ̀ ẹ̀ka",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.communities.title": {
+      "en": "Shop by community",
+      "fr": "Acheter par communauté",
+      "es": "Comprar por comunidad",
+      "ar": "تسوّق حسب المجتمع",
+      "yo": "Ra ọjà nípasẹ̀ àdúgbò",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.services.nearYou.title": {
+      "en": "Services near {city}",
+      "fr": "Services près de {city}",
+      "es": "Servicios cerca de {city}",
+      "ar": "خدمات قرب {city}",
+      "yo": "Àwọn iṣẹ́ nítòsí {city}",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.services.popular.title": {
+      "en": "Popular services",
+      "fr": "Services populaires",
+      "es": "Servicios populares",
+      "ar": "خدمات شائعة",
+      "yo": "Àwọn iṣẹ́ tó gbajúmọ̀",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.services.bookAgain.title": {
+      "en": "Book again",
+      "fr": "Réserver à nouveau",
+      "es": "Reservar de nuevo",
+      "ar": "احجز مرة أخرى",
+      "yo": "Tún ṣe ìwé ìpàdé",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.services.cta": {
+      "en": "Browse services",
+      "fr": "Voir les services",
+      "es": "Ver servicios",
+      "ar": "تصفّح الخدمات",
+      "yo": "Wo àwọn iṣẹ́",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.services.fromPrice": {
+      "en": "from {price}",
+      "fr": "à partir de {price}",
+      "es": "desde {price}",
+      "ar": "ابتداءً من {price}",
+      "yo": "láti {price}",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.newArrivals.title": {
+      "en": "Just landed",
+      "fr": "Nouveautés",
+      "es": "Recién llegados",
+      "ar": "وصل حديثًا",
+      "yo": "Tuntun dé",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.topSellers.title": {
+      "en": "Top rated",
+      "fr": "Les mieux notés",
+      "es": "Mejor valorados",
+      "ar": "الأعلى تقييمًا",
+      "yo": "Àwọn tí a fún ní ìdíyelé tó ga jùlọ",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.deals.title": {
+      "en": "Deals",
+      "fr": "Bonnes affaires",
+      "es": "Ofertas",
+      "ar": "عروض",
+      "yo": "Àwọn ẹ̀dínwó",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.groceries.title": {
+      "en": "Pantry staples",
+      "fr": "Produits de base du garde-manger",
+      "es": "Básicos de despensa",
+      "ar": "أساسيات المؤونة",
+      "yo": "Àwọn oúnjẹ pàtàkì inú ilé",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.topIn.title": {
+      "en": "Top in {department}",
+      "fr": "Le meilleur de {department}",
+      "es": "Lo mejor en {department}",
+      "ar": "الأفضل في {department}",
+      "yo": "Àwọn tó ga jùlọ nínú {department}",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.moreToExplore.title": {
+      "en": "More to explore",
+      "fr": "À découvrir aussi",
+      "es": "Más para explorar",
+      "ar": "المزيد لاستكشافه",
+      "yo": "Ohun míì láti ṣàwárí",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.preorder.title": {
+      "en": "Pre-order windows",
+      "fr": "Fenêtres de précommande",
+      "es": "Ventanas de preventa",
+      "ar": "فترات الطلب المسبق",
+      "yo": "Àkókò ìbéèrè ṣáájú",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.plus.title": {
+      "en": "AfroTransact Plus",
+      "fr": "AfroTransact Plus",
+      "es": "AfroTransact Plus",
+      "ar": "AfroTransact Plus",
+      "yo": "AfroTransact Plus",
+      "needsReview": []
+    },
+    "home.plus.body": {
+      "en": "A membership with member benefits. See what is included before you join.",
+      "fr": "Un abonnement avec des avantages réservés aux membres. Découvrez ce qui est inclus avant de vous inscrire.",
+      "es": "Una membresía con beneficios para socios. Vea qué incluye antes de unirse.",
+      "ar": "عضوية بمزايا للأعضاء. اطّلع على ما تشمله قبل الانضمام.",
+      "yo": "Ìjẹ́ ọmọ ẹgbẹ́ pẹ̀lú àǹfààní fún àwọn ọmọ ẹgbẹ́. Wo ohun tó wà nínú rẹ̀ kí o tó darapọ̀.",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.plus.cta": {
+      "en": "See Plus",
+      "fr": "Voir Plus",
+      "es": "Ver Plus",
+      "ar": "اعرف المزيد عن Plus",
+      "yo": "Wo Plus",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.continue.title": {
+      "en": "Based on your orders",
+      "fr": "D'après vos commandes",
+      "es": "Según sus pedidos",
+      "ar": "بناءً على طلباتك",
+      "yo": "Gẹ́gẹ́ bí àwọn ìbéèrè rẹ",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.recent.title": {
+      "en": "Recently viewed",
+      "fr": "Consultés récemment",
+      "es": "Vistos recientemente",
+      "ar": "شوهدت مؤخرًا",
+      "yo": "Àwọn tí o wò láìpẹ́",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "home.seeAll": {
+      "en": "See all",
+      "fr": "Tout voir",
+      "es": "Ver todo",
+      "ar": "عرض الكل",
+      "yo": "Wo gbogbo rẹ̀",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.groceries-food": {
+      "en": "Groceries",
+      "fr": "Épicerie",
+      "es": "Alimentos",
+      "ar": "البقالة",
+      "yo": "Oúnjẹ",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.beverages": {
+      "en": "Beverages",
+      "fr": "Boissons",
+      "es": "Bebidas",
+      "ar": "المشروبات",
+      "yo": "Ohun mímu",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.beauty-personal-care": {
+      "en": "Beauty",
+      "fr": "Beauté",
+      "es": "Belleza",
+      "ar": "الجمال",
+      "yo": "Ẹwà",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.fashion-accessories": {
+      "en": "Fashion",
+      "fr": "Mode",
+      "es": "Moda",
+      "ar": "الأزياء",
+      "yo": "Aṣọ",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.home-household": {
+      "en": "Home",
+      "fr": "Maison",
+      "es": "Hogar",
+      "ar": "المنزل",
+      "yo": "Ilé",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.electronics": {
+      "en": "Electronics",
+      "fr": "Électronique",
+      "es": "Electrónica",
+      "ar": "الإلكترونيات",
+      "yo": "Ẹ̀rọ iná",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.books-media": {
+      "en": "Books & Media",
+      "fr": "Livres et médias",
+      "es": "Libros y medios",
+      "ar": "الكتب والوسائط",
+      "yo": "Ìwé àti ìròyìn",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.health-wellness": {
+      "en": "Health",
+      "fr": "Santé",
+      "es": "Salud",
+      "ar": "الصحة",
+      "yo": "Ìlera",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.baby-kids": {
+      "en": "Baby & Kids",
+      "fr": "Bébé et enfants",
+      "es": "Bebés y niños",
+      "ar": "الأطفال والرضع",
+      "yo": "Ọmọ ọwọ́ àti àwọn ọmọdé",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.pets": {
+      "en": "Pets",
+      "fr": "Animaux",
+      "es": "Mascotas",
+      "ar": "الحيوانات الأليفة",
+      "yo": "Ẹran ọ̀sìn",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.digital-products": {
+      "en": "Digital",
+      "fr": "Numérique",
+      "es": "Digital",
+      "ar": "المنتجات الرقمية",
+      "yo": "Oníforíkorí",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.services": {
+      "en": "Services",
+      "fr": "Services",
+      "es": "Servicios",
+      "ar": "الخدمات",
+      "yo": "Àwọn iṣẹ́",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    },
+    "dept.other-specialty": {
+      "en": "Specialty",
+      "fr": "Spécialités",
+      "es": "Especialidades",
+      "ar": "منتجات خاصة",
+      "yo": "Àkànṣe",
+      "needsReview": ["fr", "es", "ar", "yo"]
+    }
+  }
+}

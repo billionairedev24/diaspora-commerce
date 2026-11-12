@@ -60,6 +60,14 @@ paths:
         - {name: maxPrice, in: query, schema: {type: integer, format: int64, minimum: 0}, description: Minor units}
         - {name: maxDays, in: query, schema: {type: integer, minimum: 1}, description: Delivery within N days}
         - {name: inStock, in: query, schema: {type: boolean}}
+        - name: eligibleOnly
+          in: query
+          schema: {type: boolean, default: false}
+          description: |
+            Home, nav, footer and sitemap counts (S415). Restricts hits AND facets to products a shopper may be shown: live,
+            in stock and `photo_ok` (a real photograph: http(s) or site-relative, not svg, ico, data: or a placeholder path).
+            With it the page also carries `distinctSellers` and the `department`, `communities` and `sellers` facets count only
+            eligible products. Same behaviour on Meilisearch and Elasticsearch.
         - {name: lat, in: query, schema: {type: number}}
         - {name: lon, in: query, schema: {type: number}}
         - {name: withinMiles, in: query, schema: {type: integer, minimum: 1}}
@@ -299,6 +307,7 @@ components:
           type: string
           enum: [SHORT_QUERY, NOT_CONFIGURED, SORTED, DEEP_PAGE, EMBEDDER_UNAVAILABLE, EMBEDDER_TIMEOUT]
           description: Why semantic retrieval was not used (LEXICAL pages only).
+        distinctSellers: {type: integer, description: 'Distinct sellers among the matching products. Present only with eligibleOnly=true (exact up to 1000, an estimate above).'}
         tookMs: {type: integer, format: int64}
         searchId: {type: string, description: Identifies this search for click reporting}
     Suggestion:

@@ -48,6 +48,8 @@ servers:
   - url: https://api.afrotransact.com/bff
     description: prod
 tags:
+  - name: Home
+    description: Dynamic home settings, community registry and the home preview with eligibility reasons
   - name: Shell
     description: Staff session and the RBAC-filtered sidebar
   - name: Dashboard
@@ -288,6 +290,143 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/home/settings:
+    get:
+      tags: [Home]
+      operationId: getStaffHomeSettings
+      security: [{sessionCookie: []}]
+      summary: Home module thresholds, caps, variety settings and department labels (Marketing > Home)
+      description: |
+        content `GET /v1/home-settings` through the staff session (marketing at VIEW or above). Defaults load when nothing is
+        stored (`version: 0`) and equal the documented thresholds (communities: 3 communities with 8 products and 2 sellers each).
+        Each module row is listed by its name, never an id. `effectiveDynamic` is what the page runs now: the stored `dynamic`
+        value, else the environment default (on in local, dev, uat and trial, off in prod).
+      responses:
+        '200': {description: Settings, content: {application/json: {schema: {$ref: '#/components/schemas/StaffHomeSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Home]
+      operationId: saveStaffHomeSettings
+      security: [{sessionCookie: []}]
+      summary: Save the home settings as a new version (marketing at EDIT); a reason is mandatory
+      description: |
+        content `PUT /v1/home-settings`. Rejected with a 422 problem (RFC 9457, `errors` by field) for a negative threshold, a
+        weight outside 0 to 100, an unknown module or no reason. Audit-logged with who, old and new values. A stale
+        `expectedVersion` is a 409. The gateway picks the change up within its cache TTL (60 s).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffHomeSettingsSave'}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffHomeSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/staff/home/settings/versions:
+    get:
+      tags: [Home]
+      operationId: listStaffHomeSettingsVersions
+      security: [{sessionCookie: []}]
+      summary: Who changed which home setting, when and why
+      responses:
+        '200': {description: Versions newest first, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StaffHomeSettingsVersion'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/staff/home/settings/revert:
+    post:
+      tags: [Home]
+      operationId: revertStaffHomeSettings
+      security: [{sessionCookie: []}]
+      summary: Make an earlier version current again (a new version; reason mandatory)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toVersion, reason]
+              properties:
+                toVersion: {type: integer, minimum: 1}
+                reason: {type: string, minLength: 3, maxLength: 300}
+      responses:
+        '200': {description: Reverted, content: {application/json: {schema: {$ref: '#/components/schemas/StaffHomeSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/staff/home/communities:
+    get:
+      tags: [Home]
+      operationId: listStaffHomeCommunities
+      security: [{sessionCookie: []}]
+      summary: Community registry plus the communities seen in products (with counts) that have no entry yet
+      description: |
+        Staff see each community as the shopper does: canonical key, labels in five locales, aliases and the editorial image
+        (accepted only if it passes the real-photo check). `unregistered` lists raw product values (with eligible counts) that
+        map to no entry, so staff can merge `nigerian` and `Nigerian` by adding an alias.
+      responses:
+        '200': {description: Registry, content: {application/json: {schema: {$ref: '#/components/schemas/StaffHomeCommunities'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/staff/home/communities/{key}:
+    put:
+      tags: [Home]
+      operationId: putStaffHomeCommunity
+      security: [{sessionCookie: []}]
+      summary: Create or replace a community registry entry (reason mandatory, audit-logged)
+      parameters:
+        - {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 60}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffHomeCommunityWrite'}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffHomeCommunity'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+    delete:
+      tags: [Home]
+      operationId: deleteStaffHomeCommunity
+      security: [{sessionCookie: []}]
+      summary: Remove a registry entry
+      parameters:
+        - {name: key, in: path, required: true, schema: {type: string}}
+        - {name: reason, in: query, required: true, schema: {type: string, minLength: 3, maxLength: 300}}
+      responses:
+        '204': {description: Removed}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/staff/home/preview:
+    get:
+      tags: [Home]
+      operationId: previewStaffHome
+      security: [{sessionCookie: []}]
+      summary: The home page for a chosen ZIP, signed-in state, language and date, with every module shown or hidden and why
+      description: |
+        Read only; no personal data. `blocks` is what shoppers see (same composition as `GET /v1/home`); `decisions` lists
+        EVERY module by name with shown or hidden, a reason code, a sentence, and the live count against the threshold.
+        `asOf` evaluates scheduled placements (starts, ends) and seasons at that instant, so it shows exactly what goes live
+        then; staff pins win ties over automatic modules and the decision says so. `catalog` replays a fixture (0, 10, 100 or
+        10000 eligible products) instead of the live catalogue. `seed` reproduces a visitor view (copy `debug.seed`);
+        `deterministic=true` shows the default order shoppers' crawlers get.
+      parameters:
+        - {name: zip, in: query, schema: {type: string, pattern: '^[0-9]{5}$'}}
+        - {name: signedIn, in: query, schema: {type: boolean, default: false}}
+        - {name: locale, in: query, schema: {type: string, enum: [en, fr, es, ar, yo], default: en}}
+        - {name: asOf, in: query, schema: {type: string, format: date-time}, description: Default now. May be in the future.}
+        - {name: catalog, in: query, schema: {type: string, enum: [live, '0', '10', '100', '10000'], default: live}}
+        - {name: seed, in: query, schema: {type: string, maxLength: 80}}
+        - {name: deterministic, in: query, schema: {type: boolean, default: false}}
+        - {name: variant, in: query, schema: {type: string, maxLength: 32}}
+      responses:
+        '200': {description: Preview, content: {application/json: {schema: {$ref: '#/components/schemas/StaffHomePreview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
   /v1/staff/resources/{resource}:
     get:
       tags: [Resources]
@@ -6577,6 +6716,158 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    StaffLocaleLabels:
+      type: object
+      required: [en]
+      properties:
+        en: {type: string}
+        fr: {type: string}
+        es: {type: string}
+        ar: {type: string}
+        yo: {type: string}
+    StaffHomeModuleRule:
+      type: object
+      properties:
+        enabled: {type: boolean}
+        minProducts: {type: integer, minimum: 0}
+        minSellers: {type: integer, minimum: 0}
+        minUnits: {type: integer, minimum: 0}
+        unitMinProducts: {type: integer, minimum: 0}
+        unitMinSellers: {type: integer, minimum: 0}
+        maxAgeDays: {type: integer, minimum: 0}
+        weight: {type: integer, minimum: 0, maximum: 100}
+        show: {type: integer, minimum: 1, maximum: 24}
+        band: {type: string, enum: [hero, personal, discovery, promo, brand]}
+    StaffHomeCaps:
+      type: object
+      properties:
+        maxModules: {type: integer, default: 12}
+        minModules: {type: integer, default: 3}
+        sellerShare: {type: integer, default: 2}
+        sponsoredPerOrganic: {type: integer, default: 3}
+        poolMultiplier: {type: integer, default: 3}
+        noveltyLoads: {type: integer, default: 3}
+        noveltyPenalty: {type: number, default: 0.6}
+        visitWindowMinutes: {type: integer, default: 30}
+        hysteresis: {type: integer, default: 2}
+        dealMinPercent: {type: integer, default: 10}
+        navBarSize: {type: integer, default: 7}
+    StaffHomeSettings:
+      type: object
+      required: [version, modules, caps, departmentLabels, effectiveDynamic, moduleNames]
+      properties:
+        version: {type: integer}
+        dynamic: {type: [string, 'null'], enum: [off, shadow, 'on', null]}
+        effectiveDynamic: {type: string, enum: [off, shadow, 'on']}
+        modules: {type: object, additionalProperties: {$ref: '#/components/schemas/StaffHomeModuleRule'}}
+        moduleNames: {type: object, additionalProperties: {type: string}, description: 'Module key to the name staff read (never show the key).'}
+        caps: {$ref: '#/components/schemas/StaffHomeCaps'}
+        departmentLabels: {type: object, additionalProperties: {$ref: '#/components/schemas/StaffLocaleLabels'}}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+    StaffHomeSettingsSave:
+      type: object
+      required: [expectedVersion, dynamic, modules, caps, departmentLabels, reason]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        dynamic: {type: [string, 'null'], enum: [off, shadow, 'on', null]}
+        modules: {type: object, additionalProperties: {$ref: '#/components/schemas/StaffHomeModuleRule'}}
+        caps: {$ref: '#/components/schemas/StaffHomeCaps'}
+        departmentLabels: {type: object, additionalProperties: {$ref: '#/components/schemas/StaffLocaleLabels'}}
+        reason: {type: string, minLength: 3, maxLength: 300}
+    StaffHomeSettingsVersion:
+      type: object
+      required: [version, reason, changedBy, changedAt, changes]
+      properties:
+        version: {type: integer}
+        reason: {type: string}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+        revertOf: {type: [integer, 'null']}
+        changes:
+          type: array
+          items:
+            type: object
+            required: [field, from, to]
+            properties:
+              field: {type: string}
+              from: {}
+              to: {}
+    StaffHomeCommunity:
+      type: object
+      required: [key, labels, aliases]
+      properties:
+        key: {type: string}
+        labels: {$ref: '#/components/schemas/StaffLocaleLabels'}
+        aliases: {type: array, items: {type: string}}
+        imageUrl: {type: [string, 'null']}
+        imageAccepted: {type: boolean, description: 'False when the editorial image fails the real-photo check (then the top product photo is used).'}
+        eligibleProducts: {type: integer}
+        sellers: {type: integer}
+        visible: {type: boolean, description: Above the thresholds now}
+    StaffHomeCommunityWrite:
+      type: object
+      required: [labels, reason]
+      properties:
+        labels: {$ref: '#/components/schemas/StaffLocaleLabels'}
+        aliases: {type: array, maxItems: 20, items: {type: string, maxLength: 60}}
+        imageUrl: {type: [string, 'null'], pattern: '^https://'}
+        reason: {type: string, minLength: 3, maxLength: 300}
+    StaffHomeCommunities:
+      type: object
+      required: [registered, unregistered]
+      properties:
+        registered: {type: array, items: {$ref: '#/components/schemas/StaffHomeCommunity'}}
+        unregistered:
+          type: array
+          items:
+            type: object
+            required: [value, eligibleProducts]
+            properties:
+              value: {type: string}
+              eligibleProducts: {type: integer}
+    StaffHomePreview:
+      type: object
+      required: [asOf, locale, catalog, blocks, decisions, seed]
+      properties:
+        asOf: {type: string, format: date-time}
+        locale: {type: string}
+        catalog: {type: string}
+        seed: {type: string}
+        deliverTo: {type: object, properties: {zip: {type: string}, city: {type: string}, state: {type: string}}}
+        blocks:
+          type: array
+          description: Same shape as `HomeBlock` of gateway-bff.yaml.
+          items: {type: object, additionalProperties: true}
+        decisions:
+          type: array
+          items: {$ref: '#/components/schemas/StaffHomeDecision'}
+        season:
+          type: [object, 'null']
+          description: The season window active at asOf and the modules it boosted.
+          properties:
+            name: {type: string}
+            startsAt: {type: string, format: date-time}
+            endsAt: {type: string, format: date-time}
+            boosted: {type: array, items: {type: string}}
+    StaffHomeDecision:
+      type: object
+      required: [module, label, shown, reason, detail]
+      properties:
+        module: {type: string}
+        label: {type: string}
+        shown: {type: boolean}
+        order: {type: integer}
+        reason: {type: string, enum: [shown, disabled-by-staff, not-enough-products, not-enough-sellers, not-fresh-enough, not-enough-departments, no-shopper-signal, nothing-to-show, sponsored-cap, page-full]}
+        detail: {type: string}
+        have: {type: integer}
+        need: {type: integer}
+        units: {type: array, items: {type: string}}
+        pool: {type: integer}
+        picked: {type: integer}
+        band: {type: string}
+        pinned: {type: boolean, description: A staff placement won this slot over the automatic module}
+        editRule: {type: string, description: 'Anchor of the rule row in Home settings.'}
     # ── taxonomy (Catalog → Categories)
     StaffTaxonomyReason: {type: string, minLength: 3, maxLength: 1000, description: Why the change is made; recorded in the audit trail with the person's name}
     StaffBrandScope:
