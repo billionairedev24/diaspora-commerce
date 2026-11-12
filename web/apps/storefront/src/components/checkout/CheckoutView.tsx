@@ -402,14 +402,17 @@ export function CheckoutView() {
   if (!s) return null;
 
   const addressList = addressOpen || !address;
-  // The BFF sends a rate ('8.25% TX') or, before an address is known, its own sentence: never repeat it.
-  const taxNote = s.taxMinor
-    ? /\d\s*%/.test(s.taxRateLabel)
-      ? t('co.taxExplainRate', { rate: s.taxRateLabel })
-      : t('co.taxExplain')
-    : /\d\s*%/.test(s.taxRateLabel)
-      ? t('co.taxNoteRate', { rate: s.taxRateLabel })
-      : s.taxRateLabel || t('co.taxNote');
+  // The tax row is worded from the BFF's taxEstimateStatus, never from its label text: a known estimate shows its rate
+  // (when a taxable line has one), an address is asked for only when none is chosen, and anything else is "calculated
+  // when you place your order" (never $0.00 or 0%).
+  const taxNote =
+    s.taxEstimateStatus === 'ESTIMATED'
+      ? /\d\s*%/.test(s.taxRateLabel)
+        ? t('co.taxExplainRate', { rate: s.taxRateLabel })
+        : t('co.taxExplain')
+      : s.taxEstimateStatus === 'NEEDS_ADDRESS'
+        ? t('co.taxNote')
+        : t('co.taxLaterNote');
 
   return (
     <div className={styles.layout}>
@@ -434,10 +437,12 @@ export function CheckoutView() {
           {!addressOpen && address ? (
             <div data-testid="checkout-address" className={styles.choiceCompact}>
               <div className={styles.choiceText}>
-                <strong className={styles.name}>{address.name}</strong>
+                <span>
+                  <strong className={styles.name}>{address.name}</strong>
+                  {address.isDefault && <span className={styles.tag}> {t('pay.default')}</span>}
+                </span>
                 <span>{addressLine(address)}</span>
                 <span className={styles.meta}>{address.phone}</span>
-                {address.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
               </div>
               <div className={styles.currentActions}>
                 <button
@@ -470,10 +475,13 @@ export function CheckoutView() {
                     aria-label={`${a.name} ${addressLine(a)}`}
                   />
                   <span className={styles.choiceText}>
-                    <strong className={styles.name}>{a.name}</strong> <span>{addressLine(a)}</span>
+                    <span>
+                      <strong className={styles.name}>{a.name}</strong>
+                      {a.isDefault && <span className={styles.tag}> {t('pay.default')}</span>}
+                    </span>
+                    <span>{addressLine(a)}</span>
                     <span className={styles.meta}>{a.phone}</span>
                   </span>
-                  {a.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
                   <button
                     type="button"
                     className="link-button"

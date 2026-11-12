@@ -2,7 +2,7 @@
    allocated over a package's lines by item value, blocked lines. Same rules as the BFF (Go) and orders (Java): the
    allocation is tested against tools/checkout/shipping-allocation-vectors.json.
    OPEN LEGAL DECISION 5: the mixed-basket delivery attribution method must be approved by the tax adviser. */
-import { type CheckoutBlockedLine, type CheckoutPackage, type CheckoutTaxLine, type ShippingTaxAllocation } from '../schemas/shopper';
+import { type CheckoutBlockedLine, type CheckoutPackage, type CheckoutTaxLine, type ShippingTaxAllocation, type TaxEstimateStatus } from '../schemas/shopper';
 import { isGroceryProductType } from './service';
 
 /** Product types whose tax decision is not definite yet (held for tax approval): such a line is blocked at checkout. */
@@ -56,6 +56,7 @@ export interface MockTaxInput {
 export interface MockTax {
   taxMinor: number;
   taxRateLabel: string;
+  taxEstimateStatus: TaxEstimateStatus;
   taxJurisdictionLabel: string;
   taxLines: CheckoutTaxLine[];
   blockedLines: CheckoutBlockedLine[];
@@ -72,7 +73,7 @@ export const blockedMessage = (title: string) => `We can't sell ${title} yet. We
 export function mockCheckoutTax(input: MockTaxInput): MockTax {
   const { packages, state, city, shippingByPackage, discountMinor, hasAddress } = input;
   if (!hasAddress) {
-    return { taxMinor: 0, taxRateLabel: 'Add your address to see an estimate', taxJurisdictionLabel: '', taxLines: [], blockedLines: [], canPlaceOrder: true, shippingTaxAllocation: undefined };
+    return { taxMinor: 0, taxRateLabel: 'Add your address to see an estimate', taxEstimateStatus: 'NEEDS_ADDRESS', taxJurisdictionLabel: '', taxLines: [], blockedLines: [], canPlaceOrder: true, shippingTaxAllocation: undefined };
   }
   const tx = state === 'TX';
   const lines = packages.flatMap((p) => p.lines.map((l) => ({ p, l })));
@@ -95,15 +96,20 @@ export function mockCheckoutTax(input: MockTaxInput): MockTax {
       // Texas taxes delivery with the sale it belongs to; a delivery tied only to exempt lines is 0%.
       const tax = status === 'TAXABLE' && tx ? Math.round(((net[i] ?? 0) + shippingMinor) * (STATE_RATE + LOCAL_RATE)) : 0;
       taxMinor += tax;
-      taxLines.push({ lineId: l.lineId, status, taxMinor: tax, shippingMinor });
+      // The mock stands in for tax-returns: an exempt line carries that decision's own words (category + rule wording).
+      const exemptReason = status === 'EXEMPT' ? `${l.department}: no sales tax applies. Standard qualifying item.` : undefined;
+      taxLines.push({ lineId: l.lineId, status, taxMinor: tax, shippingMinor, ...(exemptReason ? { exemptReason } : {}) });
     });
     at += p.lines.length;
   }
-  const label = tx ? `${((STATE_RATE + LOCAL_RATE) * 100).toFixed(2)}%` : 'No sales tax';
+  // Only Texas has rules (as in tax-returns): elsewhere, or with a blocked line, there is no figure, never "$0.00" or "0%".
+  const estimated = tx && blockedLines.length === 0;
+  const anyTaxable = taxLines.some((l) => l.status === 'TAXABLE');
   return {
-    taxMinor,
-    taxRateLabel: label,
-    taxJurisdictionLabel: [city, state].filter(Boolean).join(', '),
+    taxMinor: estimated ? taxMinor : 0,
+    taxRateLabel: !estimated ? 'Calculated when you place your order' : anyTaxable ? `${((STATE_RATE + LOCAL_RATE) * 100).toFixed(2)}%` : '',
+    taxEstimateStatus: estimated ? 'ESTIMATED' : 'UNAVAILABLE',
+    taxJurisdictionLabel: estimated ? [city, state].filter(Boolean).join(', ') : '',
     taxLines,
     blockedLines,
     canPlaceOrder: blockedLines.length === 0,

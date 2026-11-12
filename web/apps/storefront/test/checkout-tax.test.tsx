@@ -49,6 +49,53 @@ describe('checkout tax', () => {
     expect(within(summary).getByTestId('checkout-tax-exempt-note')).toHaveTextContent('No tax on these items, or on their delivery.');
     expect(screen.getAllByTestId('checkout-item-no-tax')).toHaveLength(1);
     expect(screen.queryByTestId('checkout-blocked')).not.toBeInTheDocument();
+    // An untaxed item says why, in the words of tax-returns' decision (never hard-coded per category here).
+    expect(within(summary).getByTestId('checkout-tax-exempt-reason')).toHaveTextContent(/no sales tax applies/);
+  });
+
+  describe('guard: no $0.00, 0% or "no tax" unless the decision is resolved (owner principle: never wrong tax information)', () => {
+    const overridden = async (patch: (s: CheckoutSummary) => Partial<CheckoutSummary>) => {
+      const api = await signInDemo();
+      const jollof = await api.getProduct('AT000000P2');
+      await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+      const real = await api.getCheckoutSummary();
+      mockServer.use(http.get('*/v1/checkout/summary', () => HttpResponse.json({ ...real, ...patch(real) })));
+      renderWithProviders(<CheckoutView />);
+      await screen.findByTestId('checkout-package');
+      return within(await screen.findByTestId('order-summary'));
+    };
+    const NEVER = /\$0\.00|0(\.0+)?\s*%|not taxable|no tax/i;
+
+    it('an address is chosen but the tax lookup failed: "Calculated when you place your order", never $0.00, never the address prompt', async () => {
+      const summary = await overridden(() => ({ taxMinor: 0, taxRateLabel: 'Calculated when you place your order', taxEstimateStatus: 'UNAVAILABLE', taxJurisdictionLabel: '', taxLines: [] }));
+      const row = summary.getByTestId('checkout-tax-amount');
+      expect(row).toHaveTextContent('Calculated when you place your order');
+      expect(row.textContent).not.toMatch(NEVER);
+      expect(summary.queryByTestId('checkout-tax-place')).not.toBeInTheDocument();
+      expect(summary.queryByTestId('checkout-tax-exempt-note')).not.toBeInTheDocument();
+      expect(summary.queryByText(/add your address/i)).not.toBeInTheDocument();
+    });
+
+    it('no address chosen: the dash and the address prompt', async () => {
+      const summary = await overridden(() => ({ taxMinor: 0, taxRateLabel: 'Add your address to see an estimate', taxEstimateStatus: 'NEEDS_ADDRESS', taxJurisdictionLabel: '', taxLines: [] }));
+      expect(summary.getByTestId('checkout-tax-amount')).toHaveTextContent('—');
+      expect(summary.getByText('Add your address to see an estimate')).toBeInTheDocument();
+    });
+
+    it('a line whose decision is not resolved is never tagged or explained as untaxed, whatever else the payload says', async () => {
+      const summary = await overridden((s) => {
+        const line = s.packages[0]?.lines[0];
+        return {
+          taxMinor: 0,
+          taxRateLabel: 'Calculated when you place your order',
+          taxEstimateStatus: 'UNAVAILABLE',
+          taxLines: line ? [{ lineId: line.lineId, status: 'BLOCKED', taxMinor: 0, shippingMinor: 0, exemptReason: 'Groceries: no sales tax applies.' }] : []
+        };
+      });
+      expect(summary.getByTestId('checkout-tax-amount').textContent).not.toMatch(NEVER);
+      expect(summary.queryByTestId('checkout-tax-exempt-reason')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('checkout-item-no-tax')).not.toBeInTheDocument();
+    });
   });
 
   it('a mixed basket taxes only the taxable item and says some items carry no tax', async () => {
@@ -88,43 +135,4 @@ describe('checkout tax', () => {
       const clean = { ...held, blockedLines: [], taxLines: [], canPlaceOrder: true };
       // The summary holds the item back until the page asked the cart to take it out of this order.
       const removed = () => sent.some((r) => r.method === 'PATCH' && r.url.includes('/v1/cart/items/'));
-      mockServer.use(http.get('*/v1/checkout/summary', () => HttpResponse.json(removed() ? clean : held)));
-      const user = userEvent.setup();
-      renderWithProviders(<CheckoutView />);
-      const box = await screen.findByTestId('checkout-blocked');
-      const title = held.blockedLines[0]?.title ?? '';
-      expect(within(box).getByTestId('checkout-blocked-line')).toHaveTextContent(`We can’t sell ${title} yet.`);
-      expect(box).toHaveTextContent('Remove it from this order to continue');
-      expect(box.textContent).not.toMatch(/AT0000|tax|ATIN/i);
-      expect(screen.getByTestId('tax-blocked-note')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
-
-      // Remove takes the line out of this order (it stays in the cart), then the summary is read again.
-      await user.click(within(box).getByRole('button', { name: `Remove ${title} from this order` }));
-      await waitFor(() => expect(screen.queryByTestId('checkout-blocked')).not.toBeInTheDocument());
-      expect(sent.some((r) => r.method === 'PATCH' && r.url.includes('/v1/cart/items/'))).toBe(true);
-      expect(screen.queryByTestId('tax-blocked-note')).not.toBeInTheDocument();
-    });
-
-    it('a refused placement says so in plain words, never the server’s detail', async () => {
-      addCookie('at_mock_stripe_pk=pk_test_fake');
-      const held = await blockedSummary();
-      mockServer.use(
-        http.get('*/v1/checkout/summary', () => HttpResponse.json({ ...held, blockedLines: [], taxLines: [], canPlaceOrder: true })),
-        http.post('*/v1/checkout/orders', () => problem('CHECKOUT_ITEM_BLOCKED', 'We can’t sell ATG0000123 (orders detail)'))
-      );
-      const stripe = fakeStripe();
-      window.Stripe = stripe.factory;
-      const user = userEvent.setup();
-      renderWithProviders(<CheckoutView />);
-      await screen.findByTestId('checkout-package');
-      await waitFor(() => expect(stripe.payment()).toBeDefined());
-      const el = await screen.findByTestId('stripe-payment-element');
-      await waitFor(() => expect(el).toHaveAttribute('aria-busy', 'false'));
-      act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
-      await user.click(screen.getByRole('button', { name: /Place your order/ }));
-      expect(await screen.findByText('Some items in your order can’t be sold yet. Remove them to place your order.')).toBeInTheDocument();
-      expect(screen.queryByText(/ATG0000123/)).not.toBeInTheDocument();
-    });
-  });
-});
+      mockServer.use(http.get('*/v1/checkout/summary', () => Ht

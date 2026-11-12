@@ -1245,6 +1245,8 @@ export interface components {
              * @enum {string}
              */
             addressPrecision?: "ZIP" | "ADDRESS";
+            /** @description Why the line carries no tax, in plain words for the shopper (the category and the rule's own wording; no codes or ids; English). Present only for a RESOLVED, EXEMPT decision; never shown for any other status. */
+            explanation?: string;
         };
         /** @description Items of one delivered shipment, the reason per item and the method */
         CreateReturn: {

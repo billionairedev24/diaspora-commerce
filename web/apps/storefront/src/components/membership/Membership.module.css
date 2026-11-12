@@ -38,10 +38,20 @@
 .buttons { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-4); align-items: center; }
 .stack { display: flex; flex-direction: column; gap: var(--at-space-3); max-inline-size: 46rem; }
 
-/* "Join Plus to save $X on this order" in the cart and at checkout */
-.upsell { display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-3) var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface-brand); }
-.upsellTitle { display: flex; gap: var(--at-space-2); align-items: center; font-weight: var(--at-weight-bold); }
+/* One quiet line under the totals in the cart and at checkout (no box), and the member's savings note */
+.upsellLine { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+.savings { display: flex; flex-direction: column; gap: var(--at-space-1); font-size: var(--at-text-sm); }
+.upsellTitle { display: flex; gap: var(--at-space-2); align-items: center; font-weight: var(--at-weight-semibold); }
 .upsellBody { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
-.upsellLink { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); }
+.upsellLink { font-weight: var(--at-weight-semibold); }
 .waived { color: var(--at-color-success); font-weight: var(--at-weight-semibold); }
 .waivedNote { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+
+/* Offer page: hero, tiers, plain FAQ */
+.hero { display: flex; flex-direction: column; gap: var(--at-space-2); max-inline-size: 46rem; }
+.faq { display: flex; flex-direction: column; margin: 0; max-inline-size: 46rem; }
+.faqItem { padding-block: var(--at-space-3); border-block-start: 1px solid var(--at-color-border); }
+.faqItem:first-child { border-block-start: 0; }
+.faqQ { margin: 0; font-weight: var(--at-weight-semibold); }
+.faqA { margin: var(--at-space-1) 0 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+@media (max-width: 480px) { .price { font-size: var(--at-text-2xl); } .action > * { inline-size: 100%; } }

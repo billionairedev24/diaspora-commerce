@@ -4601,8 +4601,16 @@ export interface components {
             coupon?: components["schemas"]["CheckoutCoupon"];
             /** @description Estimated sales tax on the lines that can be sold; a blocked line carries none */
             taxMinor: number;
-            /** @example 8.25% TX */
+            /**
+             * @description Display text only (a rate, or the sentence for the state below). Clients word the tax row from taxEstimateStatus, not from this text.
+             * @example 8.25% TX
+             */
             taxRateLabel: string;
+            /**
+             * @description ESTIMATED: every line has a RESOLVED tax decision and taxMinor is the estimate (an all-exempt basket is a real 0, each exempt line carries its reason). UNAVAILABLE: tax-returns could not be asked, or a line has no definite decision; taxMinor is 0 and must not be shown as an amount ("calculated when you place your order"). NEEDS_ADDRESS: no delivery address is chosen.
+             * @enum {string}
+             */
+            taxEstimateStatus: "ESTIMATED" | "UNAVAILABLE" | "NEEDS_ADDRESS";
             /**
              * @description Where the estimate was worked out, from the delivery address; empty without an estimate. The storefront shows "Estimated tax" with it.
              * @example Houston, TX
@@ -4646,6 +4654,8 @@ export interface components {
              * @description This line's share of its package's delivery charge
              */
             shippingMinor: number;
+            /** @description Why an EXEMPT line carries no tax, in plain English from tax-returns' stored decision (category and the rule's wording, no codes or ids). Present only when the decision is RESOLVED and EXEMPT. */
+            exemptReason?: string;
         };
         ShippingTaxAllocation: {
             /**

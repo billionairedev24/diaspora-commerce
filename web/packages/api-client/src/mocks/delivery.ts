@@ -156,10 +156,10 @@ export function deliveryPromise(from: ShipFrom, metro: string, now: Date): Deliv
 }
 
 /** Shopper-facing option labels (launch shipping). No carrier is ever named. */
-export const LABEL_DELIVERY = 'Delivery by AfroTransact';
-export const LABEL_STORE_DELIVERY = 'AfroTransact collects from the store and delivers';
-export const LABEL_PICKUP_POINT = 'Pickup at an AfroTransact point';
-export const LABEL_STORE_PICKUP = 'Collect from the store';
+export const LABEL_DELIVERY = 'Delivery';
+export const LABEL_STORE_DELIVERY = 'Delivery';
+export const LABEL_PICKUP_POINT = 'Pickup';
+export const LABEL_STORE_PICKUP = 'Pickup';
 export const LABEL_SELLER_SHIPPING = 'Standard shipping from the seller';
 export const LABEL_QUOTE_REQUIRED = 'Too far for standard delivery. Ask us for a quote';
 

@@ -284,6 +284,7 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     coupon,
     taxMinor,
     taxRateLabel,
+    taxEstimateStatus: tax.taxEstimateStatus,
     taxJurisdictionLabel: tax.taxJurisdictionLabel,
     taxLines: tax.taxLines,
     shippingTaxAllocation: tax.shippingTaxAllocation,

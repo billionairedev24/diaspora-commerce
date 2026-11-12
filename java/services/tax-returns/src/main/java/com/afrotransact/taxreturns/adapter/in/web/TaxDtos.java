@@ -88,7 +88,9 @@ final class TaxDtos {
                              @Schema(description = "Plain message for the shopper when the line cannot be taxed")
                              String blockedReason,
                              @Schema(description = "ZIP (rate table) or ADDRESS (a provider resolved the exact address)")
-                             String addressPrecision) {
+                             String addressPrecision,
+                             @Schema(description = "Why the line carries no tax, in plain words (category and the rule's wording, "
+                                     + "no codes or ids); only a RESOLVED EXEMPT decision has one, English") String explanation) {
 
         static QuoteLineResponse of(TaxLineResult r, String quoteProvider) {
             LineDecision d = r.decision();
@@ -98,7 +100,7 @@ final class TaxDtos {
                     r.shippingTaxMinor(), r.taxCode(), d == null ? null : d.status().name(),
                     d == null || d.outcome() == null ? null : d.outcome().name(), d == null ? null : d.internalTaxCode(),
                     providerCode, d == null ? null : d.ruleVersion(), d == null ? null : d.blockedReason(),
-                    r.addressPrecision());
+                    r.addressPrecision(), d == null ? null : d.explanation());
         }
 
         private static String providerId(String quoteProvider) {

@@ -612,6 +612,15 @@ type CheckoutCoupon struct {
 }
 
 // Tax line statuses of CheckoutTaxLine.
+// Tax estimate states of CheckoutSummary.TaxEstimateStatus. The storefront words the tax row from this, never from the
+// label text: ESTIMATED shows the amount, UNAVAILABLE says it is "calculated when you place your order" (never $0.00 or
+// 0%), NEEDS_ADDRESS asks for an address.
+const (
+	TaxEstimated    = "ESTIMATED"
+	TaxUnavailable  = "UNAVAILABLE"
+	TaxNeedsAddress = "NEEDS_ADDRESS"
+)
+
 const (
 	TaxLineTaxable = "TAXABLE"
 	TaxLineExempt  = "EXEMPT"
@@ -624,6 +633,9 @@ type CheckoutTaxLine struct {
 	Status        string `json:"status"`
 	TaxMinor      int64  `json:"taxMinor"`
 	ShippingMinor int64  `json:"shippingMinor"`
+	// ExemptReason is why an EXEMPT line carries no tax, from tax-returns' stored decision (customer-safe words). Only a
+	// RESOLVED, EXEMPT line has one; a taxable or blocked line never does.
+	ExemptReason string `json:"exemptReason,omitempty"`
 }
 
 // ShippingTaxAllocation is the method that attributed a package's delivery charge to its lines for the estimate.
@@ -660,6 +672,8 @@ type CheckoutSummary struct {
 	ShippingDiscountMinor int64  `json:"shippingDiscountMinor"`
 	TaxMinor              int64  `json:"taxMinor"`
 	TaxRateLabel          string `json:"taxRateLabel"`
+	// TaxEstimateStatus is ESTIMATED, UNAVAILABLE or NEEDS_ADDRESS (see the constants).
+	TaxEstimateStatus string `json:"taxEstimateStatus"`
 	// TaxJurisdictionLabel names where the estimate was worked out for the shopper ("Houston, TX"); empty without an
 	// estimate. The storefront shows "Estimated tax" with it.
 	TaxJurisdictionLabel string `json:"taxJurisdictionLabel"`

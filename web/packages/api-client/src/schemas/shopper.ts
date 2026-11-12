@@ -264,7 +264,9 @@ export const CheckoutTaxLineSchema = z.object({
   status: z.enum(['TAXABLE', 'EXEMPT', 'BLOCKED']),
   taxMinor: MinorSchema,
   /** The line's share of its package's delivery charge (allocated by item value). */
-  shippingMinor: MinorSchema
+  shippingMinor: MinorSchema,
+  /** Why an EXEMPT line carries no tax (tax-returns' stored decision, plain English); only a resolved exempt line has one. */
+  exemptReason: z.string().optional()
 });
 export type CheckoutTaxLine = z.infer<typeof CheckoutTaxLineSchema>;
 
@@ -287,6 +289,9 @@ export type CheckoutBlockedLine = z.infer<typeof CheckoutBlockedLineSchema>;
 export const ShippingTaxAllocationSchema = z.object({ method: z.enum(['PROPORTIONAL', 'FIRST_LINE']), approved: z.boolean(), note: z.string() });
 export type ShippingTaxAllocation = z.infer<typeof ShippingTaxAllocationSchema>;
 
+export const TaxEstimateStatusSchema = z.enum(['ESTIMATED', 'UNAVAILABLE', 'NEEDS_ADDRESS']);
+export type TaxEstimateStatus = z.infer<typeof TaxEstimateStatusSchema>;
+
 export const CheckoutSummarySchema = z.object({
   packages: z.array(CheckoutPackageSchema),
   addresses: z.array(AddressSchema),
@@ -298,6 +303,11 @@ export const CheckoutSummarySchema = z.object({
   coupon: CheckoutCouponSchema.nullish(),
   taxMinor: MinorSchema,
   taxRateLabel: z.string(),
+  /**
+   * What the tax row can say: ESTIMATED (show the amount; an all-exempt basket is a real $0.00 with each line's reason),
+   * UNAVAILABLE ("calculated when you place your order": never $0.00 or 0%) or NEEDS_ADDRESS. A missing value is UNAVAILABLE.
+   */
+  taxEstimateStatus: TaxEstimateStatusSchema.default('UNAVAILABLE'),
   /** Where the estimate was worked out ("Houston, TX"); empty without an estimate. Shown next to "Estimated tax". */
   taxJurisdictionLabel: z.string().default(''),
   /** The estimate per cart line (mixed exempt/taxable baskets); empty without an estimate. */

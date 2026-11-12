@@ -58,13 +58,15 @@ describe('mock checkout tax', () => {
     expect(b).toMatchObject({ lineId: 'gc', title: 'Gift card', action: 'REMOVE', packageId: 'a' });
     expect(b?.message).toBe(blockedMessage('Gift card'));
     expect(b?.message).not.toMatch(/tax|ATIN|of-gc/i);
-    expect(t.taxMinor).toBe(248);
+    // a basket with a line that has no definite decision has no figure at all
+    expect(t.taxMinor).toBe(0);
+    expect(t.taxEstimateStatus).toBe('UNAVAILABLE');
     expect(t.taxLines[1]).toMatchObject({ status: 'BLOCKED', taxMinor: 0 });
   });
 
-  it('outside Texas nothing is taxed and with no address there is no estimate', () => {
+  it('outside Texas (no rules) the tax is unavailable, never $0.00 or 0%, and with no address it asks for one', () => {
     const p = [pkg('a', line('l1', 'Sauce pan', 'home-decor', 3000))];
-    expect(mockCheckoutTax({ ...base, state: 'NY', city: 'Albany', packages: p, shippingByPackage: { a: 500 } })).toMatchObject({ taxMinor: 0, taxRateLabel: 'No sales tax' });
-    expect(mockCheckoutTax({ ...base, hasAddress: false, packages: p, shippingByPackage: {} })).toMatchObject({ taxMinor: 0, taxLines: [], taxJurisdictionLabel: '' });
+    expect(mockCheckoutTax({ ...base, state: 'NY', city: 'Albany', packages: p, shippingByPackage: { a: 500 } })).toMatchObject({ taxMinor: 0, taxEstimateStatus: 'UNAVAILABLE', taxRateLabel: 'Calculated when you place your order' });
+    expect(mockCheckoutTax({ ...base, hasAddress: false, packages: p, shippingByPackage: {} })).toMatchObject({ taxMinor: 0, taxEstimateStatus: 'NEEDS_ADDRESS', taxLines: [], taxJurisdictionLabel: '' });
   });
 });

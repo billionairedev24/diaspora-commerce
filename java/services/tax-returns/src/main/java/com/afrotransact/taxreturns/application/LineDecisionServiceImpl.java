@@ -11,6 +11,7 @@ import java.util.Set;
 
 import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
+import com.afrotransact.taxreturns.domain.profile.Outcome;
 import com.afrotransact.taxreturns.domain.profile.RecordStatus;
 import com.afrotransact.taxreturns.domain.profile.Resolution;
 import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
@@ -100,7 +101,7 @@ class LineDecisionServiceImpl implements LineDecisionService {
             Map<String, String> codes = new LinkedHashMap<>(usable.getOrDefault(res.internalTaxCode(), Map.of()));
             codes.putAll(rec.refinedProviderCodes());
             LineDecision d = new LineDecision(ResolveStatus.RESOLVED, res.outcome(), res.internalTaxCode(), codes,
-                    res.ruleVersion(), null, rec.categoryCode(), res.reason());
+                    res.ruleVersion(), null, rec.categoryCode(), res.reason(), explanationOf(res, rec.categoryCode()));
             telemetry.quoteLine("RESOLVED", res.outcome().name());
             out.put(r.key(), d);
             try {
@@ -110,6 +111,21 @@ class LineDecisionServiceImpl implements LineDecisionService {
             }
         }
         return out;
+    }
+
+    /**
+     * Why an exempt line carries no tax, in the shopper's words: the category and the rule's own wording from the stored
+     * decision ("Baby food & formula: no sales tax applies. Standard qualifying item."). Only a RESOLVED EXEMPT decision
+     * has one; anything else is null, so a screen can never explain a missing tax with an unresolved decision.
+     */
+    private String explanationOf(Resolution res, String categoryCode) {
+        if (res.status() != ResolveStatus.RESOLVED || res.outcome() != Outcome.EXEMPT) {
+            return null;
+        }
+        String name = engine.profile(categoryCode).name();
+        String why = res.reason() == null ? "" : res.reason().strip();
+        String tail = why.isEmpty() ? "" : " " + (why.endsWith(".") ? why : why + ".");
+        return name + ": no sales tax applies." + tail;
     }
 
     /**

@@ -312,6 +312,8 @@ type UpTaxLineQuote struct {
 	DecisionStatus string `json:"decisionStatus"`
 	Outcome        string `json:"outcome"`
 	BlockedReason  string `json:"blockedReason,omitempty"`
+	// Explanation is why an exempt line carries no tax, in the shopper's words (tax-returns; only RESOLVED + EXEMPT has one).
+	Explanation string `json:"explanation,omitempty"`
 }
 
 // Resolved reports whether tax-returns gave a definite decision for the line (never guessed: a missing status is not).

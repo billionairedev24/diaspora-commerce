@@ -31,8 +31,8 @@ test.describe('storefront · signed-in shopper', () => {
     await expect(pkg.getByTestId('checkout-item').first()).toBeVisible();
     await pkg.getByTestId('fulfil-pickup').click();
     await expect(pkg.getByTestId('pickup-point').first()).toBeVisible();
-    await pkg.getByTestId('fulfil-delivery').click();
-    await pkg.getByRole('radio', { name: /Delivery by AfroTransact/ }).check();
+    await pkg.getByTestId('delivery-option-afrotransact_delivery').click();
+    await pkg.getByRole('radio', { name: /^Delivery / }).check();
     await expect(pkg.getByText(/Delivery preferences/)).toBeVisible();
 
     await page.getByRole('button', { name: 'Place your order' }).click();

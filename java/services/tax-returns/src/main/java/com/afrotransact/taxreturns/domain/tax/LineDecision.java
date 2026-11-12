@@ -17,10 +17,12 @@ import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
  * @param blockedReason plain message for the shopper when the line cannot be taxed
  * @param categoryCode  category the decision came from
  * @param detail        internal explanation (logs, reports), never shown to shoppers
+ * @param explanation   plain words for the shopper on why the line carries no tax (only a RESOLVED EXEMPT decision has
+ *                      one): the category and the rule's wording, no codes or ids; null otherwise
  */
 public record LineDecision(ResolveStatus status, Outcome outcome, String internalTaxCode,
                            Map<String, String> providerCodes, String ruleVersion, String blockedReason,
-                           String categoryCode, String detail) {
+                           String categoryCode, String detail, String explanation) {
 
     /** The message shoppers see for any line that cannot be taxed. */
     public static final String BLOCKED_MESSAGE = "This item can't be bought right now. We're checking its tax details. "
@@ -28,6 +30,12 @@ public record LineDecision(ResolveStatus status, Outcome outcome, String interna
 
     public LineDecision {
         providerCodes = providerCodes == null ? Map.of() : Map.copyOf(providerCodes);
+    }
+
+    /** A decision without a shopper explanation. */
+    public LineDecision(ResolveStatus status, Outcome outcome, String internalTaxCode, Map<String, String> providerCodes,
+                        String ruleVersion, String blockedReason, String categoryCode, String detail) {
+        this(status, outcome, internalTaxCode, providerCodes, ruleVersion, blockedReason, categoryCode, detail, null);
     }
 
     public static LineDecision blocked(ResolveStatus status, String ruleVersion, String categoryCode, String detail) {

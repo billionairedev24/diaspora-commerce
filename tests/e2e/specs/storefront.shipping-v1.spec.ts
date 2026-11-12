@@ -16,7 +16,7 @@ test.describe('storefront · launch shipping', () => {
     await signIn(page.request);
 
     await page.goto('/p/AT000000P2');
-    await expect(page.getByText(/Delivery by AfroTransact/).first()).toBeVisible();
+    await expect(page.getByText(/Delivery/).first()).toBeVisible();
     const buyBox = page.getByRole('complementary', { name: 'Buy box' });
     await buyBox.getByRole('button', { name: 'Add to Cart' }).click();
     await expect(buyBox.getByText(/in cart/)).toBeVisible();
@@ -28,7 +28,7 @@ test.describe('storefront · launch shipping', () => {
 
     await page.goto('/checkout');
     const pkg = page.getByTestId('checkout-package').first();
-    await expect(pkg.getByTestId('delivery-option-afrotransact_delivery')).toContainText('Delivery by AfroTransact');
+    await expect(pkg.getByTestId('delivery-option-afrotransact_delivery')).toContainText('Delivery');
     await expect(pkg.getByTestId('option-fee-afrotransact_delivery')).toHaveText('$5.99');
     await expect(pkg.getByTestId('delivery-option-express')).toHaveCount(0);
     await pkg.getByTestId('fulfil-pickup').click();

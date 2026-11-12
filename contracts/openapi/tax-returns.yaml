@@ -1713,6 +1713,7 @@ components:
         ruleVersion: {type: string}
         blockedReason: {type: string, description: Plain message for the shopper when the line cannot be taxed}
         addressPrecision: {type: string, enum: [ZIP, ADDRESS], description: 'How exactly the address was resolved: ZIP (rate table, the documented TX-03 launch limitation) or ADDRESS (a provider resolved the exact address)'}
+        explanation: {type: string, description: 'Why the line carries no tax, in plain words for the shopper (the category and the rule''s own wording; no codes or ids; English). Present only for a RESOLVED, EXEMPT decision; never shown for any other status.'}
     CreateReturn:
       type: object
       description: Items of one delivered shipment, the reason per item and the method

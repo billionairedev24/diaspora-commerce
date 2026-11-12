@@ -83,7 +83,7 @@ func (s *checkoutServiceImpl) Summary(ctx context.Context, c *domain.Caller, _ s
 	}
 	out := domain.CheckoutSummary{Packages: pkgs, Addresses: []domain.Address{},
 		PaymentMethods: make([]domain.PaymentMethod, 0, len(wallet.Items)), StripeCustomerID: wallet.StripeCustomerID,
-		Currency: cart.Currency, TaxRateLabel: "Add your address to see an estimate"}
+		Currency: cart.Currency, TaxRateLabel: taxLabelNeedsAddress, TaxEstimateStatus: domain.TaxNeedsAddress}
 	for _, m := range wallet.Items {
 		out.PaymentMethods = append(out.PaymentMethods, toPaymentMethod(m))
 	}

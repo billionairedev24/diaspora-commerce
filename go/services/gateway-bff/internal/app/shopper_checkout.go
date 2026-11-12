@@ -180,6 +180,10 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 			}
 		}
 	}
+	if addr != nil {
+		// An address is chosen: until priceTax has a definite answer the tax is "calculated when you place your order".
+		sum.TaxEstimateStatus, sum.TaxRateLabel = domain.TaxUnavailable, taxLabelUnavailable
+	}
 	if s.d.ShippingSettings != nil {
 		s.d.ShippingSettings.Ensure(ctx)
 	}

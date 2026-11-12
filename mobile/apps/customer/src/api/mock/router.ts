@@ -31,8 +31,8 @@ const TAX_RATE = 0.0825;
 function promiseOf(p: FixtureProduct): DeliveryPromise {
   const fee = LAUNCH_SHIPPING.flatFeeMinor;
   return p.sameDay
-    ? { days: 0, label: 'Today by 8 pm', prefix: 'Delivery by AfroTransact', free: false, feeMinor: fee, cutoff: 'Order within 3 hrs' }
-    : { days: 1, label: 'Tomorrow', prefix: 'Delivery by AfroTransact', free: false, feeMinor: fee, cutoff: null };
+    ? { days: 0, label: 'Today by 8 pm', prefix: 'Delivery', free: false, feeMinor: fee, cutoff: 'Order within 3 hrs' }
+    : { days: 1, label: 'Tomorrow', prefix: 'Delivery', free: false, feeMinor: fee, cutoff: null };
 }
 
 const stockStatus = (n: number) => (n === 0 ? 'OUT_OF_STOCK' : n <= 5 ? 'LOW_STOCK' : 'IN_STOCK') as 'OUT_OF_STOCK' | 'LOW_STOCK' | 'IN_STOCK';
@@ -134,10 +134,10 @@ function deliveryOptions(p: FixtureProduct, subtotal: number) {
   const fee = deliveryFee(subtotal);
   const fba = p.fulfilment === 'AFROTRANSACT';
   return [
-    { key: 'afrotransact_delivery' as const, label: fba ? 'Delivery by AfroTransact' : 'AfroTransact collects from the store and delivers', eta: p.sameDay ? 'Today 6–8 pm' : 'In 2 days', feeMinor: fee, free: fee === 0 },
+    { key: 'afrotransact_delivery' as const, label: fba ? 'Delivery' : 'Delivery', eta: p.sameDay ? 'Today 6–8 pm' : 'In 2 days', feeMinor: fee, free: fee === 0 },
     fba
-      ? { key: 'pickup' as const, label: 'Pickup at an AfroTransact point', eta: 'Ready today after 4 pm', feeMinor: 0, free: true }
-      : { key: 'pickup' as const, label: 'Collect from the store', eta: 'Ready tomorrow', feeMinor: 0, free: true }
+      ? { key: 'pickup' as const, label: 'Pickup', eta: 'Ready today after 4 pm', feeMinor: 0, free: true }
+      : { key: 'pickup' as const, label: 'Pickup', eta: 'Ready tomorrow', feeMinor: 0, free: true }
   ];
 }
 
@@ -160,7 +160,7 @@ function checkoutSummary(): CheckoutSummary | null {
   const t = mockTax(packages, shipping);
   return {
     packages, addresses: db.addresses, paymentMethods: db.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: t.taxMinor,
-    taxRateLabel: '8.25% TX', taxJurisdictionLabel: 'Houston, TX', taxLines: t.taxLines, blockedLines: t.blockedLines, canPlaceOrder: t.blockedLines.length === 0,
+    taxRateLabel: t.blockedLines.length ? 'Calculated when you place your order' : '8.25% TX', taxEstimateStatus: t.blockedLines.length ? 'UNAVAILABLE' : 'ESTIMATED', taxJurisdictionLabel: 'Houston, TX', taxLines: t.taxLines, blockedLines: t.blockedLines, canPlaceOrder: t.blockedLines.length === 0,
     shippingTaxAllocation: { method: 'PROPORTIONAL', approved: false, note: 'Open legal decision: the mixed-basket delivery attribution method must be approved by the tax adviser before production.' },
     totalMinor: subtotal + shipping + t.taxMinor, currency: 'USD', sellerCount: new Set(packages.map((p) => p.seller.id)).size
   } as CheckoutSummary;

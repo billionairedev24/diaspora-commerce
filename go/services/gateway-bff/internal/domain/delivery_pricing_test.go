@@ -131,7 +131,7 @@ func TestEstimatorLocalDelivery(t *testing.T) {
 	}
 	e.(ShippingSettingsSetter).SetShippingSettings(&ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599})
 	p := e.Promise(AfroTransactDelivery, 0, now)
-	if p.Days != 1 || p.Prefix != "AfroTransact collects from the store and delivers" || p.FeeMinor != 599 || p.Free {
+	if p.Days != 1 || p.Prefix != "Delivery" || p.FeeMinor != 599 || p.Free {
 		t.Fatalf("promise = %+v", p)
 	}
 	opts := e.Options(AfroTransactDelivery, 0, 1000, now)

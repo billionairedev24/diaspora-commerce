@@ -9,7 +9,7 @@ import { usePathname } from 'next/navigation';
 
 import { useT } from '@/i18n/t';
 import { setAttribution } from '@/lib/preorder/attribution';
-import { familyCities } from '@/lib/preorder/copy';
+import { familyCities, familyDeliveryNote } from '@/lib/preorder/copy';
 import { type LivePreorder, useLivePreorder, useOpenPreorders, usePreorderResolution } from '@/lib/preorder/usePreorder';
 
 import { Countdown } from './Countdown';
@@ -53,12 +53,12 @@ export function PreorderBanners() {
   if (live) return <PreorderRibbon live={live} />;
   const windows = open?.windows ?? [];
   if (!windows.length || !r.placements.family || pathname === PREORDER_PATH) return null;
-  const first = windows[0];
+  const note = familyDeliveryNote(t, fmt, windows);
   return (
     <Link href={PREORDER_PATH} className={styles.family} onClick={() => setAttribution('page')} data-testid="preorder-family">
       <CalendarCheck weight="fill" className={styles.familyIcon} aria-hidden />
       <strong>{t('preorder.family.text', { cities: familyCities(t, windows.map((w) => w.place.city)) })}</strong>
-      {first && <span className={styles.familySub}>{t('preorder.family.sub', { fee: fmt.money(first.doorFeeMinor, first.currency) })}</span>}
+      {note && <span className={styles.familySub}>{note}</span>}
       <span className={styles.familyCta}>{t('preorder.family.cta')}</span>
     </Link>
   );

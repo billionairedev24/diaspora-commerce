@@ -17,7 +17,7 @@ export type MockTile = Omit<Tile, 'cells'> & { cells: MockTileCell[] };
 /** Placements without the product rails and rule tiles (resolved against the catalogue by the mock BFF). */
 export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile[]; rails: Array<{ id: string; title: string; href: string; source: RailSource }> } = {
   announcements: [
-    { id: 'a1', tone: 'ink', icon: 'truck', text: 'FREE delivery on Fulfilled by AfroTransact items', cta: 'Shop fast delivery', href: '/s?delivery=1' },
+    { id: 'a1', tone: 'ink', icon: 'truck', text: 'One flat delivery fee on every order. Pickup is free where offered.', cta: 'Shop now', href: '/s' },
     { id: 'a2', tone: 'gold', icon: 'calendar-star', text: 'Diwali and Detty December stock is landing — order early', cta: 'See picks', href: '/s?community=Indian' },
     { id: 'a3', tone: 'green', icon: 'storefront', text: 'Sellers: 0% commission for your first 30 days', cta: 'Start selling', href: '/sell' }
   ],

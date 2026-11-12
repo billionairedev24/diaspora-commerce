@@ -54,6 +54,22 @@ export function deliveryTerms(t: T, fmt: Money, terms: Pick<PreorderTerms, 'door
   return door && pickup ? t('preorder.terms.or', { a: door, b: pickup }) : door || pickup;
 }
 
+/**
+ * The delivery sentence of the "send to family" band, from the open windows' own door fee (each window is a run with its own
+ * staff-edited fee): one fee when the windows agree, "from the lowest" when they differ, nothing when no window carries a
+ * door fee (the band then only names the cities). Never a fee that is not set on a window, and never "free" (the list does
+ * not say whether a window with no door fee delivers to the door at all).
+ */
+export function familyDeliveryNote(t: T, fmt: Money, windows: readonly { doorFeeMinor: number; currency: string }[]): string {
+  const priced = windows.filter((w) => w.doorFeeMinor > 0);
+  const first = priced[0];
+  if (!first) return '';
+  // Fees in another currency are not comparable: the sentence speaks for the windows in the first one's currency.
+  const fees = priced.filter((w) => w.currency === first.currency).map((w) => w.doorFeeMinor);
+  const low = Math.min(...fees);
+  return t(fees.every((x) => x === low) ? 'preorder.family.sub' : 'preorder.family.subFrom', { fee: fmt.money(low, first.currency) });
+}
+
 const METHOD_KEY: Record<PreorderPaymentMethod, MessageKey> = { CARD: 'preorder.pay.card', WALLET: 'preorder.pay.wallet', ACH: 'preorder.pay.ach' };
 
 /** "card, Apple Pay or ACH" from the window's allowed payment methods. */

@@ -33,10 +33,10 @@ const (
 
 // Shopper-facing option labels (launch shipping, listing rules section 3). No carrier is ever named.
 const (
-	LabelDeliveryByAfroTransact = "Delivery by AfroTransact"
-	LabelStoreDelivery          = "AfroTransact collects from the store and delivers"
-	LabelPickupPoint            = "Pickup at an AfroTransact point"
-	LabelStorePickup            = "Collect from the store"
+	LabelDeliveryByAfroTransact = "Delivery"
+	LabelStoreDelivery          = "Delivery"
+	LabelPickupPoint            = "Pickup"
+	LabelStorePickup            = "Pickup"
 	LabelSellerShipping         = "Standard shipping from the seller"
 	LabelQuoteRequired          = "Too far for standard delivery. Ask us for a quote"
 	// LabelFeeUnknown replaces a fee that cannot be read right now: never $0.

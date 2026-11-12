@@ -19,8 +19,8 @@ installMockBff();
 /** Carrier and carrier-service names no shopper-facing text may carry while we are not shipping by carrier. */
 const CARRIER = /\b(usps|ups|fedex|dhl)\b|ground advantage|next day air|priority mail|express air/i;
 
-const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: 'Delivery by AfroTransact', eta: 'Tuesday, Nov 17', feeMinor: 599, free: false };
-const pickup: DeliveryOption = { key: 'pickup', label: 'Pickup at an AfroTransact point', eta: 'Ready the same day', feeMinor: 0, free: true };
+const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: 'Delivery', eta: 'Tuesday, Nov 17', feeMinor: 599, free: false };
+const pickup: DeliveryOption = { key: 'pickup', label: 'Pickup', eta: 'Ready the same day', feeMinor: 0, free: true };
 const quote: DeliveryOption = { key: 'quote_required', label: 'Too far for standard delivery. Ask us for a quote', eta: '', feeMinor: 0, free: false };
 
 function pkg(options: DeliveryOption[]): CheckoutPackage {
@@ -30,7 +30,7 @@ function pkg(options: DeliveryOption[]): CheckoutPackage {
     fulfilment: 'AFROTRANSACT',
     heading: 'Shipped by AfroTransact',
     shipsFrom: 'AfroTransact',
-    delivery: { days: 2, label: 'Tuesday, Nov 17', prefix: 'Delivery by AfroTransact', free: false, feeMinor: 599, cutoff: null },
+    delivery: { days: 2, label: 'Tuesday, Nov 17', prefix: 'Delivery', free: false, feeMinor: 599, cutoff: null },
     deliveryOptions: options,
     lines: [{ lineId: 'l1', atin: 'AT1', offerId: 'o1', title: 'Jollof Seasoning', unit: '', department: 'Groceries', priceMinor: 649, lineTotalMinor: 649, quantity: 1, maxQuantity: 5, availableQty: 5, stockStatus: 'IN_STOCK', selected: true }],
     itemCount: 1,
@@ -38,7 +38,7 @@ function pkg(options: DeliveryOption[]): CheckoutPackage {
     freeShippingNudge: null,
     membershipWaivedMinor: 0,
     pickupPoints: options.some((o) => o.key === 'pickup')
-      ? [{ id: 'pp1', name: 'Houston FC — Will Call', address: '1 Dock Rd, Houston, TX 77002', hours: 'Mon–Sat 8 am–8 pm', ready: 'Ready the same day', setBy: 'platform', kind: 'PLATFORM_COUNTER', distanceMiles: 3 }]
+      ? [{ id: 'pp1', name: 'Houston FC — Will Call', address: '1 Dock Rd, Houston, TX 77002', hours: 'Mon–Sat', ready: 'Ready the same day', setBy: 'platform', kind: 'PLATFORM_COUNTER', distanceMiles: 3 }]
       : []
   } as CheckoutPackage;
 }
@@ -61,11 +61,11 @@ describe('the delivery option list at launch (listing rules section 3)', () => {
   it('is a flat list: Delivery by AfroTransact with its price and date, no carrier, no express', () => {
     card(pkg([delivery, pickup]));
     const row = screen.getByTestId('delivery-option-afrotransact_delivery');
-    expect(row).toHaveTextContent('Delivery by AfroTransact');
+    expect(row).toHaveTextContent('Delivery');
     expect(row).toHaveTextContent('Tuesday, Nov 17');
     expect(screen.getByTestId('option-fee-afrotransact_delivery')).toHaveTextContent('$5.99');
     expect(screen.queryByTestId('delivery-option-express')).toBeNull();
-    expect(screen.getByRole('radio', { name: /Delivery by AfroTransact/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /^Delivery / })).toBeChecked();
     expect(document.body.textContent ?? '').not.toMatch(CARRIER);
   });
 
@@ -127,7 +127,7 @@ describe('checkout page (mock BFF)', () => {
     await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 2 });
     renderWithProviders(<CheckoutView />);
     const pk = await screen.findByTestId('checkout-package');
-    expect(within(pk).getByTestId('delivery-option-afrotransact_delivery')).toHaveTextContent('Delivery by AfroTransact');
+    expect(within(pk).getByTestId('delivery-option-afrotransact_delivery')).toHaveTextContent('Delivery');
     expect(within(pk).getByTestId('option-fee-afrotransact_delivery')).toHaveTextContent('$5.99');
     expect(screen.getByRole('button', { name: 'Place your order' })).toBeEnabled();
     expect(document.body.textContent ?? '').not.toMatch(CARRIER);

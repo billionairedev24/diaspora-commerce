@@ -19,6 +19,9 @@ const ICONS: Record<string, ReactNode> = {
   MONTHLY_CREDIT: <Gift weight="duotone" />
 };
 
+/** MEMBER_PRICES is on staff's menu but nothing prices it yet (payments: "documented, not priced here"): never promised to shoppers. */
+const NOT_YET_DELIVERED = new Set(['MEMBER_PRICES']);
+
 export interface BenefitListProps {
   benefits: readonly MembershipBenefit[];
   currency: string;
@@ -30,7 +33,7 @@ export interface BenefitListProps {
 export function BenefitList({ benefits, currency, t, fmt }: BenefitListProps) {
   return (
     <ul className={styles.benefits}>
-      {benefits.map((b) => {
+      {benefits.filter((b) => !NOT_YET_DELIVERED.has(b.code)).map((b) => {
         const detail = benefitDetail(t, fmt, b, currency);
         return (
           <li key={b.code} className={styles.benefit}>

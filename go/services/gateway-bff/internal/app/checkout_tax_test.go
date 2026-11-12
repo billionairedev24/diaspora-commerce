@@ -38,7 +38,7 @@ func taxable(l port.UpTaxQuoteLine) port.UpTaxLineQuote {
 }
 
 func exempt(l port.UpTaxQuoteLine) port.UpTaxLineQuote {
-	return port.UpTaxLineQuote{LineID: l.LineID, DecisionStatus: "RESOLVED", Outcome: "EXEMPT"}
+	return port.UpTaxLineQuote{LineID: l.LineID, DecisionStatus: "RESOLVED", Outcome: "EXEMPT", Explanation: "Groceries: no sales tax applies. Standard qualifying item."}
 }
 
 func undecided(l port.UpTaxQuoteLine) port.UpTaxLineQuote {
@@ -100,7 +100,9 @@ func TestDeliveryTiedOnlyToExemptLinesIsNotTaxed(t *testing.T) {
 	f := &fakeReturns{answer: func(l port.UpTaxQuoteLine) port.UpTaxLineQuote { return exempt(l) }}
 	sum := price(t, f, "", domain.CheckoutSummary{Currency: "USD",
 		Packages: []domain.CheckoutPackage{pkg("a", 499, cl("l1", "Egusi", 1, 2500), cl("l2", "Groundnuts", 1, 1500))}})
-	if sum.TaxMinor != 0 || sum.TaxRateLabel != "0.00%" {
+	// An all-exempt basket is a real $0.00 with the reason per line, and never a "0.00%" rate.
+	if sum.TaxMinor != 0 || sum.TaxRateLabel != "" || sum.TaxEstimateStatus != domain.TaxEstimated ||
+		sum.TaxLines[0].ExemptReason != "Groceries: no sales tax applies. Standard qualifying item." || sum.TaxLines[1].ExemptReason == "" {
 		t.Fatalf("exempt-only basket: %+v", sum)
 	}
 	if got := f.req.Lines[0].ShippingMinor + f.req.Lines[1].ShippingMinor; got != 499 {
@@ -157,8 +159,10 @@ func TestLinesWithoutADefiniteDecisionAreBlockedNotGuessed(t *testing.T) {
 			strings.Contains(b.Message, "ATIN") || strings.Contains(b.Message, "NEEDS_APPROVAL") {
 			t.Fatalf("%s: message must be plain, name the item, and carry no ids or tax terms: %q", name, b.Message)
 		}
-		// the blocked line contributes no tax figure; the rest is still estimated
-		if sum.TaxMinor != 83 || sum.TaxLines[1].Status != domain.TaxLineBlocked || sum.TaxLines[1].TaxMinor != 0 {
+		// a basket with a line that has no definite decision has no tax figure at all: the row says it is calculated
+		// when the order is placed (never an amount for part of the basket), and the blocked line carries no tax
+		if sum.TaxMinor != 0 || sum.TaxEstimateStatus != domain.TaxUnavailable || sum.TaxRateLabel != taxLabelUnavailable ||
+			sum.TaxLines[1].Status != domain.TaxLineBlocked || sum.TaxLines[1].TaxMinor != 0 || sum.TaxLines[1].ExemptReason != "" {
 			t.Fatalf("%s: estimate %+v %+v", name, sum.TaxMinor, sum.TaxLines)
 		}
 	}
@@ -204,5 +208,38 @@ func TestPlaceOrderMapsABlockedLineToAStableProblem(t *testing.T) {
 	p, ok := domain.AsProblem(err)
 	if !ok || p.Code != domain.CodeCheckoutItemBlocked || p.Status != http.StatusUnprocessableEntity || !strings.Contains(p.Detail, "Gift card") {
 		t.Fatalf("%+v", p)
+	}
+}
+
+// Guard (owner principle: never pass wrong tax information to a customer): a line shows no tax, and an exemption reason,
+// only when tax-returns' decision for it is RESOLVED. Anything else is blocked or unavailable, never "$0.00" / "0%" /
+// "not taxable".
+func TestAnExemptionReasonOnlyComesFromAResolvedExemptDecision(t *testing.T) {
+	cases := map[string]port.UpTaxLineQuote{
+		"needs approval":   {DecisionStatus: "NEEDS_APPROVAL", Outcome: "EXEMPT", Explanation: "Groceries: no sales tax applies."},
+		"conflict open":    {DecisionStatus: "CONFLICT_OPEN", Outcome: "EXEMPT", Explanation: "Groceries: no sales tax applies."},
+		"blocked outcome":  {DecisionStatus: "RESOLVED", Outcome: "BLOCKED", Explanation: "Groceries: no sales tax applies."},
+		"missing status":   {Outcome: "EXEMPT", Explanation: "Groceries: no sales tax applies."},
+		"taxable resolved": {DecisionStatus: "RESOLVED", Outcome: "TAXABLE", Rate: 0.0825, TaxMinor: 83, Explanation: "stray"},
+	}
+	for name, ans := range cases {
+		f := &fakeReturns{answer: func(l port.UpTaxQuoteLine) port.UpTaxLineQuote { a := ans; a.LineID = l.LineID; return a }}
+		sum := price(t, f, "", domain.CheckoutSummary{Currency: "USD", Packages: []domain.CheckoutPackage{pkg("a", 0, cl("l1", "Rice", 1, 1000))}})
+		for _, tl := range sum.TaxLines {
+			if tl.ExemptReason != "" {
+				t.Fatalf("%s: a line that is not RESOLVED + EXEMPT must carry no exemption reason: %+v", name, tl)
+			}
+		}
+		if name != "taxable resolved" && (sum.CanPlaceOrder || sum.TaxEstimateStatus != domain.TaxUnavailable || sum.TaxMinor != 0) {
+			t.Fatalf("%s: an unresolved line must block and leave the tax unavailable: %+v", name, sum)
+		}
+	}
+}
+
+func TestATaxLookupThatFailsLeavesTheTaxUnavailableNotZero(t *testing.T) {
+	f := &fakeReturns{err: errors.New("down")}
+	sum := price(t, f, "", domain.CheckoutSummary{Currency: "USD", Packages: []domain.CheckoutPackage{pkg("a", 0, cl("l1", "Rice", 1, 1000))}})
+	if sum.TaxEstimateStatus != domain.TaxUnavailable || sum.TaxRateLabel != taxLabelUnavailable || sum.TaxMinor != 0 || sum.TaxJurisdictionLabel != "" {
+		t.Fatalf("%+v", sum)
 	}
 }

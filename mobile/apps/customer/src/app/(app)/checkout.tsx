@@ -15,7 +15,7 @@ import { accountKeys, cartKeys, checkoutKeys } from '@/api/keys';
 import { useCheckoutSummary } from '@/api/queries';
 import { type CheckoutSummary } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
-import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, checkoutFailure, defaultChoices, deliveryBlock, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '@/domain/checkout';
+import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, checkoutFailure, defaultChoices, deliveryBlock, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, taxLabel, taxNote, taxValue, totalFor, validateChoices } from '@/domain/checkout';
 import { onRequestQuote } from '@/domain/quote';
 import { usePayments } from '@/payments/usePayments';
 import { c, sp, t } from '@/theme';
@@ -303,7 +303,7 @@ export default function Checkout() {
       <View style={styles.summary}>
         <KeyValue k="Items" v={formatMoney(s.subtotalMinor, s.currency)} />
         <KeyValue k="Delivery" v={total - s.subtotalMinor - s.taxMinor ? formatMoney(total - s.subtotalMinor - s.taxMinor, s.currency) : 'Free'} />
-        <KeyValue k={taxLabel(s)} v={formatMoney(s.taxMinor, s.currency)} />
+        <KeyValue k={taxLabel(s)} v={taxValue(s, formatMoney)} />
         {taxNote(s) ? <AppText variant="caption" color={c.textMuted}>{taxNote(s)}</AppText> : null}
         <KeyValue k="Total" v={formatMoney(total, s.currency)} strong />
         <AppText variant="caption" color={c.textMuted}>One charge, split automatically between AfroTransact and each seller.</AppText>

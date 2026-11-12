@@ -87,9 +87,12 @@ export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save
               />
               <PaymentChip method={p} />
               <span className={styles.choiceText}>
-                <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(t, p)}</span>
+                <span>
+                  <strong>{p.label}</strong>
+                  {p.isDefault && <span className={styles.tag}> {t('pay.default')}</span>}
+                </span>
+                <span className={styles.muted}>{pmSub(t, p)}</span>
               </span>
-              {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
             </label>
           ))}
           <label className={styles.choiceCompact} data-testid="checkout-use-new">

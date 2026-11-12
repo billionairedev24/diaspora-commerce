@@ -72,11 +72,16 @@ export function MembershipOfferView() {
   const trialAvailable = account.data?.trialAvailable ?? true;
   const percent = bestYearlyPercent(tiers);
 
+  // One tier: the page is that tier's offer (trial and price up front). Several: the tiers sit side by side.
+  const only = tiers.length === 1 ? tiers[0] : undefined;
+  const onlyTrial = only !== undefined && trialAvailable && only.trialDays > 0;
+  const onlyPrice = only ? fmt.money(interval === 'YEARLY' ? only.yearlyPriceMinor : only.monthlyPriceMinor, only.currency) : '';
+
   return (
     <FlatPage width="wide">
       <PageHeader
-        title={t('mem.title')}
-        lead={t('mem.intro')}
+        title={only ? (onlyTrial ? t('mem.hero.trial', { tier: only.name, days: only.trialDays }) : t('mem.join', { tier: only.name })) : t('mem.title')}
+        lead={only ? t('mem.hero.then', { price: onlyPrice, every: t(everyKey(interval)) }) : t('mem.intro')}
         actions={
           signedIn ? (
             <Link href="/account/membership" className={textLinkClassName}>
@@ -132,16 +137,6 @@ export function MembershipOfferView() {
                 {money} <span className={styles.priceUnit}>{every}</span>
               </p>
               {interval === 'YEARLY' && yearlySaving > 0 && <p className={styles.save}>{t('mem.yearlySaving', { amount: fmt.money(yearlySaving, tier.currency) })}</p>}
-              <BenefitList benefits={tier.benefits} currency={tier.currency} t={t} fmt={fmt} />
-              <div className={styles.disclosure}>
-                <p>{trial ? t('mem.disclosure.trial', { days: tier.trialDays, price: money, every }) : t('mem.disclosure.billed', { price: money, every })}</p>
-                <p>{t('mem.disclosure.cancel')}</p>
-                <p>
-                  <Link href="/legal/membership-terms" data-testid={`membership-terms-${tier.code}`}>
-                    {t('mem.termsLink')}
-                  </Link>
-                </p>
-              </div>
               <div className={styles.action}>
                 {!signedIn ? (
                   <a href={signInHref('/membership')} className={buttonClassName({ variant: index === 0 ? 'primary' : 'neutral' })} data-testid={`membership-signin-${tier.code}`}>
@@ -159,15 +154,34 @@ export function MembershipOfferView() {
                     onClick={() => join.mutate(tier)}
                     data-testid={`membership-join-${tier.code}`}
                   >
-                    {trial ? t('mem.joinTrial', { days: tier.trialDays }) : t('mem.join', { tier: tier.name })}
+                    {trial ? t('mem.joinTrial') : t('mem.join', { tier: tier.name })}
                   </Button>
                 )}
+              </div>
+              <BenefitList benefits={tier.benefits} currency={tier.currency} t={t} fmt={fmt} />
+              <div className={styles.disclosure}>
+                <p>{trial ? t('mem.disclosure.trial', { days: tier.trialDays, price: money, every }) : t('mem.disclosure.billed', { price: money, every })}</p>
+                <p>{t('mem.disclosure.cancel')}</p>
+                <p>
+                  <Link href="/legal/membership-terms" data-testid={`membership-terms-${tier.code}`}>
+                    {t('mem.termsLink')}
+                  </Link>
+                </p>
               </div>
             </section>
           );
         })}
       </div>
-      <p className={styles.fine}>{t('mem.creditNote')}</p>
+      <Section title={t('mem.faq.title')} id="mem-faq">
+        <dl className={styles.faq} data-testid="membership-faq">
+          {(['trial', 'charge', 'cancel', 'change', 'credit'] as const).map((k) => (
+            <div key={k} className={styles.faqItem}>
+              <dt className={styles.faqQ}>{t(`mem.faq.${k}.q`)}</dt>
+              <dd className={styles.faqA}>{t(`mem.faq.${k}.a`)}</dd>
+            </div>
+          ))}
+        </dl>
+      </Section>
     </FlatPage>
   );
 }

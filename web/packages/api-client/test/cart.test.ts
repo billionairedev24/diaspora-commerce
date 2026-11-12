@@ -69,7 +69,7 @@ describe('cart (mock BFF) — stock caps and packages per seller', () => {
     expect(selfShip?.heading).toMatch(/^Shipped by Addis Spice House/);
     // Launch shipping: AfroTransact delivers a seller's package at the flat fee; no carrier option while the staff switch is off.
     expect(selfShip?.deliveryOptions.map((o) => o.key)).toEqual(['afrotransact_delivery']);
-    expect(selfShip?.deliveryOptions[0]).toMatchObject({ label: 'AfroTransact collects from the store and delivers', feeMinor: 599, free: false });
+    expect(selfShip?.deliveryOptions[0]).toMatchObject({ label: 'Delivery', feeMinor: 599, free: false });
     expect(selfShip?.freeShippingNudge).toBeNull();
     expect(cart.itemCount).toBe(4);
     expect(cart.sellerCount).toBe(2);

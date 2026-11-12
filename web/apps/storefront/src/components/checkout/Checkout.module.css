@@ -35,7 +35,12 @@
 .choice:has(input:checked), .choiceCompact:has(input:checked) { border-color: var(--at-color-action-secondary); background: var(--at-color-success-bg); }
 .choice input, .choiceCompact input, .option input, .point input { flex: none; accent-color: var(--at-color-action-secondary); }
 .choiceText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.tag { flex: none; padding: 2px var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); white-space: nowrap; }
+.tag { flex: none; align-self: flex-start; color: var(--at-color-text-muted); font-size: var(--at-text-xs); white-space: nowrap; }
+.name { font-weight: var(--at-weight-semibold); }
+.meta { color: var(--at-color-text-muted); font-size: var(--at-text-sm); }
+.currentActions { flex: none; display: inline-flex; align-items: center; gap: var(--at-space-3); }
+.currentActions > * + *, .rowLinks > * + * { padding-inline-start: var(--at-space-3); border-inline-start: 1px solid var(--at-color-border); }
+.rowLinks { flex: none; display: inline-flex; align-items: center; gap: var(--at-space-3); }
 .rowActions { display: flex; flex-wrap: wrap; gap: var(--at-space-3); align-items: center; justify-content: space-between; }
 .addRow { display: inline-flex; gap: var(--at-space-2); align-items: center; border: 0; background: none; padding: var(--at-space-2) 0; color: var(--at-color-link); font: inherit; font-size: var(--at-text-sm); cursor: pointer; }
 
@@ -507,3 +512,8 @@
 .pickupHours { color: var(--at-color-text-muted); }
 .pickupTag { font-size: 10px; padding: 1px 6px; border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); color: var(--at-color-text-muted); }
 
+
+/* Pickup places of a package: plain rows under the Pickup option (flat, no cards). */
+.pointList { margin: 0; padding: 0 0 0 var(--at-space-6); border: 0; display: flex; flex-direction: column; }
+.pointRow { display: flex; align-items: flex-start; gap: var(--at-space-3); padding: var(--at-space-2) 0; cursor: pointer; }
+.pointRow input[type="radio"] { margin-top: 3px; accent-color: var(--at-color-action-secondary); flex: none; }

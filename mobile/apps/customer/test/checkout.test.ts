@@ -4,25 +4,25 @@ import { resolve } from 'node:path';
 import { ApiError } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, CART_CHANGED_MESSAGE, checkoutFailure, type CheckoutSummary, defaultChoices, deliveryBlock, idempotencyKey, ITEM_BLOCKED_MESSAGE, keyAfterFailure, paymentSheetIntent, QUOTE_REQUIRED_MESSAGE, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '../src/domain/checkout';
+import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, CART_CHANGED_MESSAGE, checkoutFailure, type CheckoutSummary, defaultChoices, deliveryBlock, idempotencyKey, ITEM_BLOCKED_MESSAGE, keyAfterFailure, paymentSheetIntent, QUOTE_REQUIRED_MESSAGE, requiresDeviceAuth, taxLabel, taxNote, taxValue, totalFor, validateChoices } from '../src/domain/checkout';
 import { onRequestQuote } from '../src/domain/quote';
 import { allocateShipping, type AllocationMethod } from '../src/domain/shippingAllocation';
 import { deliveryFee } from '../src/domain/shippingFee';
 
-const promise = { days: 0, label: 'Today', prefix: 'Delivery by AfroTransact', free: false, feeMinor: 599, cutoff: null };
+const promise = { days: 0, label: 'Today', prefix: 'Delivery', free: false, feeMinor: 599, cutoff: null };
 const summary = {
   packages: [
     {
       packageId: 'pkg-1', seller: { id: 's', name: 'AfroTransact Retail', kind: 'PLATFORM', city: 'Houston' }, fulfilment: 'AFROTRANSACT',
       heading: 'Shipped by AfroTransact', shipsFrom: 'Houston FC', delivery: promise,
       deliveryOptions: [
-        { key: 'afrotransact_delivery', label: 'Delivery by AfroTransact', eta: 'Today 6–8 pm', feeMinor: 599, free: false },
-        { key: 'pickup', label: 'Pickup at an AfroTransact point', eta: 'Today', feeMinor: 0, free: true }
+        { key: 'afrotransact_delivery', label: 'Delivery', eta: 'Today 6–8 pm', feeMinor: 599, free: false },
+        { key: 'pickup', label: 'Pickup', eta: 'Today', feeMinor: 0, free: true }
       ],
       lines: [], itemCount: 1, subtotalMinor: 5000, freeShippingNudge: null, pickupPoints: []
     }
   ],
-  addresses: [], paymentMethods: [], subtotalMinor: 5000, shippingMinor: 0, taxMinor: 413, taxRateLabel: '8.25% TX', totalMinor: 5413, currency: 'usd', sellerCount: 1
+  addresses: [], paymentMethods: [], subtotalMinor: 5000, shippingMinor: 0, taxMinor: 413, taxRateLabel: '8.25% TX', taxEstimateStatus: 'ESTIMATED', totalMinor: 5413, currency: 'usd', sellerCount: 1
 } as unknown as CheckoutSummary;
 
 describe('checkout rules', () => {
@@ -43,7 +43,7 @@ describe('checkout rules', () => {
   it('a package outside every delivery zone offers quote_required: not payable, with pickup beside it', () => {
     const far = { ...summary.packages[0], packageId: 'pkg-far', deliveryOptions: [
       { key: 'quote_required', label: 'Too far for standard delivery. Ask us for a quote', eta: '', feeMinor: 0, free: false },
-      { key: 'pickup', label: 'Pickup at an AfroTransact point', eta: 'Today', feeMinor: 0, free: true }
+      { key: 'pickup', label: 'Pickup', eta: 'Today', feeMinor: 0, free: true }
     ] };
     const sum = { ...summary, packages: [far], canPlaceOrder: false, deliveryBlockedReason: QUOTE_REQUIRED_MESSAGE } as unknown as CheckoutSummary;
     const ch = defaultChoices(sum);
@@ -59,8 +59,8 @@ describe('checkout rules', () => {
 
   it('does not default to pickup when a delivery option exists', () => {
     const seller = { ...summary.packages[0], packageId: 'pkg-2', deliveryOptions: [
-      { key: 'afrotransact_delivery', label: 'AfroTransact collects from the store and delivers', eta: '3 days', feeMinor: 599, free: false },
-      { key: 'pickup', label: 'Collect from the store', eta: 'Tomorrow', feeMinor: 0, free: true }
+      { key: 'afrotransact_delivery', label: 'Delivery', eta: '3 days', feeMinor: 599, free: false },
+      { key: 'pickup', label: 'Pickup', eta: 'Tomorrow', feeMinor: 0, free: true }
     ] };
     const onlyPickup = { ...summary.packages[0], packageId: 'pkg-3', deliveryOptions: [{ key: 'pickup', label: 'Pickup', eta: 'Tomorrow', feeMinor: 0, free: true }], pickupPoints: [{ id: 'pp-9', name: 'Shop', address: 'x', hours: 'y', ready: 'z', setBy: 'seller' }] };
     const ch = defaultChoices({ ...summary, packages: [seller, onlyPickup] } as unknown as CheckoutSummary);
@@ -192,5 +192,16 @@ describe('the delivery fee equals what orders charges (shared fee vectors)', () 
     const req = buildPlaceOrderRequest('a1', { 'pkg-1': { option: 'pickup', pickupPointId: 'pp-1' } }, { paymentMethodId: 'pm_1' });
     expect(req.deliverySelections[0]?.option).toBe('pickup');
     expect(totalFor(summary, { 'pkg-1': { option: 'pickup' } }) - summary.subtotalMinor - summary.taxMinor).toBe(0);
+  });
+});
+
+describe('the tax row never shows $0.00 for a tax that is not known', () => {
+  const money = (minor: number) => `$${(minor / 100).toFixed(2)}`;
+  const base = { addresses: [], paymentMethods: [], subtotalMinor: 5000, shippingMinor: 0, taxMinor: 0, taxRateLabel: '', totalMinor: 5000, currency: 'usd', packages: [] } as unknown as CheckoutSummary;
+  it('words the row from taxEstimateStatus', () => {
+    expect(taxValue({ ...base, taxEstimateStatus: 'ESTIMATED', taxMinor: 413 }, money)).toBe('$4.13');
+    expect(taxValue({ ...base, taxEstimateStatus: 'ESTIMATED' }, money)).toBe('$0.00'); // a real all-exempt basket
+    expect(taxValue({ ...base, taxEstimateStatus: 'UNAVAILABLE' }, money)).toBe('Calculated when you place your order');
+    expect(taxValue({ ...base, taxEstimateStatus: 'NEEDS_ADDRESS' }, money)).toBe('Add your address');
   });
 });

@@ -96,7 +96,9 @@ export function CheckoutOrderPanel(props: Props) {
   const netShipping = Math.max(0, shippingMinor - s.shippingDiscountMinor - waivedMinor);
   // The estimate per line (mixed baskets): exempt lines are named, blocked ones are listed with Remove above.
   const statusOf = new Map((s.taxLines ?? []).map((l) => [l.lineId, l.status] as const));
-  const hasEstimate = statusOf.size > 0;
+  const estimated = s.taxEstimateStatus === 'ESTIMATED';
+  // Why exempt lines carry no tax, in tax-returns' words: one line per distinct reason, only for a resolved exempt line.
+  const exemptReasons = [...new Set((s.taxLines ?? []).filter((l) => l.status === 'EXEMPT' && l.exemptReason).map((l) => l.exemptReason as string))];
   const exempt = [...statusOf.values()].filter((x) => x === 'EXEMPT').length;
   const taxable = [...statusOf.values()].filter((x) => x === 'TAXABLE').length;
 
@@ -183,7 +185,7 @@ export function CheckoutOrderPanel(props: Props) {
                   <span className={styles.compactText}>
                     <span className={styles.compactTitle}>
                       {l.title}
-                      {statusOf.get(l.lineId) === 'EXEMPT' && <span className={styles.itemTag} data-testid="checkout-item-no-tax">{t('co.taxExemptTag')}</span>}
+                      {estimated && statusOf.get(l.lineId) === 'EXEMPT' && <span className={styles.itemTag} data-testid="checkout-item-no-tax">{t('co.taxExemptTag')}</span>}
                       {statusOf.get(l.lineId) === 'BLOCKED' && <span className={styles.itemTag} data-testid="checkout-item-blocked-tag">{t('co.blocked.tag')}</span>}
                     </span>
                     <span className={styles.muted}>
@@ -282,17 +284,25 @@ export function CheckoutOrderPanel(props: Props) {
           )}
           <div className={styles.row}>
             <dt>{t('co.tax')}</dt>
-            <dd data-testid="checkout-tax-amount">{s.taxMinor || hasEstimate ? fmt.money(s.taxMinor) : '—'}</dd>
-            {s.taxJurisdictionLabel && (
+            <dd data-testid="checkout-tax-amount">
+              {estimated ? fmt.money(s.taxMinor) : s.taxEstimateStatus === 'NEEDS_ADDRESS' ? '—' : t('co.taxLater')}
+            </dd>
+            {estimated && s.taxJurisdictionLabel && (
               <dd className={styles.rowNote} data-testid="checkout-tax-place">
                 {t('co.taxFor', { place: s.taxJurisdictionLabel })}
               </dd>
             )}
-            {exempt > 0 && (
+            {estimated && exempt > 0 && (
               <dd className={styles.rowNote} data-testid="checkout-tax-exempt-note">
                 {taxable > 0 ? t('co.taxSomeExempt') : t('co.taxAllExempt')}
               </dd>
             )}
+            {estimated &&
+              exemptReasons.map((r) => (
+                <dd key={r} className={styles.rowNote} data-testid="checkout-tax-exempt-reason">
+                  {r}
+                </dd>
+              ))}
             {taxNote && <dd className={styles.rowNote}>{taxNote}</dd>}
           </div>
           {creditMinor > 0 && (

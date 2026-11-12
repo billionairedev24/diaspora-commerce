@@ -61,6 +61,12 @@ export function taxLabel(summary: CheckoutSummary): string {
   return summary.taxJurisdictionLabel ? `Estimated tax · ${summary.taxJurisdictionLabel}` : 'Estimated tax';
 }
 
+/** What the tax row shows: the amount only for a real estimate, never "$0.00" for a tax that is not known. */
+export function taxValue(summary: CheckoutSummary, money: (minor: number, currency: string) => string): string {
+  if (summary.taxEstimateStatus === 'ESTIMATED') return money(summary.taxMinor, summary.currency);
+  return summary.taxEstimateStatus === 'NEEDS_ADDRESS' ? 'Add your address' : 'Calculated when you place your order';
+}
+
 /** Says when some or all items carry no tax (mixed or exempt baskets); null when there is nothing to say. */
 export function taxNote(summary: CheckoutSummary): string | null {
   const lines = summary.taxLines ?? [];

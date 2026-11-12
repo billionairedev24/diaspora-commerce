@@ -2,7 +2,7 @@
 
 import { type CheckoutPackage, type DeliveryOptionKey, type DeliveryPreferences, type PlaceableOption } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, ImagePlaceholder, Key, Lightning, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
+import { Button, ImagePlaceholder, Key, Lightning, Truck, Warning } from '@afrotransact/ui';
 
 import { useT } from '@/i18n/t';
 import { feeRuleNote } from '@/lib/fee-rule';
@@ -119,7 +119,8 @@ export function PackageCard({
   const points = pkg.pickupPoints ?? [];
   const deliveryOptions = pkg.deliveryOptions.filter((o) => o.key !== 'pickup');
   const hasPickupOption = pkg.deliveryOptions.some((o) => o.key === 'pickup');
-  const canPickup = hasPickupOption && (points.length > 0 || deliveryOptions.length > 0);
+  const canPickup = hasPickupOption && points.length > 0;
+  const pickupOption = pkg.deliveryOptions.find((o) => o.key === 'pickup');
   const pickup = choice.option === 'pickup';
   const undeliverable = pkg.localDelivery?.available === false;
   const perishable = pkg.lines.some((l) => l.perishable);
@@ -129,10 +130,6 @@ export function PackageCard({
   const prefs = (p: Partial<DeliveryPreferences>) => onChoice({ ...choice, preferences: { ...choice.preferences, ...p } });
   const selected = pkg.deliveryOptions.find((o) => o.key === choice.option);
   const point = points.find((p) => p.id === choice.pickupPointId) ?? points[0];
-  const setMode = (mode: 'delivery' | 'pickup') =>
-    mode === 'pickup'
-      ? onChoice({ ...choice, option: 'pickup', pickupPointId: choice.pickupPointId ?? points[0]?.id })
-      : onChoice({ ...choice, option: deliveryOptions[0]?.key ?? 'afrotransact_delivery' });
   const promise = pickup ? (point?.ready ?? selected?.eta ?? '') : (selected?.eta ?? pkg.delivery.label);
   const group = `pkg-${pkg.packageId}`;
 
@@ -185,141 +182,104 @@ export function PackageCard({
       </div>
 
       <div className={styles.packageBody}>
-        {canPickup && (
-          <div className={styles.toggle} role="radiogroup" aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
-            <button
-              role="radio"
-              type="button"
-              aria-checked={!pickup}
-              className={!pickup ? styles.toggleOn : styles.toggleOff}
-              onClick={() => setMode('delivery')}
-              data-testid="fulfil-delivery"
-            >
-              <Truck aria-hidden />
-              <span>{t('co.fulfil.delivery')}</span>
-            </button>
-            <button
-              role="radio"
-              type="button"
-              aria-checked={pickup}
-              className={pickup ? styles.toggleOn : styles.toggleOff}
-              onClick={() => setMode('pickup')}
-              data-testid="fulfil-pickup"
-            >
-              <Storefront aria-hidden />
-              <span>{t('co.fulfil.pickup')}</span>
-            </button>
-          </div>
-        )}
-
         {!pickup && <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />}
 
-        {!pickup ? (
-          <fieldset className={styles.optionList} disabled={undeliverable}>
-            <legend className={styles.optionsSectionTitle}>{t('co.deliveryOption')}</legend>
-            {deliveryOptions.map((o) => {
-              if (o.key === 'quote_required') {
-                // Outside every delivery zone: not payable. The shopper asks for a quote, picks up, or changes the address.
-                return (
-                  <div key={o.key} className={styles.optionRow} role="group" aria-label={o.label} data-testid="quote-required">
-                    <Warning weight="fill" className={styles.flatIcon} aria-hidden />
-                    <div className={styles.flatText}>
-                      <strong className={styles.optionTitle}>{o.label}</strong>
-                      <p className={styles.optionDesc}>{t('co.quote.help')}</p>
-                      <div className={styles.optionActions}>
-                        <Button size="sm" variant="secondary" onClick={() => onRequestQuote(pkg)} data-testid="request-quote">
-                          {t('co.quote.cta')}
-                        </Button>
-                        <Button size="sm" variant="neutral" onClick={onChangeAddress}>
-                          {t('ld.changeAddress')}
-                        </Button>
-                      </div>
+        <fieldset className={styles.optionList} disabled={undeliverable && !canPickup} aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
+          <legend className={styles.optionsSectionTitle}>{t('co.deliveryOption')}</legend>
+          {deliveryOptions.map((o) => {
+            if (o.key === 'quote_required') {
+              // Outside every delivery zone: not payable. The shopper asks for a quote, picks up, or changes the address.
+              return (
+                <div key={o.key} className={styles.optionRow} role="group" aria-label={o.label} data-testid="quote-required">
+                  <Warning weight="fill" className={styles.flatIcon} aria-hidden />
+                  <div className={styles.flatText}>
+                    <strong className={styles.optionTitle}>{o.label}</strong>
+                    <p className={styles.optionDesc}>{t('co.quote.help')}</p>
+                    <div className={styles.optionActions}>
+                      <Button size="sm" variant="secondary" onClick={() => onRequestQuote(pkg)} data-testid="request-quote">
+                        {t('co.quote.cta')}
+                      </Button>
+                      <Button size="sm" variant="neutral" onClick={onChangeAddress}>
+                        {t('ld.changeAddress')}
+                      </Button>
                     </div>
                   </div>
-                );
-              }
-              const isSelected = choice.option === o.key;
-              const isFree = !o.feeUnknown && (o.free || o.feeMinor === 0);
-              return (
-                <label key={o.key} className={`${styles.optionRow} ${isSelected ? styles.optionRowActive : ''}`} data-testid={`delivery-option-${o.key}`}>
-                  <input
-                    type="radio"
-                    name={`opt-${pkg.packageId}`}
-                    checked={isSelected}
-                    onChange={() => onChoice({ ...choice, option: o.key })}
-                    disabled={undeliverable}
-                    aria-label={`${o.label} ${o.eta}`}
-                  />
-                  <div className={styles.flatText}>
-                    <strong className={styles.optionTitle}>{undeliverable ? t('ld.notAvailableOption') : o.label}</strong>
-                    <span className={styles.optionDesc}>
-                      {o.eta}
-                      {o.cutoffLabel ? ` · ${o.cutoffLabel}` : ''}
-                    </span>
-                    {o.feeRule && !undeliverable ? (
-                      <span className={styles.optionDesc} data-testid={`fee-rule-${o.key}`}>
-                        {feeRuleNote(t, o.feeRule)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <span className={o.feeUnknown ? styles.optionFee : isFree ? styles.optionFeeFree : styles.optionFee} data-testid={`option-fee-${o.key}`}>
-                    {o.feeUnknown ? t('co.fee.unknown') : isFree ? t('co.free') : fmt.money(o.feeMinor)}
-                  </span>
-                </label>
+                </div>
               );
-            })}
+            }
+            const isSelected = choice.option === o.key;
+            const isFree = !o.feeUnknown && (o.free || o.feeMinor === 0);
+            return (
+              <label key={o.key} className={`${styles.optionRow} ${isSelected ? styles.optionRowActive : ''}`} data-testid={`delivery-option-${o.key}`}>
+                <input
+                  type="radio"
+                  name={`opt-${pkg.packageId}`}
+                  checked={isSelected}
+                  onChange={() => onChoice({ ...choice, option: o.key })}
+                  disabled={undeliverable}
+                  aria-label={`${o.label} ${o.eta}`}
+                />
+                <div className={styles.flatText}>
+                  <strong className={styles.optionTitle}>{undeliverable ? t('ld.notAvailableOption') : o.label}</strong>
+                  <span className={styles.optionDesc}>
+                    {o.eta}
+                    {o.cutoffLabel ? ` · ${o.cutoffLabel}` : ''}
+                  </span>
+                  {o.feeRule && !undeliverable ? (
+                    <span className={styles.optionDesc} data-testid={`fee-rule-${o.key}`}>
+                      {feeRuleNote(t, o.feeRule)}
+                    </span>
+                  ) : null}
+                </div>
+                <span className={o.feeUnknown ? styles.optionFee : isFree ? styles.optionFeeFree : styles.optionFee} data-testid={`option-fee-${o.key}`}>
+                  {o.feeUnknown ? t('co.fee.unknown') : isFree ? t('co.free') : fmt.money(o.feeMinor)}
+                </span>
+              </label>
+            );
+          })}
+
+          {canPickup && point && (
+            <label className={`${styles.optionRow} ${pickup ? styles.optionRowActive : ''}`} data-testid="fulfil-pickup">
+              <input
+                type="radio"
+                name={`opt-${pkg.packageId}`}
+                checked={pickup}
+                onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: choice.pickupPointId ?? points[0]?.id })}
+                aria-label={`${t('co.fulfil.pickup')} ${point.name}`}
+              />
+              <div className={styles.flatText}>
+                <strong className={styles.optionTitle}>{t('co.fulfil.pickup')}</strong>
+                <span className={styles.optionDesc}>{t('co.pickupAt', { place: point.name, address: point.address })}</span>
+                <span className={styles.optionDesc}>{t('co.pickupReady', { ready: pickupOption?.eta || point.ready })}</span>
+              </div>
+              <span className={styles.optionFeeFree} data-testid="option-fee-pickup">{fmt.money(0)}</span>
+            </label>
+          )}
+        </fieldset>
+
+        {pickup && points.length > 0 && (
+          <fieldset className={styles.pointList} data-testid="pickup-points">
+            <legend className={styles.optionsSectionTitle}>{t('co.pickupChoose')}</legend>
+            {points.map((pt) => (
+              <label key={pt.id} className={styles.pointRow} data-testid="pickup-point">
+                <input
+                  type="radio"
+                  name={`pt-${pkg.packageId}`}
+                  checked={point?.id === pt.id}
+                  onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id })}
+                  aria-label={`${pt.name} ${pt.address}`}
+                />
+                <span className={styles.flatText}>
+                  <strong className={styles.optionTitle}>{pt.name}</strong>
+                  <span className={styles.optionDesc}>{pt.address}</span>
+                  <span className={styles.optionDesc}>
+                    {pt.distanceMiles != null ? `${t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })} · ` : ''}
+                    {pt.hours} · {pt.ready}
+                  </span>
+                </span>
+              </label>
+            ))}
           </fieldset>
-        ) : (
-          <div className={styles.pickupSection}>
-            {points.length === 0 ? (
-              <p className={styles.muted} role="status">
-                {t('co.pickupNoneNear')}
-              </p>
-            ) : (
-              <fieldset className={styles.pickupGrid} data-testid="pickup-points">
-                <legend className={styles.optionsSectionTitle}>{t('co.pickupChoose')}</legend>
-                {points.map((pt) => {
-                  const isPtSelected = point?.id === pt.id;
-                  return (
-                    <label
-                      key={pt.id}
-                      className={`${styles.pickupOptionCard} ${isPtSelected ? styles.pickupOptionCardActive : ''}`}
-                      data-testid="pickup-point"
-                    >
-                      <input
-                        type="radio"
-                        name={`pt-${pkg.packageId}`}
-                        checked={isPtSelected}
-                        onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id })}
-                        aria-label={`${pt.name} ${pt.address}`}
-                      />
-                      <div className={styles.pickupCardIcon}>
-                        <MapPin weight="fill" aria-hidden />
-                      </div>
-                      <div className={styles.pickupCardContent}>
-                        <div className={styles.pickupCardHeader}>
-                          <strong className={styles.pickupPointName}>{pt.name}</strong>
-                          <span className={styles.optionFeeFree}>{t('co.free')}</span>
-                        </div>
-                        <p className={styles.pickupPointAddress}>{pt.address}</p>
-                        <div className={styles.pickupPointMeta}>
-                          {pt.distanceMiles != null && (
-                            <span className={styles.pickupDistance}>
-                              {t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })}
-                            </span>
-                          )}
-                          <span className={styles.pickupHours}>· Mon–Sat 8 am–8 pm · Ready {pt.ready}</span>
-                          <span className={styles.pickupTag}>
-                            {pt.setBy === 'seller' ? t('co.setBySeller') : t('co.setByPlatform')}
-                          </span>
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </fieldset>
-            )}
-          </div>
         )}
 
         {atd && !undeliverable && (

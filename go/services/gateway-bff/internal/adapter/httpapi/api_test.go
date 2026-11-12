@@ -234,7 +234,7 @@ func TestSearchAndSuggest(t *testing.T) {
 	}
 	h := hits[0].(map[string]any)
 	if h["offerId"] != "ATJOLLOF01" || h["stockStatus"] != "LOW_STOCK" || h["lowStock"] != true || h["department"] != "Groceries" ||
-		h["fulfilment"] != "AFROTRANSACT" || h["delivery"].(map[string]any)["prefix"] != "Delivery by AfroTransact" {
+		h["fulfilment"] != "AFROTRANSACT" || h["delivery"].(map[string]any)["prefix"] != "Delivery" {
 		t.Fatalf("hit = %v", h)
 	}
 	facets := page["facets"].(map[string]any)

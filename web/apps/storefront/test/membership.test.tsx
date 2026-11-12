@@ -35,6 +35,9 @@ describe('the membership offer page (S323)', () => {
     expect(within(plus).getByText('Priority support')).toBeInTheDocument();
     expect(within(plus).getByText('Free for 14 days')).toBeInTheDocument();
     expect(screen.getByTestId('membership-tier-premium')).toBeInTheDocument();
+    // Plain FAQ with the cancel wording; benefits staff can list but nothing prices (member prices) are never promised.
+    expect(within(screen.getByTestId('membership-faq')).getByText('How do I cancel?')).toBeInTheDocument();
+    expect(screen.queryByText('Member prices and deals')).not.toBeInTheDocument();
     expect(within(plus).getByTestId('membership-signin-plus')).toHaveAttribute('href', expect.stringContaining('membership'));
     expect(screen.getByText(/can’t be withdrawn or refunded to a card/)).toBeInTheDocument();
     // Credit has no way out anywhere on the page.
@@ -52,7 +55,7 @@ describe('the membership offer page (S323)', () => {
     await user.click(screen.getByTestId('membership-interval-MONTHLY'));
 
     const join = await within(plus).findByTestId('membership-join-plus');
-    expect(join).toHaveTextContent('Start my 14-day free trial');
+    expect(join).toHaveTextContent('Start free trial');
     await waitFor(() => expect(join).toBeEnabled());
     await user.click(join);
     expect(await screen.findByTestId('membership-already')).toHaveTextContent('You are a Plus member.');
@@ -137,7 +140,7 @@ describe('membership at the cart and the checkout (S323)', () => {
     const api = await cartWithSellerShipping();
     const { unmount } = renderWithProviders(<CartView />);
     const upsell = await screen.findByTestId('membership-upsell');
-    expect(upsell).toHaveTextContent('Join Plus to save $5.99 on this order');
+    expect(upsell).toHaveTextContent('Save $5.99 on this order with Plus.');
     unmount();
     await api.joinAccountMembership({ tierCode: 'plus', interval: 'MONTHLY' }, 'membership-ui-0000005');
     renderWithProviders(<CartView />);
@@ -145,13 +148,17 @@ describe('membership at the cart and the checkout (S323)', () => {
     await waitFor(() => expect(screen.queryByTestId('membership-upsell')).not.toBeInTheDocument());
   });
 
-  it('shows "Join Plus to save $5.99 on this order" before joining and "Fee waived: membership" after', async () => {
+  it('shows "Save $5.99 on this order with Plus" before joining and "Fee waived: membership" after', async () => {
     const api = await cartWithSellerShipping();
     const { unmount } = renderWithProviders(<CheckoutView />);
     const upsell = await screen.findByTestId('membership-upsell');
-    expect(upsell).toHaveTextContent('Join Plus to save $5.99 on this order');
-    expect(upsell).toHaveTextContent(/Try it free for 14 days, then \$9\.99 a month/);
-    expect(within(upsell).getByRole('link', { name: 'See membership' })).toHaveAttribute('href', '/membership');
+    expect(upsell).toHaveTextContent('Save $5.99 on this order with Plus.');
+    // One quiet line, one link, no price or benefit claim of its own.
+    expect(upsell).toHaveTextContent('Save $5.99 on this order with Plus. Try free for 14 days');
+    expect(within(upsell).getAllByRole('link')).toHaveLength(1);
+    expect(within(upsell).queryByRole('button')).not.toBeInTheDocument();
+    expect(upsell).not.toHaveTextContent(/Free delivery and more/);
+    expect(within(upsell).getByRole('link', { name: 'Try free for 14 days' })).toHaveAttribute('href', '/membership');
     expect(screen.queryByTestId('checkout-membership-waived')).not.toBeInTheDocument();
     unmount();
 
@@ -163,18 +170,6 @@ describe('membership at the cart and the checkout (S323)', () => {
     expect(row).toHaveTextContent(/Plus · Free AfroTransact delivery: \$5\.99 off/);
     expect(screen.queryByTestId('membership-upsell')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('order-summary')).getByText('FREE')).toBeInTheDocument();
-  });
-
-  it('joins from the checkout itself: the upsell goes away and the fee is waived at once', async () => {
-    const api = await cartWithSellerShipping();
-    const user = userEvent.setup();
-    renderWithProviders(<CheckoutView />);
-    const upsell = await screen.findByTestId('membership-upsell');
-    await user.click(within(upsell).getByTestId('membership-upsell-join'));
-    expect(await screen.findByTestId('checkout-membership-waived')).toHaveTextContent('−$5.99');
-    await waitFor(() => expect(screen.queryByTestId('membership-upsell')).not.toBeInTheDocument());
-    expect((await api.getAccountMembership()).membership).toMatchObject({ status: 'TRIALING', tierName: 'Plus' });
-    expect(screen.queryByTestId('checkout-membership-earn')).not.toBeInTheDocument(); // a trial earns no credit
   });
 
   it('shows the credit a paying member earns, in the cart and at checkout', async () => {

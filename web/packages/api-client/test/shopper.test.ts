@@ -101,7 +101,7 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     expect(sum.publishableKey).toBe('pk_test_mock');
     const pkg = sum.packages[0];
     expect(pkg?.deliveryOptions.map((o) => o.key)).toEqual(['afrotransact_delivery', 'pickup']);
-    expect(pkg?.deliveryOptions.map((o) => o.label)).toEqual(['Delivery by AfroTransact', 'Pickup at an AfroTransact point']);
+    expect(pkg?.deliveryOptions.map((o) => o.label)).toEqual(['Delivery', 'Pickup']);
     expect(pkg?.pickupPoints?.[0]?.hours).toBeTruthy();
     expect(pkg?.deliveryOptions[0]?.earliestDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const conf = await api.placeOrder(

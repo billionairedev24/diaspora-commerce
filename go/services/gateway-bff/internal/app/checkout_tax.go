@@ -12,6 +12,23 @@ import (
 // blockedAction is the one thing a shopper can do about a blocked line.
 const blockedAction = "REMOVE"
 
+// Plain words for the tax row when there is no estimate. The storefront words the row from TaxEstimateStatus, these are
+// the matching labels for clients that only read taxRateLabel.
+const (
+	taxLabelNeedsAddress = "Add your address to see an estimate"
+	taxLabelUnavailable  = "Calculated when you place your order"
+)
+
+// taxUnavailable marks the tax estimate as not known: never a $0.00 amount or a 0% rate, orders quotes again when the
+// order is placed.
+func taxUnavailable(sum *domain.CheckoutSummary, addr *port.IdentityAddress) {
+	sum.TaxMinor, sum.TaxRateLabel, sum.TaxJurisdictionLabel = 0, taxLabelUnavailable, ""
+	sum.TaxEstimateStatus = domain.TaxUnavailable
+	if addr == nil {
+		sum.TaxRateLabel, sum.TaxEstimateStatus = taxLabelNeedsAddress, domain.TaxNeedsAddress
+	}
+}
+
 // shippingAllocationNote is what the summary says about the delivery attribution method until it is approved.
 const shippingAllocationNote = "Delivery charges are attributed to the lines of a package by item value. For packages that mix " +
 	"taxable and exempt items this method is an open legal decision and must be approved by the tax adviser before production."
@@ -42,6 +59,7 @@ func (s *checkoutPaymentServiceImpl) shippingAllocation() ShippingAllocation {
 func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.CheckoutSummary, addr *port.IdentityAddress,
 	packageDelivery map[string]string) {
 	if s.d.Returns == nil || addr == nil || strings.TrimSpace(addr.State) == "" || strings.TrimSpace(addr.PostalCode) == "" {
+		taxUnavailable(sum, addr)
 		return
 	}
 	method := s.shippingAllocation()
@@ -69,6 +87,7 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 		}
 	}
 	if len(lines) == 0 {
+		taxUnavailable(sum, addr)
 		return
 	}
 	cur := strings.ToUpper(firstNonEmpty(sum.Currency, domain.Currency))
@@ -77,6 +96,7 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 	q, err := s.d.Returns.TaxQuote(ctx, req)
 	if err != nil {
 		s.d.log().WarnContext(ctx, "tax quote unavailable; tax shown at order time", "error", err)
+		taxUnavailable(sum, addr)
 		return
 	}
 	answers := map[string]port.UpTaxLineQuote{}
@@ -99,7 +119,8 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 		}
 		tl.Status, tl.TaxMinor = domain.TaxLineTaxable, a.TaxMinor
 		if a.Outcome == "EXEMPT" {
-			tl.Status = domain.TaxLineExempt
+			// Resolved() above guarantees RESOLVED + EXEMPT: only then does a line carry a reason for having no tax.
+			tl.Status, tl.ExemptReason = domain.TaxLineExempt, strings.TrimSpace(a.Explanation)
 		}
 		sum.TaxMinor += a.TaxMinor
 		if sum.TaxRateLabel == "" && a.Rate > 0 {
@@ -107,11 +128,16 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 		}
 		sum.TaxLines = append(sum.TaxLines, tl)
 	}
-	if sum.TaxRateLabel == "" && len(sum.BlockedLines) < len(lines) {
-		sum.TaxRateLabel = "0.00%"
-	}
-	sum.TaxJurisdictionLabel = jurisdictionLabel(addr)
 	sum.CanPlaceOrder = len(sum.BlockedLines) == 0
+	if len(sum.BlockedLines) > 0 {
+		// A line without a definite decision: no figure for the basket, only the blocked lines say why.
+		taxUnavailable(sum, addr)
+		return
+	}
+	// ESTIMATED: the amount is shown (an all-exempt basket is a real $0.00, each exempt line carries its reason); the rate
+	// is the first taxable line's, empty when no line is taxable (never "0%").
+	sum.TaxEstimateStatus = domain.TaxEstimated
+	sum.TaxJurisdictionLabel = jurisdictionLabel(addr)
 	sum.ShippingTaxAllocation = &domain.ShippingTaxAllocation{Method: string(method), Approved: false, Note: shippingAllocationNote}
 }
 

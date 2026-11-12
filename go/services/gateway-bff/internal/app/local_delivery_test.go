@@ -81,7 +81,7 @@ func TestCheckoutQuotesLocalDelivery(t *testing.T) {
 		len(ld.OfferIDs) != 1 || ld.UnavailableReason != nil {
 		t.Fatalf("quote = %+v", ld)
 	}
-	if o := sum.Packages[0].DeliveryOptions[0]; o.FeeMinor != 599 || o.Label != "AfroTransact collects from the store and delivers" || o.FeeUnknown {
+	if o := sum.Packages[0].DeliveryOptions[0]; o.FeeMinor != 599 || o.Label != "Delivery" || o.FeeUnknown {
 		t.Fatalf("option = %+v", o)
 	}
 	if sum.ShippingMinor != 1099 || sum.TotalMinor != 5599 || sum.Packages[1].LocalDelivery != nil {

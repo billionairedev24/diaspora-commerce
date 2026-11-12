@@ -118,13 +118,13 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(screen.queryByRole('radio', { name: /Use a new payment method/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: 'Powered by Stripe' }).length).toBeGreaterThan(0);
 
-    await user.click(within(pkg).getByRole('radio', { name: /Delivery by AfroTransact/ }));
+    await user.click(within(pkg).getByRole('radio', { name: /^Delivery / }));
     expect(within(pkg).getByText(/Delivery preferences/)).toBeInTheDocument();
     await user.click(within(pkg).getByTestId('fulfil-pickup'));
     expect(within(pkg).getByText('Houston FC — Will Call')).toBeInTheDocument();
-    expect(within(pkg).getAllByText(/Mon–Sat 8 am–8 pm/).length).toBeGreaterThan(0);
-    await user.click(within(pkg).getByTestId('fulfil-delivery'));
-    await user.click(within(pkg).getByRole('radio', { name: /Delivery by AfroTransact/ }));
+    expect(within(pkg).getAllByText(/Mon–Sat/).length).toBeGreaterThan(0);
+    await user.click(within(pkg).getByTestId('delivery-option-afrotransact_delivery'));
+    await user.click(within(pkg).getByRole('radio', { name: /^Delivery / }));
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });

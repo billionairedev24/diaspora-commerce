@@ -42,20 +42,20 @@ func TestEstimator(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 	at := e.Promise(domain.FulfilledByAfroTransact, 0, sat)
-	if at.Days != 2 || at.Free || at.FeeMinor != 599 || at.Prefix != "Delivery by AfroTransact" || at.Cutoff == nil || *at.Cutoff != "Order within 11 hrs 59 mins." {
+	if at.Days != 2 || at.Free || at.FeeMinor != 599 || at.Prefix != "Delivery" || at.Cutoff == nil || *at.Cutoff != "Order within 11 hrs 59 mins." {
 		t.Fatalf("%+v", at)
 	}
 	s := e.Promise(domain.ShipsFromSeller, 3, sat)
-	if s.Free || s.FeeMinor != 599 || s.Days != 3 || s.Cutoff != nil || s.Prefix != "AfroTransact collects from the store and delivers" {
+	if s.Free || s.FeeMinor != 599 || s.Days != 3 || s.Cutoff != nil || s.Prefix != "Delivery" {
 		t.Fatalf("%+v", s)
 	}
 	// Carrier off (launch): a seller's package is delivered by AfroTransact at the same flat fee; no express, no carrier.
 	opts := e.Options(domain.ShipsFromSeller, 0, 5000, sat)
-	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].FeeMinor != 599 || opts[0].Free || opts[0].Label != "AfroTransact collects from the store and delivers" {
+	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].FeeMinor != 599 || opts[0].Free || opts[0].Label != "Delivery" {
 		t.Fatalf("%+v", opts)
 	}
 	opts = e.Options(domain.FulfilledByAfroTransact, 0, 100, sat)
-	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].Label != "Delivery by AfroTransact" || opts[0].FeeMinor != 599 {
+	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].Label != "Delivery" || opts[0].FeeMinor != 599 {
 		t.Fatalf("%+v", opts)
 	}
 	if n := e.Nudge(domain.ShipsFromSeller, 2500); n != nil {
