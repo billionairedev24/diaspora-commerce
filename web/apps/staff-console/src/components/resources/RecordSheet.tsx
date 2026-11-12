@@ -86,7 +86,12 @@ export function Details({ record }: { record: RecordDetail }) {
               {s.fields.map((f) => (
                 <li key={f.label}>
                   <a href={f.value} target="_blank" rel="noreferrer" aria-label={f.label}>
-                    <img src={f.value} alt={f.label} loading="lazy" className="size-24 rounded-sm border border-border object-cover" />
+                    <img
+                      src={f.value}
+                      alt={f.label}
+                      loading="lazy"
+                      className={s.fields.length === 1 ? 'max-h-80 max-w-full rounded-sm border border-border object-contain' : 'size-24 rounded-sm border border-border object-cover'}
+                    />
                   </a>
                 </li>
               ))}

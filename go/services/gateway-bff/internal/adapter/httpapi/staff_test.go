@@ -459,6 +459,33 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"path": "Fashion › Women › Bridal sets", "parentPath": "Fashion › Women", "name": "Bridal sets", "exampleProduct": "Aso-ebi set", "detailsNeeded": "Pieces",
 			"status": "PENDING_REVIEW", "createdAt": now, "productsWaiting": 1}, "products": []any{map[string]any{"id": "prd-1", "atin": "AT0001", "title": "Aso-ebi set"}},
 			"suggestedParent": nil})
+	case p == "/v1/change-requests":
+		// The review queues (S385): the table of each kind of request asks for its own type.
+		typ := r.URL.Query().Get("type")
+		if typ == "" {
+			typ = "TITLE"
+		}
+		writeJ(w, 200, page(map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "atin": "AT00000001", "title": "Shea butter", "type": typ, "status": "PENDING",
+			"payload": map[string]any{"value": "Raw shea butter", "gtin": "012345678905", "duplicateOfAtin": "AT00000009"}, "variantAtin": "AT00000002", "requestedByOrg": "org-1",
+			"requestedAt": now, "slaDueAt": now, "overdue": false, "ageHours": 5, "version": 0}))
+	case strings.HasPrefix(p, "/v1/change-requests/") && strings.HasSuffix(p, "/decision"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "status": "APPLIED"})
+	case strings.HasPrefix(p, "/v1/change-requests/"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "atin": "AT00000001", "title": "Shea butter", "type": "TITLE", "status": "PENDING",
+			"payload": map[string]any{"value": "Raw shea butter"}, "requestedByOrg": "org-1", "requestedAt": now, "slaDueAt": now, "overdue": false, "ageHours": 5, "version": 0})
+	case p == "/v1/gtin-exemptions":
+		writeJ(w, 200, page(map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f2", "productAtin": "AT00000007", "title": "Hand carved stool", "brand": "Adire Lagos",
+			"requiredBecause": "BRAND_GATED_CATEGORY", "status": "PENDING", "requestedByOrg": "org-1", "createdAt": now, "slaDueAt": now, "overdue": false, "ageHours": 5,
+			"duplicateHints": []any{}, "sellerMessage": "We are checking that this item has no barcode."}))
+	case strings.HasPrefix(p, "/v1/gtin-exemptions/") && strings.HasSuffix(p, "/decision"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f2", "status": "APPROVED"})
+	case p == "/v1/assets/held":
+		writeJ(w, 200, map[string]any{"assets": []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f3", "fileName": "stool.jpg", "ownerOrg": "org-1", "imageSlot": "MAIN",
+			"width": 1600, "height": 1600, "createdAt": now, "url": "https://storage.example/signed/stool.jpg", "status": "FLAGGED",
+			"checks":     []any{map[string]any{"code": "HELD_TEXT", "level": "HOLD", "message": "We are checking this photo for text, logos or watermarks."}},
+			"moderation": map[string]any{"verdict": "HELD", "aiLabels": []any{"WATERMARK"}, "mismatchScore": 0.4}}}})
+	case strings.HasPrefix(p, "/v1/assets/") && strings.HasSuffix(p, "/review"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f3", "status": "READY"})
 	case p == "/v1/products":
 		writeJ(w, 200, page(map[string]any{"id": "prd-1", "atin": "AT0001", "title": "Shea butter", "status": "IN_REVIEW", "ownerOrgId": "org-1",
 			"variants": []any{map[string]any{"atin": "AT0001-1", "sku": "SHEA", "status": "IN_REVIEW"}}}))
@@ -909,7 +936,7 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJ(w, 200, map[string]any{"noticeVersion": "2.1", "effectiveDate": "2026-09-01", "noticeHref": "/legal/cookies",
 			"categories": []any{map[string]any{"key": "necessary", "name": "Strictly necessary"}, map[string]any{"key": "analytics", "name": "Analytics"}, map[string]any{"key": "functional", "name": "Functional"}},
-			"cookies": cookieRows})
+			"cookies":    cookieRows})
 	case strings.HasPrefix(p, "/v1/consent/cookies/"):
 		if r.Method == http.MethodDelete {
 			w.WriteHeader(204)
@@ -983,7 +1010,7 @@ func staffBFFWith(t *testing.T, f *fakePlatform, opts ...func(d app.StaffDeps, s
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), Seller: up("seller"), Orders: up("orders"), Catalog: up("catalog"), TrustOps: up("trust-ops"),
 		TaxReturns: up("tax-returns"), Payments: up("payments"), Inventory: up("inventory"), Retail: up("retail"), Fulfilment: up("fulfilment"),
-		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings"), Carrier: up("carrier-gateway"), Offers: up("offers")},
+		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings"), Carrier: up("carrier-gateway"), Offers: up("offers"), Media: up("media")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
 		Jobs:   exportfiles.NewMemoryJobs(), Maintenance: app.NewMaintenanceService(memcache.NewMaintenance(), nil, nil), Blobs: files, Renderer: exportfiles.NewRenderer(), ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
@@ -1928,7 +1955,6 @@ func TestStaffAccessLevels(t *testing.T) {
 		t.Fatal("marketing may not refund")
 	}
 }
-
 
 // appWorkflow is seller's view of who holds the fake application: with Amina Bello at approval, overdue, escalated once.
 func appWorkflow(now string) map[string]any {

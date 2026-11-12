@@ -89,10 +89,11 @@ class ChangeRequestController {
     @GetMapping("/v1/change-requests")
     ChangeRequestPageResponse list(@RequestParam(required = false) ChangeRequestStatus status,
                                    @RequestParam(required = false) ChangeRequestType type,
+                                   @RequestParam(defaultValue = "false") boolean contentOnly,
                                    @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "25") int size,
                                    @RequestParam(defaultValue = "OLDEST") String sort) {
-        return ChangeRequestPageResponse.of(changeRequests.queue(status, type, !"NEWEST".equalsIgnoreCase(sort), page,
-                size));
+        return ChangeRequestPageResponse.of(changeRequests.queue(status, type, contentOnly,
+                !"NEWEST".equalsIgnoreCase(sort), page, size));
     }
 
     @Tag(name = "Review queue")

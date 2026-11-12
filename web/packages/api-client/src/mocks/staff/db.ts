@@ -6,6 +6,7 @@ import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { COOKIE_CATEGORIES, COOKIE_TABLE } from '../fixtures/legal';
 import { seedReviewSettings, seedWorkflow } from './application-flow';
+import { seedCatalogReview } from './catalog-review';
 import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './content-pages';
 import { seedQuotes,seedQuoteSettings } from './delivery-quotes';
 import { MOCK_DEPARTMENT_ORGS, type MockDepartmentsState, seedDepartments } from './departments';
@@ -689,6 +690,7 @@ function seed(now: Date): MockStaffDb {
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now), 'application-review-settings': seedReviewSettings(now), 'delivery-quotes': seedQuotes(now), 'delivery-quote-settings': seedQuoteSettings(now), 'service-area-rules': seedServiceAreaRules(now), 'service-zones': seedServiceZones(now), 'shipping-settings': seedShippingSettings(now),
       ...seedSelling(now),
+      ...seedCatalogReview(now),
       ...seedIdentityAdmin(now)
     },
     notifications,

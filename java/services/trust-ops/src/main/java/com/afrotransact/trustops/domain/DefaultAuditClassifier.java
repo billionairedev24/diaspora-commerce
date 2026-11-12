@@ -56,6 +56,11 @@ public final class DefaultAuditClassifier implements AuditClassifier {
                     + label(s(p, "departmentCode")) + reason(p)));
             case "seller.org.departments_changed" -> Optional.of(new AuditFacts(s(p, "actorId"), "STAFF", eventType,
                     "ORG", first(s(p, "orgId"), key), first(s(p, "orgId"), key), departmentsSummary(p)));
+            case "catalog.change_request.decided" -> changeRequestDecision(eventType, p, key);
+            case "catalog.gtin_exemption.decided" -> Optional.of(new AuditFacts(s(p, "decidedBy"), "STAFF", eventType,
+                    "GTIN_EXEMPTION", first(s(p, "exemptionId"), key), s(p, "requestedByOrg"),
+                    ("APPROVED".equals(s(p, "status")) ? "Approved" : "Rejected") + " the no-barcode request for "
+                    + s(p, "productAtin") + reason(p)));
             case "orders.shipment.status_changed", "orders.shipment.cancelled" -> override(eventType, p);
             case "preorder.window.paused", "preorder.window.resumed" -> Optional.of(new AuditFacts(
                     first(s(p, "actorId"), "system"), "STAFF", eventType, "PREORDER_WINDOW", first(s(p, "windowId"), key),
@@ -72,6 +77,21 @@ public final class DefaultAuditClassifier implements AuditClassifier {
             default -> Optional.of(new AuditFacts(first(s(p, "actorId"), s(p, "subject")), null, eventType, "EVENT",
                     key, s(p, "orgId"), eventType));
         };
+    }
+
+    /** Staff decisions only: a seller who takes a waiting request back is not a staff decision. */
+    private static Optional<AuditFacts> changeRequestDecision(String eventType, Map<String, Object> p, String key) {
+        String status = s(p, "status");
+        if (!"APPLIED".equals(status) && !"REJECTED".equals(status)) {
+            return Optional.empty();
+        }
+        String resolution = s(p, "resolution");
+        String created = s(p, "resultAtin");
+        return Optional.of(new AuditFacts(s(p, "decidedBy"), "STAFF", eventType, "CHANGE_REQUEST",
+                first(s(p, "changeRequestId"), key), s(p, "requestedByOrg"),
+                ("APPLIED".equals(status) ? "Applied " : "Did not apply ") + label(s(p, "type")).toLowerCase(Locale.ROOT)
+                + " request on " + s(p, "atin") + (resolution == null ? "" : " (" + resolution + ")")
+                + (created == null ? "" : ", new variant " + created) + reason(p)));
     }
 
     private static Optional<AuditFacts> override(String eventType, Map<String, Object> p) {

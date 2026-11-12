@@ -82,10 +82,12 @@ final class ChangeRequestDtos {
     record DecisionInput(
             @NotNull @Schema(allowableValues = {"APPROVE", "REJECT"}) String decision,
             @NotBlank @Size(min = 3, max = 1000) String reason,
-            @Schema(description = "Required to approve WRONG_MATCH or DUPLICATE_PAGE",
+            @Schema(description = "Required to approve WRONG_MATCH or DUPLICATE_PAGE (NEW_VARIANT and the content types "
+                    + "need none)",
                     allowableValues = {"CORRECT_GTIN", "MOVE_VARIANT", "SPLIT_VARIANT", "MERGE"}) String resolution,
-            @Schema(description = "CORRECT_GTIN: {gtin}. MOVE_VARIANT: {variantAtin, targetPageAtin}. SPLIT_VARIANT: "
-                    + "{variantAtin}. MERGE: {survivorAtin, variantMap?}") Map<String, Object> resolutionParams,
+            @Schema(description = "NEW_VARIANT: {holdPageForTax?}. CORRECT_GTIN: {gtin}. MOVE_VARIANT: {targetAtin, "
+                    + "holdPageForTax?}. SPLIT_VARIANT: none (the variant is the one in the report). MERGE: "
+                    + "{survivorAtin, variantMap?}") Map<String, Object> resolutionParams,
             Long expectedVersion) {
 
         DecisionCommand toCommand() {

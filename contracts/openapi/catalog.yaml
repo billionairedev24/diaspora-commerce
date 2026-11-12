@@ -3322,6 +3322,13 @@ paths:
         required: false
         schema:
           $ref: '#/components/schemas/ChangeRequestType'
+      - name: contentOnly
+        in: query
+        required: false
+        description: Leave out the WRONG_MATCH and DUPLICATE_PAGE reports (they have tables of their own in the staff console)
+        schema:
+          type: boolean
+          default: false
       - name: page
         in: query
         required: false

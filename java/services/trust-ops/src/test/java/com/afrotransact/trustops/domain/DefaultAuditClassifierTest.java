@@ -67,6 +67,35 @@ class DefaultAuditClassifierTest {
     }
 
     @Test
+    void staffDecisionsOnChangeRequestsAndBarcodeExemptionsCarryWhoWhatAndWhy() {
+        AuditFacts applied = classifier.classify("catalog.change_request.decided", Map.of("changeRequestId", "cr-1",
+                "atin", "AT00000001", "type", "NEW_VARIANT", "status", "APPLIED", "requestedByOrg", "org_b",
+                "decidedBy", "staff-9", "reason", "A real size", "resultAtin", "AT00000042"), "cr-1").orElseThrow();
+        assertThat(applied.actorId()).isEqualTo("staff-9");
+        assertThat(applied.actorType()).isEqualTo("STAFF");
+        assertThat(applied.entityType()).isEqualTo("CHANGE_REQUEST");
+        assertThat(applied.entityId()).isEqualTo("cr-1");
+        assertThat(applied.orgId()).isEqualTo("org_b");
+        assertThat(applied.summary()).isEqualTo("Applied new variant request on AT00000001, new variant AT00000042 — A real size");
+
+        AuditFacts rejected = classifier.classify("catalog.change_request.decided", Map.of("changeRequestId", "cr-2",
+                "atin", "AT00000001", "type", "WRONG_MATCH", "status", "REJECTED", "requestedByOrg", "org_b",
+                "decidedBy", "staff-9", "reason", "The barcode is right"), "cr-2").orElseThrow();
+        assertThat(rejected.summary()).isEqualTo("Did not apply wrong match request on AT00000001 — The barcode is right");
+
+        // A seller taking a waiting request back is not a staff decision.
+        assertThat(classifier.classify("catalog.change_request.decided", Map.of("changeRequestId", "cr-3", "atin",
+                "AT00000001", "type", "TITLE", "status", "WITHDRAWN", "requestedByOrg", "org_b", "decidedBy", "user-1"),
+                "cr-3")).isEmpty();
+
+        AuditFacts exemption = classifier.classify("catalog.gtin_exemption.decided", Map.of("exemptionId", "ex-1",
+                "productAtin", "AT00000007", "status", "APPROVED", "requestedByOrg", "org_c", "decidedBy", "staff-9",
+                "reason", "Handmade, checked the maker"), "ex-1").orElseThrow();
+        assertThat(exemption.entityType()).isEqualTo("GTIN_EXEMPTION");
+        assertThat(exemption.summary()).isEqualTo("Approved the no-barcode request for AT00000007 — Handmade, checked the maker");
+    }
+
+    @Test
     void unknownTypesFallBackToTheKey() {
         AuditFacts f = classifier.classify("content.flag.changed", Map.of("actorId", "pm-1"), "flag-9").orElseThrow();
         assertThat(f.actorId()).isEqualTo("pm-1");

@@ -55,7 +55,9 @@
       "producers": [
         "catalog"
       ],
-      "consumers": []
+      "consumers": [
+        "trust-ops"
+      ]
     },
     "at.content.events": {
       "producers": [

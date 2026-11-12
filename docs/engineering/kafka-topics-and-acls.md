@@ -47,7 +47,7 @@ covered by it. If `KAFKA_GROUP` is set in a deployment, the id must still start 
 | retail | Java | `retail-service` | `retail-service*` | `at.inventory-reservation.events` |
 | seller | Java | `seller-service` | `seller-service*` | `at.bookings.events`, `at.identity.events`, `at.offers.events`, `at.order.events` |
 | tax-returns | Java | `tax-returns-service` | `tax-returns-service*` | `at.carrier-shipment.events`, `at.order.events`, `at.payment.events`, `at.product.events` |
-| trust-ops | Java | `trust-ops-service`, `trust-ops-service-audit`, `trust-ops-service-fulfilment`, `trust-ops-service-moderation`, `trust-ops-service-product-reviews`, `trust-ops-service-reviews`, `trust-ops-service-seller-health`, `trust-ops-service-support` | `trust-ops-service*` | `at.ai-handoff.events`, `at.bookings.events`, `at.fulfilment.events`, `at.identity.events`, `at.mcp-tool.events`, `at.order.events`, `at.payout.events`, `at.product-review.events`, `at.product.events`, `at.seller-application.events`, `at.seller-compliance.events` |
+| trust-ops | Java | `trust-ops-service`, `trust-ops-service-audit`, `trust-ops-service-fulfilment`, `trust-ops-service-moderation`, `trust-ops-service-product-reviews`, `trust-ops-service-reviews`, `trust-ops-service-seller-health`, `trust-ops-service-support` | `trust-ops-service*` | `at.ai-handoff.events`, `at.bookings.events`, `at.change-request.events`, `at.fulfilment.events`, `at.identity.events`, `at.mcp-tool.events`, `at.order.events`, `at.payout.events`, `at.product-review.events`, `at.product.events`, `at.seller-application.events`, `at.seller-compliance.events` |
 
 ## Corrections made to the previous Terraform list
 

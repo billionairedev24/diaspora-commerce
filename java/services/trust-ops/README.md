@@ -160,7 +160,7 @@ Consumed (each listener has its own consumer group and inbox consumer, so they n
 | `-product-reviews` | `at.product-review.events` | `catalog.review.submitted\|published\|rejected\|removed\|deleted` (S324) |
 | `-seller-health` | `at.order.events` | `orders.order.placed`, `orders.shipment.delivered\|cancelled\|status_changed` |
 | `-support` | `at.ai-handoff.events` | `ai.handoff.requested` |
-| `-audit` | `TRUSTOPS_AUDIT_TOPICS` (default identity, seller-application, seller-compliance, payout, mcp-tool, order) | `TRUSTOPS_AUDIT_EVENT_TYPES`: role / permission grants and revokes, user disable / enable, seller application decisions, payout holds and listing hides, payout lifecycle, `mcp.tool.invoked`, and shipment status changes / cancellations made by `PLATFORM_ADMIN` or `FULFILMENT_OPS` |
+| `-audit` | `TRUSTOPS_AUDIT_TOPICS` (default identity, seller-application, seller-compliance, payout, mcp-tool, order, delivery-runs, change-request) | `TRUSTOPS_AUDIT_EVENT_TYPES`: role / permission grants and revokes, user disable / enable, seller application decisions, payout holds and listing hides, payout lifecycle, `mcp.tool.invoked`, shipment status changes / cancellations made by `PLATFORM_ADMIN` or `FULFILMENT_OPS`, and staff decisions on catalog change requests and no-barcode exemptions (`catalog.change_request.decided`, `catalog.gtin_exemption.decided`) |
 
 ## Configuration
 

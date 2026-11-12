@@ -75,6 +75,11 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
   orders: [{ resource: 'orders', label: 'Orders' }],
   catalog: [
     { resource: 'moderation', label: 'Moderation queue' },
+    { resource: 'change-requests', label: 'Change requests', labelKey: 'st.moduleView.tab.changeRequests', statusFilter: true, defaultStatus: 'PENDING' },
+    { resource: 'wrong-matches', label: 'Wrong matches', labelKey: 'st.moduleView.tab.wrongMatches', statusFilter: true, defaultStatus: 'PENDING' },
+    { resource: 'duplicate-pages', label: 'Duplicate pages', labelKey: 'st.moduleView.tab.duplicatePages', statusFilter: true, defaultStatus: 'PENDING' },
+    { resource: 'gtin-exemptions', label: 'No-barcode items', labelKey: 'st.moduleView.tab.gtinExemptions', statusFilter: true, defaultStatus: 'PENDING' },
+    { resource: 'held-images', label: 'Held images', labelKey: 'st.moduleView.tab.heldImages' },
     { resource: 'product-reviews', label: 'Product reviews' },
     { resource: 'products', label: 'Products' },
     { resource: 'category-requests', label: 'Category requests', statusFilter: true },

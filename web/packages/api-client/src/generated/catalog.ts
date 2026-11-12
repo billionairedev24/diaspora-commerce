@@ -190,6 +190,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/image-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Improve your image tasks
+         * @description The organisation's live listings whose main image passes with a warning (IMPROVE) or breaks a rule (FAIL), failing ones first, with the reasons in plain words and, for failing ones, the end of the grace period (60 days by default). Live listings stay live; after the grace period they are limited only when the owner has switched the hide step on. Nothing is deleted and the listing can still be edited; a new main image must pass the rules.
+         */
+        get: operations["listImageTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/image-quality/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Image quality report (staff, catalog:moderate)
+         * @description Listings per state, how many are not scored yet, the reasons, the failing listings and how many the hide step would limit now (a dry run; read it on the seeded catalog before the hide flag is enabled).
+         */
+        get: operations["imageQualityReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/image-quality/rescore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Score the next batch of listings now (staff, catalog:moderate)
+         * @description The back-fill job runs by itself (a batch per interval, resumable, rate limited); this runs one batch at once.
+         */
+        post: operations["rescoreImagesNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/image-quality/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The hide step (staff, catalog:moderate)
+         * @description With dryRun=true (the default) only counts the failing listings past the grace period. Without it the step runs only when at.catalog.images.hide-failing is on (a separate flag, off until the owner switches it on); it never deletes anything.
+         */
+        post: operations["hideFailingImages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/image-library/attach": {
         parameters: {
             query?: never;
@@ -201,7 +281,7 @@ export interface paths {
         put?: never;
         /**
          * Attach matching library images to the organisation's listings by SKU
-         * @description Looks up the organisation's library images (media) for the SKUs of its listings (all, or those in skus) and applies them: SKU.MAIN and SKU.PT01-PT08 of the first of a product's SKUs that has a MAIN image replace the product images in that order; on products with several variants a variant SKU's MAIN sets that variant's image. Images held by moderation are skipped. Each changed product is validated again like an edit (catalog.product.updated); taken-down listings and products whose new main image is under 1000 px are skipped with a reason. Products without matches are left unchanged. 503 catalog.media-unavailable when media cannot be reached.
+         * @description Looks up the organisation's library images (media) for the SKUs of its listings (all, or those in skus) and applies them: SKU.MAIN and SKU.PT01-PT08 of the first of a product's SKUs that has a MAIN image replace the product images in that order; on products with several variants a variant SKU's MAIN sets that variant's image. Images held by moderation are skipped. Each changed product is validated again like an edit (catalog.product.updated); taken-down listings and products whose new main image media rejects or holds (under 1000 px on its longest side, not on white, ...) are skipped with media's plain reason. Products without matches are left unchanged. 503 catalog.media-unavailable when media cannot be reached.
          */
         post: operations["attachLibraryImages"];
         delete?: never;
@@ -1690,6 +1770,327 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/catalog/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find the existing product page for a barcode, or for a brand plus part number (S381)
+         * @description One call for the Seller Center form and bulk upload (docs/engineering/bulk-upload-and-images.md, section 3.2).
+         *     The GTIN is cleaned (spaces and dashes dropped), an ISBN-10 becomes the ISBN-13, the check digit is verified and
+         *     the code is normalised to 14 digits (`gtin14`), so the UPC `012345678905` and the EAN `0012345678905` meet on the
+         *     same variant. Reserved numbers (store prefixes 02, 04, 20 to 29, coupons 981 to 984 and 99; staff-editable) answer
+         *     `RESTRICTED`. Brand plus `mpn` is used when there is no barcode. A match returns the ATIN of the child (variant)
+         *     and the page summary; the seller never edits page content. `canOffer` and `blockers` say whether the caller's
+         *     organisation may sell it (page not live, department or brand approval, brand retired or rejected); offers
+         *     re-checks at offer creation and also refuses an open duplicate (`offers.offer-exists`) and a full plan
+         *     (`offers.listing-limit-reached`). The number of sellers is not known to catalog; the BFF reads it from offers.
+         *     Needs catalog:write (sellers) or catalog:read (service clients). Records metrics only
+         *     (`catalog_match_total{result}`), never the barcode.
+         */
+        post: operations["match"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/offer-eligibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * May this organisation attach an offer to this variant? (service clients, S383)
+         * @description Used by offers-service before it creates an offer on an ATIN. The same checks as `canOffer` in `/v1/catalog/matches`,
+         *     for one variant: the page is live with every variant's tax decision resolved (fail closed), the brand is not
+         *     RETIRED or REJECTED, the organisation's department scope covers the category, and the selling approval for the brand
+         *     or category is granted (`SellingPublishGate.evaluate`, the gate the product writer uses). Also returns the
+         *     conditions the category allows and the page owner. `sellerOrgId` is honoured for service and staff tokens only;
+         *     a seller always asks for its own organisation. 404 `catalog.variant-not-found` for an unknown ATIN.
+         */
+        post: operations["offerEligibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{atin}/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The change requests on a product page (the page owner sees all, other sellers their own, staff all)
+         * @description Newest first. The first creator's content stays until staff apply a change; the owner is shown the request but is not the approver.
+         */
+        get: operations["listPageChangeRequests"];
+        put?: never;
+        /**
+         * Suggest an edit, report a wrong match or a duplicate page (S385)
+         * @description Any seller with an offer on the page may suggest `IMAGE_ADD`, `IMAGE_REPLACE`, `TITLE`, `ATTRIBUTE`, `DESCRIPTION`,
+         *     `CATEGORY`, `BRAND` or `NEW_VARIANT`; a seller shown the match card files `WRONG_MATCH`; any seller files
+         *     `DUPLICATE_PAGE`. The page is never changed by this call. One open request per (page, type, field, requester):
+         *     409 `catalog.change-request-exists`. 403 `catalog.not-your-offer` when the caller has no offer on the page
+         *     (WRONG_MATCH and DUPLICATE_PAGE need none). 422 `catalog.change-request-invalid` with `errors` for a payload
+         *     that does not fit the type. Publishes `catalog.change_request.created`. While a `WRONG_MATCH` is open, creating a
+         *     page with the same GTIN answers 409 `catalog.wrong-match-open`: "We are checking this barcode. We will tell you
+         *     within 2 business days." (the number of days is a setting).
+         */
+        post: operations["fileChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's own change requests, with the decision and its reason
+         * @description The seller reads Waiting (PENDING), Applied (APPLIED) or Not applied, because ... (REJECTED with `reason`).
+         */
+        get: operations["listMyChangeRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One change request (the requester, the page owner or staff) */
+        get: operations["getChangeRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The requester withdraws a request that is still waiting */
+        post: operations["withdrawChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Staff queue of change requests (catalog:moderate)
+         * @description Oldest first by default (the SLA clock), server-side paging. `overdue` is true past the SLA (2 business days, a setting).
+         */
+        get: operations["listChangeRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve (apply) or reject a change request with a reason (catalog:moderate)
+         * @description The reason is required (3 or more characters) for both outcomes; it is shown to the requester. Approving applies
+         *     the change to the page, increases its `version`, publishes `catalog.product.updated` and notifies the owner.
+         *     Image changes pass the image checks first (422 `catalog.change-request-image-rejected`). **Applying never changes
+         *     the product's status** (the live gate stays the only way to LIVE); a `CATEGORY` change to a different tax profile
+         *     is refused with 422 `catalog.change-request-needs-tax-review`. An image that media holds for staff cannot be applied
+         *     until the held image review queue decided it (409 `catalog.change-request-image-held`). `NEW_VARIANT` adds a child ATIN
+         *     to the page (its tax facts are copied from the page's first variant and evaluated again); on a page that is on sale it
+         *     is refused with `catalog.change-request-needs-tax-review` unless `resolutionParams.holdPageForTax` is true, which takes
+         *     the page off sale through the live gate until tax review approves the new variant; the new ATIN is in the decided
+         *     event (`resultAtin`). `WRONG_MATCH` is resolved with `CORRECT_GTIN`, `MOVE_VARIANT` (the variant keeps its ATIN and
+         *     joins another page; its offers follow) or `SPLIT_VARIANT` (the variant keeps its ATIN and becomes the only variant of a
+         *     new page in review) or rejected; `DUPLICATE_PAGE` with `MERGE` (offers move to the surviving
+         *     page, the old ATIN redirects) or rejected. Deciding twice is 409 `catalog.change-request-decided`. Publishes
+         *     `catalog.change_request.decided` (who, what, why).
+         */
+        post: operations["decideChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gtin-exemptions/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's requests to sell an item without a barcode
+         * @description While PENDING the page is `PENDING_EXEMPTION` and not live; the seller reads "We are checking that this item has no barcode."
+         */
+        get: operations["listMyGtinExemptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gtin-exemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Staff queue of no-barcode exemption requests (catalog:moderate)
+         * @description Oldest first. Each request carries duplicate hints (title, brand and part number similarity) so staff can spot a page that already exists.
+         */
+        get: operations["listGtinExemptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gtin-exemptions/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or reject a no-barcode exemption with a reason (catalog:moderate)
+         * @description Approving moves the page from `PENDING_EXEMPTION` to `IN_REVIEW` (never LIVE: the normal review and the tax gate
+         *     still apply). Rejecting rejects the page with the reason. The reason (3 or more characters) is required and the
+         *     decision is audited. 409 `catalog.exemption-decided` when already decided.
+         */
+        post: operations["decideGtinExemption"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One queue for staff - change requests and no-barcode exemptions, with age and SLA (catalog:moderate)
+         * @description Merged, oldest first, server-side paging. Held images are listed by media-service (`GET /v1/assets?status=FLAGGED`)
+         *     and are not part of this response yet. `overdue` is true when the item is past its SLA; the gauge
+         *     `catalog_change_request_open` and `catalog_change_request_oldest_age_seconds` back the alert at 3 business days.
+         */
+        get: operations["reviewQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/products/{atin}/redirect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where an ATIN went after two duplicate pages were merged
+         * @description Anonymous. 200 with the surviving page ATIN, 404 when the ATIN was never merged away.
+         */
+        get: operations["atinRedirect"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Matching, exemption and review-queue settings (catalog:moderate)
+         * @description Every threshold of S381 to S387 lives here and is editable by staff; nothing is hard-coded. Defaults come from configuration until staff save a value.
+         */
+        get: operations["getCatalogSettings"];
+        /**
+         * Save the settings (catalog:moderate, audited by `updatedBy` and `version`)
+         * @description 409 `catalog.concurrent-update` when `version` is stale; 422 for an invalid value (for example a reserved prefix that is not digits).
+         */
+        put: operations["updateCatalogSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2654,6 +3055,13 @@ export interface components {
         };
         GtinCheck: {
             digits?: string;
+            /** @description The 14-digit match key (UPC-A and EAN-13 of one item are equal); null when the code is not valid */
+            gtin14?: string;
+            /**
+             * @description MATCH when a page already uses the barcode, NO_MATCH, INVALID, RESTRICTED (store-use or coupon number)
+             * @enum {string}
+             */
+            result?: "MATCH" | "NO_MATCH" | "INVALID" | "RESTRICTED";
             valid?: boolean;
             suggestion?: string;
             existingAtin?: string;
@@ -2822,6 +3230,83 @@ export interface components {
             needs?: string[];
             /** Format: date-time */
             createdAt?: string;
+        };
+        ImageTaskList: {
+            items?: components["schemas"]["ImageTask"][];
+        };
+        /** @description An Improve your image task */
+        ImageTask: {
+            /** Format: uuid */
+            productId?: string;
+            atin?: string;
+            title?: string;
+            /** @enum {string} */
+            state?: "IMPROVE" | "FAIL";
+            reasons?: components["schemas"]["ImageReason"][];
+            /**
+             * Format: date-time
+             * @description When the listing first failed (absent for IMPROVE)
+             */
+            failingSince?: string;
+            /**
+             * Format: date-time
+             * @description End of the grace period (absent for IMPROVE)
+             */
+            hideAfter?: string;
+            /** @description Whole days left of the grace period (absent for IMPROVE) */
+            daysLeft?: number;
+            /** @description The hide step has limited the listing */
+            hidden?: boolean;
+        };
+        /** @description One finding in plain words; Seller Center translates by code (media's check codes plus NO_MAIN_IMAGE) */
+        ImageReason: {
+            code?: string;
+            level?: string;
+            message?: string;
+        };
+        ImageQualityReport: {
+            /** @description Listings per state (OK, IMPROVE, FAIL) */
+            counts?: {
+                [key: string]: number;
+            };
+            /** Format: int64 */
+            notScored?: number;
+            reasons?: {
+                [key: string]: number;
+            };
+            graceDays?: number;
+            hideFlagOn?: boolean;
+            /**
+             * Format: int64
+             * @description Failing listings past the grace period that the hide step would limit now
+             */
+            wouldHide?: number;
+            /** @description Failing listings, oldest failure first (at most 200) */
+            failing?: components["schemas"]["ImageQualityReportRow"][];
+        };
+        ImageQualityReportRow: {
+            /** Format: uuid */
+            productId?: string;
+            atin?: string;
+            ownerOrg?: string;
+            title?: string;
+            reasonCodes?: string[];
+            /** Format: date-time */
+            failingSince?: string;
+            /** Format: date-time */
+            hideAfter?: string;
+            pastGrace?: boolean;
+            hidden?: boolean;
+        };
+        ImageRescoreResult: {
+            /** @description How many listings the batch scored */
+            scored?: number;
+        };
+        ImageHideResult: {
+            dryRun?: boolean;
+            flagOn?: boolean;
+            /** @description How many listings were (or would be) limited */
+            listings?: number;
         };
         AttachLibraryImagesRequest: {
             /** @description Only listings with one of these SKUs (any variant); empty = every listing of the organisation */
@@ -3412,6 +3897,313 @@ export interface components {
             fitNote?: "RUNS_SMALL" | "TRUE_TO_SIZE" | "RUNS_LARGE";
             howToMeasure?: string;
         };
+        /** @description A barcode (UPC, EAN, GTIN or ISBN), or a brand with its manufacturer part number. At least one of the two. */
+        MatchRequest: {
+            /**
+             * @description Digits with optional spaces or dashes; 8, 12, 13 or 14 digits, or an ISBN-10
+             * @example 012345678905
+             */
+            gtin?: string;
+            /** @description Brand name or registry id (with mpn, for items without a barcode) */
+            brand?: string;
+            /** @description Manufacturer part number (letters and digits are compared; case and punctuation ignored) */
+            mpn?: string;
+            /**
+             * Format: uuid
+             * @description Narrows a brand plus part number match to a category
+             */
+            categoryId?: string;
+        };
+        PageImage: {
+            url?: string;
+            /** Format: int32 */
+            width?: number;
+            /** Format: int32 */
+            height?: number;
+        };
+        /** @description Why the organisation cannot do something, in plain words */
+        Blocker: {
+            /** @description Stable code, for example catalog.page-not-live, catalog.department-not-allowed, offers.selling-approval-required, catalog.brand-unavailable, catalog.wrong-match-open */
+            code: string;
+            message: string;
+        };
+        MatchResult: {
+            /** @enum {string} */
+            result: "MATCH" | "NO_MATCH" | "INVALID" | "RESTRICTED";
+            /**
+             * @description Present on MATCH
+             * @enum {string}
+             */
+            matchedOn?: "GTIN" | "BRAND_MPN";
+            /** @description The normalised 14-digit key (null for a brand plus part number lookup or an unreadable code) */
+            gtin14?: string;
+            /** @description The cleaned input digits (an ISBN-10 shown as its ISBN-13) */
+            digits?: string;
+            /** @description ATIN of the matched child (variant); offers attach to this */
+            atin?: string;
+            /** @description ATIN of the product page */
+            parentAtin?: string;
+            productStatus?: string;
+            title?: string;
+            brand?: string;
+            image?: components["schemas"]["PageImage"];
+            /** @description Category path */
+            category?: string;
+            /** Format: uuid */
+            categoryId?: string;
+            variantOptions?: {
+                [key: string]: string;
+            };
+            /** @description Every child of the matched page, so the seller may offer the others too. A brand plus part number match on a page with several children has no `atin`; the seller picks one of these. */
+            variants?: components["schemas"]["MatchVariant"][];
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
+            /** @description False when a new page with this barcode must not be created (a match exists, the barcode is invalid or restricted, or a wrong-match report on it is open) */
+            canCreate: boolean;
+            createBlockers: components["schemas"]["Blocker"][];
+            /** @description A corrected barcode when only the check digit is wrong */
+            suggestion?: string;
+            /** @description Plain words for INVALID and RESTRICTED, for example "This number is for store use or coupons, not a product barcode." */
+            message?: string;
+        };
+        MatchVariant: {
+            atin?: string;
+            options?: {
+                [key: string]: string;
+            };
+            gtin14?: string;
+        };
+        OfferEligibilityRequest: {
+            /** @description Variant ATIN */
+            atin: string;
+            /** @description Service and staff tokens only */
+            sellerOrgId?: string;
+        };
+        OfferEligibility: {
+            atin: string;
+            productAtin?: string;
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
+            /** @description Conditions the category allows (NEW only unless used items are allowed, listing rule D9) */
+            allowedConditions?: ("NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE")[];
+            pageOwnerOrgId?: string;
+        };
+        /** @enum {string} */
+        ChangeRequestType: "IMAGE_ADD" | "IMAGE_REPLACE" | "TITLE" | "ATTRIBUTE" | "DESCRIPTION" | "CATEGORY" | "BRAND" | "NEW_VARIANT" | "WRONG_MATCH" | "DUPLICATE_PAGE";
+        /**
+         * @description PENDING is Waiting, APPLIED is Applied, REJECTED is "Not applied, because ..."
+         * @enum {string}
+         */
+        ChangeRequestStatus: "PENDING" | "APPLIED" | "REJECTED" | "WITHDRAWN";
+        ChangeRequestInput: {
+            type: components["schemas"]["ChangeRequestType"];
+            /** @description The attribute key for ATTRIBUTE; the image slot (MAIN, OTHER) for image types; otherwise empty */
+            field?: string;
+            /**
+             * @description By type. TITLE, DESCRIPTION, BRAND: {value}. ATTRIBUTE: {key, value}. CATEGORY: {categoryId}.
+             *     IMAGE_ADD: {url, width, height, bytes, contentType}; IMAGE_REPLACE: the same plus {position}.
+             *     NEW_VARIANT: {options, gtin?, gtinExempt?, sellerSku?, images?}. WRONG_MATCH: {gtin, variantAtin, correctGtin?}.
+             *     DUPLICATE_PAGE: {duplicateOfAtin}.
+             */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** @description Why, in the seller's words (shown to staff); at most `noteMaxLength` of the catalog settings (1000 by default, never above 5000) */
+            note?: string;
+        };
+        ChangeRequest: {
+            /** Format: uuid */
+            id: string;
+            /** @description The page ATIN the request is about */
+            atin: string;
+            /** Format: uuid */
+            productId?: string;
+            /** @description The page title at filing time */
+            title?: string;
+            type: components["schemas"]["ChangeRequestType"];
+            field?: string;
+            payload?: {
+                [key: string]: unknown;
+            };
+            note?: string;
+            status: components["schemas"]["ChangeRequestStatus"];
+            requestedByOrg: string;
+            requestedBy?: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /**
+             * Format: date-time
+             * @description Business-day SLA from filing
+             */
+            slaDueAt?: string;
+            overdue?: boolean;
+            /** Format: int64 */
+            ageHours?: number;
+            decidedBy?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            /** @description Staff reason, shown to the requester */
+            reason?: string;
+            /** @description CORRECT_GTIN, MOVE_VARIANT, SPLIT_VARIANT or MERGE when staff resolved a WRONG_MATCH or DUPLICATE_PAGE */
+            resolution?: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ChangeRequestPage: {
+            items?: components["schemas"]["ChangeRequest"][];
+            /** Format: int64 */
+            total?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+        };
+        ChangeRequestDecisionInput: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            reason: string;
+            /**
+             * @description Required to approve WRONG_MATCH or DUPLICATE_PAGE (NEW_VARIANT and the content types need none)
+             * @enum {string}
+             */
+            resolution?: "CORRECT_GTIN" | "MOVE_VARIANT" | "SPLIT_VARIANT" | "MERGE";
+            /** @description NEW_VARIANT: {holdPageForTax?}. CORRECT_GTIN: {gtin}. MOVE_VARIANT: {targetAtin, holdPageForTax?}. SPLIT_VARIANT: none (the variant is the one in the report). MERGE: {survivorAtin, variantMap?} */
+            resolutionParams?: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            expectedVersion?: number;
+        };
+        /** @enum {string} */
+        ExemptionStatus: "PENDING" | "APPROVED" | "REJECTED";
+        DuplicateHint: {
+            atin?: string;
+            title?: string;
+            brand?: string;
+            mpn?: string;
+            /**
+             * Format: double
+             * @description 0 to 1
+             */
+            score?: number;
+            matchedOn?: ("BRAND_MPN" | "TITLE")[];
+        };
+        GtinExemptionRequest: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            productId?: string;
+            productAtin: string;
+            title?: string;
+            brand?: string;
+            mpn?: string;
+            /** @description The seller's reason for having no barcode */
+            sellerReason?: string;
+            /** @enum {string} */
+            requiredBecause?: "BRAND_GATED_CATEGORY" | "KNOWN_GS1_BRAND";
+            status: components["schemas"]["ExemptionStatus"];
+            requestedByOrg: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            slaDueAt?: string;
+            overdue?: boolean;
+            /** Format: int64 */
+            ageHours?: number;
+            decidedBy?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            reason?: string;
+            /** @description What the seller reads while waiting */
+            sellerMessage?: string;
+            duplicateHints?: components["schemas"]["DuplicateHint"][];
+        };
+        GtinExemptionPage: {
+            items?: components["schemas"]["GtinExemptionRequest"][];
+            /** Format: int64 */
+            total?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+        };
+        ExemptionDecisionInput: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            reason: string;
+        };
+        ReviewQueueItem: {
+            /** @enum {string} */
+            kind: "CHANGE_REQUEST" | "GTIN_EXEMPTION";
+            /** Format: uuid */
+            id: string;
+            atin?: string;
+            title?: string;
+            /** @description The request type or "No barcode" */
+            summary?: string;
+            requestedByOrg?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            slaDueAt: string;
+            overdue: boolean;
+            /** Format: int64 */
+            ageHours?: number;
+        };
+        ReviewQueuePage: {
+            items?: components["schemas"]["ReviewQueueItem"][];
+            /** Format: int64 */
+            total?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+        };
+        AtinRedirect: {
+            atin: string;
+            /** @description ATIN of the page that survived the merge */
+            redirectTo: string;
+        };
+        /** @description Every threshold of matching, exemptions and the review queue, editable by staff */
+        CatalogPolicySettings: {
+            /** @description Prefixes of the GTIN (leading zeros of the 14-digit form dropped) that are store-use or coupon numbers; seeded with 02, 04, 20 to 29, 981 to 984 and 99 */
+            reservedPrefixes: string[];
+            /**
+             * @description The product attribute that holds the manufacturer part number
+             * @default model
+             */
+            mpnAttributeKey: string;
+            /**
+             * Format: int32
+             * @default 2
+             */
+            reviewSlaBusinessDays: number;
+            /**
+             * Format: int32
+             * @default 3
+             */
+            alertAfterBusinessDays: number;
+            /**
+             * Format: int32
+             * @default 1000
+             */
+            noteMaxLength: number;
+            /**
+             * Format: int32
+             * @description A brand with at least this many pages that carry barcodes counts as a known GS1 brand (a no-barcode item of it needs staff approval)
+             * @default 1
+             */
+            knownGs1BrandMinPages: number;
+            /** @description Category or product-type codes treated as brand-gated for no-barcode items, on top of the categories whose listing rules say brand_gated; a no-barcode item in them needs staff approval */
+            exemptionGatedCategoryCodes: string[];
+            /** @default true */
+            exemptionRequiresApprovalForKnownBrands: boolean;
+            updatedBy?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            version?: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -3701,6 +4493,88 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["GtinPrefill"];
+                };
+            };
+        };
+    };
+    listImageTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ImageTaskList"];
+                };
+            };
+        };
+    };
+    imageQualityReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ImageQualityReport"];
+                };
+            };
+        };
+    };
+    rescoreImagesNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ImageRescoreResult"];
+                };
+            };
+        };
+    };
+    hideFailingImages: {
+        parameters: {
+            query?: {
+                dryRun?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ImageHideResult"];
                 };
             };
         };
@@ -4438,7 +5312,7 @@ export interface operations {
         parameters: {
             query?: {
                 orgId?: string;
-                status?: "IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED" | "TAKEN_DOWN";
+                status?: "IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED" | "TAKEN_DOWN" | "PENDING_EXEMPTION" | "MERGED";
                 q?: string;
                 page?: number;
                 size?: number;
@@ -5208,7 +6082,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Only these statuses (default LIVE) */
-                status?: ("IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED" | "TAKEN_DOWN")[];
+                status?: ("IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED" | "TAKEN_DOWN" | "PENDING_EXEMPTION" | "MERGED")[];
                 /** @description Exclusive lower bound: the nextAfter of the previous page */
                 after?: string;
                 /** @description Only products changed (own data, rating or owner's listing visibility) at or after this instant */
@@ -6011,6 +6885,581 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["VariantLookup"];
                 };
+            };
+        };
+    };
+    match: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatchRequest"];
+            };
+        };
+        responses: {
+            /** @description The answer; INVALID and RESTRICTED are answers, not errors */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchResult"];
+                };
+            };
+            /** @description Missing catalog:read or catalog:write */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Neither a GTIN nor a brand with a part number was given */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    offerEligibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferEligibilityRequest"];
+            };
+        };
+        responses: {
+            /** @description The answer; a refusal is `canOffer=false` with blockers, not an error */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferEligibility"];
+                };
+            };
+            /** @description Missing catalog:read or catalog:write */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.variant-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listPageChangeRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Page ATIN or the ATIN of one of its variants */
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequest"][];
+                };
+            };
+            /** @description catalog.product-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    fileChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRequestInput"];
+            };
+        };
+        responses: {
+            /** @description Filed; status PENDING ("Waiting") */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequest"];
+                };
+            };
+            /** @description catalog.not-your-offer */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.product-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.change-request-exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.change-request-invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMyChangeRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ChangeRequestStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestPage"];
+                };
+            };
+        };
+    };
+    getChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequest"];
+                };
+            };
+            /** @description catalog.change-request-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    withdrawChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdrawn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequest"];
+                };
+            };
+            /** @description catalog.change-request-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.change-request-decided */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listChangeRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ChangeRequestStatus"];
+                type?: components["schemas"]["ChangeRequestType"];
+                /** @description Leave out the WRONG_MATCH and DUPLICATE_PAGE reports (they have tables of their own in the staff console) */
+                contentOnly?: boolean;
+                page?: number;
+                size?: number;
+                sort?: "OLDEST" | "NEWEST";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestPage"];
+                };
+            };
+            /** @description Missing catalog:moderate */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    decideChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRequestDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description Decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequest"];
+                };
+            };
+            /** @description Missing catalog:moderate */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.change-request-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.change-request-decided */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A reason of 3 or more characters is required; or the change cannot be applied */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMyGtinExemptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GtinExemptionRequest"][];
+                };
+            };
+        };
+    };
+    listGtinExemptions: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ExemptionStatus"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GtinExemptionPage"];
+                };
+            };
+            /** @description Missing catalog:moderate */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    decideGtinExemption: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExemptionDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description Decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GtinExemptionRequest"];
+                };
+            };
+            /** @description Missing catalog:moderate */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.exemption-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.exemption-decided */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A reason of 3 or more characters is required */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reviewQueue: {
+        parameters: {
+            query?: {
+                kind?: "CHANGE_REQUEST" | "GTIN_EXEMPTION";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewQueuePage"];
+                };
+            };
+            /** @description Missing catalog:moderate */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    atinRedirect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtinRedirect"];
+                };
+            };
+            /** @description catalog.redirect-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCatalogSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogPolicySettings"];
+                };
+            };
+            /** @description Missing catalog:moderate */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateCatalogSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogPolicySettings"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogPolicySettings"];
+                };
+            };
+            /** @description Missing catalog:moderate */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.concurrent-update */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid value */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

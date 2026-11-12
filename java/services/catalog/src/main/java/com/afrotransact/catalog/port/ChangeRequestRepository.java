@@ -43,10 +43,18 @@ public interface ChangeRequestRepository {
 
     /**
      * @param requestedByOrg null for every organisation (staff)
+     * @param contentOnly    leave out the wrong-match and duplicate-page reports (the "Change requests" table of the staff
+     *                       console; the reports have tables of their own)
      * @param oldestFirst    the order of the SLA clock
      */
-    record Query(ChangeRequestStatus status, ChangeRequestType type, String requestedByOrg, boolean oldestFirst, int page,
-                 int size) {
+    record Query(ChangeRequestStatus status, ChangeRequestType type, boolean contentOnly, String requestedByOrg,
+                 boolean oldestFirst, int page, int size) {
+
+        /** Every type. */
+        public Query(ChangeRequestStatus status, ChangeRequestType type, String requestedByOrg, boolean oldestFirst, int page,
+                     int size) {
+            this(status, type, false, requestedByOrg, oldestFirst, page, size);
+        }
     }
 
     record Page(List<ProductChangeRequest> items, long total, int page, int size) {

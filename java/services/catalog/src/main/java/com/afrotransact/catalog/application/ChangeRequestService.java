@@ -34,8 +34,14 @@ public interface ChangeRequestService {
     ChangeRequestView withdraw(UUID id);
 
     /** The staff queue (catalog:moderate), oldest first unless asked otherwise. */
-    PageView<ChangeRequestView> queue(ChangeRequestStatus status, ChangeRequestType type, boolean oldestFirst, int page,
-                                      int size);
+    default PageView<ChangeRequestView> queue(ChangeRequestStatus status, ChangeRequestType type, boolean oldestFirst,
+                                              int page, int size) {
+        return queue(status, type, false, oldestFirst, page, size);
+    }
+
+    /** As above; {@code contentOnly} leaves out the wrong-match and duplicate-page reports. */
+    PageView<ChangeRequestView> queue(ChangeRequestStatus status, ChangeRequestType type, boolean contentOnly,
+                                      boolean oldestFirst, int page, int size);
 
     /**
      * Staff approve (apply) or reject a request with a reason of 3 or more characters (catalog:moderate). Publishes

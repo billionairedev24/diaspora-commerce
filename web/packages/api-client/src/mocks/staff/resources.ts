@@ -29,6 +29,7 @@ import { shippingSettingsDef } from './shipping-settings';
 import { sellerApprovalsDef, sellingApprovalsDef, sellingRulesDef } from './selling';
 import { serviceAreaRulesDef, serviceZonesDef } from './service-areas';
 import { categoryRequestsDef } from './taxonomy';
+import { changeRequestsDef, duplicatePagesDef, gtinExemptionsDef, heldImagesDef, wrongMatchesDef } from './catalog-review';
 
 export interface ActionCtx {
   actor: string;
@@ -1666,6 +1667,11 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   'seller-approvals': sellerApprovalsDef,
   'selling-rules': sellingRulesDef,
   'category-requests': categoryRequestsDef,
+  'change-requests': changeRequestsDef,
+  'wrong-matches': wrongMatchesDef,
+  'duplicate-pages': duplicatePagesDef,
+  'gtin-exemptions': gtinExemptionsDef,
+  'held-images': heldImagesDef,
   // Identity & access (S291)
   ...IDENTITY_RESOURCES
 };

@@ -20,6 +20,9 @@ export const CATEGORIES_TAB = 'categories';
 /** The brand registry: the review queue of brands sellers typed in, and the approved list. */
 export const BRANDS_TAB = 'brands';
 const TAXONOMY = 'catalog:taxonomy';
+/** The review queues of the shared catalog (change requests, wrong matches, duplicate pages, no-barcode items, held images). */
+const MODERATE = 'catalog:moderate';
+const REVIEW_QUEUES: ReadonlySet<string> = new Set(['change-requests', 'wrong-matches', 'duplicate-pages', 'gtin-exemptions', 'held-images']);
 
 /**
  * Catalog: the moderation queue, product reviews and products, and, for staff who may manage the taxonomy
@@ -32,6 +35,7 @@ export function CatalogView() {
   const pathname = usePathname();
   const params = useSearchParams();
   const taxonomy = hasPermission(TAXONOMY);
+  const moderate = hasPermission(MODERATE);
   const pending = useQuery({ ...staffTaxonomyQueries.tree(staffApi().taxonomy), enabled: taxonomy });
   const waiting = pending.data?.pendingRequests ?? 0;
   const brandQueue = useQuery({ ...staffTaxonomyQueries.brands(staffApi().taxonomy, { status: ['PENDING'], limit: 1 }), enabled: taxonomy });
@@ -41,11 +45,12 @@ export function CatalogView() {
 
   const items = tables
     .filter((x) => taxonomy || x.resource !== 'category-requests')
+    .filter((x) => moderate || !REVIEW_QUEUES.has(x.resource))
     .flatMap((x) => {
       const table = {
         value: x.resource,
-        label: x.resource === 'category-requests' && waiting > 0 ? t('st.catalog.tab.requestsCount', { n: waiting }) : x.label,
-        content: <ResourceTable resource={x.resource} urlPrefix={x.resource} statusFilter={x.statusFilter} />
+        label: x.resource === 'category-requests' && waiting > 0 ? t('st.catalog.tab.requestsCount', { n: waiting }) : x.labelKey ? t(x.labelKey) : x.label,
+        content: <ResourceTable resource={x.resource} urlPrefix={x.resource} statusFilter={x.statusFilter} defaultStatus={x.defaultStatus} />
       };
       // The tree and the brand registry sit right before the requests queue they feed.
       return x.resource === 'category-requests' ? [{ value: CATEGORIES_TAB, label: t('st.catalog.tab.categories'), content: <CategoriesView /> }, brandsTab, table] : [table];

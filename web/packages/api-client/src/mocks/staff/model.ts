@@ -61,7 +61,7 @@ export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKe
 ];
 
 export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
-  users: 'rbac', roles: 'rbac', applications: 'apps', orders: 'orders', products: 'catalog', 'category-requests': 'catalog', moderation: 'catalog', 'product-reviews': 'catalog', claims: 'disputes', returns: 'disputes',
+  users: 'rbac', roles: 'rbac', applications: 'apps', orders: 'orders', products: 'catalog', 'category-requests': 'catalog', 'change-requests': 'catalog', 'wrong-matches': 'catalog', 'duplicate-pages': 'catalog', 'gtin-exemptions': 'catalog', 'held-images': 'catalog', moderation: 'catalog', 'product-reviews': 'catalog', claims: 'disputes', returns: 'disputes',
   payouts: 'payouts', inventory: 'inventory', 'purchase-orders': 'retail', routes: 'dispatch', 'support-cases': 'support', audit: 'audit', markets: 'markets',
   'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'help-articles': 'siteCfg', 'careers-jobs': 'siteCfg', 'cookie-definitions': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'home-layout': 'marketing', 'identity-providers': 'dev',
   'fee-schedules': 'fees', 'tax-rates': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',

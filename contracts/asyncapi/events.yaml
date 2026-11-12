@@ -13581,6 +13581,13 @@ operations:
       $ref: '#/channels/ordersOrderEvents'
     summary: 'Audit log: orders.shipment.status_changed and orders.shipment.cancelled only when actorType is PLATFORM_ADMIN
       or FULFILMENT_OPS (staff status overrides).'
+  consumeTrustOpsAuditChangeRequestEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/catalogChangeRequestEvents'
+    summary: 'Audit log (S385-S387): catalog.change_request.decided (only staff decisions, status APPLIED or REJECTED; a seller
+      withdrawing a request is not audited) and catalog.gtin_exemption.decided. Actor = decidedBy, entity = the request, the
+      summary carries what was decided and the staff reason.'
 servers:
   cloud:
     description: Confluent Cloud (same on AWS, GCP and Azure)

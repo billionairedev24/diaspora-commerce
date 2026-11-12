@@ -176,10 +176,10 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageView<ChangeRequestView> queue(ChangeRequestStatus status, ChangeRequestType type, boolean oldestFirst,
-                                             int page, int size) {
+    public PageView<ChangeRequestView> queue(ChangeRequestStatus status, ChangeRequestType type, boolean contentOnly,
+                                             boolean oldestFirst, int page, int size) {
         permissions.require(CatalogPermissions.MODERATE);
-        return views(requests.search(new Query(status, type, null, oldestFirst, Math.max(page, 0),
+        return views(requests.search(new Query(status, type, contentOnly, null, oldestFirst, Math.max(page, 0),
                 Math.clamp(size, 1, 100))));
     }
 

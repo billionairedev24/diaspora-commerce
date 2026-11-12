@@ -113,6 +113,9 @@ class JdbcChangeRequestRepository implements ChangeRequestRepository {
             where.append(" and type = :type");
             params.put("type", q.type().name());
         }
+        if (q.contentOnly()) {
+            where.append(" and type not in ('WRONG_MATCH', 'DUPLICATE_PAGE')");
+        }
         if (q.requestedByOrg() != null) {
             where.append(" and requested_by_org = :org");
             params.put("org", q.requestedByOrg());
