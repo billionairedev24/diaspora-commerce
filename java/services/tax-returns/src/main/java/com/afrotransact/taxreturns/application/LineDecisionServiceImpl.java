@@ -114,6 +114,28 @@ class LineDecisionServiceImpl implements LineDecisionService {
     }
 
     @Override
+    public ListingStatus decideListing(Request r, LocalDate saleDate) {
+        String rules = engine.snapshot().ruleVersion();
+        VariantClassification rec = r.atin() == null || r.atin().isBlank() ? null : load(List.of(r)).get(r.atin());
+        LineDecision early = early(r, rec, rules, false);
+        if (early != null) {
+            return new ListingStatus(early.status(), rec == null ? null : rec.status().name(), early.blockedReason());
+        }
+        Map<String, Object> behaviour = behaviourOf(r, rec);
+        try {
+            Resolution res = engine.resolveRecord(rec, behaviour, saleDate);
+            if (!res.chargeable()) {
+                return new ListingStatus(res.status(), rec.status().name(), res.reason());
+            }
+            listingDecisions.save(rec, behaviour, r.sellerOrgId(), res, "SYSTEM:offer", clock.instant());
+            return new ListingStatus(res.status(), rec.status().name(), null);
+        } catch (NotFoundException ex) {
+            return new ListingStatus(ResolveStatus.BLOCKED, rec.status().name(),
+                    "No tax profile for category " + rec.categoryCode());
+        }
+    }
+
+    @Override
     public Map<String, ListingStatus> status(List<Request> items, LocalDate saleDate) {
         String rules = engine.snapshot().ruleVersion();
         Set<String> atins = new LinkedHashSet<>();

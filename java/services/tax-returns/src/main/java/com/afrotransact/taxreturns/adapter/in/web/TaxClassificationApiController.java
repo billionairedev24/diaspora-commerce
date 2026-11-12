@@ -15,6 +15,8 @@ import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProfileS
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProviderCodeEntry;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProviderCodeUpdate;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ReclassifyRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.SellerDecisionRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.SellerDecisionState;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ResolveRequest;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ResolveResponse;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ShadowReportDto;
@@ -25,6 +27,7 @@ import com.afrotransact.taxreturns.application.ClassificationResolveService;
 import com.afrotransact.taxreturns.application.LineDecisionService;
 import com.afrotransact.taxreturns.application.ListingDecisionStatusService;
 import com.afrotransact.taxreturns.application.ProviderCodeService;
+import com.afrotransact.taxreturns.application.SellerListingDecisionService;
 import com.afrotransact.taxreturns.application.TaxProfileService;
 import com.afrotransact.taxreturns.application.TaxShadowService;
 import com.afrotransact.taxreturns.application.VariantClassificationService;
@@ -59,8 +62,9 @@ class TaxClassificationApiController {
     private final VariantClassificationService variants;
     private final TaxShadowService shadow;
     private final ListingDecisionStatusService listingStatus;
+    private final SellerListingDecisionService sellerDecisions;
 
-    TaxClassificationApiController(ListingDecisionStatusService listingStatus, ClassificationResolveService resolve, TaxProfileService profiles,
+    TaxClassificationApiController(ListingDecisionStatusService listingStatus, SellerListingDecisionService sellerDecisions, ClassificationResolveService resolve, TaxProfileService profiles,
                                    ProviderCodeService providerCodes, VariantClassificationService variants,
                                    TaxShadowService shadow) {
         this.resolve = resolve;
@@ -69,6 +73,7 @@ class TaxClassificationApiController {
         this.variants = variants;
         this.shadow = shadow;
         this.listingStatus = listingStatus;
+        this.sellerDecisions = sellerDecisions;
     }
 
     @Operation(summary = "Resolve the tax outcome of a category and its facts, without charging (tax:classify)",
@@ -90,6 +95,28 @@ class TaxClassificationApiController {
                 .toList());
         return new ListingStatusResponse(found.entrySet().stream().map(e -> new ListingStatusAnswer(e.getKey(),
                 e.getValue().status().name(), e.getValue().recordStatus(), e.getValue().reason())).toList());
+    }
+
+    @Operation(operationId = "getListingDecision",
+            summary = "Does this seller have a stored tax decision on this variant? (service clients, S384)",
+            description = "The decision is stored per (variant ATIN, seller behaviour) and lists the organisations it applies "
+                    + "to; the page owner's decision is not another seller's. RESOLVED only when a stored, RESOLVED decision "
+                    + "names this organisation under the rules in force; MISSING when none is stored. Read-only: never "
+                    + "creates a decision. Needs tax:read.")
+    @GetMapping("/v1/tax/listing-decisions")
+    SellerDecisionState sellerDecision(@RequestParam String atin, @RequestParam String sellerOrgId) {
+        return SellerDecisionState.of(sellerDecisions.find(atin, sellerOrgId));
+    }
+
+    @Operation(operationId = "requestListingDecision",
+            summary = "Ask for the seller's decision on a variant from the page's facts (service clients, S384)",
+            description = "Resolves the variant's classification record under the seller's own behaviour facts and, when the "
+                    + "outcome is chargeable, stores the decision for this organisation. Never defaults a rate or an "
+                    + "outcome: an unapproved record, a missing fact or a gated profile stores nothing and the answer says "
+                    + "why. Idempotent. Needs tax:classify.")
+    @PostMapping("/v1/tax/listing-decisions/request")
+    SellerDecisionState requestSellerDecision(@Valid @RequestBody SellerDecisionRequest body) {
+        return SellerDecisionState.of(sellerDecisions.request(body.atin(), body.sellerOrgId(), body.sellerBehaviour()));
     }
 
     @Operation(summary = "Category tax profiles with their status (tax:read)")

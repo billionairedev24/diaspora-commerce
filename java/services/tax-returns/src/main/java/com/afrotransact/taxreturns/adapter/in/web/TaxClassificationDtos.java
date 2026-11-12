@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.taxreturns.application.ClassificationResolveService;
+import com.afrotransact.taxreturns.application.SellerListingDecisionService;
 import com.afrotransact.taxreturns.application.TaxProfileService;
 import com.afrotransact.taxreturns.application.TaxShadowService;
 import com.afrotransact.taxreturns.application.VariantClassificationService;
@@ -54,6 +55,28 @@ final class TaxClassificationDtos {
 
     @Schema(name = "ListingDecisionStatusRequest")
     record ListingStatusRequest(@NotNull @Size(min = 1, max = 500) List<@Valid ListingStatusItem> items) {
+    }
+
+    @Schema(name = "ListingDecisionRequest", description = "Ask for a seller's decision on a variant from the page's facts")
+    record SellerDecisionRequest(@NotBlank @Size(max = 10) String atin, @NotBlank @Size(max = 80) String sellerOrgId,
+                                 @Schema(description = "The seller's behaviour facts for this listing (sold_heated, "
+                                         + "utensils_provided ...). Empty means none given.")
+                                 Map<String, Object> sellerBehaviour) {
+    }
+
+    @Schema(name = "ListingDecisionState")
+    record SellerDecisionState(String atin, String sellerOrgId,
+                               @Schema(description = "RESOLVED, MISSING (no stored decision) or the unresolved "
+                                       + "ResolveStatus (MISSING_FACTS, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, "
+                                       + "CONFLICT_OPEN)") String status,
+                               @Schema(description = "True only for RESOLVED with a stored decision") boolean resolved,
+                               String outcome, String internalTaxCode, String ruleVersion, Instant decidedAt,
+                               @Schema(description = "Plain reasons when not resolved") List<String> reasons) {
+
+        static SellerDecisionState of(SellerListingDecisionService.State s) {
+            return new SellerDecisionState(s.atin(), s.sellerOrgId(), s.status(), s.resolved(), s.outcome(),
+                    s.internalTaxCode(), s.ruleVersion(), s.decidedAt(), s.reasons());
+        }
     }
 
     @Schema(name = "ListingDecisionStatusItem")

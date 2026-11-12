@@ -26,6 +26,14 @@ public interface LineDecisionService {
      */
     Map<String, ListingStatus> status(List<Request> items, LocalDate saleDate);
 
+    /**
+     * Decides one seller's listing of a variant and, when the outcome is chargeable, stores that decision for the seller (the
+     * same stored row a quote writes), so "does this seller have a decision?" has a stored answer. Used when an offer of a
+     * seller who is not the page owner is created (S384). A variant without a record is asked of catalog once and ingested for
+     * review, exactly as a quote does; it is never guessed. Nothing is stored unless the status is RESOLVED.
+     */
+    ListingStatus decideListing(Request item, LocalDate saleDate);
+
     /** @param status RESOLVED is the only chargeable status; {@code reason} is plain words (null when resolved) */
     record ListingStatus(ResolveStatus status, String recordStatus, String reason) {
 

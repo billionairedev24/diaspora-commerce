@@ -27,6 +27,7 @@ import com.afrotransact.taxreturns.application.LineDecisionService.ListingStatus
 import com.afrotransact.taxreturns.application.ListingDecisionStatusService;
 import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
 import com.afrotransact.taxreturns.application.ProviderCodeService;
+import com.afrotransact.taxreturns.application.SellerListingDecisionService;
 import com.afrotransact.taxreturns.application.TaxProfileService;
 import com.afrotransact.taxreturns.application.TaxShadowService;
 import com.afrotransact.taxreturns.application.VariantClassificationService;
@@ -56,8 +57,8 @@ class TaxClassificationApiControllerTest {
     private final VariantClassificationService variants = mock(VariantClassificationService.class);
     private final TaxShadowService shadow = mock(TaxShadowService.class);
     private final ListingDecisionStatusService listingStatus = mock(ListingDecisionStatusService.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TaxClassificationApiController(listingStatus, resolve,
-            profiles, codes, variants, shadow)).build();
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TaxClassificationApiController(listingStatus,
+            mock(SellerListingDecisionService.class), resolve, profiles, codes, variants, shadow)).build();
 
     private static TaxProfile profile(String code) {
         return TaxMapFixture.profiles(TaxMapFixture.read("category_tax_map.json")).stream()
