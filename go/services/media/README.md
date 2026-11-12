@@ -15,8 +15,10 @@ Direct uploads and file inspection. Go 1.27.1 · PostgreSQL · local port **8207
 
 ### Moderation of public images (S030)
 
-`product-image` and `storefront` uploads land in **quarantine** (`quarantine/<key>` on S3-compatible stores — the
-bucket policy must make only the purpose prefixes public, never `quarantine/*`; UploadThing uploads are `private`) and
+`product-image` and `storefront` uploads land in **quarantine** (`quarantine/<key>` on S3-compatible stores. In prod
+`quarantineStore: private` puts them in the private bucket and publishing copies the cleaned image to the public bucket,
+so no bucket policy or WAF rule is needed; elsewhere the bucket policy must make only the purpose prefixes public,
+never `quarantine/*`; UploadThing uploads are `private`) and
 are published only when moderation passes:
 
 1. **Rules**: real type, size, minimum edge, white background / main-image eligibility (quality flags never block).

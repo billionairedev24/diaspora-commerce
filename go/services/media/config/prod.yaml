@@ -1,8 +1,10 @@
-# media · prod (lean): product images go to Cloudflare R2 (10 GB free, no egress fees, served from media.afrotransact.com);
-# private files to the primary cloud's object-locked bucket. UploadThing is no longer used in prod (its adapter stays
-# available: add the store back with kind: uploadthing).
-# The private store below is AWS S3; for GCP use name: gcs + endpoint https://storage.googleapis.com (HMAC keys),
-# for Azure use kind: azure-blob with account + AZURE_STORAGE_KEY. Cloudflare R2 is the alternative public store.
+# media · prod: Cloudflare R2 for everything, two buckets with two least-privilege API tokens (docs/runbooks/r2-buckets.md).
+#   public bucket  afrotransact-prod-media        product images + storefront media, served from media.afrotransact.com
+#   private bucket afrotransact-prod-kyc-evidence KYC / identity documents, proof and return photos, POs, resumes,
+#                                                 exports: no public access, no custom domain, short-lived signed URLs
+# UploadThing, MinIO and AWS S3 are not used in prod; Config.Validate refuses to start if prod selects them, if a
+# credential is missing or if the ACCOUNT_ID placeholder is left in an endpoint.
+# Endpoint: R2_ACCOUNT_ID (Cloudflare account id) or R2_ENDPOINT (full https://<id>.r2.cloudflarestorage.com).
 port: 8080
 # Public API base (shared API_BASE_URL, injected by the Helm library); publicBaseUrl defaults to <apiBaseUrl>/media,
 # the base of media-hosted long-lived links.
@@ -12,7 +14,9 @@ stores:
   r2:
     kind: s3
     name: r2
-    endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
+    endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com   # placeholder: R2_ENDPOINT / R2_ACCOUNT_ID must override it
+    endpointEnv: R2_ENDPOINT
+    accountIdEnv: R2_ACCOUNT_ID
     region: auto
     bucket: afrotransact-prod-media
     publicBaseUrl: https://media.afrotransact.com
@@ -21,9 +25,17 @@ stores:
     secretKeyEnv: R2_SECRET_ACCESS_KEY
   private:
     kind: s3
-    name: s3
-    region: us-east-1
-    bucket: afrotransact-prod-kyc-evidence
+    name: r2
+    endpoint: https://ACCOUNT_ID.r2.cloudflarestorage.com
+    endpointEnv: R2_ENDPOINT
+    accountIdEnv: R2_ACCOUNT_ID
+    region: auto
+    bucket: afrotransact-prod-kyc-evidence   # no publicBaseUrl: never served publicly
+    accessKeyEnv: R2_PRIVATE_ACCESS_KEY_ID
+    secretKeyEnv: R2_PRIVATE_SECRET_ACCESS_KEY
+# Unreleased public images (quarantine/...) are uploaded to the PRIVATE bucket and copied into the public bucket only
+# after moderation passes, so the public bucket and media.afrotransact.com never hold or serve quarantine/.
+quarantineStore: private
 purposes:
   product-image: r2
   storefront: r2
@@ -36,7 +48,7 @@ purposes:
   export: private
 # Signed download links of private assets: 5 minutes by default; purchase orders, shipping documents, résumés and
 # exports may ask for longer ones (GET /v1/assets/{id}?urlTtlSeconds=) up to maxLongTtl. The store caps them too
-# (S3-compatible stores and UploadThing sign for at most 7 days).
+# (R2 and other S3-compatible stores sign for at most 7 days). KYC documents and photos never get long links.
 # Long links (above defaultTtl) are media-hosted redirect links <publicBaseUrl>/v1/l/<token> when LINK_SIGNING_KEY
 # (secret) is set: they last up to maxLongTtl on every cloud; each click gets a fresh storage URL of redirectTtl.
 links:

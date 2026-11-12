@@ -110,6 +110,14 @@ func WithLibrary(lib port.LibraryRepository) Option {
 	return func(s *mediaServiceImpl) { s.library = lib }
 }
 
+// WithQuarantine holds unmoderated public images in a separate, private store (their key starts with
+// domain.QuarantinePrefix) instead of the public purpose store: the public bucket then never contains an image that is
+// not yet released, so no CDN or WAF rule is needed to hide quarantine/. Publishing copies the cleaned image into the
+// purpose's public store and deletes the quarantined upload.
+func WithQuarantine(st port.ObjectStore) Option {
+	return func(s *mediaServiceImpl) { s.quarantine = st }
+}
+
 // WithClock replaces time.Now (tests).
 func WithClock(now func() time.Time) Option { return func(s *mediaServiceImpl) { s.now = now } }
 
@@ -134,8 +142,9 @@ type mediaServiceImpl struct {
 	linkBase    string
 	redirectTTL time.Duration
 
-	fetcher port.URLFetcher
-	library port.LibraryRepository
+	fetcher    port.URLFetcher
+	library    port.LibraryRepository
+	quarantine port.ObjectStore
 }
 
 var _ MediaService = (*mediaServiceImpl)(nil)
@@ -178,6 +187,24 @@ func (s *mediaServiceImpl) store(p domain.Purpose) (port.ObjectStore, error) {
 	return st, nil
 }
 
+// storeFor is the store that currently holds the asset's object: the quarantine store for a quarantined key when one
+// is configured, else the purpose's store.
+func (s *mediaServiceImpl) storeFor(a domain.Asset) (port.ObjectStore, error) {
+	if s.quarantine != nil && strings.HasPrefix(a.Key, domain.QuarantinePrefix) {
+		return s.quarantine, nil
+	}
+	return s.store(a.Purpose)
+}
+
+// holding is the store new uploads of the purpose are written to: the quarantine store for moderated purposes when
+// one is configured, else the purpose's store.
+func (s *mediaServiceImpl) holding(p domain.Purpose) (port.ObjectStore, error) {
+	if s.quarantine != nil && s.moderated(p) {
+		return s.quarantine, nil
+	}
+	return s.store(p)
+}
+
 // moderated reports whether uploads of the purpose go through the moderation gate.
 func (s *mediaServiceImpl) moderated(p domain.Purpose) bool {
 	return s.processor != nil && domain.ModeratedPurpose(p)
@@ -210,7 +237,7 @@ func (s *mediaServiceImpl) requestUpload(ctx context.Context, actor auth.Actor, 
 	if !mayUse(actor, p) {
 		return domain.Asset{}, port.Upload{}, fmt.Errorf("upload %s: %w", p, ErrForbidden)
 	}
-	st, err := s.store(p)
+	st, err := s.holding(p)
 	if err != nil {
 		return domain.Asset{}, port.Upload{}, err
 	}
@@ -406,7 +433,7 @@ func (s *mediaServiceImpl) Complete(ctx context.Context, actor auth.Actor, id st
 
 // finish inspects a pending asset's object; public images are also moderated before they are published.
 func (s *mediaServiceImpl) finish(ctx context.Context, a domain.Asset) (domain.Asset, error) {
-	st, err := s.store(a.Purpose)
+	st, err := s.storeFor(a)
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -472,7 +499,7 @@ func (s *mediaServiceImpl) ImportFromURL(ctx context.Context, actor auth.Actor, 
 	if !slices.Contains(rules.ContentTypes, contentType) {
 		return domain.Asset{}, fmt.Errorf("%w: the link is not a JPG, PNG or WebP image", domain.ErrRejected)
 	}
-	st, err := s.store(p)
+	st, err := s.holding(p)
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -581,21 +608,26 @@ func (s *mediaServiceImpl) moderate(ctx context.Context, st port.ObjectStore, a 
 
 // publish writes the cleaned image under its public key and removes the quarantined upload.
 func (s *mediaServiceImpl) publish(ctx context.Context, st port.ObjectStore, a *domain.Asset, img port.ProcessedImage) error {
+	pub, err := s.store(a.Purpose)
+	if err != nil {
+		return err
+	}
+	crossStore := s.quarantine != nil && strings.HasPrefix(a.Key, domain.QuarantinePrefix)
 	finalKey := strings.TrimPrefix(a.Key, domain.QuarantinePrefix)
 	if finalKey == a.Key {
 		// The store named the upload itself (UploadThing file keys): publish under our own key.
 		finalKey = fmt.Sprintf("%s/%s/%s%s", a.Purpose, sanitize(a.OwnerOrg), a.ID, strings.ToLower(path.Ext(a.FileName)))
 	}
-	key, publicURL, err := st.Put(ctx, finalKey, a.FileName, a.ContentType, img.Data, true)
+	key, publicURL, err := pub.Put(ctx, finalKey, a.FileName, a.ContentType, img.Data, true)
 	if err != nil {
 		return fmt.Errorf("publish image: %w", err)
 	}
-	if key != a.Key {
+	if key != a.Key || crossStore {
 		if err := st.Delete(ctx, a.Key); err != nil {
 			s.log.WarnContext(ctx, "quarantined upload not deleted", "asset_id", a.ID, "error", err)
 		}
 	}
-	a.Key, a.URL, a.Bytes = key, publicURL, int64(len(img.Data))
+	a.Key, a.URL, a.Bytes, a.Provider = key, publicURL, int64(len(img.Data)), pub.Name()
 	if img.Width > 0 {
 		a.Width, a.Height = img.Width, img.Height
 	}
@@ -645,7 +677,7 @@ func (s *mediaServiceImpl) Get(ctx context.Context, actor auth.Actor, id string,
 		a.URL, a.URLExpiresAt = s.linkBase+"/v1/l/"+token, &expires
 		return a, nil
 	default:
-		st, err := s.store(a.Purpose)
+		st, err := s.storeFor(a)
 		if err != nil {
 			return domain.Asset{}, err
 		}
@@ -654,7 +686,7 @@ func (s *mediaServiceImpl) Get(ctx context.Context, actor auth.Actor, id string,
 }
 
 func (s *mediaServiceImpl) signed(ctx context.Context, a domain.Asset, ttl time.Duration) (domain.Asset, error) {
-	st, err := s.store(a.Purpose)
+	st, err := s.storeFor(a)
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -689,7 +721,7 @@ func (s *mediaServiceImpl) ResolveLink(ctx context.Context, token string) (strin
 	if err != nil || !rules.LongLinks || (a.Status != domain.StatusReady && a.Status != domain.StatusFlagged) {
 		return "", ErrLinkInvalid
 	}
-	st, err := s.store(a.Purpose)
+	st, err := s.storeFor(a)
 	if err != nil {
 		return "", err
 	}
@@ -717,7 +749,7 @@ func (s *mediaServiceImpl) Review(ctx context.Context, actor auth.Actor, id stri
 	if !s.moderated(a.Purpose) || a.Moderation == nil || a.Moderation.Verdict != domain.VerdictHeld {
 		return domain.Asset{}, fmt.Errorf("%w: only images held by moderation can be reviewed", ErrState)
 	}
-	st, err := s.store(a.Purpose)
+	st, err := s.storeFor(a)
 	if err != nil {
 		return domain.Asset{}, err
 	}
