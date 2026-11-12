@@ -9,8 +9,12 @@
 #   pg-restore.sh globals [OBJECT|latest]           print the roles/grants dump (psql < file) when it was captured
 #
 # Environment:
-#   BACKUP_REMOTE=backup:afrotransact-pg-backups    rclone path; define the remote with RCLONE_CONFIG_BACKUP_TYPE/_PROVIDER/_ENDPOINT/
-#                                                   _ACCESS_KEY_ID/_SECRET_ACCESS_KEY/_REGION (same values as the Secret pg-backup)
+#   B2_KEY_ID B2_APPLICATION_KEY B2_BUCKET B2_ENDPOINT [B2_REGION]
+#                                                   the Backblaze B2 bucket (same values as the Secret pg-backup; a key restricted to
+#                                                   the bucket and Read-only is enough for a restore). Region = the <region> of
+#                                                   s3.<region>.backblazeb2.com unless B2_REGION is set.
+#   BACKUP_REMOTE=<rclone path>                     generic alternative (tests, another S3 vendor): define the remote with
+#                                                   RCLONE_CONFIG_BACKUP_TYPE/_PROVIDER/_ENDPOINT/_ACCESS_KEY_ID/_SECRET_ACCESS_KEY/_REGION
 #   AGE_IDENTITY=~/age-backup-key.txt               the age private key (offline copy)
 #   PGHOST PGPORT PGUSER PGPASSWORD PGSSLMODE       an ADMIN of the target server (roles and databases are created with it)
 #   RESTORE_ROLE_PASSWORD                           password for a role this script has to create (default: random, printed once)
@@ -19,7 +23,17 @@
 # exactly as infra/tofu/scripts/postgres-bootstrap.sh does on a fresh server.
 set -euo pipefail
 
-: "${BACKUP_REMOTE:?set BACKUP_REMOTE, e.g. backup:afrotransact-pg-backups}"
+if [[ -n "${B2_KEY_ID:-}" ]]; then
+  : "${B2_APPLICATION_KEY:?}" "${B2_BUCKET:?}" "${B2_ENDPOINT:?}"
+  b2_host="${B2_ENDPOINT#https://}"; b2_host="${b2_host%/}"
+  b2_region="${B2_REGION:-$(sed -n 's/^s3\.\([^.]*\)\.backblazeb2\.com$/\1/p' <<< "$b2_host")}"
+  [[ -n "$b2_region" ]] || { echo "error: cannot derive the region from B2_ENDPOINT=$B2_ENDPOINT; set B2_REGION" >&2; exit 1; }
+  export RCLONE_CONFIG_BACKUP_TYPE=s3 RCLONE_CONFIG_BACKUP_PROVIDER=Other RCLONE_CONFIG_BACKUP_ENDPOINT="https://$b2_host" \
+    RCLONE_CONFIG_BACKUP_REGION="$b2_region" RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID="$B2_KEY_ID" \
+    RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY="$B2_APPLICATION_KEY"
+  BACKUP_REMOTE="backup:$B2_BUCKET"
+fi
+: "${BACKUP_REMOTE:?set B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET and B2_ENDPOINT (or BACKUP_REMOTE)}"
 export PGSSLMODE="${PGSSLMODE:-require}" PGDATABASE="${PGDATABASE:-postgres}"
 
 role_of() { case "$1" in temporal_visibility) echo temporal_app ;; *) echo "${1}_app" ;; esac; }

@@ -97,6 +97,7 @@ ensure() {
 # backup_bucket: the bucket for the server's backups (database dumps, the generated secrets), next to the state bucket, kept
 # after `destroy` so a new server can be restored from it. Objects expire after 30 days. Exports BACKUP_* into the job.
 backup_bucket() {
+  if [ -n "${B2_KEY_ID:-}" ]; then echo "backups go to Backblaze B2 (B2_BUCKET): no OVH backup bucket is made"; return 0; fi
   need aws
   need_keys
   local b="${BACKUP_BUCKET:-${TF_STATE_BUCKET/tfstate/backups}}"

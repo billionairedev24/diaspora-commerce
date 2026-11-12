@@ -17,6 +17,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [Maintenance mode](maintenance-mode.md) | turn on the maintenance page before planned work, what it pauses, how to clear it without the console |
 | [Settings in the staff console](settings.md) | where every platform setting lives, who calculates sales tax (our rules or Stripe Tax), finding a transfer in Stripe |
 | [v1 to v2 cutover](v1-to-v2-cutover.md) | moving production from v1 to v2 on the same Stripe account: Stripe inventory, test-mode rehearsal, freeze, webhook swap, data mapping, DNS, comms, rollback, go/no-go |
+| [Backups on Backblaze B2](backups-backblaze.md) | creating the per-environment bucket and its bucket-scoped key, retention days and the lifecycle rule, Object Lock, testing with rclone, restoring one database inside the RTO, rotating the key, the backup size and staleness alerts |
 | [Production readiness review](production-readiness.md) | what was checked, what could not be, and what blocks go-live |
 | [Cost](cost.md) | a budget alert fired; the monthly cost review |
 | [Kafka dead letters, replay and recovery](kafka-replay.md) | an event was not applied by a consumer: inspect a DLQ, replay records, reset a consumer group's offsets, re-publish outbox rows, rebuild a read model (`tools/ops/kafka-replay`) |

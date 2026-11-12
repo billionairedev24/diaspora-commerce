@@ -8,8 +8,8 @@ restored is not a backup: **the first drill is a launch blocker** (`production-r
 
 | Data | How | Where | Retention |
 |---|---|---|---|
-| PostgreSQL, all 19 databases (`identity catalog offers inventory orders payments seller fulfilment bookings trustops taxreturns content ai cart geo media notifications temporal temporal_visibility`) | CronJob `pg-backup` in namespace `ops` at **03:15 UTC** nightly: `pg_dump -Fc` per database, checked with `pg_restore --list`, encrypted with **age** (the cluster holds only the public key), uploaded with rclone | a bucket at a vendor **other than Layerbase** (and not on the OVH node), remote configured by `BACKUP_REMOTE` + `RCLONE_CONFIG_BACKUP_*` | **14 days** (the job's sweep; also set a bucket lifecycle rule of ~21 days) |
-| Roles and grants | `pg_dumpall --globals-only --no-role-passwords` in the same job (a warning if Layerbase does not allow it) | same bucket, `postgres/_globals/` | 14 days |
+| PostgreSQL, all 19 databases (`identity catalog offers inventory orders payments seller fulfilment bookings trustops taxreturns content ai cart geo media notifications temporal temporal_visibility`) | CronJob `pg-backup` in namespace `ops` at **03:15 UTC** nightly: `pg_dump -Fc` per database, checked with `pg_restore --list`, encrypted with **age** (the cluster holds only the public key), uploaded with rclone | **Backblaze B2** (S3 API, rclone), one private bucket per environment (`afrotransact-prod-backups`, `afrotransact-test-backups`), one bucket-scoped key; a vendor other than Layerbase, OVH and Cloudflare (**never R2**). Setup, key, lifecycle rule: `backups-backblaze.md` | **`RETENTION_DAYS`, default 14** (owner may set 7); the job's sweep plus the bucket lifecycle rule "delete hidden versions after 1 day" (B2 versions every file) |
+| Roles and grants | `pg_dumpall --globals-only --no-role-passwords` in the same job (a warning if Layerbase does not allow it) | same bucket, `postgres/_globals/` | `RETENTION_DAYS` |
 | **Secrets that cannot be re-created**: `IDENTITY_DATA_KEY`, JWT signing key `SIGNING_KEY_PEM`, `HANDOVER_CODE_KEY`, `PAY_LINK_KEY`, `FIELD_ENCRYPTION_KEY`, `LINK_SIGNING_KEY`, `*_CLIENT_SECRET`, database role passwords | `infra/ops/secrets/escrow.sh create`: age bundle of `STATE_DIR` for two recipients, **plus** the SOPS-encrypted Secret files | **offline**, in two places (password manager attachment + a physical copy), **separately from the database backups** | until rotated |
 | Temporal | state is in the two Postgres databases above | covered | |
 | Kafka (10 GiB PVC) | not backed up: services publish through an outbox; replay `docs/runbooks/kafka-replay.md`, `tools/ops/outbox-republish.sql` | | |
@@ -25,12 +25,14 @@ repository). Lose `IDENTITY_DATA_KEY` and a perfect database restore leaves iden
 
 1. `age-keygen -o ~/age-backup-key.txt` on an offline-capable machine; the **public** key (`age1...`) goes into `BACKUP_AGE_RECIPIENT`
    of `secrets.local.env`; keep the private key file in two places. Do the same for the SOPS and escrow keys (separate keys are better).
-2. Create the bucket at the backup vendor (Cloudflare R2, Backblaze B2 or another S3-compatible store; **not** Layerbase, **not** OVH) and
-   an access key limited to that bucket. Set `BACKUP_REMOTE=backup:<bucket>` and `BACKUP_S3_*` in `secrets.local.env`.
+2. Create the Backblaze B2 bucket and an application key restricted to it (Read and Write), set the bucket's lifecycle rule, and put
+   `BACKUP_B2_KEY_ID`, `BACKUP_B2_APPLICATION_KEY`, `BACKUP_B2_BUCKET`, `BACKUP_B2_ENDPOINT` (and `BACKUP_RETENTION_DAYS`) in `secrets.local.env`: click by click in
+   `backups-backblaze.md` (sections 2 and 3). Not Cloudflare R2, not Layerbase, not OVH.
 3. A dead-man's-switch URL (`BACKUP_HEALTHCHECK_URL`, healthchecks.io style) with a 26-hour grace: no success ping means someone is told. Free-tier limits UNVERIFIED.
 4. Apply the Secret `pg-backup` (infra/ops/secrets), sync `lean-prod`, then run one now:
    `kubectl -n ops create job --from=cronjob/pg-backup manual-1 && kubectl -n ops logs -f job/manual-1`
-   Expected: `backed up <db>` x 19 and `backup complete: 19 databases`. Any `FAILED` line makes the job exit 1.
+   Expected: `backed up <db>` x 19, one `backup_metrics ... run_bytes=... bucket_bytes=...` line (the size alerts in `infra/observability/rules/backup.yaml` read it) and
+   `backup complete: 19 databases`. Any `FAILED` line makes the job exit 1.
 5. `escrow.sh create` and store the bundle; test with `escrow.sh restore` into a temp directory.
 
 ## The drill (do it in the trial, before launch, then monthly)
@@ -39,9 +41,7 @@ Use a **scratch** server: a second Layerbase database/server (a trial plan is en
 (`postgis/postgis:17-3.5`). Never restore over production to "test".
 
 ```bash
-export BACKUP_REMOTE=backup:<bucket>
-export RCLONE_CONFIG_BACKUP_TYPE=s3 RCLONE_CONFIG_BACKUP_PROVIDER=<provider> RCLONE_CONFIG_BACKUP_ENDPOINT=<endpoint> \
-       RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID=<key> RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY=<secret> RCLONE_CONFIG_BACKUP_REGION=auto
+export B2_KEY_ID=<keyID> B2_APPLICATION_KEY=<applicationKey> B2_BUCKET=afrotransact-prod-backups B2_ENDPOINT=s3.<region>.backblazeb2.com
 export AGE_IDENTITY=~/age-backup-key.txt
 export PGHOST=<scratch host> PGUSER=<scratch admin> PGPASSWORD=... PGSSLMODE=require
 
@@ -76,6 +76,9 @@ Then prove the data is usable, not just present:
    changing `DB_URL` in its Secret and restarting, or rename databases while the service is down. Never `DROP` the damaged database until the restored one is verified.
 4. `pg-restore.sh globals latest | psql` only if roles are missing (it contains no passwords: reset them and update the Secrets).
 5. Rebuild search, replay lost events from the outbox, and write the post-incident note with the real RPO and RTO.
+
+The key of the bucket and its rotation, the lifecycle rule and the time budget for restoring one database inside the 4-hour RTO are in
+`backups-backblaze.md` (sections 3, 6 and 7). Record the B2 download time of the largest dump in the result log below.
 
 ## Result log (fill in at every drill)
 

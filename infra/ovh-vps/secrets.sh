@@ -63,13 +63,13 @@ platform() {
     # Production extras (no OpenFGA). Values come from secrets.local.env; an empty value is a mistake the apply step refuses.
     secret ingress cloudflared "token=${CLOUDFLARED_TUNNEL_TOKEN:-}"
     secret observability grafana-cloud-otlp "GRAFANA_OTLP_ENDPOINT=${GRAFANA_OTLP_ENDPOINT:-}" "GRAFANA_INSTANCE_ID=${GRAFANA_INSTANCE_ID:-}" "GRAFANA_API_TOKEN=${GRAFANA_API_TOKEN:-}"
-    # Nightly backup job (infra/k8s/platform/lean/backup): admin read access, the PUBLIC age key, and the rclone remote of the
-    # backup vendor (any S3-compatible bucket at a vendor other than Layerbase).
+    # Nightly backup job (infra/k8s/platform/lean/backup): admin read access, the PUBLIC age key and this environment's Backblaze B2
+    # bucket with its bucket-scoped key (pg-backup.sh builds the rclone remote from B2_*; docs/runbooks/backups-backblaze.md).
     secret ops pg-backup "PGHOST=$PG_HOST" "PGPORT=5432" "PGUSER=$PG_ADMIN" "PGPASSWORD=$(pg_admin_password)" "PGSSLMODE=$PG_SSL" \
-      "AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}" "BACKUP_REMOTE=${BACKUP_REMOTE:-}" "RETENTION_DAYS=14" "HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-}" \
-      "RCLONE_CONFIG_BACKUP_TYPE=s3" "RCLONE_CONFIG_BACKUP_PROVIDER=${BACKUP_S3_PROVIDER:-Other}" "RCLONE_CONFIG_BACKUP_ENDPOINT=${BACKUP_S3_ENDPOINT:-}" \
-      "RCLONE_CONFIG_BACKUP_REGION=${BACKUP_S3_REGION:-auto}" "RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID=${BACKUP_S3_ACCESS_KEY:-}" \
-      "RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY=${BACKUP_S3_SECRET_KEY:-}"
+      "AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}" "B2_KEY_ID=${BACKUP_B2_KEY_ID:-}" "B2_APPLICATION_KEY=${BACKUP_B2_APPLICATION_KEY:-}" \
+      "B2_BUCKET=${BACKUP_B2_BUCKET:-afrotransact-prod-backups}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
+      "RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}" "RETENTION_MODE=${BACKUP_RETENTION_MODE:-sweep}" "BACKUP_ENV=prod" \
+      "PUSHGATEWAY_URL=${BACKUP_PUSHGATEWAY_URL:-}" "HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-}"
     return 0
   fi
   ofga_pw="$(db_password openfga)"

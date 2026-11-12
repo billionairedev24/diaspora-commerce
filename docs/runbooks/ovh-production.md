@@ -96,7 +96,7 @@ Follow `infra/ops/secrets/README.md`: render with `PROFILE=prod ... infra/ovh-vp
 the three webhook secrets (`docs/runbooks/stripe-webhooks.md`), `STRIPE_PUBLISHABLE_KEY` (gateway-bff refuses to start without it),
 `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` (`docs/runbooks/resend-email.md`; no Resend = no sign-up codes and no staff email MFA; notifications refuses to start in prod without both), `OPENROUTER_API_KEY` (**and a credit limit on that key in the OpenRouter
 dashboard**: the USD 2 per day gateway ceiling in `ai-gateway`'s `values-prod.yaml` is the first guard, the key limit the second), geo and tax data keys, the
-Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-buckets.md`; media refuses to start in prod without them), the tunnel token, Grafana Cloud OTLP credentials, the backup remote and the **age public key** of the backup, `GHCR_USER` /
+Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-buckets.md`; media refuses to start in prod without them), the tunnel token, Grafana Cloud OTLP credentials, the Backblaze B2 bucket (`afrotransact-prod-backups`), its bucket-scoped application key and endpoint, `BACKUP_RETENTION_DAYS` (default 14; click by click in `docs/runbooks/backups-backblaze.md`; **never Cloudflare R2 for backups**) and the **age public key** of the backup, `GHCR_USER` /
 `GHCR_TOKEN` (read-only `read:packages`; creates the pull secret `ghcr`), `BOOTSTRAP_ADMIN_*` for identity's first admin.
 Generate **everything fresh** (never reuse trial or dev values: `STATE_DIR` must be a new directory).
 
@@ -155,7 +155,7 @@ Sync by Application name (`<component>-prod`). Wait for Healthy before the next 
    serving; fix forward, never edit applied migrations.
 5. **Search index:** once catalog data exists, `kubectl -n afrotransact-prod create job reindex-1 --from=cronjob/indexer-reindex` (the CronJob is
    suspended; `reindex.enabled: true` in the indexer prod values renders it) and follow its logs.
-6. Backups: `kubectl -n ops create job --from=cronjob/pg-backup first-backup` and **run the restore drill** (restore-drill.md) before inviting users.
+6. Backups (Backblaze B2: bucket, key, lifecycle rule and a key test first, `docs/runbooks/backups-backblaze.md`): `kubectl -n ops create job --from=cronjob/pg-backup first-backup` and **run the restore drill** (restore-drill.md) before inviting users.
 
 Memory/CPU check after each wave: `kubectl top pods -A`, `kubectl describe node | grep -A12 "Allocated resources"`.
 
@@ -204,7 +204,7 @@ Kafka disk growth per day; Grafana Cloud series and log volume against the free 
 - OVH node upgrades need a maintenance window (downtime). Tell users.
 - Alerts that must exist (Grafana Cloud alerting + an external uptime check on the storefront, `/bff/healthz` and the OIDC discovery URL): site/API
   down, 5xx rate on gateway-bff, Stripe webhook failures, Kafka consumer lag / outbox backlog / DLQ above 0, Postgres connections near the limit,
-  node memory above 85 %, OOMKilled/CrashLoop, PVC above 80 %, **missed backup** (dead-man's-switch), Layerbase storage near the limit.
+  node memory above 85 %, OOMKilled/CrashLoop, PVC above 80 %, **missed backup** (alert `BackupStale`, 26 hours, and the dead-man's-switch), backup size (`BackupSizeHigh` above 600 MB per night, `BackupBucketSizeHigh` above 8 GB; `infra/observability/rules/backup.yaml`), Layerbase storage near the limit.
 - Pre-orders, community, retail and delivery-runs are **not launched**: hide their navigation in the storefront (delivery-runs is not deployed).
 
 ## 14. Questions for Layerbase, in writing (all answers currently unknown)
@@ -226,7 +226,7 @@ Kafka disk growth per day; Grafana Cloud series and log volume against the free 
 
 **OVH:** MKS free plan in US East; Free vs Standard SLA; `b3-16` monthly and hourly price; node upgrade windows and what happens to PVCs; block storage and CSI
 snapshot support; Object Storage price, **object lock** in the US; whether the US MKS API supports IP restrictions that keep node-to-API traffic working;
-outbound traffic charges. **Cloudflare:** free-plan WAF and rate-limit rule quotas, Tunnel limits, Workers Paid need, R2 versioning/lifecycle.
+outbound traffic charges. **Cloudflare:** free-plan WAF and rate-limit rule quotas, Tunnel limits, Workers Paid need, R2 versioning/lifecycle (media only; backups are on Backblaze B2). **Backblaze B2:** free-tier storage and transaction limits, what an S3 delete does in a versioned bucket, lifecycle rule behaviour, Object Lock, the capabilities of a bucket-scoped key (all UNVERIFIED in `backups-backblaze.md`).
 **GitHub:** GHCR private package storage and transfer limits. **Grafana Cloud:** free-tier limits and alert-rule quotas.
 
 ## 16. Known gaps (not done, do not forget)

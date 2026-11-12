@@ -1,11 +1,14 @@
-# Nightly pg_dump of every database on the external Postgres (Layerbase) to a bucket at ANOTHER vendor, age-encrypted,
-# 14-day retention (RPO 24 h). Script: pg-backup.sh (same directory). Restore: infra/ops/backup/pg-restore.sh and
-# docs/runbooks/restore-drill.md. The job fails until the Secret pg-backup exists (infra/ops/secrets/apply.sh).
+# Nightly pg_dump of every database on the external Postgres (Layerbase) to this environment's Backblaze B2 bucket (S3 API, rclone),
+# age-encrypted, RETENTION_DAYS kept (default 14, the owner may set 7; RPO 24 h). Cloudflare R2 is NOT used for backups. Script:
+# pg-backup.sh (same directory). Restore: infra/ops/backup/pg-restore.sh. Setup, retention, lifecycle and key rotation:
+# docs/runbooks/backups-backblaze.md; drill: docs/runbooks/restore-drill.md. The job fails until the Secret pg-backup exists
+# (infra/ops/secrets/apply.sh).
 #
-# Secret pg-backup (namespace ops) keys: PGHOST PGPORT PGUSER PGPASSWORD PGSSLMODE AGE_RECIPIENT BACKUP_REMOTE
-#   RCLONE_CONFIG_BACKUP_TYPE RCLONE_CONFIG_BACKUP_PROVIDER RCLONE_CONFIG_BACKUP_ENDPOINT RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID
-#   RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY RCLONE_CONFIG_BACKUP_REGION  [HEALTHCHECK_URL]
-# A failed or missed run must page someone: HEALTHCHECK_URL (a dead-man's-switch service) alerts when no success ping arrives.
+# Secret pg-backup (namespace ops) keys: PGHOST PGPORT PGUSER PGPASSWORD PGSSLMODE AGE_RECIPIENT
+#   B2_KEY_ID B2_APPLICATION_KEY B2_BUCKET B2_ENDPOINT [B2_REGION]    one bucket and one key per environment (test | prod)
+#   [RETENTION_DAYS RETENTION_MODE BACKUP_ENV PUSHGATEWAY_URL HEALTHCHECK_URL]
+# A failed or missed run must page someone: the alert BackupStale (infra/observability/rules/backup.yaml, kube-state-metrics) and,
+# optionally, HEALTHCHECK_URL (a dead-man's-switch service). The run's total size is logged as one backup_metrics line.
 apiVersion: batch/v1
 kind: CronJob
 metadata:

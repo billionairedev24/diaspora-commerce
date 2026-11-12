@@ -1,0 +1,47 @@
+# GENERATED from infra/observability/rules/backup.yaml by generate_rules.py — do not edit by hand.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: afrotransact-backup
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/part-of: afrotransact
+spec:
+  groups:
+  - name: afrotransact-backup
+    rules:
+    - alert: BackupSizeHigh
+      expr: max by (env) (afrotransact_backup_run_bytes) > 600000000
+      for: 5m
+      labels:
+        severity: ticket
+      annotations:
+        summary: The last {{ $labels.env }} database backup uploaded {{ $value | humanize1024 }}B, over 600 MB
+        description: 'One night''s compressed, encrypted dump set is over 600 MB: at 14 days of retention that outgrows the 10 GB free tier of the backup bucket (UNVERIFIED). Find the growing database,
+          shorten RETENTION_DAYS or move to a paid plan.'
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backups-backblaze.md#alerts
+    - alert: BackupBucketSizeHigh
+      expr: max by (env) (afrotransact_backup_bucket_bytes) > 8000000000
+      for: 5m
+      labels:
+        severity: ticket
+      annotations:
+        summary: The {{ $labels.env }} backup bucket holds {{ $value | humanize1024 }}B, over 8 GB
+        description: 'The bucket is close to the 10 GB free tier (UNVERIFIED). Hidden versions are not in this number: check the B2 console and the bucket lifecycle rule.'
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backups-backblaze.md#alerts
+    - alert: BackupStale
+      expr: |
+        (time() - kube_cronjob_status_last_successful_time{namespace="ops",cronjob="pg-backup"} > 93600)
+        or
+        (time() - kube_cronjob_created{namespace="ops",cronjob="pg-backup"} > 93600
+          unless on (namespace, cronjob) kube_cronjob_status_last_successful_time{namespace="ops",cronjob="pg-backup"})
+        or
+        (time() - afrotransact_backup_last_success_timestamp_seconds > 93600)
+      for: 10m
+      labels:
+        severity: page
+      annotations:
+        summary: No successful database backup for more than 26 hours
+        description: The pg-backup CronJob has not completed successfully since the last 03:15 UTC run plus a margin. RPO 24 h is at risk.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backups-backblaze.md#alerts

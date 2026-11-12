@@ -47,7 +47,7 @@ afrotransact-prod/media-secrets:R2_ACCOUNT_ID,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_
 afrotransact-prod/identity-secrets:SIGNING_KEY_PEM,IDENTITY_DATA_KEY,BOOTSTRAP_ADMIN_PASSWORD
 afrotransact-prod/ai-gateway-secrets:OPENROUTER_API_KEY
 ingress/cloudflared:token
-ops/pg-backup:AGE_RECIPIENT,BACKUP_REMOTE,RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID,RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY'
+ops/pg-backup:AGE_RECIPIENT,B2_KEY_ID,B2_APPLICATION_KEY,B2_BUCKET,B2_ENDPOINT'
 
 check_mandatory() { # check_mandatory < decrypted-yaml ; prints the problems, exit 1 when any
   MANDATORY="$MANDATORY" python3 -c '

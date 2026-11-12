@@ -29,7 +29,7 @@ The profile is `infra/tofu/envs/prod/sizing.tf` (`node_size = "lean"`, `zone_cou
 | Telemetry | one OTLP collector to Grafana Cloud free tier |
 | Secrets | SOPS + age files (`infra/ops/secrets`); OKMS + External Secrets optional and unverified |
 | Deploy | Argo CD (trimmed), manual sync in prod |
-| Backups | nightly age-encrypted `pg_dump` of the 19 databases to a bucket at a vendor other than Layerbase (`infra/k8s/platform/lean/backup`) |
+| Backups | nightly age-encrypted `pg_dump` of the 19 databases to a **Backblaze B2** bucket (S3 API, rclone; not Cloudflare R2, so backups do not depend on the Cloudflare account), one bucket and key per environment (`infra/k8s/platform/lean/backup`, `docs/runbooks/backups-backblaze.md`) |
 
 ## One location for everything
 
@@ -62,7 +62,7 @@ sites is expected to be a few ms in the same metro (**UNVERIFIED**: measure it b
 | Layerbase Dedicated 8 GB | $65 | UNVERIFIED. **Not needed**: Valkey and Meilisearch run in the cluster |
 | Cloudflare Workers Paid | 5 | UNVERIFIED (only if the bundle size needs it) |
 | Cloudflare R2 (both media buckets), Grafana Cloud, GHCR | free tiers | UNVERIFIED (check the free limits: Grafana Cloud 10k metric series, 50 GB logs, 50 GB traces; R2 10 GB, and whether private KYC objects need more than that or a retention lock, which R2 may not offer) |
-| Backup bucket at the second vendor | a few cents to a few dollars | UNVERIFIED (small: 19 compressed dumps x 14 days) |
+| Backup buckets at Backblaze B2 (`afrotransact-test-backups`, `afrotransact-prod-backups`) | 0 on the free tier | UNVERIFIED: the free tier is assumed to be 10 GB of storage with daily transaction and download allowances. 14 days x one night's dump set fits while that set stays below about 700 MB (alerts at 600 MB per night and 8 GB in the bucket). **Revisit above about 700 MB per day** (or set `RETENTION_DAYS=7`, which doubles the headroom); paid B2 storage is a few dollars per month at this size (price UNVERIFIED). Hidden versions count as storage until the lifecycle rule removes them |
 | Resend (email), Stripe fees, OpenRouter | usage based | not infrastructure; OpenRouter is capped (see below) |
 
 `monthly_budget` in `envs/prod/sizing.tf` is a **placeholder (150)** until the OVH quote exists: set it to about 1.2 times the OVH
@@ -146,7 +146,7 @@ environment variable overrides it by Spring's property precedence: confirm with 
   gateway and USD 0.50 per caller, pinned in `values-prod.yaml` (`AI_GLOBAL_DAILY_COST_USD`, `AI_CALLER_DAILY_COST_USD`); above it every call answers 429.
   Set a **credit limit on the OpenRouter key** as the second, independent cap.
 - **Connection counts** are capped (above). **Kafka** keeps 72 hours, dead letters 14 days, on a 10 GiB disk.
-- **Backups** keep 14 days at the second vendor.
+- **Backups** keep `RETENTION_DAYS` (default 14, the owner may set 7) at Backblaze B2; alerts at 600 MB per night and 8 GB in the bucket (`infra/observability/rules/backup.yaml`).
 
 ## Accepted trade-offs
 

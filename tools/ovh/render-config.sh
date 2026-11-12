@@ -38,6 +38,11 @@ kv() { printf '%s=%q\n' "$1" "${2-}"; }
   kv BACKUP_S3_REGION "${BACKUP_S3_REGION:-}"
   kv BACKUP_S3_ACCESS_KEY "${BACKUP_S3_ACCESS_KEY:-}"
   kv BACKUP_S3_SECRET_KEY "${BACKUP_S3_SECRET_KEY:-}"
+  # Backblaze B2 (the default off-vendor backup target; backup.sh prefers it over the OVH bucket above when B2_KEY_ID is set)
+  kv B2_KEY_ID "${B2_KEY_ID:-}"
+  kv B2_APPLICATION_KEY "${B2_APPLICATION_KEY:-}"
+  kv B2_BUCKET "${B2_BUCKET:-}"
+  kv B2_ENDPOINT "${B2_ENDPOINT:-}"
 } > "$out/config.env"
 
 : > "$out/secrets.local.env"

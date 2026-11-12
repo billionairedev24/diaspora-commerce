@@ -1,0 +1,31 @@
+# The same three alerts as infra/observability/rules/backup.yaml, for the log path (pod logs -> Alloy -> Loki ruler) when no
+# Pushgateway exists. Load it as a Loki ruler rule file or import it in Grafana as a Loki-managed alert rule group. The job logs
+# one line per run:
+#   backup_metrics env=prod stamp=... run_bytes=N bucket_bytes=M databases_ok=19 failed=0 retention_days=14 retention_mode=sweep
+# UNVERIFIED: this LogQL has not been run against a real Loki. The label app=pg-backup comes from the Alloy relabel in
+# infra/ovh-vps/deploy.sh (pod label app.kubernetes.io/name). Not a Prometheus rule file: generate_rules.py does not read this folder.
+groups:
+  - name: afrotransact-backup-logs
+    rules:
+      - alert: BackupSizeHigh
+        expr: max by (env) (max_over_time({namespace="ops", app="pg-backup"} |= "backup_metrics" | logfmt | unwrap run_bytes [26h])) > 600000000
+        for: 5m
+        labels: {severity: ticket}
+        annotations:
+          summary: "The last {{ $labels.env }} database backup uploaded over 600 MB"
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backups-backblaze.md#alerts
+      - alert: BackupBucketSizeHigh
+        expr: max by (env) (max_over_time({namespace="ops", app="pg-backup"} |= "backup_metrics" | logfmt | unwrap bucket_bytes [26h])) > 8000000000
+        for: 5m
+        labels: {severity: ticket}
+        annotations:
+          summary: "The {{ $labels.env }} backup bucket holds over 8 GB"
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backups-backblaze.md#alerts
+      - alert: BackupStale
+        # fires when no run in the last 26 h reported failed=0 (a missing line counts as no success)
+        expr: absent_over_time({namespace="ops", app="pg-backup"} |= "backup_metrics" |= "failed=0" [26h])
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: "No successful database backup for more than 26 hours"
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backups-backblaze.md#alerts

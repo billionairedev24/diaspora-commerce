@@ -68,6 +68,11 @@ jobs:
       TF_VAR_ovh_location: ${{ vars.OVH_LOCATION }}
       TF_VAR_instance_flavor: ${{ vars.OVH_INSTANCE_FLAVOR || 'b3-32' }}
       TF_VAR_ssh_public_key: ${{ vars.OVH_SSH_PUBLIC_KEY }}
+      # Off-vendor backups: this environment's Backblaze B2 bucket and its bucket-scoped key (docs/runbooks/backups-backblaze.md)
+      B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+      B2_BUCKET: ${{ vars.B2_BUCKET }}
+      B2_ENDPOINT: ${{ vars.B2_ENDPOINT }}
     steps:
       - uses: actions/checkout@v7
 

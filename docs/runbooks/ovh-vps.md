@@ -219,8 +219,10 @@ notes and the caveat that two-label hosts need a paid certificate: `docs/runbook
 - **Grafana** at `https://grafana.<domain>` (user `admin`, password in `/var/lib/afrotransact/` on the server; metrics from
   kube-prometheus-stack, logs from Loki via Alloy). Run `observability` to (re)install it.
 - **Backups**: `backup` installs a nightly 03:15 job: every database (`pg_dump -Fc`), and the generated secrets, encrypted with
-  `BACKUP_PASSPHRASE` and sent to the `*-backups` bucket on OVH Object Storage; objects expire after 30 days (server-side) and
-  14 days (job). `sudo bash infra/ovh-vps/backup.sh list|run|restore <db> <object>`. Keep `BACKUP_PASSPHRASE` somewhere
+  `BACKUP_PASSPHRASE` and sent to the Backblaze B2 bucket `afrotransact-test-backups` (set the GitHub secrets `B2_KEY_ID`, `B2_APPLICATION_KEY` and variables
+  `B2_BUCKET`, `B2_ENDPOINT`; `docs/runbooks/backups-backblaze.md`). Without them the old stop-gap is used: the `*-backups` bucket on OVH Object Storage, the same vendor as the
+  server. Objects older than `RETENTION_DAYS` (default 14) are deleted by the job after a fully successful run; on B2 add the bucket lifecycle rule of that page.
+  `sudo bash infra/ovh-vps/backup.sh list|run|restore <db> <object>`. Keep `BACKUP_PASSPHRASE` somewhere
   outside this server: without it the backups cannot be read. **Do a restore drill into a scratch database before relying on them.**
 - Chart versions of Traefik, cert-manager and the observability stack are recorded on first install in
   `/var/lib/afrotransact/chart-versions.env` and reused afterwards.
