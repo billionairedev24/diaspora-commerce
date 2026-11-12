@@ -20,6 +20,7 @@ import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.security.relationship.FgaObject;
 import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -212,8 +213,17 @@ class ProductServiceImpl implements ProductService {
         return new NotFoundException("catalog.variant-not-found", "Variant " + atin + " not found");
     }
 
+    /**
+     * Owner or staff may edit a page. Another seller is told it is not theirs (403 {@code catalog.not-your-page}, with the
+     * way forward: sell it, or suggest an edit) when the page is on sale and so already public; for any other page the
+     * answer stays 404, so nobody learns that somebody else's draft exists.
+     */
     private void ensureOwnerOrStaff(Actor actor, Product p) {
         if (!isStaff(actor) && !actor.orgId().map(p.owner().orgId()::equals).orElse(false)) {
+            if (p.status() == ProductStatus.LIVE) {
+                throw new ForbiddenActionException("catalog.not-your-page", "This product page belongs to another seller. "
+                        + "Add your offer to it, or suggest an edit if something on the page is wrong.");
+            }
             throw notFound(p.id().toString());
         }
     }

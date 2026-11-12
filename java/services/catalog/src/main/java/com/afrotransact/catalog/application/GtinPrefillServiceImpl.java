@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.Gtin;
+import com.afrotransact.catalog.domain.GtinReader;
 import com.afrotransact.catalog.domain.prefill.CategoryHintPolicy;
 import com.afrotransact.catalog.domain.prefill.ProductData;
 import com.afrotransact.catalog.domain.prefill.ProductPrefill;
@@ -42,11 +43,12 @@ class GtinPrefillServiceImpl implements GtinPrefillService {
     private final CategoryHintPolicy hints;
     private final ProductDataSettings settings;
     private final ActorResolver actors;
+    private final CatalogSettingsService policy;
     private final Clock clock;
 
     GtinPrefillServiceImpl(List<ProductDataSource> sources, ProductDataCache cache, ProductRepository products,
                            CategoryRepository categories, CategoryHintPolicy hints, ProductDataSettings settings,
-                           ActorResolver actors, Clock clock) {
+                           ActorResolver actors, CatalogSettingsService policy, Clock clock) {
         List<String> order = settings.order().stream().map(s -> s.toUpperCase(Locale.ROOT)).toList();
         this.sources = sources.stream()
                 .sorted(Comparator.comparingInt(s -> {
@@ -60,6 +62,7 @@ class GtinPrefillServiceImpl implements GtinPrefillService {
         this.hints = hints;
         this.settings = settings;
         this.actors = actors;
+        this.policy = policy;
         this.clock = clock;
     }
 
@@ -70,11 +73,10 @@ class GtinPrefillServiceImpl implements GtinPrefillService {
             throw new ForbiddenActionException("auth.missing-permission",
                     "Missing one of the permissions " + CatalogPermissions.READ + ", " + CatalogPermissions.WRITE);
         }
-        String digits = Gtin.digits(raw);
-        if (!Gtin.isValid(digits)) {
-            String fix = Gtin.suggestCorrection(digits);
-            String message = digits.isEmpty() ? "Required" : fix == null ? "Use 8, 12, 13 or 14 digits"
-                    : "Invalid check digit (did you mean " + fix + "?)";
+        GtinReader.Reading reading = GtinReader.read(raw, policy.current().reservedPrefixes());
+        String digits = reading.digits();
+        if (!reading.valid()) {
+            String message = reading.status() == GtinReader.Status.EMPTY ? "Required" : reading.message();
             throw new CatalogRuleViolation("Invalid GTIN: " + message, Map.of("gtin", message));
         }
         Gtin gtin = new Gtin(digits);

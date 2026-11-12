@@ -3,6 +3,10 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.Map;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.catalog.domain.ChangeRequestInvalid;
+import com.afrotransact.catalog.domain.GtinAlreadyUsed;
+import com.afrotransact.catalog.domain.PageAlreadyExists;
+import com.afrotransact.catalog.port.SellerOffers.OffersUnavailable;
 import com.afrotransact.catalog.domain.tax.TaxNotReady;
 import com.afrotransact.catalog.port.TaxResolver.TaxProfileNotFound;
 import com.afrotransact.catalog.port.TaxResolver.TaxServiceUnavailable;
@@ -38,6 +42,49 @@ class CatalogErrorAdvice {
         pd.setTitle("Catalog rule violated");
         pd.setProperty("code", "catalog.rule-violation");
         pd.setProperty("fieldErrors", ex.fieldErrors());
+        return pd;
+    }
+
+    @ExceptionHandler(GtinAlreadyUsed.class)
+    ProblemDetail gtinExists(GtinAlreadyUsed ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        pd.setType(ProblemTypes.of("catalog.gtin-exists"));
+        pd.setTitle("This barcode already has a product page");
+        pd.setProperty("code", "catalog.gtin-exists");
+        pd.setProperty("existingAtin", ex.existingAtin());
+        pd.setProperty("gtin14", ex.gtin14());
+        return pd;
+    }
+
+    @ExceptionHandler(PageAlreadyExists.class)
+    ProblemDetail pageExists(PageAlreadyExists ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        pd.setType(ProblemTypes.of("catalog.page-exists"));
+        pd.setTitle("This product already has a page");
+        pd.setProperty("code", "catalog.page-exists");
+        pd.setProperty("existingAtin", ex.existingAtin());
+        return pd;
+    }
+
+    @ExceptionHandler(ChangeRequestInvalid.class)
+    ProblemDetail changeRequestInvalid(ChangeRequestInvalid ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        pd.setType(ProblemTypes.of("catalog.change-request-invalid"));
+        pd.setTitle("The request does not fit its type");
+        pd.setProperty("code", "catalog.change-request-invalid");
+        pd.setProperty("errors", ex.errors());
+        pd.setProperty("fieldErrors", ex.errors());
+        return pd;
+    }
+
+    @ExceptionHandler(OffersUnavailable.class)
+    ProblemDetail offersUnavailable(OffersUnavailable ex) {
+        LOG.warn("offers unavailable: {}", ex.getMessage(), ex.getCause());
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "We could not check your offers right now; try again in a minute");
+        pd.setType(ProblemTypes.of("catalog.offers-unavailable"));
+        pd.setTitle("Offers unavailable");
+        pd.setProperty("code", "catalog.offers-unavailable");
         return pd;
     }
 

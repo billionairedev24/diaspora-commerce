@@ -11,6 +11,7 @@ import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.sizing.SizeChart;
 import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
+import com.afrotransact.catalog.port.AtinRedirectRepository;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -26,13 +27,16 @@ class PublicCatalogServiceImpl implements PublicCatalogService {
     private final ListingSuppressionRepository suppressions;
     private final SizeChartRepository charts;
     private final CategoryRepository categories;
+    private final AtinRedirectRepository redirects;
 
     PublicCatalogServiceImpl(ProductRepository products, ListingSuppressionRepository suppressions,
-                             SizeChartRepository charts, CategoryRepository categories) {
+                             SizeChartRepository charts, CategoryRepository categories,
+                             AtinRedirectRepository redirects) {
         this.products = products;
         this.suppressions = suppressions;
         this.charts = charts;
         this.categories = categories;
+        this.redirects = redirects;
     }
 
     @Override
@@ -71,6 +75,12 @@ class PublicCatalogServiceImpl implements PublicCatalogService {
     public Optional<String> taxProfileOf(Product product) {
         return product.categoryId() == null ? Optional.empty() : categories.findById(product.categoryId())
                 .map(CategoryNode::taxProfileId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> redirectOf(String atin) {
+        return redirects.find(atin.toUpperCase(Locale.ROOT));
     }
 
     /**

@@ -7,6 +7,19 @@ public final class CatalogEvents {
     public static final String AGGREGATE_CATEGORY_REQUEST = "category-request";
     public static final String AGGREGATE_TAXONOMY = "taxonomy";
 
+    /** Aggregate of change requests and no-barcode exemptions (topic at.change-request.events, key = request id). */
+    public static final String AGGREGATE_CHANGE_REQUEST = "change-request";
+    /** A seller filed a suggest-an-edit, wrong-match or duplicate-page request (the page is not changed). */
+    public static final String CHANGE_REQUEST_CREATED = "catalog.change_request.created";
+    /** Staff decided a change request: who, what and why. */
+    public static final String CHANGE_REQUEST_DECIDED = "catalog.change_request.decided";
+    /** A no-barcode item waits for staff approval (the page is PENDING_EXEMPTION). */
+    public static final String GTIN_EXEMPTION_REQUESTED = "catalog.gtin_exemption.requested";
+    /** Staff decided a no-barcode exemption. */
+    public static final String GTIN_EXEMPTION_DECIDED = "catalog.gtin_exemption.decided";
+    /** Two duplicate pages were merged (aggregate product, key = the surviving product id). */
+    public static final String PRODUCT_MERGED = "catalog.product.merged";
+
     public static final String PRODUCT_CREATED = "catalog.product.created";
     public static final String PRODUCT_APPROVED = "catalog.product.approved";
     public static final String PRODUCT_REJECTED = "catalog.product.rejected";

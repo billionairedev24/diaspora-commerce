@@ -2,6 +2,7 @@ package com.afrotransact.catalog.adapter.in.web;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -13,6 +14,7 @@ import com.afrotransact.catalog.application.ProductReviewService;
 import com.afrotransact.catalog.application.PublicCatalogService;
 import com.afrotransact.catalog.application.PublicCatalogService.LiveVariant;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.platform.web.error.NotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -73,6 +75,20 @@ class PublicProductController {
 
     @Schema(name = "PublicVariant")
     record PublicVariantResponse(PublicProductResponse product, VariantResponse variant) {
+    }
+
+    @Schema(name = "AtinRedirect")
+    record AtinRedirectResponse(String atin,
+                                @Schema(description = "ATIN of the page that survived the merge") String redirectTo) {
+    }
+
+    @Operation(operationId = "atinRedirect", summary = "Where an ATIN went after two duplicate pages were merged",
+            description = "Anonymous. 200 with the surviving page ATIN, 404 when the ATIN was never merged away.")
+    @GetMapping("/products/{atin}/redirect")
+    AtinRedirectResponse redirect(@PathVariable String atin) {
+        String target = catalog.redirectOf(atin).orElseThrow(() -> new NotFoundException("catalog.redirect-not-found",
+                "The ATIN " + atin + " was never merged into another page"));
+        return new AtinRedirectResponse(atin.toUpperCase(Locale.ROOT), target);
     }
 
     @Operation(summary = "A live product page by product ATIN")

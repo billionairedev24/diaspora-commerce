@@ -17,6 +17,7 @@ import com.afrotransact.catalog.application.OwnerResolver;
 import com.afrotransact.catalog.application.ProductDataSettings;
 import com.afrotransact.catalog.application.RetailAwareOwnerResolver;
 import com.afrotransact.catalog.application.ReviewSettings;
+import com.afrotransact.catalog.domain.CatalogPolicy;
 import com.afrotransact.catalog.domain.DefaultProductDraftPolicy;
 import com.afrotransact.catalog.domain.DefaultReviewContentPolicy;
 import com.afrotransact.catalog.domain.ProductDraftPolicy;
@@ -94,6 +95,21 @@ class CatalogConfiguration {
     ImportSettings importSettings(@Value("${at.catalog.imports.notify-min-rows:100}") int notifyMinRows,
                                   @Value("${at.catalog.imports.stall-after:2m}") Duration stallAfter) {
         return new ImportSettings(notifyMinRows, stallAfter);
+    }
+
+    /** S381-S387: the configured starting values of the thresholds staff edit; the stored copy wins. */
+    @Bean
+    CatalogPolicy catalogPolicyDefaults(
+            @Value("${at.catalog.policy.reserved-prefixes}") List<String> reservedPrefixes,
+            @Value("${at.catalog.policy.mpn-attribute-key}") String mpnAttributeKey,
+            @Value("${at.catalog.policy.review-sla-business-days}") int reviewSla,
+            @Value("${at.catalog.policy.alert-after-business-days}") int alertAfter,
+            @Value("${at.catalog.policy.note-max-length}") int noteMaxLength,
+            @Value("${at.catalog.policy.known-gs1-brand-min-pages}") int knownBrandMinPages,
+            @Value("${at.catalog.policy.exemption-gated-category-codes}") List<String> gatedCodes,
+            @Value("${at.catalog.policy.exemption-requires-approval-for-known-brands}") boolean knownBrands) {
+        return new CatalogPolicy(reservedPrefixes, mpnAttributeKey, reviewSla, alertAfter, noteMaxLength,
+                knownBrandMinPages, gatedCodes, knownBrands, null, null, 0);
     }
 
     /** Runs bulk-upload imports in the background (one virtual thread per started upload). */

@@ -1,6 +1,7 @@
 package com.afrotransact.catalog.application;
 
 import com.afrotransact.catalog.domain.Gtin;
+import com.afrotransact.catalog.domain.GtinReader;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
@@ -13,10 +14,12 @@ class IdentifierServiceImpl implements IdentifierService {
 
     private final ProductRepository products;
     private final ActorResolver actors;
+    private final CatalogSettingsService settings;
 
-    IdentifierServiceImpl(ProductRepository products, ActorResolver actors) {
+    IdentifierServiceImpl(ProductRepository products, ActorResolver actors, CatalogSettingsService settings) {
         this.products = products;
         this.actors = actors;
+        this.settings = settings;
     }
 
     @Override
@@ -27,20 +30,24 @@ class IdentifierServiceImpl implements IdentifierService {
             throw new ForbiddenActionException("auth.missing-permission",
                     "Missing one of the permissions " + CatalogPermissions.READ + ", " + CatalogPermissions.WRITE);
         }
-        String digits = Gtin.digits(raw);
-        if (digits.isEmpty()) {
-            return new GtinCheck(digits, false, null, null, isbnRequired ? "ISBN-13 required" : "Required, or request exemption");
-        }
-        if (!Gtin.isValid(digits)) {
-            String fix = Gtin.suggestCorrection(digits);
-            return new GtinCheck(digits, false, fix, null,
-                    fix == null ? "Use 8, 12, 13 or 14 digits" : "Invalid check digit");
+        GtinReader.Reading reading = GtinReader.read(raw, settings.current().reservedPrefixes());
+        String digits = reading.digits();
+        switch (reading.status()) {
+            case EMPTY:
+                return new GtinCheck(digits, null, "INVALID", false, null, null,
+                        isbnRequired ? "ISBN-13 required" : "Required, or request exemption");
+            case INVALID:
+                return new GtinCheck(digits, null, "INVALID", false, reading.suggestion(), null, reading.message());
+            case RESTRICTED:
+                return new GtinCheck(digits, reading.gtin14(), "RESTRICTED", false, null, null, reading.message());
+            default:
+                break;
         }
         if (isbnRequired && !new Gtin(digits).isIsbn13()) {
-            return new GtinCheck(digits, false, null, null, "Must be ISBN-13 (978/979)");
+            return new GtinCheck(digits, reading.gtin14(), "INVALID", false, null, null, "Must be ISBN-13 (978/979)");
         }
         String existing = products.findByVariantGtin(digits).map(p -> p.atin().value()).orElse(null);
-        return new GtinCheck(digits, true, null, existing,
+        return new GtinCheck(digits, reading.gtin14(), existing == null ? "NO_MATCH" : "MATCH", true, null, existing,
                 existing == null ? "Valid" : "Matches existing product " + existing + " — add your offer to it");
     }
 }

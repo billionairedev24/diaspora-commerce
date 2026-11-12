@@ -10,5 +10,12 @@ public enum ProductStatus {
     REJECTED,
     PAUSED,
     /** A live (or paused) listing removed by Trust and Safety; hidden publicly until staff restore it. */
-    TAKEN_DOWN
+    TAKEN_DOWN,
+    /**
+     * A no-barcode item in a brand-gated category, or of a brand known to carry barcodes, waits for staff to accept that
+     * it has none (S387). Not live; approval moves it to IN_REVIEW.
+     */
+    PENDING_EXEMPTION,
+    /** Merged into another page as a duplicate (S386): its ATIN redirects to the page that survived. Never live. */
+    MERGED
 }

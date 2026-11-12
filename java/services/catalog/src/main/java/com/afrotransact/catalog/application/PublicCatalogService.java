@@ -27,6 +27,9 @@ public interface PublicCatalogService {
      */
     Optional<String> taxProfileOf(Product product);
 
+    /** The ATIN an ATIN now redirects to after two duplicate pages were merged; empty when it was never merged away. */
+    Optional<String> redirectOf(String atin);
+
     /** A variant and the product it belongs to. */
     record LiveVariant(Product product, Variant variant) {
     }

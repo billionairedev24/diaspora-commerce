@@ -16,6 +16,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.Atin;
+import com.afrotransact.catalog.domain.Gtin;
+import com.afrotransact.catalog.domain.GtinAlreadyUsed;
+import com.afrotransact.catalog.domain.GtinReader;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ListingOwnerKind;
 import com.afrotransact.catalog.domain.PackageDimensions;
@@ -26,6 +29,7 @@ import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.web.error.ConflictException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -62,6 +66,7 @@ class JdbcProductRepository implements ProductRepository {
     @Override
     public Product insert(Product p) {
         LiveRequiresTax.require(p);
+        claimGtins(p);
         jdbc.sql("""
                 insert into product (id, atin, owner_kind, owner_org, category_id, category_request_id, product_type,
                                      title, attributes, images, variation_theme, status, moderation_note,
@@ -74,6 +79,31 @@ class JdbcProductRepository implements ProductRepository {
                 .update();
         insertVariants(p);
         return findById(p.id()).orElseThrow();
+    }
+
+    /**
+     * Takes the barcodes of the product's variants for this transaction: a lock per 14-digit key (taken in order, so two
+     * writers cannot deadlock) and a look at who already claims it. Two sellers creating the same item at the same moment
+     * are serialised here, and the second one is told which page won. The unique index on gtin_claim stays as the last
+     * line of defence ({@link #update} turns a violation of it into the same answer).
+     */
+    private void claimGtins(Product p) {
+        if (p.status() == ProductStatus.REJECTED || p.status() == ProductStatus.MERGED) {
+            return;
+        }
+        List<String> keys = p.variants().stream()
+                .filter(v -> !v.gtinExempt() && v.gtin() != null && !v.gtin().isBlank())
+                .map(v -> GtinReader.key14(Gtin.digits(v.gtin()))).distinct().sorted().toList();
+        for (String key : keys) {
+            jdbc.sql("select 1 from (select pg_advisory_xact_lock(hashtextextended(:k, 0))) l")
+                    .param("k", "gtin14:" + key).query(Integer.class).single();
+            jdbc.sql("""
+                    select p.atin from product_variant v join product p on p.id = v.product_id
+                    where v.gtin_claim = :k and v.product_id <> :own limit 1
+                    """).param("k", key).param("own", p.id()).query(String.class).optional().ifPresent(atin -> {
+                throw new GtinAlreadyUsed(key, atin.trim());
+            });
+        }
     }
 
     @Override
@@ -99,7 +129,22 @@ class JdbcProductRepository implements ProductRepository {
         LiveRequiresTax.require(p);
         Map<String, Object> params = params(p);
         params.put("version", p.version());
-        int rows = jdbc.sql("""
+        int rows;
+        try {
+            rows = updateRow(params);
+        } catch (DuplicateKeyException ex) {
+            // A rejected page that is resubmitted claims its barcodes again; somebody else took one in the meantime.
+            throw new GtinAlreadyUsed(null, null);
+        }
+        if (rows == 0) {
+            throw new ConflictException("catalog.concurrent-update",
+                    "Product " + p.id() + " was changed by someone else; reload and try again");
+        }
+        return findById(p.id()).orElseThrow();
+    }
+
+    private int updateRow(Map<String, Object> params) {
+        return jdbc.sql("""
                 update product set category_id = :categoryId, product_type = :productType, title = :title,
                        attributes = cast(:attributes as jsonb), images = cast(:images as jsonb),
                        variation_theme = :theme, status = :status, moderation_note = :note,
@@ -109,16 +154,12 @@ class JdbcProductRepository implements ProductRepository {
                 """)
                 .params(params)
                 .update();
-        if (rows == 0) {
-            throw new ConflictException("catalog.concurrent-update",
-                    "Product " + p.id() + " was changed by someone else; reload and try again");
-        }
-        return findById(p.id()).orElseThrow();
     }
 
     @Override
     public Product updateWithVariants(Product p) {
         LiveRequiresTax.require(p);
+        claimGtins(p);
         Product current = findById(p.id()).orElseThrow();
         Set<UUID> kept = new HashSet<>();
         p.variants().forEach(v -> kept.add(v.id()));
@@ -206,7 +247,40 @@ class JdbcProductRepository implements ProductRepository {
 
     @Override
     public Optional<Product> findByVariantGtin(String gtin) {
-        return one(SELECT + " where id = (select product_id from product_variant where gtin = :v limit 1)", gtin);
+        String digits = Gtin.digits(gtin);
+        if (digits.isEmpty()) {
+            return Optional.empty();
+        }
+        return one(SELECT + " where id = (select product_id from product_variant where gtin_claim = :v limit 1)",
+                GtinReader.key14(digits));
+    }
+
+    @Override
+    public List<Product> findByBrandAndMpn(String brandId, String mpnAttributeKey, String mpnKey) {
+        // The expression is the one product_brand_mpn indexes for the default attribute key (model).
+        return withVariants(jdbc.sql(SELECT + """
+                 where attributes ->> 'brand_id' = :brand and mpn_key(attributes ->> :key) = :mpn
+                   and status not in ('REJECTED', 'MERGED')
+                 order by created_at desc
+                """).param("brand", brandId).param("key", mpnAttributeKey).param("mpn", mpnKey)
+                .query(this::mapProduct).list());
+    }
+
+    @Override
+    public long countPagesWithBarcode(String brandId) {
+        return jdbc.sql("""
+                select count(*) from product p
+                where p.attributes ->> 'brand_id' = :brand and p.status not in ('REJECTED', 'MERGED')
+                  and exists (select 1 from product_variant v where v.product_id = p.id and v.gtin_claim is not null)
+                """).param("brand", brandId).query(Long.class).single();
+    }
+
+    @Override
+    public List<Product> findByBrand(String brandId, int limit) {
+        return withVariants(jdbc.sql(SELECT + """
+                 where attributes ->> 'brand_id' = :brand and status not in ('REJECTED', 'MERGED')
+                 order by created_at desc limit :limit
+                """).param("brand", brandId).param("limit", limit).query(this::mapProduct).list());
     }
 
     @Override
@@ -338,8 +412,21 @@ class JdbcProductRepository implements ProductRepository {
         if (gtins.isEmpty()) {
             return Set.of();
         }
-        return new HashSet<>(jdbc.sql("select distinct gtin from product_variant where gtin in (:gtins)")
-                .param("gtins", List.copyOf(gtins)).query(String.class).list());
+        Map<String, List<String>> byKey = new HashMap<>();
+        for (String g : gtins) {
+            String digits = Gtin.digits(g);
+            if (!digits.isEmpty()) {
+                byKey.computeIfAbsent(GtinReader.key14(digits), k -> new ArrayList<>()).add(g);
+            }
+        }
+        if (byKey.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> out = new HashSet<>();
+        jdbc.sql("select distinct gtin_claim from product_variant where gtin_claim in (:keys)")
+                .param("keys", List.copyOf(byKey.keySet())).query(String.class).list()
+                .forEach(key -> out.addAll(byKey.getOrDefault(key.trim(), List.of())));
+        return out;
     }
 
     @Override

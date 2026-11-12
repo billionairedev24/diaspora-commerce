@@ -65,6 +65,12 @@ public record ListingDetails(String description, ItemCondition condition, List<S
                 sizeChartId, fitNote, sellerBehaviour, dangerous, docs, reasons);
     }
 
+    /** These details with another description. */
+    public ListingDetails withDescription(String next) {
+        return new ListingDetails(next, condition, keywords, fulfilment, packaging, handlingDays, shipFrom,
+                sizeChartId, fitNote, sellerBehaviour, dangerousGoods, documents, exemptions);
+    }
+
     /** These details with another condition. */
     public ListingDetails withCondition(ItemCondition next) {
         return new ListingDetails(description, next, keywords, fulfilment, packaging,

@@ -71,7 +71,7 @@ class ProductWriterSizingTest {
         when(brands.resolve(any(), any(), any(), any(), any())).thenAnswer(i -> i.getArgument(3));
         writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
-                charts, mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(), new TaxGateEvaluator(readyResolver(), false), RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()),
+                charts, mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(), new TaxGateEvaluator(readyResolver(), false), RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()), mock(NewPageGuard.class),
                 Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"),
                         ZoneOffset.UTC));
     }

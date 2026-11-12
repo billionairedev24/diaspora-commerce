@@ -102,6 +102,19 @@ at:
     relay-enabled: true
   catalog:
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # S381-S387: starting values of the thresholds staff edit under PUT /v1/catalog/settings (the saved copy wins).
+    policy:
+      # Store-use and coupon numbers, compared with the start of the GTIN-13 form (docs/engineering/bulk-upload-and-images.md 3.1).
+      reserved-prefixes: 02,04,20,21,22,23,24,25,26,27,28,29,981,982,983,984,99
+      mpn-attribute-key: model
+      review-sla-business-days: 2
+      alert-after-business-days: 3
+      note-max-length: 1000
+      known-gs1-brand-min-pages: 1
+      # Extra category codes treated as brand-gated for no-barcode items, on top of the categories whose listing rules say
+      # brand_gated (docs/engineering/listing-rules.md): staff approve a no-barcode item there.
+      exemption-gated-category-codes: ${EXEMPTION_GATED_CODES:}
+      exemption-requires-approval-for-known-brands: true
     # S216: seller.listings.hidden|restored republish an org's products in pages, one transaction per page.
     listing-enforcement:
       page-size: ${LISTING_ENFORCEMENT_PAGE_SIZE:500}
@@ -123,7 +136,7 @@ at:
       token-path: /oauth2/token
       client-id: ${CATALOG_CLIENT_ID:catalog-service}
       client-secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
-      scopes: media:import orders:purchase-check sellers:catalog-scope.read tax:classify
+      scopes: media:import orders:purchase-check sellers:catalog-scope.read tax:classify offers:read
     # Which departments an organisation may sell in: seller-service GET /v1/orgs/{orgId}/catalog-scope (scope
     # sellers:catalog-scope.read). Unreachable = the catalog refuses non-exempt organisations (fail closed).
     seller:
@@ -131,6 +144,10 @@ at:
       timeout: ${SELLER_TIMEOUT:3s}
       scope-ttl: ${SELLER_SCOPE_TTL:15s}
       selling-ttl: ${SELLER_SELLING_TTL:10s}
+    # S385: only a seller with an open offer on a page may suggest an edit to it (offers-service GET /v1/offers/presence).
+    offers:
+      base-url: ${OFFERS_URL:http://localhost:8102}
+      timeout: ${OFFERS_TIMEOUT:3s}
     # Selling approvals (docs/engineering/listing-rules.md section 2): the publish gate asks seller-service
     # (GET /v1/orgs/{orgId}/selling-status) and refuses a listing the seller may not sell (409
     # catalog.selling-approval-required; the form keeps its draft). A listing the seller may sell goes live after validation

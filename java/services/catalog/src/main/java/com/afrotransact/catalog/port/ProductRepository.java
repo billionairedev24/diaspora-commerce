@@ -61,7 +61,7 @@ public interface ProductRepository {
     /** Which of the SKUs the organisation already uses. */
     Set<String> takenSellerSkus(String orgId, Collection<String> sellerSkus);
 
-    /** Which of the GTINs already have a product page (any owner). */
+    /** Which of the GTINs already have a product page (any owner); UPC and EAN forms of one item count as the same. */
     Set<String> existingGtins(Collection<String> gtins);
 
     Optional<Product> findByAtin(Atin atin);
@@ -69,8 +69,24 @@ public interface ProductRepository {
     /** Finds the product that owns the variant with this ATIN. */
     Optional<Product> findByVariantAtin(Atin variantAtin);
 
-    /** Finds the product whose variant carries {@code gtin} (one product page per manufacturer barcode). */
+    /**
+     * Finds the product whose variant carries {@code gtin} (one product page per manufacturer barcode). The match is on the
+     * 14-digit key, so a UPC-A and the EAN-13 of the same item find the same page; rejected and merged pages and
+     * no-barcode variants never match.
+     */
     Optional<Product> findByVariantGtin(String gtin);
+
+    /**
+     * The pages of a brand whose manufacturer part number (the attribute {@code mpnAttributeKey}) reads {@code mpnKey}
+     * once only letters and digits are compared; rejected and merged pages are left out. Newest first.
+     */
+    List<Product> findByBrandAndMpn(String brandId, String mpnAttributeKey, String mpnKey);
+
+    /** How many pages of the brand carry at least one barcode (a claimed GTIN): the "known GS1 brand" test. */
+    long countPagesWithBarcode(String brandId);
+
+    /** Pages of a brand (rejected and merged ones left out), newest first, at most {@code limit}: duplicate hints. */
+    List<Product> findByBrand(String brandId, int limit);
 
     List<Product> findByCategoryRequest(UUID categoryRequestId);
 

@@ -82,7 +82,7 @@ class ProductWriterTaxGateTest {
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
                 mock(SizeChartRepository.class), events, brands, new UnrestrictedScopeGuard(),
                 new TaxGateEvaluator(new LocalDatasetTaxResolver(SOURCE), true), RulesFixtures.permissiveService(),
-                liveGate, Clock.fixed(Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+                liveGate, mock(NewPageGuard.class), Clock.fixed(Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
     }
 
     private CreateProductCommand command(String sku, Map<String, Object> facts) {

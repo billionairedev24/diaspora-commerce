@@ -22,7 +22,10 @@ import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.CategoryRequest;
 import com.afrotransact.catalog.domain.CategoryRequestStatus;
 import com.afrotransact.catalog.domain.DepartmentScope;
+import com.afrotransact.catalog.domain.ExemptionRequirement;
 import com.afrotransact.catalog.domain.Gtin;
+import com.afrotransact.catalog.domain.GtinAlreadyUsed;
+import com.afrotransact.catalog.domain.GtinReader;
 import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
@@ -36,6 +39,7 @@ import com.afrotransact.catalog.domain.VariantOptions;
 import com.afrotransact.catalog.domain.rules.CategoryRules;
 import com.afrotransact.catalog.domain.rules.ListingNormaliser;
 import com.afrotransact.catalog.domain.rules.RuleAwareType;
+import com.afrotransact.catalog.domain.rules.RuleField;
 import com.afrotransact.catalog.domain.sizing.SizeChart;
 import com.afrotransact.catalog.domain.sizing.SizeChartPolicy;
 import com.afrotransact.catalog.domain.tax.SellerSkus;
@@ -67,12 +71,13 @@ class ProductWriterImpl implements ProductWriter {
     private final TaxGateEvaluator taxGate;
     private final ListingRulesService rulesService;
     private final ProductLiveGate liveGate;
+    private final NewPageGuard newPages;
     private final Clock clock;
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
                       SizeChartPolicy sizePolicy, SizeChartRepository charts, ProductEvents events, BrandResolver brands, SellerScopeGuard scopeGuard,
-                      TaxGateEvaluator taxGate, ListingRulesService rulesService, ProductLiveGate liveGate, Clock clock) {
+                      TaxGateEvaluator taxGate, ListingRulesService rulesService, ProductLiveGate liveGate, NewPageGuard newPages, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
@@ -87,6 +92,7 @@ class ProductWriterImpl implements ProductWriter {
         this.taxGate = taxGate;
         this.rulesService = rulesService;
         this.liveGate = liveGate;
+        this.newPages = newPages;
         this.clock = clock;
     }
 
@@ -114,7 +120,14 @@ class ProductWriterImpl implements ProductWriter {
                         "SKU " + v.sellerSku() + " is already used by another of your products");
             }
             ensureGtinFree(v, null);
+            if (!v.gtinExempt()) {
+                newPages.refuseWhileWrongMatchOpen(Gtin.digits(v.gtin()));
+            }
         }
+        // An item without a barcode first tries a brand plus part number match; in a brand-gated category, or for a brand
+        // that carries barcodes elsewhere, staff accept the missing barcode before the page goes any further (S387).
+        ExemptionRequirement exemption = placement.request() != null ? null : newPages.assessExemption(rules,
+                placement.type().code(), attributes, submitted.stream().anyMatch(VariantDraft::gtinExempt)).orElse(null);
 
         Instant now = Instant.now(clock);
         String currency = cmd.currency() == null ? "USD" : cmd.currency().toUpperCase(Locale.ROOT);
@@ -122,16 +135,18 @@ class ProductWriterImpl implements ProductWriter {
         for (int i = 0; i < submitted.size(); i++) {
             variants.add(newVariant(submitted.get(i), currency, owner.orgId(), tax.variants().get(i)));
         }
-        ProductStatus status = placement.request() == null
-                ? ProductStatus.IN_REVIEW
-                : ProductStatus.PENDING_CATEGORY_APPROVAL;
+        ProductStatus status = placement.request() != null ? ProductStatus.PENDING_CATEGORY_APPROVAL
+                : exemption != null ? ProductStatus.PENDING_EXEMPTION : ProductStatus.IN_REVIEW;
         boolean preorderEligible = cmd.preorderEligible() != null ? cmd.preorderEligible()
                 : placement.type().traits().preorder() || Product.preorderDefault(placement.type().code());
         Product product = products.insert(new Product(UUID.randomUUID(), ids.nextAtin(), owner,
                 placement.categoryId(), placement.request() == null ? null : placement.request().id(),
                 placement.type().code(), cmd.title().trim(), attributes, ruled.images(), draft.variationTheme(),
-                variants, status, null, now, now, 0, preorderEligible, Boolean.TRUE.equals(cmd.shipsNow()),
-                details));
+                variants, status, exemption == null ? null : Product.EXEMPTION_NOTE, now, now, 0, preorderEligible,
+                Boolean.TRUE.equals(cmd.shipsNow()), details));
+        if (exemption != null) {
+            newPages.exemptionRequested(product, details.exemptions().get(RuleField.PRODUCT_ID.id()), exemption);
+        }
         dropDraft(cmd.draftId(), owner.orgId());
         events.publish(CatalogEvents.PRODUCT_CREATED, product);
         events.publishTaxFactsChanged(product, categoryNode, null, List.of(), Set.of());
@@ -404,9 +419,7 @@ class ProductWriterImpl implements ProductWriter {
             return;
         }
         products.findByVariantGtin(gtin).filter(existing -> !existing.id().equals(ownProductId)).ifPresent(existing -> {
-            throw new ConflictException("catalog.gtin-exists",
-                    "GTIN " + gtin + " already has a product page (" + existing.atin()
-                            + "). Add an offer to it instead of creating a duplicate.");
+            throw new GtinAlreadyUsed(GtinReader.key14(gtin), existing.atin().value());
         });
     }
 

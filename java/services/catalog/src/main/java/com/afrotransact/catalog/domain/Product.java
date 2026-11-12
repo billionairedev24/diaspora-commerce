@@ -144,6 +144,53 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
         return withStatus(previous, null, now);
     }
 
+    /** What the seller reads while a no-barcode item waits for staff (S387). */
+    public static final String EXEMPTION_NOTE = "We are checking that this item has no barcode.";
+
+    /** Staff accepted that the item has no barcode: it moves into normal listing review (never straight to LIVE). */
+    public Product exemptionApproved(Instant now) {
+        if (status != ProductStatus.PENDING_EXEMPTION) {
+            throw new IllegalStateException("Only a page waiting for its barcode exemption can be approved (was "
+                    + status + ")");
+        }
+        return withStatus(ProductStatus.IN_REVIEW, null, now);
+    }
+
+    /** Staff did not accept the missing barcode; the note carries the reason. */
+    public Product exemptionRejected(String note, Instant now) {
+        if (status != ProductStatus.PENDING_EXEMPTION) {
+            throw new IllegalStateException("Only a page waiting for its barcode exemption can be rejected (was "
+                    + status + ")");
+        }
+        return withStatus(ProductStatus.REJECTED, note, now);
+    }
+
+    /** The page was merged into another one as a duplicate; its ATIN now redirects. It is never on sale again. */
+    public Product mergedAway(Instant now) {
+        if (status == ProductStatus.MERGED) {
+            throw new IllegalStateException("The page was already merged");
+        }
+        return withStatus(ProductStatus.MERGED, null, now);
+    }
+
+    /**
+     * The same page with other content, applied by staff from a change request. The status is never touched here:
+     * putting a page on sale or taking it off stays with the live gate and moderation.
+     */
+    public Product withContent(String newTitle, Map<String, String> newAttributes, List<ProductImage> newImages,
+                               ListingDetails newDetails, Instant now) {
+        return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, newTitle, newAttributes,
+                newImages, variationTheme, variants, status, moderationNote, createdAt, now, version, preorderEligible,
+                shipsNow, newDetails);
+    }
+
+    /** The same page in another category (staff, from a change request); the status is not touched. */
+    public Product withCategory(UUID newCategoryId, String newProductType, Instant now) {
+        return new Product(id, atin, owner, newCategoryId, categoryRequestId, newProductType, title, attributes,
+                images, variationTheme, variants, status, moderationNote, createdAt, now, version, preorderEligible,
+                shipsNow, details);
+    }
+
     /** Sets the pre-order flags (S272). A product that always ships now is never offered as a pre-order. */
     public Product withPreorderFlags(boolean eligible, boolean ships, Instant now) {
         return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,

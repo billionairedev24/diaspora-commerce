@@ -57,6 +57,12 @@ public record Variant(UUID id, Atin atin, String sellerSku, String gtin, boolean
                 compareAtMinor, images, sellerSkuGenerated, next, packaging);
     }
 
+    /** The same variant with another barcode (digits; null for none); a variant that now has one is no longer exempt. */
+    public Variant withGtin(String next) {
+        return new Variant(id, atin, sellerSku, next, next == null && gtinExempt, options, priceMinor, currency, quantity,
+                compareAtMinor, images, sellerSkuGenerated, tax, packaging);
+    }
+
     /** The same variant with its own package. */
     public Variant withPackaging(PackageDimensions next) {
         return new Variant(id, atin, sellerSku, gtin, gtinExempt, options, priceMinor, currency, quantity,

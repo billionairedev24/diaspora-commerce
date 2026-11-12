@@ -167,7 +167,7 @@ at:
         type: confidential
         secret: ${CATALOG_CLIENT_SECRET:}
         grant-types: [client_credentials]
-        scopes: ["media:import", "orders:purchase-check", "sellers:catalog-scope.read", "tax:classify"]
+        scopes: ["media:import", "orders:purchase-check", "sellers:catalog-scope.read", "tax:classify", "offers:read"]
       - client-id: retail-service
         name: AfroTransact Retail service
         type: confidential
