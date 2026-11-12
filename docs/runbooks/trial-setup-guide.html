@@ -1,0 +1,1108 @@
+<title>Trial Setup Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one calm reading column (about 46rem) with a sticky progress bar; phases are sections, steps are ticked rows.
+   Source of truth for the content: docs/runbooks/*.md. Republish from docs/runbooks/trial-setup-guide.html. */
+:root {
+  --bg: #ffffff;
+  --surface: #f5f7f6;
+  --surface-2: #eaefed;
+  --fg: #1c2421;
+  --muted: #5a6762;
+  --line: #d9e0dd;
+  --accent: #1d6b53;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1f0ea;
+  --warn-bg: #fff4d6;
+  --warn-fg: #6b4a00;
+  --warn-line: #e8cf8a;
+  --bad-bg: #fde8e6;
+  --bad-fg: #8a2a22;
+  --code-bg: #14201c;
+  --code-fg: #e4efe9;
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101513; --surface: #171e1b; --surface-2: #1f2824; --fg: #e5ece8; --muted: #9aa8a2; --line: #2b3631;
+    --accent: #5fc4a1; --accent-ink: #08140f; --accent-soft: #19302a;
+    --warn-bg: #33290d; --warn-fg: #f0d58a; --warn-line: #5a4a1c; --bad-bg: #3a1a17; --bad-fg: #f3b3ac;
+    --code-bg: #0a0f0d; --code-fg: #dbe8e2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101513; --surface: #171e1b; --surface-2: #1f2824; --fg: #e5ece8; --muted: #9aa8a2; --line: #2b3631;
+  --accent: #5fc4a1; --accent-ink: #08140f; --accent-soft: #19302a;
+  --warn-bg: #33290d; --warn-fg: #f0d58a; --warn-line: #5a4a1c; --bad-bg: #3a1a17; --bad-fg: #f3b3ac;
+  --code-bg: #0a0f0d; --code-fg: #dbe8e2;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 6.5rem; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem; -webkit-text-size-adjust: 100%;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
+.wrap { max-width: 46rem; margin: 0 auto; }
+a { color: var(--accent); text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { font-family: var(--font-head); font-weight: 600; text-wrap: balance; line-height: 1.2; margin: 0; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--surface-2); padding: 0.08em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* sticky bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); border-bottom: 1px solid var(--line); padding-block: 0.6rem 0.5rem; }
+.bar-row { display: flex; align-items: center; gap: 0.75rem; }
+.bar-title { font-family: var(--font-head); font-weight: 600; font-size: 1.05rem; margin-right: auto; }
+.meter { flex: 1 1 8rem; max-width: 14rem; height: 0.5rem; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.meter > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.25s; }
+.bar-count { font-variant-numeric: tabular-nums; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.nav { display: flex; gap: 0.4rem; overflow-x: auto; padding-top: 0.5rem; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+.nav a { flex: none; text-decoration: none; font-size: 0.8rem; padding: 0.2rem 0.6rem; border: 1px solid var(--line); border-radius: 99px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.nav a.done { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+button { font: inherit; color: inherit; }
+.ghost { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0.2rem 0.6rem; font-size: 0.8rem; cursor: pointer; color: var(--fg); }
+.ghost:hover { background: var(--surface); }
+
+/* head */
+.head { padding-block: 2.2rem 1rem; }
+.head h1 { font-size: clamp(1.9rem, 6vw, 2.6rem); }
+.lede { color: var(--muted); max-width: 40rem; margin: 0.6rem 0 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-top: 1rem; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+
+/* badges */
+.chk { display: inline-block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-line); border-radius: 4px; padding: 0 0.35em; line-height: 1.5; vertical-align: 0.08em; }
+.who { display: inline-block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 4px; padding: 0 0.4em; line-height: 1.6; background: var(--surface-2); color: var(--muted); }
+.who.owner { background: var(--accent-soft); color: var(--accent); }
+
+/* decisions + prod strip */
+details.card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin-block: 1rem; }
+details.card > summary { cursor: pointer; padding: 0.7rem 1rem; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 1rem; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::after { content: "Show"; font-weight: 400; font-size: 0.8rem; color: var(--muted); }
+details.card[open] > summary::after { content: "Hide"; }
+details.card .inner { padding: 0 1rem 1rem; }
+.decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.4rem 1.5rem; margin: 0; padding: 0; list-style: none; font-size: 0.92rem; }
+.decisions li { min-width: 0; }
+.decisions b { font-weight: 600; }
+.prod-strip { border: 1px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-fg); border-radius: 10px; padding: 0.8rem 1rem; margin-block: 1rem; }
+.prod-strip h2 { font-size: 1rem; font-family: var(--font-ui); font-weight: 600; margin-bottom: 0.4rem; }
+.prod-strip ul { margin: 0; padding-left: 1.1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0.2rem 1.5rem; font-size: 0.9rem; }
+.prod-strip li { min-width: 0; }
+
+/* phases and steps */
+.phase { padding-top: 2.4rem; }
+.phase > header { display: flex; align-items: baseline; gap: 0.8rem; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
+.phase h2 { font-size: 1.55rem; }
+.phase .pnum { font-family: var(--font-mono); color: var(--accent); font-size: 0.9rem; }
+.phase .pcount { margin-left: auto; font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.phase .intro { color: var(--muted); margin: 0.7rem 0 0; }
+.step { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); gap: 0 0.7rem; padding-block: 1.2rem; border-bottom: 1px solid var(--line); }
+.step input[type=checkbox] { width: 1.15rem; height: 1.15rem; margin: 0.28rem 0 0; accent-color: var(--accent); cursor: pointer; }
+.step h3 { font-size: 1.08rem; font-family: var(--font-ui); font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; }
+.step.done h3 .t { text-decoration: line-through; text-decoration-color: var(--muted); color: var(--muted); }
+.step p, .step ul { margin: 0.5rem 0 0; }
+.step ul { padding-left: 1.2rem; }
+.step li + li { margin-top: 0.2rem; }
+.step .body { min-width: 0; }
+.kv { margin-top: 0.7rem; display: grid; gap: 0.35rem; font-size: 0.93rem; }
+.kv > div { min-width: 0; }
+.kv b { font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); display: block; font-weight: 600; }
+.kv .ok b { color: var(--accent); }
+.kv .fail b { color: var(--bad-fg); }
+.kv .prod b { color: var(--warn-fg); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.chips code { background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; padding: 0.1em 0.45em; }
+.urls { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; margin-top: 0.5rem; font-size: 0.93rem; }
+
+/* code */
+.cmd { margin-top: 0.6rem; border-radius: 8px; background: var(--code-bg); color: var(--code-fg); overflow: hidden; }
+.cmd-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.25rem 0.5rem 0.25rem 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 0.75rem; color: #9fb3aa; }
+.cmd-top span { min-width: 0; overflow-wrap: anywhere; }
+.copy { background: transparent; border: 1px solid rgba(255,255,255,0.22); color: #e4efe9; border-radius: 5px; padding: 0.1rem 0.6rem; font-size: 0.75rem; cursor: pointer; flex: none; }
+.copy:hover { background: rgba(255,255,255,0.1); }
+.copy.copied { background: #2f7d62; border-color: transparent; }
+.cmd pre { margin: 0; padding: 0.7rem 0.8rem; overflow-x: auto; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.55; tab-size: 2; }
+
+/* tables */
+.tablewrap { overflow-x: auto; margin-top: 0.8rem; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; min-width: 34rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--line); }
+th { background: var(--surface); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; font-weight: 600; }
+
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; }
+@media (max-width: 520px) { .bar-title { display: none; } .phase h2 { font-size: 1.3rem; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .meter > i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <div class="bar" id="bar">
+    <div class="bar-row">
+      <span class="bar-title">Trial Setup Guide</span>
+      <div class="meter" role="progressbar" aria-label="Steps ticked" aria-valuemin="0" aria-valuemax="100" id="meter"><i id="meter-fill"></i></div>
+      <span class="bar-count" id="bar-count">0 / 0</span>
+      <button class="ghost" id="theme-btn" type="button" aria-label="Switch light or dark theme">Theme</button>
+    </div>
+    <nav class="nav" id="nav" aria-label="Phases"></nav>
+  </div>
+
+  <header class="head">
+    <h1>Trial Setup Guide</h1>
+    <p class="lede">Everything you set up in the 8-day trial, in order, with the exact command or page for each step, how to tell it worked and what to do if it did not. It follows the runbooks in <code>docs/runbooks</code>. Your ticks are kept in this browser only.</p>
+    <div class="legend">
+      <span><span class="who owner">You</span> only you can do it</span>
+      <span><span class="who">Agent</span> the engineering agent can run it</span>
+      <span><span class="chk">check</span> a vendor fact nobody has verified on a live account: screen names, prices, limits</span>
+    </div>
+  </header>
+
+  <details class="card" id="decisions">
+    <summary>Decisions this guide assumes (final)</summary>
+    <div class="inner"><ul class="decisions" id="decision-list"></ul></div>
+  </details>
+
+  <aside class="prod-strip" aria-label="Things that are different in production">
+    <h2>Things that are different in production</h2>
+    <ul id="prod-list"></ul>
+  </aside>
+
+  <main id="phases"></main>
+
+  <footer>
+    <span>Written from the runbooks, nothing here was run against a live account.</span>
+    <button class="ghost" type="button" id="reset-btn">Clear my ticks</button>
+    <span id="reset-note" role="status"></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- data ---------- */
+  var DECISIONS = [
+    ["Cluster", "OVH Managed Kubernetes free plan, one b3-16 node, OVH US us-east-va (US entity)"],
+    ["Postgres", "Layerbase, PostGIS yes, 19 databases, written questions first"],
+    ["Edge", "Cloudflare Tunnel, no load balancer; web apps on Cloudflare Workers"],
+    ["Images", "Cloudflare R2, two buckets (public media, private evidence)"],
+    ["Backups", "Backblaze B2, free tier, age-encrypted, never R2"],
+    ["Email", "Resend (DNS already done)"],
+    ["Monitoring", "Grafana Cloud stack afrotransact.grafana.net, US East, one stack, label env=trial or env=prod"],
+    ["Payments", "Stripe, same account. Webhooks created fresh, v1 deleted at the freeze. Connect account shape: open"],
+    ["AI", "Cap USD 2 a day, MCP private with auth"],
+    ["Product", "No sign-up gate, no native apps (installable web app), 21 launch services, promise off, FGA off"],
+    ["Secrets and deploy", "SOPS and age; Argo CD with manual sync"],
+    ["Credits", "OVH and Layerbase credit applications happen after launch"],
+    ["Trial", "8 days, then the go or no-go for production"]
+  ];
+
+  var PROD = [
+    "Stripe live keys and live webhooks (v1 endpoints deleted at the freeze), not test mode",
+    "Real OVH project: not disposable, monthly node billing, deletion protection, 7-year KYC lock",
+    "The real domain, and the trial domain and hosts are gone",
+    "Fresh secrets only: new STATE_DIR, new age keys, never reuse trial values",
+    "GRAFANA_ENV=prod: only env=prod alerts reach the on-call mailbox",
+    "New R2 buckets or tokens with no expiry (trial tokens expire in 10 days)",
+    "New Resend key, webhook and sender on the production mail domain",
+    "Backups: prod bucket afrotransact-prod-backups, retention 14 days (7 allowed), restore drill monthly",
+    "Images pinned by the promote workflow with prod reviewers approving",
+    "A real small payment, a refund and a payout test instead of test cards",
+    "CSP report-only for 7 days, then enforce; apex redirects to www",
+    "Layerbase and OVH quotes in writing, monthly budget set from the real quote",
+    "OpenRouter key limit set by you, privacy settings recorded with a date",
+    "No seed data and no *.test users anywhere"
+  ];
+
+  function c(label, code) { return [label, code]; }
+
+  var PHASES = [
+
+  /* ================= 0 ================= */
+  { id: "p0", n: "0", title: "Before you start", intro: "Accounts, tools and names. Decide who does what so nothing waits on the wrong person.",
+    steps: [
+    { id: "0-split", t: "Agree the owner and agent split", who: "both",
+      do: [
+        "**You (owner):** create every vendor account, add payment methods, turn on two-factor sign-in, click through the vendor consoles, copy each secret into your password manager and into the local files on your machine, approve every Argo CD sync, and make the go or no-go call.",
+        "**Agent:** run tofu, render and encrypt secrets, run kubectl and curl checks, write down results, fix repository files, and prepare anything that needs a code change.",
+        "**Rule:** a secret value is never pasted into chat, an issue, a commit or this page. This guide lists secret names only."
+      ],
+      ok: "Both of you can say which steps are yours. The agent has a way to ask you for a value without you pasting it (you type it into your own terminal).",
+      fail: "If the agent needs a value, it asks you to run the command yourself and tell it only whether it worked." },
+
+    { id: "0-tools", t: "Install the tools on the machine that runs the commands", who: "agent",
+      do: ["tofu 1.9 or newer, kubectl, sops, age, psql and pg_restore 17, rclone, python3 with PyYAML, helm 3.16 or newer, kustomize (or kubectl kustomize), gh, the argocd CLI (optional), conftest, mimirtool (for Grafana rules)."],
+      cmds: [c("Versions", String.raw`tofu version && kubectl version --client && sops --version && age --version
+psql --version && pg_restore --version && rclone version | head -1 && helm version --short
+python3 -c "import yaml; print('pyyaml ok')"`)],
+      ok: "Every command prints a version. psql and pg_restore say 17.",
+      fail: "Install the missing tool and run the block again. A psql older than 17 can fail to read the dumps." },
+
+    { id: "0-gate", t: "Run the offline launch-set gate", who: "agent",
+      do: ["This works with no cloud account. It proves the repository produces exactly the 21 launch services plus 5 platform Applications for prod."],
+      cmds: [c("From the repository root", String.raw`python3 infra/argocd/scripts/check_launch_set.py
+python3 infra/argocd/scripts/render_apps.py --env prod --no-crd-schemas`)],
+      ok: "The first command ends with OK and shows 21 services and 5 platform Applications for prod.",
+      fail: "Do not continue. A mismatch means the repository and the runbook disagree: tell the agent to fix the launch set first." },
+
+    { id: "0-names", t: "Choose the trial names and write them down", who: "owner",
+      do: [
+        "<code>&lt;domain&gt;</code>: the trial domain. Use a registered domain that is a zone on your Cloudflare account, so every host is one label under it (<code>api.&lt;domain&gt;</code>, <code>auth.&lt;domain&gt;</code>, <code>media.&lt;domain&gt;</code>). [[check]] Cloudflare's free certificate covers the apex and one label only, so a name like <code>api.trial.afrotransact.com</code> has no free certificate while it is proxied.",
+        "<code>&lt;mail-domain&gt;</code>: the sending domain where your Resend DNS is already verified. The sender address in the trial must be on it.",
+        "OVH project name <code>afrotransact-trial</code>, state key <code>prod-trial</code>, Grafana label <code>env=trial</code>, B2 bucket <code>afrotransact-trial-backups</code>.",
+        "Keep a note with these names open for the whole trial."
+      ],
+      ok: "You have one note that lists every name above.",
+      fail: "If you cannot use a separate domain, ask the agent to choose flat host names (for example <code>api-trial.&lt;zone&gt;</code>) before you create any DNS." ,
+      unv: "Which name your existing Resend DNS covers is not recorded in the repository. Resend runbook assumes mail.trial.<zone>." },
+
+    { id: "0-people", t: "Create the two operator keys and two logins", who: "owner",
+      do: ["Production needs two people able to operate: two age keys and two OVH users. In the trial, create both so the recovery path is rehearsed. If you are alone, the second person is a second key kept on a different device."],
+      ok: "Two age public keys exist (step 2.1) and a second OVH user is invited to the trial project.",
+      fail: "Do it later in phase 2, but not after the first secret is encrypted." }
+    ]},
+
+  /* ================= 1 ================= */
+  { id: "p1", n: "1", title: "Accounts and tokens", intro: "One card per vendor. Each says exactly what to create and which secret names it produces. Names only, never values.",
+    steps: [
+    { id: "1-ovh", t: "OVH US account, project and API keys", who: "owner",
+      do: [
+        "Create the account at <code>us.ovhcloud.com</code>. The US entity is a separate account from the EU and CA ones: different console, different API endpoint (<code>ovh-us</code>), different credentials. Add a payment method. [[check]]",
+        "Create a Public Cloud project for the trial, named <code>afrotransact-trial</code>. Check its quotas for instances, Kubernetes and block storage.",
+        "Send OVH these questions in writing: is the MKS free plan available in US-EAST-VA-1, with what limits and SLA; the monthly price of b3-16 and whether monthly billing can be cancelled; block storage class and price, CSI snapshots; Object Storage price and S3 object lock in the US. [[check]]",
+        "Create API credentials for tofu with rights <code>GET/POST/PUT/DELETE /cloud/project/&lt;id&gt;/*</code> and <code>GET /me</code>. Set Public Cloud consumption alerts."
+      ],
+      urls: [["API token page (US)", "https://api.us.ovhcloud.com/createToken/"], ["OVH US", "https://us.ovhcloud.com"]],
+      sec: ["OVH_APPLICATION_KEY", "OVH_APPLICATION_SECRET", "OVH_CONSUMER_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+      cmds: [c("Export in your shell only (never in a file in the repo)", String.raw`export OVH_APPLICATION_KEY=...  OVH_APPLICATION_SECRET=...  OVH_CONSUMER_KEY=...
+# the state user's S3 keys come from the bootstrap step (3.2):
+export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...`)],
+      ok: "The project exists, three OVH variables are set in your shell, and the quota page shows room for one b3-16 node.",
+      fail: "Quota too low or the node does not start: ask OVH support for an increase or a different flavour. Authentication errors usually mean the token was made on the EU site instead of api.us.ovhcloud.com.",
+      prod: "A separate, real project; the node bills monthly and cannot go back to hourly. Set monthly_budget from the real quote (the 150 in sizing.tf is a placeholder).",
+      unv: "Free plan in US East, b3-16 price, quotas, object lock in the US." },
+
+    { id: "1-layerbase", t: "Layerbase Postgres server and written questions", who: "owner",
+      do: [
+        "Send Layerbase the ten written questions first (see the list below) and wait for the answers on connections, mTLS, backups and PostGIS. Then create the Dedicated server (4 GB plan) in Virginia and note the host, port, admin user and password. [[check]]",
+        "The Pro trial has 10 databases. The platform needs 19, so use a Dedicated plan, not the free or Pro tiers. [[check]]",
+        "Do not apply for credits now. Credit applications for OVH and Layerbase happen after launch."
+      ],
+      cmds: [c("The ten questions, to send as one email", String.raw`1. Plan and price for 19 databases; may the admin run CREATE EXTENSION postgis, and is btree_gist available?
+2. Which cloud, region and data centre hosts the Virginia server; private connectivity to OVH US East; expected round trip time.
+3. max_connections per plan, any pooler, idle connection reaping (we plan 74 steady, about 90 peak).
+4. Is TLS with a password enough, or is mTLS mandatory? CA certificate and server name for verify-full.
+5. Backups: frequency, retention, point-in-time recovery window, restore method and time, and may we run our own pg_dump and pg_dumpall --globals-only?
+6. High availability, maintenance windows, PostgreSQL 17 upgrade policy, SLA, status page, support response time.
+7. Behaviour at the storage limit, alerts, resizing without downtime.
+8. Egress and ingress charges, data location, DPA, credit programme eligibility.
+9. May the superuser create roles and databases, set ownership and GRANT a role to the admin?
+10. Is pg_dump -Fc from outside their network allowed, and how is IP allow-listing done?`)],
+      sec: ["EXTERNAL_PG_HOST", "EXTERNAL_PG_ADMIN_USER", "EXTERNAL_PG_ADMIN_PASSWORD", "EXTERNAL_PG_SSLMODE"],
+      ok: "You have the host, the admin user and password in your password manager, and written answers to questions 1, 4 and 9 at least.",
+      fail: "If PostGIS cannot be created by the admin, stop: fulfilment will not start. If mTLS is mandatory, the agent needs the client certificate and sslmode=verify-full in every service URL.",
+      prod: "Dedicated plan bought for real, backups and point-in-time recovery confirmed in writing (a launch blocker in the readiness checklist).",
+      unv: "Plan names, prices, regions, PostGIS and no-egress-charge claims are verbal and unconfirmed." },
+
+    { id: "1-cf-zone", t: "Cloudflare: account, zone and zone settings", who: "owner",
+      do: [
+        "Sign up, turn on two-factor sign-in, add <code>&lt;domain&gt;</code> on the Free plan and move its nameservers at the registrar. Wait for the zone to show Active.",
+        "SSL/TLS: mode Full (strict), Always Use HTTPS on. Rules > Settings > Managed Transforms: turn on Add visitor location headers (the home page uses them). [[check]]",
+        "Delete any old A, AAAA or CNAME on the bare domain, www, seller and admin: Workers custom domains refuse to overwrite them."
+      ],
+      urls: [["Cloudflare dashboard", "https://dash.cloudflare.com"]],
+      sec: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE"],
+      ok: "The zone is Active, SSL mode is Full (strict), and the Account ID (Workers & Pages, right column) is copied.",
+      fail: "Zone stuck Pending: nameservers not changed or not propagated yet, wait and press Check nameservers.",
+      prod: "The real afrotransact.com zone, with HSTS, WAF and rate limits from infra/cloudflare (manage_zone = true).",
+      unv: "Menu names in the Cloudflare dashboard." },
+
+    { id: "1-cf-r2", t: "Cloudflare R2: two buckets, custom domain, CORS, two tokens", who: "owner",
+      do: [
+        "R2 object storage > Overview: enable R2 (a payment method is needed) and copy the Account ID.",
+        "Create the public bucket <code>afrotransact-prod-media</code> and the private bucket <code>afrotransact-prod-kyc-evidence</code> in the trial account. Location Automatic. In each bucket Settings confirm r2.dev subdomain is Disabled. The bucket names are fixed by the prod config, so the trial account must be a separate Cloudflare account, or you delete them at teardown.",
+        "Public bucket > Settings > Custom Domains > Add <code>media.&lt;domain&gt;</code>. Wait for Active. Do not add a domain to the private bucket.",
+        "Private bucket > Settings > CORS Policy > JSON: allow the trial web origins with methods PUT, GET, HEAD, headers *, expose ETag, max age 3600. Never use * as an origin.",
+        "Create two Account API tokens, Object Read and Write, one per bucket only: <code>media-trial-public</code> and <code>media-trial-private</code>. TTL 10 days. Copy each Access Key ID and Secret now, they show once."
+      ],
+      urls: [["R2 overview", "https://dash.cloudflare.com/?to=/:account/r2/overview"]],
+      sec: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PRIVATE_ACCESS_KEY_ID", "R2_PRIVATE_SECRET_ACCESS_KEY", "MEDIA_PUBLIC_URL"],
+      cmds: [c("CORS JSON for the private bucket (replace the origins)", String.raw`[
+  {
+    "AllowedOrigins": ["https://www.<domain>", "https://seller.<domain>", "https://admin.<domain>"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]`)],
+      ok: "Two buckets exist, media.<domain> shows Active, two tokens exist with different access keys. The media service refuses to start in prod if the two stores share a credential, so they must differ.",
+      fail: "A CORS error in the browser during upload means the web origin is missing from the private bucket policy. A token that can read both buckets is wrong: delete it and create one per bucket.",
+      prod: "Fresh buckets and tokens with no expiry (rotation reminder every 6 months). Never reuse the trial tokens.",
+      unv: "R2 free tier size (10 GB assumed) and whether the private bucket can hold a retention lock." },
+
+    { id: "1-cf-token", t: "Cloudflare: API token for tofu, Tunnel and Workers", who: "owner",
+      do: [
+        "Profile > API Tokens > Create Custom Token. Scopes: Account Workers Scripts Edit, Account Settings Read, Zone Workers Routes Edit, Zone DNS Edit, Zone Read. infra/cloudflare also needs Zone WAF/SSL/Settings, and Account Turnstile, R2, Tunnel and Lists. Limit Zone Resources to <code>&lt;domain&gt;</code>. [[check]]",
+        "Check the Workers plan: the apps may exceed the free Workers size limit. If the first deploy says the Worker is too large, upgrade to Workers Paid (about 5 USD a month). [[check]]"
+      ],
+      sec: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE", "CLOUDFLARED_TUNNEL_TOKEN", "TURNSTILE secrets (sign-in, sign-up, checkout)"],
+      ok: "The token verifies (the agent runs a read-only zone call). The tunnel token appears later, in step 3.6, from tofu.",
+      fail: "Authentication error 10000 means a missing scope or the zone is not in Zone Resources.",
+      unv: "The exact scope list for infra/cloudflare and the free Workers size limit." },
+
+    { id: "1-b2", t: "Backblaze B2: private bucket, lifecycle rule and a bucket-scoped key", who: "owner",
+      do: [
+        "Account > My Settings: turn on two-factor sign-in. [[check]]",
+        "B2 Cloud Storage > Buckets > Create a Bucket: name <code>afrotransact-trial-backups</code>, Private, default encryption off (files are age-encrypted), Object Lock off for now. Note the bucket Endpoint <code>s3.&lt;region&gt;.backblazeb2.com</code>. Backups never go to R2.",
+        "Lifecycle Settings > custom rule: prefix <code>postgres/</code>, Days Before Hiding empty, Days Before Deleting 1. This is the sweep mode default.",
+        "Application Keys > Add a New Application Key: name <code>afrotransact-trial-backups-rw</code>, only that bucket, Read and Write, List All Bucket Names off. Copy keyID and applicationKey once.",
+        "Account > Caps & Alerts: set a storage and transaction cap and an email alert so a runaway job cannot bill you."
+      ],
+      urls: [["Backblaze", "https://www.backblaze.com/b2/"]],
+      sec: ["BACKUP_B2_KEY_ID", "BACKUP_B2_APPLICATION_KEY", "BACKUP_B2_BUCKET", "BACKUP_B2_ENDPOINT", "BACKUP_RETENTION_DAYS", "BACKUP_RETENTION_MODE", "BACKUP_AGE_RECIPIENT", "BACKUP_HEALTHCHECK_URL (optional)"],
+      cmds: [c("Test the key from your laptop (values in your shell only)", String.raw`export RCLONE_CONFIG_BACKUP_TYPE=s3 RCLONE_CONFIG_BACKUP_PROVIDER=Other \
+  RCLONE_CONFIG_BACKUP_ENDPOINT=https://s3.<region>.backblazeb2.com RCLONE_CONFIG_BACKUP_REGION=<region> \
+  RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID=<keyID> RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY=<applicationKey>
+B=backup:afrotransact-trial-backups
+echo "hello $(date -u +%FT%TZ)" | rclone rcat "$B/_test/hello.txt" --s3-no-check-bucket
+rclone lsf "$B/_test" --s3-no-check-bucket
+rclone cat "$B/_test/hello.txt" --s3-no-check-bucket
+rclone delete "$B/_test" --s3-no-check-bucket`)],
+      ok: "Write, list, read and delete all work. With this key, listing any other bucket is refused (prove the scoping once).",
+      fail: "A retention sweep that logs an access error later means the key lacks the delete capability: recreate it. If the free tier asks for a card, add one and rely on the caps.",
+      prod: "Bucket afrotransact-prod-backups with its own key. Retention 14 days (7 allowed). Do not turn on Object Lock before the first restore drill has passed.",
+      unv: "Free tier size and transaction limits, what an S3 delete does in a versioned bucket, lifecycle behaviour, key capabilities, screen names." },
+
+    { id: "1-resend", t: "Resend: domain check, sending key and webhook", who: "owner",
+      do: [
+        "Your DNS is done. Confirm in Resend > Domains that <code>&lt;mail-domain&gt;</code> shows Verified, and that Click tracking and Open tracking are off.",
+        "API Keys > Create API Key: name <code>notifications-trial</code>, permission Sending access, domain <code>&lt;mail-domain&gt;</code> only, never Full access. Copy the <code>re_...</code> value once.",
+        "Webhooks > Add Webhook: URL <code>https://api.&lt;domain&gt;/notifications/v1/webhooks/resend</code>, events email.delivered, email.bounced, email.complained. Copy the Signing Secret <code>whsec_...</code>. Notifications refuses to start in prod without both values. [[check]]",
+        "The trial sender must be on the verified domain: set <code>EMAIL_FROM</code> and <code>EMAIL_UNSUBSCRIBE_MAILTO</code> for the trial. Do not email real customers; use your own mailboxes and resend.dev test addresses."
+      ],
+      urls: [["Resend", "https://resend.com"]],
+      sec: ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "UNSUBSCRIBE_SIGNING_KEY (generated by secrets.sh)", "EMAIL_FROM (optional)"],
+      ok: "Domain Verified, key and webhook secret saved. The webhook test event is answered 200 later, in step 6.2.",
+      fail: "A webhook secret that is wrong shows 401 in the delivery log. Unverified domain: re-check the three DNS records are DNS only (grey cloud).",
+      prod: "Production mail domain and a new key and webhook. DMARC moves from p=none to p=quarantine after two clean weeks.",
+      unv: "Resend free daily and monthly limits, whether the webhook can be saved before the URL answers." },
+
+    { id: "1-grafana", t: "Grafana Cloud: endpoints, users and scoped tokens", who: "owner",
+      do: [
+        "Open <code>https://afrotransact.grafana.net/</code> from the account that owns the stack. Confirm the region is US East (it cannot be changed later). Read the free-tier limits on grafana.com under your organisation, Billing or Usage, and write them down. [[check]]",
+        "Connections > Hosted Prometheus metrics > Send metrics: copy the remote write URL and the numeric Username or Instance ID. Connections > Hosted logs: copy the URL and the other numeric user. Also note the query base URL (the remote write URL without <code>/api/prom/push</code>).",
+        "Administration > Cloud access policies: create <code>afrotransact-alloy-trial</code> (scopes metrics:write and logs:write only, realm this stack only) and add a token with an expiry. Create <code>afrotransact-rules-deploy</code> (rules:read, rules:write) for your laptop only.",
+        "Administration > Users and access > Service accounts: <code>afrotransact-dashboards</code>, role Editor, with a token.",
+        "Traces: you also need the OTLP gateway endpoint, instance id and a traces:write token. The runbook calls this the existing OTLP credential and does not say how to create it. [[check]]"
+      ],
+      sec: ["GRAFANA_ENV=trial", "GRAFANA_PROM_URL", "GRAFANA_PROM_USER", "GRAFANA_LOKI_URL", "GRAFANA_LOKI_USER", "GRAFANA_ALLOY_TOKEN", "GRAFANA_OTLP_ENDPOINT", "GRAFANA_INSTANCE_ID", "GRAFANA_API_TOKEN", "MIMIR_ADDRESS (laptop)", "MIMIR_TENANT_ID (laptop)", "MIMIR_API_KEY (laptop)", "GRAFANA_SA_TOKEN (laptop)"],
+      ok: "You hold six values for Alloy, three for traces and four for your laptop, all in the password manager.",
+      fail: "If a menu has moved, use grafana.com > organisation > Access Policies. The Alloy token cannot read data, so a leak means delete that one token and make a new one.",
+      prod: "GRAFANA_ENV=prod and its own policy afrotransact-alloy-prod. Delete afrotransact-alloy-trial when the trial ends.",
+      unv: "Every menu name, default data source uid, the free limits and alert rule quotas." },
+
+    { id: "1-stripe", t: "Stripe test mode: keys and three webhook endpoints", who: "owner",
+      do: [
+        "Use the same Stripe account, switched to test mode. The v1 live endpoints are untouched. v1 is deleted at the freeze, not now.",
+        "Copy the test secret key <code>sk_test_</code> and publishable key <code>pk_test_</code>. The gateway-bff will not start without the publishable key.",
+        "Create three endpoints with Snapshot payloads and API version <code>2026-09-30.endive</code>, one secret each, never shared. Use Workbench (or Developers > Webhooks in the older layout).",
+        "Endpoint 1, Your account, <code>https://api.&lt;domain&gt;/payments/v1/webhooks/stripe</code>: payment_intent.succeeded, payment_intent.amount_capturable_updated, payment_intent.payment_failed, payment_intent.requires_action, payment_intent.canceled, charge.refunded, charge.dispute.created, charge.dispute.closed, transfer.reversed, payout.paid, payout.failed, setup_intent.succeeded, setup_intent.requires_action, payment_method.attached, payment_method.detached.",
+        "Endpoint 2, Connected accounts, <code>https://api.&lt;domain&gt;/seller/v1/webhooks/stripe-connect</code>: account.updated, capability.updated, person.created, person.updated, account.external_account.created, account.external_account.updated, account.external_account.deleted, payout.failed, account.application.deauthorized.",
+        "Endpoint 3, Your account, <code>https://api.&lt;domain&gt;/seller/v1/webhooks/stripe-billing</code>: payment_intent.succeeded and payment_intent.payment_failed. Only needed if sellers pay plan fees by US bank debit, so optional in the trial."
+      ],
+      urls: [["Stripe dashboard", "https://dashboard.stripe.com/test/workbench/webhooks"]],
+      sec: ["STRIPE_SECRET_KEY (sk_test_)", "STRIPE_PUBLISHABLE_KEY (pk_test_)", "STRIPE_WEBHOOK_SECRET", "STRIPE_CONNECT_WEBHOOK_SECRET", "STRIPE_BILLING_WEBHOOK_SECRET (optional)"],
+      ok: "Three endpoints exist in test mode and each secret is stored. After the edge is up (step 6.1) an unsigned POST to each URL returns 400 and Send test event returns 2xx.",
+      fail: "404 on the unsigned POST means the route is missing at the edge. 400 on a test event means the secret is wrong or not set (a service with no secret also answers 400).",
+      prod: "Live keys, three new live endpoints with new secrets, v1 endpoints written down then deleted at the freeze step.",
+      unv: "Workbench menu layout." },
+
+    { id: "1-openrouter", t: "OpenRouter: key with a USD 2 credit limit, privacy settings", who: "owner",
+      do: [
+        "Create a key named <code>afrotransact-trial</code> and set its Credit limit to USD 2 in the dashboard (Keys, the key, Credit limit). The gateway caps spend at USD 2 per UTC day; the key limit is the real backstop if the gateway is bypassed.",
+        "Account settings: turn prompt and response logging off, turn the inputs and outputs logging and training options off, set the account privacy or zero-data-retention policy, and restrict providers to ones that do not train on prompts. Write down the date and who checked. [[check]]"
+      ],
+      urls: [["OpenRouter keys", "https://openrouter.ai/settings/keys"]],
+      sec: ["OPENROUTER_API_KEY"],
+      ok: "The key shows a USD 2 limit. After deploy, ai-gateway has AI_PROVIDER_ZDR=true and AI_PROVIDER_DATA_COLLECTION=deny (or unset).",
+      fail: "If Lola stops answering with a 429, the daily cap is reached: it resets at 00:00 UTC.",
+      prod: "A higher key limit that you choose, privacy settings re-checked every quarter, DPAs signed if EU or UK personal data is processed.",
+      unv: "Dashboard menu names." },
+
+    { id: "1-ghcr", t: "GitHub: image pull token and the deploy environment", who: "owner",
+      do: [
+        "Create a token that can only read packages (<code>read:packages</code>) for the account that owns the images. The cluster uses it as the pull secret named ghcr. [[check]]",
+        "Make sure the GitHub environment <code>prod</code> exists with reviewers, and the repository variables <code>CLOUD=ovh</code> and <code>REGISTRY_URL=ghcr.io/&lt;owner&gt;/&lt;repo&gt;</code>. Images are built on every green push to main.",
+        "Choose the first admin: your own mailbox as <code>ADMIN_EMAIL</code> (a real address, not example or .test, or secrets.sh refuses) and a password of at least 16 characters."
+      ],
+      urls: [["GitHub tokens", "https://github.com/settings/tokens"]],
+      sec: ["GHCR_USER", "GHCR_TOKEN", "BOOTSTRAP_ADMIN_EMAIL (from ADMIN_EMAIL)", "BOOTSTRAP_ADMIN_PASSWORD (from ADMIN_PASSWORD)", "BOOTSTRAP_ADMIN_PHONE (from ADMIN_PHONE)"],
+      ok: "The token has only read:packages. A green main build exists whose full commit sha you can quote.",
+      fail: "Pods in ImagePullBackOff later: the token, user or the tag is wrong.",
+      prod: "Same shape, but the promote workflow waits for the prod environment reviewers." }
+    ]},
+
+  /* ================= 2 ================= */
+  { id: "p2", n: "2", title: "Secrets with SOPS and age", intro: "Secrets are rendered on your machine, encrypted with SOPS and age, and applied with a script. Argo CD never manages them.",
+    steps: [
+    { id: "2-age", t: "Generate the age keys", who: "owner",
+      do: [
+        "Make a SOPS key for encrypting files and a separate key for backups. The backup private key stays offline. Make the second operator key too. Put the two SOPS public keys in <code>infra/ops/secrets/.sops.yaml</code>.",
+        "Never put a private key in the repository or the cluster."
+      ],
+      cmds: [c("Generate", String.raw`mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt              # operator key 1 (SOPS)
+age-keygen -o ~/.config/sops/age/keys-second.txt       # operator key 2, keep on another device
+age-keygen -o ~/age-backup-key.txt                     # backup key: private half stays OFFLINE
+grep '^# public key' ~/.config/sops/age/keys.txt ~/age-backup-key.txt`)],
+      sec: ["BACKUP_AGE_RECIPIENT (the age1... public key of the backup key)"],
+      ok: "Three key files exist; the public keys (age1...) are printed; .sops.yaml lists the two operator public keys.",
+      fail: "SOPS says no matching creation rule: .sops.yaml path regex does not match the files in prod/." },
+
+    { id: "2-fill", t: "Fill the two local files", who: "owner",
+      do: [
+        "Copy the examples. Both files are never committed. Use a new, empty <code>STATE_DIR</code> for the trial so nothing from dev leaks in.",
+        "<code>config.env</code>: DOMAIN, IMAGE_TAG (the sha), DB_MODE=external, EXTERNAL_PG_HOST, EXTERNAL_PG_ADMIN_USER, EXTERNAL_PG_ADMIN_PASSWORD, EXTERNAL_PG_SSLMODE, GHCR_USER, GHCR_TOKEN, ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PHONE, STOREFRONT_HOST, MEDIA_PUBLIC_URL.",
+        "<code>secrets.local.env</code>: the Stripe, Resend, OpenRouter, R2, tunnel, Grafana and backup names from phase 1 with <code>GRAFANA_ENV=trial</code>. Leave the carrier, Google, Smarty and UploadThing keys empty unless the agent says a launch service needs one. [[check]]"
+      ],
+      cmds: [c("Copy the templates", String.raw`cd infra/ovh-vps
+cp config.env.example config.env
+cp secrets.local.env.example secrets.local.env
+chmod 600 config.env secrets.local.env`)],
+      ok: "Every name from phase 1 is filled except CLOUDFLARED_TUNNEL_TOKEN (step 3.6).",
+      fail: "Which geo and tax data keys are mandatory is not written down. If a service later refuses to start, the log names the missing key.",
+      prod: "A new file and a new STATE_DIR. Stripe LIVE keys. GRAFANA_ENV=prod. Never reuse any trial value.",
+      unv: "Which optional keys a launch service refuses to start without." },
+
+    { id: "2-render", t: "Render the Secrets for the 21 services", who: "agent",
+      do: ["<code>secrets.sh</code> generates every internal secret once and keeps it in STATE_DIR, so a re-run changes nothing. It needs no cluster in SECRETS_OUT mode."],
+      cmds: [c("Render to a temp directory", String.raw`cd infra/ovh-vps
+export PROFILE=prod STATE_DIR=$HOME/.afrotransact-trial SECRETS_OUT=$(mktemp -d)
+./secrets.sh platform && ./secrets.sh services
+ls "$SECRETS_OUT"`)],
+      ok: "One YAML per Secret appears, including observability/grafana-cloud-alloy and grafana-cloud-otlp, ops/pg-backup, ingress/cloudflared and the ghcr pull secret.",
+      fail: "It refuses a missing or example ADMIN_EMAIL, and it dies if a mandatory third-party key is empty. Fill the named key and run again." },
+
+    { id: "2-encrypt", t: "Encrypt, and keep the encrypted files out of public view", who: "agent",
+      do: ["Encrypt before anything is committed. Commit the encrypted files only if the repository is private; otherwise keep them in a private repository or storage."],
+      cmds: [c("Encrypt in place", String.raw`cd infra/ops/secrets && cp -r "$SECRETS_OUT"/. prod/ && rm -rf "$SECRETS_OUT"
+sops --encrypt --in-place prod/*.yaml
+grep -L 'sops:' prod/*.yaml || echo "all files encrypted"`)],
+      ok: "Every file in prod/ contains a sops: block and no plain value.",
+      fail: "A file listed by grep -L is not encrypted: encrypt it before you do anything else." },
+
+    { id: "2-escrow", t: "Escrow what can never be re-created, right now", who: "both",
+      do: [
+        "Two values cannot be recovered if lost: <b>IDENTITY_DATA_KEY</b> (personal data encryption) and the <b>JWT signing key</b> (SIGNING_KEY_PEM, file identity-signing-key.pem). A perfect database restore without IDENTITY_DATA_KEY leaves identity's encrypted fields unreadable.",
+        "Also in the bundle: HANDOVER_CODE_KEY, PAY_LINK_KEY, FIELD_ENCRYPTION_KEY, LINK_SIGNING_KEY, every *_CLIENT_SECRET and the database role passwords.",
+        "Store the bundle offline in two places (a password manager attachment and a physical copy), separately from the database backups. Run it again after every rotation."
+      ],
+      cmds: [c("Create and test the bundle (two recipients are required)", String.raw`cd infra/ops/secrets
+./escrow.sh create $HOME/.afrotransact-trial ~/escrow-trial.age recipients.txt
+./escrow.sh restore ~/escrow-trial.age ~/.config/sops/age/keys-second.txt /tmp/escrow-test
+ls /tmp/escrow-test && rm -rf /tmp/escrow-test`)],
+      ok: "The restore into a temporary folder lists identity-signing-key.pem and the generated values.",
+      fail: "It refuses with fewer than two age recipients: add the second public key to recipients.txt.",
+      prod: "Production gets its own bundle from its own STATE_DIR, tested the same way, before the first user signs in." }
+    ]},
+
+  /* ================= 3 ================= */
+  { id: "p3", n: "3", title: "Infrastructure", intro: "OpenTofu builds the cluster, then you connect to it, prepare the 19 Layerbase databases, add the secrets and bootstrap Argo CD. Nothing here has run against OVH yet, so expect first-run provider errors. [[check]]",
+    steps: [
+    { id: "3-state", t: "Bootstrap the remote state (once per project)", who: "agent",
+      do: ["Creates a state bucket and a state-only S3 user in the trial project."],
+      cmds: [c("From the repository root", String.raw`cd infra/tofu/bootstrap/ovh && tofu init
+tofu apply -var service_name=<project id> -var region=US-EAST-VA -var endpoint=ovh-us`)],
+      ok: "Apply finishes; you have the state user's S3 key pair for AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.",
+      fail: "Provider schema errors are expected on a first run: the agent fixes the module and re-runs. Never run two applies against one state: OVH Object Storage has no lock." },
+
+    { id: "3-apply", t: "Apply the trial environment", who: "agent",
+      do: [
+        "In <code>infra/tofu/envs/prod</code> copy the tfvars example: region <code>US-EAST-VA-1</code>, <code>ovh_endpoint = \"ovh-us\"</code>, <code>ovh_service_name</code>, <code>layerbase_region = \"virginia\"</code>, <code>admin_cidrs</code> (required, your public IP as /32) and, for the trial only, <code>disposable = true</code> and a trial <code>name_prefix</code>. Use a separate state key such as <code>prod-trial</code>.",
+        "Plan fails on purpose if admin_cidrs is empty, if a US region is paired with a non-US endpoint, or if the region is not the Layerbase one."
+      ],
+      cmds: [c("Plan, check policy, apply", String.raw`cd infra/tofu/envs/prod
+cp terraform.tfvars.example terraform.tfvars
+cp backend.ovh.hcl.example backend.hcl
+printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf
+tofu init -backend-config=backend.hcl && tofu fmt -check -recursive ../.. && tofu validate
+tofu plan -out plan.out && tofu show -json plan.out > plan.json
+conftest test plan.json --policy ../../../policy/tofu
+tofu apply plan.out`)],
+      ok: "One MKS cluster (free plan) with one b3-16 node, a private network, Object Storage buckets (kyc-evidence, exports, labels, media), per-service S3 users and consumption alerts. No load balancer, no gateway, no database.",
+      fail: "If you cannot reach the API later, your IP changed: edit admin_cidrs and apply again. Policy failures from conftest must be fixed, not skipped.",
+      prod: "disposable = true is never set in the real project: it removes deletion protection and shortens KYC retention to one day. Production uses monthly billing and the 7-year locked retention.",
+      unv: "MKS free plan limits, provider behaviour." },
+
+    { id: "3-kube", t: "Download the kubeconfig and check the node", who: "both",
+      do: [
+        "OVH Control Panel (US) > Public Cloud > Managed Kubernetes > your cluster > kubeconfig, or <code>tofu output cluster</code>. Keep it out of the repository.",
+        "Compare allocatable memory with the 13 GiB assumed in cloud-cost.md. Note the default storage class and test a 1 GiB PVC.",
+        "Set the cluster maintenance window to a quiet hour in the OVH panel. One node means every node upgrade is downtime."
+      ],
+      cmds: [c("Cluster checks", String.raw`export CONFIRM_CONTEXT=$(kubectl config current-context)
+kubectl get nodes
+kubectl describe node | grep -A8 Allocatable
+kubectl get storageclass
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: pvc-test, namespace: default }
+spec: { accessModes: [ReadWriteOnce], resources: { requests: { storage: 1Gi } } }
+---
+apiVersion: v1
+kind: Pod
+metadata: { name: pvc-test, namespace: default }
+spec:
+  containers: [{ name: t, image: busybox, command: [sh, -c, "echo ok > /d/x && sleep 30"], volumeMounts: [{ name: d, mountPath: /d }] }]
+  volumes: [{ name: d, persistentVolumeClaim: { claimName: pvc-test } }]
+EOF
+kubectl wait --for=condition=Ready pod/pvc-test --timeout=120s; kubectl delete pod/pvc-test pvc/pvc-test`)],
+      ok: "One node, b3-16, Ready. The test pod mounts the volume and both objects delete cleanly.",
+      fail: "kubectl times out: your IP is not in admin_cidrs. No default storage class: the agent sets one before Kafka and Valkey are synced.",
+      unv: "Which OVH CSI class is the default." },
+
+    { id: "3-layerbase", t: "Connect to Layerbase, measure latency, create the 19 databases", who: "both",
+      do: [
+        "Measure latency from a pod on the node. A few milliseconds is expected. Above about 10 ms, stop and ask Layerbase which data centre it is. [[check]]",
+        "Create the 19 databases, their <code>&lt;db&gt;_app</code> roles and the extensions before any service starts. The script also creates <code>postgis</code> in geo and fulfilment and <code>btree_gist</code> in bookings as the admin: fulfilment's migration runs create extension as the service role and fails on a managed server unless it already exists.",
+        "Use only one of the two scripts. For prod-profile secrets, secrets.sh is the single source of the passwords.",
+        "The 19: identity catalog offers inventory orders payments seller fulfilment bookings trustops taxreturns content ai cart geo media notifications temporal temporal_visibility (temporal_visibility uses the temporal_app role)."
+      ],
+      cmds: [
+        c("Latency from the node", String.raw`kubectl run -it --rm psql --image=postgres:17-alpine --restart=Never -- \
+  psql "host=<layerbase host> user=<admin> dbname=postgres sslmode=require" -c '\timing' -c 'select 1' `),
+        c("Create databases, roles and extensions", String.raw`cd infra/ovh-vps
+PROFILE=prod STATE_DIR=$HOME/.afrotransact-trial ./secrets.sh databases`),
+        c("Verify the extensions", String.raw`psql "host=<host> user=<admin> sslmode=require dbname=fulfilment" -c "select postgis_version()"
+psql "host=<host> user=<admin> sslmode=require dbname=geo" -c "select postgis_version()"
+psql "host=<host> user=<admin> sslmode=require dbname=bookings" -c "select extname from pg_extension where extname='btree_gist'"
+psql "host=<host> user=<admin> sslmode=require" -Atc "select count(*) from pg_database where datname in ('identity','catalog','offers','inventory','orders','payments','seller','fulfilment','bookings','trustops','taxreturns','content','ai','cart','geo','media','notifications','temporal','temporal_visibility')"`)
+      ],
+      ok: "postgis_version() returns a version in fulfilment and geo, btree_gist is listed in bookings, and the count is 19.",
+      fail: "CREATE EXTENSION refused: the admin lacks the right, ask Layerbase (question 9). Connection refused: allow-list the node's public IP in Layerbase. If mTLS is required, every service needs the client certificate and sslmode=verify-full.",
+      prod: "The same scripts, on the real server, with Layerbase backups and point-in-time recovery confirmed in writing first.",
+      unv: "Layerbase latency, extension permissions and connection limits." },
+
+    { id: "3-edge", t: "Cloudflare Tunnel and DNS for api and auth only", who: "agent",
+      do: [
+        "Run <code>infra/cloudflare</code> with <code>origin_mode = \"tunnel\"</code>. It creates the tunnel and DNS for api and auth, the Workers routes, the Turnstile widgets and the media custom domain. The environment variable only accepts dev, uat or prod today, so the trial needs its own tfvars and a code change. [[check]]",
+        "Take the token with <code>cloudflared tunnel token &lt;tunnel id&gt;</code> into CLOUDFLARED_TUNNEL_TOKEN and render the Secrets again.",
+        "Only api and auth are exposed (BFF, identity, bookings, fulfilment, media, notifications and the three Stripe webhook paths). There is no mcp host and no grafana host, and there must never be."
+      ],
+      cmds: [c("Tunnel", String.raw`cd infra/cloudflare
+export CLOUDFLARE_API_TOKEN=...
+tofu init -backend-config=backend.hcl -backend-config="key=cloudflare/trial.tfstate"
+tofu apply -var-file=envs/trial.tfvars
+tofu output -json turnstile_site_keys
+cloudflared tunnel token <tunnel id>`)],
+      ok: "DNS shows api.<domain> and auth.<domain> as proxied records. dig mcp.<domain> and dig grafana.<domain> return nothing.",
+      fail: "tofu rejects environment trial: ask the agent to add it or to run with environment prod and trial values. The infra/cloudflare media bucket name differs from the R2 runbook, so do not create both.",
+      unv: "A trial tfvars file does not exist yet." },
+
+    { id: "3-apply-secrets", t: "Apply the encrypted Secrets to the cluster", who: "agent",
+      do: ["apply.sh decrypts with SOPS, refuses Secrets whose mandatory keys are empty (Stripe, Resend, OpenRouter, tunnel, backup), applies them and labels the namespaces."],
+      cmds: [c("Apply", String.raw`cd infra/ops/secrets
+export CONFIRM_CONTEXT=$(kubectl config current-context)
+SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt ./apply.sh
+kubectl get secret -A | grep -E 'ghcr|cloudflared|pg-backup|grafana-cloud|valkey|meilisearch|temporal'`)],
+      ok: "The named Secrets exist. No Secret value is printed.",
+      fail: "apply.sh stops naming an empty key: fill it in secrets.local.env, render and encrypt again." },
+
+    { id: "3-pin", t: "Pin the images to a green sha", who: "both",
+      do: ["Every launch-set chart's values-prod.yaml must pin image.tag to a full 40-character commit sha of a green main build. The base value dev does not exist in GHCR. Use the promote workflow once per service with environment prod and tag set to the sha; prod waits for the prod reviewers. It refuses services outside the launch set.",
+           "The pins live in the repository, so the trial and production share them."],
+      cmds: [c("Gate", String.raw`python3 infra/argocd/scripts/check_launch_set.py --env prod --require-tags`)],
+      ok: "The gate prints OK for 21 services pinned to a 40-character sha.",
+      fail: "A service without a pin: run the promote workflow for it. Do not continue until the gate is green." },
+
+    { id: "3-argo", t: "Install a trimmed Argo CD and bootstrap the app of apps", who: "agent",
+      do: ["Argo CD with the dex server and notifications controller scaled to zero (about 0.3 GiB saved). Auto-sync is off everywhere: a human approves every step. If the repository is private, add its credential out of band."],
+      cmds: [c("Install and bootstrap", String.raw`kubectl create namespace argocd
+kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/<pin a 3.x release tag>/manifests/install.yaml
+kubectl -n argocd scale deploy argocd-dex-server argocd-notifications-controller --replicas=0
+kubectl apply -n argocd -f infra/argocd/bootstrap/root-prod.yaml
+argocd app sync root-prod
+argocd app list`)],
+      ok: "argocd app list shows 26 Applications, all OutOfSync, none syncing by themselves. kubectl -n argocd top pods shows about 1 GiB or less.",
+      fail: "Pods Pending: not enough memory, check kubectl describe node. A private repo that cannot be read needs the repository credential." ,
+      unv: "The exact Argo CD 3.x tag to pin." }
+    ]},
+
+  /* ================= 4 ================= */
+  { id: "p4", n: "4", title: "First sync order", intro: "Sync by Application name, <code>&lt;component&gt;-prod</code>, and wait for Healthy before the next step. Three Java services at a time, because JVM start-up spikes CPU. After each wave run the memory check.",
+    steps: [
+    { id: "4-platform", t: "Platform, in order", who: "both",
+      do: ["namespaces (wave -10), envoy-gateway (-4), opentelemetry-collector-gateway (-2), edge (-1: Gateway, routes, cloudflared) and then lean (0: Kafka, Temporal, Valkey, Meilisearch, the DLQ topic job, the backup CronJob, Grafana Alloy and kube-state-metrics). lean needs the temporal, valkey, meilisearch, grafana-cloud-otlp, grafana-cloud-alloy and pg-backup Secrets."],
+      cmds: [c("Sync and check", String.raw`for a in namespaces envoy-gateway opentelemetry-collector-gateway edge lean; do
+  argocd app sync $a-prod && argocd app wait $a-prod --health --timeout 600
+done
+kubectl -n kafka get pods
+kubectl -n temporal logs deploy/temporal | tail
+kubectl -n ingress get pods
+kubectl -n ops get cronjob
+kubectl -n observability get pods`)],
+      ok: "Kafka is Running, the Temporal log says both databases are reachable and the afrotransact namespace exists, cloudflared and Envoy run, a pg-backup CronJob exists, and alloy, kube-state-metrics and kafka-exporter are Ready.",
+      fail: "edge Degraded: the cloudflared Secret is missing or the token is wrong. lean Degraded on Temporal: the temporal or temporal_visibility database or role is missing." },
+
+    { id: "4-identity", t: "identity first", who: "both",
+      do: ["Identity issues the tokens every other service needs and runs its Flyway migrations on its own database."],
+      cmds: [c("Sync and prove it", String.raw`argocd app sync identity-prod && argocd app wait identity-prod --health --timeout 600
+curl -s https://auth.<domain>/.well-known/openid-configuration | head -c 300`)],
+      ok: "The OIDC discovery document answers through the tunnel and names the issuer.",
+      fail: "Pod CrashLoop: read kubectl logs. A failed Flyway migration leaves the pod crash-looping: fix forward, never edit an applied migration. A refusal naming the bootstrap admin means the password is too short or the address is example or .test." },
+
+    { id: "4-wave2", t: "Wave 2: the Java services, three at a time", who: "both",
+      do: ["Order: catalog, offers, inventory. Then orders, payments, seller. Then fulfilment, bookings, trust-ops. Then tax-returns, content, ai-gateway, mcp-server."],
+      cmds: [c("One group", String.raw`argocd app sync catalog-prod offers-prod inventory-prod
+argocd app wait catalog-prod offers-prod inventory-prod --health --timeout 900
+kubectl top node && kubectl top pods -A | sort -k4 -h | tail -5`),
+              c("Memory and CPU check after every wave", String.raw`kubectl top pods -A
+kubectl describe node | grep -A12 "Allocated resources"`)],
+      ok: "Each group turns Healthy before the next starts. Memory requests stay near the 10 to 11 GB planned out of about 13 allocatable.",
+      fail: "OOMKilled or node CPU pinned: sync fewer at a time and write down the numbers, they are decision data. fulfilment failing on a missing extension: re-check step 3.5." },
+
+    { id: "4-wave3", t: "Wave 3: the Go services, gateway-bff last", who: "both",
+      do: ["cart, geo, media, notifications, search, indexer, then gateway-bff. gateway-bff refuses to start without REDIS_URL, SESSION_SIGNING_KEY and STRIPE_PUBLISHABLE_KEY. media refuses to start in prod without both R2 tokens. notifications refuses without RESEND_API_KEY and RESEND_WEBHOOK_SECRET."],
+      cmds: [c("Sync", String.raw`argocd app sync cart-prod geo-prod media-prod notifications-prod search-prod indexer-prod
+argocd app wait cart-prod geo-prod media-prod notifications-prod search-prod indexer-prod --health
+argocd app sync gateway-bff-prod && argocd app wait gateway-bff-prod --health
+argocd app list | grep -c Healthy`)],
+      ok: "All 26 Applications are Healthy. The service logs show the profile is prod.",
+      fail: "A service that exits at start-up logs the exact missing item: add it to the Secret, re-render, encrypt, apply and restart that deployment." },
+
+    { id: "4-reindex", t: "Fill the search index once catalog data exists", who: "agent",
+      cmds: [c("Reindex", String.raw`kubectl -n afrotransact-prod create job reindex-1 --from=cronjob/indexer-reindex
+kubectl -n afrotransact-prod logs -f job/reindex-1`)],
+      ok: "The job completes and a search for a product title returns it.",
+      fail: "CronJob not found: the indexer prod values need reindex.enabled: true. Search stays empty until the job runs.",
+      prod: "Run it again after any change of search provider." }
+    ]},
+
+  /* ================= 5 ================= */
+  { id: "p5", n: "5", title: "Web apps deploy", intro: "The three web apps (storefront, Seller Center, staff console) are Cloudflare Workers. The per-app pipelines are wired to the afrotransact.com hosts, so the trial uses the ovh-web workflow, which takes the hosts from the domain you give it. [[check]]",
+    steps: [
+    { id: "5-gh", t: "Give GitHub the Cloudflare values", who: "owner",
+      do: ["Run the setup once and enter the three Cloudflare values. They go to the GitHub environment <code>ovh-vps</code>."],
+      cmds: [c("One-time", String.raw`make ovh-gh-setup`)],
+      sec: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE", "OVH_DOMAIN"],
+      ok: "The GitHub environment lists those secrets and variables.",
+      fail: "The ovh-web run stops at Decide: OVH_DOMAIN or a secret is missing." },
+
+    { id: "5-domain", t: "Make the backend and the Workers agree on the hosts", who: "agent",
+      do: ["The prod values name afrotransact.com: <code>global.domain</code> and <code>global.storefrontHost</code> in <code>infra/argocd/envs/prod/platform-values.yaml</code>. For the trial they must equal the trial domain and storefront host, or identity's redirect URIs, CORS and email links are wrong. Deploy the Workers with the same host choice. [[check]]"],
+      ok: "Redirect URIs in identity and the Worker vars name the same hosts.",
+      fail: "Sign-in loops or redirect_uri mismatch means the app host differs from the backend's. Make them equal, sync identity and gateway-bff, redeploy the app.",
+      unv: "There is no written trial override of global.domain; the runbooks do not cover it." },
+
+    { id: "5-deploy", t: "Run ovh-web for all three apps", who: "both",
+      do: ["GitHub > Actions > ovh-web > Run workflow on main. Leave the inputs empty to deploy all three apps on OVH_DOMAIN. Approve the run if asked. Each app takes about 5 to 10 minutes."],
+      cmds: [c("Open and check", String.raw`curl -sI "https://<domain>/p/x?a=1" | grep -i -E '^(HTTP|location)'
+curl -i https://api.<domain>/bff/healthz
+open https://www.<domain>   # then https://seller.<domain> and https://admin.<domain>`)],
+      ok: "The three hosts load over https. The bare domain answers 301 to https://www.<domain>/p/x?a=1. /bff/healthz returns 200.",
+      fail: "Worker too large: upgrade to Workers Paid. Custom domain already has a DNS record: delete that record and re-run. A certificate error on a host two labels under the zone: use flat host names. A CSP report-only log naming a blocked host usually means MEDIA_PUBLIC_URL is wrong.",
+      prod: "The per-app web-* pipelines deploy to the afrotransact.com Workers; CSP_MODE stays report-only for 7 days and then moves to enforce." },
+
+    { id: "5-pwa", t: "Check the installable web app on a phone", who: "owner",
+      do: ["There are no native apps. On an iPhone open the storefront in Safari, tap Share, then Add to Home Screen. On Android in Chrome use the Install the app entry in the footer. Registration happens only in a production build."],
+      ok: "The icon opens the site in its own window. Switching to airplane mode and opening a page shows the offline page, not a browser error.",
+      fail: "No install entry: check the manifest (DevTools > Application) and that /sw.js returns text/javascript. Never expect the Seller Center or staff console to install: only the storefront ships a manifest." }
+    ]},
+
+  /* ================= 6 ================= */
+  { id: "p6", n: "6", title: "Smoke test", intro: "Walk the whole product once. Use test cards and your own mailboxes. Replace prod with trial in any Grafana query: the label is env=trial.",
+    steps: [
+    { id: "6-edge", t: "Edge, profile and no demo data", who: "agent",
+      cmds: [c("Edge", String.raw`curl -s -o /dev/null -w '%{http_code}\n' https://auth.<domain>/.well-known/openid-configuration
+curl -s -o /dev/null -w '%{http_code}\n' https://api.<domain>/bff/healthz
+for p in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing; do
+  printf '%s -> ' "$p"; curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://api.<domain>/$p" -H 'Content-Type: application/json' -d '{}'
+done`),
+             c("Profile and seed data", String.raw`kubectl -n afrotransact-prod exec deploy/orders -- env | grep -E 'APP_ENV|SPRING_PROFILES'
+kubectl -n afrotransact-prod exec deploy/orders -- env | grep -c SEED_ALLOW_REMOTE`)],
+      ok: "200, 200, then three times 400 (not 404 and not 200). The profile says prod. The seed variable count is 0.",
+      fail: "404 on a webhook path: the route is missing at the edge. 502 or 503: the service is down. A *.test user or src=demo-seed row means seed data got in: stop and investigate." },
+
+    { id: "6-signup", t: "Sign-up email code", who: "owner",
+      do: ["Open the storefront, create an account with a mailbox you own. The 6-digit code goes identity, outbox, Kafka, notifications, Resend. Enter it. Optionally set up an authenticator app or email codes and look at the recovery codes."],
+      cmds: [c("If no mail arrives, look here first", String.raw`kubectl -n afrotransact-prod logs deploy/notifications --tail=60
+kubectl -n kafka get pods`)],
+      ok: "The mail arrives. In Resend > Emails it shows Delivered. The message headers show dkim=pass, spf=pass, dmarc=pass for the sending domain. Webhook > Send test event returns 200.",
+      fail: "No mail: check Kafka and notifications before anything else. A webhook 401 means the signing secret is wrong. A 503 on the webhook means the secret is not set.",
+      prod: "A test to Gmail, Outlook and Yahoo with SPF, DKIM and DMARC all passing, and a native speaker reads each language's templates." },
+
+    { id: "6-staff", t: "Staff sign-in with MFA, change the password", who: "owner",
+      do: ["Sign in at <code>https://admin.&lt;domain&gt;</code> as the bootstrap admin. Staff MFA is mandatory: the first sign-in forces setup of an authenticator or email codes. Change the password, then create one more staff account with only the permissions it needs."],
+      ok: "You reach the console after MFA, and the second staff account signs in.",
+      fail: "No code arrives for email MFA: same cause as the sign-up check." },
+
+    { id: "6-product", t: "Product listing with a tax decision", who: "both",
+      do: [
+        "Start a seller application and approve it in the staff console (two-person review). Sign in as that seller, create a product and submit it.",
+        "Every variant's tax classification waits for a reviewer (<code>taxReview.mode = ALL</code>). In the staff console go to Fees and commissions > Sales tax > Tax review and approve it as a Tax Reviewer. Approve the product in trust-ops.",
+        "Checkout needs the tax-returns profiles to be ACTIVE, because ORDERS_TAX_FALLBACK_TO_TABLE=false. If they are not, checkout fails by design."
+      ],
+      cmds: [c("The product must be searchable (reindex if needed)", String.raw`kubectl -n afrotransact-prod create job reindex-2 --from=cronjob/indexer-reindex`)],
+      ok: "The product appears in search and can be added to a cart. The Tax review screen shows no red banner. The alert CatalogLiveWithoutTaxDecision stays at 0.",
+      fail: "A listing that goes back to in review means the tax gate closed it: it comes back only when tax review approves it. Never invent a decision to clear the number.",
+      prod: "Tax method and rates loaded for every state you ship to. taxReview.mode stays ALL until a tax professional agrees in writing." },
+
+    { id: "6-checkout", t: "Checkout with a Stripe test card", who: "owner",
+      do: ["As a customer, add the product to the cart and pay with 4242 4242 4242 4242, any future date, any code. This exercises Kafka events, the Temporal checkout saga, payments, inventory and notifications. Also try 4000 0025 0000 3155 (3-D Secure) and 4000 0000 0000 9995 (declined)."],
+      ok: "The order shows authorised and nothing captured yet. In Stripe test mode the payment is Uncaptured and endpoint 1 shows 2xx deliveries.",
+      fail: "The order stays payment pending: the webhook is not confirming. Check the endpoint's delivery log and the STRIPE_WEBHOOK_SECRET value.",
+      prod: "One real small payment, one refund and one payout test. Card holds expire after about 7 days, so staff must pick up within 5 days." },
+
+    { id: "6-status", t: "Order status changed by an admin", who: "owner",
+      do: ["In the staff console open the order and set the shipment to picked up. Write a note. A confirmation dialog appears. Marking picked up captures the customer's money."],
+      ok: "The PaymentIntent turns Succeeded, the order shows paid, and the order history shows who changed the status, when and the note.",
+      fail: "If the dialog does not mention the charge and the note is optional, that is a known gap (backlog S353): until it is fixed, write a note every time and have a second person review the day's captures.",
+      prod: "Staff fulfilment procedure written and trained, and a daily captures report for the first weeks." },
+
+    { id: "6-image", t: "Image upload through R2", who: "both",
+      do: ["Upload a product image in the Seller Center. The browser gets a presigned PUT into the private bucket under quarantine/. On complete, media inspects it, strips EXIF, moderates it and copies it into the public bucket."],
+      cmds: [c("The same flow by hand (get a seller token first)", String.raw`curl -sS -X POST https://api.<domain>/media/v1/uploads -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"purpose":"product-image","fileName":"test.jpg","contentType":"image/jpeg","size":'"$(stat -c%s test.jpg)"'}'
+curl -sS -X PUT "$UPLOAD_URL" -H "Content-Type: image/jpeg" --data-binary @test.jpg -w '%{http_code}\n'
+curl -sS -X POST https://api.<domain>/media/v1/assets/$ID/complete -H "Authorization: Bearer $TOKEN"
+curl -I <returned url>
+curl -I https://media.<domain>/quarantine/anything`)],
+      ok: "The upload returns 200, complete returns status ready with a url under media.<domain>, curl -I on it returns 200 with content-type image/jpeg, and the quarantine path returns 404.",
+      fail: "403 SignatureDoesNotMatch: send every returned header. A CORS error in the browser: the web origin is missing in the private bucket policy. status flagged: staff must release it.",
+      prod: "Check that fetching a KYC object URL without credentials returns 403 and that each token cannot read the other bucket." },
+
+    { id: "6-mcp", t: "MCP is private and refuses calls without a token", who: "agent",
+      do: ["There must be no public route: no mcp host, no tunnel rule, no HTTPRoute. The Service is ClusterIP. From inside the cluster an unauthenticated call gets 401."],
+      cmds: [c("Prove it", String.raw`dig +short mcp.<domain>
+kubectl -n afrotransact-prod get svc mcp-server
+kubectl -n afrotransact-prod run curl --rm -it --restart=Never --image=curlimages/curl -- \
+  curl -i -X POST http://mcp-server/mcp -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+nmap -Pn <node public IP>`)],
+      ok: "dig prints nothing, the Service type is ClusterIP, the call returns 401 with a WWW-Authenticate Bearer header, and nmap finds no open ports. With a shopper token, staff tools are not listed and cannot be called.",
+      fail: "A route or an mcp DNS name exists: remove it (tunnel ingress, HTTPRoute, infra/cloudflare). The service refuses to start if AT_SECURITY_ENABLED is false, by design." },
+
+    { id: "6-ai", t: "AI cap of USD 2 a day", who: "both",
+      do: ["Send one message to Lola. Then read the day's total in the ai database (cost is in micro-dollars, 2,000,000 equals USD 2)."],
+      cmds: [c("In the ai database", String.raw`select * from ai_usage_daily where usage_day = current_date and scope = 'GLOBAL';`)],
+      ok: "Lola answers and the global cost is far below 2,000,000. Optionally lower AI_GLOBAL_DAILY_COST_USD, restart ai-gateway and confirm the next call returns 429 ai.budget-exceeded, then put it back.",
+      fail: "429 ai.rate-limited means more than 20 calls a minute from one user. A 429 budget message means the cap is reached until 00:00 UTC." },
+
+    { id: "6-alerts", t: "Alerts and dashboards show data", who: "both",
+      do: [
+        "Alloy, kube-state-metrics and kafka-exporter run in the observability namespace. Everything carries env=trial.",
+        "Load the rules and dashboards from your laptop (needs mimirtool and the four laptop tokens). Check Alerting > Alert rules and the AfroTransact dashboard folder.",
+        "Contact points: create <code>afrotransact-prod-email</code> with your on-call mailbox and press Test. In Notification policies route env=prod to it and env=trial to an empty contact point named trial-quiet. Trial alerts therefore mail nobody on purpose.",
+        "Alerts that hard-code env=prod, such as the missing-metric alerts, do not fire in the trial. Test routing with More > Test on the policy."
+      ],
+      cmds: [c("Alloy", String.raw`kubectl -n observability get pods
+kubectl -n observability logs deploy/alloy | tail`),
+             c("Load rules and dashboards", String.raw`export MIMIR_ADDRESS=https://prometheus-prod-NN-<region>.grafana.net MIMIR_TENANT_ID=<id> MIMIR_API_KEY=... GRAFANA_SA_TOKEN=...
+infra/observability/scripts/grafana-cloud-load.sh check
+DRY_RUN=1 infra/observability/scripts/grafana-cloud-load.sh all
+infra/observability/scripts/grafana-cloud-load.sh all`),
+             c("Explore queries (hosted Prometheus and Loki)", String.raw`count by (job) (up{env="trial"})
+http_server_requests_seconds_count{env="trial", service="orders"}
+{env="trial", app="orders"}
+{env="trial"} |~ "@[a-z0-9-]+\\.[a-z]{2,}"
+count({env="trial"})`)],
+      ok: "Within 2 to 3 minutes the up query returns one row per service (21) plus temporal, cloudflared, kafka-exporter, valkey, meilisearch, kube-state-metrics, kubelet, cadvisor and alloy, all 1. The e-mail and bearer searches show only [redacted-...]. The series count is under the free limit you wrote down.",
+      fail: "Alloy logs 401 or 403: wrong token, user id or missing scope. 429: ingestion limit reached, follow the tighten-the-allowlist steps. A series with an empty env: CLUSTER_ENV is empty in the Secret. Data source uids in the loader may differ from the real ones: copy them from Connections > Data sources.",
+      prod: "An external uptime check on the storefront, /bff/healthz and the OIDC URL, plus a test notification that reaches the on-call mailbox.",
+      unv: "Data source names and uids, the free tier alert rule quota, whether the free tier includes Synthetic Monitoring." }
+    ]},
+
+  /* ================= 7 ================= */
+  { id: "p7", n: "7", title: "Backup and restore drill", intro: "A backup that has never been restored is not a backup. The first drill is a launch blocker. Targets (not yet measured): lose at most 24 hours, be back in 4 hours.",
+    steps: [
+    { id: "7-first", t: "Run the first backup job", who: "agent",
+      cmds: [c("Run now", String.raw`kubectl -n ops create job --from=cronjob/pg-backup first-backup
+kubectl -n ops logs -f job/first-backup`)],
+      ok: "The log says backed up <db> for each of the 19 databases, one backup_metrics line with run_bytes and bucket_bytes, and backup complete: 19 databases. The objects are in B2 under postgres/<db>/<stamp>.dump.age.",
+      fail: "A FAILED line names the database or upload and the job exits 1. An access error means the key or bucket is wrong. pg_dump failures mean Layerbase blocked the node IP." ,
+      unv: "rclone and age are installed with apk at run time, which needs outbound network." },
+
+    { id: "7-ping", t: "Set the dead-man's switch and the key scoping", who: "owner",
+      do: ["Create a healthchecks.io style check with a 26-hour grace and put its URL in BACKUP_HEALTHCHECK_URL. Also prove that the trial key is refused on any other bucket."],
+      ok: "A ping arrives after the first run, and listing another bucket with this key is refused.",
+      fail: "No ping: the URL is empty or the node cannot reach it.",
+      unv: "Free limits of the ping service." },
+
+    { id: "7-restore", t: "Restore into a scratch server", who: "agent",
+      do: ["Use a scratch server only: a local postgis/postgis:17-3.5 container or a second Layerbase database. Never restore over the trial databases to test. The age private key stays on your machine and never goes to the cluster."],
+      cmds: [c("Restore eight databases and time it", String.raw`export B2_KEY_ID=<keyID> B2_APPLICATION_KEY=<applicationKey> B2_BUCKET=afrotransact-trial-backups B2_ENDPOINT=s3.<region>.backblazeb2.com
+export AGE_IDENTITY=~/age-backup-key.txt
+export PGHOST=<scratch host> PGUSER=<scratch admin> PGPASSWORD=... PGSSLMODE=require
+date -u +%T
+infra/ops/backup/pg-restore.sh list orders | tail -3
+for db in identity orders catalog payments fulfilment geo bookings temporal; do
+  infra/ops/backup/pg-restore.sh restore "$db" latest
+done
+date -u +%T`)],
+      ok: "Each restore prints a table count. It refuses a non-empty database. The difference between the two times is your restore time.",
+      fail: "A pg_restore error stops the run (exit on error). A missing extension: the script creates postgis or btree_gist as admin, so the admin needs the right." },
+
+    { id: "7-usable", t: "Prove the data is usable, not just present", who: "both",
+      do: [
+        "Compare row counts with the live trial database.",
+        "Boot orders and identity against the scratch server using the secrets restored from the escrow. Flyway must report no pending or failed migration, a trial user must sign in (this proves IDENTITY_DATA_KEY and the signing key from the escrow), and an order lookup returns data.",
+        "On fulfilment and geo run select postgis_version() and one nearest-driver query.",
+        "Rebuild what is not backed up: the reindex job and one search query. Redis and Kafka are not backed up by design."
+      ],
+      ok: "Sign-in works on the restored copy and the order is readable.",
+      fail: "A sign-in that fails after a perfect restore means the wrong IDENTITY_DATA_KEY: the escrow is not good enough, fix it today." },
+
+    { id: "7-log", t: "Write the result in the drill log", who: "owner",
+      do: ["Add one row to the result log in restore-drill.md: date, who, backup age restored, dump to restored in minutes, B2 download time of the largest dump, cluster rebuild minutes (if you did it), problems, whether 24 hours and 4 hours were met."],
+      ok: "The row is committed. Production gets the same drill monthly.",
+      fail: "Product images and the private evidence bucket are not covered by the database job. The nightly copy of the two R2 buckets to OVH Object Storage is marked as still to do in the drill runbook, so say so in the row.",
+      unv: "Object Lock stays off until this drill has passed. Hidden versions in B2 count as storage until the lifecycle rule removes them: check the bucket size in the B2 console." }
+    ]},
+
+  /* ================= 8 ================= */
+  { id: "p8", n: "8", title: "Stripe test-mode connected-account check (option A)", intro: "Before the cutover you must know whether v1's connected accounts (Full dashboard) work with v2 (no dashboard, separate charges and transfers). Test mode has its own accounts, so this touches no live data. It takes a few hours. This is a launch blocker.",
+    steps: [
+    { id: "8-create", t: "Create a test account shaped like v1's", who: "both",
+      cmds: [c("Stripe CLI, test mode (examples only)", String.raw`stripe accounts create --country US --business-type company \
+  -d "controller[fees][payer]"=account \
+  -d "controller[losses][payments]"=stripe \
+  -d "controller[requirement_collection]"=stripe \
+  -d "controller[stripe_dashboard][type]"=full \
+  -d "capabilities[card_payments][requested]"=true \
+  -d "capabilities[transfers][requested]"=true
+stripe account_links create --account acct_TEST -d type=account_onboarding \
+  -d refresh_url=https://example.com/r -d return_url=https://example.com/d`)],
+      ok: "After onboarding with Stripe's test data, charges_enabled and payouts_enabled are both true.",
+      fail: "Stuck on requirements: complete them with Stripe's documented test values. Note the account shape you got, it is the evidence." ,
+      unv: "Whether test mode behaves like live for Full-dashboard accounts." },
+
+    { id: "8-link", t: "Link it to a test organisation and run the v2 flows", who: "both",
+      do: [
+        "Link the account to a test v2 organisation (<code>PUT /v1/connected-accounts/{orgId}</code> on payments and the seller-side row).",
+        "Run each flow and write down exactly what Stripe allows or refuses, with the error code: a separate charge on the platform and a transfer of the net (with transfer_group); a refund with and without reversing the transfer, and after the balance was paid out; a payout-schedule update to manual and a platform payout; the transfers and card_payments capability state and a request for a capability; v2's embedded onboarding and account health (account session); the account.updated, capability.updated and account.application.deauthorized events reaching endpoint 2; a dispute with card 4000 0000 0000 0259 on a charge whose net was transferred."
+      ],
+      cmds: [c("Payout schedule probe", String.raw`stripe accounts update acct_TEST -d "settings[payouts][schedule][interval]"=manual`)],
+      ok: "A table with one row per flow: allowed or refused, the error, and what the seller sees in their own dashboard.",
+      fail: "Any refusal on the transfer, refund with reversal or health sync points to option B or C. A refused transfer in production strands a seller's money." },
+
+    { id: "8-decide", t: "Decide A, B or C and send the questions to Stripe", who: "owner",
+      do: [
+        "Keep and test (A), re-onboard each seller (B), or hybrid (C). If you have only one connected account, B is cheap: one seller redoes KYC.",
+        "Send the twelve numbered questions from v1-to-v2-cutover.md to Stripe support from the account owner's dashboard (Help, Contact support, topic Connect). Record each answer with the date and the case id. Treat an answer as unverified until it is in writing.",
+        "If a flow is refused and you keep v1 accounts, backlog story S378 makes v2 tolerate both account shapes. The test itself is S379."
+      ],
+      ok: "The decision, the results table and the support case id are filed.",
+      fail: "Nothing else in the cutover starts until this is decided. This stays Open if Stripe has not answered: write that on the go/no-go sheet." }
+    ]},
+
+  /* ================= 9 ================= */
+  { id: "p9", n: "9", title: "Day-by-day plan for the 8 trial days", intro: "A suggested order. Move a day if a vendor is slow, but keep the order of dependencies. Tick the day when everything on it is done.",
+    table: [
+      ["Day 1", "Phases 0 to 2", "Accounts and tokens, written questions to OVH and Layerbase, age keys, config files, secrets rendered, encrypted and escrowed."],
+      ["Day 2", "Phase 3", "State bootstrap, tofu apply, kubeconfig, node and PVC checks, Layerbase latency and the 19 databases, tunnel and DNS, secrets applied, images pinned, Argo CD bootstrapped."],
+      ["Day 3", "Phases 4 and 5", "First sync in order (platform, identity, waves 2 and 3), reindex, web apps deployed. Record memory and CPU after each wave."],
+      ["Day 4", "Phase 6", "Smoke test end to end: sign-up code, staff MFA, product with tax decision, checkout, admin status, image from R2, MCP refusal, AI cap, alerts and dashboards."],
+      ["Day 5", "Phases 7 and 8", "First backup, scratch restore drill with timing, data usability proof. Stripe option A test in test mode."],
+      ["Day 6", "Measure", "RSS per JVM idle and under a k6 run (tools/perf, 50 concurrent shoppers), node requests versus allocatable, CPU during a 3-service sync, downtime of a rolling update and of a node reboot, pg_stat_activity peak, migration times, Layerbase round trip time."],
+      ["Day 7", "Measure and rehearse", "Kafka disk growth, Grafana series and log volume against the free limits, backup run time and size, a second restore or a cluster rebuild rehearsal, rollback by reverting an image tag, a bad tag that fails safe. Cost per day times 30."],
+      ["Day 8", "Phase 10", "Fill the go or no-go sheet, read the numbers, decide. If no-go keep the notes. Tear down trial resources you will not keep: revoke trial tokens, delete the trial Grafana policy, empty and delete the trial buckets, destroy the disposable project."]
+    ],
+    steps: [
+    { id: "9-d1", t: "Day 1 done", who: "both", do: ["Phases 0, 1 and 2 are ticked."], ok: "Secrets are encrypted and the escrow restore test passed." },
+    { id: "9-d2", t: "Day 2 done", who: "both", do: ["Phase 3 is ticked."], ok: "argocd app list shows 26 Applications, all OutOfSync." },
+    { id: "9-d3", t: "Day 3 done", who: "both", do: ["Phases 4 and 5 are ticked."], ok: "All 26 Applications Healthy and the three web hosts load." },
+    { id: "9-d4", t: "Day 4 done", who: "both", do: ["Phase 6 is ticked."], ok: "Every smoke item passed or has a written reason." },
+    { id: "9-d5", t: "Day 5 done", who: "both", do: ["Phases 7 and 8 are ticked."], ok: "The drill row and the Stripe option A table are written." },
+    { id: "9-d6", t: "Day 6 measurements recorded", who: "agent",
+      cmds: [c("Useful commands", String.raw`kubectl top pods -A
+kubectl describe node | grep -A12 "Allocated resources"
+kubectl get events -A --sort-by=.lastTimestamp | tail -30
+kubectl get events -A | grep -i oom
+psql "host=<host> user=<admin> sslmode=require" -c "select count(*) from pg_stat_activity"`)],
+      do: ["Write every number into one table: it is the decision data."], ok: "The table holds RSS, requests versus allocatable, p95 at 50 shoppers, OOM events and reboot downtime." },
+    { id: "9-d7", t: "Day 7 measurements and rehearsals recorded", who: "agent", do: ["Rolling update downtime, node reboot time to all Ready (PVCs reattach, Kafka, Temporal and Valkey resume), Grafana usage, backup size and run time, cost per day times 30 for node, disks and buckets."], ok: "Costs and downtime are on the sheet." },
+    { id: "9-d8", t: "Day 8 decision made and the trial cleaned up", who: "owner", do: ["Decision recorded and teardown done or consciously postponed."], ok: "Nothing from the trial can still write to a production service." }
+    ]},
+
+  /* ================= 10 ================= */
+  { id: "p10", n: "10", title: "Go or no-go before production", intro: "Tick each line only if you saw it. Any unticked blocker means no-go until it is closed or consciously accepted in writing.",
+    steps: [
+    { id: "10-smoke", t: "The whole smoke test passed on the trial", who: "both", do: ["Phase 6, each item, with dates."], ok: "No item is waived without a written reason." },
+    { id: "10-restore", t: "A restore drill passed and its numbers are in the log (blocker)", who: "both", do: ["Restore time and RPO and RTO against 24 hours and 4 hours. IDENTITY_DATA_KEY and the signing key proven by a sign-in on the restored data."], ok: "The result row is committed." },
+    { id: "10-escrow", t: "The escrow bundle restores and is stored offline in two places", who: "owner", do: ["Separately from the database backups."], ok: "You tested escrow.sh restore this week." },
+    { id: "10-stripe", t: "Connected-account decision A, B or C is made and recorded (blocker)", who: "owner", do: ["Option A results table, Stripe's written answers with the case id."], ok: "Decision and answers filed." },
+    { id: "10-layerbase", t: "Layerbase answers in writing (blocker)", who: "owner", do: ["Backups and point-in-time recovery, connection limit versus the 74 steady and 90 peak plan, mTLS, PostGIS, behaviour at the storage limit, DPA."], ok: "The ten questions each have a written answer." },
+    { id: "10-ovh", t: "OVH answers and the real quote in writing", who: "owner", do: ["Free plan in US East and its SLA, b3-16 price, object lock, block storage. Set monthly_budget from the quote."], ok: "The quote exists and the budget is set to about 1.2 times its subtotal." },
+    { id: "10-fit", t: "It fits on one node", who: "agent", do: ["Memory requests under allocatable with headroom, no OOM kills at 50 concurrent shoppers, node reboot downtime accepted by you, CPU during a three-service sync acceptable."], ok: "The numbers from days 6 and 7 are on the sheet and you accept them." },
+    { id: "10-cost", t: "Cost per day times 30 is inside your budget", who: "owner", do: ["Node, disks, buckets, Layerbase, Workers, plus Grafana and B2 on their free tiers."], ok: "You can say the monthly number out loud." },
+    { id: "10-free", t: "Free tiers held: Grafana series and logs, B2, R2, Resend", who: "both", do: ["Measured volume against the limits you wrote down."], ok: "No usage alert fired, or you have a plan." },
+    { id: "10-ai", t: "AI is capped and private", who: "both", do: ["USD 2 per day proven, OpenRouter key limit set, privacy settings recorded, MCP refused without a token and not reachable from outside."], ok: "All four checks are ticked in phase 6." },
+    { id: "10-alerts", t: "Alerts reach a real person for env=prod", who: "owner", do: ["A test notification arrived and trial alerts mailed nobody."], ok: "You received the test." },
+    { id: "10-clean", t: "Trial leftovers are gone", who: "owner", do: ["Trial tokens revoked, trial Grafana policy deleted, trial buckets emptied and deleted, trial Resend key and webhook removed, trial Stripe test webhooks removed if not reused, no trial secret reused for production."], ok: "A fresh STATE_DIR and fresh keys are planned for production." },
+    { id: "10-ext", t: "The outside gates are owned", who: "owner", do: ["Tax professional and counsel review handled internally, legal documents published, the v1 cutover plan and freeze window agreed, credit applications to OVH and Layerbase planned for after launch."], ok: "Each has a name and a date. They do not block engineering, but they block the launch." },
+    { id: "10-decide", t: "Decision recorded: go, no-go, or go with conditions", who: "owner", do: ["Write the date, the decision and the conditions at the top of the go or no-go sheet."], ok: "Written down." }
+    ]}
+  ];
+
+  /* ---------- helpers ---------- */
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  // Inline markup: **bold**, [[check]] badge. Strings may contain trusted HTML tags (code, b) written in this file.
+  function fmt(s) {
+    return String(s)
+      .replace(/<(?!\/?(?:code|b)>)/g, "&lt;")
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+      .replace(/\[\[check\]\]/g, '<span class="chk" title="Not verified on a live account. Confirm it on your screen.">check</span>');
+  }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+
+  /* ---------- storage (always in try/catch) ---------- */
+  var KEY = "trial-setup-guide-v1";
+  var state = {};
+  function load() { try { var r = window.localStorage.getItem(KEY); if (r) state = JSON.parse(r) || {}; } catch (e) { state = {}; } }
+  function save() { try { window.localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* works without storage */ } }
+  function getTheme() { try { return window.localStorage.getItem(KEY + "-theme"); } catch (e) { return null; } }
+  function setTheme(t) { try { window.localStorage.setItem(KEY + "-theme", t); } catch (e) { /* ignore */ } }
+
+  /* ---------- copy ---------- */
+  function fallbackCopy(pre, btn) {
+    var ok = false;
+    try {
+      var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      ok = document.execCommand && document.execCommand("copy");
+    } catch (e) { ok = false; }
+    flash(btn, ok ? "Copied" : "Selected: press Ctrl+C", ok);
+  }
+  function flash(btn, text, good) {
+    var old = btn.getAttribute("data-label") || "Copy";
+    btn.textContent = text; if (good) btn.classList.add("copied");
+    setTimeout(function () { btn.textContent = old; btn.classList.remove("copied"); }, 1800);
+  }
+  function copyCmd(pre, btn) {
+    var text = pre.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        navigator.clipboard.writeText(text).then(function () { flash(btn, "Copied", true); }, function () { fallbackCopy(pre, btn); });
+      } catch (e) { fallbackCopy(pre, btn); }
+    } else { fallbackCopy(pre, btn); }
+  }
+
+  /* ---------- render ---------- */
+  var WHO = { owner: ["You", "owner"], agent: ["Agent", ""], both: ["You + agent", "owner"] };
+  var allIds = [];
+
+  function renderStep(s) {
+    allIds.push(s.id);
+    var row = el("div", "step"); row.id = "s-" + s.id; row.setAttribute("data-id", s.id);
+    var cb = el("input"); cb.type = "checkbox"; cb.id = "cb-" + s.id; cb.setAttribute("aria-labelledby", "t-" + s.id);
+    row.appendChild(cb);
+    var body = el("div", "body");
+    var w = WHO[s.who] || WHO.both;
+    var h = el("h3", null, '<span class="t" id="t-' + s.id + '">' + esc(s.t) + '</span><span class="who ' + w[1] + '">' + w[0] + '</span>');
+    body.appendChild(h);
+    (s.do || []).forEach(function (d) { body.appendChild(el("p", null, fmt(d))); });
+    if (s.urls) {
+      var u = el("div", "urls");
+      s.urls.forEach(function (x) { var a = el("a", null, esc(x[0])); a.href = x[1]; a.target = "_blank"; a.rel = "noopener noreferrer"; u.appendChild(a); });
+      body.appendChild(u);
+    }
+    (s.cmds || []).forEach(function (cm) {
+      var box = el("div", "cmd");
+      var top = el("div", "cmd-top");
+      top.appendChild(el("span", null, esc(cm[0])));
+      var btn = el("button", "copy", "Copy"); btn.type = "button"; btn.setAttribute("data-label", "Copy"); btn.setAttribute("aria-label", "Copy command: " + cm[0]);
+      top.appendChild(btn); box.appendChild(top);
+      var pre = el("pre"); var code = document.createElement("code"); code.textContent = cm[1]; code.style.background = "none"; code.style.padding = "0"; code.style.color = "inherit"; code.style.fontSize = "inherit";
+      pre.appendChild(code); pre.tabIndex = 0; box.appendChild(pre);
+      btn.addEventListener("click", function () { copyCmd(pre, btn); });
+      body.appendChild(box);
+    });
+    if (s.sec && s.sec.length) {
+      var k = el("div", "kv"); var d = el("div"); d.appendChild(el("b", null, "Secret names this produces (names only)"));
+      var ch = el("div", "chips"); s.sec.forEach(function (n) { ch.appendChild(el("code", null, esc(n))); }); d.appendChild(ch); k.appendChild(d); body.appendChild(k);
+    }
+    var kv = el("div", "kv");
+    if (s.ok) kv.appendChild(el("div", "ok", "<b>Works when</b>" + fmt(s.ok)));
+    if (s.fail) kv.appendChild(el("div", "fail", "<b>If not</b>" + fmt(s.fail)));
+    if (s.prod) kv.appendChild(el("div", "prod", "<b>In production</b>" + fmt(s.prod)));
+    if (s.unv) kv.appendChild(el("div", null, '<span class="chk">check</span> ' + esc(s.unv)));
+    if (kv.children.length) body.appendChild(kv);
+    row.appendChild(body);
+    cb.addEventListener("change", function () { if (cb.checked) state[s.id] = 1; else delete state[s.id]; row.classList.toggle("done", cb.checked); save(); refresh(); });
+    return row;
+  }
+
+  function render() {
+    var dl = document.getElementById("decision-list");
+    DECISIONS.forEach(function (d) { dl.appendChild(el("li", null, "<b>" + esc(d[0]) + ".</b> " + esc(d[1]))); });
+    var pl = document.getElementById("prod-list");
+    PROD.forEach(function (p) { pl.appendChild(el("li", null, esc(p))); });
+
+    var main = document.getElementById("phases"), nav = document.getElementById("nav");
+    PHASES.forEach(function (p) {
+      var sec = el("section", "phase"); sec.id = "phase-" + p.n; sec.setAttribute("data-phase", p.id);
+      sec.appendChild(el("header", null, '<span class="pnum">Phase ' + p.n + '</span><h2>' + esc(p.title) + '</h2><span class="pcount" data-count="' + p.id + '"></span>'));
+      sec.appendChild(el("p", "intro", fmt(p.intro)));
+      if (p.table) {
+        var tw = el("div", "tablewrap"); var t = el("table");
+        t.innerHTML = "<thead><tr><th>Day</th><th>Focus</th><th>What gets done</th></tr></thead>";
+        var tb = el("tbody"); p.table.forEach(function (r) { tb.appendChild(el("tr", null, "<td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td><td>" + esc(r[2]) + "</td>")); });
+        t.appendChild(tb); tw.appendChild(t); sec.appendChild(tw);
+      }
+      p.steps.forEach(function (s) { sec.appendChild(renderStep(s)); });
+      main.appendChild(sec);
+      var a = el("a", null, p.n); a.href = "#phase-" + p.n; a.setAttribute("data-nav", p.id); a.title = p.title; a.setAttribute("aria-label", "Phase " + p.n + ": " + p.title);
+      nav.appendChild(a);
+    });
+    allIds.forEach(function (id) {
+      var cb = document.getElementById("cb-" + id);
+      if (cb && state[id]) { cb.checked = true; document.getElementById("s-" + id).classList.add("done"); }
+    });
+    refresh();
+  }
+
+  function refresh() {
+    var total = allIds.length, done = allIds.filter(function (i) { return state[i]; }).length;
+    document.getElementById("bar-count").textContent = done + " / " + total;
+    document.getElementById("meter-fill").style.width = (total ? (100 * done / total) : 0) + "%";
+    document.getElementById("meter").setAttribute("aria-valuenow", String(total ? Math.round(100 * done / total) : 0));
+    PHASES.forEach(function (p) {
+      var d = p.steps.filter(function (s) { return state[s.id]; }).length;
+      var cEl = document.querySelector('[data-count="' + p.id + '"]'); if (cEl) cEl.textContent = d + " / " + p.steps.length;
+      var nEl = document.querySelector('[data-nav="' + p.id + '"]'); if (nEl) nEl.classList.toggle("done", d === p.steps.length);
+    });
+  }
+
+  /* ---------- theme and reset ---------- */
+  function applyTheme(t) { if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); }
+  function currentIsDark() {
+    var a = document.documentElement.getAttribute("data-theme");
+    if (a) return a === "dark";
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  var saved = getTheme(); if (saved) applyTheme(saved);
+  document.getElementById("theme-btn").addEventListener("click", function () { var t = currentIsDark() ? "light" : "dark"; applyTheme(t); setTheme(t); });
+
+  var armed = false, resetBtn = document.getElementById("reset-btn"), note = document.getElementById("reset-note");
+  resetBtn.addEventListener("click", function () {
+    if (!armed) { armed = true; resetBtn.textContent = "Press again to clear"; note.textContent = "This removes every tick in this browser."; setTimeout(function () { armed = false; resetBtn.textContent = "Clear my ticks"; note.textContent = ""; }, 4000); return; }
+    state = {}; save(); armed = false; resetBtn.textContent = "Clear my ticks"; note.textContent = "Cleared.";
+    allIds.forEach(function (id) { var cb = document.getElementById("cb-" + id); if (cb) cb.checked = false; document.getElementById("s-" + id).classList.remove("done"); });
+    refresh();
+  });
+
+  load();
+  render();
+})();
+</script>
