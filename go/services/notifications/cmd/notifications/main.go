@@ -59,6 +59,9 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 	cfg.Resolve()
+	if err := cfg.Validate(loader.Env()); err != nil {
+		return fmt.Errorf("invalid %s configuration: %w", loader.Env(), err)
+	}
 	log := logging.New(serviceName, loader.Env())
 	slog.SetDefault(log)
 	local := loader.Env() == pkgconfig.EnvLocal

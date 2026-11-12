@@ -50,13 +50,13 @@ identity:
   notFoundTtl: 30s
   cacheMaxEntries: 10000
 # Email attachments (S243): signed media links are fetched at send time from these hosts only (the media base URL's
-# host is always allowed); larger files stay links. Media's private bucket
-# signs the links (add the purchase-order store's host here if media maps that purpose elsewhere).
+# host is always allowed); larger files stay links. Media's private bucket is Cloudflare R2
+# (docs/runbooks/r2-buckets.md): its signed links point at <bucket>.<account id>.r2.cloudflarestorage.com.
 attachments:
   enabled: true
   mediaBaseUrl: http://media
   mediaPublicUrl: https://media.afrotransact.com
-  allowedHosts: [afrotransact-prod-kyc-evidence.s3.us-east-1.amazonaws.com]
+  allowedHosts: ["*.r2.cloudflarestorage.com"]
   maxBytes: 10485760
   maxTotalBytes: 20971520
   timeout: 10s
@@ -83,9 +83,12 @@ dispatcher:
 routing:
   sendTimeout: 3s
   # Ordered provider lists per market; "default" covers markets without their own list.
+  # Email: Resend only (docs/runbooks/resend-email.md). Config.Validate refuses to start without RESEND_API_KEY,
+  # RESEND_WEBHOOK_SECRET and a Resend-first route. To add a failover later, append sendgrid or ses to these lists and
+  # set that provider's credentials; a provider without credentials is skipped with a warning.
   email:
-    default: [resend, sendgrid, ses]
-    us: [resend, sendgrid, ses]
+    default: [resend]
+    us: [resend]
   sms:
     default: [twilio, vonage, aws]
     us: [twilio, aws, vonage]
