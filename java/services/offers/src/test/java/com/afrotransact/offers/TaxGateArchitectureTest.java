@@ -68,4 +68,24 @@ class TaxGateArchitectureTest {
                 .should().dependOnClassesThat().haveSimpleName("OfferTaxGate");
         rule.check(CLASSES);
     }
+
+    @Test
+    void theBulkBatchPathsNeverStoreAnOfferOrMoveItIntoActive() {
+        // S393/S394: a bulk row creates an offer only through OfferService.create (which asks the tax gate) and changes
+        // terms through revise/update, which keep the status. The batch service never inserts, releases or marks a basis.
+        ArchRule rule = ArchRuleDefinition.noClasses().that().haveSimpleName("OfferBatchServiceImpl")
+                .should().callMethodWhere(callsToOffer("releasedFromTaxHold|withTaxBasis|heldForTax"))
+                .orShould().callMethodWhere(JavaCall.Predicates.target(HasName.Predicates.name("insert"))
+                        .and(JavaCall.Predicates.target(HasOwner.Predicates.With.owner(
+                                JavaClass.Predicates.simpleName("OfferRepository")))))
+                .because("only OfferServiceImpl stores new offers after the tax gate, and only TaxHoldServiceImpl releases them");
+        rule.check(CLASSES);
+    }
+
+    @Test
+    void theBulkBatchServiceDependsOnTheOfferServiceForCreation() {
+        ArchRule rule = ArchRuleDefinition.classes().that().haveSimpleName("OfferBatchServiceImpl")
+                .should().dependOnClassesThat().haveSimpleName("OfferService");
+        rule.check(CLASSES);
+    }
 }
