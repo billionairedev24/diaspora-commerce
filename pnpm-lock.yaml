@@ -428,6 +428,9 @@ importers:
       '@afrotransact/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
+      '@afrotransact/tour':
+        specifier: workspace:*
+        version: link:../../packages/tour
       '@afrotransact/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -534,6 +537,9 @@ importers:
       '@afrotransact/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
+      '@afrotransact/tour':
+        specifier: workspace:*
+        version: link:../../packages/tour
       '@afrotransact/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -973,6 +979,55 @@ importers:
       '@types/node':
         specifier: ^22.19.0
         version: 22.20.5
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.15.0(@types/node@22.20.5)(typescript@7.0.2))(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  web/packages/tour:
+    dependencies:
+      '@afrotransact/ui':
+        specifier: workspace:*
+        version: link:../ui
+      driver.js:
+        specifier: 1.12.1
+        version: 1.12.1
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: ^6.9.1
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@testing-library/user-event':
+        specifier: ^14.6.7
+        version: 14.6.7(@testing-library/dom@10.4.2)
+      '@types/node':
+        specifier: ^22.19.0
+        version: 22.20.5
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^6.1.2
+        version: 6.1.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      jsdom:
+        specifier: ^27.0.0
+        version: 27.4.0(@noble/hashes@1.8.0)
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -7418,6 +7473,9 @@ packages:
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
+
+  driver.js@1.12.1:
+    resolution: {integrity: sha512-upBRqQW+bz+yfH7ee1gjWBaq0ue7i2343f2U3WzIUc3bhs5hwb2jz86cuB8gArRh3nfNp77CLNgkUtArTYTKFA==}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -21163,6 +21221,8 @@ snapshots:
   dotenv@16.6.1: {}
 
   dotenv@17.4.2: {}
+
+  driver.js@1.12.1: {}
 
   dunder-proto@1.0.1:
     dependencies:

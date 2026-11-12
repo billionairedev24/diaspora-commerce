@@ -1,0 +1,181 @@
+/* Guided tours: the Driver.js base (overlay layer, pointer rules, popover box) restyled with the AfroTransact tokens.
+   Only tokens from @afrotransact/tokens are used, no raw colours. The popover is `.at-tour-popover`; narrow screens get the
+   bottom sheet `.at-tour-sheet`. Reading direction comes from `dir` on the popover (set by the engine), so spacing uses
+   logical properties. Reduced motion and high contrast are handled at the end. */
+@import 'driver.js/dist/driver.css';
+
+/* Spotlight: the dimmed layer around the target. */
+.driver-overlay path { fill: var(--at-color-overlay); }
+
+.driver-popover.at-tour-popover {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--at-space-2);
+  width: min(360px, calc(100vw - var(--at-space-6)));
+  min-width: 280px;
+  max-width: 360px;
+  max-height: min(80vh, 32rem);
+  padding: var(--at-space-4);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-lg);
+  background: var(--at-color-surface);
+  box-shadow: var(--at-shadow-lg);
+  color: var(--at-color-text);
+  font-family: var(--at-font-sans);
+  font-size: var(--at-text-md);
+  line-height: var(--at-leading-normal);
+  text-align: start;
+}
+.driver-popover.at-tour-popover:focus { outline: none; }
+
+.at-tour-popover .driver-popover-title {
+  margin: 0;
+  padding-inline-end: var(--at-space-8);
+  font-family: var(--at-font-display);
+  font-size: var(--at-text-lg);
+  font-weight: var(--at-weight-bold);
+  line-height: var(--at-leading-tight);
+}
+.at-tour-popover .driver-popover-description {
+  margin: 0;
+  overflow-y: auto;
+  color: var(--at-color-text);
+  font-size: var(--at-text-md);
+  line-height: var(--at-leading-relaxed);
+}
+.at-tour-popover .driver-popover-title:not([style*='none']) + .driver-popover-description { margin-top: 0; }
+
+.at-tour-popover .driver-popover-close-btn {
+  /* the physical `right` and `left` of the base rule are cleared first; the logical offset after them wins */
+  right: auto;
+  left: auto;
+  inset-block-start: var(--at-space-2);
+  inset-inline-end: var(--at-space-2);
+  display: grid;
+  place-items: center;
+  width: var(--at-size-touch);
+  height: var(--at-size-touch);
+  border-radius: var(--at-radius-pill);
+  color: var(--at-color-text-muted);
+  font-size: var(--at-text-xl);
+  line-height: 1;
+}
+.at-tour-popover .driver-popover-close-btn:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); }
+.at-tour-popover .driver-popover-close-btn:focus-visible,
+.at-tour-btn:focus-visible,
+.at-tour-never input:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+
+/* Arrow: the visible side takes the popover's surface colour. */
+.at-tour-popover .driver-popover-arrow-side-left { border-left-color: var(--at-color-surface); }
+.at-tour-popover .driver-popover-arrow-side-right { border-right-color: var(--at-color-surface); }
+.at-tour-popover .driver-popover-arrow-side-top { border-top-color: var(--at-color-surface); }
+.at-tour-popover .driver-popover-arrow-side-bottom { border-bottom-color: var(--at-color-surface); }
+
+.at-tour-success {
+  margin: var(--at-space-2) 0 0;
+  color: var(--at-color-success);
+  font-weight: var(--at-weight-semibold);
+}
+
+.at-tour-popover .at-tour-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--at-space-3);
+  margin: var(--at-space-2) 0 0;
+  text-align: start;
+}
+.at-tour-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--at-space-2); color: var(--at-color-text-muted); font-size: var(--at-text-sm); }
+.at-tour-never { display: inline-flex; align-items: center; gap: var(--at-space-2); min-height: var(--at-size-touch); cursor: pointer; }
+.at-tour-never input { width: 18px; height: 18px; margin: 0; accent-color: var(--at-color-action-secondary); }
+.at-tour-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-2); }
+.at-tour-spacer { flex: 1; }
+
+.at-tour-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--at-size-touch);
+  padding: 0 var(--at-space-4);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-action-neutral);
+  color: var(--at-color-text);
+  font-size: var(--at-text-md);
+  font-weight: var(--at-weight-semibold);
+  cursor: pointer;
+}
+.at-tour-btn:hover { background: var(--at-color-action-neutral-hover); }
+.at-tour-next { border-color: var(--at-color-action-primary); background: var(--at-color-action-primary); color: var(--at-color-action-primary-text); }
+.at-tour-next:hover { background: var(--at-color-action-primary-hover); }
+.at-tour-skip { border-color: transparent; background: transparent; color: var(--at-color-text-muted); text-decoration: underline; text-underline-offset: 2px; }
+.at-tour-skip:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); }
+
+/* Bottom sheet (screens narrower than the popover can sit beside a target). The engine positions the popover with
+   inline styles, so the sheet needs !important to take over; this is the only place it is used. */
+/* stylelint-disable declaration-no-important */
+.driver-popover.at-tour-sheet {
+  position: fixed !important;
+  inset: auto 0 0 0 !important;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  max-height: 60vh;
+  margin: 0 !important;
+  padding-block-end: calc(var(--at-space-4) + env(safe-area-inset-bottom, 0px));
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+  transform: none !important;
+}
+/* stylelint-enable declaration-no-important */
+.at-tour-sheet .driver-popover-arrow { display: none; }
+
+/* Help menu on the black header (same look as the account menu trigger). */
+.at-tour-help {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--at-space-1);
+  min-height: var(--at-size-touch);
+  padding: 0 var(--at-space-3);
+  border: 0;
+  border-radius: var(--at-radius-pill);
+  background: none;
+  color: var(--at-color-header-text);
+  font: inherit;
+  font-size: var(--at-text-sm);
+  font-weight: var(--at-weight-semibold);
+  cursor: pointer;
+}
+.at-tour-help[data-state='open'] { background: var(--at-color-header-hover-bg); }
+@media (hover: hover) {
+  .at-tour-help:hover { background: var(--at-color-header-hover-bg); }
+}
+.at-tour-help:focus-visible { outline: none; background: var(--at-color-header-hover-bg); box-shadow: inset 0 0 0 2px var(--at-color-header-indicator); }
+.at-tour-help-heading { padding: var(--at-space-2) var(--at-space-3) var(--at-space-1); color: var(--at-color-text-muted); font-size: var(--at-text-2xs); font-weight: var(--at-weight-bold); letter-spacing: var(--at-tracking-caps); text-transform: uppercase; }
+.at-tour-help-entry { display: flex; flex-direction: column; gap: 2px; }
+.at-tour-help-summary { color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
+
+/* Reduced motion: no fades or nudges, the popover simply appears. */
+@media (prefers-reduced-motion: reduce) {
+  .driver-fade .driver-overlay,
+  .driver-fade .driver-popover,
+  .driver-popover.driver-popover-nudge { animation: none; }
+  .at-tour-popover .driver-popover-close-btn,
+  .at-tour-btn { transition: none; }
+}
+
+/* High contrast: system colours, a solid ring on the target (the dimmed layer may not be drawn), thicker borders. */
+@media (forced-colors: active) {
+  .driver-popover.at-tour-popover { border: 2px solid CanvasText; background: Canvas; color: CanvasText; box-shadow: none; }
+  .at-tour-btn { border: 2px solid ButtonText; background: ButtonFace; color: ButtonText; }
+  .at-tour-next { border-color: Highlight; background: Highlight; color: HighlightText; }
+  .at-tour-popover .driver-popover-close-btn { color: ButtonText; }
+  .driver-active-element { outline: 3px solid Highlight; outline-offset: 4px; }
+}
+@media (prefers-contrast: more) {
+  .driver-popover.at-tour-popover { border-width: 2px; border-color: var(--at-color-text); }
+  .at-tour-btn { border-width: 2px; border-color: var(--at-color-text); }
+}
