@@ -7253,6 +7253,11 @@ components:
           type: object
           additionalProperties:
             type: string
+        variants:
+          type: array
+          description: Every child of the matched page, so the seller may offer the others too. A brand plus part number match on a page with several children has no `atin`; the seller picks one of these.
+          items:
+            $ref: '#/components/schemas/MatchVariant'
         canOffer:
           type: boolean
         blockers:
@@ -7272,6 +7277,18 @@ components:
         message:
           type: string
           description: Plain words for INVALID and RESTRICTED, for example "This number is for store use or coupons, not a product barcode."
+    MatchVariant:
+      type: object
+      properties:
+        atin:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        gtin14:
+          type: string
+          pattern: '[0-9]{14}'
     OfferEligibilityRequest:
       type: object
       required:
@@ -7357,8 +7374,8 @@ components:
           additionalProperties: {}
         note:
           type: string
-          description: Why, in the seller's words (shown to staff)
-          maxLength: 1000
+          description: Why, in the seller's words (shown to staff); at most `noteMaxLength` of the catalog settings (1000 by default, never above 5000)
+          maxLength: 5000
     ChangeRequest:
       type: object
       required:
@@ -7698,7 +7715,7 @@ components:
           default: 1
         exemptionGatedCategoryCodes:
           type: array
-          description: Product-type codes that are brand-gated; a no-barcode item in them needs staff approval
+          description: Category or product-type codes treated as brand-gated for no-barcode items, on top of the categories whose listing rules say brand_gated; a no-barcode item in them needs staff approval
           items:
             type: string
         exemptionRequiresApprovalForKnownBrands:

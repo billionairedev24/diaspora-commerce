@@ -367,6 +367,34 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Offer'
+  /v1/offers/presence:
+    get:
+      tags:
+      - Offers
+      summary: Does this organisation have an open offer on a product page? (service clients, S385)
+      description: Used by catalog-service before it accepts a suggest-an-edit request from a seller. `atin` may be the page ATIN or any variant ATIN of it. Needs offers:read (service token). Withdrawn offers do not count; paused and tax-held ones do.
+      operationId: presence
+      parameters:
+      - name: atin
+        in: query
+        required: true
+        schema:
+          type: string
+          pattern: AT[0-9A-Z]{8}
+      - name: sellerOrgId
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPresence'
+        '403':
+          description: Missing offers:read
   /v1/offers/stock/{sku}:
     put:
       tags:
@@ -807,6 +835,19 @@ components:
           items:
             type: string
             format: uuid
+    OfferPresence:
+      type: object
+      required:
+      - atin
+      - sellerOrgId
+      - hasOpenOffer
+      properties:
+        atin:
+          type: string
+        sellerOrgId:
+          type: string
+        hasOpenOffer:
+          type: boolean
     CreateOfferRequest:
       type: object
       description: Exactly one of atin (variant ATIN) or gtin
