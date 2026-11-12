@@ -27,10 +27,10 @@ output "workload_identity" {
 }
 
 output "node_identity" {
-  description = "Not used on OVH: the registry is pulled with an image pull secret (Harbor robot account)."
+  description = "Not used on OVH: images are pulled with an image pull secret (GHCR read-only token, or a Harbor robot account)."
   value       = ""
 }
 
 output "kubeconfig_command" {
-  value = "Control Panel > Public Cloud > Managed Kubernetes > ${ovh_cloud_project_kube.this.name} > kubeconfig file (or: tofu output -raw kubeconfig, env root)"
+  value = "OVH Control Panel > Public Cloud > Managed Kubernetes > ${ovh_cloud_project_kube.this.name} > Download the kubeconfig (or the API: POST /cloud/project/<project>/kube/${ovh_cloud_project_kube.this.id}/kubeconfig on the same OVH endpoint)"
 }

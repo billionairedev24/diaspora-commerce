@@ -7,6 +7,10 @@
 #   - "spot": OVH has no spot market, so spot_enabled creates a tainted (afrotransact.com/spot=true:NoSchedule) HOURLY pool
 #     that autoscales from 0: spot-tolerant workloads still scale to zero, there is just no price discount.
 #   - egress none (lean): no private network, nodes use their public IPs; otherwise the cluster joins the vRack network
+# LAUNCH PROFILE (prod, docs/runbooks/ovh-production.md): free control plane, ONE b3-16 node billed MONTHLY, no autoscaler, no
+# spot pool, no private network and no load balancer (traffic comes in through Cloudflare Tunnel). The Kubernetes API is public
+# on the free plan, so ovh_cloud_project_kube_iprestrictions limits it to context.admin_cidrs; envs/prod refuses to plan
+# without any (nodes are always allowed to reach the API; UNVERIFIED, check on the first cluster).
 # private_endpoint and admin_principals have no equivalent on OVH (no private API endpoint on the free plan, no cloud IAM
 # for cluster roles): restrict the API with context.admin_cidrs (IP restrictions) and use the kubeconfig / OIDC.
 terraform {

@@ -1,7 +1,7 @@
 # Copy to terraform.tfvars and commit it: non-secret values only (credentials come from OIDC / env vars).
 # ---- the one switch -------------------------------------------------------------------------------
 cloud  = "aws" # aws | gcp | azure | ovh
-region = "us-east-1" # aws: us-east-1 | gcp: us-east4 | azure: eastus | ovh: GRA11 (BHS5 next to a US-East Layerbase)
+region = "us-east-1" # aws: us-east-1 | gcp: us-east4 | azure: eastus | ovh: US-EAST-VA-1 (OVH US account, next to a US-East Layerbase; GRA11 on OVH EU)
 
 # ---- identity of the account/project/subscription (only the selected cloud's line matters) ----------
 # gcp_project_id        = "afrotransact-uat"

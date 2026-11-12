@@ -58,7 +58,7 @@ resource "ovh_okms_secret" "storage" {
     data = jsonencode({
       S3_ACCESS_KEY_ID     = ovh_cloud_project_user_s3_credential.this[each.key].access_key_id
       S3_SECRET_ACCESS_KEY = ovh_cloud_project_user_s3_credential.this[each.key].secret_access_key
-      S3_ENDPOINT          = "https://s3.${lower(regex("^[A-Za-z]+", var.context.region))}.io.cloud.ovh.net"
+      S3_ENDPOINT          = "https://s3.${lower(replace(upper(var.context.region), "/-?[0-9]+$/", ""))}.io.cloud.ovh.${startswith(upper(var.context.region), "US-") ? "us" : "net"}"
     })
   }
 }

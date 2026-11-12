@@ -12,7 +12,7 @@ terraform {
 }
 
 locals {
-  site      = upper(regex("^[A-Za-z]+", var.context.region))
+  site      = replace(upper(var.context.region), "/-?[0-9]+$/", "")
   namespace = "library"
 }
 

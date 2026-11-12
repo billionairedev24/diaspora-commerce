@@ -39,6 +39,10 @@ locals {
     gcp       = local.is_gcp ? toset(["gcp"]) : toset([])
     azure     = local.is_azure ? toset(["azure"]) : toset([])
     ovh       = local.is_ovh ? toset(["ovh"]) : toset([])
+    # OVH extras that the launch profile leaves OFF: OKMS (Secret Manager) and the Harbor registry (GHCR is the registry of
+    # record, secrets are SOPS/age). Turn on with ovh_okms / ovh_harbor.
+    ovh_okms   = local.is_ovh && var.ovh_okms ? toset(["ovh"]) : toset([])
+    ovh_harbor = local.is_ovh && var.ovh_harbor ? toset(["ovh"]) : toset([])
     ec        = var.enable_elastic ? toset(["ec"]) : toset([])
     confluent = var.enable_confluent ? toset(["confluent"]) : toset([])
     temporal  = var.enable_temporal ? toset(["temporal"]) : toset([])
@@ -60,9 +64,12 @@ locals {
 
   # The cluster must sit next to the external database server (latency, and cross-region traffic is billed). Layerbase
   # Dedicated runs in US East (Virginia) and US West (Oregon) only.
+  # OVH: the OVH US entity (endpoint ovh-us, a separate account from the EU/CA entities) has Vint Hill, Virginia as
+  # US-EAST-VA-1, the same metro as Layerbase Virginia (infra/ovh-vps/terraform/locations.json). It replaces the earlier
+  # BHS5 (Quebec) mapping, which put the cluster tens of milliseconds away from the database.
   layerbase_regions = {
-    virginia = { aws = "us-east-1", gcp = "us-east4", azure = "eastus", ovh = "BHS5" } # BHS (Beauharnois, Quebec) is the closest OVH site
-    oregon   = { aws = "us-west-2", gcp = "us-west1", azure = "", ovh = "" }
+    virginia = { aws = "us-east-1", gcp = "us-east4", azure = "eastus", ovh = "US-EAST-VA-1" }
+    oregon   = { aws = "us-west-2", gcp = "us-west1", azure = "", ovh = "US-WEST-OR-1" }
   }
 
   context = {
@@ -147,6 +154,23 @@ resource "terraform_data" "database_location" {
     precondition {
       condition     = local.size.managed_data || var.region == local.layerbase_regions[var.layerbase_region][var.cloud]
       error_message = "With external data (Layerbase) the region must match layerbase_region (${var.layerbase_region}): that is ${local.layerbase_regions[var.layerbase_region][var.cloud] == "" ? "not available on " : local.layerbase_regions[var.layerbase_region][var.cloud] + " on "}${var.cloud}, but region is ${var.region}."
+    }
+  }
+}
+
+# OVH entity and region must agree: US regions only exist on the OVH US API endpoint (own account, own credentials), the
+# EU/CA regions never on it. A mismatch otherwise fails late and confusingly inside the provider.
+resource "terraform_data" "ovh_account" {
+  count = local.is_ovh ? 1 : 0
+  lifecycle {
+    precondition {
+      condition     = startswith(upper(var.region), "US-") == (var.ovh_endpoint == "ovh-us")
+      error_message = "OVH region ${var.region} and ovh_endpoint ${var.ovh_endpoint} do not match: US-* regions need ovh_endpoint = \"ovh-us\" (the OVH US account), other regions ovh-eu or ovh-ca."
+    }
+    # Production refuses to plan with a world-open Kubernetes API (free plan: the API endpoint is public).
+    precondition {
+      condition     = !local.size.deletion_protection || length(var.admin_cidrs) > 0
+      error_message = "OVH: set admin_cidrs (the IP restrictions of the Kubernetes API) for any environment with deletion protection. The API server is reachable from the internet on the free plan."
     }
   }
 }
@@ -576,9 +600,10 @@ module "ovh_cluster" {
   admin_principals = var.cluster_admins
 }
 
+# OPTIONAL (ovh_okms = true): OVH Secret Manager. The default path is SOPS/age files applied with infra/ops/secrets/apply.sh.
 module "ovh_secrets" {
   source         = "../../modules/ovh/secrets"
-  for_each       = local.on.ovh
+  for_each       = local.on.ovh_okms
   providers      = { ovh = ovh.this[each.key] }
   context        = local.context
   services       = local.service_names
@@ -596,7 +621,7 @@ module "ovh_postgres" {
   storage_gb            = local.size.db_storage_gb
   backup_retention_days = local.size.backup_days
   databases             = local.databases
-  secret_store          = module.ovh_secrets["ovh"].store
+  secret_store          = try(module.ovh_secrets["ovh"].store, null)
 }
 
 module "ovh_cache" {
@@ -618,9 +643,10 @@ module "ovh_bucket" {
   buckets   = local.buckets
 }
 
+# OPTIONAL (ovh_harbor = true): OVH Managed Private Registry (Harbor). Off by default: images are pulled from GHCR.
 module "ovh_registry" {
   source            = "../../modules/ovh/registry"
-  for_each          = local.on.ovh
+  for_each          = local.on.ovh_harbor
   providers         = { ovh = ovh.this[each.key] }
   context           = local.context
   repositories      = local.service_names
@@ -645,7 +671,7 @@ module "ovh_identity" {
   cluster      = module.ovh_cluster["ovh"].workload_identity
   services     = local.workload_identities
   buckets      = module.ovh_bucket["ovh"].buckets
-  secret_store = module.ovh_secrets["ovh"].store
+  secret_store = try(module.ovh_secrets["ovh"].store, null) # null = the S3 keys are not written anywhere (read them from the state, put them in the SOPS secrets)
 }
 
 module "ovh_github_deploy" {
@@ -655,7 +681,7 @@ module "ovh_github_deploy" {
   context   = local.context
   access    = "deploy"
   subjects  = [local.gh_subject_env]
-  registry  = module.ovh_registry["ovh"].registry
+  registry  = try(module.ovh_registry["ovh"].registry, null)
 }
 
 module "ovh_github_plan" {
@@ -723,6 +749,7 @@ locals {
     postgres  = one(concat(values(module.aws_postgres), values(module.gcp_postgres), values(module.azure_postgres), values(module.ovh_postgres)))
     cache     = one(concat(values(module.aws_cache), values(module.gcp_cache), values(module.azure_cache), values(module.ovh_cache)))
     bucket    = one(concat(values(module.aws_bucket), values(module.gcp_bucket), values(module.azure_bucket), values(module.ovh_bucket)))
+    # secrets and registry are null on OVH unless ovh_okms / ovh_harbor (the outputs below use try()).
     secrets   = one(concat(values(module.aws_secrets), values(module.gcp_secrets), values(module.azure_secrets), values(module.ovh_secrets)))
     registry  = one(concat(values(module.aws_registry), values(module.gcp_registry), values(module.azure_registry), values(module.ovh_registry)))
     identity  = one(concat(values(module.aws_identity), values(module.gcp_identity), values(module.azure_identity), values(module.ovh_identity)))

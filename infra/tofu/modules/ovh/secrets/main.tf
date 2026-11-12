@@ -17,7 +17,7 @@ data "ovh_me" "this" {}
 
 locals {
   prefix = var.prefix
-  site   = upper(regex("^[A-Za-z]+", var.context.region))
+  site   = replace(upper(var.context.region), "/-?[0-9]+$/", "")
   # Secret Manager regions are named after the OVH site.
   okms_regions = {
     GRA = "eu-west-rbx"
@@ -26,7 +26,10 @@ locals {
     PAR = "eu-west-par"
     BHS = "ca-east-bhs"
   }
-  okms_region = lookup(local.okms_regions, local.site, "eu-west-rbx")
+  # OKMS is OPTIONAL on the OVH launch path (SOPS/age is the default, docs/runbooks/ovh-production.md). The OVH US regions have
+  # no entry: UNVERIFIED whether OKMS exists in the US, so applying this module with a US region fails here rather than
+  # silently creating the KMS domain in Europe.
+  okms_region = local.okms_regions[local.site]
 }
 
 resource "ovh_okms" "this" {

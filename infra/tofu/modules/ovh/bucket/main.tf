@@ -16,7 +16,8 @@ terraform {
 }
 
 locals {
-  site = upper(regex("^[A-Za-z]+", var.context.region))
+  # OVH region -> Object Storage site: GRA11 -> GRA, BHS5 -> BHS (EU/CA accounts), US-EAST-VA-1 -> US-EAST-VA (OVH US account).
+  site = replace(upper(var.context.region), "/-?[0-9]+$/", "")
   # Standard-IA needs objects of at least 128 KiB to be worthwhile; the lifecycle rule applies to all objects as in the
   # other clouds (cheaper storage, slightly dearer reads).
   lifecycle = {

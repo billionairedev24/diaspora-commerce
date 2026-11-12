@@ -3,6 +3,7 @@
 # tofu.yml concurrency group is the lock (docs/engineering/ci-cd.md#ovhcloud).
 #   export OVH_APPLICATION_KEY=... OVH_APPLICATION_SECRET=... OVH_CONSUMER_KEY=...
 #   cd infra/tofu/bootstrap/ovh && tofu init && tofu apply -var service_name=<project id> -var region=GRA
+#   OVH US account (production): ... -var region=US-EAST-VA -var endpoint=ovh-us
 #   tofu output state            # TF_TARGETS.<env>.state
 #   tofu output -raw s3_access_key; tofu output -raw s3_secret_key    # OVH_PLAN_/OVH_APPLY_ S3 secrets (use two users in practice)
 # State of this root stays local (keep the file safe) or migrate it into the bucket afterwards.

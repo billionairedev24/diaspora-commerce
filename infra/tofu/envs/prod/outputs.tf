@@ -25,7 +25,7 @@ output "budget" {
 
 output "registry_url" {
   description = "Set as the GitHub environment variable REGISTRY_URL (deploy mirror target)."
-  value       = local.p.registry.registry_url
+  value       = try(local.p.registry.registry_url, null) # null when the registry is GHCR (OVH without ovh_harbor)
 }
 
 output "github_oidc" {
@@ -64,12 +64,12 @@ output "buckets" {
 
 output "secret_names" {
   description = "Service => secret name in the cloud secret store (ExternalSecret extract key)."
-  value       = local.p.secrets.secret_names
+  value       = try(local.p.secrets.secret_names, {}) # empty when secrets are SOPS files (OVH without ovh_okms)
 }
 
 output "cluster_secret_store" {
   description = "spec.provider for the ESO ClusterSecretStore `platform-secrets` (consumed by infra/k8s)."
-  value       = local.p.secrets.cluster_secret_store
+  value       = try(local.p.secrets.cluster_secret_store, null)
 }
 
 output "platform_values" {

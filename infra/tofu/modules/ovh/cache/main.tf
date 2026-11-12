@@ -8,7 +8,7 @@ terraform {
 }
 
 locals {
-  site    = upper(regex("^[A-Za-z]+", var.network.region))
+  site    = replace(upper(var.network.region), "/-?[0-9]+$/", "")
   flavor  = lookup({ small = "db1-4", medium = "db1-7", large = "db1-15" }, var.size)
   nodes   = var.high_availability ? 2 : 1
   private = var.network.gateway

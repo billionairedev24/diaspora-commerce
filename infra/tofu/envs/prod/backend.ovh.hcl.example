@@ -2,10 +2,12 @@
 #   printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf ; tofu init -backend-config=backend.hcl
 # State bucket + state-only S3 user come from infra/tofu/bootstrap/ovh. Export AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 # with that user's S3 keys. No native lock: do not run two applies against one state.
+# OVH US account (the production path): bootstrap with
+#   cd infra/tofu/bootstrap/ovh && tofu init && tofu apply -var service_name=<project id> -var region=US-EAST-VA -var endpoint=ovh-us
 # bucket                      = "afrotransact-tfstate-<project>"
-# key                         = "envs/dev/terraform.tfstate"
-# region                      = "gra"
-# endpoints                   = { s3 = "https://s3.gra.io.cloud.ovh.net" }
+# key                         = "envs/prod/terraform.tfstate"
+# region                      = "us-east-va"
+# endpoints                   = { s3 = "https://s3.us-east-va.io.cloud.ovh.us" }   # EU accounts: https://s3.gra.io.cloud.ovh.net
 # use_path_style              = true
 # skip_credentials_validation = true
 # skip_region_validation      = true

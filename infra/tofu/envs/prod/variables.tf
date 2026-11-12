@@ -10,7 +10,7 @@ variable "cloud" {
 }
 
 variable "region" {
-  description = "Region in the chosen cloud (us-east-1 | us-east4 | eastus | GRA11 on OVHcloud ...)."
+  description = "Region in the chosen cloud (us-east-1 | us-east4 | eastus | US-EAST-VA-1 on the OVH US account, GRA11 on OVH EU ...)."
   type        = string
 }
 
@@ -168,6 +168,18 @@ variable "ovh_endpoint" {
   }
 }
 
+variable "ovh_okms" {
+  description = "cloud = ovh only: create the OVH Secret Manager (OKMS) and write per-service seed secrets there. Default false: the launch path keeps secrets in SOPS/age files (docs/runbooks/ovh-production.md). OKMS in the US regions is UNVERIFIED and the module refuses a US region."
+  type        = bool
+  default     = false
+}
+
+variable "ovh_harbor" {
+  description = "cloud = ovh only: create the OVH Managed Private Registry (Harbor). Default false: the launch path pulls from GHCR with a read-only pull secret."
+  type        = bool
+  default     = false
+}
+
 variable "saas_cloud" {
   description = "Cloud that Elastic Cloud, Confluent Cloud and Temporal Cloud run on when cloud = ovh (they are not offered on OVHcloud): aws | gcp | azure. Ignored on the other clouds."
   type        = string
@@ -185,7 +197,7 @@ variable "saas_region" {
 }
 
 variable "layerbase_region" {
-  description = "Where the external Layerbase server runs (sizing.managed_data = false): virginia | oregon. The cluster's region must be in the same place (plan check), so database traffic stays in one metro: virginia = aws us-east-1, gcp us-east4, azure eastus, ovh BHS5; oregon = aws us-west-2, gcp us-west1 (Azure has no Oregon region next to Layerbase: use virginia)."
+  description = "Where the external Layerbase server runs (sizing.managed_data = false): virginia | oregon. The cluster's region must be in the same place (plan check), so database traffic stays in one metro: virginia = aws us-east-1, gcp us-east4, azure eastus, ovh US-EAST-VA-1 (OVH US account); oregon = aws us-west-2, gcp us-west1 (Azure has no Oregon region next to Layerbase: use virginia)."
   type        = string
   default     = "virginia"
   validation {

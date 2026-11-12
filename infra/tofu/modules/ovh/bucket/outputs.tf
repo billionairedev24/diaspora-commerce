@@ -13,5 +13,5 @@ output "bucket_names" {
 
 output "endpoint" {
   description = "S3 endpoint of the region (path-style or virtual-host)."
-  value       = "https://s3.${lower(local.site)}.io.cloud.ovh.net"
+  value       = "https://s3.${lower(local.site)}.io.cloud.ovh.${startswith(local.site, "US-") ? "us" : "net"}" # OVH US accounts use the .us domain
 }

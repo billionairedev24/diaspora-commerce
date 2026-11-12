@@ -1,47 +1,43 @@
-# Copy to terraform.tfvars and commit it: non-secret values only (credentials come from OIDC / env vars).
-# ---- the one switch -------------------------------------------------------------------------------
-cloud  = "gcp" # aws | gcp | azure. The lean profile is cheapest on gcp (free-tier zonal control plane).
-region = "us-east4" # MUST be where Layerbase runs: virginia = gcp us-east4 | aws us-east-1 | azure eastus (docs/engineering/cloud-cost.md)
-layerbase_region = "virginia" # virginia | oregon (Layerbase Dedicated 16 GB is Virginia only)
+# Copy to terraform.tfvars and commit it: non-secret values only (credentials come from environment variables).
+# PRODUCTION = OVHcloud Managed Kubernetes (OVH US account) + Layerbase PostgreSQL. Other clouds stay supported by the modules;
+# switch `cloud` and the identity lines below (docs/engineering/cloud-cost.md has the alternatives, none of them is the launch path).
 
-# ---- identity of the account/project/subscription (only the selected cloud's line matters) ----------
-gcp_project_id        = "afrotransact-prod"
+# ---- the one switch -------------------------------------------------------------------------------
+cloud            = "ovh"
+region           = "US-EAST-VA-1" # OVH US East (Vint Hill, Virginia). MUST be next to Layerbase: virginia = ovh US-EAST-VA-1 | aws us-east-1 | gcp us-east4 | azure eastus
+layerbase_region = "virginia"     # virginia | oregon (Layerbase Dedicated 16 GB is Virginia only)
+
+# ---- identity of the OVH account/project (OVH US entity is a SEPARATE account from OVH EU/CA) -------------------------
+ovh_service_name = "<public cloud project id>" # Public Cloud project in the OVH US account (credentials: OVH_APPLICATION_KEY / _SECRET / OVH_CONSUMER_KEY)
+ovh_endpoint     = "ovh-us"                    # US-* regions REQUIRE ovh-us (checked at plan time)
+# gcp_project_id        = "afrotransact-prod"
 # azure_subscription_id = "00000000-0000-0000-0000-000000000000"
 # azure_tenant_id       = "00000000-0000-0000-0000-000000000000"
-# ovh_service_name       = "<public cloud project id>"   # ovh (credentials: OVH_APPLICATION_KEY / _SECRET / OVH_CONSUMER_KEY)
-# ovh_endpoint           = "ovh-eu"                      # ovh-eu | ovh-ca | ovh-us
 
 # ---- network & access --------------------------------------------------------------------------------
-cidr_block  = "10.40.0.0/16"
-web_domain  = "afrotransact.com"
-admin_cidrs = [] # e.g. ["203.0.113.0/24"] office/VPN egress; empty = API reachable with auth only
-# cluster_admins = ["arn:aws:iam::123456789012:role/platform-admins"]   # aws
-# cluster_admins = ["group:platform@afrotransact.com"]                  # gcp
-# cluster_admins = ["<entra-group-object-id>"]                          # azure
+cidr_block = "10.40.0.0/16"
+web_domain = "afrotransact.com"
+# REQUIRED on OVH production: the Kubernetes API of the free plan is public, so it is restricted to these CIDRs (ovh_cloud_project_kube_iprestrictions).
+# Your office/VPN egress, /32 for a single admin. Argo CD runs inside the cluster and does not need an entry; GitHub-hosted runners have no fixed IPs and are NOT allowed.
+admin_cidrs = [] # e.g. ["203.0.113.7/32"]  <- tofu plan fails while this is empty
+
+# ---- OVH extras that the launch profile leaves OFF -----------------------------------------------------------
+ovh_okms   = false # OVH Secret Manager: secrets are SOPS/age files (infra/ops/secrets). OKMS in the US is unverified and the module refuses a US region.
+ovh_harbor = false # OVH Managed Private Registry: images come from GHCR with a read-only pull secret.
 
 # ---- tags --------------------------------------------------------------------------------------------
 owner       = "platform"
 cost_center = "engineering"
 
-# ---- GitHub OIDC: only one env per AWS account / GCP project creates the shared provider/pool ---------
+# ---- GitHub OIDC: OVH has none (no module resources are created); keep false ---------------------------------
 create_github_oidc_provider = false
-# github_oidc_provider_ref  = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" # or pool id "github"
 
-# ---- SaaS (same on every cloud) ----------------------------------------------------------------------
-# Lean profile: all three off. Search is Meilisearch on Layerbase; Kafka and Temporal run in the cluster
-# (infra/k8s/platform/lean). Turn them on only when you outgrow one node (docs/engineering/cloud-cost.md).
-enable_elastic   = false # needs EC_API_KEY
-enable_confluent = false # needs CONFLUENT_CLOUD_API_KEY / CONFLUENT_CLOUD_API_SECRET
-enable_temporal  = false # needs TEMPORAL_CLOUD_API_KEY; namespace afrotransact-<env>
-# temporal_region             = "aws-us-east-1"   # default <cloud>-<region>; required for azure
-# temporal_accepted_client_ca = "LS0tLS1CRUdJTi..." # base64 PEM of the worker client CA (mTLS); empty = API keys
+# ---- SaaS: all off. Search is Meilisearch in the cluster; Kafka and Temporal run in the cluster (infra/k8s/platform/lean). ----
+enable_elastic   = false
+enable_confluent = false
+enable_temporal  = false
 
-# ---- cost (S182): monthly budget amount per env is in sizing.tf ---------------------------------------
+# ---- cost: the monthly budget amount is in sizing.tf ---------------------------------------------------------
 budget_notification_emails = [] # e.g. ["platform-alerts@afrotransact.com", "finance@afrotransact.com"]
-budget_shared_account      = false # true when environments share an AWS account / GCP project
-# gcp_billing_account      = "01ABCD-23EF45-6789AB"   # gcp: required for the budget
-
-# ---- OVHcloud only: where Elastic / Confluent / Temporal Cloud run (they are not offered on OVHcloud) -------
-# saas_cloud  = "gcp"            # aws | gcp | azure
-# saas_region = "europe-west1"   # region of saas_cloud closest to the OVH region
-# temporal_region = "aws-eu-west-1"
+budget_shared_account      = false
+# gcp_billing_account      = "01ABCD-23EF45-6789AB"   # gcp only
