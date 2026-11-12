@@ -91,7 +91,14 @@ final class AiDtos {
             @Schema(description = "Base64-encoded image (at most 2 MB decoded)")
             @NotBlank @Size(max = 2_900_000) String image,
             @Schema(example = "image/jpeg") @NotBlank String contentType,
-            @Schema(description = "product-image or storefront", example = "product-image") String purpose) {
+            @Schema(description = "product-image or storefront", example = "product-image") String purpose,
+            @Schema(description = "MAIN, OTHER, SWATCH or LABEL (product images; optional)", example = "MAIN")
+            @Size(max = 20) String slot,
+            @Schema(description = "Listing title the picture should match (optional, seller text)")
+            @Size(max = 500) String title,
+            @Schema(description = "Listing brand the picture should match (optional, seller text)")
+            @Size(max = 200) String brand,
+            @Schema(description = "Product type code (optional)") @Size(max = 80) String productTypeCode) {
     }
 
     @Schema(description = "A moderation finding")
@@ -104,7 +111,10 @@ final class AiDtos {
             @Schema(description = "ALLOW (publish), REVIEW (hold for a person) or BLOCK (prohibited)",
                     allowableValues = {"ALLOW", "REVIEW", "BLOCK"}) String decision,
             List<ModerationLabelView> labels,
-            @Schema(example = "google/gemini-2.5-flash") String model) {
+            @Schema(example = "google/gemini-2.5-flash") String model,
+            @Schema(description = "How far the picture is from the given title and brand, 0 (matches) to 1 (clearly "
+                    + "different); null when no title or brand was given or the model did not say", nullable = true)
+            Double mismatchScore) {
     }
 
     @Schema(description = "Trust-team triage input; field values as the reviewer sees them (masked where required)")

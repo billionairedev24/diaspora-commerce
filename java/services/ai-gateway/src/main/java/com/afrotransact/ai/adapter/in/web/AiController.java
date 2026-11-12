@@ -86,8 +86,11 @@ class AiController {
     @Operation(summary = "Moderate an uploaded image before it is published (ai:use)", description = """
             The AI moderation hook of media-service (client media-service): a vision model checks a product or \
             storefront image for prohibited content (BLOCK) and marketplace rules such as watermarks, contact \
-            details or text overlays (REVIEW). Labels imply a minimum decision and an unreadable answer is REVIEW, \
-            never ALLOW. Advisory: media holds or publishes the image and staff review held ones.""")
+            details or text overlays (REVIEW). Labels (TEXT_OVERLAY, WATERMARK, PLACEHOLDER, BORDER, NOT_PRODUCT hold; \
+            PROPS and MANNEQUIN are informational, media applies them by slot) imply a minimum decision and an \
+            unreadable answer is REVIEW, never ALLOW. With a title or brand the answer carries a mismatchScore. \
+            Advisory: media holds or publishes the image and staff review held ones. Uses the cheapest vision model \
+            and the AI budget (a spent budget is an error, which media turns into a hold).""")
     @PostMapping("/v1/ai/moderate-image")
     ModerateImageResponse moderateImage(@Valid @RequestBody ModerateImageRequest body, HttpServletRequest request) {
         byte[] image;
@@ -97,9 +100,11 @@ class AiController {
             throw new AiRuleViolation("ai.unsupported-image", "image must be base64-encoded");
         }
         ImageModerationService.Result r = images.moderate(callers.current(request),
-                new ImageModerationService.Request(image, body.contentType(), body.purpose()));
+                new ImageModerationService.Request(image, body.contentType(), body.purpose(), body.slot(), body.title(),
+                        body.brand(), body.productTypeCode()));
         return new ModerateImageResponse(r.decision().name(),
-                r.labels().stream().map(l -> new ModerationLabelView(l.code(), l.description())).toList(), r.model());
+                r.labels().stream().map(l -> new ModerationLabelView(l.code(), l.description())).toList(), r.model(),
+                r.mismatchScore());
     }
 
     @Operation(summary = "One model turn for Lola in Seller Center (ai:use, seller and provider members)", description = """

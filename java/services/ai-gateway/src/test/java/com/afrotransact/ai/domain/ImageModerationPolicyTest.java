@@ -29,6 +29,20 @@ class ImageModerationPolicyTest {
     }
 
     @Test
+    void marketplaceLabelsHoldAndSlotDependentOnesStayInformational() {
+        for (String code : List.of("TEXT_OVERLAY", "WATERMARK", "PLACEHOLDER", "BORDER", "NOT_PRODUCT")) {
+            assertThat(ImageModerationPolicy.decide("ALLOW", List.of(new ImageLabel(code, ""))).decision()).as(code)
+                    .isEqualTo(ImageDecision.REVIEW);
+        }
+        // Props and people are fine in an additional picture and for apparel on a model: media decides by slot.
+        for (String code : List.of("PROPS", "MANNEQUIN")) {
+            var v = ImageModerationPolicy.decide("ALLOW", List.of(new ImageLabel(code, "")));
+            assertThat(v.decision()).as(code).isEqualTo(ImageDecision.ALLOW);
+            assertThat(v.labels()).extracting(ImageLabel::code).containsExactly(code);
+        }
+    }
+
+    @Test
     void unknownLabelsAreInformationalAndDuplicatesCollapse() {
         var v = ImageModerationPolicy.decide("ALLOW", List.of(new ImageLabel("pretty-photo", ""),
                 new ImageLabel("Pretty Photo", ""), new ImageLabel(" ", "")));

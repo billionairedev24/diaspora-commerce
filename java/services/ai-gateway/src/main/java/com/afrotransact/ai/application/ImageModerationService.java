@@ -22,11 +22,20 @@ public interface ImageModerationService {
      * @param image       image bytes (media sends a small JPEG preview)
      * @param contentType {@code image/jpeg}, {@code image/png} or {@code image/webp}
      * @param purpose     {@code product-image} or {@code storefront}
+     * @param slot        {@code MAIN}, {@code OTHER}, {@code SWATCH} or {@code LABEL} (optional; product images)
+     * @param title       the listing title the picture should match (optional; seller text, treated as data)
+     * @param brand       the listing brand the picture should match (optional; seller text, treated as data)
+     * @param productType the product type code (optional)
      */
-    record Request(byte[] image, String contentType, String purpose) {
+    record Request(byte[] image, String contentType, String purpose, String slot, String title, String brand,
+                   String productType) {
 
         public Request {
             image = image == null ? new byte[0] : image.clone();
+        }
+
+        public Request(byte[] image, String contentType, String purpose) {
+            this(image, contentType, purpose, null, null, null, null);
         }
 
         @Override
@@ -38,7 +47,9 @@ public interface ImageModerationService {
         public boolean equals(Object o) {
             return o instanceof Request other && Arrays.equals(image, other.image)
                     && Objects.equals(contentType, other.contentType)
-                    && Objects.equals(purpose, other.purpose);
+                    && Objects.equals(purpose, other.purpose) && Objects.equals(slot, other.slot)
+                    && Objects.equals(title, other.title) && Objects.equals(brand, other.brand)
+                    && Objects.equals(productType, other.productType);
         }
 
         @Override
@@ -58,7 +69,13 @@ public interface ImageModerationService {
      * @param decision ALLOW, REVIEW or BLOCK
      * @param labels   findings such as WATERMARK or WEAPONS
      * @param model    model that answered
+     * @param mismatchScore how far the picture is from the title and brand it was given, 0 (matches) to 1 (clearly
+     *                 different); null when no title or brand was given or the model did not say
      */
-    record Result(ImageDecision decision, List<ImageLabel> labels, String model) {
+    record Result(ImageDecision decision, List<ImageLabel> labels, String model, Double mismatchScore) {
+
+        public Result(ImageDecision decision, List<ImageLabel> labels, String model) {
+            this(decision, labels, model, null);
+        }
     }
 }

@@ -55,8 +55,10 @@ paths:
       summary: Moderate an uploaded image before it is published (ai:use)
       description: 'The AI moderation hook of media-service (client media-service): a vision model checks a product or storefront
         image for prohibited content (BLOCK) and marketplace rules such as watermarks, contact details or text overlays (REVIEW).
-        Labels imply a minimum decision and an unreadable answer is REVIEW, never ALLOW. Advisory: media holds or publishes
-        the image and staff review held ones.'
+        Labels imply a minimum decision and an unreadable answer is REVIEW, never ALLOW. TEXT_OVERLAY, WATERMARK, PLACEHOLDER,
+        BORDER and NOT_PRODUCT imply REVIEW; PROPS and MANNEQUIN are informational (media applies them by slot). With a title
+        or brand the answer carries a mismatchScore. Advisory: media holds or publishes the image and staff review held ones;
+        a failed call or a spent AI budget is turned into a hold by media, never a rejection.'
       operationId: moderateImage
       requestBody:
         content:
@@ -687,6 +689,23 @@ components:
           type: string
           description: product-image or storefront
           example: product-image
+        slot:
+          type: string
+          description: MAIN, OTHER, SWATCH or LABEL (product images; optional)
+          example: MAIN
+          maxLength: 20
+        title:
+          type: string
+          description: Listing title the picture should match (optional, seller text)
+          maxLength: 500
+        brand:
+          type: string
+          description: Listing brand the picture should match (optional, seller text)
+          maxLength: 200
+        productTypeCode:
+          type: string
+          description: Product type code (optional)
+          maxLength: 80
       required:
       - contentType
       - image
@@ -708,6 +727,13 @@ components:
         model:
           type: string
           example: google/gemini-2.5-flash
+        mismatchScore:
+          type:
+          - number
+          - 'null'
+          format: double
+          description: How far the picture is from the given title and brand, 0 (matches) to 1 (clearly different); null
+            when no title or brand was given or the model did not say
     ModerationLabelView:
       type: object
       description: A moderation finding

@@ -21,10 +21,15 @@ public final class ImageModerationPolicy {
 
     /** Marketplace rules a person should check: holds the image for review. */
     public static final Set<String> REVIEWABLE = Set.of("WATERMARK", "CONTACT_INFO", "TEXT_OVERLAY", "NOT_A_PRODUCT",
-            "THIRD_PARTY_LOGO", "MISLEADING");
+            "NOT_PRODUCT", "PLACEHOLDER", "BORDER", "THIRD_PARTY_LOGO", "MISLEADING");
 
-    /** Informational only (does not change the model's decision); labels outside the vocabulary become OTHER. */
-    public static final Set<String> INFORMATIONAL = Set.of("LOW_QUALITY", "NON_WHITE_BACKGROUND", "OTHER");
+    /**
+     * Informational only (does not change the model's decision); labels outside the vocabulary become OTHER.
+     * {@code PROPS} and {@code MANNEQUIN} depend on where the image is used (fine in an additional picture, and for
+     * apparel on a model when the marketplace allows it), so media-service decides by slot.
+     */
+    public static final Set<String> INFORMATIONAL = Set.of("LOW_QUALITY", "NON_WHITE_BACKGROUND", "PROPS", "MANNEQUIN",
+            "OTHER");
 
     /** Label used when the model's answer could not be read. */
     public static final String UNREADABLE = "UNREADABLE_ANSWER";

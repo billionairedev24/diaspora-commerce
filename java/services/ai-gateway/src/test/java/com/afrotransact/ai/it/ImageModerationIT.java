@@ -51,6 +51,34 @@ class ImageModerationIT extends AiGatewayIntegrationTest {
     }
 
     @Test
+    void returnsTheMismatchScoreAndSlotAwareLabelsForAListing() throws Exception {
+        TestActors.as(TestActors.seller(unique("svc-media"), "ai:use"));
+        String image = jpeg(unique("mismatch"));
+        WireMock.stubFor(WireMock.post("/v1/chat/completions")
+                .withRequestBody(WireMock.containing(image.substring(0, 12)))
+                .withRequestBody(WireMock.containing("<listing>title: Ankara wrap dress; brand: Adire</listing>"))
+                .willReturn(WireMock.okJson(OpenRouterStubs.completion("test/vision",
+                        "{\"decision\":\"ALLOW\",\"labels\":[{\"code\":\"MANNEQUIN\",\"description\":\"on a mannequin\"}],"
+                                + "\"mismatchScore\":0.9}"))));
+
+        HttpResponse<String> response = postJson("/v1/ai/moderate-image",
+                Map.of("image", image, "contentType", "image/jpeg", "purpose", "product-image", "slot", "MAIN",
+                        "title", "Ankara wrap dress", "brand", "Adire", "productTypeCode", "APPAREL_DRESS"),
+                "application/json");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = readJson(response);
+        assertThat(body.path("decision").asString()).isEqualTo("ALLOW");
+        assertThat(body.path("labels").get(0).path("code").asString()).isEqualTo("MANNEQUIN");
+        assertThat(body.path("mismatchScore").asDouble()).isEqualTo(0.9);
+
+        HttpResponse<String> unknownSlot = postJson("/v1/ai/moderate-image",
+                Map.of("image", image, "contentType", "image/jpeg", "slot", "HERO"), "application/json");
+        assertThat(unknownSlot.statusCode()).isEqualTo(422);
+        assertThat(readJson(unknownSlot).path("code").asString()).isEqualTo("ai.unknown-slot");
+    }
+
+    @Test
     void unreadableAnswerIsReviewNotAllow() throws Exception {
         TestActors.as(TestActors.seller(unique("svc-media"), "ai:use"));
         String image = jpeg(unique("bag"));
