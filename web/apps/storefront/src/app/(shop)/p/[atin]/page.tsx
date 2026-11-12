@@ -45,7 +45,7 @@ export default async function ProductPage({ params }: Props) {
     <HydrationBoundary state={dehydrate(r.qc)}>
       <JsonLd data={seo.jsonLd} />
       <TrackView atin={r.detail.product.atin} />
-      <ProductView atin={r.detail.product.atin} />
+      <ProductView atin={atin} />
     </HydrationBoundary>
   );
 }

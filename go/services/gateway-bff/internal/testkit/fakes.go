@@ -355,7 +355,7 @@ func (u *Upstreams) product(atin string) (Product, bool) {
 func publicProduct(p Product) map[string]any {
 	vs := []map[string]any{}
 	for _, v := range p.Variants {
-		vs = append(vs, map[string]any{"atin": v.ATIN, "options": v.Options, "priceMinor": v.PriceMinor, "currency": "usd"})
+		vs = append(vs, map[string]any{"atin": v.ATIN, "options": v.Options, "priceMinor": v.PriceMinor, "currency": "usd", "taxStatus": "READY"})
 	}
 	out := map[string]any{"atin": p.ATIN, "ownerKind": p.OwnerKind, "sellerOrgId": p.SellerOrgID, "categoryId": p.CategoryID,
 		"title": p.Title, "attributes": p.Attributes, "images": []map[string]any{{"url": "https://img.example/" + p.ATIN + ".jpg"}}, "variants": vs}

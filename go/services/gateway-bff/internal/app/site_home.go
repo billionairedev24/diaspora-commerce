@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
 // Home-page product rules. Everything a rule (tile cell, rail, personalised rail) puts in front of a shopper is
@@ -17,8 +18,11 @@ import (
 const (
 	// BasedOnOrdersRailID and RecentlyViewedRailID are the ids of the personalised rails.
 	BasedOnOrdersRailID = "based-on-orders"
-	// RecentlyViewedLimit is how many remembered products the recently viewed rail resolves at most.
-	RecentlyViewedLimit = 12
+	// RecentlyViewedLimit is how many cards the recently viewed rail shows at most; RecentlyViewedStored is how many
+	// remembered ids (the browser keeps 20) are resolved, so ids that drop out (sold out, held, a duplicate of a
+	// product already listed) do not leave the rail short while older products are still eligible.
+	RecentlyViewedLimit  = 12
+	RecentlyViewedStored = 20
 
 	ruleCandidates = 12
 	ordersLookback = 10
@@ -62,6 +66,18 @@ func realPhoto(u *string) bool {
 // eligibleCard is the home eligibility rule: in stock and a real photo.
 func eligibleCard(p domain.ProductSummary) bool {
 	return p.InStock && realPhoto(p.ImageURL)
+}
+
+// taxResolved is the tax half of the eligibility rule: nothing is shown without a stored, definite tax decision, so
+// every variant must be READY. Catalog already answers 404 for held products; this keeps a product that was held after
+// it was cached, or a catalog that omits the status, off home rails (never guessed: a missing status is not READY).
+func taxResolved(p port.CatalogProduct) bool {
+	for _, v := range p.Variants {
+		if v.TaxStatus != "READY" {
+			return false
+		}
+	}
+	return len(p.Variants) > 0
 }
 
 func eligibleOnly(in []domain.ProductSummary) []domain.ProductSummary {
@@ -182,15 +198,16 @@ func (s *siteServiceImpl) resolveTiles(ctx context.Context, tiles []domain.Tile,
 	return out
 }
 
-// RecentlyViewed resolves the ATINs the browser remembers into cards: unknown, unavailable and photo-less products are
-// dropped, order is kept (most recent first), duplicates collapse. Cheap by design: no storage, one catalog and one
-// inventory read per product.
+// RecentlyViewed resolves the ATINs the browser remembers into cards: unknown, unavailable, held-for-tax and photo-less
+// products are dropped, order is kept (most recent first) and a product is listed once however many of its variant or
+// product ids were remembered (older browsers stored the variant ATIN the shopper picked). Cheap by design: no storage,
+// one catalog and one inventory read per product.
 func (s *siteServiceImpl) RecentlyViewed(ctx context.Context, atins []string) ([]domain.ProductSummary, error) {
 	seen := map[string]bool{}
 	ids := make([]string, 0, len(atins))
 	for _, a := range atins {
 		a = strings.ToUpper(strings.TrimSpace(a))
-		if atinRe.MatchString(a) && !seen[a] && len(ids) < RecentlyViewedLimit {
+		if atinRe.MatchString(a) && !seen[a] && len(ids) < RecentlyViewedStored {
 			seen[a] = true
 			ids = append(ids, a)
 		}
@@ -198,7 +215,8 @@ func (s *siteServiceImpl) RecentlyViewed(ctx context.Context, atins []string) ([
 	if len(ids) == 0 {
 		return []domain.ProductSummary{}, nil
 	}
-	return eligibleOnly(s.byATIN(ctx, ids, RecentlyViewedLimit, s.d.Clock.now())), nil
+	items := eligibleOnly(s.byATIN(ctx, ids, RecentlyViewedStored, s.d.Clock.now()))
+	return items[:min(len(items), RecentlyViewedLimit)], nil
 }
 
 // basedOnOrders is the signed-in shopper's "Based on your orders" rail: the departments of what they bought most

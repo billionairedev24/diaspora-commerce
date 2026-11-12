@@ -90,6 +90,8 @@ export interface ProductCardProps {
   availability?: ProductCardAvailability;
   href: string;
   variant?: 'grid' | 'rail';
+  /** Rail only: false leaves out the "Fulfilled by" badge and the delivery line ("Recently viewed" shows name, price and rating only). Default true. */
+  showDelivery?: boolean;
   /** Units of the buy-box offer already in the cart (turns "Add to cart" into a stepper). */
   quantityInCart?: number;
   onAdd?: () => void;
@@ -115,7 +117,7 @@ function DefaultLink({ href, className, children, ...rest }: LinkLikeProps) {
 const moneyIn = (locale: string) => (m: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(m / 100);
 
 /** Product card for search results (grid) and home rows (rail), with the fulfilment badge and cart controls. */
-export function ProductCard({ product: p, href, variant = 'grid', availability: av, quantityInCart = 0, onAdd, onQuantityChange, onRemove, busy, linkAs: Link = DefaultLink, labels, locale = 'en-US', className }: ProductCardProps) {
+export function ProductCard({ product: p, href, variant = 'grid', showDelivery = true, availability: av, quantityInCart = 0, onAdd, onQuantityChange, onRemove, busy, linkAs: Link = DefaultLink, labels, locale = 'en-US', className }: ProductCardProps) {
   const money = moneyIn(locale);
   const L = { ...defaultProductCardLabels, ...labels };
   const isPlatform = p.sellerKind === 'PLATFORM';
@@ -148,8 +150,8 @@ export function ProductCard({ product: p, href, variant = 'grid', availability: 
         </Link>
         <Stars rating={p.rating} reviewCount={p.reviewCount} size={12} reviewsLabel={L.reviews} ratingLabel={L.rating} locale={locale} />
         <Price amountMinor={p.priceMinor} size="md" locale={locale} />
-        {p.fulfilment === 'AFROTRANSACT' && <FulfilmentBadge fulfilment="AFROTRANSACT" />}
-        {delivery}
+        {showDelivery && p.fulfilment === 'AFROTRANSACT' && <FulfilmentBadge fulfilment="AFROTRANSACT" />}
+        {showDelivery && delivery}
       </article>
     );
   }

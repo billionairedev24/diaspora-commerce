@@ -42,7 +42,9 @@ func (homeLocation) Current(context.Context, *domain.Caller) domain.DeliveryLoca
 
 type homeCatalog struct {
 	port.CatalogClient
-	category map[string]string // product ATIN -> category id
+	category  map[string]string // product ATIN -> category id
+	variantOf map[string]string // variant ATIN -> product ATIN (a size or colour the shopper picked)
+	held      map[string]bool   // product ATIN -> its variants have no resolved tax decision
 }
 
 func (c homeCatalog) Product(_ context.Context, atin string) (port.CatalogProduct, error) {
@@ -54,11 +56,23 @@ func (c homeCatalog) Product(_ context.Context, atin string) (port.CatalogProduc
 		Images: []struct {
 			URL string `json:"url"`
 		}{{URL: "https://img.example/" + atin + ".jpg"}},
-		Variants: []port.CatalogVariant{{ATIN: atin + "V", PriceMinor: 500, Currency: "USD"}}}, nil
+		Variants: []port.CatalogVariant{{ATIN: atin + "V", PriceMinor: 500, Currency: "USD", TaxStatus: c.taxStatus(atin)}}}, nil
 }
 
-func (homeCatalog) Variant(context.Context, string) (port.CatalogVariantView, error) {
-	return port.CatalogVariantView{}, port.ErrNotFound
+func (c homeCatalog) taxStatus(atin string) string {
+	if c.held[atin] {
+		return "MISSING_FACTS"
+	}
+	return "READY"
+}
+
+func (c homeCatalog) Variant(ctx context.Context, atin string) (port.CatalogVariantView, error) {
+	parent, ok := c.variantOf[atin]
+	if !ok {
+		return port.CatalogVariantView{}, port.ErrNotFound
+	}
+	p, err := c.Product(ctx, parent)
+	return port.CatalogVariantView{Product: p, Variant: port.CatalogVariant{ATIN: atin}}, err
 }
 
 func (homeCatalog) Categories(context.Context) ([]port.Category, error) {
@@ -279,5 +293,51 @@ func TestRecentlyViewedKeepsOrderAndDropsIneligible(t *testing.T) {
 	}
 	if empty, _ := svc.RecentlyViewed(context.Background(), nil); empty == nil || len(empty) != 0 {
 		t.Errorf("empty input must give an empty, non-nil list: %v", empty)
+	}
+}
+
+// The owner's screenshot: one product opened through four sizes was remembered as four variant ATINs and listed four times.
+func TestRecentlyViewedCollapsesVariantsOfOneProduct(t *testing.T) {
+	svc := NewSiteService(SiteDeps{Content: homeContent{}, Search: &rulesSearch{}, Catalog: homeCatalog{
+		category:  map[string]string{"ATDRESS001": "c-fash", "ATRICE0001": "c-groc", "ATGARI0001": "c-groc"},
+		variantOf: map[string]string{"ATDRESSS01": "ATDRESS001", "ATDRESSM01": "ATDRESS001", "ATDRESSL01": "ATDRESS001"}},
+		Inventory: homeInventory{}, Location: homeLocation{}, Estimator: est, Market: "us", Clock: func() time.Time { return homeNow }})
+	got, err := svc.RecentlyViewed(context.Background(), []string{"ATDRESSS01", "ATDRESS001", "ATDRESSM01", "ATGARI0001", "ATDRESSL01", "ATRICE0001"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, p := range got {
+		ids = append(ids, p.ATIN)
+	}
+	if strings.Join(ids, ",") != "ATDRESS001,ATGARI0001,ATRICE0001" {
+		t.Errorf("recently viewed = %v (four ids of one dress are one card, first position kept)", ids)
+	}
+}
+
+func TestRecentlyViewedDropsHeldForTaxAndCapsTheRail(t *testing.T) {
+	cat := map[string]string{"ATRICE0001": "c-groc", "ATHELD0001": "c-groc"}
+	var stored []string
+	for i := range 18 {
+		a := "ATFILL" + string(rune('A'+i/10)) + string(rune('0'+i%10)) + "00"
+		cat[a] = "c-fash"
+		stored = append(stored, a)
+	}
+	svc := NewSiteService(SiteDeps{Content: homeContent{}, Search: &rulesSearch{}, Catalog: homeCatalog{category: cat, held: map[string]bool{"ATHELD0001": true}},
+		Inventory: homeInventory{}, Location: homeLocation{}, Estimator: est, Market: "us", Clock: func() time.Time { return homeNow }})
+	got, err := svc.RecentlyViewed(context.Background(), append([]string{"ATHELD0001", "ATRICE0001"}, stored...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != RecentlyViewedLimit {
+		t.Fatalf("shown %d, want the cap of %d", len(got), RecentlyViewedLimit)
+	}
+	for _, p := range got {
+		if p.ATIN == "ATHELD0001" {
+			t.Fatal("a product held for tax must not be listed")
+		}
+	}
+	if got[0].ATIN != "ATRICE0001" {
+		t.Errorf("most recent eligible first, got %s", got[0].ATIN)
 	}
 }

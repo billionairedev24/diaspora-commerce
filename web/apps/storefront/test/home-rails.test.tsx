@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { RecentlyViewed } from '@/components/home/RecentlyViewed';
 import { TrackView } from '@/components/product/TrackView';
-import { readViewed, RECENTLY_VIEWED_MAX, rememberViewed } from '@/lib/recent/recentlyViewed';
+import { normalizeViewed, railItems, readViewed, RECENTLY_VIEWED_SHOWN, RECENTLY_VIEWED_STORED, rememberViewed } from '@/lib/recent/recentlyViewed';
 
 import { installMockBff } from './mockBff';
 import { renderWithProviders } from './render';
@@ -17,8 +17,23 @@ describe('recently viewed memory', () => {
   it('keeps the newest first, moves a repeat to the front and stops at the limit', () => {
     ['ATAAAAAAA1', 'ATAAAAAAA2', 'ATAAAAAAA1'].forEach(rememberViewed);
     expect(readViewed()).toEqual(['ATAAAAAAA1', 'ATAAAAAAA2']);
-    for (let i = 0; i < RECENTLY_VIEWED_MAX + 5; i += 1) rememberViewed(`ATZZZZZ${String(i).padStart(3, '0')}`);
-    expect(readViewed()).toHaveLength(RECENTLY_VIEWED_MAX);
+    for (let i = 0; i < RECENTLY_VIEWED_STORED + 5; i += 1) rememberViewed(`ATZZZZZ${String(i).padStart(3, '0')}`);
+    expect(readViewed()).toHaveLength(RECENTLY_VIEWED_STORED);
+    expect(readViewed()[0]).toBe(`ATZZZZZ${String(RECENTLY_VIEWED_STORED + 4).padStart(3, '0')}`);
+  });
+
+  it('never stores one product twice, whatever the case or spacing, and moves it to the front', () => {
+    ['ATAAAAAAA1', 'ATBBBBBBB2', ' ataaaaaaa1 ', 'ATAAAAAAA1'].forEach(rememberViewed);
+    expect(readViewed()).toEqual(['ATAAAAAAA1', 'ATBBBBBBB2']);
+  });
+
+  it('collapses duplicates already in storage when reading, keeping the most recent position and every other entry', () => {
+    const stale = ['ATDRESS001', 'ATRICE0001', 'ATDRESS001', 'atdress001', 'ATGARI0001', 'ATDRESS001', 'ATRICE0001'];
+    window.localStorage.setItem('at.recentlyViewed', JSON.stringify(stale));
+    expect(readViewed()).toEqual(['ATDRESS001', 'ATRICE0001', 'ATGARI0001']);
+    // reading is not a migration: the stored value is untouched until the next view
+    expect(JSON.parse(window.localStorage.getItem('at.recentlyViewed') ?? '[]')).toEqual(stale);
+    expect(normalizeViewed('nope')).toEqual([]);
   });
 
   it('shrugs off damaged storage', () => {
@@ -34,7 +49,36 @@ describe('recently viewed memory', () => {
   });
 });
 
+describe('the rail items', () => {
+  const card = (atin: string) => ({ atin });
+  it('lists each product once, most recent first (the four Ankara dresses of the bug report are one card)', () => {
+    const items = railItems(['ATANKARA01', 'ATANKARA01', 'ATRICE0001', 'ATANKARA01', 'ATANKARA01', 'ATBEANS001'].map(card));
+    expect(items.map((p) => p.atin)).toEqual(['ATANKARA01', 'ATRICE0001', 'ATBEANS001']);
+  });
+
+  it('caps the rail', () => {
+    const many = Array.from({ length: RECENTLY_VIEWED_STORED }, (_, i) => card(`ATMANY${String(i).padStart(4, '0')}`));
+    expect(railItems(many)).toHaveLength(RECENTLY_VIEWED_SHOWN);
+  });
+
+  it('is empty when nothing is left', () => {
+    expect(railItems([])).toEqual([]);
+  });
+});
+
 describe('the Recently viewed rail', () => {
+  it('shows a product once however often it was remembered, with no delivery date and no fulfilled-by badge', async () => {
+    window.localStorage.setItem('at.recentlyViewed', JSON.stringify([atinOf('p11'), atinOf('p11'), atinOf('P11'), atinOf('p9'), atinOf('p11')]));
+    renderWithProviders(<RecentlyViewed />);
+    const rail = await screen.findByRole('region', { name: 'Recently viewed' });
+    expect(within(rail).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(rail).getAllByText(/Basmati Rice/)).toHaveLength(1);
+    expect(within(rail).queryByTestId('card-availability')).not.toBeInTheDocument();
+    expect(rail.textContent ?? '').not.toMatch(/deliver|fulfilled by|arrives|tomorrow|ships from/i);
+    expect(within(rail).queryByText(/\b0 reviews\b/)).not.toBeInTheDocument();
+    expect(within(rail).getAllByText(/\$/).length).toBeGreaterThan(0);
+  });
+
   it('shows nothing at all when no product was viewed: no heading, no empty state', async () => {
     renderWithProviders(<RecentlyViewed />);
     await new Promise((r) => setTimeout(r, 50));

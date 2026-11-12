@@ -198,10 +198,10 @@ paths:
       summary: Product cards for the products this browser viewed last
       description: |
         The storefront remembers viewed ATINs in the browser (nothing is stored server side) and asks for their cards here.
-        Order is kept (most recent first); unknown, unavailable, out-of-stock and photo-less products are dropped. The
+        Order is kept (most recent first); a product is listed once (variant ATINs collapse to their product, at most 12 cards); unknown, unavailable, out-of-stock, held-for-tax and photo-less products are dropped. The
         storefront hides the rail when `items` is empty.
       parameters:
-        - {name: atins, in: query, required: true, description: 'Comma separated ATINs, most recent first; at most 12 are used.', schema: {type: string}}
+        - {name: atins, in: query, required: true, description: 'Comma separated ATINs (product or variant), most recent first; at most 20 are used.', schema: {type: string}}
       responses:
         '200':
           description: Cards

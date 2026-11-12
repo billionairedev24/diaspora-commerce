@@ -33,7 +33,7 @@ export function useCardLabels() {
 }
 
 /** Product card wired to the cart: "Add to cart" becomes a −/+ stepper capped by stock; pre-order badge and lock (S273). */
-export function CartAwareProductCard({ product, variant = 'grid' }: { product: ProductSummary; variant?: 'grid' | 'rail' }) {
+export function CartAwareProductCard({ product, variant = 'grid', showDelivery }: { product: ProductSummary; variant?: 'grid' | 'rail'; showDelivery?: boolean }) {
   const cardLabels = useCardLabels();
   const fmt = useFormatters();
   const { data: cart } = useCart();
@@ -45,6 +45,7 @@ export function CartAwareProductCard({ product, variant = 'grid' }: { product: P
       product={product}
       href={productHref(product.atin)}
       variant={variant}
+      showDelivery={showDelivery}
       availability={availability.card}
       linkAs={ProductLink}
       labels={cardLabels}

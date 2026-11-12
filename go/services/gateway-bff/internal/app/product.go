@@ -233,7 +233,9 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	}
 	unit := firstNonEmpty(attr(p.Attributes, "unit", "size", "netContent", "net_content", "packSize"), optionsLabel(sel.Options), "each")
 	department := departmentFor(ctx, s.catalog, p.CategoryID)
-	productATIN := strings.ToUpper(strings.TrimSpace(atin))
+	// The page-level ATIN, never the variant ATIN the shopper opened (a size pick links /p/<variant ATIN>): reviews and
+	// "Recently viewed" key on the product, so one product is one entry however many variants were opened.
+	productATIN := firstNonEmpty(p.ATIN, strings.ToUpper(strings.TrimSpace(atin)))
 	return domain.ProductDetail{
 		Product: domain.ProductInfo{
 			ATIN: productATIN, Title: p.Title, Brand: attr(p.Attributes, "brand"),

@@ -429,7 +429,7 @@ export function recentlyViewed(atins: string[], loc: DeliveryLocation, now: Date
   const metro = metroOf(loc);
   const seen = new Set<string>();
   const out: ProductSummary[] = [];
-  for (const raw of atins.slice(0, 12)) {
+  for (const raw of atins.slice(0, 20)) {
     const atin = raw.trim().toUpperCase();
     const p = db.products.get(atin);
     if (!p || p.unlisted || seen.has(atin)) continue;

@@ -97,6 +97,8 @@ type CatalogVariant struct {
 	Options    map[string]string `json:"options"`
 	PriceMinor int64             `json:"priceMinor"`
 	Currency   string            `json:"currency"`
+	// TaxStatus is READY when the variant has a stored, resolved tax decision (any other value: it is held).
+	TaxStatus string `json:"taxStatus"`
 }
 
 // CatalogProduct is a live product page from catalog (GET /v1/public/products/{atin}).

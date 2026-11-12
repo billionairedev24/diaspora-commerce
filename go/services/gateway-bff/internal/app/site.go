@@ -315,7 +315,7 @@ func (s *siteServiceImpl) byATIN(ctx context.Context, atins []string, limit int,
 	for i, a := range atins {
 		wg.Go(func() {
 			p, _, err := resolveProduct(ctx, s.d.Catalog, a)
-			if err != nil || len(p.Variants) == 0 {
+			if err != nil || len(p.Variants) == 0 || !taxResolved(p) {
 				return
 			}
 			v := p.Variants[0]
@@ -344,9 +344,12 @@ func (s *siteServiceImpl) byATIN(ctx context.Context, atins []string, limit int,
 		})
 	}
 	wg.Wait()
+	// A variant ATIN resolves to its product: the first (most recent) hit wins, a product is never listed twice.
 	res := []domain.ProductSummary{}
+	listed := map[string]bool{}
 	for _, p := range out {
-		if p != nil {
+		if p != nil && !listed[p.ATIN] {
+			listed[p.ATIN] = true
 			res = append(res, *p)
 		}
 	}
