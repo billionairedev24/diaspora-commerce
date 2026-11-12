@@ -137,7 +137,9 @@ DRY_RUN=1 infra/observability/scripts/grafana-cloud-load.sh all
 infra/observability/scripts/grafana-cloud-load.sh all          # rules + dashboards; run again after every change (idempotent)
 ```
 
-- **Rules** loaded: `services.yaml`, `kafka.yaml`, `inventory.yaml`, `payments-transfer-recovery.yaml`, `launch.yaml` (in `infra/observability/rules`).
+- **Rules** loaded: `services.yaml`, `kafka.yaml`, `inventory.yaml`, `payments-transfer-recovery.yaml`, `backup.yaml`, `launch.yaml` (in `infra/observability/rules`). The LogQL backup
+  alerts in `infra/observability/loki-rules/backup.yaml` (they read the `backup_metrics` line the job logs; the stream carries `app="pg-backup"`, `namespace="ops"` and `env` from Alloy) load with
+  `grafana-cloud-load.sh lokirules` (needs `LOKI_ADDRESS` = Hosted logs URL without `/loki/api/v1/push` and `LOKI_TENANT_ID` = the logs user id; UNVERIFIED against Grafana Cloud).
   `mimirtool rules sync` makes the ruler equal to these files, so do not hand-create rules in this stack. Not loaded yet: `slo-*.yaml` (their
   metrics are in the metrics contract but not in the code, section 9), `elasticsearch.yaml`, `postgres.yaml` (no exporters in the lean platform).
   Check in Grafana: **Alerting > Alert rules**, data-source managed rules.
@@ -210,7 +212,7 @@ silent until the series exists.
 | Pod restarts, OOMKilled | `PodRestartingFrequently` (ticket), `ContainerOOMKilled` (page), `ContainerOOMEvents` (ticket) | `kube_pod_container_status_restarts_total`, `kube_pod_container_status_last_terminated_reason`, `container_oom_events_total` | kube-state-metrics: standard; `container_oom_events_total`: UNCONFIRMED (cadvisor version) |
 | Node memory pressure | `NodeMemoryPressure` (page), `NodeMemoryWorkingSetHigh` (ticket) | `kube_node_status_condition`, `kube_node_status_allocatable` + cadvisor | standard names |
 | Certificate / tunnel down | `CloudflareTunnelDown` (page) | `cloudflared_tunnel_ha_connections` | standard cloudflared name. There is no certificate in the cluster (Cloudflare terminates TLS): use the external uptime check of section 8 for the edge certificate |
-| Backup failed / not run in 26 h | `BackupJobFailed` (page), `BackupNotRunIn26h` (page), `BackupCronJobSuspended` (ticket) | `kube_cronjob_status_last_{schedule,successful}_time`, `kube_cronjob_created` | standard kube-state-metrics names. Keep the dead-man's-switch `HEALTHCHECK_URL` too: it also works when the whole cluster is down |
+| Backup failed / not run in 26 h | `BackupJobFailed` (page), `BackupCronJobSuspended` (ticket) in `launch.yaml`; `BackupStale` (page, 26 h), `BackupSizeHigh`, `BackupBucketSizeHigh` in `backup.yaml` | `kube_cronjob_status_last_{schedule,successful}_time`, `kube_cronjob_created` (our kube-state-metrics); `afrotransact_backup_*` (needs a Pushgateway, none runs: silent; the Loki variant `loki-rules/backup.yaml` reads the `backup_metrics` log line instead) | standard kube-state-metrics names. Keep the dead-man's-switch `HEALTHCHECK_URL` too: it also works when the whole cluster is down |
 | `catalog_live_without_tax_decision` | `CatalogLiveWithoutTaxDecision` (ticket) | `catalog_live_without_tax_decision` | **UNCONFIRMED here**: added by another change; silent until it lands |
 | The shipper itself | `AlloyNotReporting` (page), `AlloyRemoteWriteFailing` (ticket), `ScrapeTargetCardinalityHigh` (ticket) | `up{service="alloy"}`, `prometheus_remote_storage_*`, `loki_write_dropped_*`, `scrape_samples_post_metric_relabeling` | `AlloyNotReporting` is the dead-man's switch: if Alloy or the node dies, every other alert goes blind |
 

@@ -6,6 +6,7 @@
 #   infra/observability/scripts/grafana-cloud-load.sh rules              sync the launch rule files to the ruler (namespace = file name; `sync` also deletes namespaces not listed, so
 #                                                                        do not hand-create rules in this stack)
 #   infra/observability/scripts/grafana-cloud-load.sh dashboards         upload the launch dashboards to the folder "AfroTransact"
+#   infra/observability/scripts/grafana-cloud-load.sh lokirules          OPTIONAL: sync infra/observability/loki-rules/*.yaml to the Loki ruler (UNVERIFIED against Grafana Cloud)
 #   infra/observability/scripts/grafana-cloud-load.sh alertmanager       OPTIONAL: load alertmanager.yaml into the Mimir Alertmanager
 #   infra/observability/scripts/grafana-cloud-load.sh all                rules + dashboards
 #   DRY_RUN=1 ...                                                          print what would be sent, send nothing
@@ -15,6 +16,7 @@
 #   GRAFANA_SA_TOKEN       dashboards: a Grafana service-account token (Administration > Users and access > Service accounts, role Editor)
 #   MIMIR_ADDRESS          rules: the Hosted Prometheus URL WITHOUT /api/prom, e.g. https://prometheus-prod-NN-<region>.grafana.net
 #   MIMIR_TENANT_ID        rules: the numeric Hosted Prometheus "Username / Instance ID"
+#   LOKI_ADDRESS / LOKI_TENANT_ID   lokirules only: the Hosted logs URL WITHOUT /loki/api/v1/push, and its numeric user id (token: MIMIR_API_KEY)
 #   MIMIR_API_KEY          rules: an access-policy token with rules:read + rules:write (NOT the Alloy token, which has metrics:write only)
 #   PROM_DS_UID            dashboards: uid of the Prometheus data source (default grafanacloud-prom, UNVERIFIED: see Connections > Data sources)
 #   LOKI_DS_UID            dashboards: uid of the Loki data source (default grafanacloud-logs, UNVERIFIED)
@@ -33,7 +35,8 @@ DRY_RUN="${DRY_RUN:-}"
 # What the launch loads. The SLO files are not loaded yet: their metrics (checkout_attempts_total, payments_webhook_lag_seconds,
 # payouts_completed_total, notifications_delivery_duration_seconds) are in the metrics contract but not in the code.
 # elasticsearch.yaml and postgres.yaml need exporters that do not run on the lean platform.
-RULE_FILES=(services.yaml kafka.yaml inventory.yaml payments-transfer-recovery.yaml launch.yaml)
+RULE_FILES=(services.yaml kafka.yaml inventory.yaml payments-transfer-recovery.yaml backup.yaml launch.yaml)
+LOKI_RULE_FILES=(backup.yaml)   # LogQL alerts on the backup_metrics log line (infra/observability/loki-rules)
 DASHBOARDS=(launch-platform.json launch-payments.json platform-overview.json jvm.json kafka-consumer-lag.json)
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -81,6 +84,13 @@ rules() {
   echo "rules synced to $MIMIR_ADDRESS"
 }
 
+lokirules() {
+  need mimirtool; req LOKI_ADDRESS; req LOKI_TENANT_ID; req MIMIR_API_KEY
+  local args=() f; for f in "${LOKI_RULE_FILES[@]}"; do args+=("$obs/loki-rules/$f"); done
+  if [[ -n "$DRY_RUN" ]]; then echo "DRY RUN: mimirtool rules sync --backend=loki --address=$LOKI_ADDRESS --rule-files=${LOKI_RULE_FILES[*]}"; return; fi
+  mimirtool rules sync --backend=loki --address="$LOKI_ADDRESS" --id="$LOKI_TENANT_ID" --key="$MIMIR_API_KEY" --rule-files="$(IFS=,; echo "${args[*]}")"
+}
+
 alertmanager() {
   need mimirtool; req MIMIR_ADDRESS; req MIMIR_TENANT_ID; req MIMIR_API_KEY
   if [[ -n "$DRY_RUN" ]]; then echo "DRY RUN: mimirtool alertmanager load $obs/grafana-cloud/alertmanager.yaml"; return; fi
@@ -123,6 +133,7 @@ case "${1:-}" in
   rules) check; rules ;;
   dashboards) dashboards ;;
   alertmanager) alertmanager ;;
+  lokirules) lokirules ;;
   all) check; rules; dashboards ;;
   *) sed -n '2,25p' "${BASH_SOURCE[0]}"; exit 2 ;;
 esac

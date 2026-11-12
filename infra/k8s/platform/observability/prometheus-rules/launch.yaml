@@ -303,21 +303,6 @@ spec:
         description: The most recent scheduled run is more than 2 hours old and no run has succeeded since. Check `kubectl -n ops get jobs` and the job logs (app=pg-backup in Loki).
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
         dashboard: /d/at-launch-platform
-    - alert: BackupNotRunIn26h
-      expr: |
-        (time() - max by (env, namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="ops", cronjob="pg-backup"})) > 26 * 3600
-        or
-        (
-          (time() - max by (env, namespace, cronjob) (kube_cronjob_created{namespace="ops", cronjob="pg-backup"})) > 26 * 3600
-          unless on (env, namespace, cronjob) max by (env, namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="ops", cronjob="pg-backup"})
-        )
-      labels:
-        severity: page
-      annotations:
-        summary: No successful database backup for more than 26 hours ({{ $labels.env }})
-        description: The nightly dump (RPO 24 h) has not completed, or has never completed. Layerbase's own backups are UNVERIFIED, so this dump is the guarantee.
-        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
-        dashboard: /d/at-launch-platform
     - alert: BackupCronJobSuspended
       expr: max by (env, namespace, cronjob) (kube_cronjob_spec_suspend{namespace="ops", cronjob="pg-backup"}) == 1
       for: 30m
