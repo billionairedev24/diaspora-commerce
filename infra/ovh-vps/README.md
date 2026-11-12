@@ -1,5 +1,9 @@
 # AfroTransact on one OVHcloud server (k3s)
 
+> **Test environment only.** Production is [docs/runbooks/ovh-production.md](../../docs/runbooks/ovh-production.md) (OVH Managed Kubernetes, Argo CD, prod profile,
+> launch set). Two scripts here are also used by production: `secrets.sh` with `PROFILE=prod` renders the production Secrets
+> (`infra/ops/secrets/README.md`) and `backup.sh restore` works against an external Postgres. `deploy.sh` never deploys production.
+
 A **test environment** on a single OVHcloud Public Cloud instance: k3s, every backend service, Kafka, Temporal, OpenFGA,
 Valkey, Meilisearch and (optionally) Postgres on one machine, created and deployed by one manual GitHub workflow.
 

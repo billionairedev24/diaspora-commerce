@@ -1,163 +1,138 @@
-# Infrastructure (OpenTofu) - AWS, Google Cloud, Azure or OVHcloud
+# Infrastructure (OpenTofu): OVHcloud + Layerbase for production
 
-AfroTransact runs on Kubernetes on **one** of four clouds per environment, chosen with a single variable.
-Cloudflare sits in front of every option (`infra/cloudflare`), and Elasticsearch (Elastic Cloud) and
-Kafka (Confluent Cloud) are the same on all four, so moving clouds changes the origin and the data
-stores - not the applications, pipelines or edge.
+**Production is OVHcloud Managed Kubernetes (OVH US entity, `US-EAST-VA-1`) with PostgreSQL on Layerbase.** The same environment
+roots can also target AWS, Google Cloud or Azure with one variable (`cloud`), but those are alternatives, not the launch path
+([ADR 0004](../../docs/adr/0004-lean-single-node-production.md), [cost and sizing](../../docs/engineering/cloud-cost.md)).
+Nothing here has been applied to a live account: treat every OVH resource as **unrun** until the first apply in a disposable project
+(step by step: [docs/runbooks/ovh-production.md](../../docs/runbooks/ovh-production.md)).
+
+Cloudflare sits in front (`infra/cloudflare`, Tunnel, no load balancer). Search is Meilisearch, events are Kafka and workflows are
+Temporal, all **in the cluster** (`infra/k8s/platform/lean`). Elastic Cloud, Confluent Cloud and Temporal Cloud are not used
+(their modules remain for the other clouds and are off by default: `enable_elastic/confluent/temporal = false`).
 
 ```
 infra/tofu/
   modules/{aws,gcp,azure,ovh}/{network,cluster,postgres,cache,bucket,secrets,registry,identity,github-oidc,budget}
-  modules/shared/{elastic,confluent,temporal}  same on every cloud (Elastic Cloud, Confluent Cloud, Temporal Cloud)
+  modules/shared/{elastic,confluent,temporal}  optional SaaS, off in the lean profile
   modules/README.md                        the shared module contract (read this next)
   envs/{dev,uat,prod}/                     main.tf (identical) + sizing.tf (per env) + tfvars/backends
   bootstrap/{aws,gcp,azure,ovh}/              one-time remote-state bucket per account/project/subscription
   scripts/sync-interface.sh                keeps the four module sets on one interface (CI: --check)
-  scripts/postgres-bootstrap.sh            per-service databases + roles (all clouds)
-  scripts/elastic-ilm.sh                   ILM hot-warm-frozen policies + scoped ES API keys
+  scripts/postgres-bootstrap.sh            per-service databases + roles + PostGIS (Layerbase and every other server)
+  scripts/elastic-ilm.sh                   only with Elastic Cloud (not used on the OVH path)
 infra/policy/tofu/                    OPA/Conftest rules run against every plan
 ```
 
-Requires **OpenTofu >= 1.9** (provider `for_each`). OpenTofu is not supported for the env roots.
+Requires **OpenTofu >= 1.9** (provider `for_each`). The OVH provider is `ovh/ovh` `>= 2.0, < 3.0`.
 
-## 1. Pick a cloud
+## 1. What `cloud = "ovh"` creates in production
+
+| Module | Production behaviour |
+|---|---|
+| `network` | one private network + subnet (free); **no gateway** (`egress = "none"`): nodes keep public IPs, users never reach them (Tunnel) |
+| `cluster` | MKS **free plan**, ONE `b3-16` node in pool `general`, **monthly billed** (deletion protection on), no autoscaler, no spot pool; `ovh_cloud_project_kube_iprestrictions` from `admin_cidrs` |
+| `bucket` | Object Storage (S3): `kyc-evidence` with object lock (compliance, 7 years), `exports`, `labels`, `media` (versioned) |
+| `identity` | one Object Storage user per service that touches a bucket (policy limited to its buckets); the S3 keys are read from the state or the OVH panel and go into the service Secret |
+| `budget` | Public Cloud consumption alerts at 50/80/100 % of `monthly_budget` |
+| `github-oidc` | creates nothing (OVH has no CI identity federation); with GHCR as the registry the deploy job needs no OVH secret |
+| `postgres`, `cache` | **not created**: Postgres is external (Layerbase) and Valkey runs in the cluster (`managed_data = false`) |
+| `secrets` (OKMS) | **opt-in**, `ovh_okms = true`; default is SOPS/age (`infra/ops/secrets`). The module refuses a US region (OKMS in the US is unverified) |
+| `registry` (Harbor) | **opt-in**, `ovh_harbor = true`; default is GHCR |
+
+Plan-time guards in `envs/*/main.tf` (identical in all three environments):
+
+- with external data (`managed_data = false`) the cluster region must equal the Layerbase region mapping: `virginia` is OVH
+  `US-EAST-VA-1`, `oregon` is `US-WEST-OR-1` (the old mapping to Quebec `BHS5` is gone);
+- a `US-*` region requires `ovh_endpoint = "ovh-us"` (the OVH US entity is its own account with its own API credentials);
+- an environment with deletion protection (prod) requires `admin_cidrs` (the Kubernetes API is public on the free plan).
+
+## 2. Pick a cloud (and account)
 
 ```hcl
-# envs/<env>/terraform.tfvars
-cloud  = "gcp"        # aws | gcp | azure | ovh  <- the only switch
-region = "us-east4"
+# envs/prod/terraform.tfvars   (envs/prod/terraform.tfvars.example is the OVH production starting point)
+cloud            = "ovh"
+region           = "US-EAST-VA-1"
+layerbase_region = "virginia"
+ovh_service_name = "<public cloud project id>"
+ovh_endpoint     = "ovh-us"
+admin_cidrs      = ["203.0.113.7/32"]    # your office/VPN: the Kubernetes API is restricted to these
 ```
 
-Only that cloud's modules - and its provider - are instantiated: every module and provider block uses
-`for_each = local.on.<cloud>`, which is an empty set for the other two clouds, so `tofu plan` never needs
-credentials for clouds you did not choose. Each environment may use a different cloud (e.g. try GCP in
-dev while prod is on AWS).
+Only that cloud's modules and provider are instantiated (`for_each = local.on.<cloud>`), so `tofu plan` never needs credentials for the
+others. OVH credentials are **API keys** (no OIDC): `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`, created at
+`https://api.us.ovhcloud.com/createToken/` for the US entity with rights on `/cloud/project/<id>/*` and `/me`.
+`disposable = true` (trial) removes deletion protection and shortens KYC retention to one day: **never** for the real project.
+Switching an existing environment to another cloud is a migration, not a flag flip (back up, destroy, change, apply, restore).
 
-Credentials are never in files: locally use `aws sso login` / `gcloud auth application-default login` /
-`az login`; in CI the OIDC roles created by `github-oidc` are used. Elastic Cloud reads `EC_API_KEY`,
-Confluent reads `CONFLUENT_CLOUD_API_KEY` / `CONFLUENT_CLOUD_API_SECRET`, Temporal Cloud reads
-`TEMPORAL_CLOUD_API_KEY` (or set `enable_elastic` / `enable_confluent` / `enable_temporal = false`).
-The first apply of a new environment, step by step per cloud: `docs/runbooks/first-environment.md`.
-
-**Switching an existing environment to another cloud** is a migration, not a flag flip: back up data,
-`tofu destroy` (OpenTofu warns that provider instances must outlive their resources - this is why), change
-`cloud`, `tofu apply`, restore data, repoint Cloudflare (`origin_mode`/`origin_target`), set the GitHub
-environment variables (step 4). Pipelines, charts and images do not change.
-
-## 2. Bootstrap remote state (once per account / project / subscription)
+## 3. Bootstrap remote state (once per project)
 
 ```bash
-cd infra/tofu/bootstrap/aws   && tofu init && tofu apply -var region=us-east-1
-cd infra/tofu/bootstrap/gcp   && tofu init && tofu apply -var project_id=afrotransact-prod -var region=us-east4
-cd infra/tofu/bootstrap/azure && tofu init && tofu apply -var subscription_id=<id> -var location=eastus
-cd infra/tofu/bootstrap/ovh   && tofu init && tofu apply -var service_name=<project id> -var region=GRA   # state bucket + state-only S3 user
+cd infra/tofu/bootstrap/ovh && tofu init && tofu apply \
+  -var service_name=<project id> -var region=US-EAST-VA -var endpoint=ovh-us    # state bucket + state-only S3 user
 ```
 
-Each creates a versioned, encrypted, private state bucket (S3 native lockfile / GCS / Azure blob lease
-locking). Then in the environment directory:
+OVH Object Storage has no native lock: do not run two applies against one state (the `tofu.yml` concurrency group is the lock).
+Then in the environment directory:
 
 ```bash
-cd infra/tofu/envs/dev
-cp terraform.tfvars.example terraform.tfvars          # non-secret values; commit it (CI reads it)
-cp backend.<cloud>.hcl.example backend.hcl            # fill bucket / account names
-printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf   # "gcs" or "azurerm" for the other clouds
+cd infra/tofu/envs/prod
+cp terraform.tfvars.example terraform.tfvars          # fill in; non-secret values only
+cp backend.ovh.hcl.example backend.hcl                # uncomment the US lines
+printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf
 tofu init -backend-config=backend.hcl
 ```
 
-`main.tf` stays cloud-neutral; CI writes `backend.tf` + `backend.hcl` itself (`.github/actions/tofu-init`).
-
-## 3. Apply an environment
+## 4. Apply
 
 ```bash
 tofu plan -out plan.out
 tofu show -json plan.out > plan.json
-conftest test plan.json --policy ../../../policy/tofu   # public buckets, encryption, tags, world ingress
+conftest test plan.json --policy ../../../policy/tofu
 tofu apply plan.out
 ```
 
-After the first apply:
+After the first apply (full runbook in `docs/runbooks/ovh-production.md`):
 
-1. `tofu output -json cluster_secret_store` -> the `platform-secrets` ClusterSecretStore (infra/k8s).
-2. `tofu output -json platform_values` -> per-service `cloud` + `workloadIdentity` values for Argo CD.
-3. Run `scripts/postgres-bootstrap.sh` (admin secret: `tofu output postgres`) and merge its per-service
-   `DB_URL/DB_USER/DB_PASSWORD` into the service secrets.
-4. `ES_URL=... ES_PASSWORD=... scripts/elastic-ilm.sh` -> ILM policies + `ES_API_KEY` for search/indexer.
-5. `tofu output github_oidc` and `registry_url` -> GitHub environment variables (see
-   `docs/engineering/ci-cd.md`). The first apply of an environment is done by an admin; afterwards CI
-   plans every PR and applies dev on merge, uat/prod on approval.
+1. Download the kubeconfig (`tofu output cluster` prints the hint), set the cluster up (Argo CD, secrets).
+2. Create the databases, roles and extensions on Layerbase **before any service starts**:
+   `PGHOST=<layerbase host> PGUSER=<admin> PGPASSWORD=... infra/tofu/scripts/postgres-bootstrap.sh`
+   (19 databases; `postgis` in `geo` and `fulfilment`, `btree_gist` in `bookings`, created as the admin because the service roles
+   cannot on a managed server; `temporal_visibility` shares the `temporal_app` role). It prints each database's URL and password once.
+   For production the single source of passwords is `infra/ovh-vps/secrets.sh` with `PROFILE=prod` (it also creates roles and the
+   same extensions and renders the Secrets): use one of the two, not both.
+3. Object Storage keys for the media service's private bucket: from the `identity` module's state or the OVH panel, into
+   `secrets.local.env` (`OVH_S3_ACCESS_KEY_ID`, `OVH_S3_SECRET_ACCESS_KEY`).
 
-Order of environments: `dev` creates the account-wide GitHub OIDC provider/pool
-(`create_github_oidc_provider = true`); `uat`/`prod` in the same account/project set it to `false` and pass
-`github_oidc_provider_ref`. Prefer separate accounts/projects/subscriptions for prod.
+Environments: `dev` and `uat` use the same roots with their own `sizing.tf` and are applied only for a short, deliberate test.
+`main.tf`, `providers.tf`, `variables.tf` and `outputs.tf` are identical in all three directories (`scripts/sync-interface.sh`).
 
-## 4. Environments and cost levers
+## 5. Environments and cost levers
 
-`main.tf`, `providers.tf`, `variables.tf` and `outputs.tf` are identical in all environment directories; only
-`sizing.tf` differs:
-
-| | dev | uat | prod |
+| | dev | uat | prod (OVH launch) |
 |---|---|---|---|
-| Zones / NAT | 1 / single | 2 / single | 3 / per zone |
-| Nodes (arm64 on-demand floor / max, spot max) | 1 / 3, 6 | 2 / 4, 10 | 3 / 12, 30 |
-| Postgres | smallest; Aurora Serverless v2 **min 0 ACU (auto-pause)** | medium | large, HA (standby/reader in another zone) |
-| Cache | small, no replica | medium | large, replica + failover |
-| Elastic / Confluent | hot only / Basic | hot + frozen / Standard | hot + warm + frozen, 3 zones / Standard multi-zone |
-| Backups / KYC retention | 3 d / 1 d (governance) | 7 d / 30 d | 30 d / 7 years (compliance, locked) |
+| Zones / NAT | 1 / single | 2 / single | 1 / none |
+| Nodes | 1 / 3, spot 6 | 2 / 4, spot 10 | **one `b3-16`, no autoscaling** |
+| Postgres | smallest managed | medium managed | **external (Layerbase)** |
+| Cache | small | medium | in the cluster (Valkey) |
+| Elastic / Confluent / Temporal Cloud | off | off | off |
+| Backups / KYC retention | 3 d / 1 d (governance) | 7 d / 30 d | Layerbase + nightly off-vendor dump / 7 years (compliance, locked) |
 | Deletion protection | off | on | on |
-| Monthly cloud budget (`monthly_budget`, alerts 50/80/100% actual + 100% forecast) | $1,000 | $1,500 | $6,500 |
-| Temporal Cloud namespace retention | 3 d | 14 d | 30 d |
+| Monthly cloud budget (`monthly_budget`, UNVERIFIED placeholder in prod) | $1,000 | $1,500 | 150 until the OVH quote exists |
 
-Levers built in (S182, IaC side):
+Levers that exist in the modules: free MKS control plane unless `zone_count > 1`; monthly billing for the always-on pool; no NAT/gateway
+unless `egress != none`; Object Storage lifecycle (abort stale uploads, expire noncurrent versions, Standard-IA); consumption alerts.
+OVH has no arm64 and no spot market (the "spot" pool is tainted, hourly and scales from zero; there is no discount).
 
-- **Arm everywhere**: Graviton (AWS), Axion C4A (GCP), Cobalt 100 (Azure); images are multi-arch.
-- **Spot pools** on every cloud with the same taint `afrotransact.com/spot=true:NoSchedule`; stateless
-  services tolerate it in dev (see `values-dev.yaml`), the pool scales to zero. Karpenter (AWS) and GKE's
-  optimize-utilization profile bin-pack; AKS node autoprovisioning can be enabled in `modules/azure/cluster`.
-- **Scale to zero in dev**: Aurora auto-pause, Confluent Basic, spot pool min 0; preview namespaces (label
-  `afrotransact.com/preview=true`) scale to zero after 30 idle minutes and outside working hours via the
-  `preview-idle-scaler` CronJob (`infra/k8s/platform/previews`); web previews are Workers versions (per request).
-- **Budgets and alerts** (`modules/<cloud>/budget`): AWS Budgets (+ SNS topic), GCP Cloud Billing budget (+ email
-  channels), Azure consumption budget on the environment's resource group. Amounts per env in `sizing.tf`;
-  recipients `budget_notification_emails`; what to do when one fires: `docs/runbooks/cost.md`.
-- **No NAT for cloud APIs**: S3 gateway + interface endpoints (AWS), Private Google Access (GCP), private
-  endpoints (Azure); NAT only carries third-party SaaS traffic and is single in dev/uat.
-- **Storage tiering**: lifecycle to IA/Nearline/Cool then Glacier IR/Coldline/Archive; exports expire after
-  30 days; R2 (zero egress) for public media.
-- **Commitments (prod)**: cover ~60% of the on-demand arm64 floor and the Postgres baseline with Compute
-  Savings Plans + RDS reserved capacity (AWS), committed-use discounts (GCP), or Azure savings plan +
-  reserved capacity; buy after 4-6 weeks of steady prod metrics. Spot and on-demand above the baseline.
-- **Search**: ILM hot-warm-frozen (`modules/shared/elastic/ilm`).
-- **Sizing guard**: `tools/ci/check_env_config.py` (CI `env-urls.yml`) fails a PR that gives dev more than one
-  replica or an HPA, drops the spot toleration in dev/uat, adds it in prod, or leaves requests/limits unset.
+## 6. Tests and checks
 
-## 5. Cost comparison (launch scale)
+- `tofu test` in `modules/ovh/*` (mocked provider) pins the cost choices: lean = one `b3-16` on the free plan, monthly billing in prod.
+- `scripts/sync-interface.sh --check` keeps the four module sets and the three environment roots in step (CI).
+- `infra/policy/tofu` (Conftest) checks public buckets, encryption, tags and world ingress on every plan.
+- What could **not** be run when these changes were written: `tofu init/validate/plan/test` (no OpenTofu binary, no provider
+  registry access, no OVH account). The files were only parsed as HCL. Run `tofu fmt -check` and `tofu validate` first.
 
-Planning estimates for ≈50k monthly shoppers and 600 sellers (architecture §22); validate with each
-provider's calculator and committed-use quotes.
+## 7. Other clouds (alternatives)
 
-| Layer | AWS | Google Cloud | Azure | Est. / month | Cost levers (where in this repo) |
-|---|---|---|---|---|---|
-| Kubernetes compute | EKS + Karpenter, Graviton, spot | GKE, Axion C4A, spot pool | AKS, Cobalt Arm, spot pool | $1.5k-3k | Arm, spot, bin-packing, previews to zero (`cluster`, `sizing.tf`) |
-| PostgreSQL | Aurora PostgreSQL 17 Serverless v2 | Cloud SQL PostgreSQL 17 | Azure Database for PostgreSQL Flexible 17 | $1k-2k | One server per env, auto-pause in dev, replicas only where measured, reserved capacity (`postgres`) |
-| Search | Elastic Cloud on AWS | Elastic Cloud on GCP | Elastic Cloud on Azure | $0.6k-1.5k | Same vendor everywhere; hot-warm-frozen ILM (`shared/elastic`) |
-| Events | Confluent Cloud | Confluent Cloud | Confluent Cloud | $0.3k-0.8k | Basic in dev, Standard after; identical Kafka on every cloud (`shared/confluent`) |
-| Cache | ElastiCache (Valkey) | Memorystore (Valkey) | Azure Cache for Redis | $0.15k-0.4k | Size to working set (`cache`) |
-| Workflows | Temporal Cloud | Temporal Cloud | Temporal Cloud | $0.2k-0.5k | Action-efficient workflow design |
-| Object storage | S3 | GCS | Blob Storage | $0.1k-0.3k | Lifecycle tiers, export expiry (`bucket`) |
-| Edge (all clouds) | Cloudflare | Cloudflare | Cloudflare | $0.2k-0.5k | DNS, CDN, WAF, Turnstile, R2 for media (`infra/cloudflare`) |
-| Web front-ends | Cloudflare Workers | Cloudflare Workers | Cloudflare Workers | $0.05k-0.3k | Vercel as fallback (`_web-app.yml`) |
-| Registry & secrets | ECR, Secrets Manager | Artifact Registry, Secret Manager | ACR, Key Vault | $0.05k-0.2k | ESO abstracts all three (`registry`, `secrets`) |
-| Network egress / NAT | NAT GW + endpoints | Cloud NAT | NAT Gateway | $0.1k-0.4k | Private endpoints for cloud APIs, single NAT outside prod (`network`) |
-| Observability | Grafana Cloud | Grafana Cloud | Grafana Cloud | $0.4k-1k | OTel tail sampling, 14-day hot retention |
-| Messaging | Resend + SendGrid, Twilio | same | same | $0.3k-1k | Email first, SMS for OTP/urgent only |
-| AI | OpenRouter | OpenRouter | OpenRouter | $0.5k-1.5k | Model routing, caching, per-feature budgets |
-| **Total (launch)** | | | | **$6k-11k** | Similar on all three at this scale; startup credits and committed-use quotes decide year one. Target ≤ 3% of GMV. |
-
-## 6. Guard rails
-
-- `infra/policy/tofu` (Conftest, run on every plan in CI): no public buckets, encryption at rest (and
-  TLS for data services), required `env`/`owner`/`cost-center` tags, no `0.0.0.0/0` ingress except load
-  balancers (tag `purpose = load-balancer`). Unit tests: `conftest verify --policy infra/policy/tofu`.
-- `scripts/sync-interface.sh --check`: module inputs/outputs identical across clouds; env roots identical.
-- `tofu fmt -check -recursive`, `tofu validate` for every module and every env x cloud, `tflint` (modules,
-  bootstrap and Cloudflare; tflint cannot parse provider `for_each`, so env roots are covered by validate).
+AWS, GCP and Azure keep working with the same interface (`cloud = aws|gcp|azure`, their `bootstrap/` roots, OIDC deploy roles from
+`modules/<cloud>/github-oidc`, ECR/Artifact Registry/ACR mirrors by `.github/workflows/_deploy.yml`). The first apply of each is described
+in `docs/runbooks/first-environment.md`. They are not the launch path and are not rehearsed against the OVH decision.

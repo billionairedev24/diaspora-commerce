@@ -5,7 +5,13 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 STATE_DIR="${STATE_DIR:-/var/lib/afrotransact}"
-NS="${NS:-afrotransact-dev}"
+# PROFILE=dev (default, the test box: dev values, all 26 services) | prod (the launch set, APP_ENV=prod, namespace afrotransact-prod).
+# prod is used by infra/ops/secrets to RENDER the production Secrets on an operator's machine; the single-server deploy.sh
+# stays a test path (docs/runbooks/ovh-vps.md) and is not how production is deployed (docs/runbooks/ovh-production.md).
+PROFILE="${PROFILE:-dev}"
+case "$PROFILE" in dev|prod) ;; *) echo "error: PROFILE must be dev or prod" >&2; exit 1 ;; esac
+NS="${NS:-afrotransact-$PROFILE}"
+SERVICES_CONF="${SERVICES_CONF:-$( [[ "$PROFILE" == prod ]] && echo "$HERE/services.launch.conf" || echo "$HERE/services.conf" )}"
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }
@@ -31,7 +37,7 @@ load_config() {
 }
 
 # Services listed in services.conf: name runtime database wave.
-services() { grep -Ev '^\s*(#|$)' "$HERE/services.conf"; }
+services() { grep -Ev '^\s*(#|$)' "$SERVICES_CONF"; }
 
 # A value generated once and kept in $STATE_DIR/generated.env, so re-running secrets.sh never rotates anything.
 gen() { # gen NAME [bytes]  -> prints the value
@@ -53,9 +59,16 @@ strip_kinds() {
 }
 STRIP_KINDS='ExternalSecret|ServiceMonitor|PodMonitor|PrometheusRule|ClusterSecretStore|SecretStore'
 
+# SECRETS_OUT=<dir>: do not talk to a cluster; write each Secret as <dir>/<namespace>.<name>.yaml (kubectl is only used offline,
+# `--dry-run=client`) so it can be encrypted with SOPS/age and committed (infra/ops/secrets/README.md). Without it: apply live.
 secret() { # secret NAMESPACE NAME KEY=VALUE...   (create or replace, values never echoed)
   local ns="$1" name="$2"; shift 2
   local args=() kv
   for kv in "$@"; do args+=("--from-literal=$kv"); done
-  kubectl -n "$ns" create secret generic "$name" "${args[@]}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  if [[ -n "${SECRETS_OUT:-}" ]]; then
+    install -d -m 700 "$SECRETS_OUT"
+    ( umask 077; kubectl -n "$ns" create secret generic "$name" "${args[@]}" --dry-run=client -o yaml > "$SECRETS_OUT/$ns.$name.yaml" )
+  else
+    kubectl -n "$ns" create secret generic "$name" "${args[@]}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  fi
 }

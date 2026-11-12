@@ -9,6 +9,8 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 |---|---|
 | [First environment](first-environment.md) | bootstrapping dev / uat / prod on AWS, Google Cloud or Azure (state, OIDC, secrets, apply, Argo CD, Temporal, Pages, smoke) |
 | [Test environment on one OVHcloud server](ovh-vps.md) | creating and deploying the whole stack on one OVHcloud instance from a pipeline (`make ovh-gh-setup`, then Actions > ovh-vps); not production |
+| [Production on OVH + Layerbase](ovh-production.md) | the production launch from zero: OVH US account, tofu, kubeconfig, Cloudflare Tunnel, Layerbase databases, SOPS secrets, Argo CD, first sync order, smoke test, rollback, vendor questions |
+| [Restore drill](restore-drill.md) | nightly off-vendor backups, escrow of the keys that cannot be re-created, RPO 24 h / RTO 4 h, the drill and the incident restore |
 | [Stripe webhooks](stripe-webhooks.md) | creating, verifying, rotating and troubleshooting the three Stripe webhook endpoints (payments, seller Connect, seller plan fees) for the OVH test environment and the real ones |
 | [Finance: payouts, reconciliation and ledger adjustments](finance-reconciliation.md) | approving a payout, the daily Stripe reconciliation, four-eyes ledger corrections, Stripe lookups |
 | [Delivery quotes](delivery-quotes.md) | an address is too far for standard delivery: how the shopper asks, how customer care agrees an amount, how the order carries it, SLA and escalation |

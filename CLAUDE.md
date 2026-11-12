@@ -76,7 +76,12 @@ design/         the Claude Design prototypes (read-only reference)
 Every service is independently buildable, testable, containerised and deployable to Kubernetes:
 its own Dockerfile, its own Helm chart (`deploy/helm`, depends on `infra/helm/library/at-service`),
 its own GitHub Actions workflow (path-filtered) and its own Argo CD Application per environment.
-Target cloud (aws | gcp | azure) is a deploy-time variable only.
+Target cloud (aws | gcp | azure | ovh) is a deploy-time variable only.
+
+Every service keeps its Dockerfile, chart, workflow and ApplicationSet-generated Argo CD Application. An environment may deploy only
+its **launch set**: the explicit list in `infra/argocd/launch-set` (uat and prod; dev runs everything). A service outside it has no
+Application and no pods there. Production is OVH Managed Kubernetes (one node, one replica of everything, prod profile) with
+PostgreSQL on Layerbase (ADR 0004, `docs/runbooks/ovh-production.md`); `make launch-set-check` lists what each environment deploys.
 
 ## Ports (local)
 See `infra/local/PORTS.md` — every service has a fixed local port so the stack runs side by side.

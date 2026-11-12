@@ -1,5 +1,9 @@
 # Test environment on one OVHcloud server: step by step
 
+> **This is the TEST box, not production.** It deploys the dev profile (`values-dev.yaml`, `APP_ENV=dev`) of all 26 services on one k3s server with
+> in-cluster Prometheus/Grafana. Production is OVH Managed Kubernetes + Layerbase with the prod profile and the 21-service launch set:
+> [ovh-production.md](ovh-production.md), [ADR 0004](../adr/0004-lean-single-node-production.md).
+
 > **Start here: run `make deploy-guide`.** A guided, resumable wizard walks through everything below, asks for each value with its
 > help, checks each step and prints PASS/FAIL ([deploy-guide.md](deploy-guide.md)). The manual steps on this page stay as the reference.
 

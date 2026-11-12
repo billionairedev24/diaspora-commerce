@@ -1,5 +1,9 @@
 # Cost: budgets, alerts and the monthly review
 
+> **Launch profile (OVH + Layerbase):** the budgets, arm nodes, spot pools and Aurora described below are the multi-cloud defaults. The production
+> launch is one `b3-16` node on OVH (no arm64, no spot) with Postgres on Layerbase: see [cloud-cost.md](../engineering/cloud-cost.md) and
+> [ADR 0004](../adr/0004-lean-single-node-production.md). The OVH budget is a placeholder until the OVH quote exists.
+
 **Backlog:** S182 · **Budgets:** `infra/tofu/modules/<cloud>/budget` · **Sizing:** `infra/tofu/envs/<env>/sizing.tf` ·
 **Cost table:** `infra/tofu/README.md` sections 4 and 5
 

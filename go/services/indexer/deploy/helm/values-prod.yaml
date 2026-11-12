@@ -14,4 +14,8 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  SEARCH_PROVIDER: meilisearch   # Meilisearch on Layerbase; MEILISEARCH_URL / MEILISEARCH_API_KEY come from the secret store
+  SEARCH_PROVIDER: meilisearch   # Meilisearch in the cluster (infra/k8s/platform/lean/data); MEILISEARCH_URL / MEILISEARCH_API_KEY come from the service Secret
+# Renders the SUSPENDED CronJob indexer-reindex (it never runs by itself). Rebuild the index after the first catalog data or after losing the
+# Meilisearch disk: kubectl -n afrotransact-prod create job reindex-$(date +%s) --from=cronjob/indexer-reindex (docs/runbooks/ovh-production.md).
+reindex:
+  enabled: true

@@ -1,187 +1,184 @@
-# Cloud cost: the lean profile (USD 200 per month, one node)
+# Cloud cost and sizing: OVHcloud + Layerbase, one node
 
-Production used to cost about USD 600/month (GKE + Aiven + Uploadthing and friends). The repository's production design
-was larger still (regional cluster on 3 nodes, HA databases, three paid SaaS platforms, USD 6,500 budget). This page is the
-design that fits **USD 200/month for about 20-200 active users**, on **GCP, Azure or AWS**, and how to grow out of it.
+This page is the sizing and cost design for the **production launch**: OVH Managed Kubernetes (one node) + Layerbase PostgreSQL +
+Cloudflare. Decision and reasons: [ADR 0004](../adr/0004-lean-single-node-production.md). Step by step from zero:
+[ovh-production.md](../runbooks/ovh-production.md).
 
-The profile is `envs/prod/sizing.tf` (`node_size = "lean"`, `zone_count = 1`, `egress = "none"`, `managed_data = false`,
-`monthly_budget = 135`: cloud only; the USD 200 ceiling includes Layerbase). `dev` and `uat` are not part of the budget: keep them destroyed, develop on the local stack
-(`docs/engineering/local-development.md`) and apply them only for a short test.
+**Reading the numbers.** Nothing here has been applied or priced on a live account. A figure tagged **UNVERIFIED** is a vendor fact
+(OVH, Layerbase, Cloudflare, GitHub, Grafana) not confirmed against a primary source: confirm it before relying on it. Memory and
+connection numbers are computed from the repository's own manifests and are labelled as requests, not measurements. **No OVH price
+appears below on purpose: the repository has none and the vendor site could not be read when this was written.**
+
+The profile is `infra/tofu/envs/prod/sizing.tf` (`node_size = "lean"`, `zone_count = 1`, `egress = "none"`, `managed_data = false`).
+`dev` and `uat` are not part of the budget: develop on the local stack (`docs/engineering/local-development.md`).
 
 ## What runs where
 
-| Concern | Before | Lean |
-|---|---|---|
-| Kubernetes | regional GKE, 3 arm64 nodes + system pool + spot pool, autoscaling to 12 | **one zonal cluster, one 4 vCPU / 16 GB node**, no autoscaling, no spare pools |
-| Replicas | 3 per service, HPA to 12, Argo Rollouts canary | **1 per service**, no HPA, no Rollouts, no PodDisruptionBudgets that block drains |
-| Network | VPC per environment, Cloud NAT per zone, flow logs 50% | **one VPC**, no NAT (nodes have public IPs, inbound closed, Cloudflare Tunnel in), flow logs 10% |
-| Postgres, Valkey | Cloud SQL HA + Memorystore (OpenTofu) | **Layerbase** (external; `managed_data = false` creates nothing) |
-| Search | Elastic Cloud / ECK | **Meilisearch on Layerbase** (`SEARCH_PROVIDER=meilisearch`) |
-| Events | Confluent Cloud Standard | **Apache Kafka, one KRaft pod** (`infra/k8s/platform/lean/kafka.yaml`, 10 GiB) |
-| Workflows | Temporal Cloud | **Temporal auto-setup pod**, state in Layerbase Postgres (`lean/temporal.yaml`) |
-| Images | Uploadthing | **Cloudflare R2** (10 GB free, no egress fees); private KYC bucket stays in the cloud's locked bucket |
-| Metrics, logs, traces | kube-prometheus-stack + Loki + Tempo (3 collector replicas) | **one OTLP collector to Grafana Cloud free tier** (`envs/prod/opentelemetry-collector-gateway.yaml`) |
-| Policy / canary / ECK | Kyverno, Argo Rollouts, ECK operator | not installed (`argocd/applicationsets/lean/`) |
-| Web apps | Workers | unchanged (Cloudflare Workers, USD 5 plan) |
-| Edge | Cloudflare | unchanged (free plan, Tunnel, no load balancer) |
+| Concern | Choice |
+|---|---|
+| Kubernetes | OVH MKS **free plan** control plane, **one `b3-16` node** (4 vCPU / 16 GB), billed monthly, region `US-EAST-VA-1` (OVH US entity). No autoscaler, no spare pool |
+| Services | **21 of 26**: 14 Java (identity catalog offers inventory orders payments seller fulfilment bookings tax-returns content trust-ops ai-gateway mcp-server) and 7 Go (gateway-bff cart search indexer geo media notifications), 1 replica each. Explicit list in `infra/argocd/launch-set` |
+| Not deployed | promise (the BFF and orders degrade without it), carrier-gateway, retail, delivery-runs, authz-sync, OpenFGA (`FGA_ENABLED=false`), Kafka UI, Mailpit, MinIO, Elasticsearch, in-cluster Prometheus/Loki/Grafana, Kyverno, Argo Rollouts, cert-manager, External Secrets |
+| Postgres | **Layerbase** (external), 19 databases. Nothing is created by OpenTofu |
+| Valkey, Meilisearch | in the cluster (`lean/data`), PVC 2 GiB and 5 GiB |
+| Events, workflows | Kafka (KRaft, one pod, 10 GiB PVC), Temporal (one pod, state in Layerbase) |
+| Edge | Cloudflare Tunnel (cloudflared) to Envoy Gateway. No load balancer, no public node IP for users |
+| Web apps | Cloudflare Workers (unchanged) |
+| Images | product images in Cloudflare R2; private/KYC files in OVH Object Storage with object lock |
+| Registry | GHCR with a read-only pull secret (no OVH Harbor) |
+| Telemetry | one OTLP collector to Grafana Cloud free tier |
+| Secrets | SOPS + age files (`infra/ops/secrets`); OKMS + External Secrets optional and unverified |
+| Deploy | Argo CD (trimmed), manual sync in prod |
+| Backups | nightly age-encrypted `pg_dump` of the 19 databases to a bucket at a vendor other than Layerbase (`infra/k8s/platform/lean/backup`) |
 
 ## One location for everything
 
-**Layerbase Dedicated runs in three places only: US East (Virginia), US West (Oregon) and South America (Sao Paulo); the 16 GB
-size is Virginia only for now.** So the whole platform lives in **Virginia**, and every region below is that one metro:
+Layerbase Dedicated runs in US East (Virginia), US West (Oregon) and South America (Sao Paulo) (**UNVERIFIED**, copied from
+Layerbase's site by an earlier version of this page). The platform lives in **Virginia**:
 
 | Piece | Where | Setting |
 |---|---|---|
-| Layerbase Dedicated (Postgres, Valkey, Meilisearch) | US East (Virginia) | chosen when you create the server |
-| Kubernetes cluster, node, secrets, KYC bucket | GCP `us-east4` (Northern Virginia) / AWS `us-east-1` / Azure `eastus` | `region` in `envs/prod/terraform.tfvars` |
-| Product images (R2) | Eastern North America (`enam`) | already set in `infra/cloudflare/environment.tf` |
-| Grafana Cloud stack | US East | pick it when you create the stack (the OTLP endpoint in `afrotransact/grafana-cloud`) |
-| Kafka, Temporal | in the cluster | nothing to choose |
+| Layerbase server | US East (Virginia) | chosen when you create the server |
+| OVH cluster, node, object storage | OVH US `US-EAST-VA-1` (Vint Hill, Virginia) | `region` in `envs/prod/terraform.tfvars`, `ovh_endpoint = "ovh-us"` |
+| Product images (R2) | Eastern North America (`enam`) | `infra/cloudflare/environment.tf` |
+| Grafana Cloud stack | US East | choose it when you create the stack |
 
-`layerbase_region = "virginia"` (or `"oregon"`: gcp `us-west1`, aws `us-west-2`; Azure has no region next to Oregon) is checked at
-plan time: with external data, `tofu plan` **fails** if `region` is anywhere else. Why it matters: queries cross the network on every
-request (a few ms in the same metro, 60+ ms across the country) and traffic leaving the cloud to a database elsewhere is billed.
-Layerbase does not say which cloud hosts a server: ask, because the same provider and region is the cheapest and fastest pairing.
+`layerbase_region = "virginia"` maps to OVH `US-EAST-VA-1` (it used to map to Quebec `BHS5`, which made the database tens of
+milliseconds away). With external data `tofu plan` fails if `region` is not the mapped one, and fails if a `US-*` region is used
+without `ovh_endpoint = "ovh-us"` (the OVH US entity is a separate account with separate credentials). Which cloud and data
+centre host the Layerbase server is unknown (**ask**, see the Layerbase questions in ovh-production.md); latency between the two
+sites is expected to be a few ms in the same metro (**UNVERIFIED**: measure it before the first deploy).
+
+## Monthly cost: what is known and what is not
+
+| Line | Amount | Status |
+|---|---|---|
+| OVH MKS control plane (free plan) | 0 | UNVERIFIED (repo module header; confirm the free plan exists in US East and its SLA/limits) |
+| OVH node `b3-16`, monthly billing | **not in the repo** | UNVERIFIED: get the quote; monthly billing is said to be about half the hourly price and cannot be switched back |
+| OVH block storage for PVCs (Kafka 10 GiB + Valkey 2 + Meilisearch 5 = 17 GiB) and boot disk | not in the repo | UNVERIFIED |
+| OVH Object Storage (KYC bucket, exports, image backup copy) and the Terraform state bucket | not in the repo | UNVERIFIED |
+| OVH load balancer | **0, none is created** | by design (Cloudflare Tunnel); a `LoadBalancer` Service would create one |
+| Layerbase Dedicated 4 GB (Postgres only) | $35 | UNVERIFIED (Layerbase site / owner chat) |
+| Layerbase Dedicated 8 GB | $65 | UNVERIFIED. **Not needed**: Valkey and Meilisearch run in the cluster |
+| Cloudflare Workers Paid | 5 | UNVERIFIED (only if the bundle size needs it) |
+| Cloudflare R2, Grafana Cloud, GHCR | free tiers | UNVERIFIED (check the free limits: Grafana Cloud 10k metric series, 50 GB logs, 50 GB traces; R2 10 GB) |
+| Backup bucket at the second vendor | a few cents to a few dollars | UNVERIFIED (small: 19 compressed dumps x 14 days) |
+| Resend (email), Stripe fees, OpenRouter | usage based | not infrastructure; OpenRouter is capped (see below) |
+
+`monthly_budget` in `envs/prod/sizing.tf` is a **placeholder (150)** until the OVH quote exists: set it to about 1.2 times the OVH
+subtotal. OVH has no budget object, only Public Cloud consumption alerts at 50/80/100 % (no forecast alerts).
+
+Where the savings are, independent of the OVH price: monthly instead of hourly node billing, no load balancer, no in-cluster
+observability, no OpenFGA and four fewer JVMs than the old 26-service design, GHCR instead of Harbor, Postgres on the 4 GB
+Layerbase plan instead of 8 GB.
+
+The previous comparison (GCP/Azure/AWS list prices, USD 173 to 279 per month in total) is kept in the git history of this file; it no
+longer drives any decision.
 
 ## Layerbase plan
 
+All plan facts here are **UNVERIFIED** (copied from Layerbase's site and an owner conversation on 2026-11-01).
+
 | Plan | Price | vCPU / RAM / disk | Fits? |
 |---|---|---|---|
-| Free, Solo, Pro | $0 / $5 / $15 | pooled, shared | **No**: 2 or 10 databases; this platform needs ~25 (one per service plus `temporal`, `temporal_visibility`, `openfga`) |
-| Dedicated 4 GB | **$35** | 2 / 4 GB / 25 GB | Postgres with ~25 small databases, headroom for one more light service. **Not** Valkey and Meilisearch too |
-| Dedicated 8 GB | **$65** | 4 / 8 GB / 50 GB | Layerbase's own example: Postgres, Valkey, Meilisearch always on, one more database. **This is the plan for the setup you chose** |
-| Dedicated 16 GB | $120 | 2 / 16 GB / 100 GB | Not needed at this size |
+| Free, Solo, Pro | $0 / $5 / $15 | pooled, shared | **No** for production: 2 or 10 databases; this platform needs 19. The Pro 7-day trial can probe a few services |
+| Dedicated 4 GB | **$35** | 2 / 4 GB / 25 GB | **The plan for this design**: Postgres with 19 small databases |
+| Dedicated 8 GB | $65 | 4 / 8 GB / 50 GB | Only if you also want Valkey and Meilisearch there |
 
-Dedicated has no database or branch cap, hourly backups, mTLS, and egress included, for a flat price.
+Confirmed verbally by the owner, still to get in writing: PostGIS is available; no egress charges. Still unknown: which cloud hosts the
+server, `max_connections` per plan, whether mTLS is optional, backup/PITR terms, behaviour at the storage limit (full list in
+ovh-production.md).
 
-## Monthly cost (list prices, estimates: check the calculators before you commit)
+## Will it fit on one node? Memory table
 
-| Line | GCP us-east4 | Azure eastus | AWS us-east-1 |
+Requests are what the scheduler counts; limits are what the kernel enforces. Computed from the rendered prod charts
+(`python3 infra/argocd/scripts/render_apps.py --env prod`) and `infra/k8s/platform`.
+
+| Workload | Count x request | Requests | Limits |
 |---|---|---|---|
-| Control plane | **0** (free credit covers one zonal cluster) | **0** (Free tier, no uptime SLA) | **73** (EKS has no free tier) |
-| Node (4 vCPU / 16 GB), on demand | ~110 (`e2-standard-4`) | ~115 (`Standard_D4ps_v6`) | ~98 (`t4g.xlarge`) |
-| Node with a 1-year commitment | ~69 | ~75 | ~65 |
-| Disks (boot + Kafka), public IPv4 | ~11 | ~13 | ~14 |
-| Outbound path | 0 | ~22 (standard LB for SNAT) | 0 |
-| Secrets, keys, locked bucket, registry (GHCR) | ~5 | ~4 | ~6 |
-| Egress and logs | ~8 | ~8 | ~8 |
-| Cloudflare Workers | 5 | 5 | 5 |
-| Grafana Cloud, R2 (free tiers) | 0 | 0 | 0 |
-| **Cloud subtotal on demand** | **~139** | **~167** | **~204** |
-| **Cloud subtotal with the 1-year commitment** | **~98** | **~127** | **~171** |
-| Layerbase Dedicated 8 GB | 65 | 65 | 65 |
-| Reserve for traffic cluster -> Layerbase (same metro, see below) | 10 | 10 | 10 |
-| **Total on demand** | **~214** | **~242** | **~279** |
-| **Total with the 1-year commitment** | **~173** | **~202** | **~246** |
+| Java services (heap 70 % of the limit, serial GC, C1 only) | 14 x 384 Mi (limit 640 Mi) | 5,376 Mi | 8,960 Mi |
+| Go services | 7 x 48 Mi (limit 160 Mi) | 336 Mi | 1,120 Mi |
+| Kafka (broker + controller, heap 384 Mi) | 640 Mi (limit 896 Mi) | 640 Mi | 896 Mi |
+| Temporal (auto-setup, all four roles) | 512 Mi (limit 768 Mi) | 512 Mi | 768 Mi |
+| Valkey | 128 Mi (limit 256 Mi) | 128 Mi | 256 Mi |
+| Meilisearch | 384 Mi (limit 768 Mi) | 384 Mi | 768 Mi |
+| OTLP collector | 128 Mi (limit 384 Mi) | 128 Mi | 384 Mi |
+| cloudflared | 64 Mi (limit 256 Mi) | 64 Mi | 256 Mi |
+| Envoy proxy (data plane) | 128 Mi (limit 512 Mi) | 128 Mi | 512 Mi |
+| Envoy Gateway controller | 128 Mi (limit 256 Mi) | 128 Mi | 256 Mi |
+| **Subtotal, our workloads** | | **7,824 Mi = 7.64 GiB** | 14,176 Mi = 13.8 GiB |
+| Kubernetes system on MKS (CNI, DNS, kube-proxy, CSI, metrics; the repo's figure, **UNVERIFIED** on OVH) | | ~1.2 GiB | |
+| Argo CD, trimmed (repo figure; dex and notifications scaled to 0) | | ~1.0 GiB | |
+| **Total with Argo CD** | | **~9.8 GiB** | |
+| Allocatable on a 16 GB node (the repo's figure, **UNVERIFIED** on `b3-16`) | | ~13 GiB | |
+| **Spare requests** | | **~3.2 GiB** | |
 
-So with the 8 GB server **only GCP with a 1-year commitment is clearly under USD 200 (~173)**. Without a commitment GCP is ~14 over.
-Two ways to get under 200 without a commitment, your choice:
+- The **backup CronJob** (128 Mi, limit 512 Mi) runs for minutes at night and is not counted above; a deploy surge adds one JVM
+  (384 Mi) at a time (`maxSurge 25 %`, `maxUnavailable 0`).
+- Limits sum to more than the node. That is normal for a single node, but it means that if every JVM grows to its limit at once the
+  kernel OOM-kills something. Real RSS is **unmeasured**: measure it in the trial (`kubectl top`, `ovh-production.md` section 12)
+  before deciding the node is big enough. An 8 GB node does not hold this.
+- CPU requests: services 1,575 m + platform 525 m = ~2.1 cores of ~3.9 allocatable, plus Argo and system. Concurrent JVM
+  starts spike CPU: sync a few services at a time.
 
-- **A. Keep everything on Layerbase 8 GB ($65)**, as planned, and buy the GCP 1-year committed-use discount (~173).
-- **B. Layerbase 4 GB ($35) for Postgres only; run Valkey and Meilisearch in the cluster.** Both are small (Valkey ~128 MB with
-  persistence, Meilisearch ~512 MB with a 5 GB disk; the node has ~2.5 GB spare) and a cache next to the services is also faster than a
-  remote one. Total on demand on GCP: 139 + 35 + 10 = **~184**. This needs two small manifests in `infra/k8s/platform/lean/` that are not
-  written yet; say so and they will be.
+## Postgres connection budget (Layerbase)
 
-Notes:
+One server, ~15 services. Every number is a pool maximum from the repository's configuration, not a measurement.
 
-- **OpenTofu's budget is the cloud spend only: `monthly_budget = 135`** (200 minus Layerbase's 65). It alerts at 50/80/100% actual
-  and 100% forecast, so on demand GCP (~139) raises an alert on purpose: it is the signal to buy the commitment or move to option B.
-  AWS is over budget on any option because the EKS control plane alone is 73.
-- **Hidden cost: cross-provider traffic.** Layerbase's egress is included, but our cluster's traffic *to* it can leave our cloud as
-  internet egress (~$0.08-0.12 per GB) unless both sit on the same provider and region. Same metro keeps latency low; the $10 reserve
-  covers ~100 GB. Connection counts are already capped (4 per Java service).
-- **Client certificates (mTLS).** Layerbase lists mTLS for Postgres. If it is *required* rather than optional, every service needs the
-  client certificate mounted and `sslmode=verify-full` in its JDBC/pgx URL: ask whether password-over-TLS is allowed.
+| Consumer | Pools | Max each | Total |
+|---|---|---|---|
+| Java services with a database (12 + ai-gateway; mcp-server has none) | 13 | **4** (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`, `MINIMUM_IDLE 0` in every `values-prod.yaml`) | 52 |
+| Go services with a database (cart, geo, media, notifications) | 4 | **3** (explicit cap in each `main.go` / `postgres.go`; a lower `pool_max_conns` in `DB_URL` is respected) | 12 |
+| Temporal (`temporal`, `temporal_visibility`) | 2 | 5 (`DB_CONNECT_MAX_CONNS`) | 10 |
+| **Steady maximum** | | | **74** |
+| Rolling update surge (one new JVM pool per service being synced, up to 3 at a time) | | | +12 |
+| Backup job (sequential), operators (psql, Flyway at start-up shares the service pool) | | | +4 |
+| **Peak to plan for** | | | **~90** |
 
-## OVHcloud (cloud = ovh), designed for cost
+Ask Layerbase for `max_connections` (a plan below ~100 needs action): lower Hikari to 2 or 3 for low-traffic services in their
+`values-prod.yaml`, or put a pooler in session mode in front (transaction mode breaks Flyway advisory locks and prepared
+statements). ai-gateway's `application-prod.yml` says `DB_POOL_SIZE` default 30; the chart's `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=4`
+environment variable overrides it by Spring's property precedence: confirm with `pg_stat_activity` on the first boot.
 
-The same lean profile runs on OVHcloud Public Cloud with `cloud = "ovh"`, `region = "GRA11"` (or `BHS5`, the closest site to a
-US-East Layerbase). The modules (`infra/tofu/modules/ovh`) make these choices, each pinned by a `tofu test` in `tests/`:
+## Cost guards that are real
 
-| Lever | What the module does | Why it saves money |
-|---|---|---|
-| Control plane | `free` plan unless `zone_count > 1` | the free Managed Kubernetes plan has no control-plane charge (the 3-AZ `standard` plan does) |
-| Nodes | one `b3-16` (4 vCPU / 16 GB) for `lean`; `b3-8` / `b3-16` / `b3-32` otherwise | B3 is the cheapest general-purpose line; OVH has no arm64 |
-| Billing | stable pool **monthly-billed** when `deletion_protection` (prod), hourly otherwise | monthly billing is roughly half the hourly price for always-on nodes; it cannot be switched back, so trials stay hourly |
-| "Spot" | tainted, hourly, autoscaling-from-zero pool | OVH has no spot market: scale-to-zero is the only saving, there is no discount |
-| Network | private network always (free), **gateway only if `egress != none`** (smallest model, one per region) | lean uses public node IPs and no gateway; OVH does not charge for public IPv4 on instances or for egress traffic |
-| Databases | `discovery` = one node; `production` (2 nodes) only with `high_availability`; flavors `db1-4/7/15` | one small server holding the 24 service databases; with Layerbase (`managed_data = false`) none at all |
-| Object Storage | Standard class, versioning, abort stale uploads after 3 days, noncurrent versions out after 30, `archive_after_days` -> Standard-IA | requests and storage stay small; no per-bucket fixed fee |
-| Registry | Managed Private Registry **SMALL** | cheapest tier; raise it only when storage says so |
-| Budget | Public Cloud consumption alerts at 50/80/100% of `monthly_budget` (no forecast alerts on OVH) | the same early warning as the other clouds |
+- **ai-gateway spend cap.** `application.yml` budgets default to USD 1,000+ per day in total. `values-prod.yaml` of ai-gateway
+  overrides every feature's `feature-daily-cost-usd` through `SPRING_APPLICATION_JSON` (USD 89 per day worst case, above a cap the
+  gateway degrades to the cheapest model then answers 429). Set a **credit limit on the OpenRouter key** as the second, independent cap.
+- **Connection counts** are capped (above). **Kafka** keeps 72 hours, dead letters 14 days, on a 10 GiB disk.
+- **Backups** keep 14 days at the second vendor.
 
-Expect OVH to be the cheapest of the four for the lean node (no EKS-style control-plane fee, no NAT, no egress bill), but the
-per-hour prices change: check the OVHcloud Public Cloud price list for `b3-16` before you commit, and use monthly billing only for
-the production node.
+## Accepted trade-offs
 
-What differs from the other clouds (all documented in the module headers):
+One node and one replica of everything: a node restart, a node upgrade or a bad deploy is **a few minutes of downtime**, with no canary.
+Data is safe only as far as the backups are: Layerbase's own backups are **UNVERIFIED** (hourly claimed, PITR not mentioned), so the
+nightly off-vendor dump (RPO 24 h) is the guarantee. Kafka and Temporal are single instances; both resume where they stopped.
+Valkey (carts, sessions) and Meilisearch are rebuildable. Plan MKS maintenance windows for a quiet hour.
 
-- **No workload identity.** Pods reach Object Storage with a per-service S3 user (policy limited to its buckets) whose keys are in the
-  Secret Manager (`<prefix>/<env>/<service>-storage`); the Helm chart must expose that secret to the service (value `storageSecret`).
-- **Secrets** live in OVHcloud Secret Manager (OKMS). External Secrets Operator has no OVH provider; the store uses its Vault provider
-  with a client certificate. **Verify this against your OKMS endpoint on first use**: it is the one integration here that was not
-  checked against a live account.
-- **CORS** for browser uploads cannot be set with the OVH provider: set it once with the S3 API or keep uploads server-side.
-- **Elastic, Confluent and Temporal Cloud** are not offered on OVHcloud; with `enable_*` on they run in `saas_cloud` / `saas_region`
-  (default GCP europe-west1). The lean profile does not use them.
-- **Registry** pulls need an image pull secret (robot account) and the project is Harbor's `library`; tag immutability and retention
-  are Harbor project rules.
+## Alternatives, kept for comparison
 
-## Will it fit on one node?
+The same lean profile exists for GCP (`us-east4`), Azure (`eastus`) and AWS (`us-east-1`): `cloud = gcp|azure|aws` in the same
+OpenTofu root, with the same modules. They are **not** the launch path and their old list-price estimates are not repeated here. The
+OVH modules (`infra/tofu/modules/ovh`) pin their cost choices with `tofu test` (free control plane, `b3-16`, monthly billing when
+deletion protection is on, no gateway when `egress = none`).
 
-Memory (requests) against ~13 GB allocatable on a 16 GB node:
+What differs on OVH, all documented in the module headers:
 
-| Workload | Requests |
-|---|---|
-| 16 Java services at 384 Mi (heap capped at 70% of a 640 Mi limit, serial GC, C1 only) | 6.1 GB |
-| 10 Go services at 48 Mi | 0.5 GB |
-| Kafka 640 Mi, Temporal 512 Mi, OpenFGA 96 Mi | 1.2 GB |
-| Envoy, cloudflared, cert-manager, External Secrets, OTLP collector | 0.7 GB |
-| Argo CD | ~1.0 GB |
-| Kubernetes system (kubelet, CNI, metrics, DNS) | ~1.2 GB |
-| **Total** | **~10.7 GB** (about 2.5 GB spare) |
-
-CPU is ~2.6 of ~3.9 cores requested; services idle at a few percent. The risk is **deploy time**: starting JVMs together
-spikes CPU. Prod syncs are manual (`autoSync: false`): sync a few services at a time.
-
-**Confirmed with Layerbase (2026-11-01, by the owner, by phone/chat; get it in writing):** PostGIS is available and there are no
-egress charges.
-
-**Still to confirm with Layerbase** (in writing): which cloud hosts the server, Postgres max connections on the
-chosen size, whether mTLS is optional, and what happens at the storage limit (overage price or hard stop).
-
-Database connections: every Java service is capped at 4 connections (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`), about
-60-90 in total with the Go services, OpenFGA (5) and Temporal (5). **Check Layerbase's connection limit** (or use its pooler).
-
-## Accepted trade-offs (you asked for one replica)
-
-One node and one replica of everything means a node restart or a bad deploy is **a few minutes of downtime**, with no
-canary. Data is safe: it lives in Layerbase (backups, not this repo's job), Kafka's disk and R2/GCS. Kafka and Temporal
-are single instances; both resume where they stopped. Plan GKE/AKS maintenance windows for a quiet hour.
+- **No workload identity.** Pods reach Object Storage with a per-service S3 user whose keys go into the service Secret
+  (`OVH_S3_ACCESS_KEY_ID`, `OVH_S3_SECRET_ACCESS_KEY` for media). OVH US uses the `.ovh.us` S3 endpoint.
+- **OKMS and Harbor are opt-in** (`ovh_okms`, `ovh_harbor`, both false). OKMS in the US regions is UNVERIFIED and the module refuses
+  a US region. CORS for browser uploads cannot be set with the OVH provider (the media service signs server-side).
+- **Elastic, Confluent and Temporal Cloud** are not offered on OVH and are off in this profile.
 
 ## Test first, decide later
 
-[trial-environment.md](../runbooks/trial-environment.md) runs the whole workflow on free-credit accounts with everything in the cluster
-(`infra/k8s/platform/lean/data/`), plus a short Layerbase probe, and ends with the table that chooses between option A and B.
+[trial-environment.md](../runbooks/trial-environment.md) runs the whole workflow on a disposable project (hourly billing, separate
+project, `disposable = true`) with a short Layerbase probe, and produces the measurements this page marks as missing.
 Nothing there needs a commitment.
-
-## Setting it up
-
-1. `terraform.tfvars` from `envs/prod/terraform.tfvars.example` (the lean defaults are already in it), `tofu apply`.
-2. Put these in the secret store (`infra/tofu/scripts/secret-set.sh`): per service `DB_URL`, `DB_USER`, `DB_PASSWORD`
-   (Layerbase Postgres, one database per service: run `infra/tofu/scripts/postgres-bootstrap.sh` with the admin credential and
-   `DATABASES` = the service databases plus `temporal temporal_visibility openfga`; the `geo` database needs the PostGIS extension),
-   `REDIS_URL` (Valkey), `MEILISEARCH_URL` and `MEILISEARCH_API_KEY` for search and indexer, `R2_ACCESS_KEY_ID` and
-   `R2_SECRET_ACCESS_KEY` for media, and the platform keys `afrotransact/temporal` (host, port, user, password of the
-   Temporal databases `temporal` and `temporal_visibility`), `afrotransact/grafana-cloud` (endpoint, instance-id, api-token)
-   and `afrotransact/openfga`.
-3. Cloudflare (`infra/cloudflare`, `origin_mode = "tunnel"`), then bootstrap Argo CD with `argocd/bootstrap/root-prod.yaml`.
-4. Move users off Keycloak: [keycloak-migration.md](keycloak-migration.md).
 
 ## Growing out of it
 
-Each step is a sizing flip, not a redesign: `zone_count = 3`, `min_nodes = 3`, `node_size = "medium"` (HA nodes);
-`managed_data = true` (cloud Postgres/Valkey); `enable_elastic/confluent/temporal = true`; switch
-`argocd/envs/prod/kustomization.yaml` back to `../../applicationsets`; set `replicas`, `autoscaling` and `rollout` in the
-services' `values-prod.yaml`. Do it when active users, not the calendar, say so.
+Each step is a sizing flip, not a redesign: a second node pool or a bigger flavour, `zone_count = 3` (needs the paid `standard`
+control plane), `managed_data = true` (OVH Managed PostgreSQL), `enable_elastic/confluent/temporal`, switching
+`argocd/envs/prod/kustomization.yaml` back to `../../applicationsets`, `replicas`/`autoscaling`/`rollout` in the services'
+`values-prod.yaml`. Do it when measured CPU or downtime cost says so, not the calendar.

@@ -1,5 +1,10 @@
 # Trial run on free credits (before the production decision)
 
+> **OVH update (2026-11-12):** production is now OVH Managed Kubernetes + Layerbase ([ADR 0004](../adr/0004-lean-single-node-production.md)). Run the trial
+> the same way on a **separate OVH US project** (`disposable = true`, hourly node) with the 21-service launch set, following
+> [ovh-production.md](ovh-production.md); the GCP/Azure/AWS free-credit steps below remain for comparing clouds only. The trial must produce the
+> measurements listed in ovh-production.md section 12 and a first restore drill.
+
 Purpose: prove the whole workflow on a free-credit cloud account (GCP's $300, Azure's $200, AWS's new-account credits) and
 answer the open questions of [cloud-cost.md](../engineering/cloud-cost.md) **without a commitment and without paying Layerbase**.
 Check the exact credit terms (amount, days, quotas, which services are covered) on each signup page: they change, and trial

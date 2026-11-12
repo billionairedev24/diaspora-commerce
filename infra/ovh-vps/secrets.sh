@@ -5,6 +5,13 @@
 #   secrets.sh services   <service>-secrets in $NS, the keys listed in each chart's "Secret keys expected" comment
 # Generated values are kept in /var/lib/afrotransact/generated.env (root only), so re-running changes nothing.
 # Third-party keys come from secrets.local.env. Back up generated.env: without it the Secrets cannot be rebuilt.
+#
+# PROFILE=prod (production secrets, run on an OPERATOR machine, never on a shared server):
+#   PROFILE=prod STATE_DIR=$HOME/.afrotransact-prod SECRETS_OUT=./out DB_MODE=external ./secrets.sh services|platform
+#   - the launch set only (services.launch.conf), APP_ENV=prod, no OpenFGA (FGA_ENABLED=false in prod), namespace afrotransact-prod
+#   - SECRETS_OUT writes the Secrets as YAML files for SOPS instead of applying them (infra/ops/secrets/README.md)
+#   - STATE_DIR holds the generated values (IDENTITY_DATA_KEY, signing key ...): back it up OFFLINE, separately from the database
+#   - `databases` is for a self-hosted Postgres only in dev; for Layerbase run infra/tofu/scripts/postgres-bootstrap.sh
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_config
@@ -15,7 +22,7 @@ KAFKA="kafka-0.kafka.kafka.svc.cluster.local:9092"
 VALKEY_PW="$(gen VALKEY_PASSWORD)"
 REDIS_URL="redis://:${VALKEY_PW}@valkey.data.svc.cluster.local:6379"
 MEILI_KEY="$(gen MEILI_MASTER_KEY)"
-FGA_TOKEN="$(gen FGA_API_TOKEN)"
+FGA_TOKEN=""; [[ "$PROFILE" == prod ]] || FGA_TOKEN="$(gen FGA_API_TOKEN)"   # prod: OpenFGA is not deployed (FGA_ENABLED=false)
 TEMPORAL_TARGET="temporal.temporal.svc.cluster.local:7233"
 
 pg_admin_password() { if [[ "$DB_MODE" == external ]]; then printf '%s' "$EXTERNAL_PG_ADMIN_PASSWORD"; else gen POSTGRES_ADMIN_PASSWORD; fi; }
@@ -36,6 +43,7 @@ jdbc_url() { printf 'jdbc:postgresql://%s:5432/%s?sslmode=%s' "$PG_HOST" "$1" "$
 go_url() { printf 'postgres://%s:%s@%s:5432/%s?sslmode=%s' "$(role_of "$1")" "$(db_password "$1")" "$PG_HOST" "$1" "$PG_SSL"; }
 
 ensure_namespaces() {
+  [[ -z "${SECRETS_OUT:-}" ]] || return 0   # render-only mode: no cluster
   for n in data kafka temporal openfga ingress cert-manager "$NS"; do kubectl get ns "$n" >/dev/null 2>&1 || kubectl create ns "$n" >/dev/null; done
   # NetworkPolicies of the data stores admit namespaces carrying this label.
   kubectl label ns "$NS" app.kubernetes.io/part-of=afrotransact --overwrite >/dev/null
@@ -49,8 +57,22 @@ platform() {
   secret data valkey "VALKEY_PASSWORD=$VALKEY_PW"
   secret data meilisearch "MEILI_MASTER_KEY=$MEILI_KEY"
   local tdb_pw ofga_pw
-  tdb_pw="$(db_password temporal)"; ofga_pw="$(db_password openfga)"
+  tdb_pw="$(db_password temporal)"
   secret temporal temporal "POSTGRES_SEEDS=$PG_HOST" "DB_PORT=5432" "POSTGRES_USER=$(role_of temporal)" "POSTGRES_PWD=$tdb_pw"
+  if [[ "$PROFILE" == prod ]]; then
+    # Production extras (no OpenFGA). Values come from secrets.local.env; an empty value is a mistake the apply step refuses.
+    secret ingress cloudflared "token=${CLOUDFLARED_TUNNEL_TOKEN:-}"
+    secret observability grafana-cloud-otlp "GRAFANA_OTLP_ENDPOINT=${GRAFANA_OTLP_ENDPOINT:-}" "GRAFANA_INSTANCE_ID=${GRAFANA_INSTANCE_ID:-}" "GRAFANA_API_TOKEN=${GRAFANA_API_TOKEN:-}"
+    # Nightly backup job (infra/k8s/platform/lean/backup): admin read access, the PUBLIC age key, and the rclone remote of the
+    # backup vendor (any S3-compatible bucket at a vendor other than Layerbase).
+    secret ops pg-backup "PGHOST=$PG_HOST" "PGPORT=5432" "PGUSER=$PG_ADMIN" "PGPASSWORD=$(pg_admin_password)" "PGSSLMODE=$PG_SSL" \
+      "AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}" "BACKUP_REMOTE=${BACKUP_REMOTE:-}" "RETENTION_DAYS=14" "HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-}" \
+      "RCLONE_CONFIG_BACKUP_TYPE=s3" "RCLONE_CONFIG_BACKUP_PROVIDER=${BACKUP_S3_PROVIDER:-Other}" "RCLONE_CONFIG_BACKUP_ENDPOINT=${BACKUP_S3_ENDPOINT:-}" \
+      "RCLONE_CONFIG_BACKUP_REGION=${BACKUP_S3_REGION:-auto}" "RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID=${BACKUP_S3_ACCESS_KEY:-}" \
+      "RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY=${BACKUP_S3_SECRET_KEY:-}"
+    return 0
+  fi
+  ofga_pw="$(db_password openfga)"
   secret openfga openfga \
     "OPENFGA_DATASTORE_URI=postgres://$(role_of openfga):${ofga_pw}@${PG_HOST}:5432/openfga?sslmode=${PG_SSL}" \
     "OPENFGA_AUTHN_PRESHARED_KEYS=$FGA_TOKEN"
@@ -59,23 +81,32 @@ platform() {
 databases() {
   log "databases and roles"
   local db role pw
-  local names=(temporal temporal_visibility openfga)
+  local names=(temporal temporal_visibility)
+  [[ "$PROFILE" == prod ]] || names+=(openfga)
   while read -r _ _ db _; do [[ "$db" != "-" ]] && names+=("$db"); done < <(services)
   for db in "${names[@]}"; do
     # temporal_visibility belongs to the temporal role
     if [[ "$db" == temporal_visibility ]]; then role="$(role_of temporal)"; pw="$(db_password temporal)"; else role="$(role_of "$db")"; pw="$(db_password "$db")"; fi
     psql_admin postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='$role') THEN CREATE ROLE \"$role\" LOGIN PASSWORD '$pw'; END IF; END \$\$;" >/dev/null
+    # Managed servers: the admin is not a superuser, so it must be a member of the role to create a database owned by it.
+    psql_admin postgres -c "GRANT \"$role\" TO CURRENT_USER" >/dev/null 2>&1 || true
     [[ -n "$(psql_admin postgres -c "SELECT 1 FROM pg_database WHERE datname='$db'")" ]] || psql_admin postgres -c "CREATE DATABASE \"$db\" OWNER \"$role\"" >/dev/null
     psql_admin postgres -c "REVOKE ALL ON DATABASE \"$db\" FROM PUBLIC; GRANT ALL ON DATABASE \"$db\" TO \"$role\"" >/dev/null
     psql_admin "$db" -c "ALTER SCHEMA public OWNER TO \"$role\"" >/dev/null
-    [[ "$db" == geo ]] && psql_admin geo -c "CREATE EXTENSION IF NOT EXISTS postgis" >/dev/null || true
+    # Extensions are created HERE, as admin, because the service roles cannot on a managed server: fulfilment's V3 migration and
+    # geo's 001 migration run `create extension if not exists postgis` as the service role, which only works once it exists.
+    # (bookings: btree_gist, a trusted extension, pre-created too.) Same list as infra/tofu/scripts/postgres-bootstrap.sh.
+    case "$db" in
+      geo|fulfilment) psql_admin "$db" -c "CREATE EXTENSION IF NOT EXISTS postgis" >/dev/null || die "cannot create postgis in $db (ask the provider; docs/runbooks/ovh-production.md)" ;;
+      bookings) psql_admin "$db" -c "CREATE EXTENSION IF NOT EXISTS btree_gist" >/dev/null || die "cannot create btree_gist in $db" ;;
+    esac
   done
 }
 
 # KEY=VALUE lines for one service (values may be empty when a third-party key was not given).
 service_keys() {
   local svc="$1" db="$2"
-  local common=("APP_ENV=dev" "KAFKA_BOOTSTRAP=$KAFKA")
+  local common=("APP_ENV=$PROFILE" "KAFKA_BOOTSTRAP=$KAFKA")
   local out=()
   if [[ "$db" != "-" ]]; then
     if is_java "$svc"; then
@@ -90,7 +121,7 @@ service_keys() {
     bookings)         out+=("${common[@]}" "BOOKINGS_CLIENT_SECRET=$(gen BOOKINGS_CLIENT_SECRET)") ;;
     carrier-gateway)  out+=("REDIS_URL=$REDIS_URL" "USPS_CLIENT_ID=${USPS_CLIENT_ID:-}" "USPS_CLIENT_SECRET=${USPS_CLIENT_SECRET:-}" "UPS_CLIENT_ID=${UPS_CLIENT_ID:-}" "UPS_CLIENT_SECRET=${UPS_CLIENT_SECRET:-}" "FEDEX_CLIENT_ID=${FEDEX_CLIENT_ID:-}" "FEDEX_CLIENT_SECRET=${FEDEX_CLIENT_SECRET:-}") ;;
     cart)             out+=("REDIS_URL=$REDIS_URL" "CART_CLIENT_SECRET=$(gen CART_CLIENT_SECRET)") ;;
-    catalog)          out+=("${common[@]}" "FGA_API_TOKEN=$FGA_TOKEN" "CATALOG_CLIENT_SECRET=$(gen CATALOG_CLIENT_SECRET)" "GS1_API_KEY=") ;;
+    catalog)          out+=("${common[@]}" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"} "CATALOG_CLIENT_SECRET=$(gen CATALOG_CLIENT_SECRET)" "GS1_API_KEY=") ;;
     content)          out+=("${common[@]}" "NEWSLETTER_TOKEN_KEY=$(gen NEWSLETTER_TOKEN_KEY)") ;;
     delivery-runs)    out+=("${common[@]}" "DELIVERY_RUNS_CLIENT_SECRET=$(gen DELIVERY_RUNS_CLIENT_SECRET)") ;;
     fulfilment)       out+=("${common[@]}" "FULFILMENT_CLIENT_SECRET=$(gen FULFILMENT_CLIENT_SECRET)") ;;
@@ -107,14 +138,14 @@ service_keys() {
     indexer)          out+=("KAFKA_BOOTSTRAP=$KAFKA" "SEARCH_PROVIDER=meilisearch" "MEILISEARCH_URL=http://meilisearch.data.svc.cluster.local:7700" "MEILISEARCH_API_KEY=$MEILI_KEY" "ES_URLS=http://elasticsearch.invalid:9200" "ES_API_KEY=" "INDEXER_CLIENT_SECRET=$(gen INDEXER_CLIENT_SECRET)") ;;
     inventory)        out+=("${common[@]}" "INVENTORY_CLIENT_SECRET=$(gen INVENTORY_CLIENT_SECRET)") ;;
     mcp-server)       out+=("KAFKA_BOOTSTRAP=$KAFKA" "REDIS_URL=$REDIS_URL") ;;
-    media)            out+=("UPLOADTHING_API_KEY=${UPLOADTHING_API_KEY:-}" "LINK_SIGNING_KEY=$(gen LINK_SIGNING_KEY)" "LINK_SIGNING_KEYS_PREVIOUS=" "MEDIA_CLIENT_SECRET=$(gen MEDIA_CLIENT_SECRET)" "R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}" "R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}" "AZURE_STORAGE_KEY=") ;;
+    media)            out+=("UPLOADTHING_API_KEY=${UPLOADTHING_API_KEY:-}" "LINK_SIGNING_KEY=$(gen LINK_SIGNING_KEY)" "LINK_SIGNING_KEYS_PREVIOUS=" "MEDIA_CLIENT_SECRET=$(gen MEDIA_CLIENT_SECRET)" "R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}" "R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}" "OVH_S3_ACCESS_KEY_ID=${OVH_S3_ACCESS_KEY_ID:-}" "OVH_S3_SECRET_ACCESS_KEY=${OVH_S3_SECRET_ACCESS_KEY:-}" "AZURE_STORAGE_KEY=") ;;
     notifications)    out+=("RESEND_API_KEY=${RESEND_API_KEY:-}" "UNSUBSCRIBE_SIGNING_KEY=$(gen UNSUBSCRIBE_SIGNING_KEY)" "NOTIFICATIONS_CLIENT_SECRET=$(gen NOTIFICATIONS_CLIENT_SECRET)") ;;
-    offers)           out+=("${common[@]}" "OFFERS_CLIENT_SECRET=$(gen OFFERS_CLIENT_SECRET)" "FGA_API_TOKEN=$FGA_TOKEN") ;;
-    orders)           out+=("${common[@]}" "ORDERS_CLIENT_SECRET=$(gen ORDERS_CLIENT_SECRET)" "TEMPORAL_TARGET=$TEMPORAL_TARGET" "TEMPORAL_NAMESPACE=afrotransact" "TEMPORAL_TLS_CERT=" "TEMPORAL_TLS_KEY=" "HANDOVER_CODE_KEY=$(gen HANDOVER_CODE_KEY)" "PAY_LINK_KEY=$(gen PAY_LINK_KEY)" "FGA_API_TOKEN=$FGA_TOKEN") ;;
+    offers)           out+=("${common[@]}" "OFFERS_CLIENT_SECRET=$(gen OFFERS_CLIENT_SECRET)" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"}) ;;
+    orders)           out+=("${common[@]}" "ORDERS_CLIENT_SECRET=$(gen ORDERS_CLIENT_SECRET)" "TEMPORAL_TARGET=$TEMPORAL_TARGET" "TEMPORAL_NAMESPACE=afrotransact" "TEMPORAL_TLS_CERT=" "TEMPORAL_TLS_KEY=" "HANDOVER_CODE_KEY=$(gen HANDOVER_CODE_KEY)" "PAY_LINK_KEY=$(gen PAY_LINK_KEY)" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"}) ;;
     # Stripe webhook secrets (one whsec_ per Stripe endpoint; docs/runbooks/stripe-webhooks.md). A changed value reaches the pod only
     # after the services action AND a restart: kubectl -n $NS rollout restart deploy/payments (STRIPE_WEBHOOK_SECRET) or deploy/seller
     # (STRIPE_CONNECT_WEBHOOK_SECRET: required for sellers; STRIPE_BILLING_WEBHOOK_SECRET: optional, bank-debit plan fees only).
-    payments)         out+=("${common[@]}" "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}" "FGA_API_TOKEN=$FGA_TOKEN" "PAYMENTS_CLIENT_SECRET=$(gen PAYMENTS_CLIENT_SECRET)") ;;
+    payments)         out+=("${common[@]}" "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"} "PAYMENTS_CLIENT_SECRET=$(gen PAYMENTS_CLIENT_SECRET)") ;;
     promise)          out+=("REDIS_URL=$REDIS_URL") ;;
     retail)           out+=("${common[@]}" "RETAIL_CLIENT_SECRET=$(gen RETAIL_CLIENT_SECRET)") ;;
     search)           out+=("KAFKA_BOOTSTRAP=$KAFKA" "SEARCH_PROVIDER=meilisearch" "MEILISEARCH_URL=http://meilisearch.data.svc.cluster.local:7700" "MEILISEARCH_API_KEY=$MEILI_KEY" "ES_URLS=http://elasticsearch.invalid:9200" "ES_API_KEY=" "ADS_TOKEN_KEY=$(gen ADS_TOKEN_KEY)" "SEARCH_CLIENT_SECRET=$(gen SEARCH_CLIENT_SECRET)") ;;
@@ -147,7 +178,12 @@ services_secrets() {
     echo "  $svc: ${#kv[@]} keys"
   done < <(services)
   if [[ -n "${GHCR_USER:-}" && -n "${GHCR_TOKEN:-}" ]]; then
-    kubectl -n "$NS" create secret docker-registry ghcr --docker-server=ghcr.io --docker-username="$GHCR_USER" --docker-password="$GHCR_TOKEN" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    if [[ -n "${SECRETS_OUT:-}" ]]; then
+      install -d -m 700 "$SECRETS_OUT"
+      ( umask 077; kubectl -n "$NS" create secret docker-registry ghcr --docker-server=ghcr.io --docker-username="$GHCR_USER" --docker-password="$GHCR_TOKEN" --dry-run=client -o yaml > "$SECRETS_OUT/$NS.ghcr.yaml" )
+    else
+      kubectl -n "$NS" create secret docker-registry ghcr --docker-server=ghcr.io --docker-username="$GHCR_USER" --docker-password="$GHCR_TOKEN" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    fi
   fi
 }
 

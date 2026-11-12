@@ -22,7 +22,7 @@ tofu output -json turnstile_secrets      # TURNSTILE_SECRET_* into the identity 
 ```
 
 Tunnel mode: `cloudflared` runs in the cluster (`infra/k8s/platform/edge/base/cloudflared.yaml`) with the tunnel token
-(`cloudflared tunnel token <tunnel_id>`) stored at `afrotransact/<env>/cloudflared` (property `token`) and synced by ESO;
+(`cloudflared tunnel token <tunnel_id>`) stored as the Secret `cloudflared` (key `token`, namespace `ingress`), applied from SOPS by `infra/ops/secrets/apply.sh` on the OVH launch path (ESO key `afrotransact/<env>/cloudflared` on the OKMS/other-cloud path);
 the tunnel's ingress rules send every origin host to `http://envoy-gateway.ingress.svc.cluster.local:80`. Ingress mode: set `origin_target` to the load balancer and
 make Envoy require Cloudflare's origin-pull client certificate. Rate-limit periods above 10 s need a
 Pro/Business plan; adjust `auth_rate_limit` / `checkout_rate_limit` to the zone's plan.
