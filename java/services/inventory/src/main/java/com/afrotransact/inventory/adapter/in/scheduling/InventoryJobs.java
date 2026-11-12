@@ -4,6 +4,7 @@ import com.afrotransact.inventory.application.InventorySettings;
 import com.afrotransact.inventory.application.LotLifecycleService;
 import com.afrotransact.inventory.application.ReconciliationService;
 import com.afrotransact.inventory.application.ReservationService;
+import com.afrotransact.inventory.application.StockImportService;
 import com.afrotransact.inventory.application.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,14 +26,16 @@ class InventoryJobs {
     private final LotLifecycleService lots;
     private final ReconciliationService reconciliation;
     private final StorageService storage;
+    private final StockImportService stockImports;
     private final InventorySettings settings;
 
     InventoryJobs(ReservationService reservations, LotLifecycleService lots, ReconciliationService reconciliation,
-                  StorageService storage, InventorySettings settings) {
+                  StorageService storage, StockImportService stockImports, InventorySettings settings) {
         this.reservations = reservations;
         this.lots = lots;
         this.reconciliation = reconciliation;
         this.storage = storage;
+        this.stockImports = stockImports;
         this.settings = settings;
     }
 
@@ -45,6 +48,13 @@ class InventoryJobs {
                 released = reservations.expireDue(settings.sweepBatch());
             } while (released == settings.sweepBatch());
         });
+    }
+
+    /** Continues stock file imports (S395) whose pod stopped; every row is applied at most once. */
+    @Scheduled(fixedDelayString = "${at.inventory.jobs.stock-import-resume-interval:60s}",
+            initialDelayString = "${at.inventory.jobs.stock-import-resume-interval:60s}")
+    void resumeStockImports() {
+        run("stock-import-resume", stockImports::resumeStalled);
     }
 
     @Scheduled(cron = "${at.inventory.jobs.expire-lots-cron:0 5 * * * *}", zone = "${at.inventory.jobs.zone:UTC}")

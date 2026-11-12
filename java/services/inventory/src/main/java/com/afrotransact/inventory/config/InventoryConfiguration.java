@@ -3,6 +3,8 @@ package com.afrotransact.inventory.config;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import com.afrotransact.inventory.adapter.out.carrier.HttpCarrierGateway;
 import com.afrotransact.inventory.adapter.out.catalog.HttpUnitLabelClient;
@@ -53,6 +55,12 @@ class InventoryConfiguration {
     InventorySettings inventorySettings(InventoryProperties props) {
         return new InventorySettings(props.retailOrgId(), props.reservationTtl(), props.fefoMinRemainingDays(),
                 props.jobs().reservationSweepBatch(), props.storage().defaultUnitCubicFeet(), props.costCurrencies());
+    }
+
+    /** Runs stock file imports in the background (one virtual thread per started import, S395). */
+    @Bean(destroyMethod = "close")
+    ExecutorService stockImportExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Bean

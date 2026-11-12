@@ -31,6 +31,12 @@ public interface LotRepository {
 
     Optional<Lot> lockByKey(String sku, String lotNo, String nodeId);
 
+    /**
+     * Every lot of the organisation's SKU at a node that is not written off, including empty ones, in FEFO order, without
+     * locking (stock file imports, S395: the caller locks the position and then the lot it picked).
+     */
+    List<Lot> findBySkuAndNode(String sku, String nodeId, String ownerOrg);
+
     Page<Lot> search(LotQuery query);
 
     /**

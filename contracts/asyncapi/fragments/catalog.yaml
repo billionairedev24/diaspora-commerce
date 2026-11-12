@@ -48,6 +48,7 @@ channels:
     address: at.product-import.events
     description: Bulk product uploads (S308, key = upload id). Headers event-id, event-type, occurred-at.
     messages:
+      catalogImportStarted: {$ref: '#/components/messages/catalogImportStarted'}
       catalogImportCompleted: {$ref: '#/components/messages/catalogImportCompleted'}
   catalogCategoryRequestEvents:
     address: at.category-request.events
@@ -105,9 +106,11 @@ operations:
     action: send
     channel: {$ref: '#/channels/catalogProductImportEvents'}
     summary: >-
-      catalog.import.completed: a bulk upload finished importing (every importable row created, updated or failed;
-      rows with errors skipped). notifySeller is true for uploads of at least at.catalog.imports.notify-min-rows rows
-      (100 by default); notifications-service then tells the member who uploaded it.
+      catalog.import.started: a bulk upload was started (who, the file's SHA-256, the mode, the row counts; no cell
+      content). catalog.import.completed: a bulk upload finished importing (every importable row created, updated,
+      held or failed; rows with errors skipped). Offer uploads count offersCreated and heldRows (valid rows that are not
+      for sale yet). notifySeller is true for uploads of at least at.catalog.imports.notify-min-rows rows (100 by
+      default); notifications-service then tells the member who uploaded it.
   publishCatalogCategoryRequestEvents:
     action: send
     channel: {$ref: '#/channels/catalogCategoryRequestEvents'}
@@ -259,6 +262,11 @@ components:
       title: A bulk upload finished importing (S308)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogImportCompleted'}
+    catalogImportStarted:
+      name: catalog.import.started
+      title: A bulk upload was started (S396)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogImportStarted'}
     catalogProductTermsChanged:
       name: catalog.product.terms_changed
       title: Price, quantity, "was" price, condition, fulfilment, handling time or ship-from changed (S307)
@@ -556,15 +564,34 @@ components:
         ownerOrgId: {type: string}
         uploadedBy: {type: string, description: Token subject of the member who uploaded the file}
         fileName: {type: string}
-        mode: {type: string, enum: [CREATE, UPDATE]}
+        mode: {type: string, enum: [CREATE, UPDATE, OFFER, PRICE_QTY]}
         totalRows: {type: integer}
         processedRows: {type: integer}
         createdProducts: {type: integer}
-        updatedProducts: {type: integer}
+        updatedProducts: {type: integer, description: Rows that changed an existing product or offer}
         failedRows: {type: integer}
-        skippedRows: {type: integer, description: Rows with errors that were not imported}
+        skippedRows: {type: integer, description: Rows not imported because they had errors or changed nothing}
         notifySeller: {type: boolean}
         finishedAt: {type: string, format: date-time}
+        fileSha256: {type: [string, 'null'], description: SHA-256 of the uploaded file (S393)}
+        offersCreated: {type: integer, description: Rows that created an offer on an existing page (OFFER mode)}
+        heldRows: {type: integer, description: Valid rows that are not for sale yet - tax decision, selling approval or moderation}
+    CatalogImportStarted:
+      type: object
+      required: [importId, reference, ownerOrgId, uploadedBy, mode, totalRows, importableRows, errorRows, validOnly]
+      properties:
+        importId: {type: string, format: uuid}
+        reference: {type: string, description: Shown to the seller (BU-000123)}
+        ownerOrgId: {type: string}
+        uploadedBy: {type: string, description: Token subject of the member who uploaded the file}
+        mode: {type: string, enum: [CREATE, UPDATE, OFFER, PRICE_QTY]}
+        fileSha256: {type: [string, 'null'], description: SHA-256 of the uploaded file}
+        sameFileAs: {type: [string, 'null'], format: uuid, description: The organisation's earlier upload of the same file}
+        totalRows: {type: integer}
+        importableRows: {type: integer}
+        errorRows: {type: integer}
+        validOnly: {type: boolean}
+        startedAt: {type: [string, 'null'], format: date-time}
     CatalogListingImageTask:
       type: object
       required: [productId, atin, ownerOrg, state, reasonCodes]

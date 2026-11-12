@@ -51,6 +51,8 @@ tags:
     with inventory:reserve).'
 - name: Nodes
   description: Fulfilment centres, origin hubs and warehouses
+- name: Stock import
+  description: 'Stock CSV import: counts for the organisation''s own stock, validated row by row and applied in the background with the reason BULK_COUNT (S395)'
 paths:
   /v1/availability:
     get:
@@ -1738,8 +1740,414 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/StorageUsage'
+  /v1/stock/imports:
+    get:
+      tags:
+      - Stock import
+      summary: The organisation's stock files, newest first
+      operationId: listStockImports
+      parameters:
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockImportPage'
+    post:
+      tags:
+      - Stock import
+      summary: Upload and validate a stock CSV (S395)
+      description: 'Every row is validated: the SKU is held by the caller at that location, the location code, the quantity
+        (whole number, never negative, at most 99,999), lot and expiry. A SKU of another organisation looks like an unknown
+        one. Up to 50,000 rows and 25 MB. 422 inventory.upload-rejected when the file cannot be read (size, rows, missing
+        columns); nothing is stored then. 403 inventory.retail-stock for AfroTransact Retail''s own stock. 409
+        inventory.import-already-running. Starts nothing: see POST /v1/stock/imports/{id}/start. Needs inventory:inbound.'
+      operationId: uploadStockImport
+      parameters:
+      - name: mode
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ABSOLUTE
+          enum:
+          - ABSOLUTE
+          - DELTA
+      - name: ownerOrg
+        in: query
+        required: false
+        description: Staff only; sellers always act for their own organisation
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockImport'
+        '409':
+          description: inventory.import-already-running
+        '422':
+          description: inventory.upload-rejected
+  /v1/stock/imports/template:
+    get:
+      tags:
+      - Stock import
+      summary: Download the stock file template (CSV)
+      description: 'mode=ABSOLUTE: the On hand column is what you counted. mode=DELTA: the Change column is added to what is
+        on hand (a DELTA file is never applied twice). Needs inventory:inbound.'
+      operationId: stockImportTemplate
+      parameters:
+      - name: mode
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ABSOLUTE
+          enum:
+          - ABSOLUTE
+          - DELTA
+      responses:
+        '200':
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: byte
+  /v1/stock/imports/{id}:
+    get:
+      tags:
+      - Stock import
+      summary: A stock file with its validation counts and import progress
+      operationId: getStockImport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockImport'
+        '404':
+          description: inventory.import-not-found
+  /v1/stock/imports/{id}/report:
+    get:
+      tags:
+      - Stock import
+      summary: Download the row report (CSV)
+      description: 'The uploaded columns first, then Row, Result, Severity, Column, Message, Before and After. Cells starting with = + - @ are prefixed with '' (formula injection).'
+      operationId: stockImportReport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: byte
+  /v1/stock/imports/{id}/rows:
+    get:
+      tags:
+      - Stock import
+      summary: Rows of a stock file (preview)
+      description: In file order; status=ERROR filters the preview to the rows with errors, outcome to the import result
+      operationId: stockImportRows
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - VALID
+          - WARNING
+          - ERROR
+      - name: outcome
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - APPLIED
+          - UNCHANGED
+          - FAILED
+          - SKIPPED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockImportRowPage'
+  /v1/stock/imports/{id}/start:
+    post:
+      tags:
+      - Stock import
+      summary: Start the import
+      description: 'Runs in the background (poll GET /v1/stock/imports/{id}): each row locks the position and lot, refuses
+        another owner''s stock and a count below the reserved units, and writes an ADJUST movement with the reason BULK_COUNT
+        and the import id. 409 inventory.import-has-errors unless validOnly; 409 inventory.import-already-applied for a DELTA
+        file already applied. Starting again returns the import as it is.'
+      operationId: startStockImport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartStockImportRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockImport'
+        '409':
+          description: inventory.import-has-errors, inventory.import-already-applied or inventory.import-already-running
 components:
   schemas:
+    StockImport:
+      type: object
+      description: 'A stock file: validation counts and import progress (S395)'
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        fileName:
+          type: string
+        fileSha256:
+          type: string
+        sameFileAs:
+          type: string
+          format: uuid
+          description: The organisation's earlier upload of the same file in the same mode
+        mode:
+          type: string
+          enum:
+          - ABSOLUTE
+          - DELTA
+        status:
+          type: string
+          enum:
+          - VALIDATED
+          - QUEUED
+          - RUNNING
+          - COMPLETED
+          - FAILED
+        ownerOrg:
+          type: string
+        totalRows:
+          type: integer
+          format: int32
+        validRows:
+          type: integer
+          format: int32
+        warningRows:
+          type: integer
+          format: int32
+        errorRows:
+          type: integer
+          format: int32
+        processedRows:
+          type: integer
+          format: int32
+        appliedRows:
+          type: integer
+          format: int32
+        unchangedRows:
+          type: integer
+          format: int32
+        failedRows:
+          type: integer
+          format: int32
+        header:
+          type: array
+          items:
+            type: string
+        uploadedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+    StockImportPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockImport'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    StockImportRowMessage:
+      type: object
+      properties:
+        column:
+          type: string
+        severity:
+          type: string
+          enum:
+          - ERROR
+          - WARNING
+        message:
+          type: string
+    StockImportRow:
+      type: object
+      properties:
+        rowNumber:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        location:
+          type: string
+        lot:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        expiry:
+          type: string
+        status:
+          type: string
+          enum:
+          - VALID
+          - WARNING
+          - ERROR
+        outcome:
+          type: string
+          enum:
+          - PENDING
+          - APPLIED
+          - UNCHANGED
+          - FAILED
+          - SKIPPED
+        outcomeNote:
+          type: string
+        before:
+          type: integer
+          format: int32
+        after:
+          type: integer
+          format: int32
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockImportRowMessage'
+        cells:
+          type: array
+          items:
+            type: string
+    StockImportRowPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockImportRow'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    StartStockImportRequest:
+      type: object
+      description: 'validOnly: import the valid and warning rows and skip the rows with errors (required when the file has errors)'
+      properties:
+        validOnly:
+          type: boolean
     SkuDimensionsRequest:
       type: object
       description: Outer dimensions of one sellable unit, in inches

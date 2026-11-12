@@ -116,6 +116,13 @@ class JdbcLotRepository implements LotRepository {
     }
 
     @Override
+    public List<Lot> findBySkuAndNode(String sku, String nodeId, String ownerOrg) {
+        return jdbc.sql(SELECT + " where sku = :sku and node_id = :node and owner_org = :owner "
+                + "and status <> 'WRITTEN_OFF'" + FEFO).param("sku", sku).param("node", nodeId).param("owner", ownerOrg)
+                .query(JdbcLotRepository::map).list();
+    }
+
+    @Override
     public Page<Lot> search(LotQuery q) {
         StringBuilder where = new StringBuilder(" where 1 = 1");
         Map<String, Object> params = new HashMap<>();

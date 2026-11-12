@@ -530,8 +530,11 @@ paths:
       summary: Upload and validate a .xlsx or .csv file
       description: 'Every row is validated (required fields, allowed values, numbers and units, GTIN check digit, duplicate
         SKUs in the file and against the organisation''s listings, image URL format). 422 catalog.upload-rejected when the
-        file cannot be read (format, 10 MB, 5,000 rows, missing required columns); nothing is stored then. Starts nothing:
-        see POST /v1/imports/{id}/start.'
+        file cannot be read (format, 10 MB (25 MB for PRICE_QTY), 5,000 rows (50,000 for PRICE_QTY), missing required columns);
+        nothing is stored then. mode=OFFER matches each row to an existing page (barcode, ATIN or brand and part number)
+        and PRICE_QTY reads a price and quantity feed (S393, S394). 409 catalog.import-already-running (one active upload
+        per mode) and catalog.import-daily-limit (20 a day). fileSha256 and sameFileAs say when the organisation uploaded
+        the same file before. Starts nothing: see POST /v1/imports/{id}/start.'
       operationId: uploadImport
       parameters:
       - name: mode
@@ -543,6 +546,8 @@ paths:
           enum:
           - CREATE
           - UPDATE
+          - OFFER
+          - PRICE_QTY
       - name: productType
         in: query
         required: false
@@ -592,6 +597,18 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: mode
+        in: query
+        required: false
+        description: 'OFFER (sell products already on AfroTransact: barcode, ATIN or brand and part number, with price, quantity, condition, shipping and handling; no image, title or attribute columns) and PRICE_QTY (seller SKU or ATIN with price, list price and quantity) are generated server-side and do not depend on a category (S393, S394)'
+        schema:
+          type: string
+          default: CREATE
+          enum:
+          - CREATE
+          - UPDATE
+          - OFFER
+          - PRICE_QTY
       - name: format
         in: query
         required: false
@@ -4498,6 +4515,8 @@ components:
           enum:
           - CREATE
           - UPDATE
+          - OFFER
+          - PRICE_QTY
         productType:
           type: string
         status:
@@ -4560,6 +4579,21 @@ components:
         finishedAt:
           type: string
           format: date-time
+        fileSha256:
+          type: string
+          description: SHA-256 of the uploaded file (S393)
+        sameFileAs:
+          type: string
+          format: uuid
+          description: "The organisation's earlier upload of the same file in the same mode: offer to show that result instead of running it again (S393)"
+        offersCreated:
+          type: integer
+          format: int32
+          description: Rows that created an offer on an existing page
+        heldRows:
+          type: integer
+          format: int32
+          description: 'Valid rows that are not for sale yet: no resolved tax decision, a selling approval is missing, or moderation holds the image. Never live (S393)'
     StartImportRequest:
       type: object
       description: 'validOnly: import the valid and warning rows and skip the rows with errors (required when the upload has
@@ -5564,6 +5598,8 @@ components:
           - PENDING
           - CREATED
           - UPDATED
+          - OFFER_CREATED
+          - HELD
           - FAILED
           - SKIPPED
         outcomeNote:
@@ -5571,6 +5607,13 @@ components:
         productId:
           type: string
           format: uuid
+        atin:
+          type: string
+          description: The page or variant the row ended on or matched (offer rows, S393)
+        offerId:
+          type: string
+          format: uuid
+          description: The offer the row created or changed
         messages:
           type: array
           items:

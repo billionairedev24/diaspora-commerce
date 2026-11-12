@@ -8,4 +8,7 @@ public interface InventoryMetrics {
 
     /** Counts reservation outcomes (held, insufficient, replayed, expired …). */
     void reservationOutcome(String outcome);
+
+    /** Counts rows of stock file imports (S395) by outcome: APPLIED, UNCHANGED, FAILED or SKIPPED. Never a SKU or an org. */
+    void stockImportRow(String outcome);
 }

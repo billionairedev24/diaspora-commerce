@@ -28,6 +28,12 @@ class MicrometerInventoryMetrics implements InventoryMetrics {
     }
 
     @Override
+    public void stockImportRow(String outcome) {
+        Counter.builder("inventory.stock.import.rows").tag("outcome", outcome)
+                .description("Rows of stock file imports by outcome").register(registry).increment();
+    }
+
+    @Override
     public void reservationOutcome(String outcome) {
         Counter.builder("inventory.reservations").tag("outcome", outcome)
                 .description("Reservation calls by outcome").register(registry).increment();
