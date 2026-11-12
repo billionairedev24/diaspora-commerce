@@ -1,6 +1,6 @@
 'use client';
 
-import { type CartPreorder, type CheckoutPackage, type CheckoutSummary, legalHref } from '@afrotransact/api-client';
+import { type CartPreorder, type CheckoutPackage, type CheckoutSummary, legalHref, type TotalChange } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, CheckCircle, Circle, CircleNotch, ImagePlaceholder, LockSimple, PoweredByStripe, Tag } from '@afrotransact/ui';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ import { useT } from '@/i18n/t';
 
 import styles from './Checkout.module.css';
 import { CheckoutCrossSell } from './CheckoutCrossSell';
+import { TaxZipEstimate } from './TaxZipEstimate';
 
 const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', 'co.placing.split'] as const;
 
@@ -53,6 +54,17 @@ type Props = {
   setCouponDraft: (v: string) => void;
   onApplyCoupon: () => void;
   onRemoveCoupon: () => void;
+  /** The summary is being worked out again (a delivery option, address or coupon changed): the shown total is not final yet. */
+  taxPending?: boolean;
+  /** Tax-returns could not answer: "We couldn't work out your tax right now. Try again." with Retry. */
+  onRetryTax?: () => void;
+  retryingTax?: boolean;
+  /** The chosen address has no state or ZIP code: the row offers Edit address. */
+  onEditAddress?: () => void;
+  /** Place order was refused because the total would be higher: the new total, confirmed before anything is charged. */
+  totalChange?: TotalChange | null;
+  onConfirmTotal?: () => void;
+  onDismissTotal?: () => void;
 };
 
 /** Sticky checkout rail, Amazon style: total and Place order first, then the items, promo code and the breakdown. */
@@ -87,7 +99,14 @@ export function CheckoutOrderPanel(props: Props) {
     couponDraft,
     setCouponDraft,
     onApplyCoupon,
-    onRemoveCoupon
+    onRemoveCoupon,
+    taxPending = false,
+    onRetryTax,
+    retryingTax = false,
+    onEditAddress,
+    totalChange = null,
+    onConfirmTotal,
+    onDismissTotal
   } = props;
 
   const coupon = s.coupon;
@@ -97,6 +116,7 @@ export function CheckoutOrderPanel(props: Props) {
   // The estimate per line (mixed baskets): exempt lines are named, blocked ones are listed with Remove above.
   const statusOf = new Map((s.taxLines ?? []).map((l) => [l.lineId, l.status] as const));
   const estimated = s.taxEstimateStatus === 'ESTIMATED';
+  const reason = s.taxUnavailableReason;
   // Why exempt lines carry no tax, in tax-returns' words: one line per distinct reason, only for a resolved exempt line.
   const exemptReasons = [...new Set((s.taxLines ?? []).filter((l) => l.status === 'EXEMPT' && l.exemptReason).map((l) => l.exemptReason as string))];
   const exempt = [...statusOf.values()].filter((x) => x === 'EXEMPT').length;
@@ -115,19 +135,38 @@ export function CheckoutOrderPanel(props: Props) {
             <LockSimple weight="fill" aria-hidden /> {t('co.secureCheckout')}
           </p>
           <div className={styles.panelTotalRow}>
-            <span className={styles.panelTotalLabel}>{t('co.total')}</span>
+            <span className={styles.panelTotalLabel}>{estimated ? t('co.total') : t('co.totalBeforeTax')}</span>
             <span className={styles.panelTotalAmount} data-testid="checkout-total-hero">
               {fmt.money(total)}
             </span>
           </div>
           <p className={styles.panelMeta}>{t('co.items', { n: itemCount })} · {t('co.sellers', { n: s.sellerCount })}</p>
+          {estimated && !taxPending && (
+            <p className={styles.panelMeta} data-testid="checkout-total-trust">
+              {t('co.totalTrust')}
+            </p>
+          )}
         </div>
 
         <div className={styles.placeBlock}>
-          <Button size="lg" block onClick={onPlace} loading={busy} disabled={!paymentChosen || !addressOk || addressList || blocked} data-place-order="1">
+          <Button size="lg" block onClick={onPlace} loading={busy} disabled={!paymentChosen || !addressOk || addressList || blocked || taxPending || !!totalChange} data-place-order="1">
             {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
           </Button>
-          {error && (
+          {totalChange && (
+            <div className={styles.totalChanged} role="alert" data-testid="checkout-total-changed">
+              <strong>{t('co.totalChanged.title')}</strong>
+              <p>{t('co.totalChanged.body', { old: fmt.money(totalChange.previousTotalMinor), new: fmt.money(totalChange.totalMinor) })}</p>
+              <div className={styles.totalChangedActions}>
+                <Button size="sm" onClick={onConfirmTotal} loading={busy}>
+                  {t('co.totalChanged.confirm', { total: fmt.money(totalChange.totalMinor) })}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={onDismissTotal} disabled={busy}>
+                  {t('co.totalChanged.review')}
+                </Button>
+              </div>
+            </div>
+          )}
+          {error && !totalChange && (
             <p className={styles.error} role="alert">
               {error}
               {errorCartLink && (
@@ -151,9 +190,14 @@ export function CheckoutOrderPanel(props: Props) {
               {deliveryReason}
             </p>
           )}
-          {taxBlocked && (
+          {taxBlocked && (s.blockedLines ?? []).length > 0 && (
             <p className={styles.fine} data-testid="tax-blocked-note">
               {t('co.blocked.placeHint')}
+            </p>
+          )}
+          {taxBlocked && (s.blockedLines ?? []).length === 0 && !estimated && reason !== 'NEEDS_ZIP' && reason !== 'ADDRESS_INCOMPLETE' && (
+            <p className={styles.fine} data-testid="tax-retry-hint">
+              {t('co.taxRetry.hint')}
             </p>
           )}
           {undeliverable && !preLocked && (
@@ -284,9 +328,38 @@ export function CheckoutOrderPanel(props: Props) {
           )}
           <div className={styles.row}>
             <dt>{t('co.tax')}</dt>
-            <dd data-testid="checkout-tax-amount">
-              {estimated ? fmt.money(s.taxMinor) : s.taxEstimateStatus === 'NEEDS_ADDRESS' ? '—' : t('co.taxLater')}
-            </dd>
+            <dd data-testid="checkout-tax-amount">{estimated ? fmt.money(s.taxMinor) : '—'}</dd>
+            {!estimated && (
+              <dd className={styles.taxState} data-testid="checkout-tax-state" data-reason={reason ?? 'UNAVAILABLE'}>
+                {s.taxEstimateStatus === 'NEEDS_ADDRESS' || reason === 'NEEDS_ZIP' ? (
+                  <TaxZipEstimate />
+                ) : reason === 'ADDRESS_INCOMPLETE' ? (
+                  <>
+                    <p className={styles.taxStateText}>{t('co.taxAddress.incomplete')}</p>
+                    {onEditAddress && (
+                      <Button size="sm" variant="secondary" onClick={onEditAddress}>
+                        {t('co.taxAddress.edit')}
+                      </Button>
+                    )}
+                  </>
+                ) : reason === 'BLOCKED_ITEMS' ? (
+                  <p className={styles.taxStateText}>{t('co.taxBlocked')}</p>
+                ) : reason === 'NO_ITEMS' ? (
+                  <p className={styles.taxStateText}>{t('co.taxNoItems')}</p>
+                ) : (
+                  <>
+                    <p className={styles.taxStateText} role="alert">
+                      {t('co.taxRetry.message')}
+                    </p>
+                    {onRetryTax && (
+                      <Button size="sm" variant="secondary" loading={retryingTax} onClick={onRetryTax} data-testid="checkout-tax-retry">
+                        {t('co.taxRetry.button')}
+                      </Button>
+                    )}
+                  </>
+                )}
+              </dd>
+            )}
             {estimated && s.taxJurisdictionLabel && (
               <dd className={styles.rowNote} data-testid="checkout-tax-place">
                 {t('co.taxFor', { place: s.taxJurisdictionLabel })}

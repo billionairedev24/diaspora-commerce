@@ -1782,6 +1782,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/checkout/tax-estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estimated tax for a ZIP code, before an address exists (cart page, a new shopper)
+         * @description The same tax-returns quote as the checkout summary, for the selected cart lines at each package's first
+         *     delivery option, in the place the ZIP code is in. No coupon, membership or delivery choice is known yet, so the
+         *     final tax can differ; the checkout shows the estimate that is locked (`taxQuoteId`). With no `zip` the answer is
+         *     `NEEDS_ADDRESS` (the client shows a ZIP code input; never $0.00).
+         */
+        get: operations["getCheckoutTaxEstimate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/checkout/summary": {
         parameters: {
             query?: never;
@@ -1930,6 +1953,11 @@ export interface paths {
          *     method from PaymentSheet — `paymentMethodId` may be any Stripe PaymentMethod id), then call
          *     `POST /v1/checkout/orders/{orderNumber}/confirm`. 202 means the saga is still preparing — poll
          *     `GET /v1/checkout/orders/{orderNumber}`.
+         *
+         *     Send the `taxQuoteId` of the summary the shopper is looking at: orders then never charges more than the total
+         *     that summary showed (409 `CHECKOUT_TOTAL_CHANGED` instead, before any payment is created). Without a valid
+         *     one the order is placed without that guarantee, or refused with 422 `CHECKOUT_QUOTE_REQUIRED` where the
+         *     deployment requires it. An address without a state or ZIP code is refused with `errors.addressId`.
          */
         post: operations["placeOrder"];
         delete?: never;
@@ -3172,6 +3200,40 @@ export interface components {
             inCart: number;
             requested: number;
             maxQuantity?: number;
+        };
+        TotalChangedProblem: components["schemas"]["Problem"] & {
+            /** @description The total the shopper saw */
+            previousTotalMinor: number;
+            /** @description The total orders would charge now */
+            totalMinor: number;
+            taxMinor: number;
+            shippingMinor: number;
+            subtotalMinor: number;
+            discountMinor: number;
+            currency: string;
+            /** @description A quote lock for the new numbers */
+            taxQuoteId?: string;
+            /** Format: date-time */
+            taxQuoteExpiresAt?: string;
+        };
+        /** @description The tax row for a ZIP code typed before an address exists. Same fields and meaning as on CheckoutSummary. */
+        CartTaxEstimate: {
+            /** @enum {string} */
+            taxEstimateStatus: "ESTIMATED" | "UNAVAILABLE" | "NEEDS_ADDRESS";
+            /** @enum {string} */
+            taxUnavailableReason?: "NEEDS_ZIP" | "ADDRESS_INCOMPLETE" | "BLOCKED_ITEMS" | "SERVICE_UNAVAILABLE" | "FACTS_UNAVAILABLE" | "NO_ITEMS";
+            taxMinor: number;
+            taxRateLabel: string;
+            /** @example Houston, TX */
+            taxJurisdictionLabel: string;
+            taxZip?: string;
+            taxLines: components["schemas"]["CheckoutTaxLine"][];
+            blockedLines?: components["schemas"]["CheckoutBlockedLine"][];
+            subtotalMinor: number;
+            shippingMinor: number;
+            /** @description Items + delivery + estimated tax, without a coupon or membership (not yet known) */
+            totalMinor: number;
+            currency: string;
         };
         /** @description AfroTransact product identifier (one per product and per variant). */
         Atin: string;
@@ -4607,20 +4669,34 @@ export interface components {
             /** @description Estimated sales tax on the lines that can be sold; a blocked line carries none */
             taxMinor: number;
             /**
-             * @description Display text only (a rate, or the sentence for the state below). Clients word the tax row from taxEstimateStatus, not from this text.
+             * @description Display text only (a rate, or the plain sentence for the state below). Clients word the tax row from taxEstimateStatus and taxUnavailableReason, not from this text.
              * @example 8.25% TX
              */
             taxRateLabel: string;
             /**
-             * @description ESTIMATED: every line has a RESOLVED tax decision and taxMinor is the estimate (an all-exempt basket is a real 0, each exempt line carries its reason). UNAVAILABLE: tax-returns could not be asked, or a line has no definite decision; taxMinor is 0 and must not be shown as an amount ("calculated when you place your order"). NEEDS_ADDRESS: no delivery address is chosen.
+             * @description ESTIMATED: every line has a RESOLVED tax decision and taxMinor is the estimate, from the same tax-returns quote orders asks for when the order is placed (an all-exempt basket is a real 0, each exempt line carries its reason). NEEDS_ADDRESS: no destination yet; the client shows a ZIP code input (GET /v1/checkout/tax-estimate), never an amount. UNAVAILABLE: no estimate (see taxUnavailableReason); taxMinor is 0 and must not be shown as an amount; canPlaceOrder is false. The shopper is never told the tax is calculated later.
              * @enum {string}
              */
             taxEstimateStatus: "ESTIMATED" | "UNAVAILABLE" | "NEEDS_ADDRESS";
+            /**
+             * @description Why there is no estimate. NEEDS_ZIP (with NEEDS_ADDRESS); ADDRESS_INCOMPLETE: the chosen address has no state or ZIP code, the shopper completes it; BLOCKED_ITEMS: see blockedLines; SERVICE_UNAVAILABLE and FACTS_UNAVAILABLE: tax-returns or catalog did not answer, the client shows "We couldn't work out your tax right now. Try again." with a Retry button (refetch the summary) and Place order stays blocked. Absent when ESTIMATED.
+             * @enum {string}
+             */
+            taxUnavailableReason?: "NEEDS_ZIP" | "ADDRESS_INCOMPLETE" | "BLOCKED_ITEMS" | "SERVICE_UNAVAILABLE" | "FACTS_UNAVAILABLE" | "NO_ITEMS";
             /**
              * @description Where the estimate was worked out, from the delivery address; empty without an estimate. The storefront shows "Estimated tax" with it.
              * @example Houston, TX
              */
             taxJurisdictionLabel?: string;
+            /**
+             * @description The ZIP code the estimate was worked out for.
+             * @example 77002
+             */
+            taxZip?: string;
+            /** @description Quote lock: a signed token for the tax and total shown, bound to the cart lines, address, delivery options and coupon and valid until taxQuoteExpiresAt (15 minutes). Send it with Place order; orders then never charges more than totalMinor (409 CHECKOUT_TOTAL_CHANGED instead). Absent without an estimate. Refetch the summary when it expires. */
+            taxQuoteId?: string;
+            /** Format: date-time */
+            taxQuoteExpiresAt?: string;
             /** @description The estimate per cart line, for mixed baskets (exempt, taxable, blocked); empty without an estimate */
             taxLines?: components["schemas"]["CheckoutTaxLine"][];
             /** @description How the delivery charge was attributed to lines for the estimate. For packages mixing taxable and exempt items the method is an OPEN LEGAL DECISION (open decision 5) until the tax adviser approves it (approved stays false). */
@@ -4901,6 +4977,8 @@ export interface components {
             useCredit?: boolean;
             /** @description Coupon validated and redeemed by orders with the offers service (released if the order fails or is cancelled); 422 with errors.couponCode when it does not apply */
             couponCode?: string;
+            /** @description The `taxQuoteId` of the summary the shopper is looking at. With it orders never charges more than that summary's `totalMinor` (409 `CHECKOUT_TOTAL_CHANGED` with the new numbers instead, before any payment is created). After a 409, send the `taxQuoteId` the problem carries (or of a refreshed summary) with a NEW Idempotency-Key once the shopper has confirmed the new total. */
+            taxQuoteId?: string;
             deliverySelections: {
                 packageId: string;
                 /**
@@ -8716,6 +8794,32 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    getCheckoutTaxEstimate: {
+        parameters: {
+            query?: {
+                zip?: string;
+                /** @description Per-package delivery option keys, as for the summary. */
+                packageDelivery?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The estimate (or why there is none) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartTaxEstimate"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getCheckoutSummary: {
         parameters: {
             query?: {
@@ -8928,7 +9032,20 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             402: components["responses"]["Problem"];
-            409: components["responses"]["StockProblem"];
+            /**
+             * @description `STOCK_LIMIT` / `STOCK_CHANGED` (a stock problem), `IDEMPOTENCY_CONFLICT`, or `CHECKOUT_TOTAL_CHANGED`: the
+             *     order would cost more than the total the shopper saw (tax, delivery, coupon or a price changed since), so
+             *     nothing was charged. The problem carries the new numbers and a fresh `taxQuoteId`; the storefront shows the
+             *     new total and asks the shopper to confirm, then places the order again with a NEW Idempotency-Key.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblem"] | components["schemas"]["TotalChangedProblem"];
+                };
+            };
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };

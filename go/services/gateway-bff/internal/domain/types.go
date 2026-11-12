@@ -50,13 +50,13 @@ type Offer struct {
 type Sponsor struct {
 	Advertiser string `json:"advertiser"`
 	// Search ads (S240): the campaign, the 1-based slot it won, the click token to report back, and why it was shown.
-	CampaignID string         `json:"campaignId,omitempty"`
-	Slot       int            `json:"slot,omitempty"`
-	AdToken    string         `json:"adToken,omitempty"`
+	CampaignID string `json:"campaignId,omitempty"`
+	Slot       int    `json:"slot,omitempty"`
+	AdToken    string `json:"adToken,omitempty"`
 	// SearchID is the search the ad came from, set on home sponsored products (several searches fill one rail); a click
 	// is reported with it.
-	SearchID string `json:"searchId,omitempty"`
-	Reason     *SponsorReason `json:"reason,omitempty"`
+	SearchID string         `json:"searchId,omitempty"`
+	Reason   *SponsorReason `json:"reason,omitempty"`
 }
 
 // ProductSummary is a product card (search hit, rail item, typeahead product).
@@ -219,6 +219,13 @@ type CartLine struct {
 	Perishable bool `json:"perishable"`
 	// ProductType is the catalog product type code (tax-returns maps it to GENERAL | GROCERY | PREPARED_FOOD).
 	ProductType string `json:"productType,omitempty"`
+	// SellerBehaviour is how the line's seller sells the item (sold_heated, utensils_provided ...) as catalog reports it
+	// for the seller's own listing. It is part of the tax decision, so the checkout estimate sends it to tax-returns
+	// exactly as orders does; never serialised.
+	SellerBehaviour map[string]any `json:"-"`
+	// FactsMissing is true when catalog's facts for the line could not be read: the tax estimate then says so instead
+	// of quoting without them (orders would quote with them); never serialised.
+	FactsMissing bool `json:"-"`
 }
 
 // DeliveryOption is one way to ship a package.
@@ -274,6 +281,9 @@ type CartPackage struct {
 	// options[], effective doorFee / pickupFee, currency, pickupWindow, allowedMethods), relayed from the cart
 	// service; null for packages that ship now.
 	Preorder json.RawMessage `json:"preorder"`
+	// SellerOrgRaw is the seller org id exactly as the cart service sent it (empty for AfroTransact's own items): the
+	// tax quote sends this, as orders does, never the display fallback in Seller.ID; never serialised.
+	SellerOrgRaw string `json:"-"`
 }
 
 // SavedItem is a "saved for later" row.
@@ -632,12 +642,28 @@ type CheckoutCoupon struct {
 
 // Tax line statuses of CheckoutTaxLine.
 // Tax estimate states of CheckoutSummary.TaxEstimateStatus. The storefront words the tax row from this, never from the
-// label text: ESTIMATED shows the amount, UNAVAILABLE says it is "calculated when you place your order" (never $0.00 or
-// 0%), NEEDS_ADDRESS asks for an address.
+// label text: ESTIMATED shows the amount (the same tax-returns quote orders asks for at order time), NEEDS_ADDRESS asks
+// for a ZIP code, UNAVAILABLE is the exceptional state (tax-returns could not answer): Place order stays blocked and the
+// row offers Retry. The tax is never shown as $0.00 or 0% unless every line is really exempt, and the shopper is never
+// told it is calculated later.
 const (
 	TaxEstimated    = "ESTIMATED"
 	TaxUnavailable  = "UNAVAILABLE"
 	TaxNeedsAddress = "NEEDS_ADDRESS"
+)
+
+// Reasons behind CheckoutSummary.TaxUnavailableReason (a status other than ESTIMATED).
+const (
+	// TaxReasonNeedsZip: no destination yet (no address and no ZIP entered).
+	TaxReasonNeedsZip = "NEEDS_ZIP"
+	// TaxReasonAddressIncomplete: the chosen address has no state or ZIP code; the shopper completes the address.
+	TaxReasonAddressIncomplete = "ADDRESS_INCOMPLETE"
+	// TaxReasonBlockedItems: a line has no definite tax decision (BlockedLines lists it; the shopper removes it).
+	TaxReasonBlockedItems = "BLOCKED_ITEMS"
+	// TaxReasonServiceUnavailable: tax-returns did not answer (down, slow, refused). Retry.
+	TaxReasonServiceUnavailable = "SERVICE_UNAVAILABLE"
+	// TaxReasonFactsUnavailable: catalog's facts for an item could not be read, so the quote would not match orders'. Retry.
+	TaxReasonFactsUnavailable = "FACTS_UNAVAILABLE"
 )
 
 const (
@@ -696,6 +722,15 @@ type CheckoutSummary struct {
 	// TaxJurisdictionLabel names where the estimate was worked out for the shopper ("Houston, TX"); empty without an
 	// estimate. The storefront shows "Estimated tax" with it.
 	TaxJurisdictionLabel string `json:"taxJurisdictionLabel"`
+	// TaxUnavailableReason says why there is no estimate (see the TaxReason constants); empty when ESTIMATED.
+	TaxUnavailableReason string `json:"taxUnavailableReason,omitempty"`
+	// TaxZip is the ZIP code the estimate was worked out for (the address's, or the one the shopper entered).
+	TaxZip string `json:"taxZip,omitempty"`
+	// TaxQuoteID locks the shown tax and total for TaxQuoteExpiresAt (a signed token bound to the cart lines, address,
+	// delivery choices and coupon): Place order carries it, and orders refuses with CHECKOUT_TOTAL_CHANGED (the new
+	// numbers in the problem) rather than charge more than the total shown. Empty without an estimate.
+	TaxQuoteID        string `json:"taxQuoteId,omitempty"`
+	TaxQuoteExpiresAt string `json:"taxQuoteExpiresAt,omitempty"`
 	// TaxLines is the estimate per cart line (taxable, exempt or blocked) for mixed baskets; empty without an estimate.
 	TaxLines []CheckoutTaxLine `json:"taxLines"`
 	// ShippingTaxAllocation says how the delivery charge was attributed to lines for the estimate. The mixed-basket
@@ -708,11 +743,11 @@ type CheckoutSummary struct {
 	// the delivery fee is not known.
 	CanPlaceOrder bool `json:"canPlaceOrder"`
 	// DeliveryBlockedReason says in plain words why delivery stops the order (empty when it does not).
-	DeliveryBlockedReason string `json:"deliveryBlockedReason,omitempty"`
-	TotalMinor    int64           `json:"totalMinor"`
-	Currency      string          `json:"currency"`
-	SellerCount   int             `json:"sellerCount"`
-	Coupon        *CheckoutCoupon `json:"coupon,omitempty"`
+	DeliveryBlockedReason string          `json:"deliveryBlockedReason,omitempty"`
+	TotalMinor            int64           `json:"totalMinor"`
+	Currency              string          `json:"currency"`
+	SellerCount           int             `json:"sellerCount"`
+	Coupon                *CheckoutCoupon `json:"coupon,omitempty"`
 	// PublishableKey is the Stripe key for Stripe.js (Payment Element, Express Checkout Element).
 	PublishableKey string `json:"publishableKey,omitempty"`
 	// StripeCustomerID is the shopper's Stripe Customer (cus_...); passed to the Payment Element to show saved cards.
@@ -727,6 +762,23 @@ type CheckoutSummary struct {
 	// Membership says which fees were waived ("fee waived: membership") or, for a shopper who is not a member, what
 	// joining would save on this order; absent when there is nothing to say.
 	Membership *MembershipSavings `json:"membership,omitempty"`
+}
+
+// CartTaxEstimate is the tax estimate for a ZIP code the shopper typed before an address exists (cart page, new shopper):
+// GET /v1/checkout/tax-estimate?zip=. Same fields and meaning as the summary's tax row.
+type CartTaxEstimate struct {
+	TaxEstimateStatus    string                `json:"taxEstimateStatus"`
+	TaxUnavailableReason string                `json:"taxUnavailableReason,omitempty"`
+	TaxMinor             int64                 `json:"taxMinor"`
+	TaxRateLabel         string                `json:"taxRateLabel"`
+	TaxJurisdictionLabel string                `json:"taxJurisdictionLabel"`
+	TaxZip               string                `json:"taxZip,omitempty"`
+	TaxLines             []CheckoutTaxLine     `json:"taxLines"`
+	BlockedLines         []CheckoutBlockedLine `json:"blockedLines,omitempty"`
+	SubtotalMinor        int64                 `json:"subtotalMinor"`
+	ShippingMinor        int64                 `json:"shippingMinor"`
+	TotalMinor           int64                 `json:"totalMinor"`
+	Currency             string                `json:"currency"`
 }
 
 // PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).
@@ -745,6 +797,9 @@ type PlaceOrderRequest struct {
 	UseCredit bool `json:"useCredit,omitempty"`
 	// CouponCode is validated and redeemed by orders with offers-service (released if the order fails).
 	CouponCode string `json:"couponCode,omitempty"`
+	// TaxQuoteID is the lock the summary returned (taxQuoteId). With it orders never charges more than the total the
+	// shopper saw: if the total would be higher the order is refused with 409 CHECKOUT_TOTAL_CHANGED and the new numbers.
+	TaxQuoteID string `json:"taxQuoteId,omitempty"`
 	// Attribution is the last-touch source {src, cr, po}; the handler falls back to the at_attr cookie.
 	Attribution *Attribution `json:"attribution,omitempty"`
 }

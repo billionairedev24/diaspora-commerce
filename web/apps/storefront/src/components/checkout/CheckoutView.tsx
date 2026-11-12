@@ -13,7 +13,9 @@ type Cart,  cartKeys,
   isApiError,
   isCartMismatch,
   type OrderConfirmation,
-  orderKeys, randomUuid } from '@afrotransact/api-client';
+  orderKeys, randomUuid,
+  type TotalChange,
+  totalChangeOf } from '@afrotransact/api-client';
 import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -105,6 +107,10 @@ export function CheckoutView() {
   const [placing, setPlacing] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const keyRef = useRef<string>(randomUuid());
+  /** Place order was refused because the total would be higher: the new total, confirmed before anything is charged. */
+  const [totalChange, setTotalChange] = useState<TotalChange | null>(null);
+  /** The lock of the total the shopper confirmed (from the 409): sent instead of the summary's until the summary is read again. */
+  const confirmedLock = useRef<string | null>(null);
   /** Single-flight guard, set synchronously before any await (state updates are too late for a double click). */
   const busyRef = useRef(false);
   /** The order the current key created, once orders answered (checked after an error before a new key is made). */
@@ -148,6 +154,16 @@ export function CheckoutView() {
     });
   };
 
+  // The lock on the shown total lasts 15 minutes: read the summary again when it runs out, so what is shown is what will be charged.
+  const lockExpiresAt = s?.taxQuoteExpiresAt;
+  const refetchSummary = summary.refetch;
+  useEffect(() => {
+    if (!lockExpiresAt) return;
+    const wait = Math.max(0, new Date(lockExpiresAt).getTime() - Date.now());
+    const timer = setTimeout(() => void refetchSummary(), Math.min(wait, 2 ** 31 - 1));
+    return () => clearTimeout(timer);
+  }, [lockExpiresAt, refetchSummary]);
+
   const address = s?.addresses.find((a) => a.id === addressId) ?? null;
   const pm = s?.paymentMethods.find((p) => p.id === pmId) ?? null;
   const selectedShipping = useMemo(() => {
@@ -182,7 +198,9 @@ export function CheckoutView() {
   const undeliverable = (s?.packages ?? []).some((p) => p.localDelivery?.available === false && (choices[p.packageId]?.option ?? initialChoice(p).option) !== 'pickup');
   // Lines without a definite tax decision can't be sold yet: the order can't be placed until the shopper removes them.
   const blockedLines = s?.blockedLines ?? [];
-  const taxBlocked = blockedLines.length > 0 || (s?.canPlaceOrder === false && !s.deliveryBlockedReason);
+  // No estimate (tax-returns could not answer, an address without a state or ZIP code, no ZIP yet) stops the order too: the shopper
+  // is never sent to pay a total whose tax nobody worked out.
+  const taxBlocked = blockedLines.length > 0 || (s?.canPlaceOrder === false && !s.deliveryBlockedReason) || (!!s && s.taxEstimateStatus !== 'ESTIMATED');
   // A package outside every delivery zone (quote_required) can't be paid for until the shopper has an agreed delivery quote
   // (/checkout?quote=<id>), picks the package up or changes the address; a delivery fee that could not be read blocks it too
   // (listing rules D20, D21). Never a dead end: the quote box above the packages and pickup are always there.
@@ -290,6 +308,14 @@ export function CheckoutView() {
       orderRef.current = null;
     }
     end();
+    const changed = totalChangeOf(e);
+    if (changed) {
+      // Nothing was charged. Show the new total and ask first; the summary is read again so the page shows the same numbers.
+      setTotalChange(changed);
+      confirmedLock.current = changed.taxQuoteId ?? null;
+      void qc.invalidateQueries({ queryKey: checkoutKeys.all });
+      return;
+    }
     setError(
       isCartMismatch(e)
         ? t('co.cartChanged')
@@ -314,7 +340,7 @@ export function CheckoutView() {
       const attribution = readAttribution() ?? undefined;
       const couponCode = s?.coupon?.applicable ? s.coupon.code : undefined;
       const conf = await api.placeOrder(
-        { addressId: address.id, ...pay, useCredit: split.appliedMinor > 0 ? true : undefined, deliverySelections: selections(), attribution, couponCode },
+        { addressId: address.id, ...pay, useCredit: split.appliedMinor > 0 ? true : undefined, deliverySelections: selections(), attribution, couponCode, taxQuoteId: confirmedLock.current ?? s?.taxQuoteId },
         keyRef.current
       );
       orderRef.current = conf.orderNumber;
@@ -402,17 +428,28 @@ export function CheckoutView() {
   if (!s) return null;
 
   const addressList = addressOpen || !address;
-  // The tax row is worded from the BFF's taxEstimateStatus, never from its label text: a known estimate shows its rate
-  // (when a taxable line has one), an address is asked for only when none is chosen, and anything else is "calculated
-  // when you place your order" (never $0.00 or 0%).
+  // The tax row is worded from the BFF's taxEstimateStatus and taxUnavailableReason, never from its label text: a known estimate
+  // shows its amount and rate (when a taxable line has one); without one the row asks for what is missing (a ZIP code, a state)
+  // or says plainly that it didn't work and offers Retry. The shopper is never told the tax is "calculated later".
   const taxNote =
     s.taxEstimateStatus === 'ESTIMATED'
       ? /\d\s*%/.test(s.taxRateLabel)
         ? t('co.taxExplainRate', { rate: s.taxRateLabel })
         : t('co.taxExplain')
-      : s.taxEstimateStatus === 'NEEDS_ADDRESS'
-        ? t('co.taxNote')
-        : t('co.taxLaterNote');
+      : null;
+  const placeNow = () => void (creditPaysAll ? placeWithCredit() : payWith === 'new' || !pm ? placeWithElement() : placeWithSaved());
+  /** The shopper confirmed the new total: place again (a new Idempotency-Key was made when the 409 came), carrying its lock. */
+  const confirmTotal = () => {
+    if (!totalChange) return;
+    // The summary read again after the 409 has a lock bound to the inputs on screen; the problem's lock carries the same numbers.
+    confirmedLock.current = s.totalMinor === totalChange.totalMinor && s.taxQuoteId ? s.taxQuoteId : (totalChange.taxQuoteId ?? null);
+    setTotalChange(null);
+    placeNow();
+  };
+  const dismissTotal = () => {
+    confirmedLock.current = null;
+    setTotalChange(null);
+  };
 
   return (
     <div className={styles.layout}>
@@ -568,7 +605,14 @@ export function CheckoutView() {
         placing={placing}
         error={error}
         errorCartLink={error !== null && error === t('co.cartChanged')}
-        onPlace={() => void (creditPaysAll ? placeWithCredit() : payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
+        onPlace={placeNow}
+        taxPending={summary.isFetching}
+        onRetryTax={() => void summary.refetch()}
+        retryingTax={summary.isFetching}
+        onEditAddress={() => address && setAddrDialog({ open: true, address })}
+        totalChange={totalChange}
+        onConfirmTotal={confirmTotal}
+        onDismissTotal={dismissTotal}
         couponDraft={couponDraft}
         setCouponDraft={setCouponDraft}
         onApplyCoupon={() => {

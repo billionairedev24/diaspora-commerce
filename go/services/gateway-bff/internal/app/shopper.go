@@ -51,6 +51,16 @@ type ShopperDeps struct {
 	// blank means PROPORTIONAL. Must match orders' at.orders.tax.shipping-allocation. The mixed-basket method is an
 	// OPEN LEGAL DECISION (open decision 5) the tax adviser must approve before production.
 	ShippingAllocation ShippingAllocation
+	// TaxMetrics counts missing tax estimates and quote-lock use (optional).
+	TaxMetrics TaxMetrics
+	// TaxQuoteKey signs the checkout's taxQuoteId (QuoteKey of the session signing key); without it no lock is issued
+	// and Place order carries no guarantee.
+	TaxQuoteKey []byte
+	// RequireTaxQuote refuses a Place order that carries no valid, unexpired taxQuoteId (422 CHECKOUT_QUOTE_REQUIRED
+	// when none was sent). Off keeps older clients working; the web storefront always sends it.
+	RequireTaxQuote bool
+	// ZipLookup resolves a ZIP code to its city and state (geo), for the tax estimate before an address exists.
+	ZipLookup func(ctx context.Context, zip string) (city, state string, err error)
 	// PublishableKey is the Stripe publishable key handed to Stripe.js / PaymentSheet.
 	PublishableKey string
 	// IdentityPublicURL is where the browser reaches identity (hosted passkey registration page).
@@ -478,6 +488,9 @@ type CheckoutPaymentService interface {
 	Place(ctx context.Context, c *domain.Caller, key string, req domain.PlaceOrderRequest) (port.PlaceOrderResult, error)
 	Status(ctx context.Context, c *domain.Caller, number string) (domain.OrderConfirmation, error)
 	Confirm(ctx context.Context, c *domain.Caller, number string) (domain.OrderConfirmation, error)
+	// TaxEstimate is the tax estimate for a ZIP code typed before an address exists (cart page, a new shopper), from the
+	// same tax-returns quote as the checkout summary.
+	TaxEstimate(ctx context.Context, c *domain.Caller, zip string, packageDelivery map[string]string) (domain.CartTaxEstimate, error)
 }
 
 type checkoutPaymentServiceImpl struct {
@@ -623,10 +636,27 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 	if len(lines) == 0 {
 		return port.PlaceOrderResult{}, domain.ValidationProblem(map[string]string{"cart": "Select at least one item to check out"})
 	}
+	addr := s.placeAddress(ctx, c, req.AddressID)
+	if addr != nil && (strings.TrimSpace(addr.State) == "" || strings.TrimSpace(addr.PostalCode) == "") {
+		// orders could not quote tax for it (tax-returns needs a state and a ZIP code): say so here, in plain words.
+		return port.PlaceOrderResult{}, addressIncompleteProblem()
+	}
+	guard, err := s.guardPlace(ctx, c, req, sels, pkgs, addr)
+	if err != nil {
+		return port.PlaceOrderResult{}, err
+	}
 	v, status, err := s.d.Orders.Checkout(ctx, c.BearerToken, key, port.UpCheckoutRequest{AddressID: req.AddressID, DeliverySelections: sels,
 		Lines: lines, PaymentMethodID: req.PaymentMethodID, Wallet: req.Wallet, Gift: req.Gift, CouponCode: strings.TrimSpace(req.CouponCode),
-		SavePaymentMethod: req.SavePaymentMethod, UseCredit: req.UseCredit, Attribution: req.Attribution.Clean()})
+		SavePaymentMethod: req.SavePaymentMethod, UseCredit: req.UseCredit, Attribution: req.Attribution.Clean(), TaxGuard: guard})
 	if err != nil {
+		if up, ok := port.AsUpstreamProblem(err); ok && up.Code == "orders.total-changed" {
+			var expected int64
+			if guard != nil {
+				expected = guard.ExpectedTotalMinor
+			}
+			s.d.taxMetrics().QuoteLock(lockTotalChanged)
+			return port.PlaceOrderResult{}, totalChangedProblem(s.d.TaxQuoteKey, s.d.Clock.now(), c.Subject, up, expected, err)
+		}
 		return port.PlaceOrderResult{}, orderErr(err)
 	}
 	res := port.PlaceOrderResult{Status: http.StatusCreated, Confirmation: toConfirmation(v)}

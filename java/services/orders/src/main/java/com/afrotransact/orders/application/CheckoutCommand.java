@@ -16,6 +16,7 @@ import com.afrotransact.orders.domain.Attribution;
  * @param attribution     storefront attribution {src, cr, po} (S272), stored on the order; null when none
  * @param savePaymentMethod the shopper pays with a new method from Stripe's Payment Element and keeps it for future
  *                          purchases: the PaymentIntent is created with setup_future_usage=off_session (S282)
+ * @param taxGuard          the total and tax the shopper was shown (null: no guard); see {@link CheckoutInput.TaxGuard}
  * @param useCredit         pay with the shopper's AfroTransact credit first (S320): credit is spent up to the order
  *                          total in the same step that creates the payment, and the card pays only the rest; an order
  *                          that credit pays in full needs no card
@@ -23,7 +24,15 @@ import com.afrotransact.orders.domain.Attribution;
 public record CheckoutCommand(String idempotencyKey, String customerBearer, String addressId,
                               List<CheckoutInput.Selection> selections, List<SelectedLine> lines,
                               String couponCode, Attribution attribution, boolean savePaymentMethod,
-                              boolean useCredit) {
+                              boolean useCredit, CheckoutInput.TaxGuard taxGuard) {
+
+    /** A checkout without a shown-total guard. */
+    public CheckoutCommand(String idempotencyKey, String customerBearer, String addressId,
+                           List<CheckoutInput.Selection> selections, List<SelectedLine> lines, String couponCode,
+                           Attribution attribution, boolean savePaymentMethod, boolean useCredit) {
+        this(idempotencyKey, customerBearer, addressId, selections, lines, couponCode, attribution,
+                savePaymentMethod, useCredit, null);
+    }
 
     /** A checkout that does not use credit. */
     public CheckoutCommand(String idempotencyKey, String customerBearer, String addressId,

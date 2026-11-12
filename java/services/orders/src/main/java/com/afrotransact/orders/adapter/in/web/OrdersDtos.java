@@ -16,6 +16,7 @@ import com.afrotransact.orders.domain.HandoverPreference;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -45,7 +46,18 @@ final class OrdersDtos {
             @Schema(description = "S320: pay with the shopper's AfroTransact credit first. Credit is spent, up to the "
                     + "order total, in the step that creates the payment (once per order, never more than the "
                     + "balance); the card pays only the rest, and an order that credit pays in full needs no card "
-                    + "(the answer has no clientSecret). Credit can only buy products and services") Boolean useCredit) {
+                    + "(the answer has no clientSecret). Credit can only buy products and services") Boolean useCredit,
+            @Schema(description = "The total and tax the shopper was shown (gateway-bff checks the signed lock): the "
+                    + "checkout is refused with 409 orders.total-changed, before any payment is created, when the order "
+                    + "would cost more. Omit for no guard") @Valid TaxGuardDto taxGuard) {
+
+        /** A request without a shown-total guard. */
+        CheckoutRequest(String addressId, List<DeliverySelection> deliverySelections, List<Line> lines,
+                        String paymentMethodId, String wallet, Boolean gift, String couponCode,
+                        AttributionDto attribution, Boolean savePaymentMethod, Boolean useCredit) {
+            this(addressId, deliverySelections, lines, paymentMethodId, wallet, gift, couponCode, attribution,
+                    savePaymentMethod, useCredit, null);
+        }
 
         CheckoutCommand toCommand(String idempotencyKey, String bearer) {
             List<CheckoutInput.Selection> selections = deliverySelections == null ? List.of()
@@ -56,7 +68,15 @@ final class OrdersDtos {
             return new CheckoutCommand(idempotencyKey, bearer, addressId, selections, selected, couponCode,
                     attribution == null ? null : Attribution.ofNullable(attribution.src(), attribution.cr(),
                             attribution.po()), Boolean.TRUE.equals(savePaymentMethod),
-                    Boolean.TRUE.equals(useCredit));
+                    Boolean.TRUE.equals(useCredit), taxGuard == null ? null : taxGuard.toGuard());
+        }
+    }
+
+    @Schema(name = "TaxGuard", description = "What the shopper was shown at checkout")
+    record TaxGuardDto(@Min(0) long expectedTotalMinor, @Min(0) long expectedTaxMinor, boolean inputsMatch) {
+
+        CheckoutInput.TaxGuard toGuard() {
+            return new CheckoutInput.TaxGuard(expectedTotalMinor, expectedTaxMinor, inputsMatch);
         }
     }
 

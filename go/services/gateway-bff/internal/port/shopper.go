@@ -217,6 +217,18 @@ type UpCheckoutRequest struct {
 	UseCredit bool `json:"useCredit,omitempty"`
 	// Attribution {src, cr, po} is stored on the order and echoed in orders.order.placed.
 	Attribution *domain.Attribution `json:"attribution,omitempty"`
+	// TaxGuard is the total and tax the shopper saw (from the signed taxQuoteId): orders refuses with 409
+	// orders.total-changed, before any payment is created, when the order would cost more.
+	TaxGuard *UpTaxGuard `json:"taxGuard,omitempty"`
+}
+
+// UpTaxGuard is orders' TaxGuard: what the shopper was shown, and whether the order is for the inputs it was shown for.
+type UpTaxGuard struct {
+	ExpectedTotalMinor int64 `json:"expectedTotalMinor"`
+	ExpectedTaxMinor   int64 `json:"expectedTaxMinor"`
+	// InputsMatch is true when the cart lines, address, delivery options and coupon are those the lock was issued for
+	// (and it had not expired): only then is a difference between the shown tax and the final tax an estimate error.
+	InputsMatch bool `json:"inputsMatch"`
 }
 
 // CustomerOrdersClient calls orders with the customer's token: Your orders, cancel, checkout saga.
@@ -276,12 +288,15 @@ type ReturnsClient interface {
 type UpTaxQuoteLine struct {
 	LineID         string `json:"lineId"`
 	ATIN           string `json:"atin"`
-	SellerOrgID    string `json:"sellerOrgId"`
+	SellerOrgID    string `json:"sellerOrgId,omitempty"`
 	ProductType    string `json:"productType,omitempty"`
 	Quantity       int    `json:"quantity"`
 	UnitPriceMinor int64  `json:"unitPriceMinor"`
 	DiscountMinor  int64  `json:"discountMinor"`
 	ShippingMinor  int64  `json:"shippingMinor"`
+	// SellerBehaviour is how the seller sells the item (sold_heated, utensils_provided ...): part of the decision, sent
+	// exactly as orders sends it (empty object when catalog reports none).
+	SellerBehaviour map[string]any `json:"sellerBehaviour"`
 }
 
 // UpTaxShipTo is tax-returns' TaxShipTo.

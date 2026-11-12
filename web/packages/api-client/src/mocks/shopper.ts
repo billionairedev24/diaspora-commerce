@@ -23,7 +23,7 @@ import {
   type ServiceDetail,
   type ShipmentDetail
 } from '../schemas/shopper';
-import { mockCheckoutTax } from './checkout-tax';
+import { mockCheckoutTax, TAX_LABELS } from './checkout-tax';
 import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
 import { addBusinessDays, insideDeliveryZone, LABEL_PICKUP_POINT, LABEL_QUOTE_REQUIRED, LABEL_STORE_DELIVERY, LABEL_STORE_PICKUP, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf, miles } from './delivery';
@@ -269,8 +269,10 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     shipDiscLeft -= off;
     shippingByPackage[p.packageId] = Math.max(0, fee) - off;
   }
-  const tax = mockCheckoutTax({ packages, state: addr?.state, city: addr?.city, shippingByPackage, discountMinor, hasAddress: !!addr });
+  const tax = mockCheckoutTax({ packages, state: addr?.state, city: addr?.city, zip: addr?.zip, shippingByPackage, discountMinor, hasAddress: !!addr });
   const { taxMinor, taxRateLabel } = tax;
+  const total = subtotal - discountMinor + netShipping + taxMinor;
+  const lockExpires = new Date(ctx.now.getTime() + 15 * 60_000).toISOString();
   // A package whose chosen delivery is quote_required can't be paid for: the shopper asks for a quote or picks it up.
   const quotePkg = packages.find((p) => (packageChoice(p, packageDelivery ?? null)?.key ?? '') === 'quote_required');
   return {
@@ -285,6 +287,10 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     taxMinor,
     taxRateLabel,
     taxEstimateStatus: tax.taxEstimateStatus,
+    ...(tax.taxUnavailableReason ? { taxUnavailableReason: tax.taxUnavailableReason } : {}),
+    ...(tax.taxZip ? { taxZip: tax.taxZip } : {}),
+    // The lock a real BFF signs; the mock only needs it to exist while there is an estimate.
+    ...(tax.taxEstimateStatus === 'ESTIMATED' ? { taxQuoteId: `mock-lock.${total}.${taxMinor}`, taxQuoteExpiresAt: lockExpires } : {}),
     taxJurisdictionLabel: tax.taxJurisdictionLabel,
     taxLines: tax.taxLines,
     shippingTaxAllocation: tax.shippingTaxAllocation,
@@ -588,6 +594,32 @@ export const shopperHandlers = [
   http.get('*/v1/cart/membership', route((ctx) => {
     const a = me(ctx);
     return json(membershipQuote(membershipState(a), checkoutPackages(ctx.session, ctx.session.zip, ctx.now), null));
+  })),
+
+  /* Estimated tax for a ZIP code typed before an address exists (cart page, a new shopper) */
+  http.get('*/v1/checkout/tax-estimate', route((ctx) => {
+    const q = new URL(ctx.request.url).searchParams;
+    const zip = (q.get('zip') ?? '').trim();
+    const packages = checkoutPackages(ctx.session, ctx.session.zip, ctx.now);
+    const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
+    const shipping = packageDeliveryFees(packages, q.get('packageDelivery'));
+    const empty = { taxMinor: 0, taxJurisdictionLabel: '', taxLines: [], blockedLines: [], subtotalMinor: subtotal, shippingMinor: shipping, totalMinor: subtotal + shipping, currency: 'USD' };
+    // No ZIP code typed: a signed-in shopper's saved default address is used when it can be taxed (a state and a ZIP code).
+    let saved: { zip: string; state: string; city: string } | undefined;
+    if (!zip) {
+      try {
+        const a = me(ctx).addresses.find((x) => x.isDefault && x.state?.trim() && x.zip.trim());
+        if (a) saved = { zip: a.zip, state: a.state ?? '', city: a.city };
+      } catch {
+        // a guest has no address book
+      }
+      if (!saved) return json({ ...empty, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxRateLabel: TAX_LABELS.NEEDS_ZIP });
+    }
+    const place = saved ?? locationForZip(zip.slice(0, 5));
+    if (!saved && (!/^\d{5}(-\d{4})?$/.test(zip) || !place)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'We don’t recognise that ZIP code.', { errors: { zip: 'Enter a 5-digit ZIP code' } });
+    const shippingByPackage = Object.fromEntries(packages.map((p) => [p.packageId, packageDeliveryFees([p], q.get('packageDelivery'))]));
+    const tax = mockCheckoutTax({ packages, state: place?.state, city: place?.city, zip: saved?.zip ?? zip, shippingByPackage, discountMinor: 0, hasAddress: true });
+    return json({ ...empty, ...tax, taxMinor: tax.taxMinor, totalMinor: subtotal + shipping + tax.taxMinor });
   })),
 
   /* Checkout */

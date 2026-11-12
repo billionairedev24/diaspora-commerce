@@ -93,3 +93,4 @@
 
 /* Pre-order package (S273): lines under the dark group header, then the door / pickup choice. */
 .preorderLines { border: 1px solid var(--at-color-border); border-top: 0; border-radius: 0 0 var(--at-radius-md) var(--at-radius-md); padding: 0 var(--at-space-3) var(--at-space-3); margin-bottom: var(--at-space-4); }
+.taxEstimate { display: flex; flex-direction: column; gap: var(--at-space-2); font-size: var(--at-text-sm); }

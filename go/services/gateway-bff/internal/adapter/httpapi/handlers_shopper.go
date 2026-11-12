@@ -94,6 +94,7 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 		route("POST /v1/pay-links/{orderNumber}/confirm", lookup(h.payLinkConfirm))
 	}
 	// Checkout payment
+	route("GET /v1/checkout/tax-estimate", h.rl.wrap("lookup", h.o.LookupPerMinute, h.taxEstimate))
 	route("GET /v1/checkout/orders/{orderNumber}", h.checkoutStatus)
 	route("POST /v1/checkout/orders/{orderNumber}/confirm", h.confirmCheckout)
 	// Login & security
@@ -256,6 +257,12 @@ func (h *handlersImpl) payLinkConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------- checkout
+
+func (h *handlersImpl) taxEstimate(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	v, err := h.s.Shopper.Checkout.TaxEstimate(r.Context(), callerFrom(r.Context()), q.Get("zip"), parseCheckoutPackageDelivery(q))
+	h.ok(w, r, v, err)
+}
 
 func (h *handlersImpl) checkoutStatus(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Shopper.Checkout.Status(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"))

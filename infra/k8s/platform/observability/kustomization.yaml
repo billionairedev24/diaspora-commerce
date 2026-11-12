@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
   - external-secrets.yaml
   - prometheus-rules/catalog-tax-gate.yaml
+  - prometheus-rules/checkout-tax-estimate.yaml
   - prometheus-rules/elasticsearch.yaml
   - prometheus-rules/inventory.yaml
   - prometheus-rules/kafka.yaml

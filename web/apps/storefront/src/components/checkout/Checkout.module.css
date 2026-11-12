@@ -517,3 +517,12 @@
 .pointList { margin: 0; padding: 0 0 0 var(--at-space-6); border: 0; display: flex; flex-direction: column; }
 .pointRow { display: flex; align-items: flex-start; gap: var(--at-space-3); padding: var(--at-space-2) 0; cursor: pointer; }
 .pointRow input[type="radio"] { margin-top: 3px; accent-color: var(--at-color-action-secondary); flex: none; }
+
+/* The tax row without an estimate: a ZIP code input, what to add to the address, or a retry; never a number. */
+.taxState { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--at-space-2); text-align: left; white-space: normal; font-variant-numeric: normal; font-size: var(--at-text-sm); }
+.taxStateText { margin: 0; color: var(--at-color-text); line-height: var(--at-leading-normal); }
+
+/* "Your total changed": the new total, confirmed before anything is charged. */
+.totalChanged { display: flex; flex-direction: column; gap: var(--at-space-2); padding: var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface-subtle, transparent); }
+.totalChanged p { margin: 0; font-size: var(--at-text-sm); line-height: var(--at-leading-normal); }
+.totalChangedActions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }

@@ -35,10 +35,21 @@ public record CheckoutInput(String orderId, String orderNumber, String customerI
                             String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
                             List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
                             String couponCode, Attribution attribution, Map<String, String> preorderFulfilment,
-                            LateAdd lateAdd, boolean savePaymentMethod, boolean useCredit) {
+                            LateAdd lateAdd, boolean savePaymentMethod, boolean useCredit, TaxGuard taxGuard) {
 
     public CheckoutInput {
         preorderFulfilment = preorderFulfilment == null ? Map.of() : Map.copyOf(preorderFulfilment);
+    }
+
+    /** An input without a shown-total guard (late adds, tests, workflow histories recorded before the guard). */
+    public CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
+                         String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
+                         List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
+                         String couponCode, Attribution attribution, Map<String, String> preorderFulfilment,
+                         LateAdd lateAdd, boolean savePaymentMethod, boolean useCredit) {
+        this(orderId, orderNumber, customerId, idempotencyKey, workflowId, currency, shipTo, items, selections,
+                paymentTimeoutSeconds, requestedAt, couponCode, attribution, preorderFulfilment, lateAdd,
+                savePaymentMethod, useCredit, null);
     }
 
     /** An input that does not use credit (late adds, older workflow histories). */
@@ -77,6 +88,18 @@ public record CheckoutInput(String orderId, String orderNumber, String customerI
      * @param windowId the pre-order window the staff member adds to
      */
     public record LateAdd(String windowId) {
+    }
+
+    /**
+     * What the shopper was shown (the checkout summary's signed tax quote lock, checked by the gateway): the order is
+     * refused with {@link CheckoutCodes#TOTAL_CHANGED}, before any payment exists, when it would cost more.
+     *
+     * @param expectedTotalMinor the order total the shopper saw
+     * @param expectedTaxMinor   the estimated tax the shopper saw
+     * @param inputsMatch        the cart lines, address, delivery options and coupon are those the estimate was made for
+     *                           (and it had not expired): only then is a tax difference an estimate error
+     */
+    public record TaxGuard(long expectedTotalMinor, long expectedTaxMinor, boolean inputsMatch) {
     }
 
     /** True when the shopper entered a coupon. */

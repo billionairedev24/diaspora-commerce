@@ -227,7 +227,8 @@ class CheckoutServiceImpl implements CheckoutService {
                 request.idempotencyKey(), request.workflowId(), currency, shipTo, items,
                 redeemQuote(request, cmd.selections(), items, shipTo), settings.paymentTimeout().toSeconds(),
                 Instant.now(clock), cmd.couponCode(),
-                cmd.attribution(), snapshot.preorderFulfilment(), null, cmd.savePaymentMethod(), cmd.useCredit());
+                cmd.attribution(), snapshot.preorderFulfilment(), null, cmd.savePaymentMethod(), cmd.useCredit(),
+                cmd.taxGuard());
     }
 
     /**
@@ -323,7 +324,7 @@ class CheckoutServiceImpl implements CheckoutService {
 
     private CheckoutView view(CheckoutRequest r) {
         if (OrderPlacementServiceImpl.STATUS_FAILED.equals(r.status())) {
-            throw new CheckoutFailed(r.failureCode(), r.failureMessage(), r.orderNumber(), List.of());
+            throw CheckoutFailed.of(r.failureCode(), r.failureMessage(), r.orderNumber());
         }
         Optional<Order> order = orders.findById(r.orderId());
         String status = switch (r.status()) {

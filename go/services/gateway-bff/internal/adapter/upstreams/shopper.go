@@ -152,7 +152,7 @@ func (r *returnsImpl) TaxQuote(ctx context.Context, req port.UpTaxQuoteRequest) 
 	if r.tokens != nil {
 		t, err := r.tokens.Token(ctx, "tax:quote")
 		if err != nil {
-			return out, err
+			return out, fmt.Errorf("service token for tax-returns: %w", err)
 		}
 		bearer = t
 	}

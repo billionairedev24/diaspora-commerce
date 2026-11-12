@@ -23,7 +23,7 @@ describe('shipping allocation (shared vectors with orders and gateway-bff)', () 
 });
 
 describe('mock checkout tax', () => {
-  const base = { state: 'TX', city: 'Houston', discountMinor: 0, hasAddress: true };
+  const base = { state: 'TX', city: 'Houston', zip: '77002', discountMinor: 0, hasAddress: true };
 
   it('statuses: groceries exempt, general goods taxable, held categories blocked', () => {
     expect(mockLineStatus('spices')).toBe('EXEMPT');
@@ -61,12 +61,32 @@ describe('mock checkout tax', () => {
     // a basket with a line that has no definite decision has no figure at all
     expect(t.taxMinor).toBe(0);
     expect(t.taxEstimateStatus).toBe('UNAVAILABLE');
+    expect(t.taxUnavailableReason).toBe('BLOCKED_ITEMS');
     expect(t.taxLines[1]).toMatchObject({ status: 'BLOCKED', taxMinor: 0 });
   });
 
-  it('outside Texas (no rules) the tax is unavailable, never $0.00 or 0%, and with no address it asks for one', () => {
+  it('outside Texas (no rules) the quote fails: the retry state, never $0.00, 0% or "calculated later"; with no address it asks for a ZIP code', () => {
     const p = [pkg('a', line('l1', 'Sauce pan', 'home-decor', 3000))];
-    expect(mockCheckoutTax({ ...base, state: 'NY', city: 'Albany', packages: p, shippingByPackage: { a: 500 } })).toMatchObject({ taxMinor: 0, taxEstimateStatus: 'UNAVAILABLE', taxRateLabel: 'Calculated when you place your order' });
-    expect(mockCheckoutTax({ ...base, hasAddress: false, packages: p, shippingByPackage: {} })).toMatchObject({ taxMinor: 0, taxEstimateStatus: 'NEEDS_ADDRESS', taxLines: [], taxJurisdictionLabel: '' });
+    const ny = mockCheckoutTax({ ...base, state: 'NY', city: 'Albany', zip: '12207', packages: p, shippingByPackage: { a: 500 } });
+    expect(ny).toMatchObject({ taxMinor: 0, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'SERVICE_UNAVAILABLE', taxRateLabel: "We couldn't work out your tax right now. Try again.", canPlaceOrder: false });
+    expect(mockCheckoutTax({ ...base, hasAddress: false, packages: p, shippingByPackage: {} })).toMatchObject({
+      taxMinor: 0,
+      taxEstimateStatus: 'NEEDS_ADDRESS',
+      taxUnavailableReason: 'NEEDS_ZIP',
+      taxRateLabel: 'Enter your ZIP code to see tax',
+      taxLines: [],
+      taxJurisdictionLabel: ''
+    });
+  });
+
+  it('an address without a state or ZIP code has no estimate and says what to add', () => {
+    const p = [pkg('a', line('l1', 'Sauce pan', 'home-decor', 3000))];
+    expect(mockCheckoutTax({ ...base, state: '', zip: '77002', packages: p, shippingByPackage: {} })).toMatchObject({ taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'ADDRESS_INCOMPLETE', canPlaceOrder: false });
+    expect(mockCheckoutTax({ ...base, state: 'TX', zip: '', packages: p, shippingByPackage: {} })).toMatchObject({ taxUnavailableReason: 'ADDRESS_INCOMPLETE' });
+  });
+
+  it('the estimate carries the ZIP code it was worked out for', () => {
+    const p = [pkg('a', line('l1', 'Sauce pan', 'home-decor', 3000))];
+    expect(mockCheckoutTax({ ...base, zip: '77002', packages: p, shippingByPackage: { a: 0 } })).toMatchObject({ taxEstimateStatus: 'ESTIMATED', taxZip: '77002' });
   });
 });

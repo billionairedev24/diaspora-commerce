@@ -8,6 +8,9 @@ public final class CheckoutCodes {
     /** A cart line has no definite tax decision (missing facts, awaiting approval, blocked): it cannot be sold yet.
      *  The shopper removes it, or tries again later (422). Never defaulted, estimated or dropped silently. */
     public static final String TAX_LINE_BLOCKED = "orders.tax-line-blocked";
+    /** The order would cost more than the total the shopper was shown (tax, delivery, coupon or a price changed since).
+     *  Nothing is charged; the problem carries the new numbers and the shopper confirms before paying (409). */
+    public static final String TOTAL_CHANGED = "orders.total-changed";
     public static final String CURRENCY_MISMATCH = "orders.currency-mismatch";
     public static final String MARKET_DISABLED = "orders.market-disabled";
     public static final String ADDRESS_NOT_FOUND = "orders.address-not-found";

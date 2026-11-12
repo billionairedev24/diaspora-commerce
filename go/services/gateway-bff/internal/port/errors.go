@@ -19,6 +19,9 @@ type UpstreamProblem struct {
 	Detail     string
 	Fields     map[string]string
 	RetryAfter int
+	// Extra holds the problem's extension members (everything but type, title, status, detail, instance and code), e.g.
+	// the new totals of orders.total-changed.
+	Extra map[string]any
 }
 
 func (p *UpstreamProblem) Error() string {

@@ -34,6 +34,8 @@ import {
   BusinessPageSchema,
   type CancellationQuote,
   CancellationQuoteSchema,
+  type CartTaxEstimate,
+  CartTaxEstimateSchema,
   type CheckoutSummary,
   CheckoutSummarySchema,
   type CustomerBooking,
@@ -162,6 +164,9 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     /* Checkout (orders saga + Stripe) */
     getCheckoutSummary: (addressId?: string, packageDelivery?: string, couponCode?: string, signal?: AbortSignal): Promise<CheckoutSummary> =>
       request('/v1/checkout/summary', CheckoutSummarySchema, { query: { addressId, packageDelivery, couponCode }, signal }),
+    /** Estimated tax for a ZIP code typed before an address exists (cart page, a new shopper); same tax-returns quote as the checkout. */
+    getTaxEstimate: (zip: string, packageDelivery?: string, signal?: AbortSignal): Promise<CartTaxEstimate> =>
+      request('/v1/checkout/tax-estimate', CartTaxEstimateSchema, { query: { zip, packageDelivery }, signal }),
     placeOrder: (body: PlaceOrderRequest, idempotencyKey: string): Promise<OrderConfirmation> =>
       request('/v1/checkout/orders', OrderConfirmationSchema, { method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey } }),
     getCheckoutStatus: (orderNumber: string): Promise<OrderConfirmation> => request(`/v1/checkout/orders/${enc(orderNumber)}`, OrderConfirmationSchema),

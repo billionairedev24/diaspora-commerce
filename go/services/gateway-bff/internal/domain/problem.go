@@ -66,7 +66,13 @@ const (
 	CodeDeliveryPickupUnavailable = "DELIVERY_PICKUP_UNAVAILABLE"
 	CodeDeliveryAddressNotLocated = "DELIVERY_ADDRESS_NOT_LOCATED"
 	// CodeCheckoutItemBlocked: a cart line can't be sold yet (its tax decision is not definite); remove it or wait.
-	CodeCheckoutItemBlocked       = "CHECKOUT_ITEM_BLOCKED"
+	CodeCheckoutItemBlocked = "CHECKOUT_ITEM_BLOCKED"
+	// CodeCheckoutTotalChanged: the total would be higher than the one the shopper saw (tax, delivery, coupon or price
+	// changed since); nothing was charged. The problem carries the new numbers; the shopper confirms before paying.
+	CodeCheckoutTotalChanged = "CHECKOUT_TOTAL_CHANGED"
+	// CodeCheckoutQuoteRequired: a checkout without a valid, unexpired tax quote lock (taxQuoteId) is refused when the
+	// deployment requires one.
+	CodeCheckoutQuoteRequired     = "CHECKOUT_QUOTE_REQUIRED"
 	CodePickupOrgNotApproved      = "PICKUP_ORG_NOT_APPROVED"
 	CodePickupInvalidHours        = "PICKUP_INVALID_HOURS"
 	CodePickupNotGeocoded         = "PICKUP_NOT_GEOCODED"

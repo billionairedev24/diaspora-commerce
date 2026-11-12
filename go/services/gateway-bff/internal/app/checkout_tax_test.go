@@ -159,9 +159,10 @@ func TestLinesWithoutADefiniteDecisionAreBlockedNotGuessed(t *testing.T) {
 			strings.Contains(b.Message, "ATIN") || strings.Contains(b.Message, "NEEDS_APPROVAL") {
 			t.Fatalf("%s: message must be plain, name the item, and carry no ids or tax terms: %q", name, b.Message)
 		}
-		// a basket with a line that has no definite decision has no tax figure at all: the row says it is calculated
-		// when the order is placed (never an amount for part of the basket), and the blocked line carries no tax
-		if sum.TaxMinor != 0 || sum.TaxEstimateStatus != domain.TaxUnavailable || sum.TaxRateLabel != taxLabelUnavailable ||
+		// a basket with a line that has no definite decision has no tax figure at all: the row asks to remove the item
+		// (never an amount for part of the basket), and the blocked line carries no tax
+		if sum.TaxMinor != 0 || sum.TaxEstimateStatus != domain.TaxUnavailable || sum.TaxRateLabel != taxLabelBlockedItems ||
+			sum.TaxUnavailableReason != domain.TaxReasonBlockedItems ||
 			sum.TaxLines[1].Status != domain.TaxLineBlocked || sum.TaxLines[1].TaxMinor != 0 || sum.TaxLines[1].ExemptReason != "" {
 			t.Fatalf("%s: estimate %+v %+v", name, sum.TaxMinor, sum.TaxLines)
 		}
@@ -194,10 +195,13 @@ func TestCreditNeverEntersTheTaxQuote(t *testing.T) {
 	}
 }
 
-func TestAnUnavailableQuoteLeavesTheEstimateEmptyAndBlocksNothing(t *testing.T) {
+// tax-returns being down is the exceptional state: no number, a plain "try again", and Place order stays blocked (the
+// shopper is never sent to pay an order whose tax nobody worked out).
+func TestAnUnavailableQuoteBlocksPlaceOrderAndSaysTryAgain(t *testing.T) {
 	f := &fakeReturns{err: errors.New("down")}
 	sum := price(t, f, "", domain.CheckoutSummary{Currency: "USD", Packages: []domain.CheckoutPackage{pkg("a", 0, cl("l1", "Rice", 1, 1000))}})
-	if !sum.CanPlaceOrder || sum.TaxMinor != 0 || sum.TaxJurisdictionLabel != "" || len(sum.TaxLines) != 0 || sum.ShippingTaxAllocation != nil {
+	if sum.CanPlaceOrder || sum.TaxMinor != 0 || sum.TaxJurisdictionLabel != "" || len(sum.TaxLines) != 0 || sum.ShippingTaxAllocation != nil ||
+		sum.TaxUnavailableReason != domain.TaxReasonServiceUnavailable || sum.TaxRateLabel != taxLabelTryAgain {
 		t.Fatalf("%+v", sum)
 	}
 }
@@ -239,7 +243,7 @@ func TestAnExemptionReasonOnlyComesFromAResolvedExemptDecision(t *testing.T) {
 func TestATaxLookupThatFailsLeavesTheTaxUnavailableNotZero(t *testing.T) {
 	f := &fakeReturns{err: errors.New("down")}
 	sum := price(t, f, "", domain.CheckoutSummary{Currency: "USD", Packages: []domain.CheckoutPackage{pkg("a", 0, cl("l1", "Rice", 1, 1000))}})
-	if sum.TaxEstimateStatus != domain.TaxUnavailable || sum.TaxRateLabel != taxLabelUnavailable || sum.TaxMinor != 0 || sum.TaxJurisdictionLabel != "" {
+	if sum.TaxEstimateStatus != domain.TaxUnavailable || sum.TaxRateLabel != taxLabelTryAgain || sum.TaxMinor != 0 || sum.TaxJurisdictionLabel != "" {
 		t.Fatalf("%+v", sum)
 	}
 }

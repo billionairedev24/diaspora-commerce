@@ -1,0 +1,60 @@
+# The checkout tax estimate and the tax charged must agree (docs/engineering/checkout-tax-estimate.md).
+#   gateway-bff  tax_estimate_unavailable_total{reason}      a checkout summary without a tax estimate, by reason
+#                checkout_tax_quote_lock_total{result}       the tax quote lock: issued, honoured, inputs_changed, expired, invalid,
+#                                                            missing, total_changed
+#   orders       checkout_tax_estimate_vs_final_total{inputs,outcome}   orders placed with a lock: final tax = estimate (match) or not
+#                checkout_tax_estimate_vs_final_delta_{count,sum,max}   the absolute tax difference of every mismatch, in minor units
+#                checkout_total_refused_total{inputs}                   orders refused because the total would be higher
+# inputs="same": the order is for the cart lines, address, delivery options and coupon the estimate was made for. Only those count
+# against the 99 % target; inputs="changed" is the shopper changing something after seeing the total.
+# Metric status: gateway-bff and orders meters written with this file; nothing here has run against live data.
+groups:
+  - name: afrotransact-checkout-tax-estimate
+    rules:
+      - alert: CheckoutTaxEstimateMismatch
+        expr: |
+          (
+            sum by (env) (increase(checkout_tax_estimate_vs_final_total{inputs="same",outcome="mismatch"}[6h]))
+            /
+            sum by (env) (increase(checkout_tax_estimate_vs_final_total{inputs="same"}[6h]))
+          ) > 0.01
+          and
+          sum by (env) (increase(checkout_tax_estimate_vs_final_total{inputs="same"}[6h])) >= 50
+        for: 30m
+        labels:
+          severity: page
+          team: checkout
+        annotations:
+          summary: "More than 1% of orders were charged a different tax than the estimate shown ({{ $value | humanizePercentage }})"
+          description: "Over the last 6 hours more than 1% of orders placed for the same cart, address, delivery and coupon the estimate was made for ended with a different tax. The estimate and the order ask tax-returns the same question, so look for a rate or rule change between the two calls, shipping allocation settings that differ (CHECKOUT_SHIPPING_ALLOCATION vs ORDERS_TAX_SHIPPING_ALLOCATION), or a package that split into several shipments."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CheckoutTaxEstimate.md
+
+      - alert: CheckoutTaxEstimateUnavailable
+        expr: |
+          sum by (env) (rate(tax_estimate_unavailable_total{reason!~"needs_zip|address_incomplete|blocked_items|no_items"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: page
+          team: checkout
+        annotations:
+          summary: "Shoppers cannot see their tax: checkout is blocked ({{ $labels.env }})"
+          description: "The checkout summary had no tax estimate for 10 minutes for a reason that is a failure, not a shopper state (tax-returns down, slow or refusing, the service token, catalog facts, tax-returns client not configured). Place order is blocked for those shoppers. See the reason label."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CheckoutTaxEstimate.md
+
+      - alert: CheckoutTaxQuoteLockNotSent
+        expr: |
+          (
+            sum by (env) (increase(checkout_tax_quote_lock_total{result=~"missing|invalid"}[1h]))
+            /
+            sum by (env) (increase(checkout_tax_quote_lock_total{result=~"missing|invalid|honoured|inputs_changed|expired"}[1h]))
+          ) > 0.05
+          and
+          sum by (env) (increase(checkout_tax_quote_lock_total{result=~"missing|invalid|honoured|inputs_changed|expired"}[1h])) >= 20
+        for: 30m
+        labels:
+          severity: ticket
+          team: checkout
+        annotations:
+          summary: "More than 5% of orders are placed without a valid tax quote lock"
+          description: "Those orders have no guarantee that the total charged is not above the total shown. A client that predates the lock is placing orders (the customer app?), or the signing key differs between gateway replicas (SESSION_SIGNING_KEY). Turn CHECKOUT_REQUIRE_TAX_QUOTE on once every client sends it."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CheckoutTaxEstimate.md

@@ -6,11 +6,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.afrotransact.orders.domain.ShipTo;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
+import io.temporal.failure.ApplicationFailure;
 import io.temporal.testing.TestWorkflowEnvironment;
 import io.temporal.worker.Worker;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +26,16 @@ class CheckoutWorkflowTest {
     private TestWorkflowEnvironment env;
     private WorkflowClient client;
     private FakeCheckoutActivities activities;
+    /** The shown-total step: refuses the order (as the real one does) when told the new total is higher. */
+    private final AtomicInteger guardCalls = new AtomicInteger();
+    private volatile boolean totalChanged;
+    private final CheckoutTotalActivities totalGuard = (in, draft) -> {
+        guardCalls.incrementAndGet();
+        if (totalChanged) {
+            throw ApplicationFailure.newNonRetryableFailure("The total for this order changed",
+                    CheckoutCodes.TOTAL_CHANGED, "newTotalMinor=2900\nnewTaxMinor=301");
+        }
+    };
 
     @BeforeEach
     void setUp() {
@@ -31,7 +43,7 @@ class CheckoutWorkflowTest {
         Worker worker = env.newWorker(CheckoutWorkflow.TASK_QUEUE);
         worker.registerWorkflowImplementationFactory(CheckoutWorkflow.class, CheckoutWorkflowImpl::new);
         activities = new FakeCheckoutActivities();
-        worker.registerActivitiesImplementations(activities);
+        worker.registerActivitiesImplementations(activities, totalGuard);
         env.start();
         client = env.getWorkflowClient();
     }
@@ -291,5 +303,48 @@ class CheckoutWorkflowTest {
         wf.paymentAuthorized();
         result(in, client);
         assertThat(activities.count("validateCoupon") + activities.count("redeemCoupon")).isZero();
+    }
+
+    private static CheckoutInput guarded(String orderId) {
+        CheckoutInput in = input(orderId);
+        return new CheckoutInput(in.orderId(), in.orderNumber(), in.customerId(), in.idempotencyKey(), in.workflowId(),
+                in.currency(), in.shipTo(), in.items(), in.selections(), in.paymentTimeoutSeconds(), in.requestedAt(),
+                in.couponCode(), in.attribution(), in.preorderFulfilment(), null, false, false,
+                new CheckoutInput.TaxGuard(2813, 214, true));
+    }
+
+    @Test
+    void aTotalAboveTheOneShownFailsBeforeAnyPaymentExistsAndGivesEverythingBack() {
+        totalChanged = true;
+        CheckoutInput in = guarded(UUID.randomUUID().toString());
+        start(in);
+        CheckoutProgress done = result(in, client);
+
+        assertThat(done.phase()).isEqualTo(CheckoutProgress.Phase.FAILED);
+        assertThat(done.failureCode()).isEqualTo(CheckoutCodes.TOTAL_CHANGED);
+        assertThat(done.details()).containsExactly("newTotalMinor=2900", "newTaxMinor=301");
+        assertThat(guardCalls.get()).isEqualTo(1);
+        assertThat(activities.count("createPayment")).isZero();
+        assertThat(activities.count("persistPending")).isZero();
+        assertThat(activities.calls.keySet()).noneMatch(k -> k.startsWith("cancelPayment"));
+        assertThat(activities.count("releaseReservation")).isEqualTo(1);
+        assertThat(activities.count("abandon:" + CheckoutCodes.TOTAL_CHANGED)).isEqualTo(1);
+    }
+
+    @Test
+    void aTotalWithinTheOneShownGoesOnToPayment() {
+        CheckoutInput in = guarded(UUID.randomUUID().toString());
+        CheckoutWorkflow wf = start(in);
+        awaitPhase(wf, CheckoutProgress.Phase.AWAITING_PAYMENT);
+        assertThat(guardCalls.get()).isEqualTo(1);
+        assertThat(activities.count("createPayment")).isEqualTo(1);
+    }
+
+    @Test
+    void anOrderWithoutAShownTotalIsNotChecked() {
+        CheckoutInput in = input(UUID.randomUUID().toString());
+        CheckoutWorkflow wf = start(in);
+        awaitPhase(wf, CheckoutProgress.Phase.AWAITING_PAYMENT);
+        assertThat(guardCalls.get()).isZero();
     }
 }

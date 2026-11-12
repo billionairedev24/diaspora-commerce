@@ -428,6 +428,10 @@ func (s *cartServiceImpl) RemoveSaved(ctx context.Context, c *domain.Caller, sav
 type lineInfo struct {
 	department, unit, productType, imageURL string
 	perishable                              bool
+	// product is the catalog product the facts came from (seller behaviour for the tax estimate); loaded is false when
+	// catalog could not be read.
+	product port.CatalogProduct
+	loaded  bool
 }
 
 // perishableProductTypes are the product types of the category tax tree that catalog marks perishable (dairy and eggs, fresh
@@ -460,6 +464,8 @@ func (s *cartServiceImpl) enrich(ctx context.Context, atins []string) map[string
 				productType: strings.TrimSpace(v.Product.ProductType),
 				imageURL:    catalogImageURL(v.Product),
 				perishable:  perishableProduct(v.Product),
+				product:     v.Product,
+				loaded:      true,
 			}
 			mu.Lock()
 			out[a] = info
@@ -515,7 +521,8 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 		}
 		sellerID := firstNonEmpty(p.SellerOrgID, map[bool]string{true: "afrotransact", false: "seller"}[kind == domain.SellerKindPlatform])
 		seller := domain.Seller{ID: sellerID, Name: firstNonEmpty(p.SellerName, sellerFallback(kind)), Kind: kind, City: ""}
-		pkg := domain.CartPackage{PackageID: sellerID + ":" + fulfilment, Seller: seller, Fulfilment: fulfilment, Lines: []domain.CartLine{}}
+		pkg := domain.CartPackage{PackageID: sellerID + ":" + fulfilment, Seller: seller, Fulfilment: fulfilment, Lines: []domain.CartLine{},
+			SellerOrgRaw: p.SellerOrgID}
 		for _, l := range p.Lines {
 			available := max(0, l.Available)
 			qty := max(1, l.Quantity)
@@ -523,9 +530,10 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 			line := domain.CartLine{
 				LineID: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN), OfferID: firstNonEmpty(l.OfferID, l.VariantATIN), Title: l.Title,
 				Unit: info[l.VariantATIN].unit, Department: info[l.VariantATIN].department, ProductType: info[l.VariantATIN].productType,
-				Perishable: info[l.VariantATIN].perishable,
-				ImageURL:   strPtr(firstNonEmpty(l.ImageURL, info[l.VariantATIN].imageURL)),
-				PriceMinor: l.PriceMinor, LineTotalMinor: l.PriceMinor * int64(qty), Quantity: qty,
+				Perishable: info[l.VariantATIN].perishable, FactsMissing: !info[l.VariantATIN].loaded,
+				SellerBehaviour: info[l.VariantATIN].product.SellerBehaviourFor(p.SellerOrgID),
+				ImageURL:        strPtr(firstNonEmpty(l.ImageURL, info[l.VariantATIN].imageURL)),
+				PriceMinor:      l.PriceMinor, LineTotalMinor: l.PriceMinor * int64(qty), Quantity: qty,
 				MaxQuantity: domain.MaxQuantity(available), AvailableQty: available, StockStatus: domain.StockStatusFor(available), Selected: sel,
 			}
 			pkg.Lines = append(pkg.Lines, line)

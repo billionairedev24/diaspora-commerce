@@ -160,7 +160,7 @@ function checkoutSummary(): CheckoutSummary | null {
   const t = mockTax(packages, shipping);
   return {
     packages, addresses: db.addresses, paymentMethods: db.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: t.taxMinor,
-    taxRateLabel: t.blockedLines.length ? 'Calculated when you place your order' : '8.25% TX', taxEstimateStatus: t.blockedLines.length ? 'UNAVAILABLE' : 'ESTIMATED', taxJurisdictionLabel: 'Houston, TX', taxLines: t.taxLines, blockedLines: t.blockedLines, canPlaceOrder: t.blockedLines.length === 0,
+    taxRateLabel: t.blockedLines.length ? 'Remove the items we can’t sell yet to see your tax' : '8.25% TX', taxEstimateStatus: t.blockedLines.length ? 'UNAVAILABLE' : 'ESTIMATED', ...(t.blockedLines.length ? { taxUnavailableReason: 'BLOCKED_ITEMS' } : { taxQuoteId: `mock-lock.${subtotal + shipping + t.taxMinor}.${t.taxMinor}` }), taxJurisdictionLabel: 'Houston, TX', taxLines: t.taxLines, blockedLines: t.blockedLines, canPlaceOrder: t.blockedLines.length === 0,
     shippingTaxAllocation: { method: 'PROPORTIONAL', approved: false, note: 'Open legal decision: the mixed-basket delivery attribution method must be approved by the tax adviser before production.' },
     totalMinor: subtotal + shipping + t.taxMinor, currency: 'USD', sellerCount: new Set(packages.map((p) => p.seller.id)).size
   } as CheckoutSummary;

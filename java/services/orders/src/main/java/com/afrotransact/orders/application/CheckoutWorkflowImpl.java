@@ -44,6 +44,19 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
                             .build())
                     .build());
 
+    /** Stub of the step that refuses an order whose total is above the one the shopper was shown. */
+    private final CheckoutTotalActivities totals = Workflow.newActivityStub(CheckoutTotalActivities.class,
+            ActivityOptions.newBuilder()
+                    .setStartToCloseTimeout(Duration.ofSeconds(30))
+                    .setRetryOptions(RetryOptions.newBuilder()
+                            .setInitialInterval(Duration.ofMillis(500))
+                            .setMaximumAttempts(3)
+                            .build())
+                    .build());
+
+    /** Change id of the shown-total guard: histories recorded before it replay without it. */
+    static final String TAX_GUARD_CHANGE = "tax-guard-v1";
+
     /** Change id of the coupon steps: histories recorded before them replay without coupons. */
     static final String COUPONS_CHANGE = "coupons-v1";
 
@@ -110,6 +123,13 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
                     couponMayExist = !CheckoutCodes.COUPON_NOT_APPLICABLE.equals(code(e));
                     throw e;
                 }
+            }
+
+            if (input.taxGuard() != null
+                    && Workflow.getVersion(TAX_GUARD_CHANGE, Workflow.DEFAULT_VERSION, 1) >= 1) {
+                // The draft is final: never go on to charge more than the total the shopper was shown. A higher total
+                // fails here with orders.total-changed (stock, coupon and run slot are released by the compensations).
+                totals.checkShownTotal(input, draft);
             }
 
             progress = progress.at(CheckoutProgress.Phase.AUTHORIZING);

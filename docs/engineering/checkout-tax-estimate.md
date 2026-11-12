@@ -2,14 +2,16 @@
 
 For **which data points decide taxability and rates**, and how **shipping** relates to tax, see [shipping-and-tax-data.md](./shipping-and-tax-data.md). The design and the rules TX-01 to TX-12 are in [category-tax-design.md](./category-tax-design.md) (sections 5 and 7); this page is how checkout (gateway-bff, orders, storefront, customer app) applies them.
 
-Shoppers see **estimated tax** on the checkout summary before they place an order. The amount is informational; the orders checkout saga **re-quotes** tax at place time, **persists the decision each line was taxed with**, and charges that.
+Shoppers see **estimated tax** on the checkout summary before they press Pay, and what they see is what they pay. The estimate and the tax charged come from **the same tax-returns quote function with the same request** (see [The guarantee](#the-guarantee)); the orders checkout saga still **quotes again** at place time, **persists the decision each line was taxed with**, and charges that, but it never charges more than the total shown without the shopper confirming the new total first.
+
+**The tax row never says the tax is "calculated at checkout" or "when you place your order".** It shows an amount, asks for the one thing it needs (a ZIP code, a state), or, in the exceptional case that tax-returns cannot answer, says so plainly with a Retry button and blocks Pay.
 
 > **Open legal decisions that gate production** (nothing here may be switched on for real customers before the Texas tax professional signs off):
 > **Open decision 5 (TX-07): how the delivery charge is attributed in a mixed basket.** The build allocates it over the package's lines proportionally to item value (default) and the summary says so (`shippingTaxAllocation.approved = false`). The adviser must approve the method, and it interacts with the still-open final delivery price. Rollback: `FIRST_LINE` (see settings). Also see the "not done yet" column of the design's section 5 (ZIP-based local rates, tax holidays, bundles, platform fee classification, gift cards).
 
 ## Never guess
 
-- **No default rate, no interim table.** The per-state table (`StateRateTaxCalculator`, `at.orders.tax.rates`, `fallback-to-table`, the `TABLE` provider) is deleted. Orders and the BFF take every rate, outcome and code from tax-returns' stored decision; when tax-returns is down, the saga's tax step fails and is retried (the estimate stays empty in the BFF). Nothing can silently supply a rate in any profile.
+- **No default rate, no interim table.** The per-state table (`StateRateTaxCalculator`, `at.orders.tax.rates`, `fallback-to-table`, the `TABLE` provider) is deleted. Orders and the BFF take every rate, outcome and code from tax-returns' stored decision; when tax-returns is down, the saga's tax step fails and is retried, and the summary says so (Retry state, Pay blocked) instead of showing an empty row. Nothing can silently supply a rate in any profile.
 - **A line whose decision is not definite is blocked.** Definite means `decisionStatus = RESOLVED` **and** an outcome of `EXEMPT` or `TAXABLE`. Anything else (`MISSING_FACTS`, `BLOCKED`, `NEEDS_APPROVAL`, `REFINE_CODE`, `CONFLICT_OPEN`, no status at all, no answer for the line) is blocked.
   - **Summary:** the BFF lists the line in `blockedLines` (`lineId`, `offerId`, `title`, `packageId`, `action: REMOVE`, plain `message`), sets `canPlaceOrder = false`, and gives it no tax. The rest of the cart is still estimated.
   - **Place order:** orders refuses with `orders.tax-line-blocked` (422, RFC 9457, stable code; the BFF maps it to `CHECKOUT_ITEM_BLOCKED`). The detail names the items in plain words ("We can't sell Gift card yet. We're still checking its details. Remove it from your cart to continue, or try again later."): no ids, no tax terms.
@@ -18,8 +20,8 @@ Shoppers see **estimated tax** on the checkout summary before they place an orde
 ## Flow
 
 1. Storefront calls `GET /v1/checkout/summary?addressId=&packageDelivery=&couponCode=` (comma-separated `packageId:optionKey` per package; optional coupon code for a **validate-only** quote).
-2. Gateway BFF enriches the cart (delivery options, AfroTransact Delivery, promises), validates the coupon with **offers**, then calls **tax-returns** `POST /v1/tax/quotes` with the **gateway-bff** client-credentials token (`tax:quote`), not the shopper JWT. Each quote line carries the **variant ATIN** and the **seller org**; tax-returns reads the stored decision for that variant and seller, which already combines the product facts with the seller's behaviour facts (sold heated, utensils, bakery) held in the seller's listing. The quote line has no behaviour fields: behaviour is never re-sent or re-derived at checkout.
-3. The BFF maps the quote to `taxMinor`, `taxRateLabel`, `taxJurisdictionLabel` ("Houston, TX", from the delivery address), `taxLines` (per line: `TAXABLE`, `EXEMPT` or `BLOCKED`, its tax and its delivery share), `blockedLines`, `canPlaceOrder`, `shippingTaxAllocation`, plus `discountMinor`, `shippingDiscountMinor`, `coupon` and `totalMinor` aligned with the same delivery selections.
+2. Gateway BFF enriches the cart (delivery options, AfroTransact Delivery, promises), validates the coupon with **offers**, then calls **tax-returns** `POST /v1/tax/quotes` with the **gateway-bff** client-credentials token (`tax:quote`), not the shopper JWT. Each quote line carries the **variant ATIN**, the **seller org** (as the cart service gives it: none for AfroTransact's own items), the product type, quantity, unit price, discount, the line's delivery share and the seller's **behaviour facts** (sold heated, utensils, bakery; catalog's listing facts, for the owner's own offers only), exactly as orders sends them (pinned by the parity vectors below). tax-returns reads the stored decision for that variant and seller.
+3. The BFF maps the quote to `taxMinor`, `taxRateLabel`, `taxJurisdictionLabel` ("Houston, TX", from the delivery address), `taxZip`, `taxLines` (per line: `TAXABLE`, `EXEMPT` or `BLOCKED`, its tax and its delivery share), `blockedLines`, `canPlaceOrder`, `shippingTaxAllocation`, plus `discountMinor`, `shippingDiscountMinor`, `coupon`, `totalMinor` aligned with the same delivery selections, and the **quote lock** `taxQuoteId` / `taxQuoteExpiresAt`. Without an estimate it sets `taxEstimateStatus` and `taxUnavailableReason` instead, and `canPlaceOrder = false`.
 4. Orders' `CheckoutTaxImpl` quotes the same way when the order is placed (orders-service token, `tax:quote`), blocks undecided lines, and writes the **decision snapshot** on each order line.
 
 When the shopper changes address, delivery option, or promo code, the UI refetches the summary.
@@ -37,7 +39,8 @@ The shipping line is **what orders will charge**, from the **same record** (orde
 
 ## What the summary shows
 
-- Row **"Estimated tax"** with "Estimated for Houston, TX" under it (`taxJurisdictionLabel`) and the explanation that the final tax is confirmed when the order is placed. No ids.
+- Row **"Estimated tax"** with the amount, "Estimated for Houston, TX" under it (`taxJurisdictionLabel`) and "This is the tax you will pay unless something in your order changes". The total is labelled "Order total" with "Includes tax. If your total would change before you pay, we show you the new total first. You are never charged more without your OK." No ids.
+- Without an estimate the amount is "—" and the row says what is needed (see [Where there is no estimate](#where-there-is-no-estimate)). The total is then labelled "Total before tax" and Pay is disabled.
 - Mixed baskets: items with no tax are tagged "No tax" in the item list, with "No tax on some of your items, or on their delivery." A basket of exempt items only shows $0.00 with "No tax on these items, or on their delivery."
 - Blocked items: see above.
 
@@ -80,3 +83,79 @@ Checkout estimates use whatever is in **tax-returns**. To load or refresh rates 
 3. Ready-made test imports: [`tools/tax/test-import-texas.csv`](../../tools/tax/test-import-texas.csv) and [`tools/tax/test-import-pennsylvania.csv`](../../tools/tax/test-import-pennsylvania.csv) (notes in [`tools/tax/test-import-README.md`](../../tools/tax/test-import-README.md)). Minimal template: [`tools/tax/us-rates-template.csv`](../../tools/tax/us-rates-template.csv).
 
 After import, refetch the checkout summary (change address or delivery) so the storefront picks up new quotes.
+
+## The guarantee
+
+> **Before the shopper presses Pay, the summary shows the tax and the total that will be charged. They agree for the same cart lines, address, delivery options and coupon (target: 99% of orders, ideally all). If anything would make the total higher, nothing is charged: the shopper sees the new total and confirms it first.**
+
+Three mechanisms, in order of strength:
+
+1. **Same engine, same inputs.** The estimate (`checkout_tax_engine.go`: `buildTaxQuote`) and the order (`CheckoutTaxImpl`) build the tax-returns `POST /v1/tax/quotes` request the same way: the lines (variant ATIN, seller org, product type, quantity, unit price, the coupon discount of the line's offer, the seller's behaviour facts), the line's share of its package's delivery charge (after the membership waiver and the coupon's shipping discount, spread by the configured allocation) and the ship-to address as the address book holds it. [`tools/checkout/checkout-tax-parity.json`](../../tools/checkout/checkout-tax-parity.json) holds eleven representative baskets (taxable, all-exempt, mixed package delivery, coupon on a line and on delivery, two sellers, pickup, different states, membership waiver, seller behaviour, AfroTransact's own item, the FIRST_LINE rollback) with the exact request lines expected and the tax they add up to. `checkout_tax_parity_test.go` (gateway-bff) and `CheckoutTaxParityTest` (orders, through the real coupon step) both run the whole file. Same request into the same tax-returns function gives the same tax; tax-returns' own determinism is its own test.
+2. **The quote lock.** The summary returns `taxQuoteId`, a token signed with a key derived from the session signing key (so every gateway replica verifies it), valid 15 minutes (`taxQuoteExpiresAt`), carrying the shopper, the tax and total shown and a hash of the inputs it was made for (the cart lines with quantity and unit price, the address id/state/ZIP/city, the delivery option per package, the coupon code). Place order carries it. The gateway verifies it and gives orders the shown total and tax (`taxGuard`).
+3. **The guard in orders.** After the draft is final (tax quoted, coupon applied) and **before any payment exists**, orders compares the total with the one shown (`CheckoutTotalActivities.checkShownTotal`, behind the workflow change id `tax-guard-v1`). A lower or equal total goes ahead. A higher one fails the saga with `orders.total-changed`; stock, coupon and run slot are released by the usual compensations; the gateway answers `409 CHECKOUT_TOTAL_CHANGED` with the previous and new total, tax, delivery, subtotal, discount and a fresh `taxQuoteId`. The storefront shows "Your total changed: it was $A and is now $B. Nothing has been charged." with **Place order for $B** and **Review my order**; confirming places the order again with a **new Idempotency-Key** (the refused attempt is over, same as any 4xx) and the new lock. The customer app shows the same as a message, reads the summary again and the shopper taps Place order again. Idempotency-Key semantics are unchanged: the same key replays the same result, the guard is not part of the request fingerprint.
+
+**Why the lock is a guard and not a frozen rate.** The lock does not make orders charge the locked amount when the rate has moved in between: orders needs a fresh quote to write the decision snapshot (refunds reverse with the code the sale used) and charging a tax other than the one computed is a legal question, not an engineering one. It guarantees the other half, that the shopper is never charged more than shown without saying yes. If tax-returns' rate changes between the summary and the order, the total goes up by the difference and the shopper confirms; if it goes down they pay less.
+
+### What can still make the final tax differ
+
+| Cause | What happens | Neutralised by |
+|---|---|---|
+| Address changed (or edited) | the lock's inputs differ; a different tax | the summary is read again when the address changes; a total above the one shown is refused (409) |
+| Delivery option or pickup point changed | delivery fee and so its tax differ | same; Place order is disabled while the summary is being read again (`taxPending`) |
+| Coupon added, removed or changed | discount and shipping discount differ | same |
+| Item price or quantity changed, stock changed | a line differs or is refused (`STOCK_CHANGED`) | same; stock problems keep their own 409 |
+| Rate or rule changed in tax-returns between summary and order (a staff rate import, a decision approved) | tax differs by the rate change | the 15-minute lock expiry makes the storefront read the summary again; a higher total is refused (409) and confirmed first |
+| Rounding | none: both sides use the same integer arithmetic on the same request; tax-returns rounds once per line | parity vectors |
+| A package that orders splits into several shipments by fulfilment node | orders charges and allocates delivery per shipment, the estimate per package | remains: counted in `checkout_tax_estimate_vs_final_total{outcome="mismatch"}`, refused (409) if the total is higher |
+| The shipping allocation setting differs between gateway-bff and orders | different line shares | startup parity of the two settings is an ops rule (runbook `CheckoutTaxEstimate`) |
+| Membership waiver or coupon rules read differently (payments, offers answer differently between the two calls) | different delivery or discount | remains: same counter, same refusal |
+| The lock expired or was edited | the guard still holds with the shown total; the order is not counted as "same inputs" | metrics only |
+| An older client sends no lock | no guard | counted in `checkout_tax_quote_lock_total{result="missing"}`; `CHECKOUT_REQUIRE_TAX_QUOTE` refuses them once every client sends it |
+
+### Measuring the 99% target
+
+Orders records, for every order placed with a lock (`CheckoutTotalActivitiesImpl`):
+
+- `checkout_tax_estimate_vs_final_total{inputs,outcome}`: `outcome` is `match` (final tax = estimated tax) or `mismatch`; `inputs` is `same` when the order is for the inputs the estimate was made for (lock honoured, not expired) and `changed` otherwise.
+- `checkout_tax_estimate_vs_final_delta_{count,sum,max}`: the absolute tax difference in minor units of every mismatch (the count is the number of mismatches, the sum their amount).
+- `checkout_total_refused_total{inputs}`: orders refused because the total would be higher.
+
+The **accuracy** is `sum(increase(...{inputs="same",outcome="match"})) / sum(increase(...{inputs="same"}))`. The alert `CheckoutTaxEstimateMismatch` pages when more than 1% of `inputs="same"` orders over 6 hours (at least 50 orders) mismatched; the orders log carries a `WARN` per mismatching order. The gateway adds `checkout_tax_quote_lock_total{result}` (issued, honoured, inputs_changed, expired, invalid, missing, total_changed) and `tax_estimate_unavailable_total{reason}` (alert `CheckoutTaxEstimateUnavailable`). Rules: `infra/observability/rules/checkout-tax-estimate.yaml`; runbook: [`CheckoutTaxEstimate`](../runbooks/CheckoutTaxEstimate.md).
+
+## Where there is no estimate
+
+The estimate needs a destination (state and ZIP code). The checkout puts the **address first** (step 1), and the totals show the estimate as soon as a deliverable address exists. Without one:
+
+| `taxEstimateStatus` / `taxUnavailableReason` | When | The row says |
+|---|---|---|
+| `NEEDS_ADDRESS` / `NEEDS_ZIP` | no address chosen (a new shopper, a guest on the cart page) | an input: **"Enter your ZIP code to see tax"** with a "See tax" button (`GET /v1/checkout/tax-estimate?zip=`). A signed-in shopper's saved default address is used on the cart page without typing. Never an amount, never $0.00. |
+| `UNAVAILABLE` / `ADDRESS_INCOMPLETE` | the chosen address has no state or ZIP code (identity does not require a state) | "Add your state and ZIP code to this address to see your tax." with **Edit address**. Place order to such an address is refused by the gateway (`errors.addressId`) before orders is called. |
+| `UNAVAILABLE` / `BLOCKED_ITEMS` | an item has no definite tax decision (`blockedLines`) | "Remove the items we can't sell yet to see your tax." (the blocked-items panel above offers Remove) |
+| `UNAVAILABLE` / `SERVICE_UNAVAILABLE`, `FACTS_UNAVAILABLE` | tax-returns (or catalog's facts for an item) did not answer: the **only** exceptional state | "We couldn't work out your tax right now. Try again." with **Retry**; Pay is disabled; `tax_estimate_unavailable_total` counts it and an alert pages |
+
+`GET /v1/checkout/tax-estimate` (cart page, new shopper): the same quote for the selected lines at each package's first delivery option, in the place the ZIP code is in (city and state from geo). No coupon, membership or delivery choice is known yet, so it can differ from the checkout's locked estimate; it is labelled "Estimated for Houston, TX".
+
+### Pickup
+
+Pickup is taxed at the **delivery address** the shopper chose, exactly as orders does today: orders sends the address-book ship-to to tax-returns for every package whatever its delivery option, and tax-returns has no pickup-location concept (`TaxQuoteCommand` takes one ship-to). The estimate does the same, so estimate and order agree. Whether a pickup order should instead be taxed by the pickup location's jurisdiction is a **tax-rules question that needs the tax professional**: it would change orders' and tax-returns' behaviour (a ship-to per package), not only the estimate. Not changed here.
+
+## Root cause of the "blank tax estimate"
+
+The summary showed the label "Calculated when you place your order" (or nothing) on a normal checkout through any of these paths, all silent before this change:
+
+1. **`shopper_checkout.go` early return**: when the delivery client was missing or the address ZIP was shorter than five characters, `summary()` returned before `priceTax` ran, leaving the status at UNAVAILABLE. Fixed: that branch now prices membership, coupon and tax too.
+2. **Address without a state or ZIP code**: identity accepts an address with no `state`, so `priceTax` fell back silently, and orders (tax-returns requires a state) would have refused the order later. Now: reason `ADDRESS_INCOMPLETE`, Edit address, and Place order refused with a plain message.
+3. **tax-returns errors swallowed**: any error from `TaxQuote` (timeout after 5 s, circuit breaker open, 401/403 when `tax:quote` is missing from the gateway client, 400/422 for a state or line tax-returns refuses, the service-token fetch failing) was logged at WARN and turned into the same empty row. Now: classified, counted in `tax_estimate_unavailable_total{reason}`, logged at ERROR with the cause, Retry state, Pay blocked.
+4. **tax-returns client not configured** (`Returns == nil`): the same silent fallback. Now: reason `returns_not_configured`, loud.
+5. **Estimate request differed from orders'** (`checkout_tax_engine.go`): the estimate sent the display fallback seller id ("afrotransact") where the cart service sends no seller org (orders then sends none), and no `sellerBehaviour`; tax-returns' owner check and fallback depend on both, so an estimate could differ from the order, or block a line orders would sell. Now identical (parity vectors). Lower probability than 1 to 4.
+6. **Catalog facts unreadable** (enrichment swallowed the error, so product type and behaviour were empty): now a `FACTS_UNAVAILABLE` retry rather than a quote without them.
+7. **Stale total next to a fresh tax**: the UI's total followed delivery choices immediately while the tax followed the last summary. Place order is now disabled while the summary is read again, and the total carries the lock of the summary it came from.
+
+## Wording that needs the tax professional's sign-off
+
+- The exempt-line reasons shown in the summary are tax-returns' own explanation per decision ("Groceries: no sales tax applies. Standard qualifying item."), unchanged. **Marked for tax-professional sign-off** together with the new sentence "This is the tax you will pay unless something in your order changes" and the shipping attribution note (open decision 5).
+- Pickup taxed at the delivery address (above).
+
+## Translations
+
+The new strings (`co.taxZip.*`, `co.taxAddress.*`, `co.taxRetry.*`, `co.totalChanged.*`, `co.totalTrust`, `co.totalBeforeTax`, `co.taxBlocked`, `co.taxNoItems`, `co.taxExplain`, `co.taxExplainRate`) exist in en, fr, es, ar and yo. **fr, es, ar and yo are machine drafts and need native review** (yo least certain). The copy "calculated when you place your order" (`co.taxLater`, `co.taxLaterNote`, `co.taxNote`) was removed from all five.

@@ -1,5 +1,6 @@
 export { type AddressLookup, addressLookup, type AddressLookupClient, type AddressSearchOptions, newAddressSessionToken, type ResolvableAddressSuggestion } from './address-lookup';
 export { isCartMismatch } from './cart-mismatch';
+export { CHECKOUT_TOTAL_CHANGED, type TotalChange, totalChangeOf } from './checkout-total';
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, type PutWithProgress, uploadHelpEvidence, uploadResume } from './client';
 export { CORRELATION_HEADER, EDGE_GEO_HEADERS, newCorrelationId, withCorrelationHeaders } from './correlation';
 export * from './credit-client';

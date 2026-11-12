@@ -65,7 +65,8 @@ class OrdersErrorAdvice {
     @ExceptionHandler(CheckoutFailed.class)
     ProblemDetail checkout(CheckoutFailed ex) {
         HttpStatus status = switch (ex.code() == null ? "" : ex.code()) {
-            case CheckoutCodes.INSUFFICIENT_STOCK, CheckoutCodes.RESERVATION_EXPIRED -> HttpStatus.CONFLICT;
+            case CheckoutCodes.INSUFFICIENT_STOCK, CheckoutCodes.RESERVATION_EXPIRED,
+                 CheckoutCodes.TOTAL_CHANGED -> HttpStatus.CONFLICT;
             case CheckoutCodes.PAYMENT_FAILED, CheckoutCodes.PAYMENT_TIMEOUT -> HttpStatus.PAYMENT_REQUIRED;
             case CheckoutCodes.UPSTREAM_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case CheckoutCodes.UPSTREAM_REJECTED -> HttpStatus.BAD_GATEWAY;
@@ -74,6 +75,16 @@ class OrdersErrorAdvice {
         ProblemDetail pd = problem(status, ex.code() == null ? "orders.checkout-failed" : ex.code(),
                 "Checkout failed", ex.getMessage());
         pd.setProperty("orderNumber", ex.orderNumber());
+        if (CheckoutCodes.TOTAL_CHANGED.equals(ex.code())) {
+            // The new numbers (newTotalMinor, newTaxMinor, ... currency): the client shows them and asks to confirm.
+            for (String d : ex.details()) {
+                int eq = d.indexOf('=');
+                if (eq > 0) {
+                    String value = d.substring(eq + 1);
+                    pd.setProperty(d.substring(0, eq), value.matches("-?\\d{1,15}") ? (Object) Long.parseLong(value) : value);
+                }
+            }
+        }
         return pd;
     }
 

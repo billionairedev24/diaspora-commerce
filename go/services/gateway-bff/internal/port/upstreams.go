@@ -117,6 +117,27 @@ type CatalogProduct struct {
 	Rating UpRating `json:"rating"`
 	// SizeChart is the seller's size chart when the product has one.
 	SizeChart *domain.ProductSizeChart `json:"sizeChart"`
+	// Listing is the owner's listing facts; SellerBehaviour (sold_heated, utensils_provided ...) is part of the tax
+	// decision and applies only to the owner's own offers (see SellerBehaviourFor).
+	Listing struct {
+		SellerBehaviour map[string]any `json:"sellerBehaviour"`
+	} `json:"listing"`
+}
+
+// SellerBehaviourFor is how the seller sells this product when the seller owns the listing, as orders reads it
+// (HttpProductFactsClient: booleans, numbers and text only, nothing nested); empty for another seller's offer.
+func (p CatalogProduct) SellerBehaviourFor(sellerOrgID string) map[string]any {
+	out := map[string]any{}
+	if p.SellerOrgID == "" || p.SellerOrgID != sellerOrgID {
+		return out
+	}
+	for k, v := range p.Listing.SellerBehaviour {
+		switch v.(type) {
+		case bool, float64, string:
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // CatalogVariantView is a variant with its product (GET /v1/public/variants/{atin}).

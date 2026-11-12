@@ -120,7 +120,7 @@ export default function Checkout() {
     try {
       let orderNumber: string;
       if (pay.kind === 'saved') {
-        const conf = await api.checkout.placeOrder(buildPlaceOrderRequest(address.id, choices, { paymentMethodId: pay.id }), idem);
+        const conf = await api.checkout.placeOrder(buildPlaceOrderRequest(address.id, choices, { paymentMethodId: pay.id }, sum.taxQuoteId), idem);
         placedNumber.current = conf.orderNumber;
         if (conf.status === 'requires_action' && conf.paymentClientSecret) {
           const r = await payments.handleNextAction(conf.paymentClientSecret);
@@ -133,7 +133,7 @@ export default function Checkout() {
           amountMinor: intent.amount,
           currency: intent.currencyCode,
           placeOrder: async (paymentMethodId) => {
-            const conf = await api.checkout.placeOrder(buildPlaceOrderRequest(address.id, choices, { paymentMethodId }), idem);
+            const conf = await api.checkout.placeOrder(buildPlaceOrderRequest(address.id, choices, { paymentMethodId }, sum.taxQuoteId), idem);
             placedNumber.current = conf.orderNumber;
             return conf;
           }
@@ -157,6 +157,8 @@ export default function Checkout() {
       const failure = checkoutFailure(e);
       setErr(failure.message);
       setCartChanged(failure.cartChanged);
+      // Nothing was charged: read the summary again so the shown total is the new one before the next tap.
+      if (failure.totalChanged) void qc.invalidateQueries({ queryKey: checkoutKeys.all });
     } finally {
       setBusy(false);
     }

@@ -180,10 +180,6 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 			}
 		}
 	}
-	if addr != nil {
-		// An address is chosen: until priceTax has a definite answer the tax is "calculated when you place your order".
-		sum.TaxEstimateStatus, sum.TaxRateLabel = domain.TaxUnavailable, taxLabelUnavailable
-	}
 	if s.d.ShippingSettings != nil {
 		s.d.ShippingSettings.Ensure(ctx)
 	}
@@ -194,9 +190,15 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 				sum.Packages[i].PickupUnavailableReason = domain.PickupWhyNeedsAddress
 			}
 		}
+		// No delivery facts to add (no pickup points or dates), but the tax estimate is still made (or its absence
+		// explained): this branch used to return before priceTax, leaving the tax row without an answer.
 		applyCheckoutShipping(&sum, packageDelivery)
+		s.priceMembership(ctx, c, &sum, packageDelivery)
+		s.priceCoupon(ctx, c, &sum, packageDelivery, couponCode)
+		s.priceTax(ctx, &sum, addr, packageDelivery)
 		s.blockUndeliverable(&sum, packageDelivery)
 		recalcCheckoutTotal(&sum)
+		s.issueTaxQuote(c, &sum, addr, packageDelivery)
 		return sum, nil
 	}
 	zip := addr.PostalCode[:5]
@@ -292,6 +294,7 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	s.priceTax(ctx, &sum, addr, packageDelivery)
 	s.blockUndeliverable(&sum, packageDelivery)
 	recalcCheckoutTotal(&sum)
+	s.issueTaxQuote(c, &sum, addr, packageDelivery)
 	return sum, nil
 }
 

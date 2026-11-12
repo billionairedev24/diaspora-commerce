@@ -1,5 +1,5 @@
 /* Checkout rules shared by the screen and the payment adapters (pure; unit-tested). */
-import { definitiveFailure, isApiError, isCartMismatch } from '@afrotransact/api-client';
+import { definitiveFailure, formatMoney, isApiError, isCartMismatch, totalChangeOf } from '@afrotransact/api-client';
 import { type components } from '@afrotransact/api-client/generated/gateway-bff';
 
 export type CheckoutSummary = components['schemas']['CheckoutSummary'];
@@ -18,8 +18,17 @@ export const CART_CHANGED_MESSAGE = 'Your cart changed, please review it.';
 /** Placing was refused because an item can't be sold yet (no definite tax decision): plain words, never the server's detail. */
 export const ITEM_BLOCKED_MESSAGE = 'Some items in your order can’t be sold yet. Remove them to place your order.';
 
-export function checkoutFailure(e: unknown): { message: string; cartChanged: boolean } {
+export function checkoutFailure(e: unknown): { message: string; cartChanged: boolean; totalChanged?: boolean } {
   if (isCartMismatch(e)) return { message: CART_CHANGED_MESSAGE, cartChanged: true };
+  // The order would cost more than the total shown: nothing was charged; the page reads the summary again and the shopper places it again.
+  const changed = totalChangeOf(e);
+  if (changed) {
+    return {
+      message: `Your total changed from ${formatMoney(changed.previousTotalMinor, changed.currency)} to ${formatMoney(changed.totalMinor, changed.currency)}. Nothing has been charged. Check the new total, then place your order again.`,
+      cartChanged: false,
+      totalChanged: true
+    };
+  }
   if (isApiError(e) && e.code === 'CHECKOUT_ITEM_BLOCKED') return { message: ITEM_BLOCKED_MESSAGE, cartChanged: false };
   return { message: isApiError(e) ? e.message : e instanceof Error ? e.message : 'Payment failed. Try again.', cartChanged: false };
 }
@@ -61,10 +70,21 @@ export function taxLabel(summary: CheckoutSummary): string {
   return summary.taxJurisdictionLabel ? `Estimated tax · ${summary.taxJurisdictionLabel}` : 'Estimated tax';
 }
 
-/** What the tax row shows: the amount only for a real estimate, never "$0.00" for a tax that is not known. */
+/**
+ * What the tax row shows: the amount only for a real estimate, never "$0.00" for a tax that is not known and never "calculated
+ * later". Without an estimate it says what is missing, or that it didn't work (the order can't be placed meanwhile).
+ */
 export function taxValue(summary: CheckoutSummary, money: (minor: number, currency: string) => string): string {
   if (summary.taxEstimateStatus === 'ESTIMATED') return money(summary.taxMinor, summary.currency);
-  return summary.taxEstimateStatus === 'NEEDS_ADDRESS' ? 'Add your address' : 'Calculated when you place your order';
+  if (summary.taxEstimateStatus === 'NEEDS_ADDRESS') return 'Enter your ZIP code to see tax';
+  switch (summary.taxUnavailableReason) {
+    case 'ADDRESS_INCOMPLETE':
+      return 'Add your state and ZIP code to this address';
+    case 'BLOCKED_ITEMS':
+      return 'Remove the items we can’t sell yet';
+    default:
+      return 'We couldn’t work out your tax right now. Try again.';
+  }
 }
 
 /** Says when some or all items carry no tax (mixed or exempt baskets); null when there is nothing to say. */
@@ -121,11 +141,14 @@ export function validateChoices(summary: CheckoutSummary, choices: Record<string
 export function buildPlaceOrderRequest(
   addressId: string,
   choices: Record<string, PackageChoice>,
-  payment: { paymentMethodId: string } | { wallet: Wallet }
+  payment: { paymentMethodId: string } | { wallet: Wallet },
+  /** The summary's taxQuoteId: orders then never charges more than the total the summary showed. */
+  taxQuoteId?: string
 ): PlaceOrderRequest {
   return {
     addressId,
     ...payment,
+    ...(taxQuoteId ? { taxQuoteId } : {}),
     deliverySelections: Object.entries(choices).map(([packageId, ch]) => ({
       packageId,
       option: placeable(ch.option),

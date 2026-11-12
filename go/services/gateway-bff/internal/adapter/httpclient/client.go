@@ -414,6 +414,16 @@ func decodeProblem(name string, res *http.Response, body []byte) *port.UpstreamP
 			}
 		}
 	}
+	for k, v := range doc {
+		switch k {
+		case "type", "title", "status", "detail", "instance", "code", "errors", "fieldErrors", "error", "error_description":
+		default:
+			if p.Extra == nil {
+				p.Extra = map[string]any{}
+			}
+			p.Extra[k] = v
+		}
+	}
 	if p.RetryAfter == 0 {
 		if n, ok := doc["retryAfterSeconds"].(float64); ok {
 			p.RetryAfter = int(n)

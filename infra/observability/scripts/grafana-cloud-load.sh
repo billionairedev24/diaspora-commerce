@@ -36,7 +36,7 @@ DRY_RUN="${DRY_RUN:-}"
 # What the launch loads. The SLO files are not loaded yet: their metrics (checkout_attempts_total, payments_webhook_lag_seconds,
 # payouts_completed_total, notifications_delivery_duration_seconds) are in the metrics contract but not in the code.
 # elasticsearch.yaml and postgres.yaml need exporters that do not run on the lean platform.
-RULE_FILES=(services.yaml kafka.yaml inventory.yaml payments-transfer-recovery.yaml backup.yaml catalog-tax-gate.yaml launch.yaml)
+RULE_FILES=(services.yaml kafka.yaml inventory.yaml payments-transfer-recovery.yaml backup.yaml catalog-tax-gate.yaml checkout-tax-estimate.yaml launch.yaml)
 LOKI_RULE_FILES=(backup.yaml)   # LogQL alerts on the backup_metrics log line (infra/observability/loki-rules)
 DASHBOARDS=(launch-platform.json launch-payments.json platform-overview.json jvm.json kafka-consumer-lag.json)
 

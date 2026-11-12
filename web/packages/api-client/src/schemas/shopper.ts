@@ -294,6 +294,14 @@ export type ShippingTaxAllocation = z.infer<typeof ShippingTaxAllocationSchema>;
 export const TaxEstimateStatusSchema = z.enum(['ESTIMATED', 'UNAVAILABLE', 'NEEDS_ADDRESS']);
 export type TaxEstimateStatus = z.infer<typeof TaxEstimateStatusSchema>;
 
+/**
+ * Why there is no estimate. NEEDS_ZIP (with NEEDS_ADDRESS): show a ZIP code input. ADDRESS_INCOMPLETE: the chosen address has no
+ * state or ZIP code, offer Edit address. BLOCKED_ITEMS: see blockedLines. SERVICE_UNAVAILABLE and FACTS_UNAVAILABLE: tax-returns or
+ * catalog did not answer, show "We couldn't work out your tax right now. Try again." with a Retry button. NO_ITEMS: nothing selected.
+ */
+export const TaxUnavailableReasonSchema = z.enum(['NEEDS_ZIP', 'ADDRESS_INCOMPLETE', 'BLOCKED_ITEMS', 'SERVICE_UNAVAILABLE', 'FACTS_UNAVAILABLE', 'NO_ITEMS']);
+export type TaxUnavailableReason = z.infer<typeof TaxUnavailableReasonSchema>;
+
 export const CheckoutSummarySchema = z.object({
   packages: z.array(CheckoutPackageSchema),
   addresses: z.array(AddressSchema),
@@ -306,12 +314,24 @@ export const CheckoutSummarySchema = z.object({
   taxMinor: MinorSchema,
   taxRateLabel: z.string(),
   /**
-   * What the tax row can say: ESTIMATED (show the amount; an all-exempt basket is a real $0.00 with each line's reason),
-   * UNAVAILABLE ("calculated when you place your order": never $0.00 or 0%) or NEEDS_ADDRESS. A missing value is UNAVAILABLE.
+   * What the tax row can say: ESTIMATED (show the amount, the same tax-returns quote orders asks for at order time; an all-exempt
+   * basket is a real $0.00 with each line's reason), NEEDS_ADDRESS (a ZIP code input) or UNAVAILABLE (the retry state: never an
+   * amount, never "$0.00", Place order blocked). The shopper is never told the tax is calculated later. A missing value is UNAVAILABLE.
    */
   taxEstimateStatus: TaxEstimateStatusSchema.default('UNAVAILABLE'),
+  /** Why there is no estimate; absent when ESTIMATED. */
+  taxUnavailableReason: TaxUnavailableReasonSchema.optional(),
   /** Where the estimate was worked out ("Houston, TX"); empty without an estimate. Shown next to "Estimated tax". */
   taxJurisdictionLabel: z.string().default(''),
+  /** The ZIP code the estimate was worked out for. */
+  taxZip: z.string().optional(),
+  /**
+   * Quote lock: a signed token for the tax and total shown, bound to the cart lines, address, delivery options and coupon, valid
+   * until taxQuoteExpiresAt (15 minutes). Send it with Place order: orders then never charges more than totalMinor (409
+   * CHECKOUT_TOTAL_CHANGED with the new numbers instead). Absent without an estimate. Refetch the summary when it expires.
+   */
+  taxQuoteId: z.string().optional(),
+  taxQuoteExpiresAt: z.string().optional(),
   /** The estimate per cart line (mixed exempt/taxable baskets); empty without an estimate. */
   taxLines: z.array(CheckoutTaxLineSchema).default([]),
   shippingTaxAllocation: ShippingTaxAllocationSchema.nullish(),
@@ -335,6 +355,24 @@ export const CheckoutSummarySchema = z.object({
   membership: MembershipSavingsSchema.nullish()
 });
 export type CheckoutSummary = z.infer<typeof CheckoutSummarySchema>;
+
+/** The tax row for a ZIP code typed before an address exists (cart page, a new shopper): GET /v1/checkout/tax-estimate?zip=. */
+export const CartTaxEstimateSchema = z.object({
+  taxEstimateStatus: TaxEstimateStatusSchema,
+  taxUnavailableReason: TaxUnavailableReasonSchema.optional(),
+  taxMinor: MinorSchema,
+  taxRateLabel: z.string(),
+  taxJurisdictionLabel: z.string().default(''),
+  taxZip: z.string().optional(),
+  taxLines: z.array(CheckoutTaxLineSchema).default([]),
+  blockedLines: z.array(CheckoutBlockedLineSchema).default([]),
+  subtotalMinor: MinorSchema,
+  shippingMinor: MinorSchema,
+  /** Items + delivery + estimated tax, without a coupon or membership (not known yet). */
+  totalMinor: MinorSchema,
+  currency: z.string()
+});
+export type CartTaxEstimate = z.infer<typeof CartTaxEstimateSchema>;
 
 export const DeliveryPreferencesSchema = z.object({
   handover: z.enum(['hand', 'door', 'desk']).optional(),
@@ -369,6 +407,8 @@ export const PlaceOrderRequestSchema = z.object({
   useCredit: z.boolean().optional(),
   gift: z.boolean().optional(),
   couponCode: z.string().max(20).optional(),
+  /** The summary's taxQuoteId: with it orders never charges more than the total that summary showed (409 CHECKOUT_TOTAL_CHANGED instead). */
+  taxQuoteId: z.string().optional(),
   deliverySelections: z.array(DeliverySelectionSchema),
   /** Last-touch channel (?src=&cr=&po= or the on-site pre-order placement), stored on the order (S273). */
   attribution: PreorderAttributionSchema.optional()

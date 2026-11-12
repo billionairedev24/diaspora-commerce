@@ -169,6 +169,7 @@ commerce:
   sellerNames: {}
 checkout:
   shippingAllocation: PROPORTIONAL # CHECKOUT_SHIPPING_ALLOCATION: PROPORTIONAL | FIRST_LINE (rollback); open legal decision 5
+  requireTaxQuote: false # CHECKOUT_REQUIRE_TAX_QUOTE: refuse a Place order without a valid taxQuoteId (turn on once every client sends it; docs/engineering/checkout-tax-estimate.md)
 stripe:
   publishableKey: "" # STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…)
 staff:

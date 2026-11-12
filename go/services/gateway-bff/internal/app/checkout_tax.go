@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,23 +12,6 @@ import (
 
 // blockedAction is the one thing a shopper can do about a blocked line.
 const blockedAction = "REMOVE"
-
-// Plain words for the tax row when there is no estimate. The storefront words the row from TaxEstimateStatus, these are
-// the matching labels for clients that only read taxRateLabel.
-const (
-	taxLabelNeedsAddress = "Add your address to see an estimate"
-	taxLabelUnavailable  = "Calculated when you place your order"
-)
-
-// taxUnavailable marks the tax estimate as not known: never a $0.00 amount or a 0% rate, orders quotes again when the
-// order is placed.
-func taxUnavailable(sum *domain.CheckoutSummary, addr *port.IdentityAddress) {
-	sum.TaxMinor, sum.TaxRateLabel, sum.TaxJurisdictionLabel = 0, taxLabelUnavailable, ""
-	sum.TaxEstimateStatus = domain.TaxUnavailable
-	if addr == nil {
-		sum.TaxRateLabel, sum.TaxEstimateStatus = taxLabelNeedsAddress, domain.TaxNeedsAddress
-	}
-}
 
 // shippingAllocationNote is what the summary says about the delivery attribution method until it is approved.
 const shippingAllocationNote = "Delivery charges are attributed to the lines of a package by item value. For packages that mix " +
@@ -50,53 +34,45 @@ func (s *checkoutPaymentServiceImpl) shippingAllocation() ShippingAllocation {
 	return s.d.ShippingAllocation
 }
 
-// priceTax estimates sales tax for the checkout through tax-returns' stored decision per line. It never guesses: a line
-// without a definite decision (decisionStatus other than RESOLVED, or no answer for it) is listed in sum.BlockedLines,
-// carries no tax, and sets CanPlaceOrder false until the shopper removes it. Each package's delivery charge is
-// allocated over its lines exactly as orders does at place time (ShippingAllocation), so a delivery tied only to
-// exempt lines is untaxed. Best effort when tax-returns is unreachable: the estimate is left empty and orders
-// quotes again when the order is placed (it refuses a line without a decision there too).
+// priceTax estimates sales tax for the checkout through tax-returns' stored decision per line, with the same request orders
+// sends when the order is placed (buildTaxQuote). It never guesses: a line without a definite decision (decisionStatus
+// other than RESOLVED, or no answer for it) is listed in sum.BlockedLines, carries no tax, and sets CanPlaceOrder false
+// until the shopper removes it. Each package's delivery charge is allocated over its lines exactly as orders does at
+// place time (ShippingAllocation), so a delivery tied only to exempt lines is untaxed.
+//
+// There is no silent fallback: when the estimate cannot be made (no ZIP, an address without a state, tax-returns down or
+// refusing, catalog facts missing) the summary says why (taxUnavailableReason), stops Place order, counts it in
+// tax_estimate_unavailable_total{reason} and logs the cause.
 func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.CheckoutSummary, addr *port.IdentityAddress,
 	packageDelivery map[string]string) {
-	if s.d.Returns == nil || addr == nil || strings.TrimSpace(addr.State) == "" || strings.TrimSpace(addr.PostalCode) == "" {
-		taxUnavailable(sum, addr)
+	switch {
+	case addr == nil:
+		s.taxUnavailable(ctx, sum, domain.TaxReasonNeedsZip, reasonNeedsZip, nil)
+		return
+	case strings.TrimSpace(addr.State) == "" || strings.TrimSpace(addr.PostalCode) == "":
+		s.taxUnavailable(ctx, sum, domain.TaxReasonAddressIncomplete, reasonAddressIncomplete, nil)
+		return
+	case s.d.Returns == nil:
+		s.taxUnavailable(ctx, sum, domain.TaxReasonServiceUnavailable, reasonNotConfigured, errors.New("tax-returns client is not configured"))
 		return
 	}
-	method := s.shippingAllocation()
-	byOffer := offerDiscounts(sum.Coupon)
-	shipDiscLeft := sum.ShippingDiscountMinor
-	lines := make([]port.UpTaxQuoteLine, 0)
-	shippingByLine := map[string]int64{}
-	pkgOf := map[string]domain.CheckoutPackage{}
-	lineOf := map[string]domain.CartLine{}
-	for _, p := range sum.Packages {
-		ship := max(0, packageShippingFee(p, packageDelivery)-p.MembershipWaivedMinor)
-		if off := min(shipDiscLeft, ship); off > 0 {
-			ship -= off
-			shipDiscLeft -= off
-		}
-		weights := make([]int64, len(p.Lines))
-		for i, l := range p.Lines {
-			weights[i] = max(0, l.PriceMinor*int64(l.Quantity)-byOffer[l.OfferID])
-		}
-		alloc := method.Allocate(ship, weights)
-		for i, l := range p.Lines {
-			shippingByLine[l.LineID], pkgOf[l.LineID], lineOf[l.LineID] = alloc[i], p, l
-			lines = append(lines, port.UpTaxQuoteLine{LineID: l.LineID, ATIN: l.ATIN, SellerOrgID: p.Seller.ID, ProductType: l.ProductType,
-				Quantity: l.Quantity, UnitPriceMinor: l.PriceMinor, DiscountMinor: byOffer[l.OfferID], ShippingMinor: alloc[i]})
-		}
-	}
+	basis := s.buildTaxQuote(sum, destinationOf(addr), packageDelivery)
+	lines, method := basis.req.Lines, basis.method
+	shippingByLine, pkgOf, lineOf := basis.shippingByLine, basis.pkgOf, basis.lineOf
 	if len(lines) == 0 {
-		taxUnavailable(sum, addr)
+		s.taxUnavailable(ctx, sum, taxReasonNoItems, reasonNoItems, nil)
 		return
 	}
-	cur := strings.ToUpper(firstNonEmpty(sum.Currency, domain.Currency))
-	req := port.UpTaxQuoteRequest{Currency: cur, ShipTo: port.UpTaxShipTo{Country: firstNonEmpty(addr.Country, "US"),
-		State: addr.State, PostalCode: addr.PostalCode, City: addr.City}, Lines: lines}
-	q, err := s.d.Returns.TaxQuote(ctx, req)
+	for _, l := range lineOf {
+		if l.FactsMissing {
+			// orders quotes with catalog's facts for the item; quoting without them could differ from the final tax.
+			s.taxUnavailable(ctx, sum, domain.TaxReasonFactsUnavailable, reasonFactsMissing, errors.New("catalog facts for "+l.ATIN+" could not be read"))
+			return
+		}
+	}
+	q, err := s.d.Returns.TaxQuote(ctx, basis.req)
 	if err != nil {
-		s.d.log().WarnContext(ctx, "tax quote unavailable; tax shown at order time", "error", err)
-		taxUnavailable(sum, addr)
+		s.taxUnavailable(ctx, sum, domain.TaxReasonServiceUnavailable, taxFailureReason(err), err)
 		return
 	}
 	answers := map[string]port.UpTaxLineQuote{}
@@ -131,13 +107,13 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 	sum.CanPlaceOrder = len(sum.BlockedLines) == 0
 	if len(sum.BlockedLines) > 0 {
 		// A line without a definite decision: no figure for the basket, only the blocked lines say why.
-		taxUnavailable(sum, addr)
+		s.taxUnavailable(ctx, sum, domain.TaxReasonBlockedItems, reasonBlockedItems, nil)
 		return
 	}
 	// ESTIMATED: the amount is shown (an all-exempt basket is a real $0.00, each exempt line carries its reason); the rate
 	// is the first taxable line's, empty when no line is taxable (never "0%").
-	sum.TaxEstimateStatus = domain.TaxEstimated
-	sum.TaxJurisdictionLabel = jurisdictionLabel(addr)
+	sum.TaxEstimateStatus, sum.TaxUnavailableReason = domain.TaxEstimated, ""
+	sum.TaxJurisdictionLabel, sum.TaxZip = jurisdictionLabel(addr), addr.PostalCode
 	sum.ShippingTaxAllocation = &domain.ShippingTaxAllocation{Method: string(method), Approved: false, Note: shippingAllocationNote}
 }
 

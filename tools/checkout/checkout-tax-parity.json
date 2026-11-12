@@ -1,0 +1,887 @@
+{
+  "description": "Checkout tax parity vectors. The same basket goes through gateway-bff's estimate (app.buildTaxQuote + priceTax) and orders' checkout (CheckoutTaxImpl); both must send tax-returns exactly 'expected.requestLines' for 'shipTo' and must add up the answers to 'expected.taxMinor'. Same request + same tax-returns function = same tax: this pins the first half, the second is tax-returns' own determinism. The fake tax-returns taxes a TAXABLE line at rateBps/10000 of (unit*qty - discount + shipping), rounded half up, and an EXEMPT line at 0. Inputs are the priced basket: 'feeMinor' is the package's delivery fee, 'membershipWaivedMinor' what the membership waives of it, 'shippingDiscountMinor' the coupon's shipping discount over the whole order, taken from the packages in order; a line's 'discountMinor' is its coupon share. 'sellerOrgId' null = AfroTransact's own item. Used by orders (CheckoutTaxParityTest) and gateway-bff (checkout_tax_parity_test.go). The attribution method for mixed baskets is an OPEN LEGAL DECISION (open decision 5).",
+  "cases": [
+    {
+      "name": "taxable basket with delivery",
+      "why": "one seller, one taxable line, flat delivery",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 599,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 2,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 2,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 599,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 214
+          }
+        ],
+        "taxMinor": 214
+      }
+    },
+    {
+      "name": "all-exempt basket",
+      "why": "delivery follows exempt lines: no tax, a real zero",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 499,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "groceries",
+              "quantity": 1,
+              "unitPriceMinor": 2500,
+              "discountMinor": 0,
+              "outcome": "EXEMPT",
+              "sellerBehaviour": {}
+            },
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "groceries",
+              "quantity": 1,
+              "unitPriceMinor": 1500,
+              "discountMinor": 0,
+              "outcome": "EXEMPT",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "groceries",
+            "quantity": 1,
+            "unitPriceMinor": 2500,
+            "discountMinor": 0,
+            "shippingMinor": 312,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "groceries",
+            "quantity": 1,
+            "unitPriceMinor": 1500,
+            "discountMinor": 0,
+            "shippingMinor": 187,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 0
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 0
+          }
+        ],
+        "taxMinor": 0
+      }
+    },
+    {
+      "name": "mixed package: delivery split by item value",
+      "why": "exempt and taxable lines in one package",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 800,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "groceries",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "EXEMPT",
+              "sellerBehaviour": {}
+            },
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 3000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "groceries",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 200,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 3000,
+            "discountMinor": 0,
+            "shippingMinor": 600,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 0
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 297
+          }
+        ],
+        "taxMinor": 297
+      }
+    },
+    {
+      "name": "coupon on one line and on delivery",
+      "why": "line discount lowers the weight and the base; shipping discount comes off the first package",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 100,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 1000,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 500,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            },
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1500,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 500,
+            "shippingMinor": 225,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1500,
+            "discountMinor": 0,
+            "shippingMinor": 675,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 60
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 179
+          }
+        ],
+        "taxMinor": 239
+      }
+    },
+    {
+      "name": "two sellers, two packages",
+      "why": "each package allocates its own delivery",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 599,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            },
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "pantry",
+              "quantity": 2,
+              "unitPriceMinor": 450,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        },
+        {
+          "sellerOrgId": "org_b",
+          "feeMinor": 599,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l3",
+              "atin": "ATIN-3",
+              "offerId": "of-3",
+              "productType": "groceries",
+              "quantity": 1,
+              "unitPriceMinor": 2000,
+              "discountMinor": 0,
+              "outcome": "EXEMPT",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 315,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "pantry",
+            "quantity": 2,
+            "unitPriceMinor": 450,
+            "discountMinor": 0,
+            "shippingMinor": 284,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l3",
+            "atin": "ATIN-3",
+            "productType": "groceries",
+            "quantity": 1,
+            "unitPriceMinor": 2000,
+            "discountMinor": 0,
+            "shippingMinor": 599,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_b"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 108
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 98
+          },
+          {
+            "lineId": "l3",
+            "taxMinor": 0
+          }
+        ],
+        "taxMinor": 206
+      }
+    },
+    {
+      "name": "pickup (no delivery charge) is taxed at the delivery address",
+      "why": "the address book ship-to is sent whatever the delivery option",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "78701",
+        "city": "Austin"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 0,
+          "membershipWaivedMinor": 0,
+          "pickup": true,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1999,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        },
+        {
+          "sellerOrgId": "org_b",
+          "feeMinor": 599,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1999,
+            "discountMinor": 0,
+            "shippingMinor": 0,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 599,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_b"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 165
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 132
+          }
+        ],
+        "taxMinor": 297
+      }
+    },
+    {
+      "name": "another state",
+      "why": "same basket, New York ship-to",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "NY",
+        "postalCode": "10001",
+        "city": "New York"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 599,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            },
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 300,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 299,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 107
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 107
+          }
+        ],
+        "taxMinor": 214
+      }
+    },
+    {
+      "name": "membership waives part of the fee",
+      "why": "the waiver comes off before the allocation",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 599,
+          "membershipWaivedMinor": 300,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            },
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 150,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 149,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 95
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 95
+          }
+        ],
+        "taxMinor": 190
+      }
+    },
+    {
+      "name": "seller behaviour is sent with the line",
+      "why": "sold_heated and utensils_provided are part of the decision",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 0,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "baked-goods",
+              "quantity": 1,
+              "unitPriceMinor": 1200,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {
+                "sold_heated": false,
+                "utensils_provided": false
+              }
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "baked-goods",
+            "quantity": 1,
+            "unitPriceMinor": 1200,
+            "discountMinor": 0,
+            "shippingMinor": 0,
+            "sellerBehaviour": {
+              "sold_heated": false,
+              "utensils_provided": false
+            },
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 99
+          }
+        ],
+        "taxMinor": 99
+      }
+    },
+    {
+      "name": "AfroTransact's own item has no seller org",
+      "why": "the cart service sends none; the quote sends none",
+      "allocation": "PROPORTIONAL",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": null,
+          "feeMinor": 599,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 599,
+            "sellerBehaviour": {}
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 132
+          }
+        ],
+        "taxMinor": 132
+      }
+    },
+    {
+      "name": "first-line rollback",
+      "why": "FIRST_LINE puts the whole delivery on the first line",
+      "allocation": "FIRST_LINE",
+      "currency": "USD",
+      "shipTo": {
+        "country": "US",
+        "state": "TX",
+        "postalCode": "77002",
+        "city": "Houston"
+      },
+      "shippingDiscountMinor": 0,
+      "packages": [
+        {
+          "sellerOrgId": "org_a",
+          "feeMinor": 599,
+          "membershipWaivedMinor": 0,
+          "pickup": false,
+          "lines": [
+            {
+              "lineId": "l1",
+              "atin": "ATIN-1",
+              "offerId": "of-1",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            },
+            {
+              "lineId": "l2",
+              "atin": "ATIN-2",
+              "offerId": "of-2",
+              "productType": "pantry",
+              "quantity": 1,
+              "unitPriceMinor": 1000,
+              "discountMinor": 0,
+              "outcome": "TAXABLE",
+              "sellerBehaviour": {}
+            }
+          ]
+        }
+      ],
+      "rateBps": 825,
+      "expected": {
+        "requestLines": [
+          {
+            "lineId": "l1",
+            "atin": "ATIN-1",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 599,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          },
+          {
+            "lineId": "l2",
+            "atin": "ATIN-2",
+            "productType": "pantry",
+            "quantity": 1,
+            "unitPriceMinor": 1000,
+            "discountMinor": 0,
+            "shippingMinor": 0,
+            "sellerBehaviour": {},
+            "sellerOrgId": "org_a"
+          }
+        ],
+        "lineTax": [
+          {
+            "lineId": "l1",
+            "taxMinor": 132
+          },
+          {
+            "lineId": "l2",
+            "taxMinor": 83
+          }
+        ],
+        "taxMinor": 215
+      }
+    }
+  ]
+}

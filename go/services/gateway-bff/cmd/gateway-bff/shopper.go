@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpapi"
@@ -25,6 +26,8 @@ type shopperClients struct {
 	limiter                    port.RateLimiter
 	estimator                  domain.Estimator
 	shippingSync               app.ShippingSettingsEnsurer
+	taxMetrics                 app.TaxMetrics
+	zipLookup                  func(ctx context.Context, zip string) (city, state string, err error)
 }
 
 // shopperServices wires the storefront's account, checkout payment, services & bookings and Lola use cases.
@@ -56,7 +59,9 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		Estimator: sc.estimator, ShippingSettings: sc.shippingSync,
 		ShippingAllocation: shippingAllocation,
-		PublishableKey:     cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
+		TaxMetrics:         sc.taxMetrics, TaxQuoteKey: app.QuoteKey(cfg.Session.SigningKey), RequireTaxQuote: cfg.Checkout.RequireTaxQuote,
+		ZipLookup:      sc.zipLookup,
+		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
 	settings := app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(sc.identity),
 		Alerts: upstreams.NewAlertPreferences(client("notifications", up.Notifications))})

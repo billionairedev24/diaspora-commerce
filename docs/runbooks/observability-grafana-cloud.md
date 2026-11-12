@@ -156,7 +156,7 @@ DRY_RUN=1 infra/observability/scripts/grafana-cloud-load.sh all
 infra/observability/scripts/grafana-cloud-load.sh all          # rules + dashboards; run again after every change (idempotent)
 ```
 
-- **Rules** loaded: `services.yaml`, `kafka.yaml`, `inventory.yaml`, `payments-transfer-recovery.yaml`, `backup.yaml`, `catalog-tax-gate.yaml`, `launch.yaml` (in `infra/observability/rules`). The LogQL backup
+- **Rules** loaded: `services.yaml`, `kafka.yaml`, `inventory.yaml`, `payments-transfer-recovery.yaml`, `backup.yaml`, `catalog-tax-gate.yaml`, `checkout-tax-estimate.yaml`, `launch.yaml` (in `infra/observability/rules`). The LogQL backup
   alerts in `infra/observability/loki-rules/backup.yaml` (they read the `backup_metrics` line the job logs; the stream carries `app="pg-backup"`, `namespace="ops"` and `env` from Alloy) load with
   `grafana-cloud-load.sh lokirules` (needs `LOKI_ADDRESS` = Hosted logs URL without `/loki/api/v1/push` and `LOKI_TENANT_ID` = the logs user id; UNVERIFIED against Grafana Cloud).
   `mimirtool rules sync` makes the ruler equal to these files, so do not hand-create rules in this stack. Not loaded yet: `slo-*.yaml` (their

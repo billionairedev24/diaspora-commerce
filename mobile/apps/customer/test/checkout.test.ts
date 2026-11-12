@@ -123,6 +123,18 @@ describe('checkoutFailure', () => {
     }
   });
 
+  it('a total that would be higher says so with both numbers and that nothing was charged', () => {
+    const e = new ApiError({ type: 'about:blank', title: 'Your total changed', status: 409, code: 'CHECKOUT_TOTAL_CHANGED', previousTotalMinor: 2813, totalMinor: 2900, taxMinor: 301, currency: 'USD' });
+    const f = checkoutFailure(e);
+    expect(f).toMatchObject({ cartChanged: false, totalChanged: true });
+    expect(f.message).toMatch(/\$28\.13.*\$29\.00.*Nothing has been charged/);
+  });
+
+  it('the order is placed with the summary’s tax lock, when it has one', () => {
+    expect(buildPlaceOrderRequest('a1', {}, { paymentMethodId: 'pm_1' }, 'lock-1').taxQuoteId).toBe('lock-1');
+    expect('taxQuoteId' in buildPlaceOrderRequest('a1', {}, { paymentMethodId: 'pm_1' })).toBe(false);
+  });
+
   it('keeps other messages as they are', () => {
     expect(checkoutFailure(problem('orders.address-not-found', 'Address a1 is not in your address book'))).toEqual({ message: 'Address a1 is not in your address book', cartChanged: false });
     expect(checkoutFailure(new Error('Your card was declined.')).message).toBe('Your card was declined.');
@@ -201,7 +213,9 @@ describe('the tax row never shows $0.00 for a tax that is not known', () => {
   it('words the row from taxEstimateStatus', () => {
     expect(taxValue({ ...base, taxEstimateStatus: 'ESTIMATED', taxMinor: 413 }, money)).toBe('$4.13');
     expect(taxValue({ ...base, taxEstimateStatus: 'ESTIMATED' }, money)).toBe('$0.00'); // a real all-exempt basket
-    expect(taxValue({ ...base, taxEstimateStatus: 'UNAVAILABLE' }, money)).toBe('Calculated when you place your order');
-    expect(taxValue({ ...base, taxEstimateStatus: 'NEEDS_ADDRESS' }, money)).toBe('Add your address');
+    expect(taxValue({ ...base, taxEstimateStatus: 'UNAVAILABLE' }, money)).toBe('We couldn’t work out your tax right now. Try again.');
+    expect(taxValue({ ...base, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'ADDRESS_INCOMPLETE' }, money)).toBe('Add your state and ZIP code to this address');
+    expect(taxValue({ ...base, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'BLOCKED_ITEMS' }, money)).toBe('Remove the items we can’t sell yet');
+    expect(taxValue({ ...base, taxEstimateStatus: 'NEEDS_ADDRESS' }, money)).toBe('Enter your ZIP code to see tax');
   });
 });

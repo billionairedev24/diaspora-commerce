@@ -178,6 +178,10 @@ type Config struct {
 		// orders' at.orders.tax.shipping-allocation. The mixed-basket method is an OPEN LEGAL DECISION (open decision
 		// 5): the tax adviser must approve it before production.
 		ShippingAllocation string `yaml:"shippingAllocation" env:"CHECKOUT_SHIPPING_ALLOCATION"`
+		// RequireTaxQuote (env CHECKOUT_REQUIRE_TAX_QUOTE) refuses a Place order that carries no valid taxQuoteId, so no
+		// client can charge more than the total it showed (docs/engineering/checkout-tax-estimate.md). Off keeps clients
+		// that predate the lock working (they are counted in checkout_tax_quote_lock_total{result="missing"}).
+		RequireTaxQuote bool `yaml:"requireTaxQuote" env:"CHECKOUT_REQUIRE_TAX_QUOTE"`
 	} `yaml:"checkout"`
 
 	// Stripe is the public half of the Stripe account (Stripe.js / PaymentSheet); secrets stay in payments.
