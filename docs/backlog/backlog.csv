@@ -1445,3 +1445,125 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - BackupStale-style alert fires when the last successful R2 copy is older than 26 hours
 - A restore of one media object and one KYC object from B2 is done once and timed (restore drill)
 - docs/runbooks/backups-backblaze.md and production-readiness.md section 9 say the copy exists; trial and prod use their own buckets","E29","","High","3","backups r2 launch","infra","To Do"
+"S381","Story","Catalog match service: normalised GTIN key, brand+MPN, unique index","Spec: docs/engineering/bulk-upload-and-images.md. Section 3.1 and 3.2. Match by GTIN-14 so UPC and EAN of one item meet, close the duplicate race with a unique index, add POST /v1/catalog/matches and a brand plus part number key.","- UPC 012345678905 and EAN 0012345678905 return the same ATIN
+- ISBN-10 is converted to ISBN-13 before matching
+- Reserved prefixes (02, 04, 20-29, 981-984, 99) answer RESTRICTED with a plain message
+- Two concurrent creates of one GTIN: one succeeds and one gets 409 catalog.gtin-exists with the ATIN (IT)
+- Migration lists existing duplicates and fails instead of dropping data
+- POST /v1/catalog/matches returns MATCH, NO_MATCH, INVALID or RESTRICTED with canOffer and blockers; contracts/openapi/catalog.yaml updated with a conformance test
+- GET /v1/identifiers/gtin/{code} keeps working and adds gtin14
+- Brand plus MPN match works when both are present","E03","","High","5","catalog matching atin","catalog","To Do"
+"S382","Story","Seller Center: barcode first, offer-only flow when the page exists","Spec: docs/engineering/bulk-upload-and-images.md. Section 3.3. The product form never calls the GTIN check today. Add a barcode step, a match card and an offer-only form with no image, title or attribute fields.","- Add a product starts with a barcode step (barcode, no barcode, brand and part number)
+- After 12 to 14 digits the match runs; a MATCH shows photo, title, brand, options and seller count
+- Yes, sell this opens only offer fields (price, list price, quantity, condition and note, fulfilment, handling days, ship-from, SKU); no image field is shown
+- NO_MATCH continues into the full form with the barcode prefilled and images required
+- INVALID and RESTRICTED show the plain message and a suggested fix
+- Seller A creates a page and seller B sells it by UPC without uploading an image (Playwright mock spec)
+- All new sc.match.* keys exist in en fr es ar yo (machine drafts flagged for native review)","E24","","High","5","seller-center matching i18n","seller-center","To Do"
+"S383","Story","Matched offer guards: page content locked, allowed offer fields, selling approval","Spec: docs/engineering/bulk-upload-and-images.md. Sections 3.4 and 3.6. An offer on an ATIN may change only offer terms. Offers must also apply the selling-approval gate the product writer uses.","- POST /v1/offers on an ATIN rejects title, image, attribute, brand and category fields with 422 and a plain message
+- A seller who is not the page owner gets 403 on product edit endpoints (test)
+- Offer create on a gated brand or category without selling approval is refused with offers.selling-approval-required
+- Non-New condition needs a condition note up to 200 characters and a category that allows used items
+- Package size and weight are accepted on the offer only for Fulfilled by AfroTransact
+- Brand RETIRED or REJECTED never matches for a new offer
+- contracts/openapi/offers.yaml updated with conformance tests","E05","","High","5","offers matching security","offers","To Do"
+"S384","Story","Close the second-seller tax gap: offers wait for their own tax decision","Spec: docs/engineering/bulk-upload-and-images.md. Section 4. A matched offer reuses the page tax facts, but the offering seller needs a stored RESOLVED decision in tax-returns. Today the offer can show and only checkout blocks it (tax-gate-paths.md). Nothing may be live without a decision.","- Offer create asks tax-returns for the seller decision on that ATIN and requests one from the page facts when missing (never a default rate)
+- A resolved decision gives an ACTIVE offer; otherwise the offer is TAX_HELD, not buyable, not in search, not in the buy box
+- A tax decision resolved event moves TAX_HELD to ACTIVE through one component (idempotent)
+- Metric offers_active_without_tax_decision exists, is 0 in tests and has an alert
+- Checkout block stays unchanged (test)
+- TaxGateArchitectureTest extended so no new code path can set a product LIVE outside ProductLiveGate
+- contracts for tax-returns, offers and asyncapi (offer.tax_held, tax_released) updated
+- tax-gate-paths.md updated, gap row removed","E05","","Highest","8","tax offers gate","offers","To Do"
+"S385","Story","Suggest an edit, wrong match and duplicate reports (change requests)","Spec: docs/engineering/bulk-upload-and-images.md. Section 3.7. Sellers cannot overwrite a page; they file a change request that staff moderate.","- ProductChangeRequest types IMAGE_ADD, IMAGE_REPLACE, TITLE, ATTRIBUTE, DESCRIPTION, CATEGORY, BRAND, NEW_VARIANT, WRONG_MATCH, DUPLICATE_PAGE exist with status, reason and reviewer
+- One open request per page, type, field and requester
+- Approving applies the change to the page, bumps its version and notifies the owner; image changes pass the image checks first
+- While a WRONG_MATCH is open the seller cannot create a duplicate page for that GTIN
+- Applying a request never changes product status (architecture test)
+- Seller sees Waiting, Applied or Not applied with the reason
+- Audit event catalog.change_request.decided carries who, what and why
+- contracts and asyncapi updated with conformance tests","E03","","High","8","catalog moderation matching","catalog","To Do"
+"S386","Story","Staff console: change request, exemption and held image queues","Spec: docs/engineering/bulk-upload-and-images.md. Sections 3.5, 3.7 and 6.4. One review queue for staff with SLA and decision reasons.","- Queue lists change requests, GTIN exemption requests and held images with age and SLA (2 business days)
+- Staff can approve or reject with a required reason of 3+ characters
+- Merge duplicate pages moves offers and redirects the old ATIN
+- Permission catalog:moderate required; decisions are audited
+- Table uses the shared data table with server-side paging
+- Metric catalog_change_request_open and alert when oldest is over 3 business days","E25","","Medium","5","staff-console moderation","staff-console","To Do"
+"S387","Story","GTIN exemption and brand+MPN ATIN assignment for items without a barcode","Spec: docs/engineering/bulk-upload-and-images.md. Section 3.5. No GTIN: exempt with a reason where rules allow, staff approval for brand-gated categories and known GS1 brands.","- Exempt listing in an open category gets a new ATIN immediately and tries a brand plus MPN match first
+- Brand-gated category or known GS1 brand needs staff approval; page is PENDING_EXEMPTION and not live until decided
+- ISBN product types allow no exemption (test)
+- Seller sees We are checking that this item has no barcode while waiting
+- Exemption decisions are audited
+- Duplicate hint (title, brand, MPN) is shown to staff in review","E03","","Medium","3","catalog atin","catalog","To Do"
+"S388","Story","Media image checks: slot-aware rules engine with pass, warn, hold, reject verdicts","Spec: docs/engineering/bulk-upload-and-images.md. Sections 6.1 to 6.4. Replace free-text flags with codes and a verdict; add the missing automatic checks in the Go media service.","- Upload and URL import accept slot MAIN, OTHER, SWATCH, LABEL; library file names infer the slot
+- MAIN is rejected under 1000 px on the longest side or under 500 on the shortest
+- Background test: at least 95 percent of the 2 percent border ring and all four corners have channels 250 or more, else REJECT; passing images are snapped to pure white 255
+- Fill ratio under 0.75 is rejected, 0.75 to 0.85 warns
+- Uniform border band, placeholder hash list, blur heuristic (warn only) and aspect ratio (warn only) implemented
+- Transparent PNG is flattened on white; CMYK converts to sRGB
+- OTHER images warn under 1000 px and reject under 500
+- Asset carries verdict and checks [{code, level, params}]; REJECT is deleted from quarantine; nothing public before the checks pass
+- Table tests over the sample image set in section 6.3 and thresholds in config images.main.*
+- contracts/openapi/media.yaml updated with conformance tests; migration backfills existing assets as PASS","E03","","High","8","media images go","catalog","To Do"
+"S389","Story","Image moderation labels for text, watermark, props and mismatch","Spec: docs/engineering/bulk-upload-and-images.md. Section 6.2. Extend the ai-gateway image moderation hook so what a program cannot judge goes to staff.","- Hook returns labels TEXT_OVERLAY, WATERMARK, PLACEHOLDER, BORDER, PROPS, MANNEQUIN, NOT_PRODUCT and a title and brand mismatch score
+- Main image with text, logo or watermark is HELD with the plain message HELD_TEXT
+- Mismatch with title and brand is HELD with HELD_MISMATCH
+- Apparel on-model main image is allowed when the product type says so
+- Hook failure still holds images in uat and prod (fail closed)
+- Staff see the label and the image in the review queue
+- Fake hook tests cover each label","E18","","Medium","5","ai moderation images","trust","To Do"
+"S390","Story","Enforce the main-image rule in catalog, bulk and library; restore the relaxed check","Spec: docs/engineering/bulk-upload-and-images.md. Section 2 (relaxed rule) and 6.4. Restores what commit 286e37c6e removed, using the longest side, and stops trusting client-sent image sizes.","- ImageVerifier port asks media for the verdict of each image URL; width and height from the client are ignored
+- Product create, update and publish refuse a main image that is REJECT or HOLD with the plain message
+- Bulk row with a bad main image fails with the same message; image library attach skips it with the reason
+- Seller sets a main image under 1000 px longest side: refused on form submit, API and bulk (three tests)
+- Non-main images may be smaller and only warn
+- listing-rules.md D15 and tools/listing-rules/rules.json updated; S361 closed as superseded
+- Flag media.image.enforce allows shadow mode (verdict recorded, nothing refused)","E03","","High","5","catalog images enforcement","catalog","To Do"
+"S391","Story","Seller Center image cards: rule hints, per-code messages, quality meter, five locales","Spec: docs/engineering/bulk-upload-and-images.md. Sections 6.5 and 6.6. Show the rules before upload and the exact message after.","- Image field shows the rule text (white background, 1000 px, 85 percent) and the extra-photo meter (n of 7)
+- Each image card shows pass, warning, held or rejected with the message for its code
+- Submit is blocked while the main image is rejected; held images allow submit and the listing waits in review
+- Image library status column and bulk preview use the same messages
+- Keys sc.img.check.<CODE>, sc.img.verdict.*, sc.pf.images.meter and the restored sc.pf.images.tooSmall and sc.pf.err.imagesMainSmall exist in en fr es ar yo
+- Machine drafts are marked for native review
+- Accessibility: messages are announced and not colour only","E24","","High","5","seller-center images i18n","seller-center","To Do"
+"S392","Story","Existing and migrated listings: rescore main images and Improve your image task","Spec: docs/engineering/bulk-upload-and-images.md. Section 6.7. Grandfather live listings, show a task, then limit failing ones after the grace period.","- Batch rescore job (rate limited, resumable) stores image_quality OK, IMPROVE or FAIL per product
+- Seller Center shows an Improve your image task on the listing row and on Home with the reason in plain words
+- Editing images on a listing must pass the rules
+- A separate flag hides FAIL listings from search and buy box after the grace period; nothing is deleted
+- Dry-run report on the seeded catalog before the flag is enabled
+- AfroTransact Retail and seeded products follow the same rules
+- Metric catalog_image_quality{state}","E03","","Medium","5","catalog images migration","catalog","To Do"
+"S393","Story","Bulk upload: match-aware rows, offer-only template, held rows, file hash idempotency","Spec: docs/engineering/bulk-upload-and-images.md. Sections 5.1, 5.2, 5.5 and 5.6. Reuse ImportJobImpl; add the OFFER mode and the match step.","- Template mode OFFER generated server-side with no image, title or attribute columns
+- A CREATE row whose GTIN matches becomes an offer row with a warning and the ATIN in the report
+- Duplicate GTIN inside one file: first row wins, later rows get an error
+- Parent group with matched and unmatched children: offers plus NEW_VARIANT requests with a warning
+- Rows without a resolved tax decision, without selling approval or with a held image end HELD and never live (test)
+- Importer cannot call Product.approve (architecture test)
+- Same file uploaded again offers to show the old result; re-run creates no duplicates and unchanged rows are SKIPPED
+- file_sha256 stored; new outcomes OFFER_CREATED and HELD in contract and report
+- Templates for every category still come from the rules book with nothing hard-coded per category (test)","E03","","High","8","bulk catalog matching","catalog","To Do"
+"S394","Story","Bulk upload: price and quantity feed","Spec: docs/engineering/bulk-upload-and-images.md. Section 5.1 PRICE_QTY. A lightweight file that changes price and stock by SKU or ATIN without rewriting products.","- Template with seller_sku or atin, price, list_price, quantity; blank means unchanged
+- Up to 50,000 rows and 25 MB
+- Applies through batch offer endpoints; seller can only touch own offers (scope test)
+- Row level report with errors and warnings; good rows proceed
+- Re-upload of the same file changes nothing
+- One audit row per changed offer with import id
+- Contract for batch offer prices and stock added","E03","","Medium","5","bulk offers","catalog","To Do"
+"S395","Story","Stock CSV import (inventory counts)","Spec: docs/engineering/bulk-upload-and-images.md. Section 5.1 STOCK. No stock file import exists today (only the single-offer quick stock sheet).","- Template with seller_sku, location, on_hand, optional lot and expiry
+- Imports write ledger entries with reason BULK_COUNT and the import id; no negative or over-limit values
+- Seller scope enforced; unknown SKUs are row errors
+- Async job with row report (errors and warnings), partial success and idempotent re-upload
+- Reserved stock is never overwritten below reserved quantity (row error)
+- Contract inventory.yaml and a concurrency IT with live reservations","E09","","Medium","5","inventory bulk","inventory","To Do"
+"S396","Story","Bulk upload hardening: image fetch budget, port 443, report columns, audit","Spec: docs/engineering/bulk-upload-and-images.md. Sections 5.3, 5.4 and 5.7. media urlfetch is SSRF safe already; add the missing limits and the report and audit detail.","- Only port 443 is dialled; IP literal hosts refused
+- Per upload budget (200 MB, 4 parallel fetches, 2 per host) and a daily per organisation fetch cap
+- Plain fetch failure messages (link did not answer, not a photo, private address) per image column
+- Report has Result, ATIN, Severity, Column and Message with original columns first; CSV and XLSX
+- Events catalog.import.started and completed with who, file hash, mode and counts; one audit row per product or offer touched
+- One active upload per mode per organisation; 20 per day (setting)
+- SSRF table tests incl. metadata IP, DNS rebinding, redirect to private or http","E03","","High","5","bulk security media","catalog","To Do"
+"S397","Story","Test and rollout plan for matching, bulk and image enforcement","Spec: docs/engineering/bulk-upload-and-images.md. Sections 9 to 11. Dashboards, alerts, shadow mode and the staging scenario.","- Dashboards and alerts for the metrics in section 9 (reject rate over 60 percent for 1 hour pages)
+- Shadow mode report from real uploads before enforcement is turned on
+- Staging scenario: seller A creates a page, seller B sells it by UPC without a photo, both appear in the buy box
+- Rollback flags tested (each returns today's behaviour)
+- Five-locale parity test passes for all new keys","E33","","Medium","3","quality observability rollout","quality","To Do"
