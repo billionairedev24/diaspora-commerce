@@ -45,6 +45,7 @@ import {
 import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type SearchPage, SearchPageSchema, type SearchQuery, type Suggestions, SuggestionsSchema } from './schemas/search';
 import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './schemas/site';
+import { type SiteNavigation, SiteNavigationSchema } from './schemas/site-nav';
 import { toApiSearchParams } from './search-params';
 import { shopperMethods } from './shopper-client';
 
@@ -61,6 +62,8 @@ export function createApiClient(options: ApiClientOptions) {
     /* Site & content */
     getSiteConfig: (signal?: AbortSignal): Promise<SiteConfig> => request('/v1/site-config', SiteConfigSchema, { signal }),
     getHome: (signal?: AbortSignal): Promise<Home> => request('/v1/home', HomeSchema, { signal }),
+    /** Departments and communities that exist right now (eligible-only counts), plus whether Services has any provider. */
+    getNavigation: (signal?: AbortSignal): Promise<SiteNavigation> => request('/v1/site/departments', SiteNavigationSchema, { signal }),
     getRecentlyViewed: (atins: readonly string[], signal?: AbortSignal): Promise<ProductSummary[]> =>
       request('/v1/home/recently-viewed', RecentlyViewedSchema, { query: { atins: atins.join(',') }, signal }).then((r) => r.items),
     subscribeNewsletter: (email: string) => request('/v1/newsletter/subscriptions', NewsletterResponseSchema, { method: 'POST', body: { email } }),

@@ -77,6 +77,7 @@ import {
 import { createStaffContentApi } from './staff-content';
 import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
 import { createStaffDepartmentsApi } from './staff-departments';
+import { createStaffHomeApi } from './staff-home';
 import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
@@ -220,6 +221,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Department requests and an organisation's departments: /v1/staff/department-requests/**, /v1/staff/organisations/{orgId}/departments */
     departments: createStaffDepartmentsApi(request),
+    /* Home settings and preview (S417, S418, S430): /v1/staff/home/** */
+    home: createStaffHomeApi(request),
 
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
     preorders: createStaffPreordersApi(request, options),

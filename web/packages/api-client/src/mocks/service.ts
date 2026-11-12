@@ -12,6 +12,7 @@ import { deliveryOptions, deliveryPromise, etaDays, locationForZip, metroOf, nea
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
 import { PLACEMENTS, SPONSORED_SEARCH, type TileRule, ZIP_TARGETING } from './fixtures/content';
 import { composeBody } from './home-blocks';
+import { type Catalog } from './home-dynamic';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
 import { publicSizeChart, seedSizeCharts,SIZE_CHART_IDS } from './seller/size-charts';
@@ -442,6 +443,17 @@ export function recentlyViewed(atins: string[], loc: DeliveryLocation, now: Date
 
 /** Placements targeted at ZIP prefixes show only to shoppers whose ZIP starts with one of them. */
 const targeted = (id: string, zip: string) => !ZIP_TARGETING[id] || ZIP_TARGETING[id].some((prefix) => zip.startsWith(prefix));
+
+/** The mock database as a home catalogue: eligible products (in stock, real photo) and the services the mock lists. */
+export function liveCatalog(loc: DeliveryLocation, now: Date): Catalog {
+  const metro = metroOf(loc);
+  const products = [...getDb().products.values()]
+    .filter((p) => !p.unlisted)
+    .map((p) => summarize(p, metro, now))
+    .filter(eligibleForHome)
+    .map((p) => ({ ...p, ageDays: 0 }));
+  return { products, services: [], preorderOpen: false };
+}
 
 export function home(loc: DeliveryLocation, now: Date, userId: string | null = null): Home {
   const db = getDb();

@@ -9,6 +9,7 @@ import { JobApplicationFormSchema } from '../schemas/careers';
 import { AddToCartRequestSchema, SelectAllRequestSchema, UpdateCartLineRequestSchema } from '../schemas/cart';
 import { StockAlertRequestSchema } from '../schemas/catalog';
 import { ZipSchema } from '../schemas/location';
+import { HomeModuleEventSchema } from '../schemas/home';
 import { NewsletterRequestSchema } from '../schemas/site';
 import { fromApiSearchParams } from '../search-params';
 import { mockAddressSuggestions, mockResolveAddress } from './addresses';
@@ -19,6 +20,7 @@ import { deliveryQuoteHandlers } from './delivery-quotes';
 import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
+import { composeDynamicHome, DEFAULT_SEED, fixtureCatalog, HOME_SEED_HEADER, homeMock, mockCatalogueSize, navigationOf } from './home-dynamic';
 import { helpRequestHandlers } from './help-requests';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
@@ -31,6 +33,7 @@ import {
   addToCart,
   buildCart,
   home,
+  liveCatalog,
   MockProblem,
   moveToCart,
   productDetail,
@@ -103,7 +106,26 @@ export const handlers = [
   ...sessionHandlers('customer-web'),
   /* Site & content */
   http.get('*/v1/site-config', route(() => json(SITE_CONFIG))),
-  http.get('*/v1/home', route((ctx) => json(home(sessionLocation(ctx.session), ctx.now, ctx.session.userId ?? null)))),
+  http.get('*/v1/home', route((ctx) => {
+    const size = mockCatalogueSize();
+    if (size === null) return json(home(sessionLocation(ctx.session), ctx.now, ctx.session.userId ?? null));
+    // The dynamic home: the visit seed arrives as a header (the storefront reads its short-lived cookie); none means the crawler default.
+    const loc = sessionLocation(ctx.session);
+    const seed = ctx.request.headers.get(HOME_SEED_HEADER)?.trim() || DEFAULT_SEED;
+    const { home: h } = composeDynamicHome({ catalog: fixtureCatalog(size), settings: homeMock.settings, seed, now: ctx.now, signedIn: !!ctx.session.userId, loc, hasZip: loc.source === 'chosen' });
+    return json(h);
+  })),
+  /* Departments, communities and Services availability: the same eligible-only counts the home uses. */
+  http.get('*/v1/site/departments', route((ctx) => {
+    const size = mockCatalogueSize();
+    const loc = sessionLocation(ctx.session);
+    const nav = navigationOf(size === null ? liveCatalog(loc, ctx.now) : fixtureCatalog(size), homeMock.settings);
+    return json(size === null ? { ...nav, servicesAvailable: true } : nav);
+  })),
+  http.post('*/v1/home/module-events', route(async (ctx) => {
+    await body(ctx.request, HomeModuleEventSchema);
+    return new Response(null, { status: 204 });
+  })),
   http.get('*/v1/home/recently-viewed', route((ctx) => {
     const atins = (new URL(ctx.request.url).searchParams.get('atins') ?? '').split(',').filter(Boolean);
     return json({ items: recentlyViewed(atins, sessionLocation(ctx.session), ctx.now) });

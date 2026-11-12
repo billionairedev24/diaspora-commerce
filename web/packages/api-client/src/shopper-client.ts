@@ -14,6 +14,7 @@ import {
   HelpRequestPageSchema,
   HelpRequestSchema
 } from './schemas/help-requests';
+import { type HomeModuleEvent } from './schemas/home';
 import { type SearchClickRequest, type SearchClickResult, SearchClickResultSchema } from './schemas/search';
 import {
   type AddressInput,
@@ -103,6 +104,8 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     recordSearchClick: (body: SearchClickRequest): Promise<SearchClickResult> =>
       request('/v1/search/clicks', SearchClickResultSchema, { method: 'POST', body }),
 
+    /** Counts an impression or click on an organic home module (S427). Aggregate only: module, position, variant, target kind. Nothing identifies the shopper. */
+    recordHomeModuleEvent: (event: HomeModuleEvent): Promise<void> => request('/v1/home/module-events', Void, { method: 'POST', body: event }),
     /** Counts an impression or click on a paid home module (`HomeBlock.sponsored`). Fire and forget; nothing identifies the shopper. */
     recordHomeAdEvent: (placementId: string, event: 'impression' | 'click'): Promise<void> =>
       request('/v1/home/ad-events', Void, { method: 'POST', body: { placementId, event } }),
