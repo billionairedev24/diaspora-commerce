@@ -566,6 +566,50 @@ class IdentityFlowIT {
     }
 
     @Test
+    void tourProgressIsPerUserIdempotentAndNeverShownToAnotherAccount() {
+        BrowserSession s = new BrowserSession(base());
+        String ada = "ada." + UUID.randomUUID() + "@example.com";
+        String bayo = "bayo." + UUID.randomUUID() + "@example.com";
+        registerAndVerify(s, ada, "sell");
+        registerAndVerify(s, bayo, "sell");
+        String adaToken = s.exchangePublic(STOREFRONT, STOREFRONT_REDIRECT,
+                s.signIn(STOREFRONT, STOREFRONT_REDIRECT, ada, PASSWORD)).accessToken();
+        String bayoToken = s.exchangePublic(STOREFRONT, STOREFRONT_REDIRECT,
+                s.signIn(STOREFRONT, STOREFRONT_REDIRECT, bayo, PASSWORD)).accessToken();
+
+        JsonNode none = BrowserSession.json(s.api("GET", "/v1/me/tour-progress", adaToken, null).body());
+        assertThat(none.get("items")).isEmpty();
+        assertThat(none.get("autoStartEnabled").asBoolean()).isTrue();
+
+        String body = "{\"contentVersion\":1,\"status\":\"COMPLETED\",\"lastStep\":\"tools\"}";
+        assertThat(s.api("PUT", "/v1/me/tour-progress/sc.orders", adaToken, body).statusCode()).isEqualTo(200);
+        assertThat(s.api("PUT", "/v1/me/tour-progress/sc.orders", adaToken, body).statusCode()).isEqualTo(200);
+        // A replay in progress does not undo a finished tour.
+        JsonNode kept = BrowserSession.json(s.api("PUT", "/v1/me/tour-progress/sc.orders", adaToken,
+                "{\"contentVersion\":1,\"status\":\"IN_PROGRESS\",\"lastStep\":\"page\"}").body());
+        assertThat(kept.get("status").asString()).isEqualTo("COMPLETED");
+
+        JsonNode mine = BrowserSession.json(s.api("GET", "/v1/me/tour-progress", adaToken, null).body());
+        assertThat(mine.get("items")).hasSize(1);
+        assertThat(mine.get("items").get(0).get("tourId").asString()).isEqualTo("sc.orders");
+        assertThat(BrowserSession.json(s.api("GET", "/v1/me/tour-progress", bayoToken, null).body()).get("items"))
+                .isEmpty();
+
+        HttpResponse<String> bad = s.api("PUT", "/v1/me/tour-progress/Not-A-Tour", adaToken, body);
+        assertThat(bad.statusCode()).isEqualTo(422);
+        assertThat(BrowserSession.json(bad.body()).get("fieldErrors").has("tourId")).isTrue();
+        assertThat(s.api("GET", "/v1/me/tour-progress", null, null).statusCode()).isEqualTo(401);
+
+        assertThat(s.api("PUT", "/v1/me/tour-progress", adaToken, """
+                {"items":[{"tourId":"st.settings","contentVersion":1,"status":"DISMISSED"}]}""").statusCode())
+                .isEqualTo(200);
+        assertThat(s.api("DELETE", "/v1/me/tour-progress", adaToken, null).statusCode()).isEqualTo(204);
+        assertThat(s.api("DELETE", "/v1/me/tour-progress", adaToken, null).statusCode()).isEqualTo(204);
+        assertThat(BrowserSession.json(s.api("GET", "/v1/me/tour-progress", adaToken, null).body()).get("items"))
+                .isEmpty();
+    }
+
+    @Test
     void mandatoryAccountsSwitchMethodsButCannotDropTheLastFactor() {
         BrowserSession user = new BrowserSession(base());
         String email = "yemi." + UUID.randomUUID() + "@example.com";

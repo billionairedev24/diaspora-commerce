@@ -2162,6 +2162,91 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/UserPreferences'
+  /v1/me/tour-progress:
+    get:
+      tags:
+      - Me
+      summary: Guided-tour progress of the signed-in user, and whether tours may start by themselves
+      description: Tour ids are namespaced by app (sc.orders, st.settings). A tour with no entry has not been started. autoStartEnabled
+        is the platform flag at.identity.tours.auto-start.
+      operationId: tourProgress
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TourProgressList'
+    put:
+      tags:
+      - Me
+      summary: Merge several tours' progress in one call (first sync of what the browser kept)
+      description: Fills gaps and moves to newer versions only (what the server already holds for a version stands), in one
+        transaction; at most 100 items. Returns the progress afterwards.
+      operationId: mergeTourProgress
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TourProgressMergeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TourProgressList'
+    delete:
+      tags:
+      - Me
+      summary: Reset all of the signed-in user's tour progress (idempotent)
+      operationId: resetAllTourProgress
+      responses:
+        '204':
+          description: No Content
+  /v1/me/tour-progress/{tourId}:
+    put:
+      tags:
+      - Me
+      summary: Save one tour's progress (idempotent upsert)
+      description: A newer contentVersion replaces an older one; an older one is ignored; for the same version IN_PROGRESS
+        never undoes COMPLETED or DISMISSED. Returns what is stored. 422 identity.invalid-tour-progress for a bad id, version
+        or status.
+      operationId: saveTourProgress
+      parameters:
+      - name: tourId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TourProgressRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TourProgress'
+    delete:
+      tags:
+      - Me
+      summary: Forget one tour's progress (idempotent)
+      operationId: resetTourProgress
+      parameters:
+      - name: tourId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
   /v1/me/roles/provider-applicant:
     post:
       tags:
@@ -2958,6 +3043,89 @@ components:
         expiresAt:
           type: string
           format: date-time
+    TourProgress:
+      type: object
+      properties:
+        tourId:
+          type: string
+        contentVersion:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - IN_PROGRESS
+          - COMPLETED
+          - DISMISSED
+        lastStep:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    TourProgressList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TourProgress'
+        autoStartEnabled:
+          type: boolean
+    TourProgressMergeItem:
+      type: object
+      properties:
+        tourId:
+          type: string
+          maxLength: 64
+          examples:
+          - sc.orders
+        contentVersion:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - IN_PROGRESS
+          - COMPLETED
+          - DISMISSED
+        lastStep:
+          type: string
+          maxLength: 64
+      required:
+      - contentVersion
+      - status
+      - tourId
+    TourProgressMergeRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TourProgressMergeItem'
+          maxItems: 100
+          minItems: 0
+      required:
+      - items
+    TourProgressRequest:
+      type: object
+      properties:
+        contentVersion:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - IN_PROGRESS
+          - COMPLETED
+          - DISMISSED
+        lastStep:
+          type: string
+          maxLength: 64
+          examples:
+          - approve
+      required:
+      - contentVersion
+      - status
     UserPreferences:
       type: object
       properties:

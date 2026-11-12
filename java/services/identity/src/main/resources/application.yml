@@ -91,6 +91,10 @@ at:
     # STAFF_CONSOLE_URL, API_BASE_URL and PLATFORM_DOMAIN are injected per environment by the Helm library chart.
     issuer: ${AUTH_ISSUER_URL:http://localhost:8100}
     home-url: ${HOME_URL:${PUBLIC_WEB_URL:http://localhost:3000}}
+    # Guided tours: false stops first-time tours from starting by themselves in every back office (the hub and Replay still work).
+    # Returned with the person's tour progress as autoStartEnabled; docs/adr/0009-guided-tour-progress-on-the-server.md.
+    tours:
+      auto-start: ${TOURS_AUTO_START:true}
     # S322: sign-up device and network are published as keyed hashes (never raw) for the referral program's abuse checks.
     signup:
       fingerprint-key: ${SIGNUP_FINGERPRINT_KEY:identity-signup-fingerprints}
