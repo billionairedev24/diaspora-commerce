@@ -7,12 +7,14 @@ import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAut
 import com.afrotransact.identity.adapter.out.crypto.Pem;
 import com.afrotransact.identity.application.BootstrapService;
 import com.afrotransact.identity.application.SigningKeyAdminService;
+import com.afrotransact.identity.domain.LocalDevelopmentPolicy;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.RSAKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -38,10 +40,15 @@ class StartupProvisioning implements ApplicationRunner {
     private final BootstrapService bootstrap;
     private final SigningKeyAdminService signingKeys;
     private final ConfiguredSigningKeys configuredKeys;
+    private final LocalDevelopmentPolicy developmentPolicy;
+    private final Environment environment;
 
     StartupProvisioning(IdentityProperties props, JdbcRegisteredClientRepository clients, PasswordEncoder encoder,
                         BootstrapService bootstrap, SigningKeyAdminService signingKeys,
-                        ConfiguredSigningKeys configuredKeys) {
+                        ConfiguredSigningKeys configuredKeys, LocalDevelopmentPolicy developmentPolicy,
+                        Environment environment) {
+        this.developmentPolicy = developmentPolicy;
+        this.environment = environment;
         this.props = props;
         this.clients = clients;
         this.encoder = encoder;
@@ -76,6 +83,8 @@ class StartupProvisioning implements ApplicationRunner {
         IdentityProperties.BootstrapAdmin admin = props.bootstrapAdmin();
         if (admin.email() != null && !admin.email().isBlank() && admin.password() != null
                 && !admin.password().isBlank()) {
+            LocalDevelopmentConfiguration.checkedBootstrapAdmin(developmentPolicy,
+                    LocalDevelopmentConfiguration.activeProfiles(environment), admin.email(), admin.password());
             bootstrap.ensureSuperAdmin(admin.email(), admin.password(),
                     admin.firstName() == null ? "Platform" : admin.firstName(),
                     admin.lastName() == null ? "Administrator" : admin.lastName(), admin.phone());

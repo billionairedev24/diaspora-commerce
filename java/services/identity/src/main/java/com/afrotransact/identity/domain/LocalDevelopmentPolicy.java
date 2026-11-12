@@ -28,6 +28,20 @@ public interface LocalDevelopmentPolicy {
      */
     boolean verificationSenderAllowed(String sender, Set<String> activeProfiles);
 
+    /** The password the local profile gives the bootstrap super administrator. */
+    String LOCAL_ADMIN_PASSWORD = "LocalAdmin2026!";
+
+    /**
+     * Whether the bootstrap super administrator may be created with these credentials. On {@code uat} and {@code prod}
+     * (and {@code dev} for the published local passwords) the account must not use a made-up {@code .test} address, a
+     * password published in this repository, or a password shorter than {@link #MIN_ADMIN_PASSWORD_LENGTH}; the
+     * {@code local} profile has no restriction.
+     */
+    boolean bootstrapAdminAllowed(Set<String> activeProfiles, String email, String password);
+
+    /** Shortest bootstrap administrator password accepted on uat and prod. */
+    int MIN_ADMIN_PASSWORD_LENGTH = 16;
+
     /** True for an address under {@link #TEST_USER_DOMAIN}. */
     boolean isTestUserEmail(String email);
 }

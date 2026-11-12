@@ -31,6 +31,20 @@ public class DefaultLocalDevelopmentPolicy implements LocalDevelopmentPolicy {
     }
 
     @Override
+    public boolean bootstrapAdminAllowed(Set<String> activeProfiles, String email, String password) {
+        Set<String> p = normalise(activeProfiles);
+        boolean published = LOCAL_ADMIN_PASSWORD.equals(password) || LOCAL_TEST_PASSWORD.equals(password);
+        if (p.stream().anyMatch(PRODUCTION_LIKE::contains)) {
+            return !published && !isTestUserEmail(email)
+                    && password != null && password.length() >= MIN_ADMIN_PASSWORD_LENGTH;
+        }
+        if (p.contains(DEV)) {
+            return !published;
+        }
+        return true;
+    }
+
+    @Override
     public boolean isTestUserEmail(String email) {
         if (email == null) {
             return false;

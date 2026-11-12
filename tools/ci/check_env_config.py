@@ -34,6 +34,13 @@ Checks every service against the environment rules in docs/engineering/environme
                catalog's resolver is not the local fake in dev/uat/prod, and the delivery-allocation setting of orders
                (ORDERS_TAX_SHIPPING_ALLOCATION) equals gateway-bff's (CHECKOUT_SHIPPING_ALLOCATION) in every environment.
 
+  demo data    (prod seed guards) uat and prod configuration never switch on demo or test data: identity's test users
+               (at.identity.local-development.test-users), delivery-runs' demo pre-order areas
+               (at.delivery-runs.preorders.seed-demo-areas), the seeder's SEED_ALLOW_REMOTE, and no default or Helm value
+               in a uat/prod file contains a local credential or a made-up account (the `.test` test-user domain, the
+               local bootstrap-admin and test-user passwords, the `demo-seed` order attribution). dev may opt in to
+               identity's test users only; nothing else may seed outside local.
+
   python3 tools/ci/check_env_config.py                 # whole repository; exit 1 on violations
   python3 tools/ci/check_env_config.py --format github # ::error annotations
   python3 tools/ci/check_env_config.py --service cart  # one service (repeatable)
@@ -420,6 +427,56 @@ def check_category_tax(rep: Report) -> None:
             rep.error(java / "tax-returns/deploy/helm" / f"values-{env}.yaml", "TAX_PROVIDER must be RULES, STRIPE_TAX or AVALARA")
 
 
+# Strings that only belong to the local stack's demo data and credentials.
+DEMO_MARKERS = [
+    (re.compile(r"afrotransact\.test", re.I), "the made-up test-user domain afrotransact.test"),
+    (re.compile(r"LocalAdmin2026"), "the local bootstrap-admin password"),
+    (re.compile(r"Test1234!Local"), "the local test-user password"),
+    (re.compile(r"demo-seed"), "the demo-seed order attribution"),
+    (re.compile(r"SEED_ALLOW_REMOTE"), "SEED_ALLOW_REMOTE (the seeder is never run from a deployed configuration)"),
+]
+
+
+def check_demo_data(rep: Report) -> None:
+    """Prod seed guards: uat and prod configuration carries no demo data switches or local credentials (dev may only
+    opt in to identity's test users)."""
+    files: list[pathlib.Path] = []
+    for env in ("uat", "prod"):
+        files += sorted(ROOT.glob(f"java/services/*/src/main/resources/application-{env}.yml"))
+        files += sorted(ROOT.glob(f"go/services/*/config/{env}.yaml"))
+        files += sorted(ROOT.glob(f"java/services/*/deploy/helm/values-{env}.yaml"))
+        files += sorted(ROOT.glob(f"go/services/*/deploy/helm/values-{env}.yaml"))
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        for pattern, what in DEMO_MARKERS:
+            if pattern.search(text):
+                rep.error(f, f"uat/prod configuration contains {what}: demo data and local credentials are local-only")
+    identity = ROOT / "java/services/identity/src/main/resources"
+    runs = ROOT / "java/services/delivery-runs/src/main/resources"
+    for env in ENVS:
+        id_file = identity / f"application-{env}.yml"
+        if id_file.exists():
+            on = as_bool(get(load(id_file), "at.identity.local-development.test-users"))
+            if on and env not in ("local",):
+                rep.error(id_file, "at.identity.local-development.test-users defaults to true: only the local profile creates test users "
+                                   "(dev may opt in with IDENTITY_TEST_USERS=true, default false)")
+        runs_file = runs / f"application-{env}.yml"
+        if runs_file.exists() and env != "local":
+            if as_bool(get(load(runs_file), "at.delivery-runs.preorders.seed-demo-areas")):
+                rep.error(runs_file, "at.delivery-runs.preorders.seed-demo-areas is on: demo pre-order areas are local-only")
+    for env in ("uat", "prod"):
+        for values in sorted(ROOT.glob(f"java/services/identity/deploy/helm/values-{env}.yaml")):
+            extra = (load(values).get("extraEnv") or {})
+            if str(extra.get("IDENTITY_TEST_USERS", "false")).lower() == "true":
+                rep.error(values, "IDENTITY_TEST_USERS=true: test accounts are never created in uat or prod")
+    base = identity / "application.yml"
+    if base.exists():
+        admin = get(load(base), "at.identity.bootstrap-admin.password")
+        if resolve(admin):
+            rep.error(base, "at.identity.bootstrap-admin.password has a default: only the local profile may set one "
+                            "(BOOTSTRAP_ADMIN_PASSWORD comes from the secret store)")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--format", choices=["text", "github"], default="text")
@@ -443,6 +500,7 @@ def main() -> int:
         check_timeouts(rep)
         check_plan_fees(rep)
         check_category_tax(rep)
+        check_demo_data(rep)
     if args.service and rep.checked == 0:
         print(f"no such service: {', '.join(args.service)}", file=sys.stderr)
         return 2

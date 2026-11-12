@@ -19,6 +19,14 @@ carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets 
 `seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
 `seed.py` and the guide.
 
+### Guards (never against production)
+
+`seed.py` stops before any step when `APP_ENV`, `ENVIRONMENT`, `DEPLOY_ENV`, `SPRING_PROFILES_ACTIVE` or `ENV` names prod,
+production, uat or staging; when any service URL it uses (`CATALOG_URL`, `AUTH_ISSUER_URL`, ...) has a host under
+afrotransact.com other than `*.dev.afrotransact.com` and `*.trial.afrotransact.com` (this holds even with
+`SEED_ALLOW_REMOTE=1`); and when a URL is not on this machine unless `SEED_ALLOW_REMOTE=1` is set. Hosts are parsed, so
+`localhost.example.com` or a path containing `localhost` is not local. `tests/test_guard.py` covers it.
+
 ### Departments of the demo sellers
 
 A seller may only create and edit items in the catalog departments recorded for its organisation (docs/engineering/seller-catalog-scope.md).
