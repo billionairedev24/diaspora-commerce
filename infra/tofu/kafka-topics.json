@@ -51,6 +51,12 @@
       ],
       "consumers": []
     },
+    "at.change-request.events": {
+      "producers": [
+        "catalog"
+      ],
+      "consumers": []
+    },
     "at.content.events": {
       "producers": [
         "content"
@@ -283,7 +289,8 @@
         "tax-returns"
       ],
       "consumers": [
-        "catalog"
+        "catalog",
+        "offers"
       ]
     },
     "at.trustops.events": {

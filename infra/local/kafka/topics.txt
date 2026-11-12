@@ -10,6 +10,7 @@ ai-handoff
 bookings
 carrier-shipment
 category-request
+change-request
 content
 delivery-runs
 fulfilment

@@ -19,6 +19,17 @@ channels:
       catalogProductTaxFactsChanged: {$ref: '#/components/messages/catalogProductTaxFactsChanged'}
       catalogProductResubmitted: {$ref: '#/components/messages/catalogProductResubmitted'}
       catalogProductRatingChanged: {$ref: '#/components/messages/catalogProductRatingChanged'}
+      catalogProductMerged: {$ref: '#/components/messages/catalogProductMerged'}
+  catalogChangeRequestEvents:
+    address: at.change-request.events
+    description: >-
+      Suggest-an-edit, wrong-match and duplicate-page requests and no-barcode exemptions (S385, S387; key = request id).
+      Decisions carry who decided, what and why (the audit trail). Headers event-id, event-type, occurred-at.
+    messages:
+      catalogChangeRequestCreated: {$ref: '#/components/messages/catalogChangeRequestCreated'}
+      catalogChangeRequestDecided: {$ref: '#/components/messages/catalogChangeRequestDecided'}
+      catalogGtinExemptionRequested: {$ref: '#/components/messages/catalogGtinExemptionRequested'}
+      catalogGtinExemptionDecided: {$ref: '#/components/messages/catalogGtinExemptionDecided'}
   catalogProductReviewEvents:
     address: at.product-review.events
     description: Verified-purchase product reviews (S324, key = review id). Headers event-id, event-type, occurred-at.
@@ -62,6 +73,16 @@ operations:
       paused listing (POST /v1/products/{id}/takedown, status TAKEN_DOWN, hidden from public reads) or reversed it
       (POST /v1/products/{id}/restore, back to LIVE or PAUSED). Read models keep a product public only while its
       status is LIVE and sellerHidden is false.
+  publishCatalogChangeRequestEvents:
+    action: send
+    channel: {$ref: '#/channels/catalogChangeRequestEvents'}
+    summary: >-
+      catalog.change_request.created: a seller filed a suggest-an-edit, wrong-match or duplicate-page request
+      (POST /v1/products/{atin}/change-requests); the page is not changed. catalog.change_request.decided: staff approved
+      (status APPLIED, the change is on the page and catalog.product.updated followed) or rejected (status REJECTED with the
+      reason); carries who, what and why. catalog.gtin_exemption.requested / decided: a no-barcode item in a brand-gated
+      category or of a known GS1 brand waits for staff (the page is PENDING_EXEMPTION); approval moves it to IN_REVIEW,
+      never LIVE. Applying a request never changes a product's status.
   publishCatalogProductReviewEvents:
     action: send
     channel: {$ref: '#/channels/catalogProductReviewEvents'}
@@ -160,6 +181,34 @@ components:
       title: A takedown was reversed (status is the listing's status before the takedown, LIVE or PAUSED)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogProductMerged:
+      name: catalog.product.merged
+      title: Two duplicate pages were merged; the loser's ATIN redirects to the survivor (S386)
+      summary: >-
+        Key = the surviving product id. Offers move every offer of the merged page's variants to the mapped variants of the
+        survivor (an offer that would duplicate the seller's open offer there is withdrawn); search drops the loser.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductMerged'}
+    catalogChangeRequestCreated:
+      name: catalog.change_request.created
+      title: A seller filed a change request on a product page
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogChangeRequestEvent'}
+    catalogChangeRequestDecided:
+      name: catalog.change_request.decided
+      title: Staff decided a change request (audit - who, what, why)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogChangeRequestEvent'}
+    catalogGtinExemptionRequested:
+      name: catalog.gtin_exemption.requested
+      title: A no-barcode item waits for staff approval (the page is PENDING_EXEMPTION)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogGtinExemptionEvent'}
+    catalogGtinExemptionDecided:
+      name: catalog.gtin_exemption.decided
+      title: Staff decided a no-barcode exemption (audit - who, why)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogGtinExemptionEvent'}
     catalogProductTermsChanged:
       name: catalog.product.terms_changed
       title: Price, quantity, "was" price, condition, fulfilment, handling time or ship-from changed (S307)
@@ -284,6 +333,52 @@ components:
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogCategoryRequestEvent'}
   schemas:
+    CatalogProductMerged:
+      type: object
+      required: [loserProductId, loserAtin, survivorProductId, survivorAtin, variantMap, mergedBy, occurredAt]
+      properties:
+        loserProductId: {type: string, format: uuid}
+        loserAtin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        survivorProductId: {type: string, format: uuid}
+        survivorAtin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        variantMap:
+          type: object
+          description: Loser variant ATIN to the surviving page's variant ATIN
+          additionalProperties: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        mergedBy: {type: string}
+        reason: {type: string}
+        changeRequestId: {type: [string, 'null'], format: uuid}
+        occurredAt: {type: string, format: date-time}
+    CatalogChangeRequestEvent:
+      type: object
+      required: [changeRequestId, atin, type, status, requestedByOrg, occurredAt]
+      properties:
+        changeRequestId: {type: string, format: uuid}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$', description: The page ATIN}
+        productId: {type: string, format: uuid}
+        pageOwnerOrgId: {type: string, description: Who is told (the owner is notified of every request and decision)}
+        type: {type: string, enum: [IMAGE_ADD, IMAGE_REPLACE, TITLE, ATTRIBUTE, DESCRIPTION, CATEGORY, BRAND, NEW_VARIANT, WRONG_MATCH, DUPLICATE_PAGE]}
+        field: {type: [string, 'null']}
+        status: {type: string, enum: [PENDING, APPLIED, REJECTED, WITHDRAWN]}
+        requestedByOrg: {type: string}
+        decidedBy: {type: [string, 'null'], description: Staff actor id (decided events)}
+        reason: {type: [string, 'null'], description: The decision reason (decided events)}
+        resolution: {type: [string, 'null']}
+        pageVersion: {type: [integer, 'null'], format: int64, description: The page version after an applied change}
+        occurredAt: {type: string, format: date-time}
+    CatalogGtinExemptionEvent:
+      type: object
+      required: [exemptionId, productId, productAtin, status, requestedByOrg, occurredAt]
+      properties:
+        exemptionId: {type: string, format: uuid}
+        productId: {type: string, format: uuid}
+        productAtin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        requiredBecause: {type: string, enum: [BRAND_GATED_CATEGORY, KNOWN_GS1_BRAND]}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
+        requestedByOrg: {type: string}
+        decidedBy: {type: [string, 'null']}
+        reason: {type: [string, 'null']}
+        occurredAt: {type: string, format: date-time}
     CatalogProductTaxFactsChanged:
       type: object
       required: [productId, ownerOrgId, categoryCode, variants, occurredAt]
@@ -322,7 +417,7 @@ components:
         ownerOrgId: {type: string}
         status:
           type: string
-          enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED, TAKEN_DOWN]
+          enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED, TAKEN_DOWN, PENDING_EXEMPTION, MERGED]
           description: >-
             LIVE only when every variant has a stored, resolved tax decision (never guess: a product without one is
             announced as IN_REVIEW, so offers, search and inventory never treat it as purchasable).

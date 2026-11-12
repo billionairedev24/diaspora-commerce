@@ -10,6 +10,8 @@ channels:
       offersOfferCreated: {$ref: '#/components/messages/offersOfferCreated'}
       offersOfferUpdated: {$ref: '#/components/messages/offersOfferUpdated'}
       offersOfferWithdrawn: {$ref: '#/components/messages/offersOfferWithdrawn'}
+      offersOfferTaxHeld: {$ref: '#/components/messages/offersOfferTaxHeld'}
+      offersOfferTaxReleased: {$ref: '#/components/messages/offersOfferTaxReleased'}
       offersBuyBoxChanged: {$ref: '#/components/messages/offersBuyBoxChanged'}
       offersCouponCreated: {$ref: '#/components/messages/offersCouponCreated'}
       offersCouponUpdated: {$ref: '#/components/messages/offersCouponUpdated'}
@@ -35,6 +37,16 @@ operations:
       rejected / paused take them off sale. taken_down (Trust and Safety) suppresses every offer on the page: none can
       win the buy box or appear in public reads; reinstated restores them when the listing's status is LIVE again (a
       listing reinstated as PAUSED stays off sale). The buy box of every affected ATIN is recomputed.
+  consumeOffersTaxClassificationEvents:
+    action: receive
+    channel: {$ref: '#/channels/taxReturnsEvents'}
+    summary: >-
+      S384: tax.classification.changed (kind VARIANT_CLASSIFICATION) for an ATIN makes offers-service re-check every
+      TAX_HELD offer on that ATIN: it asks tax-returns for each seller's decision (GET /v1/tax/listing-decisions) and
+      moves the offer to ACTIVE only when the answer is RESOLVED (the event is a trigger, never the proof). Idempotent:
+      an offer that is already ACTIVE is left alone; offers.offer.tax_released and offers.offer.updated are published for
+      each release and the buy box is recomputed. A periodic sweep does the same for held offers whose event was missed.
+      Consumer offers-tax-decisions, inbox-deduplicated.
   consumeOffersInventoryStockEvents:
     action: receive
     channel: {$ref: '#/channels/inventoryStockEvents'}
@@ -86,6 +98,18 @@ components:
       payload: {$ref: '#/components/schemas/OffersOfferEvent'}
     offersOfferWithdrawn:
       name: offers.offer.withdrawn
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersOfferEvent'}
+    offersOfferTaxHeld:
+      name: offers.offer.tax_held
+      title: >-
+        An offer was saved TAX_HELD because the offering seller has no RESOLVED tax decision on the ATIN (not buyable, not in
+        search, not in the buy box)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersOfferEvent'}
+    offersOfferTaxReleased:
+      name: offers.offer.tax_released
+      title: A TAX_HELD offer became ACTIVE because the seller now has a RESOLVED tax decision
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/OffersOfferEvent'}
     offersBuyBoxChanged:
@@ -145,7 +169,11 @@ components:
             country: {type: [string, 'null']}
             postalCode: {type: [string, 'null']}
             locationId: {type: [string, 'null'], description: seller-service ship-from location (AFROTRANSACT_DELIVERY pickup)}
-        status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN]}
+        status:
+          type: string
+          enum: [ACTIVE, PAUSED, WITHDRAWN, TAX_HELD]
+          description: TAX_HELD = the seller has no RESOLVED tax decision on this ATIN; consumers treat it like PAUSED (not live)
+        heldReason: {type: [string, 'null'], description: 'TAX_DECISION_MISSING, TAX_<status> or TAX_UNAVAILABLE while TAX_HELD'}
         productLive: {type: boolean}
         inventorySku:
           type: string

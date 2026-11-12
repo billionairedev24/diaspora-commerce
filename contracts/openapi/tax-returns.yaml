@@ -1207,6 +1207,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VariantClassification'
+  /v1/tax/listing-decisions:
+    get:
+      tags:
+      - Tax classification
+      summary: Does this seller have a stored tax decision on this variant? (service clients, offers-service, S384)
+      description: |
+        The decision is stored per (variant ATIN, seller behaviour) and lists the selling organisations it applies to
+        (`listing_tax_decision`); the page owner's decision is **not** another seller's. `status` is `RESOLVED` only when a stored,
+        RESOLVED decision names this organisation. Anything else (`MISSING` for no decision, or the unresolved status such as
+        `NEEDS_APPROVAL`, `MISSING_FACTS`, `BLOCKED`) means the seller's offer must not be live. Read-only; never creates a
+        decision. Needs tax:read (service token).
+      operationId: getListingDecision
+      parameters:
+      - {name: atin, in: query, required: true, description: Variant ATIN, schema: {type: string, pattern: 'AT[0-9A-Z]{8}'}}
+      - {name: sellerOrgId, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 80}}
+      responses:
+        '200':
+          description: The seller's decision state (MISSING is an answer, not an error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingDecisionState'
+        '403':
+          description: Missing tax:read
+  /v1/tax/listing-decisions/request:
+    post:
+      tags:
+      - Tax classification
+      summary: Ask for the seller's decision on a variant from the page's facts (service clients, offers-service, S384)
+      description: |
+        Resolves the variant's classification record (the page's facts, already reviewed for the page owner) under the
+        seller's own behaviour facts and, when the outcome is chargeable (status `RESOLVED`), stores the decision for this
+        organisation. **Never defaults a rate or an outcome**: when the record is not approved, facts are missing (a behaviour
+        fact the seller has not given), or the profile is gated, nothing is stored and the answer carries that status with
+        plain reasons, so the offer stays held. Idempotent: asking again returns the stored decision. For the page owner
+        the owner's listing behaviour is used; another seller's behaviour is never assumed. Needs tax:classify (service token).
+      operationId: requestListingDecision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingDecisionRequest'
+      responses:
+        '200':
+          description: The state after the request (also 200 when not resolvable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingDecisionState'
+        '403':
+          description: Missing tax:classify
+        '404':
+          description: tax.classification-not-found when tax-returns has no record for the ATIN (it asks catalog once)
   /v1/tax/shadow/report:
     get:
       tags:
@@ -2613,6 +2667,37 @@ components:
         rate: {type: number, description: Fraction, 0.0825 = 8.25 %}
         taxMinor: {type: integer, format: int64}
         error: {type: string}
+    ListingDecisionRequest:
+      type: object
+      required: [atin, sellerOrgId]
+      properties:
+        atin: {type: string, pattern: 'AT[0-9A-Z]{8}'}
+        sellerOrgId: {type: string, minLength: 1, maxLength: 80}
+        sellerBehaviour:
+          type: object
+          additionalProperties: {}
+          description: The seller's behaviour facts for this listing (sold_heated, utensils_provided ...). Empty means none given.
+    ListingDecisionState:
+      type: object
+      required: [atin, sellerOrgId, status, resolved]
+      properties:
+        atin: {type: string}
+        sellerOrgId: {type: string}
+        status:
+          type: string
+          description: RESOLVED, MISSING (no stored decision) or the unresolved ResolveStatus (MISSING_FACTS, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN)
+          enum: [RESOLVED, MISSING, MISSING_FACTS, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN]
+        resolved:
+          type: boolean
+          description: True only for RESOLVED with a stored decision
+        outcome: {$ref: '#/components/schemas/TaxOutcome'}
+        internalTaxCode: {type: [string, 'null']}
+        ruleVersion: {type: [string, 'null']}
+        decidedAt: {type: [string, 'null'], format: date-time}
+        reasons:
+          type: array
+          description: Plain reasons when not resolved
+          items: {type: string}
   securitySchemes:
     bearer:
       type: http

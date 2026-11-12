@@ -300,6 +300,7 @@ paths:
           - ACTIVE
           - PAUSED
           - WITHDRAWN
+          - TAX_HELD
       - name: page
         in: query
         required: false
@@ -325,9 +326,33 @@ paths:
       tags:
       - Offers
       summary: Create an offer on an existing live variant (by ATIN or GTIN)
-      description: The seller organisation is the token's org claim. 404 offers.product-not-found when the ATIN/GTIN has no
+      description: |
+        The seller organisation is the token's org claim. 404 offers.product-not-found when the ATIN/GTIN has no
         live product page; 409 offers.offer-exists when you already offer the same ATIN in that condition. Triggers a buy
         box recomputation.
+
+        An offer sells an existing page, so it only carries offer terms (price, list price, quantity, condition with a note,
+        fulfilment, handling days, ship-from, seller SKU, and a package only for Fulfilled by AfroTransact). **Page content
+        is refused with 422 `offers.page-content-locked`**: title, description, bullets, attributes, brand, category,
+        product type, GTIN changes, variation options, images and tax facts belong to the page ("That detail belongs to the
+        product page. Suggest an edit instead."); `errors` names each field. Other unknown fields are 422
+        `offers.unknown-field`.
+
+        Before the offer is stored: 422 `offers.selling-approval-required` ("You need approval to sell this brand. Apply under
+        Listings.") when the brand or category needs a selling approval the organisation does not hold (the same gate the
+        product writer uses; 403 `catalog.department-not-allowed` for a department outside the seller's scope); 422
+        `offers.brand-unavailable` when the page's brand is RETIRED or REJECTED; 422 `offers.condition-not-allowed` when the
+        category does not allow used items; 422 `offers.condition-note-required` for a condition other than NEW without a
+        note (200 characters at most, a setting); 422 `offers.package-not-allowed` for a package on an offer that is not
+        Fulfilled by AfroTransact.
+
+        **Tax (S384).** The offering seller needs its own stored RESOLVED tax decision on the ATIN in tax-returns (the page's
+        decision belongs to the page owner). Offers asks tax-returns; a missing decision is requested from the page's facts
+        (never a default rate). With a RESOLVED decision the offer is `ACTIVE`; otherwise it is saved as `TAX_HELD` with
+        `heldReason` `TAX_DECISION_MISSING` (or `TAX_<STATUS>`): not buyable, not in search and not in the buy box. When
+        tax-returns publishes `tax.decision.resolved` for the seller and ATIN, the offer becomes `ACTIVE` (idempotent). If
+        tax-returns cannot be reached the offer is saved `TAX_HELD` (fail closed). Publishes `offers.offer.tax_held` and,
+        later, `offers.offer.tax_released`.
       operationId: create
       requestBody:
         content:
@@ -855,11 +880,46 @@ components:
           description: Days to hand the order to the carrier
           maximum: 30
           minimum: 0
+        conditionNote:
+          type: string
+          description: Required for any condition other than NEW; at most 200 characters (a setting)
+          maxLength: 200
+        packaging:
+          $ref: '#/components/schemas/OfferPackage'
         shipFrom:
           $ref: '#/components/schemas/ShipFrom'
       required:
       - fulfilment
       - sellerSku
+    OfferPackage:
+      type: object
+      description: The box this seller ships the item in, stored on the offer. Only for Fulfilled by AfroTransact (fulfilment AFROTRANSACT); inches and pounds like the catalog package.
+      required:
+      - lengthIn
+      - widthIn
+      - heightIn
+      - weightLb
+      properties:
+        lengthIn:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 108
+        widthIn:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 108
+        heightIn:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 108
+        weightLb:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 150
     ShipFrom:
       type: object
       description: 'Where a seller-fulfilled order ships from. AFROTRANSACT_DELIVERY offers give only locationId: one of the
@@ -977,10 +1037,19 @@ components:
           type: string
         status:
           type: string
+          description: TAX_HELD means the seller has no RESOLVED tax decision on this ATIN yet; the offer is not buyable, not in search and not in the buy box
           enum:
           - ACTIVE
           - PAUSED
           - WITHDRAWN
+          - TAX_HELD
+        heldReason:
+          type: string
+          description: Why a TAX_HELD offer waits (TAX_DECISION_MISSING, TAX_PENDING_REVIEW, TAX_UNAVAILABLE ...); null otherwise
+        conditionNote:
+          type: string
+        packaging:
+          $ref: '#/components/schemas/OfferPackage'
         productLive:
           type: boolean
         suppressed:
@@ -1373,6 +1442,12 @@ components:
           type: string
           maxLength: 40
           minLength: 0
+        conditionNote:
+          type: string
+          description: Needed when the condition changes to anything but NEW (200 characters at most)
+          maxLength: 200
+        packaging:
+          $ref: '#/components/schemas/OfferPackage'
         version:
           type: integer
           format: int64
