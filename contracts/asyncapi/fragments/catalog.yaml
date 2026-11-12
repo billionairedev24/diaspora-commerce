@@ -20,6 +20,7 @@ channels:
       catalogProductResubmitted: {$ref: '#/components/messages/catalogProductResubmitted'}
       catalogProductRatingChanged: {$ref: '#/components/messages/catalogProductRatingChanged'}
       catalogProductMerged: {$ref: '#/components/messages/catalogProductMerged'}
+      catalogListingImageTask: {$ref: '#/components/messages/catalogListingImageTask'}
   catalogChangeRequestEvents:
     address: at.change-request.events
     description: >-
@@ -181,6 +182,15 @@ components:
       title: A takedown was reversed (status is the listing's status before the takedown, LIVE or PAUSED)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogListingImageTask:
+      name: catalog.listing.image_task
+      title: A listing's main image needs the seller's attention, or no longer does (S392)
+      summary: >-
+        Published when the back-fill (or a new main image) moves a listing's image quality between OK, IMPROVE and FAIL
+        (key = product id). Seller Center shows the Improve your image task from it. Nothing is hidden by this event: the hide
+        step is a separate flag and publishes catalog.product.hidden (sellerHidden = true) for the listings it limits.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogListingImageTask'}
     catalogProductMerged:
       name: catalog.product.merged
       title: Two duplicate pages were merged; the loser's ATIN redirects to the survivor (S386)
@@ -527,6 +537,21 @@ components:
         skippedRows: {type: integer, description: Rows with errors that were not imported}
         notifySeller: {type: boolean}
         finishedAt: {type: string, format: date-time}
+    CatalogListingImageTask:
+      type: object
+      required: [productId, atin, ownerOrg, state, reasonCodes]
+      properties:
+        productId: {type: string, format: uuid}
+        atin: {type: string}
+        ownerOrg: {type: string}
+        state: {type: string, enum: [OK, IMPROVE, FAIL]}
+        reasonCodes:
+          type: array
+          items: {type: string}
+          description: Media's check codes (MAIN_TOO_SMALL, NOT_WHITE, ...) or NO_MAIN_IMAGE
+        failingSince: {type: [string, 'null'], format: date-time}
+        hideAfter: {type: [string, 'null'], format: date-time, description: End of the grace period; null unless FAIL}
+        occurredAt: {type: string, format: date-time}
     CatalogProductFlagged:
       type: object
       required: [flagId, productId, atin, ownerKind, ownerOrgId, status, title, source, reasonCode, occurredAt]

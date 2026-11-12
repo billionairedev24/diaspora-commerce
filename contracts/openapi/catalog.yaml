@@ -57,6 +57,8 @@ tags:
 - name: Review moderation
   description: Trust and safety staff and the trust-ops service client (catalog:moderate) approve, reject and remove product
     reviews. Decisions are idempotent; the product's rating follows each decision.
+- name: Image quality
+  description: 'Existing listings against the enforced main-image rules: the Improve your image task, the staff report and the hide step (S392)'
 - name: Image library
   description: 'Library images (media) matched to listings by SKU file names: attach matching images, image usage (S310)'
 - name: Bulk upload
@@ -380,6 +382,74 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/GtinPrefill'
+  /v1/products/image-tasks:
+    get:
+      tags:
+      - Image quality
+      summary: My Improve your image tasks
+      description: The organisation's live listings whose main image passes with a warning (IMPROVE) or breaks a rule (FAIL), failing
+        ones first, with the reasons in plain words and, for failing ones, the end of the grace period (60 days by default). Live
+        listings stay live; after the grace period they are limited only when the owner has switched the hide step on. Nothing is
+        deleted and the listing can still be edited; a new main image must pass the rules.
+      operationId: listImageTasks
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ImageTaskList'
+  /v1/image-quality/report:
+    get:
+      tags:
+      - Image quality
+      summary: Image quality report (staff, catalog:moderate)
+      description: Listings per state, how many are not scored yet, the reasons, the failing listings and how many the hide step would
+        limit now (a dry run; read it on the seeded catalog before the hide flag is enabled).
+      operationId: imageQualityReport
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ImageQualityReport'
+  /v1/image-quality/rescore:
+    post:
+      tags:
+      - Image quality
+      summary: Score the next batch of listings now (staff, catalog:moderate)
+      description: The back-fill job runs by itself (a batch per interval, resumable, rate limited); this runs one batch at once.
+      operationId: rescoreImagesNow
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ImageRescoreResult'
+  /v1/image-quality/hide:
+    post:
+      tags:
+      - Image quality
+      summary: The hide step (staff, catalog:moderate)
+      description: With dryRun=true (the default) only counts the failing listings past the grace period. Without it the step runs
+        only when at.catalog.images.hide-failing is on (a separate flag, off until the owner switches it on); it never deletes anything.
+      operationId: hideFailingImages
+      parameters:
+      - name: dryRun
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ImageHideResult'
   /v1/image-library/attach:
     post:
       tags:
@@ -389,7 +459,8 @@ paths:
         and applies them: SKU.MAIN and SKU.PT01-PT08 of the first of a product''s SKUs that has a MAIN image replace the product
         images in that order; on products with several variants a variant SKU''s MAIN sets that variant''s image. Images held
         by moderation are skipped. Each changed product is validated again like an edit (catalog.product.updated); taken-down
-        listings and products whose new main image is under 1000 px are skipped with a reason. Products without matches are
+        listings and products whose new main image media rejects or holds (under 1000 px on its longest side, not on white, ...)
+        are skipped with media''s plain reason. Products without matches are
         left unchanged. 503 catalog.media-unavailable when media cannot be reached.'
       operationId: attachLibraryImages
       requestBody:
@@ -5901,6 +5972,129 @@ components:
         createdAt:
           type: string
           format: date-time
+    ImageTaskList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageTask'
+    ImageTask:
+      type: object
+      description: An Improve your image task
+      properties:
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        title:
+          type: string
+        state:
+          type: string
+          enum:
+          - IMPROVE
+          - FAIL
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageReason'
+        failingSince:
+          type: string
+          format: date-time
+          description: When the listing first failed (absent for IMPROVE)
+        hideAfter:
+          type: string
+          format: date-time
+          description: End of the grace period (absent for IMPROVE)
+        daysLeft:
+          type: integer
+          description: Whole days left of the grace period (absent for IMPROVE)
+        hidden:
+          type: boolean
+          description: The hide step has limited the listing
+    ImageReason:
+      type: object
+      description: One finding in plain words; Seller Center translates by code (media's check codes plus NO_MAIN_IMAGE)
+      properties:
+        code:
+          type: string
+        level:
+          type: string
+        message:
+          type: string
+    ImageQualityReport:
+      type: object
+      properties:
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Listings per state (OK, IMPROVE, FAIL)
+        notScored:
+          type: integer
+          format: int64
+        reasons:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        graceDays:
+          type: integer
+        hideFlagOn:
+          type: boolean
+        wouldHide:
+          type: integer
+          format: int64
+          description: Failing listings past the grace period that the hide step would limit now
+        failing:
+          type: array
+          description: Failing listings, oldest failure first (at most 200)
+          items:
+            $ref: '#/components/schemas/ImageQualityReportRow'
+    ImageQualityReportRow:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        ownerOrg:
+          type: string
+        title:
+          type: string
+        reasonCodes:
+          type: array
+          items:
+            type: string
+        failingSince:
+          type: string
+          format: date-time
+        hideAfter:
+          type: string
+          format: date-time
+        pastGrace:
+          type: boolean
+        hidden:
+          type: boolean
+    ImageRescoreResult:
+      type: object
+      properties:
+        scored:
+          type: integer
+          description: How many listings the batch scored
+    ImageHideResult:
+      type: object
+      properties:
+        dryRun:
+          type: boolean
+        flagOn:
+          type: boolean
+        listings:
+          type: integer
+          description: How many listings were (or would be) limited
     AttachLibraryImagesRequest:
       type: object
       properties:
