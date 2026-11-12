@@ -81,4 +81,29 @@ class TaxGateArchitectureTest {
                 .allowEmptyShould(true);
         rule.check(CLASSES);
     }
+
+    @Test
+    void theChangeRequestApplierNeverChangesAPagesStatus() {
+        // S385: an approved edit changes content, never whether the page is on sale (a LIVE page stays as it is).
+        ArchRule rule = ArchRuleDefinition.noClasses()
+                .that().haveSimpleName("ChangeRequestApplierImpl")
+                .should().callMethodWhere(callsToProduct(
+                        "approve|resume|restoreFromTakedown|restoreAfterTaxHold|holdForTax|reject|pause|takeDown"
+                                + "|categoryApproved|exemptionApproved|exemptionRejected|mergedAway"))
+                .because("an edit that touches a live page must not move it in or out of LIVE; tax-relevant changes go "
+                        + "through ProductLiveGate");
+        rule.check(CLASSES);
+    }
+
+    @Test
+    void mergesAndExemptionDecisionsNeverPutAPageOnSale() {
+        // S386/S387: merging, and approving a no-barcode exemption, only ever lead to review, never to LIVE.
+        ArchRule rule = ArchRuleDefinition.noClasses()
+                .that().haveSimpleNameStartingWith("PageMergerImpl")
+                .or().haveSimpleNameStartingWith("GtinExemptionServiceImpl")
+                .or().haveSimpleNameStartingWith("ReviewQueueServiceImpl")
+                .should().callMethodWhere(callsToProduct(LIVE_TRANSITIONS))
+                .because("only ProductLiveGate may put a product on sale");
+        rule.check(CLASSES);
+    }
 }

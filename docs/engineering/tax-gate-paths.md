@@ -141,6 +141,9 @@ by the gate on its own: it waits for a person ([migration runbook, 4.7](../runbo
 | 23 | Sweep (`TaxGateSweepJob` -> `TaxGateSweepServiceImpl`) | `adapter/in/scheduling/TaxGateSweepJob.java` | closes (and, for held listings, reopens through the gate) | `TaxGateSweepAndAuditTest` |
 | 24 | Staff repair run `POST /v1/tax-gate/sweep` (`make tax-gate-sweep`) | `adapter/in/web/TaxGateAuditController.java` -> `TaxGateSweepServiceImpl.sweepNowAsStaff` | closes (permission `tax:classify-admin`); reopens only through the gate | `TaxGateSweepAndAuditTest.theStaffRepairRunNeedsTheClassifyAdminPermission` |
 | 25 | **Catalog READY but tax-returns not RESOLVED** (the owner's bug) | `ProductLiveGateImpl.reconcile`, `TaxGateSweepServiceImpl.againstTaxReturns` | yes: closed, held, announced | `ProductLiveGateImplTest.aLiveListingCatalogCallsReadyIsClosedWhenTaxReturnsIsNotResolved`, `...TaxReturnsHasNoRecordOfIsClosedToo`, `TaxGateSweepAndAuditTest.theSweepClosesALiveListingTaxReturnsDoesNotResolve...`, `...theAuditListsAListingCatalogCallsReadyWhenTaxReturnsIsNotResolved...` |
+| 26 | Offers: any seller's offer on a variant (create, resume, FBA copy, relocation after a page merge) (S384) | `offers/.../OfferServiceImpl`, `OfferTaxGateImpl`, `FbaOfferServiceImpl`, `OfferRelocationServiceImpl` | yes (**fixed**, closes the second-seller gap): an offer is ACTIVE only with a `tax_basis` (OWNER_PAGE or a RESOLVED decision of that seller read from tax-returns `GET /v1/tax/listing-decisions`); otherwise it is stored `TAX_HELD`. Offer writes are guarded by `OfferRequiresTax`. A tax-returns outage holds new offers and leaves live ones on sale | `TaxHoldTest`, `MatchedOfferGuardsTest`, offers `TaxGateArchitectureTest`, `SellerListingDecisionServiceImplTest` |
+| 27 | `TaxHoldService` release: `tax.classification.changed` listener and a 60s sweep (`TaxHoldSweepJob`) | `offers/.../TaxHoldServiceImpl` | the only component that moves TAX_HELD to ACTIVE; it also verifies legacy active offers without a basis | `TaxHoldTest`, offers `TaxGateArchitectureTest` |
+| 28 | Catalog change requests, page merges and no-barcode exemptions (S385-S387) | `ChangeRequestApplierImpl`, `PageMergerImpl`, `GtinExemptionServiceImpl` | never put a page on sale and never change its status; an approved exemption goes to IN_REVIEW only | catalog `TaxGateArchitectureTest.theChangeRequestApplierNeverChangesAPagesStatus`, `...mergesAndExemptionDecisionsNeverPutAPageOnSale` |
 
 ### Gaps found by this audit, all closed
 
@@ -167,11 +170,9 @@ classification, the listing comes back on its own. Running it twice changes noth
   moderator approval (or at creation when its tax is already approved). The gate does not publish a never-live product when
   tax review approves it; only a listing that was live and closed for tax returns by itself. This is the existing design
   (category-tax-design.md section 6, step 5 says the product "goes live"; the code never did that and this change does not add it).
-- **Per-seller decisions on a shared variant.** Several sellers can offer the same variant, each with its own stored decision in
-  tax-returns (`listing_tax_decision`). Catalog holds only the listing owner's decision. A second seller's offer is created on a
-  variant whose page is resolved; if that seller has no resolved decision of their own, **checkout blocks the line** (it
-  quotes by variant and seller) but the offer can show. Closing that needs a tax-returns lookup at offer creation; not built.
 - **Notification to the seller** is the status and the note in Seller Center (listing row and product form, in all five
   languages for the product form). No email or push is sent for a tax hold yet.
 - Integration tests that need a database (Docker was not available here): `V4` applied to a database with LIVE rows, the audit
   SQL, the persistence guard against a real insert, and `recheckAll` paging. See the verification notes in the change description.
+
+Metric: `offers_active_without_tax_decision` (gauge) counts active offers with no tax basis; it must be 0 after the first sweep.
