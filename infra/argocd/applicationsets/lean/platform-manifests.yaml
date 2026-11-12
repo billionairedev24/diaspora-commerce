@@ -1,6 +1,12 @@
-# LEAN: only what a single-node prod needs (no observability content, Elasticsearch, Kyverno policies or previews; adds the
-# in-cluster Kafka + Temporal of infra/k8s/platform/lean). Plain-manifest / kustomize platform layers for one environment. manifestPath may contain CLOUD and ENV, replaced
-# with platform-values.yaml's cloud and argocd.env (e.g. the ClusterSecretStore for the env's cloud).
+# LEAN: only what a single-node prod needs (no observability content, Elasticsearch, Kyverno policies, previews or
+# OpenFGA; adds the in-cluster Kafka, Temporal, Valkey, Meilisearch and the backup CronJob of infra/k8s/platform/lean).
+# Plain-manifest / kustomize platform layers for one environment. manifestPath may contain CLOUD and ENV, replaced
+# with platform-values.yaml's cloud and argocd.env.
+# Secrets are NOT synced by Argo CD: they are SOPS/age files applied by infra/ops/secrets/apply.sh
+# (docs/runbooks/ovh-production.md section 7). To use OKMS + External Secrets instead (optional, not verified against a live
+# account): add the external-secrets chart to platform-charts.yaml, add the element
+#   {component: secret-store, wave: "-3", manifestPath: infra/k8s/platform/secret-stores/CLOUD}
+# below and `infra/k8s/platform/lean/external-secrets` to the lean kustomization.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -22,10 +28,8 @@ spec:
           - list:
               elements:
                 - {component: namespaces, wave: "-10", manifestPath: infra/k8s/platform/namespaces}
-                - {component: secret-store, wave: "-3", manifestPath: infra/k8s/platform/secret-stores/CLOUD}
                 - {component: edge, wave: "-1", manifestPath: infra/k8s/platform/edge/overlays/ENV}
                 - {component: lean, wave: "0", manifestPath: infra/k8s/platform/lean}
-                - {component: openfga, wave: "1", manifestPath: infra/k8s/platform/openfga/overlays/ENV}
   template:
     metadata:
       name: '{{ .component }}-{{ .argocd.env }}'

@@ -35,6 +35,9 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/port"
 )
 
+// maxPoolConns is this service's share of the database server's connections (see the pool setup in run).
+const maxPoolConns = 3
+
 const serviceName = "geo"
 
 func main() {
@@ -61,7 +64,17 @@ func run() error {
 	}
 	defer func() { _ = shutdownTracing(context.WithoutCancel(ctx)) }()
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	// Explicit, small connection budget: ~15 services share one managed Postgres server (docs/runbooks/ovh-production.md,
+	// connection budget). pgx would otherwise default to max(4, NumCPU). A lower pool_max_conns in DB_URL is respected.
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("postgres config: %w", err)
+	}
+	if poolCfg.MaxConns > maxPoolConns {
+		poolCfg.MaxConns = maxPoolConns
+	}
+	poolCfg.MinConns = 0
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return fmt.Errorf("postgres: %w", err)
 	}

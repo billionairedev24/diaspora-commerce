@@ -1,24 +1,10 @@
 # Self-hosted Temporal (checkout saga, billing schedules): one auto-setup pod runs all four server roles with the
-# default 4 history shards, state in two databases on the external Postgres (temporal, temporal_visibility), namespace
-# "afrotransact" created on first start. Replaces Temporal Cloud (USD 100+/month minimum).
+# default 4 history shards, state in two databases on the external Postgres (Layerbase: temporal, temporal_visibility),
+# namespace "afrotransact" created on first start. Replaces Temporal Cloud (USD 100+/month minimum).
 # One replica means workflows pause (and resume) during a restart; they are durable in Postgres.
-# ExternalSecret key afrotransact/temporal: host, port, user, password (database role must be able to create both DBs,
-# or create them first and keep SKIP_DB_CREATE=true as below).
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: temporal
-  namespace: temporal
-spec:
-  refreshInterval: 1h
-  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
-  target: {name: temporal}
-  data:
-    - {secretKey: POSTGRES_SEEDS, remoteRef: {key: afrotransact/temporal, property: host}}
-    - {secretKey: DB_PORT, remoteRef: {key: afrotransact/temporal, property: port}}
-    - {secretKey: POSTGRES_USER, remoteRef: {key: afrotransact/temporal, property: user}}
-    - {secretKey: POSTGRES_PWD, remoteRef: {key: afrotransact/temporal, property: password}}
----
+# Secret "temporal" (namespace temporal; infra/ops/secrets/apply.sh): POSTGRES_SEEDS (Layerbase host), DB_PORT, POSTGRES_USER
+# (temporal_app), POSTGRES_PWD. Both databases are created by infra/tofu/scripts/postgres-bootstrap.sh BEFORE this starts
+# (SKIP_DB_CREATE=true). Connections: DB_CONNECT_MAX_CONNS=5 per database, so at most 10 (docs/runbooks/ovh-production.md).
 apiVersion: v1
 kind: Service
 metadata:

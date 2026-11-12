@@ -45,12 +45,6 @@ spec:
         - type: URLRewrite
           urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
       backendRefs: [{name: notifications, port: 80}]
-    # carrier webhooks (UPS, FedEx, DHL), PUBLIC_BASE_URL
-    - matches: [{path: {type: PathPrefix, value: /carrier-gateway}}]
-      filters:
-        - type: URLRewrite
-          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
-      backendRefs: [{name: carrier-gateway, port: 80}]
     # Stripe webhooks only (rewritten to /v1/webhooks)
     - matches: [{path: {type: PathPrefix, value: /payments/v1/webhooks}}]
       filters:
@@ -80,39 +74,7 @@ spec:
   hostnames: [auth.afrotransact.com]
   rules:
     - backendRefs: [{name: identity, port: 80}]
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: mcp
-  namespace: afrotransact-prod
-spec:
-  parentRefs: [{name: edge, namespace: ingress}]
-  hostnames: [mcp.afrotransact.com]
-  rules:
-    - backendRefs: [{name: mcp-server, port: 80}]
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: grafana
-  namespace: observability
-spec:
-  parentRefs: [{name: edge, namespace: ingress}]
-  hostnames: [grafana.afrotransact.com]
-  rules:
-    - backendRefs: [{name: kube-prometheus-stack-grafana, port: 80}]
----
-# Tunnel token for cloudflared (base/cloudflared.yaml): `cloudflared tunnel token <tofu output tunnel_id>`.
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: cloudflared
-  namespace: ingress
-spec:
-  refreshInterval: 1h
-  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
-  target: {name: cloudflared}
-  data:
-    - secretKey: token
-      remoteRef: {key: afrotransact/prod/cloudflared, property: token}
+# No mcp. and no grafana. route: mcp-server stays cluster-internal until the developer program opens (it requires OAuth
+# bearer tokens either way) and Grafana lives in Grafana Cloud, not in the cluster. carrier-gateway is not deployed, so its
+# webhook route is gone too. The tunnel token Secret "cloudflared" (namespace ingress) is applied from SOPS by
+# infra/ops/secrets/apply.sh (optional External Secrets path: infra/k8s/platform/lean/external-secrets).

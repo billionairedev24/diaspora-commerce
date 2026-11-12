@@ -1,19 +1,7 @@
-# Valkey in the cluster (cache, sessions, carts, live feed fan-out): ~200 MB, append-only file on a 2 GiB disk so a restart
-# keeps carts and sessions. Used for the TRIAL and for option B of docs/engineering/cloud-cost.md (Layerbase 4 GB for
-# Postgres only). Services reach it at valkey.data.svc.cluster.local:6379 (REDIS_URL / REDIS_ADDR); the password is
-# ExternalSecret key afrotransact/valkey, property password. Not highly available.
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: valkey
-  namespace: data
-spec:
-  refreshInterval: 1h
-  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
-  target: {name: valkey}
-  data:
-    - {secretKey: VALKEY_PASSWORD, remoteRef: {key: afrotransact/valkey, property: password}}
----
+# Valkey in the cluster (cache, sessions, carts, live feed fan-out, rate-limit buckets): ~200 MB, append-only file on a 2 GiB
+# disk so a restart keeps carts and sessions. Services reach it at valkey.data.svc.cluster.local:6379 (REDIS_URL / REDIS_ADDR
+# = redis://:<password>@valkey.data.svc.cluster.local:6379). Secret "valkey" (namespace data): VALKEY_PASSWORD.
+# Not highly available; the data is a cache (carts also live in Postgres), so it is NOT backed up.
 apiVersion: v1
 kind: Service
 metadata:

@@ -49,6 +49,10 @@ spec:
           path: '{{ .chart.path.path }}'
           helm:
             releaseName: '{{ index .chart.path.segments 2 }}'
+            parameters:
+              # CI publishes ghcr.io/<repo>/<service> (the workflow name); the Java charts' values.yaml still say
+              # <service>-service. The directory name IS the published image name, so it wins here.
+              - {name: image.repository, value: '{{ index .chart.path.segments 2 }}', forceString: true}
             valueFiles:
               - values.yaml
               - 'values-{{ .argocd.env }}.yaml'

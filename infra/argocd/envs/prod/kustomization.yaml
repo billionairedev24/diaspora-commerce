@@ -6,6 +6,8 @@ nameSuffix: -prod
 resources:
   - ../../projects
   - ../../applicationsets/lean
+components:
+  - ../../launch-set          # only the launch-set services get an Application (launch-set/kustomization.yaml)
 patches:
   - target: {kind: ApplicationSet}
     patch: |-

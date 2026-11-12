@@ -1,7 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# Edge for prod: the shared base plus this environment's public routes and tunnel token.
+# Edge for prod on OVH: the shared base plus this environment's public routes. Traffic path (no load balancer, no public
+# node IP, no open inbound port):
+#   browser -> Cloudflare (TLS, WAF, rate limits) -> Tunnel -> cloudflared (outbound connection from the pod)
+#           -> Service envoy-gateway.ingress:80 (Envoy Gateway proxy, Gateway "edge") -> HTTPRoutes -> service Services
+# The tunnel token is the Secret "cloudflared" in namespace ingress (infra/ops/secrets/apply.sh, key: token).
 # Lean (one node): one cloudflared and one Envoy proxy replica. Two of each only matter with more than one node.
+# TLS terminates at Cloudflare, so cert-manager is not installed on this path: the Let's Encrypt issuers, their Cloudflare
+# API token and the Gateway's HTTPS listener from the base are removed here (they need cert-manager CRDs).
 resources:
   - ../../base
   - routes.yaml
@@ -12,3 +18,29 @@ patches:
   - target: {kind: EnvoyProxy, name: edge}
     patch: |-
       - {op: replace, path: /spec/provider/kubernetes/envoyDeployment/replicas, value: 1}
+  - target: {kind: Gateway, name: edge}
+    patch: |-
+      - {op: remove, path: /metadata/annotations/cert-manager.io~1cluster-issuer}
+      - {op: remove, path: /spec/listeners/1}
+  - target: {kind: ClusterIssuer, name: letsencrypt}
+    patch: |-
+      $patch: delete
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: letsencrypt
+  - target: {kind: ClusterIssuer, name: selfsigned}
+    patch: |-
+      $patch: delete
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: selfsigned
+  - target: {kind: ExternalSecret, name: cloudflare-api-token}
+    patch: |-
+      $patch: delete
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: cloudflare-api-token
+        namespace: cert-manager

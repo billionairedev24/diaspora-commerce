@@ -17,9 +17,22 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// maxPoolConns is this service's share of the database server's connections.
+const maxPoolConns = 3
+
 // Open connects a pool to dsn and verifies connectivity.
 func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("postgres config: %w", err)
+	}
+	// Explicit, small connection budget (docs/runbooks/ovh-production.md): pgx would default to max(4, NumCPU).
+	// A lower pool_max_conns in the DSN is respected.
+	if poolCfg.MaxConns > maxPoolConns {
+		poolCfg.MaxConns = maxPoolConns
+	}
+	poolCfg.MinConns = 0
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("postgres pool: %w", err)
 	}

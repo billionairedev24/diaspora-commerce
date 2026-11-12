@@ -1,0 +1,9 @@
+# Envoy Gateway controller - prod (lean, one node): ONE controller replica and a small footprint. The data-plane proxy
+# (namespace ingress, EnvoyProxy "edge") is sized in infra/k8s/platform/edge/base/gateway.yaml and patched to one replica
+# in edge/overlays/prod. Requests are counted in docs/engineering/cloud-cost.md (memory table).
+deployment:
+  replicas: 1
+  envoyGateway:
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 256Mi}

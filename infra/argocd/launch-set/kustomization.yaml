@@ -1,0 +1,38 @@
+# LAUNCH SET: the services that get an Argo CD Application in uat and prod (dev uses no component and runs all 26).
+# Single source of truth (docs/runbooks/ovh-production.md, check: infra/argocd/scripts/check_launch_set.py):
+#   14 Java: identity catalog offers inventory orders payments seller fulfilment bookings tax-returns content trust-ops
+#            ai-gateway mcp-server
+#    7 Go:   gateway-bff cart search indexer geo media notifications
+# NOT deployed (chart, Dockerfile and workflow stay; they simply get no Application and no pods here): promise
+# (gateway-bff and orders degrade without it), carrier-gateway, retail, delivery-runs, authz-sync.
+# Adding a service to the environment = add its chart path here (and its database in infra/tofu/scripts/postgres-bootstrap.sh).
+# The services ApplicationSet normally globs every chart; this replaces the glob with the explicit list.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target: {kind: ApplicationSet, name: services}
+    patch: |-
+      - op: replace
+        path: /spec/generators/0/matrix/generators/1/git/directories
+        value:
+          - path: java/services/identity/deploy/helm
+          - path: java/services/catalog/deploy/helm
+          - path: java/services/offers/deploy/helm
+          - path: java/services/inventory/deploy/helm
+          - path: java/services/orders/deploy/helm
+          - path: java/services/payments/deploy/helm
+          - path: java/services/seller/deploy/helm
+          - path: java/services/fulfilment/deploy/helm
+          - path: java/services/bookings/deploy/helm
+          - path: java/services/tax-returns/deploy/helm
+          - path: java/services/content/deploy/helm
+          - path: java/services/trust-ops/deploy/helm
+          - path: java/services/ai-gateway/deploy/helm
+          - path: java/services/mcp-server/deploy/helm
+          - path: go/services/gateway-bff/deploy/helm
+          - path: go/services/cart/deploy/helm
+          - path: go/services/search/deploy/helm
+          - path: go/services/indexer/deploy/helm
+          - path: go/services/geo/deploy/helm
+          - path: go/services/media/deploy/helm
+          - path: go/services/notifications/deploy/helm

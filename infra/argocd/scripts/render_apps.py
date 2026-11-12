@@ -10,6 +10,7 @@ For every environment (infra/argocd/envs/<env>):
      platform kustomize layers (CRDs validated through the datreeio CRDs-catalog when reachable, otherwise skipped).
 
   python3 infra/argocd/scripts/render_apps.py [--env dev] [--out DIR] [--cloud aws|gcp|azure|ovh]
+  python3 infra/argocd/scripts/check_launch_set.py        # proves which Applications each env produces (no helm needed)
 
 --cloud renders the services with the commented cloud example of platform-values.yaml switched on, to prove the
 workload-identity / registry wiring composes for that cloud too.
@@ -188,18 +189,13 @@ def main():
         env_out.mkdir(exist_ok=True)
         kbuild, err = kustomize_build(ROOT / "infra/argocd/envs" / env)
         if kbuild is None:
-            print(f"[{env}] env kustomization: {err.strip()}")
-            docs = []
-            for f in ["projects/afrotransact.yaml", "applicationsets/services.yaml", "applicationsets/platform-charts.yaml",
-                      "applicationsets/platform-manifests.yaml"]:
-                docs += list(yaml.safe_load_all((ROOT / "infra/argocd" / f).read_text()))
-            for d in docs:
-                if d["kind"] == "ApplicationSet":
-                    d["spec"]["generators"][0]["matrix"]["generators"][0]["git"]["files"][0]["path"] = f"infra/argocd/envs/{env}/platform-values.yaml"
-                    d["metadata"]["name"] += f"-{env}"
-        else:
-            docs = [d for d in yaml.safe_load_all(kbuild) if d]
-            (env_out / "argocd-env.yaml").write_text(kbuild)
+            # The env kustomization applies the launch-set component and the lean/full ApplicationSet choice: emulating it
+            # without kustomize would silently render a different set than Argo CD, so kustomize (or kubectl) is required.
+            print(f"FAIL [{env}] env kustomization: {err.strip()}")
+            failures += 1
+            continue
+        docs = [d for d in yaml.safe_load_all(kbuild) if d]
+        (env_out / "argocd-env.yaml").write_text(kbuild)
         apps = []
         pv = None
         for d in docs:
@@ -224,6 +220,8 @@ def main():
             for vf in src["helm"]["valueFiles"]:
                 files += ["-f", str(pv_file) if vf.startswith("$values/") else str(chart / vf)]
             name = src["helm"]["releaseName"]
+            for prm in src["helm"].get("parameters", []):   # Application helm.parameters = --set-string
+                files += ["--set-string", f"{prm['name']}={prm['value']}"]
             r = run([HELM, "template", name, str(chart), "-n", app["spec"]["destination"]["namespace"]] + files)
             target = env_out / f"{name}.yaml"
             if r.returncode:
@@ -242,7 +240,7 @@ def main():
             failures += 1
 
     # Platform kustomize layers (env-independent + per-env overlays).
-    layers = ["namespaces", "observability", "policies"] + [f"secret-stores/{c}" for c in ["aws", "gcp", "azure", "ovh", "none"]] + \
+    layers = ["namespaces", "observability", "policies", "lean", "lean/external-secrets", "lean/backup"] + [f"secret-stores/{c}" for c in ["aws", "gcp", "azure", "ovh", "none"]] + \
              [f"{layer}/overlays/{e}" for layer in ["edge", "elasticsearch", "openfga", "previews"] for e in envs]
     pdir = out / "platform"
     pdir.mkdir(exist_ok=True)

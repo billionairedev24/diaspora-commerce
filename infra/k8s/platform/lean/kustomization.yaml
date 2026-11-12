@@ -1,7 +1,13 @@
-# Lean (single-node) data plane that replaces the paid SaaS: Kafka (was Confluent Cloud), Temporal (was Temporal
-# Cloud) and the Grafana Cloud credentials for the OTLP collector (was in-cluster Prometheus/Loki/Tempo). Postgres,
-# Valkey and Meilisearch are external (Layerbase). Argo CD: platform-manifests-lean element `lean`.
-# Cost and sizing: docs/engineering/cloud-cost.md.
+# Lean (single-node) platform data plane for prod on OVH. Everything here runs in the cluster EXCEPT Postgres (Layerbase).
+#   Kafka         events and the outbox relay (sign-up codes go through it)      kafka.yaml
+#   Temporal      checkout saga, state in Layerbase (temporal, temporal_visibility)  temporal.yaml
+#   Valkey        cache, sessions, carts, rate limits                            data/valkey.yaml
+#   Meilisearch   search index (rebuildable)                                     data/meilisearch.yaml
+#   backup        nightly pg_dump of the 18 databases to another vendor's bucket backup/
+# NOT here on purpose: OpenFGA, Elasticsearch, MinIO, Mailpit, Kafka UI, Prometheus/Loki/Grafana (Grafana Cloud via the OTel
+# collector), Postgres (postgres-trial.yaml is for throwaway trials only).
+# Secrets are not in git in clear and not synced by Argo CD: infra/ops/secrets/apply.sh (SOPS/age). Optional OKMS path:
+# external-secrets/. Sizing and the memory table: docs/engineering/cloud-cost.md. Argo CD: platform-manifests element `lean`.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 labels:
@@ -9,13 +15,10 @@ labels:
     includeSelectors: false
 resources:
   - namespaces.yaml
+  - data/namespace.yaml
   - kafka.yaml
   - temporal.yaml
-  - grafana-cloud.yaml
-  # In-cluster data stores, OFF by default (production keeps Postgres, Valkey and Meilisearch on Layerbase). Uncomment:
-  #   - the first three for the TRIAL (docs/runbooks/trial-environment.md): everything in the cluster, nothing external
-  #   - data/valkey.yaml + data/meilisearch.yaml for option B of docs/engineering/cloud-cost.md (Layerbase 4 GB = Postgres only)
-  # - data/namespace.yaml
-  # - data/valkey.yaml
-  # - data/meilisearch.yaml
-  # - data/postgres-trial.yaml
+  - data/valkey.yaml
+  - data/meilisearch.yaml
+  - backup
+  # - data/postgres-trial.yaml   # TRIAL ONLY: a Postgres pod on the node's disk (never production)

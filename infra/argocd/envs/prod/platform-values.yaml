@@ -1,12 +1,14 @@
-# Environment-wide values for prod.
+# Environment-wide values for prod: OVHcloud Managed Kubernetes (one b3-16 node, US East) + Layerbase PostgreSQL.
 #  1. Merged LAST into every service chart by the services ApplicationSet (so it wins over values-prod.yaml):
-#     cloud, workload identity, secret store and image registry are decided here, once per environment.
+#     cloud, secret store and image registry are decided here, once per environment.
 #  2. Read by the ApplicationSets (git files generator): the "argocd" block and "cloud" (which picks
 #     infra/k8s/platform/secret-stores/<cloud> and infra/k8s/platform/clouds/<cloud>/*).
 # The at-service chart ignores the "argocd" block.
 #
-# cloud: none renders on kind / any local cluster (no identity annotations, Fake secret store).
-cloud: none
+# Which services run here is decided by infra/argocd/launch-set (21 of 26); `make launch-set-check` lists the Applications.
+# The Spring/Go profile is prod: each chart's values-prod.yaml sets env: prod, which the library chart turns into
+# SPRING_PROFILES_ACTIVE=prod / APP_ENV=prod (the Secret's APP_ENV is prod too: infra/ops/secrets).
+cloud: ovh
 
 image:
   registry: ghcr.io/billionairedev24/diaspora-commerce
@@ -23,10 +25,19 @@ global:
   # urls:
   #   MEDIA_PUBLIC_URL: https://cdn.example.net
 
+# Secrets: SOPS/age files applied by infra/ops/secrets/apply.sh create the Secret <service>-secrets in afrotransact-prod, and
+# the pods read it with envFrom. `plain: true` = no ExternalSecret is rendered (no External Secrets Operator in the lean
+# platform). Optional OKMS + External Secrets path (not verified against a live account): remove `plain`, add the
+# external-secrets chart and the secret-store element (applicationsets/lean/platform-manifests.yaml).
 secrets:
   enabled: true
-  keySeparator: "/"               # AWS Secrets Manager path; "-" on GCP and Azure (see examples below)
-  store: platform-secrets          # ClusterSecretStore from infra/k8s/platform/secret-stores/<cloud>
+  plain: true
+  keySeparator: "/"               # OKMS paths allow "/"
+  store: platform-secrets          # only used on the optional OKMS path
+
+# GHCR packages are private: read-only token (read:packages), created by infra/ops/secrets/apply.sh as the pull Secret "ghcr".
+imagePullSecrets:
+  - name: ghcr
 
 # workloadIdentity: set the env-wide default identity in the cloud block below. platform-values is merged last, so a
 # service that needs its own least-privilege identity sets it here with care (or the key is left unset here and each
@@ -36,7 +47,7 @@ argocd:
   env: prod
   destinationServer: https://kubernetes.default.svc
   targetRevision: HEAD             # prod may pin a release tag, e.g. v2026.10.1
-  autoSync: false                  # MANUAL sync — a human approves every prod sync (S187); Rollouts canary + analysis
+  autoSync: false                  # MANUAL sync: a human approves every prod sync (S187). No Rollouts on the lean footprint: rolling update, maxUnavailable 0
   prune: false
   selfHeal: false
 
@@ -60,9 +71,6 @@ argocd:
 # workloadIdentity:
 #   azure: {clientId: "00000000-0000-0000-0000-000000000000"}                     # user-assigned identity
 # secrets: {enabled: true, store: platform-secrets, keySeparator: "-"}   # Key Vault names allow [A-Za-z0-9-] only
-# ---------------------------------------------------------------------------------------------- OVHcloud (MKS)
-# cloud: ovh
-# image:
-#   registry: abcdef.gra7.container-registry.ovh.net/library       # tofu output registry_url
-# workloadIdentity: {}                                            # none on OVH: object storage uses per-service S3 keys from the secret store
-# secrets: {enabled: true, store: platform-secrets, keySeparator: "/"}   # Secret Manager (OKMS) paths allow "/"
+# ---------------------------------------------------------------------------------------------- OVHcloud (MKS)  [ACTIVE ABOVE]
+# image.registry stays GHCR (no OVH Harbor: saves the registry fee and the mirror step); there is no workload identity on
+# OVH (`workloadIdentity: {}`), object storage uses per-service S3 keys that live in the service Secrets.

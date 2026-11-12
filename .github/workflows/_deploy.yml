@@ -2,7 +2,9 @@
 #   1. verify the GHCR image signature (cosign keyless, must come from this repo's service pipelines)
 #   2. OIDC login to the target cloud (aws | gcp | azure) - no long-lived keys. ovh has no OIDC trust for CI: the
 #      deploy identity is a Harbor robot account limited to the registry project (secret OVH_REGISTRY_PASSWORD)
-#   3. mirror the signed image + signatures/attestations from GHCR to ECR / Artifact Registry / ACR / OVH Harbor
+#   3. mirror the signed image + signatures/attestations from GHCR to ECR / Artifact Registry / ACR / OVH Harbor.
+#      With REGISTRY_URL under ghcr.io (OVH production pulls straight from GHCR with a read-only pull secret, no Harbor)
+#      nothing is mirrored: the image that was verified in step 1 IS the deployed image.
 #   4. GitOps bump: image.tag in <service>/deploy/helm/values-<env>.yaml, committed to the gitops branch;
 #      Argo CD syncs the service's Application, Argo Rollouts runs the canary (uat/prod)
 # The job runs in the GitHub environment named `inputs.environment`: dev/uat need no approval, `prod` has
@@ -146,7 +148,7 @@ jobs:
         run: az acr login --name "${REGISTRY_URL%%.*}"
 
       - name: Registry login (OVHcloud Managed Private Registry, Harbor)
-        if: env.skip != 'true' && env.CLOUD == 'ovh'
+        if: env.skip != 'true' && env.CLOUD == 'ovh' && !startsWith(vars.REGISTRY_URL, 'ghcr.io/')
         env:
           OVH_REGISTRY_USERNAME: ${{ vars.OVH_REGISTRY_USERNAME }}
           OVH_REGISTRY_PASSWORD: ${{ secrets.OVH_REGISTRY_PASSWORD }}
@@ -162,6 +164,11 @@ jobs:
         id: mirror
         run: |
           dst="${REGISTRY_URL}/${SERVICE}:${TAG}"
+          if [[ "$REGISTRY_URL" == ghcr.io/* ]]; then
+            # GHCR is the registry of record: the signature was verified above, nothing to copy.
+            echo "image=${{ steps.src.outputs.ref }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # cosign copy keeps the multi-arch index digest and copies .sig/.att so Kyverno can verify in-cluster.
           cosign copy --force "${{ steps.src.outputs.ref }}" "$dst"
           cosign verify "$dst" \

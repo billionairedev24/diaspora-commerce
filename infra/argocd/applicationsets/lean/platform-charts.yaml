@@ -1,6 +1,8 @@
-# LEAN platform Helm charts (prod on one node): cert-manager, External Secrets, Envoy Gateway and ONE OTLP collector that
-# ships to Grafana Cloud. Left out versus platform-charts.yaml: kube-prometheus-stack, loki, tempo, kyverno,
-# argo-rollouts, ECK and the exporters (~4-5 GB of RAM that a 20-user platform does not need). Same values layering.
+# LEAN platform Helm charts (prod on one node): Envoy Gateway and ONE OTLP collector that ships to Grafana Cloud.
+# Left out versus platform-charts.yaml: cert-manager (Cloudflare Tunnel terminates TLS, nothing is issued in the cluster),
+# External Secrets (secrets are SOPS/age files, optional OKMS path in platform-manifests.yaml), kube-prometheus-stack, loki,
+# tempo, kyverno, argo-rollouts, ECK and the exporters (~4-5 GB of RAM that a launch-size platform does not need).
+# Same values layering.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -21,8 +23,6 @@ spec:
                 - path: infra/argocd/envs/ENV/platform-values.yaml     # patched per env
           - list:
               elements:
-                - {component: cert-manager, namespace: cert-manager, wave: "-5", repoURL: https://charts.jetstack.io, chart: cert-manager, version: v1.19.1}
-                - {component: external-secrets, namespace: external-secrets, wave: "-5", repoURL: https://charts.external-secrets.io, chart: external-secrets, version: 2.12.0}
                 - {component: envoy-gateway, namespace: envoy-gateway-system, wave: "-4", repoURL: registry-1.docker.io/envoyproxy, chart: gateway-helm, version: v1.9.2}
                 - {component: opentelemetry-collector-gateway, namespace: observability, wave: "-2", repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts, chart: opentelemetry-collector, version: 0.175.1}
   template:

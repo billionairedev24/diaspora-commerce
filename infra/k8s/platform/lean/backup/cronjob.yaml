@@ -1,0 +1,53 @@
+# Nightly pg_dump of every database on the external Postgres (Layerbase) to a bucket at ANOTHER vendor, age-encrypted,
+# 14-day retention (RPO 24 h). Script: pg-backup.sh (same directory). Restore: infra/ops/backup/pg-restore.sh and
+# docs/runbooks/restore-drill.md. The job fails until the Secret pg-backup exists (infra/ops/secrets/apply.sh).
+#
+# Secret pg-backup (namespace ops) keys: PGHOST PGPORT PGUSER PGPASSWORD PGSSLMODE AGE_RECIPIENT BACKUP_REMOTE
+#   RCLONE_CONFIG_BACKUP_TYPE RCLONE_CONFIG_BACKUP_PROVIDER RCLONE_CONFIG_BACKUP_ENDPOINT RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID
+#   RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY RCLONE_CONFIG_BACKUP_REGION  [HEALTHCHECK_URL]
+# A failed or missed run must page someone: HEALTHCHECK_URL (a dead-man's-switch service) alerts when no success ping arrives.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-backup
+  namespace: ops
+  labels: {app.kubernetes.io/name: pg-backup, app.kubernetes.io/part-of: afrotransact-platform}
+spec:
+  schedule: "15 3 * * *" # 03:15 UTC = late evening in Texas, the quietest hours of a US shopper base
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels: {app.kubernetes.io/name: pg-backup}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          containers:
+            - name: backup
+              image: postgres:17-alpine
+              command: ["/bin/sh", "/scripts/pg-backup.sh"]
+              envFrom:
+                - secretRef: {name: pg-backup}
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {memory: 512Mi}
+              securityContext:
+                # Runs as root with the default capability set ONLY because `apk add` (rclone, age, curl) needs chown; a
+                # pre-built tools image would allow runAsNonRoot and drop ALL (follow-up, see docs/runbooks/ovh-production.md).
+                allowPrivilegeEscalation: false
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+                - {name: work, mountPath: /work}
+          volumes:
+            - name: scripts
+              configMap: {name: pg-backup-script, defaultMode: 0555}
+            - name: work
+              emptyDir: {sizeLimit: 4Gi}

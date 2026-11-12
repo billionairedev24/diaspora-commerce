@@ -128,7 +128,10 @@ helm-lint: ## Helm: dependency build + lint + template every chart for every env
 	      | $(KUBECONFORM) -strict -summary -ignore-missing-schemas -kubernetes-version 1.33.0 | sed "s/^/   [$$env] /"; \
 	  done; \
 	done
-	@$(MAKE) --no-print-directory gitops-render observability-check
+	@$(MAKE) --no-print-directory launch-set-check gitops-render observability-check
+
+launch-set-check: ## Argo CD: list the Applications each env produces; fail if uat/prod differ from the 21-service launch set
+	python3 infra/argocd/scripts/check_launch_set.py
 
 gitops-render: ## Argo CD: emulate the ApplicationSets per env, render each app and kubeconform it (incl. CRDs)
 	python3 infra/argocd/scripts/render_apps.py

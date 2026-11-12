@@ -17,6 +17,12 @@ extraEnv:
   JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k -XX:-UsePerfData -XX:ReservedCodeCacheSize=64m -XX:+ExitOnOutOfMemoryError"
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
   SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
+  # SPEND CAP. Daily cost ceiling per AI feature in USD (UTC day), merged over at.ai.budgets of application.yml (the code
+  # defaults, USD 1,000+ per day in total, are far too high for a launch). Above a cap the gateway degrades to the cheapest
+  # model of the route, then answers 429 ai.budget-exceeded at hard-limit-factor x the cap (Lola, assistants, moderation).
+  # Total here: USD 89 per day worst case. Raise a single feature by editing its number; keep the JSON on one line.
+  # Second, independent cap: set a credit limit on the OPENROUTER_API_KEY itself in the OpenRouter dashboard (docs/runbooks/ovh-production.md).
+  SPRING_APPLICATION_JSON: '{"at":{"ai":{"budgets":{"lola":{"feature-daily-cost-usd":25},"embeddings":{"feature-daily-cost-usd":5},"listing-writer":{"feature-daily-cost-usd":10},"translate":{"feature-daily-cost-usd":10},"tagline":{"feature-daily-cost-usd":2},"triage":{"feature-daily-cost-usd":5},"handoff-summary":{"feature-daily-cost-usd":2},"seller-assistant":{"feature-daily-cost-usd":15},"staff-assistant":{"feature-daily-cost-usd":10},"image-moderation":{"feature-daily-cost-usd":5}}}}}'
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080
   OFFERS_URL: http://offers:8080
