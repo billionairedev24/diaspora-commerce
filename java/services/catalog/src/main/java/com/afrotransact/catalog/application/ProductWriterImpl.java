@@ -31,6 +31,7 @@ import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductDraft;
 import com.afrotransact.catalog.domain.ProductDraftPolicy;
+import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
@@ -73,11 +74,13 @@ class ProductWriterImpl implements ProductWriter {
     private final ProductLiveGate liveGate;
     private final NewPageGuard newPages;
     private final Clock clock;
+    private final ImageGate imageGate;
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
                       SizeChartPolicy sizePolicy, SizeChartRepository charts, ProductEvents events, BrandResolver brands, SellerScopeGuard scopeGuard,
-                      TaxGateEvaluator taxGate, ListingRulesService rulesService, ProductLiveGate liveGate, NewPageGuard newPages, Clock clock) {
+                      TaxGateEvaluator taxGate, ListingRulesService rulesService, ProductLiveGate liveGate, NewPageGuard newPages, Clock clock,
+                      ImageGate imageGate) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
@@ -94,6 +97,7 @@ class ProductWriterImpl implements ProductWriter {
         this.liveGate = liveGate;
         this.newPages = newPages;
         this.clock = clock;
+        this.imageGate = imageGate;
     }
 
     @Override
@@ -111,9 +115,12 @@ class ProductWriterImpl implements ProductWriter {
         TaxGateEvaluator.Evaluation tax = taxGate.evaluate(type, categoryNode, factsOf(submitted),
                 Collections.nCopies(submitted.size(), null), ruled.details().sellerBehaviour());
         ListingDetails details = ruled.details().withSellerBehaviour(tax.behaviour());
-        ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, ruled.images(),
+        // The pictures are judged by media (S390): sizes sent by the client are replaced by media's own.
+        ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted),
+                placement.type().code(), Set.of());
+        ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(),
                 cmd.variationTheme(), submitted, details);
-        validate(draft, rules, owner.orgId(), null, tax.errors());
+        validate(draft, rules, owner.orgId(), null, withPictureErrors(tax.errors(), pictures));
         for (VariantDraft v : submitted) {
             if (!sku(v).isEmpty() && products.sellerSkuTaken(owner.orgId(), sku(v))) {
                 throw new ConflictException("catalog.sku-taken",
@@ -141,7 +148,7 @@ class ProductWriterImpl implements ProductWriter {
                 : placement.type().traits().preorder() || Product.preorderDefault(placement.type().code());
         Product product = products.insert(new Product(UUID.randomUUID(), ids.nextAtin(), owner,
                 placement.categoryId(), placement.request() == null ? null : placement.request().id(),
-                placement.type().code(), cmd.title().trim(), attributes, ruled.images(), draft.variationTheme(),
+                placement.type().code(), cmd.title().trim(), attributes, pictures.images(), draft.variationTheme(),
                 variants, status, exemption == null ? null : Product.EXEMPTION_NOTE, now, now, 0, preorderEligible,
                 Boolean.TRUE.equals(cmd.shipsNow()), details));
         if (exemption != null) {
@@ -192,9 +199,13 @@ class ProductWriterImpl implements ProductWriter {
         TaxGateEvaluator.Evaluation tax = taxGate.evaluate(type, categoryNode, factsOf(submitted), previous,
                 ruled.details().sellerBehaviour());
         ListingDetails details = ruled.details().withSellerBehaviour(tax.behaviour());
-        ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, ruled.images(), cmd.variationTheme(),
+        // Only pictures the listing does not have yet are judged: a grandfathered main image stays until it is replaced.
+        ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted), typeCode,
+                pictureUrls(current));
+        ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(), cmd.variationTheme(),
                 submitted, details);
-        validate(draft, rules, current.owner().orgId(), current.details().sizeChartId(), tax.errors());
+        validate(draft, rules, current.owner().orgId(), current.details().sizeChartId(),
+                withPictureErrors(tax.errors(), pictures));
 
         List<Variant> next = new ArrayList<>();
         List<String> keptIds = new ArrayList<>();
@@ -237,7 +248,7 @@ class ProductWriterImpl implements ProductWriter {
         boolean shipsNow = cmd.shipsNow() != null ? cmd.shipsNow() : current.shipsNow();
         ProductStatus before = current.status();
         Instant editedAt = Instant.now(clock);
-        Product edited = current.edited(categoryId, typeCode, cmd.title().trim(), attributes, ruled.images(),
+        Product edited = current.edited(categoryId, typeCode, cmd.title().trim(), attributes, pictures.images(),
                 draft.variationTheme(), next, details, preorder, shipsNow, editedAt);
         // A live listing that no longer has a resolved tax decision on every variant (a new variant, a changed answer) is
         // taken off sale until tax review approves it; search and offers hear about it before the edit is stored.
@@ -257,6 +268,28 @@ class ProductWriterImpl implements ProductWriter {
             events.publishTaxFactsChanged(saved, categoryNode, previousNode, current.variants(), changed);
         }
         return saved;
+    }
+
+    private static List<List<ProductImage>> variantPictures(List<VariantDraft> variants) {
+        return variants.stream().map(VariantDraft::images).toList();
+    }
+
+    /** The URLs of every picture the product already has: judged once, when they were added. */
+    private static Set<String> pictureUrls(Product product) {
+        Set<String> urls = new HashSet<>();
+        product.images().forEach(i -> urls.add(i.url()));
+        product.variants().forEach(v -> v.images().forEach(i -> urls.add(i.url())));
+        return urls;
+    }
+
+    /** The tax problems and the picture problems together (the seller sees every problem at once). */
+    private static Map<String, String> withPictureErrors(Map<String, String> taxErrors, ImageGate.Outcome pictures) {
+        if (pictures.errors().isEmpty()) {
+            return taxErrors;
+        }
+        Map<String, String> all = new LinkedHashMap<>(taxErrors);
+        pictures.errors().forEach(all::putIfAbsent);
+        return all;
     }
 
     /**

@@ -167,9 +167,9 @@ class ImportJobImpl implements ImportJob {
             ImportedProduct p = r.product();
             if (u.mode() == ImportMode.CREATE) {
                 List<String> notes = new ArrayList<>();
-                List<ProductImage> imgs = new ArrayList<>(fetchImages(u, p.imageUrls(), r.library(), notes));
+                List<ProductImage> imgs = new ArrayList<>(fetchImages(u, p.imageUrls(), r.library(), notes, "MAIN", p));
                 if (p.labelPhotoUrl() != null) {
-                    fetchLabel(u, p.labelPhotoUrl(), r.library(), notes).ifPresent(imgs::add);
+                    fetchLabel(u, p.labelPhotoUrl(), r.library(), notes, p).ifPresent(imgs::add);
                 }
                 return new Prepared(numbers, toCreate(p, imgs), null, null, null, String.join("; ", notes));
             }
@@ -177,7 +177,7 @@ class ImportJobImpl implements ImportJob {
                     .orElseThrow(() -> new NotFoundException("catalog.product-not-found", "The listing was deleted"));
             List<String> notes = new ArrayList<>();
             List<ProductImage> imgs = p.imageUrls().isEmpty() ? current.images()
-                    : fetchImages(u, p.imageUrls(), r.library(), notes);
+                    : fetchImages(u, p.imageUrls(), r.library(), notes, "MAIN", p);
             return new Prepared(numbers, null, toUpdate(current, p, imgs), current.id(), null, String.join("; ", notes));
         } catch (ImageServiceUnavailable ex) {
             return new Prepared(numbers, null, null, null, "Images could not be copied (image service unavailable); "
@@ -271,17 +271,24 @@ class ImportJobImpl implements ImportJob {
     }
 
     /** The label photo as a typed image; a label that cannot be copied refuses the product (the rules may require it). */
-    private Optional<ProductImage> fetchLabel(ProductImport u, String url, ImageLibrary lib, List<String> notes) {
+    private Optional<ProductImage> fetchLabel(ProductImport u, String url, ImageLibrary lib, List<String> notes,
+                                              ImportedProduct product) {
         List<ProductImage> got;
         try {
-            got = fetchImages(u, List.of(url), lib, notes);
+            got = fetchImages(u, List.of(url), lib, notes, "LABEL", product);
         } catch (ImportRefused ex) {
             throw new ImportRefused("Label photo: " + ex.getMessage().replaceFirst("^Main image ", ""));
         }
         return got.stream().findFirst().map(ProductImage::asLabel);
     }
 
-    private List<ProductImage> fetchImages(ProductImport u, List<String> urls, ImageLibrary lib, List<String> notes) {
+    /**
+     * Copies the row's pictures through media for their slots: the first is {@code firstSlot} (the main image, or the
+     * label photo), the rest are additional pictures. A picture media rejects or holds says why in plain words; for the
+     * main image that refuses the product (its rows fail with the message), for the others the picture is skipped.
+     */
+    private List<ProductImage> fetchImages(ProductImport u, List<String> urls, ImageLibrary lib, List<String> notes,
+                                           String firstSlot, ImportedProduct product) {
         List<ProductImage> out = new ArrayList<>();
         for (int i = 0; i < urls.size(); i++) {
             if (ImageLibrary.isRef(urls.get(i))) {
@@ -295,13 +302,15 @@ class ImportJobImpl implements ImportJob {
                 }
                 continue;
             }
-            ImportedImage img = images.importImage(urls.get(i), u.owner().orgId(), u.uploadedBy());
+            ImportedImage img = images.importImage(urls.get(i), u.owner().orgId(), u.uploadedBy(),
+                    i == 0 ? firstSlot : "OTHER", product.title(), product.attributes().get("brand"),
+                    product.productTypeCode());
             if (img.ready()) {
                 out.add(new ProductImage(img.url(), img.width(), img.height(), img.bytes(), img.contentType()));
                 continue;
             }
-            String why = "FLAGGED".equals(img.status()) ? "held for review by moderation"
-                    : img.reason() == null ? "refused" : img.reason();
+            String why = img.reason() != null && !img.reason().isBlank() ? img.reason()
+                    : "FLAGGED".equals(img.status()) ? "held for review by moderation" : "refused";
             if (i == 0) {
                 throw new ImportRefused("Main image " + urls.get(i) + ": " + why);
             }

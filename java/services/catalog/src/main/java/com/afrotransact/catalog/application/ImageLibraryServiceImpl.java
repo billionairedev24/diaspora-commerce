@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductImage;
@@ -115,10 +116,19 @@ class ImageLibraryServiceImpl implements ImageLibraryService {
                 attached += count;
             } catch (RuntimeException ex) {
                 LOG.info("Library images not attached to {}: {}", p.id(), ex.getMessage());
-                skipped.add(new Skipped(sku, ex.getMessage() == null ? "Refused" : ex.getMessage()));
+                skipped.add(new Skipped(sku, reason(ex)));
             }
         }
         return new AttachResult(updated, attached, List.copyOf(skipped));
+    }
+
+    /** Why an attach was refused: the picture problem in plain words when there is one, else the refusal's own text. */
+    private static String reason(RuntimeException ex) {
+        if (ex instanceof CatalogRuleViolation violation) {
+            return violation.fieldErrors().entrySet().stream().filter(e -> e.getKey().startsWith("images"))
+                    .map(Map.Entry::getValue).findFirst().orElse(violation.getMessage());
+        }
+        return ex.getMessage() == null ? "Refused" : ex.getMessage();
     }
 
     /** The ready MAIN/PT images of the first of the product's SKUs that has any, or null when none or unchanged. */

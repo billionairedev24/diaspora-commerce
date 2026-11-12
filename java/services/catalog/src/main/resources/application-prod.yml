@@ -16,6 +16,8 @@ at:
     media:
       # In-cluster service name of media-service (Helm chart `media`, port 8080).
       base-url: ${MEDIA_URL:http://media:8080}
+    images:
+      mode: ${CATALOG_IMAGE_MODE:enforce}  # owner decision: the main-image rules are enforced (shadow: CATALOG_IMAGE_MODE=shadow)
     oauth:
       # identity's catalog-service client secret, only from the environment (secret store).
       client-secret: ${CATALOG_CLIENT_SECRET:}

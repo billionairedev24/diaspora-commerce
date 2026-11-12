@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.afrotransact.catalog.testsupport.ImageGates;
 import com.afrotransact.catalog.testsupport.RulesFixtures;
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
@@ -73,7 +74,7 @@ class ProductWriterSizingTest {
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
                 charts, mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(), new TaxGateEvaluator(readyResolver(), false), RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()), mock(NewPageGuard.class),
                 Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"),
-                        ZoneOffset.UTC));
+                        ZoneOffset.UTC), ImageGates.passthrough());
     }
 
     private CreateProductCommand command(UUID chartId, FitNote fit, VariantDraft... variants) {

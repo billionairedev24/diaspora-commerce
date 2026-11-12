@@ -1,6 +1,8 @@
 # Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
 at:
   catalog:
+    images:
+      mode: ${CATALOG_IMAGE_MODE:off}  # the local seeds use external pictures; try CATALOG_IMAGE_MODE=shadow or enforce with media on :8207
     taxonomy:
       import-on-start: true
     tax:

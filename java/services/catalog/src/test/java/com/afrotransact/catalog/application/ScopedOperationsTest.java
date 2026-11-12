@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.catalog.testsupport.ImageGates;
 import com.afrotransact.catalog.testsupport.RulesFixtures;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
@@ -90,7 +91,7 @@ class ScopedOperationsTest {
                 mock(ProductDraftRepository.class), mock(IdentifierIssuer.class), new DefaultProductDraftPolicy(),
                 new DefaultSizeChartPolicy(), mock(SizeChartRepository.class), mock(ProductEvents.class),
                 mock(BrandResolver.class), guard, new TaxGateEvaluator(request -> new TaxResolver.Resolution("RESOLVED", "EXEMPT", "AT.X", "S001", "0%", null, "v", "r"), false),
-                RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()), mock(NewPageGuard.class), clock);
+                RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()), mock(NewPageGuard.class), clock, ImageGates.passthrough());
         assertThatThrownBy(() -> writer.create(OWNER, create(DRESSES))).isInstanceOfSatisfying(
                 DepartmentNotAllowed.class, e -> assertThat(e.getMessage())
                         .contains("not set up to sell in Fashion"));

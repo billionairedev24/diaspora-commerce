@@ -2,6 +2,7 @@ package com.afrotransact.catalog.adapter.out.media;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +40,12 @@ class HttpImageImporter implements ImageImporter {
         this.tokens = tokens;
     }
 
+    private static void putIfSet(Map<String, String> body, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            body.put(key, value);
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record AssetJson(String id, String url, Integer width, Integer height, Long bytes, String contentType,
                      String status, List<String> flags) {
@@ -50,6 +57,21 @@ class HttpImageImporter implements ImageImporter {
 
     @Override
     public ImportedImage importImage(String url, String ownerOrg, String uploadedBy) {
+        return importImage(url, ownerOrg, uploadedBy, null, null, null, null);
+    }
+
+    @Override
+    public ImportedImage importImage(String url, String ownerOrg, String uploadedBy, String slot, String title,
+                                     String brand, String productTypeCode) {
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("purpose", "product-image");
+        body.put("url", url);
+        body.put("ownerOrg", ownerOrg);
+        body.put("uploadedBy", uploadedBy == null ? "" : uploadedBy);
+        putIfSet(body, "slot", slot);
+        putIfSet(body, "title", title);
+        putIfSet(body, "brand", brand);
+        putIfSet(body, "productTypeCode", productTypeCode);
         String token = tokens.token();
         try {
             AssetJson a = media.post().uri("/v1/assets/import")
@@ -59,8 +81,7 @@ class HttpImageImporter implements ImageImporter {
                         }
                     })
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("purpose", "product-image", "url", url, "ownerOrg", ownerOrg,
-                            "uploadedBy", uploadedBy == null ? "" : uploadedBy))
+                    .body(body)
                     .retrieve()
                     .body(AssetJson.class);
             if (a == null) {

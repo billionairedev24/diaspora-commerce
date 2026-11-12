@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.afrotransact.catalog.adapter.out.tax.LocalDatasetTaxResolver;
 import com.afrotransact.catalog.adapter.out.taxonomy.ClasspathTaxonomySource;
+import com.afrotransact.catalog.testsupport.ImageGates;
 import com.afrotransact.catalog.testsupport.RulesFixtures;
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
@@ -82,7 +83,8 @@ class ProductWriterTaxGateTest {
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
                 mock(SizeChartRepository.class), events, brands, new UnrestrictedScopeGuard(),
                 new TaxGateEvaluator(new LocalDatasetTaxResolver(SOURCE), true), RulesFixtures.permissiveService(),
-                liveGate, mock(NewPageGuard.class), Clock.fixed(Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+                liveGate, mock(NewPageGuard.class), Clock.fixed(Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC),
+                ImageGates.passthrough());
     }
 
     private CreateProductCommand command(String sku, Map<String, Object> facts) {

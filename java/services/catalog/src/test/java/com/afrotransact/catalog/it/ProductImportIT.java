@@ -12,9 +12,11 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.afrotransact.catalog.application.ProductImportService;
@@ -67,6 +69,10 @@ class ProductImportIT {
 
     private static final AtomicInteger CRASHES = new AtomicInteger();
     private static final AtomicInteger FETCHES = new AtomicInteger();
+    /** The slot the importer was asked for, by URL (the first picture of a row is the main image). */
+    private static final Map<String, String> SLOTS = new ConcurrentHashMap<>();
+    private static final String TOO_SMALL = "This photo is too small. The main photo must be at least 1000 pixels on its "
+            + "longest side so shoppers can zoom. Yours is 800 by 800.";
 
     private final ProductImportService imports;
     private final ProductService products;
@@ -92,17 +98,30 @@ class ProductImportIT {
         @Bean
         @Primary
         ImageImporter fakeImageImporter() {
-            return (url, ownerOrg, uploadedBy) -> {
-                FETCHES.incrementAndGet();
-                if (url.contains("crash") && CRASHES.getAndDecrement() > 0) {
-                    throw new IllegalStateException("pod died while copying " + url);
+            return new ImageImporter() {
+                @Override
+                public ImportedImage importImage(String url, String ownerOrg, String uploadedBy) {
+                    return importImage(url, ownerOrg, uploadedBy, null, null, null, null);
                 }
-                if (url.contains("broken")) {
-                    return new ImageImporter.ImportedImage(null, 0, 0, 0, "", "REJECTED",
-                            "The link answered 404 Not Found");
+
+                @Override
+                public ImportedImage importImage(String url, String ownerOrg, String uploadedBy, String slot,
+                                                 String title, String brand, String productTypeCode) {
+                    FETCHES.incrementAndGet();
+                    SLOTS.put(url, String.valueOf(slot));
+                    if (url.contains("crash") && CRASHES.getAndDecrement() > 0) {
+                        throw new IllegalStateException("pod died while copying " + url);
+                    }
+                    if (url.contains("broken")) {
+                        return new ImportedImage(null, 0, 0, 0, "", "REJECTED", "The link answered 404 Not Found");
+                    }
+                    if (url.contains("tiny-main")) {
+                        // media's own verdict and plain message for a main image under 1000 px on its longest side
+                        return new ImportedImage(null, 800, 800, 90_000, "image/jpeg", "REJECTED", TOO_SMALL);
+                    }
+                    return new ImportedImage("https://utfs.io/f/" + Math.abs(url.hashCode()) + ".jpg", 1600, 1600,
+                            250_000, "image/jpeg", "READY", null);
                 }
-                return new ImageImporter.ImportedImage("https://utfs.io/f/" + Math.abs(url.hashCode()) + ".jpg", 1600,
-                        1600, 250_000, "image/jpeg", "READY", null);
             };
         }
     }
@@ -186,6 +205,25 @@ class ProductImportIT {
     private long variantsWithSku(String sku) {
         return jdbc.sql("select count(*) from product_variant where owner_org = :org and seller_sku = :sku")
                 .param("org", org()).param("sku", sku).query(Long.class).single();
+    }
+
+    /** S390: a main image under 1000 px on its longest side fails its row with media's plain message, in bulk too. */
+    @Test
+    void aMainImageUnder1000PixelsFailsItsRowWithMediasMessageAndIsAskedForAsTheMainImage() {
+        byte[] file = dressCsv(dressRow("", "TINY-1", "", "https://cdn.example.com/tiny-main.jpg https://cdn.example.com/side.jpg"),
+                dressRow("", "FINE-1", "", "https://cdn.example.com/fine-main.jpg"));
+        ProductImport u = imports.upload("tiny.csv", file, ImportMode.CREATE, "dress", "Ade Okafor");
+        imports.start(u.id(), true);
+        ProductImport done = awaitDone(u.id());
+
+        assertThat(done.createdProducts()).isEqualTo(1);
+        assertThat(done.failedRows()).isEqualTo(1);
+        List<StoredRow> rows = imports.rows(u.id(), null, null, 0, 50).items();
+        assertThat(rows).extracting(StoredRow::sku, StoredRow::outcome).containsExactlyInAnyOrder(
+                tuple("TINY-1", RowOutcome.FAILED), tuple("FINE-1", RowOutcome.CREATED));
+        assertThat(rows.stream().filter(r -> "TINY-1".equals(r.sku())).findFirst().orElseThrow().outcomeNote())
+                .contains("at least 1000 pixels on its longest side");
+        assertThat(SLOTS).containsEntry("https://cdn.example.com/tiny-main.jpg", "MAIN");
     }
 
     @Test

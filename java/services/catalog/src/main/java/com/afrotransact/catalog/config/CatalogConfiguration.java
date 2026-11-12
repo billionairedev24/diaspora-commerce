@@ -10,6 +10,7 @@ import java.util.concurrent.Executors;
 
 import com.afrotransact.catalog.adapter.out.tax.HttpTaxResolver;
 import com.afrotransact.catalog.adapter.out.tax.LocalDatasetTaxResolver;
+import com.afrotransact.catalog.application.ImageSettings;
 import com.afrotransact.catalog.application.ImportSettings;
 import com.afrotransact.catalog.application.LabelSettings;
 import com.afrotransact.catalog.application.ListingEnforcementSettings;
@@ -110,6 +111,22 @@ class CatalogConfiguration {
             @Value("${at.catalog.policy.exemption-requires-approval-for-known-brands}") boolean knownBrands) {
         return new CatalogPolicy(reservedPrefixes, mpnAttributeKey, reviewSla, alertAfter, noteMaxLength,
                 knownBrandMinPages, gatedCodes, knownBrands, null, null, 0);
+    }
+
+    /**
+     * The image rules (S390, S392): {@code at.catalog.images.mode} is {@code off} (media is not asked), {@code shadow}
+     * (verdicts are recorded, nothing is refused) or {@code enforce}. The hide step for listings that still fail after
+     * the grace period is a separate flag and is off until the owner switches it on.
+     */
+    @Bean
+    ImageSettings imageSettings(@Value("${at.catalog.images.mode:off}") String mode,
+                                @Value("${at.catalog.images.grace-days:60}") int graceDays,
+                                @Value("${at.catalog.images.hide-failing:false}") boolean hideFailing,
+                                @Value("${at.catalog.images.rescore-batch:50}") int rescoreBatch,
+                                @Value("${at.catalog.images.rescore-every:30s}") Duration rescoreEvery,
+                                @Value("${at.catalog.images.recheck-after:30d}") Duration recheckAfter) {
+        return new ImageSettings(ImageSettings.Mode.valueOf(mode.trim().toUpperCase(Locale.ROOT)), graceDays, hideFailing,
+                rescoreBatch, rescoreEvery, recheckAfter);
     }
 
     /** Runs bulk-upload imports in the background (one virtual thread per started upload). */

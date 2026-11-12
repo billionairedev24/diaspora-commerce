@@ -130,6 +130,18 @@ at:
     media:
       base-url: ${MEDIA_URL:http://localhost:8207}
       timeout: ${MEDIA_TIMEOUT:30s}
+    # S390 / S392 main-image rules. The thresholds live in media-service (config images.*, staff override); this is how
+    # catalog applies its verdicts. mode: off (media is not asked), shadow (asked and counted, nothing refused) or
+    # enforce (a main image that is rejected, held or unknown is refused on the form, the API, bulk and library attach).
+    # A listing that fails stays live with an "Improve your image" task; after grace-days the hide step may limit it,
+    # but only when hide-failing is true (a separate switch, off until the owner turns it on; nothing is deleted).
+    images:
+      mode: ${CATALOG_IMAGE_MODE:off}
+      grace-days: ${CATALOG_IMAGE_GRACE_DAYS:60}
+      hide-failing: ${CATALOG_IMAGE_HIDE_FAILING:false}
+      rescore-batch: ${CATALOG_IMAGE_RESCORE_BATCH:50}   # listings measured per run of the back-fill job
+      rescore-every: ${CATALOG_IMAGE_RESCORE_EVERY:30s}  # rate limit: one batch per interval and pod
+      recheck-after: ${CATALOG_IMAGE_RECHECK_AFTER:30d}  # a stored score older than this is measured again
     # catalog-service's own client-credentials token (identity client catalog-service, scope media:import).
     oauth:
       issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
