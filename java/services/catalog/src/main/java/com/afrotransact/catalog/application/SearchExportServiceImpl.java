@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
+import com.afrotransact.catalog.port.ImageQualityRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository.Decision;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -26,13 +27,16 @@ class SearchExportServiceImpl implements SearchExportService {
     private final ProductReviewRepository reviews;
     private final ListingSuppressionRepository suppressions;
     private final PermissionChecker permissions;
+    private final ImageQualityRepository imageQuality;
 
     SearchExportServiceImpl(ProductRepository products, ProductReviewRepository reviews,
-                            ListingSuppressionRepository suppressions, PermissionChecker permissions) {
+                            ListingSuppressionRepository suppressions, PermissionChecker permissions,
+                            ImageQualityRepository imageQuality) {
         this.products = products;
         this.reviews = reviews;
         this.suppressions = suppressions;
         this.permissions = permissions;
+        this.imageQuality = imageQuality;
     }
 
     @Override
@@ -54,14 +58,16 @@ class SearchExportServiceImpl implements SearchExportService {
         }
         Map<UUID, RatingSnapshot> ratings = reviews.ratingSnapshots(ids);
         Map<String, Decision> decisions = suppressions.decisions(orgs);
+        Set<UUID> imageHidden = imageQuality.hidden(ids);
 
         List<SearchExportItem> items = page.stream()
-                .map(p -> item(p, ratings.get(p.id()), decisions.get(p.owner().orgId()))).toList();
+                .map(p -> item(p, ratings.get(p.id()), decisions.get(p.owner().orgId()), imageHidden.contains(p.id())))
+                .toList();
         return new SearchExportPage(items, more ? page.getLast().id() : null);
     }
 
-    private static SearchExportItem item(Product p, RatingSnapshot rating, Decision decision) {
-        boolean hidden = decision != null && decision.hidden();
+    private static SearchExportItem item(Product p, RatingSnapshot rating, Decision decision, boolean imageHidden) {
+        boolean hidden = imageHidden || decision != null && decision.hidden();
         Instant version = p.updatedAt();
         if (decision != null && decision.changedAt().isAfter(version)) {
             version = decision.changedAt();

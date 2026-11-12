@@ -12,6 +12,7 @@ import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductFlag;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.port.ImageQualityRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import org.springframework.stereotype.Component;
@@ -22,14 +23,25 @@ class ProductEvents {
 
     private final DomainEventPublisher events;
     private final ListingSuppressionRepository suppressions;
+    private final ImageQualityRepository imageQuality;
 
-    ProductEvents(DomainEventPublisher events, ListingSuppressionRepository suppressions) {
+    ProductEvents(DomainEventPublisher events, ListingSuppressionRepository suppressions,
+                  ImageQualityRepository imageQuality) {
         this.events = events;
         this.suppressions = suppressions;
+        this.imageQuality = imageQuality;
+    }
+
+    /**
+     * Whether the listing is hidden from the public: its organisation's listings are hidden by compliance enforcement, or
+     * the image hide step (S392, flag off by default) limited this listing.
+     */
+    private boolean sellerHidden(Product p) {
+        return suppressions.isHidden(p.owner().orgId()) || !imageQuality.hidden(Set.of(p.id())).isEmpty();
     }
 
     void publish(String type, Product p) {
-        publish(type, p, suppressions.isHidden(p.owner().orgId()));
+        publish(type, p, sellerHidden(p));
     }
 
     void publish(String type, Product p, boolean sellerHidden) {
@@ -96,12 +108,12 @@ class ProductEvents {
     /** {@code catalog.product.taken_down} carries the takedown reason code. */
     void publishWithReason(String type, Product p, String reasonCode) {
         events.publish(type, CatalogEvents.AGGREGATE_PRODUCT, p.id().toString(),
-                ProductEventPayload.of(p, suppressions.isHidden(p.owner().orgId()), reasonCode));
+                ProductEventPayload.of(p, sellerHidden(p), reasonCode));
     }
 
     /** {@code catalog.product.flagged} (key = product id, so it stays in order with the product's lifecycle). */
     void publishFlag(Product p, ProductFlag flag) {
         events.publish(CatalogEvents.PRODUCT_FLAGGED, CatalogEvents.AGGREGATE_PRODUCT, p.id().toString(),
-                ProductFlaggedPayload.of(p, flag, suppressions.isHidden(p.owner().orgId())));
+                ProductFlaggedPayload.of(p, flag, sellerHidden(p)));
     }
 }

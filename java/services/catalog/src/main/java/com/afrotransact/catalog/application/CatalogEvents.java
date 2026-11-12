@@ -47,6 +47,12 @@ public final class CatalogEvents {
     public static final String PRODUCT_HIDDEN = "catalog.product.hidden";
     /** The owner's listings were restored (payload sellerHidden=false, status unchanged). */
     public static final String PRODUCT_RESTORED = "catalog.product.restored";
+    /**
+     * A listing's main image needs the seller's attention, or no longer does (S392): payload productId, atin, ownerOrg,
+     * state (OK, IMPROVE or FAIL), reasonCodes, failingSince and hideAfter (the end of the grace period; null unless
+     * FAIL). Seller Center shows the "Improve your image" task from it; nothing is hidden by this event.
+     */
+    public static final String LISTING_IMAGE_TASK = "catalog.listing.image_task";
     /** A live listing was reported by a shopper, flagged by staff or flagged automatically (trust-ops queues it). */
     public static final String PRODUCT_FLAGGED = "catalog.product.flagged";
     /** Trust and Safety took a live listing down (status TAKEN_DOWN, reasonCode set). */

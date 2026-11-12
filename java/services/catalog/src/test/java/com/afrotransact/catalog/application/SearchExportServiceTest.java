@@ -22,6 +22,7 @@ import com.afrotransact.catalog.domain.tax.TaxStatus;
 import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository.Decision;
+import com.afrotransact.catalog.port.ImageQualityRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.ProductReviewRepository;
 import com.afrotransact.catalog.port.ProductReviewRepository.RatingSnapshot;
@@ -49,11 +50,12 @@ class SearchExportServiceTest {
     private final ProductReviewRepository reviews = mock(ProductReviewRepository.class);
     private final ListingSuppressionRepository suppressions = mock(ListingSuppressionRepository.class);
     private final PermissionChecker permissions = mock(PermissionChecker.class);
+    private final ImageQualityRepository imageQuality = mock(ImageQualityRepository.class);
     private SearchExportService service;
 
     @BeforeEach
     void setUp() {
-        service = new SearchExportServiceImpl(products, reviews, suppressions, permissions);
+        service = new SearchExportServiceImpl(products, reviews, suppressions, permissions, imageQuality);
     }
 
     @Test
@@ -86,6 +88,17 @@ class SearchExportServiceTest {
         assertThat(item.rating().average()).isEqualByComparingTo(new BigDecimal("4.50"));
         assertThat(item.rating().count()).isEqualTo(2);
         assertThat(item.rating().updatedAt()).isEqualTo(ratedAt);
+    }
+
+    @Test
+    void aListingTheImageHideStepLimitedIsExportedAsHidden() {
+        Product p = product("org_a", ProductStatus.LIVE);
+        when(products.findForExport(any(), any(), any(), anyInt())).thenReturn(List.of(p));
+        when(reviews.ratingSnapshots(any())).thenReturn(Map.of());
+        when(suppressions.decisions(any())).thenReturn(Map.of());
+        when(imageQuality.hidden(Set.of(p.id()))).thenReturn(Set.of(p.id()));
+
+        assertThat(service.export(Set.of(), null, null, 10).items().getFirst().product().sellerHidden()).isTrue();
     }
 
     @Test
