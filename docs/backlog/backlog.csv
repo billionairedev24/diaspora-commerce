@@ -1567,3 +1567,19 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Staging scenario: seller A creates a page, seller B sells it by UPC without a photo, both appear in the buy box
 - Rollback flags tested (each returns today's behaviour)
 - Five-locale parity test passes for all new keys","E33","","Medium","3","quality observability rollout","quality","To Do"
+"S398","Story","Guided tours for sellers and service providers","First-run and replayable tours in Seller Center and Provider Hub (@afrotransact/tour, Driver.js behind our own TourEngine, ADR 0008): welcome and application status, first product (category, tax questions in plain words, held listing), selling approvals, inventory, orders and shipping, payouts and Stripe, and the service provider path. Built and merged; owner browser pass pending.","- Seven tours reachable from the Help menu (Replay a tour), each in en, fr, es, ar, yo
+- Steps point only at data-tour attributes; a missing target is skipped quietly (logged in development)
+- First-time tours start once, never over a dialog or unsaved form, never under 640 px wide; Don't show again works
+- Playwright drift guard runs every tour against the mock BFF and axe on the popover
+- Owner reviewed the tours in a browser","E24","","Medium","5","seller-center onboarding a11y i18n","seller-center","To Do"
+"S399","Story","Guided tours for staff","Replayable tours in the staff console, shown only when the person's permissions reach the area: admin home, application review (two-step, same person cannot approve), product moderation, tax review and the tax-gate banner, orders and shipment status (marking picked up captures the customer's payment), settings (membership, shipping and delivery fees, markets) and roles and permissions. Built and merged; owner browser pass pending.","- Seven tours reachable from the Help menu; a role only lists the tours its permissions allow
+- The orders tour warns that Picked up charges the customer's card
+- Playwright drift guard runs every tour against the mock BFF
+- Owner reviewed the tours in a browser","E25","","Medium","5","staff-console a11y i18n","staff-console","To Do"
+"S400","Story","Native review of guided-tour translations (fr, es, ar, yo)","The tour text in Seller Center and the staff console (sc.tour.* and st.tour.*, about 180 strings per language) is a machine draft. A native speaker reviews each language for plain words and right-to-left layout, then moves the keys to reviewedKeys.","- A translator per language signs off every sc.tour.* and st.tour.* key
+- Arabic popover checked in a real browser (mirrored layout, arrows)
+- Keys moved to reviewedKeys in each catalogue","E31","","Medium","3","i18n content","legal","To Do"
+"S401","Story","Decide: keep guided-tour progress on the server","Tour progress (finished, skipped, don't show again) lives in the browser per user, tour and version. People who change browser or device see first-time tours again. The port TourProgressRemote exists with no backend. The owner decides whether a user-preference endpoint is worth building.","- Owner decision recorded (keep local, or build a preference endpoint)
+- If built: identity or seller preference endpoint, TourProgressRemote implementation, no personal data in the payload","E24","","Low","2","decision seller-center staff-console","seller-center","To Do"
+"S402","Story","Warn before Picked up in the staff order dialog","The staff order sheet asks for a note when a shipment is set to Picked up but does not say that this charges the customer's card for that package. The tour says it; the confirm dialog should too.","- The Set shipment to Picked up confirmation says the customer's card is charged for the package
+- Text in en, fr, es, ar, yo","E25","","Medium","1","staff-console orders payments","staff-console","To Do"
