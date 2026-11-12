@@ -1,0 +1,15 @@
+# Grafana Alloy + kube-state-metrics + kafka-exporter: metrics and logs to Grafana Cloud (docs/runbooks/observability-grafana-cloud.md).
+# The Secret grafana-cloud-alloy is NOT here (SOPS/age: infra/ops/secrets, rendered by infra/ovh-vps/secrets.sh).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+resources:
+  - alloy.yaml
+  - kube-state-metrics.yaml
+  - kafka-exporter.yaml
+configMapGenerator:
+  - name: alloy-config
+    files:
+      - config.alloy
+generatorOptions:
+  disableNameSuffixHash: false   # a config change gets a new ConfigMap name, so Argo CD rolls the Deployment

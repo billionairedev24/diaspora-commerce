@@ -1,0 +1,484 @@
+// Grafana Alloy for the single-node prod cluster (OVH). It is the ONLY thing that ships metrics and logs to Grafana Cloud:
+//   metrics  scrape (60 s) -> cardinality guard -> remote_write  (Grafana Cloud hosted Prometheus)
+//   logs     tail pod logs -> drop probe noise -> redact -> push  (Grafana Cloud hosted Loki)
+// Traces go through the OTel collector (infra/k8s/platform/envs/prod/opentelemetry-collector-gateway.yaml), not through here.
+// Everything environment specific comes from the Secret "grafana-cloud-alloy" (namespace observability), never from this file:
+//   CLUSTER_ENV (trial | prod: external label `env` on every series and log line), GRAFANA_PROM_URL, GRAFANA_PROM_USER,
+//   GRAFANA_LOKI_URL, GRAFANA_LOKI_USER, GRAFANA_TOKEN, VALKEY_PASSWORD, MEILI_MASTER_KEY.
+// Syntax check: `alloy validate` (or `alloy fmt`) on this file; see docs/runbooks/observability-grafana-cloud.md.
+
+logging {
+	level  = "warn"
+	format = "logfmt"
+}
+
+// ------------------------------------------------------------------------------------------------ discovery
+// One pod list shared by the metric and the log pipelines.
+discovery.kubernetes "pods" {
+	role = "pod"
+}
+
+discovery.kubernetes "nodes" {
+	role = "node"
+}
+
+// ------------------------------------------------------------------------------------------------ metrics: pods
+// Scrape every pod that carries prometheus.io/scrape=true in a platform or service namespace. The shared chart
+// infra/helm/library/at-service puts prometheus.io/{scrape,path,port} on every service pod (Java: /actuator/prometheus,
+// Go: /metrics); cloudflared, Temporal, kube-state-metrics, kafka-exporter and Alloy carry the same annotations.
+discovery.relabel "annotated_pods" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		regex         = "afrotransact-.*|ingress|temporal|observability"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+		regex         = "true"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_phase"]
+		regex         = "Running"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+		regex         = "(.+)"
+		target_label  = "__metrics_path__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_ip", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+		separator     = ":"
+		regex         = "(.+:[0-9]+)"
+		target_label  = "__address__"
+	}
+	// service = the pod's app.kubernetes.io/name (dashboards and rules select on `service`); job = the same.
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "service"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+}
+
+prometheus.scrape "annotated_pods" {
+	targets         = discovery.relabel.annotated_pods.output
+	forward_to      = [prometheus.relabel.guard.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "20s"
+	// Runaway guard: a target that exposes more samples than this fails its scrape (up = 0 and the alert ScrapeTargetFailing
+	// fires) instead of silently eating the Grafana Cloud series budget.
+	sample_limit = 4000
+}
+
+// ------------------------------------------------------------------------------------------------ metrics: Kafka, Valkey, Meilisearch
+// Kafka: consumer-group lag and dead-letter topic offsets come from the separate kafka-exporter pod (lean/alloy/kafka-exporter.yaml,
+// scraped through its annotations above). It is NOT Alloy's built-in prometheus.exporter.kafka: that one makes Alloy fail its initial
+// load when the broker is unreachable, so a Kafka outage plus an Alloy restart would blind ALL monitoring.
+
+// Valkey: INFO counters through the Redis exporter built into Alloy (it connects lazily: redis_up = 0 when Valkey is down).
+prometheus.exporter.redis "valkey" {
+	redis_addr     = "valkey.data.svc.cluster.local:6379"
+	redis_password = sys.env("VALKEY_PASSWORD")
+}
+
+discovery.relabel "valkey" {
+	targets = prometheus.exporter.redis.valkey.targets
+
+	rule {
+		target_label = "service"
+		replacement  = "valkey"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "valkey"
+	}
+}
+
+prometheus.scrape "valkey" {
+	targets         = discovery.relabel.valkey.output
+	forward_to      = [prometheus.relabel.guard.receiver]
+	scrape_interval = "60s"
+	sample_limit    = 4000
+}
+
+// Meilisearch: /metrics needs MEILI_EXPERIMENTAL_ENABLE_METRICS=true (set in lean/data/meilisearch.yaml) and a bearer key.
+discovery.relabel "meilisearch" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		separator     = ";"
+		regex         = "data;meilisearch"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_ip"]
+		replacement   = "$1:7700"
+		target_label  = "__address__"
+	}
+
+	rule {
+		target_label = "service"
+		replacement  = "meilisearch"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "meilisearch"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+}
+
+prometheus.scrape "meilisearch" {
+	targets         = discovery.relabel.meilisearch.output
+	forward_to      = [prometheus.relabel.guard.receiver]
+	scrape_interval = "60s"
+	metrics_path    = "/metrics"
+	bearer_token    = sys.env("MEILI_MASTER_KEY")
+	sample_limit    = 2000
+}
+
+// ------------------------------------------------------------------------------------------------ metrics: node, containers, volumes
+// cadvisor (container memory/CPU/OOM) and kubelet (PVC usage) through the API server proxy: no hostPath, no node port.
+discovery.relabel "kubelet" {
+	targets = discovery.kubernetes.nodes.targets
+
+	rule {
+		target_label = "__address__"
+		replacement  = "kubernetes.default.svc:443"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_name"]
+		replacement   = "/api/v1/nodes/$1/proxy/metrics"
+		target_label  = "__metrics_path__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_name"]
+		target_label  = "node"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "kubelet"
+	}
+}
+
+discovery.relabel "cadvisor" {
+	targets = discovery.kubernetes.nodes.targets
+
+	rule {
+		target_label = "__address__"
+		replacement  = "kubernetes.default.svc:443"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_name"]
+		replacement   = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
+		target_label  = "__metrics_path__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_name"]
+		target_label  = "node"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "cadvisor"
+	}
+}
+
+prometheus.scrape "kubelet" {
+	targets         = discovery.relabel.kubelet.output
+	forward_to      = [prometheus.relabel.guard.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "20s"
+	scheme          = "https"
+	sample_limit    = 6000
+
+	authorization {
+		type             = "Bearer"
+		credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	}
+
+	tls_config {
+		ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	}
+}
+
+prometheus.scrape "cadvisor" {
+	targets         = discovery.relabel.cadvisor.output
+	forward_to      = [prometheus.relabel.guard.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "20s"
+	scheme          = "https"
+	sample_limit    = 6000
+
+	authorization {
+		type             = "Bearer"
+		credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	}
+
+	tls_config {
+		ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	}
+}
+
+// ------------------------------------------------------------------------------------------------ metrics: cardinality guard
+// Everything passes through here. It is an ALLOWLIST of metric names (anything not listed is dropped) plus label drops.
+// To send one more metric family, add its name to the list below and read the series count in Grafana Cloud afterwards
+// (docs/runbooks/observability-grafana-cloud.md, "Watching usage"). The names are the ones the alert rules and dashboards in
+// infra/observability use (the doc lists which are confirmed in code).
+prometheus.relabel "guard" {
+	forward_to = [prometheus.remote_write.grafana.receiver]
+
+	// 1. Metric-name allowlist (the regex is anchored to the whole name).
+	rule {
+		source_labels = ["__name__"]
+		regex         = string.join([
+			"up",
+			// HTTP: Java (Micrometer) and Go (go/pkg/httpserver)
+			"http_server_requests_seconds_(count|sum|bucket)", "http_server_requests_total", "http_server_request_duration_seconds_(count|sum|bucket)",
+			// JVM, process, Hikari, Kafka client, logging
+			"jvm_memory_(used|committed|max)_bytes", "jvm_gc_pause_seconds_(count|sum)", "jvm_gc_(live_data_size|max_data_size)_bytes",
+			"jvm_threads_(live|daemon)_threads", "jvm_threads_states_threads", "jvm_buffer_memory_used_bytes",
+			"process_(cpu_usage|uptime_seconds|resident_memory_bytes|open_fds|max_fds)", "system_cpu_usage",
+			"hikaricp_connections_(active|idle|max|min|pending|timeout_total)", "hikaricp_connections_acquire_seconds_(count|sum|bucket)",
+			"kafka_producer_record_(send|error)_total", "kafka_consumer_fetch_manager_records_lag_max", "logback_events_total",
+			// Go runtime
+			"go_goroutines", "go_memstats_(alloc|heap_inuse)_bytes", "go_gc_duration_seconds_(count|sum)",
+			// AfroTransact business meters (Micrometer name with . -> _ ; counters get _total)
+			"payments_.*", "inventory_.*", "tax_.*", "ai_.*", "mcp_tool_calls_seconds_(count|sum)", "events_.*", "outbox_.*",
+			"checkout_.*", "payouts_.*", "notifications_.*", "indexer_.*", "search_events_total", "bff_upstream_.*", "catalog_.*",
+			// Kafka (exporter), Valkey (exporter), Meilisearch, Temporal server
+			"kafka_brokers", "kafka_topic_partitions", "kafka_consumergroup_(lag|lag_sum|current_offset)", "kafka_topic_partition_current_offset",
+			"redis_(up|memory_used_bytes|memory_max_bytes|connected_clients|evicted_keys_total|keyspace_hits_total|keyspace_misses_total|commands_processed_total|db_keys|rejected_connections_total)",
+			"meilisearch_(db_size_bytes|used_db_size_bytes|index_count|http_requests_total|nb_tasks|last_update)", "meilisearch_http_response_time_seconds_(count|sum)",
+			"workflow_(success|failed|timeout|terminate|cancel)(_total)?",
+			// cloudflared tunnel, kube-state-metrics, kubelet volumes, cadvisor, Alloy itself
+			"cloudflared_tunnel_(ha_connections|request_errors|total_requests)", "kube_.*",
+			"kubelet_volume_stats_(used_bytes|capacity_bytes|available_bytes|inodes_used|inodes)",
+			"container_(memory_working_set_bytes|spec_memory_limit_bytes|cpu_usage_seconds_total|oom_events_total)",
+			"prometheus_remote_storage_(samples_failed_total|samples_dropped_total|samples_pending|highest_timestamp_in_seconds|queue_highest_sent_timestamp_seconds)",
+			"loki_write_(dropped_entries_total|dropped_bytes_total)", "scrape_samples_post_metric_relabeling",
+		], "|")
+		action = "keep"
+	}
+
+	// 2. cadvisor: only real containers (no pod-level cgroup or pause series), and no cgroup path / image labels.
+	rule {
+		source_labels = ["__name__", "container"]
+		regex         = "container_.*;"
+		action        = "drop"
+	}
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "container_.*"
+		target_label  = "id"
+		replacement   = ""
+	}
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "container_.*"
+		target_label  = "image"
+		replacement   = ""
+	}
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "container_.*"
+		target_label  = "name"
+		replacement   = ""
+	}
+
+	// 3. High-cardinality or useless labels.
+	rule {
+		regex  = "exception|thread|client_id|client_name|controller_revision_hash|pod_template_hash|uid|image_id|container_id|instance_id"
+		action = "labeldrop"
+	}
+}
+
+prometheus.remote_write "grafana" {
+	external_labels = {
+		env     = sys.env("CLUSTER_ENV"),
+		cluster = "afrotransact-ovh",
+	}
+
+	endpoint {
+		url = sys.env("GRAFANA_PROM_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_PROM_USER")
+			password = sys.env("GRAFANA_TOKEN")
+		}
+		// No exemplars or metadata, small batches: one node sends a few dozen samples per second.
+		send_exemplars = false
+
+		metadata_config {
+			send = false
+		}
+
+		queue_config {
+			capacity             = 5000
+			max_shards           = 2
+			max_samples_per_send = 1000
+			batch_send_deadline  = "10s"
+		}
+	}
+}
+
+// ------------------------------------------------------------------------------------------------ logs
+discovery.relabel "logs" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		regex         = "afrotransact-.*|kafka|data|temporal|ingress|ops|observability|envoy-gateway-system"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+	// app: the controller name (cronjob and Job pods have no name label), overridden by app.kubernetes.io/name when set.
+	rule {
+		source_labels = ["__meta_kubernetes_pod_controller_name"]
+		regex         = "(.+)"
+		target_label  = "app"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		regex         = "(.+)"
+		target_label  = "app"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+}
+
+loki.source.kubernetes "pods" {
+	targets    = discovery.relabel.logs.output
+	forward_to = [loki.process.pods.receiver]
+}
+
+loki.process "pods" {
+	forward_to = [loki.write.grafana.receiver]
+
+	// Only namespace, app, pod (plus the external label env) are labels: container, job and instance stay out of the index.
+	stage.label_keep {
+		values = ["namespace", "app", "pod"]
+	}
+
+	// 1. Health-check and scrape noise.
+	stage.drop {
+		expression = `(?i)(kube-probe|"?(GET|HEAD) /?(healthz|readyz|metrics|actuator/(health|prometheus))|uri=/actuator/(health|prometheus))`
+	}
+
+	// 2. A runaway logger must not eat the free log volume: per pod, beyond 100 lines/s (burst 500) lines are dropped.
+	stage.limit {
+		rate          = 100
+		burst         = 500
+		drop          = true
+		by_label_name = "pod"
+	}
+
+	// 3. Redaction. The line is otherwise shipped as-is (JSON stays JSON); only the captured group is replaced.
+	// Authorization header values (Bearer / Basic / bare), in JSON or key=value form.
+	stage.replace {
+		expression = `(?i)authorization["']?\s*[:=]\s*["']?(?:(?:bearer|basic)\s+)?([A-Za-z0-9._~+/=\-]{6,})`
+		replace    = "[redacted-token]"
+	}
+
+	stage.replace {
+		expression = `(?i)bearer\s+([A-Za-z0-9._~+/=\-]{8,})`
+		replace    = "[redacted-token]"
+	}
+	// JWTs.
+	stage.replace {
+		expression = `\b(eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,})`
+		replace    = "[redacted-token]"
+	}
+	// Stripe keys and webhook secrets.
+	stage.replace {
+		expression = `\b((?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{10,}|whsec_[A-Za-z0-9]{10,})`
+		replace    = "[redacted-token]"
+	}
+	// password=, secret=, token=, api_key=, client_secret=, signature= ... in JSON or key=value form.
+	stage.replace {
+		expression = `(?i)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|client[_-]?secret|signature)["']?\s*[:=]\s*["']?([^\s"'&,}]{4,})`
+		replace    = "[redacted-secret]"
+	}
+	// Email addresses.
+	stage.replace {
+		expression = `([A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,})`
+		replace    = "[redacted-email]"
+	}
+	// Card-like numbers: four groups separated by space or dash, or an unbroken 15-16 digit number with a Visa / Mastercard /
+	// Amex / Discover prefix (an epoch-millisecond timestamp or a database id is not touched).
+	stage.replace {
+		expression = `\b(\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{1,7})\b`
+		replace    = "[redacted-card]"
+	}
+
+	stage.replace {
+		expression = `\b(4\d{12}(?:\d{3})?|5[1-5]\d{14}|2[2-7]\d{14}|3[47]\d{13}|6(?:011|5\d{2})\d{12})\b`
+		replace    = "[redacted-card]"
+	}
+}
+
+loki.write "grafana" {
+	external_labels = {
+		env = sys.env("CLUSTER_ENV"),
+	}
+
+	endpoint {
+		url = sys.env("GRAFANA_LOKI_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_LOKI_USER")
+			password = sys.env("GRAFANA_TOKEN")
+		}
+		batch_wait = "10s"
+		batch_size = "1MiB"
+	}
+}

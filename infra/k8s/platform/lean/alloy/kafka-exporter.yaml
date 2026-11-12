@@ -1,0 +1,47 @@
+# kafka_exporter: consumer-group lag, committed offsets and topic offsets (the metric names rules/kafka.yaml and the Kafka dashboard
+# use). A separate pod on purpose: if the broker is down at start, only this pod crash-loops; Alloy's built-in Kafka exporter would
+# make Alloy itself fail to start. Scraped by Alloy through the pod annotations. Request 24 Mi / limit 64 Mi (UNMEASURED).
+# Only at.* topics (the application's topics; excludes __consumer_offsets). The NetworkPolicy of the broker admits namespace observability.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-exporter
+  namespace: observability
+  labels: {app.kubernetes.io/name: kafka-exporter}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: kafka-exporter}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: kafka-exporter}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9308"
+        prometheus.io/path: /metrics
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: kafka-exporter
+          image: danielqsj/kafka-exporter:v1.9.0
+          args:
+            - --kafka.server=kafka-0.kafka.kafka.svc.cluster.local:9092
+            - --topic.filter=^at\..*
+            - --web.listen-address=:9308
+            - --log.level=warn
+          ports:
+            - {name: metrics, containerPort: 9308}
+          readinessProbe:
+            httpGet: {path: /healthz, port: metrics}
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}

@@ -9,6 +9,7 @@ The OKMS + External Secrets alternative is optional and not verified against a l
 | File | Purpose |
 |---|---|
 | `../../ovh-vps/secrets.sh` | `PROFILE=prod` renders every Secret of the 21-service launch set (no OpenFGA), `APP_ENV=prod`, with `SECRETS_OUT` writing YAML files instead of applying |
+| Grafana Cloud | `./secrets.sh platform` also renders `observability/grafana-cloud-alloy` (Alloy: metrics + logs) next to `grafana-cloud-otlp` (traces); keys and where to get them: `docs/runbooks/observability-grafana-cloud.md` |
 | `apply.sh` | decrypt with SOPS, refuse empty mandatory keys, `kubectl apply`, label namespaces |
 | `escrow.sh` | offline age bundle of `STATE_DIR` (IDENTITY_DATA_KEY, JWT signing key, ...), kept separately from the DB backups |
 | `.sops.yaml` | creation rules (put your two age public keys in) |

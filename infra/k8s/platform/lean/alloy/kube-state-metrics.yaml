@@ -1,0 +1,79 @@
+# kube-state-metrics: the source of pod restarts, last termination reason (OOMKilled), node conditions (MemoryPressure),
+# Job / CronJob state (backup job failed or not run in 26 h) and PVC phase. Restricted to the objects the alerts need and to an
+# explicit metric allowlist so it stays small (request 32 Mi, limit 96 Mi; UNMEASURED). Scraped by Alloy through the pod annotations.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: observability
+  labels: {app.kubernetes.io/name: kube-state-metrics}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics
+  labels: {app.kubernetes.io/name: kube-state-metrics}
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes, persistentvolumeclaims]
+    verbs: [list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics
+  labels: {app.kubernetes.io/name: kube-state-metrics}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: kube-state-metrics}
+subjects:
+  - {kind: ServiceAccount, name: kube-state-metrics, namespace: observability}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: observability
+  labels: {app.kubernetes.io/name: kube-state-metrics}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: kube-state-metrics}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: kube-state-metrics}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: kube-state-metrics
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: kube-state-metrics
+          # UNVERIFIED tag: confirm it exists on registry.k8s.io before the first sync.
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.16.0
+          args:
+            - --port=8080
+            - --resources=pods,nodes,deployments,statefulsets,jobs,cronjobs,persistentvolumeclaims
+            - --metric-allowlist=kube_pod_container_status_restarts_total,kube_pod_container_status_last_terminated_reason,kube_pod_container_status_waiting_reason,kube_pod_status_phase,kube_node_status_condition,kube_node_status_allocatable,kube_deployment_spec_replicas,kube_deployment_status_replicas_available,kube_statefulset_replicas,kube_statefulset_status_replicas_ready,kube_job_status_failed,kube_job_status_succeeded,kube_job_status_active,kube_cronjob_status_last_successful_time,kube_cronjob_status_last_schedule_time,kube_cronjob_spec_suspend,kube_cronjob_created,kube_persistentvolumeclaim_status_phase
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /readyz, port: 8081}
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 96Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}

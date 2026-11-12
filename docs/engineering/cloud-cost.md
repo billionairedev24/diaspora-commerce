@@ -26,7 +26,7 @@ The profile is `infra/tofu/envs/prod/sizing.tf` (`node_size = "lean"`, `zone_cou
 | Web apps | Cloudflare Workers (unchanged) |
 | Images and private files | **Cloudflare R2 only**: public bucket `afrotransact-prod-media` (product images) and private bucket `afrotransact-prod-kyc-evidence` (quarantine, KYC, proof photos, exports), one token each (`docs/runbooks/r2-buckets.md`; the media service refuses to start in prod otherwise). OVH Object Storage is the Terraform state and the backup copy |
 | Registry | GHCR with a read-only pull secret (no OVH Harbor) |
-| Telemetry | one OTLP collector to Grafana Cloud free tier |
+| Telemetry | Grafana Cloud free tier (one stack, `env` = trial or prod): traces through one OTLP collector, **metrics and logs through Grafana Alloy** (+ kube-state-metrics, kafka-exporter); no public Grafana. [observability-grafana-cloud.md](../runbooks/observability-grafana-cloud.md) |
 | Secrets | SOPS + age files (`infra/ops/secrets`); OKMS + External Secrets optional and unverified |
 | Deploy | Argo CD (trimmed), manual sync in prod |
 | Backups | nightly age-encrypted `pg_dump` of the 19 databases to a **Backblaze B2** bucket (S3 API, rclone; not Cloudflare R2, so backups do not depend on the Cloudflare account), one bucket and key per environment (`infra/k8s/platform/lean/backup`, `docs/runbooks/backups-backblaze.md`) |
@@ -61,7 +61,7 @@ sites is expected to be a few ms in the same metro (**UNVERIFIED**: measure it b
 | Layerbase Dedicated 4 GB (Postgres only) | $35 | UNVERIFIED (Layerbase site / owner chat) |
 | Layerbase Dedicated 8 GB | $65 | UNVERIFIED. **Not needed**: Valkey and Meilisearch run in the cluster |
 | Cloudflare Workers Paid | 5 | UNVERIFIED (only if the bundle size needs it) |
-| Cloudflare R2 (both media buckets), Grafana Cloud, GHCR | free tiers | UNVERIFIED (check the free limits: Grafana Cloud 10k metric series, 50 GB logs, 50 GB traces; R2 10 GB, and whether private KYC objects need more than that or a retention lock, which R2 may not offer) |
+| Cloudflare R2 (both media buckets), Grafana Cloud, GHCR | free tiers | UNVERIFIED (check the free limits: Grafana Cloud 10k metric series, 50 GB logs, 50 GB traces; the expected series count of this platform is estimated in [observability-grafana-cloud.md](../runbooks/observability-grafana-cloud.md) section 10 and must be measured in the trial; R2 10 GB, and whether private KYC objects need more than that or a retention lock, which R2 may not offer) |
 | Backup buckets at Backblaze B2 (`afrotransact-test-backups`, `afrotransact-prod-backups`) | 0 on the free tier | UNVERIFIED: the free tier is assumed to be 10 GB of storage with daily transaction and download allowances. 14 days x one night's dump set fits while that set stays below about 700 MB (alerts at 600 MB per night and 8 GB in the bucket). **Revisit above about 700 MB per day** (or set `RETENTION_DAYS=7`, which doubles the headroom); paid B2 storage is a few dollars per month at this size (price UNVERIFIED). Hidden versions count as storage until the lifecycle rule removes them |
 | Resend (email), Stripe fees, OpenRouter | usage based | not infrastructure; OpenRouter is capped (see below) |
 
@@ -103,16 +103,20 @@ Requests are what the scheduler counts; limits are what the kernel enforces. Com
 | Valkey | 128 Mi (limit 256 Mi) | 128 Mi | 256 Mi |
 | Meilisearch | 384 Mi (limit 768 Mi) | 384 Mi | 768 Mi |
 | OTLP collector | 128 Mi (limit 384 Mi) | 128 Mi | 384 Mi |
+| Grafana Alloy (metrics + logs to Grafana Cloud; **request/limit UNMEASURED**) | 96 Mi (limit 256 Mi) | 96 Mi | 256 Mi |
+| kube-state-metrics (restarts, OOMKilled, backup CronJob state; **UNMEASURED**) | 32 Mi (limit 96 Mi) | 32 Mi | 96 Mi |
+| kafka-exporter (consumer lag; **UNMEASURED**) | 24 Mi (limit 64 Mi) | 24 Mi | 64 Mi |
 | cloudflared | 64 Mi (limit 256 Mi) | 64 Mi | 256 Mi |
 | Envoy proxy (data plane) | 128 Mi (limit 512 Mi) | 128 Mi | 512 Mi |
 | Envoy Gateway controller | 128 Mi (limit 256 Mi) | 128 Mi | 256 Mi |
-| **Subtotal, our workloads** | | **7,824 Mi = 7.64 GiB** | 14,176 Mi = 13.8 GiB |
+| **Subtotal, our workloads** | | **7,976 Mi = 7.79 GiB** | 14,592 Mi = 14.25 GiB |
 | Kubernetes system on MKS (CNI, DNS, kube-proxy, CSI, metrics; the repo's figure, **UNVERIFIED** on OVH) | | ~1.2 GiB | |
 | Argo CD, trimmed (repo figure; dex and notifications scaled to 0) | | ~1.0 GiB | |
-| **Total with Argo CD** | | **~9.8 GiB** | |
+| **Total with Argo CD** | | **~10.0 GiB** | |
 | Allocatable on a 16 GB node (the repo's figure, **UNVERIFIED** on `b3-16`) | | ~13 GiB | |
-| **Spare requests** | | **~3.2 GiB** | |
+| **Spare requests** | | **~3.0 GiB** | |
 
+- Alloy, kube-state-metrics and kafka-exporter add **152 Mi of requests** (the only memory cost of the Grafana Cloud monitoring); both figures are guesses until `kubectl top pods -n observability` runs in the trial.
 - The **backup CronJob** (128 Mi, limit 512 Mi) runs for minutes at night and is not counted above; a deploy surge adds one JVM
   (384 Mi) at a time (`maxSurge 25 %`, `maxUnavailable 0`).
 - Limits sum to more than the node. That is normal for a single node, but it means that if every JVM grows to its limit at once the

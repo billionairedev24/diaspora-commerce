@@ -1,0 +1,106 @@
+# Grafana Alloy: the one agent that ships METRICS and LOGS to Grafana Cloud (config: config.alloy, mounted from the generated
+# ConfigMap "alloy-config"). A single-replica Deployment is right for one node: it discovers pods through the Kubernetes API
+# (no hostPath, no privileged access) and reaches cadvisor/kubelet through the API server proxy. With more than one node, run
+# it as a DaemonSet or turn on Alloy clustering, otherwise every node would be scraped twice (docs/runbooks/observability-grafana-cloud.md).
+# Strategy Recreate: two pods at once would send every series and log line twice.
+# Secret "grafana-cloud-alloy" (namespace observability; infra/ops/secrets, rendered by infra/ovh-vps/secrets.sh): CLUSTER_ENV
+# (trial | prod), GRAFANA_PROM_URL, GRAFANA_PROM_USER, GRAFANA_LOKI_URL, GRAFANA_LOKI_USER, GRAFANA_TOKEN, VALKEY_PASSWORD,
+# MEILI_MASTER_KEY. Memory: request 96 Mi, limit 256 Mi (UNMEASURED, see docs/engineering/cloud-cost.md).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: observability
+  labels: {app.kubernetes.io/name: alloy}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alloy
+  labels: {app.kubernetes.io/name: alloy}
+rules:
+  # discovery.kubernetes (pods, nodes) and loki.source.kubernetes (pod logs through the API server)
+  - apiGroups: [""]
+    resources: [pods, nodes, namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get, list, watch]
+  # cadvisor and kubelet metrics through the API server proxy
+  - apiGroups: [""]
+    resources: [nodes/proxy, nodes/metrics]
+    verbs: [get]
+  - nonResourceURLs: [/metrics, /metrics/cadvisor]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alloy
+  labels: {app.kubernetes.io/name: alloy}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: alloy}
+subjects:
+  - {kind: ServiceAccount, name: alloy, namespace: observability}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: observability
+  labels: {app.kubernetes.io/name: alloy}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: alloy}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: alloy}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "12345"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: alloy
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 473
+        runAsGroup: 473
+        fsGroup: 473
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: alloy
+          # UNVERIFIED tag: confirm it exists on Docker Hub (grafana/alloy) before the first sync and keep it pinned (no latest).
+          image: grafana/alloy:v1.10.2
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/var/lib/alloy/data
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --disable-reporting
+          envFrom:
+            - secretRef: {name: grafana-cloud-alloy}
+          env:
+            - {name: GOMEMLIMIT, value: 200MiB}
+          ports:
+            - {name: http, containerPort: 12345}
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/alloy, readOnly: true}
+            - {name: data, mountPath: /var/lib/alloy/data}
+      volumes:
+        - name: config
+          configMap: {name: alloy-config}
+        # Log read positions live here: after a restart Alloy may re-send or skip a few seconds of lines. Acceptable.
+        - name: data
+          emptyDir: {sizeLimit: 256Mi}

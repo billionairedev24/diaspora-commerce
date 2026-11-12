@@ -1,0 +1,424 @@
+# Launch alerts for the single-node OVH production cluster (metrics shipped by Grafana Alloy to Grafana Cloud).
+# Loaded together with services.yaml, kafka.yaml, inventory.yaml and payments-transfer-recovery.yaml by
+# infra/observability/scripts/grafana-cloud-load.sh (the list is in that script and in docs/runbooks/observability-grafana-cloud.md).
+# Every alert keeps the `env` label (external label set by Alloy: trial | prod). Notification routing sends env="prod" to the
+# contact point and env="trial" nowhere (docs/runbooks/observability-grafana-cloud.md, "Contact points and routing").
+#
+# METRIC STATUS (grep of the code on this branch; nothing here has run against live data):
+#   CONFIRMED in code   payments_webhooks_total{type,outcome}, payments_transfers_total{outcome}, payments_reconciliation_drift_minor,
+#                       inventory_reservations_total, events_dead_letter_failures_total, hikaricp_*, jvm_*, http_server_*
+#                       (Micrometer); http_server_requests_total, http_server_request_duration_seconds_* (go/pkg/httpserver);
+#                       kube_*, container_*, kubelet_volume_stats_* , cloudflared_tunnel_* (standard exporters, names from their docs)
+#   UNCONFIRMED         outbox_pending_events and checkout_attempts_total (in the metrics contract, no Micrometer meter in the
+#                       code), workflow_failed* (Temporal server names, UNVERIFIED for 1.28.1), catalog_live_without_tax_decision
+#                       (added by a separate change), container_oom_events_total (cadvisor version dependent)
+# Alerts on an UNCONFIRMED metric stay silent until the series exists; they are marked in their description.
+groups:
+  - name: afrotransact-launch-workloads
+    rules:
+      # A crash-looping or Pending pod is not a scrape target at all (Alloy only scrapes Running pods), so `up == 0` cannot see it.
+      - alert: DeploymentUnavailable
+        expr: |
+          max by (env, namespace, deployment) (kube_deployment_spec_replicas{namespace=~"afrotransact-.*"})
+          > max by (env, namespace, deployment) (kube_deployment_status_replicas_available{namespace=~"afrotransact-.*"})
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.deployment }} has no available replica in {{ $labels.env }}"
+          description: "Desired replicas exceed available replicas for 5 minutes (crash loop, failed image pull, OOM, or a stuck rollout). Single node: one replica per service."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: InfraTargetDown
+        expr: up{job=~"kafka-exporter|valkey|meilisearch|temporal|cloudflared|kube-state-metrics|kubelet|cadvisor"} == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.job }} cannot be scraped in {{ $labels.env }}"
+          description: "Alloy has failed to scrape {{ $labels.job }} for 5 minutes. For kafka-exporter/valkey the exporter pod is down or cannot reach the broker/server."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: KafkaBrokerDown
+        expr: max by (env) (kafka_brokers) < 1
+        for: 3m
+        labels:
+          severity: page
+        annotations:
+          summary: "Kafka reports no brokers in {{ $labels.env }}"
+          description: "The exporter reaches no broker. Events and the outbox relay are stalled (sign-up codes go through Kafka)."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-kafka-consumer-lag
+
+      - alert: PodRestartingFrequently
+        expr: |
+          sum by (env, namespace, pod, container) (increase(kube_pod_container_status_restarts_total{namespace=~"afrotransact-.*|kafka|data|temporal|ingress|ops|observability"}[30m])) >= 3
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} restarted {{ $value }} times in 30 minutes"
+          description: "Container {{ $labels.container }} is crash looping. Look at its logs in Loki ({app=\"...\"}) and at the last termination reason."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: ContainerOOMKilled
+        expr: |
+          max by (env, namespace, pod, container) (kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}) == 1
+          and on (env, namespace, pod, container)
+          sum by (env, namespace, pod, container) (increase(kube_pod_container_status_restarts_total[15m])) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOM-killed"
+          description: "The container hit its memory limit (docs/engineering/cloud-cost.md: limits sum to more than the node). Raise its limit or lower its heap, and check node memory."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: ContainerOOMEvents
+        expr: sum by (env, namespace, pod, container) (increase(container_oom_events_total{container!=""}[15m])) > 0
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OOM events in {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }})"
+          description: "cadvisor counted an OOM event (UNCONFIRMED metric: it depends on the cadvisor version in the kubelet; the ContainerOOMKilled alert does not)."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: ContainerMemoryNearLimit
+        expr: |
+          max by (env, namespace, pod, container) (container_memory_working_set_bytes{container!="", namespace=~"afrotransact-.*|kafka|data|temporal|ingress|observability"})
+          / max by (env, namespace, pod, container) (container_spec_memory_limit_bytes{container!="", namespace=~"afrotransact-.*|kafka|data|temporal|ingress|observability"} > 0)
+          > 0.92
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} uses {{ $value | humanizePercentage }} of its memory limit"
+          description: "Working set above 92% of the container limit for 10 minutes: an OOM kill is likely."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+  - name: afrotransact-launch-node
+    rules:
+      - alert: NodeMemoryPressure
+        expr: max by (env, node) (kube_node_status_condition{condition="MemoryPressure", status="true"}) == 1
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "Node {{ $labels.node }} reports MemoryPressure"
+          description: "The kubelet is evicting pods. One node runs everything: check which JVMs grew (JVM dashboard) and the memory table in docs/engineering/cloud-cost.md."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: NodeMemoryWorkingSetHigh
+        expr: |
+          sum by (env, node) (container_memory_working_set_bytes{container!=""})
+          / sum by (env, node) (kube_node_status_allocatable{resource="memory"})
+          > 0.9
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Containers on {{ $labels.node }} use {{ $value | humanizePercentage }} of allocatable memory"
+          description: "Total working set above 90% of allocatable memory for 15 minutes; the next deploy surge may evict something. Real RSS was unmeasured when the sizing was written."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: PersistentVolumeFillingUp
+        expr: |
+          max by (env, namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes) / max by (env, namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes) > 0.8
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+          description: "Kafka (10 GiB), Valkey (2 GiB) and Meilisearch (5 GiB) have fixed disks. Resize the claim or reduce retention."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: PersistentVolumeAlmostFull
+        expr: |
+          max by (env, namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes) / max by (env, namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes) > 0.92
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+          description: "A full Kafka disk stops the broker; a full Meilisearch disk stops indexing."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: PersistentVolumeFillsWithin24h
+        expr: |
+          predict_linear(kubelet_volume_stats_available_bytes[6h], 24 * 3600) < 0
+          and on (env, namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.5)
+        for: 1h
+        labels:
+          severity: ticket
+        annotations:
+          summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is on course to fill within 24 hours"
+          description: "Linear extrapolation of the last 6 hours."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+  - name: afrotransact-launch-jvm
+    rules:
+      - alert: JvmHeapNearLimit
+        expr: |
+          sum by (env, service, pod) (jvm_memory_used_bytes{area="heap"})
+          / sum by (env, service, pod) (jvm_memory_max_bytes{area="heap"} > 0)
+          > 0.9
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.service }} heap is {{ $value | humanizePercentage }} of its maximum"
+          description: "Heap above 90% of -Xmx (70% of the container limit) for 10 minutes: GC thrash or an OutOfMemoryError (the JVM exits on OOM, ExitOnOutOfMemoryError)."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-jvm
+
+      - alert: HikariPoolExhausted
+        expr: |
+          max by (env, service, pool) (hikaricp_connections_pending) > 0
+          and
+          max by (env, service, pool) (hikaricp_connections_active) >= max by (env, service, pool) (hikaricp_connections_max)
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.service }} database pool {{ $labels.pool }} is exhausted"
+          description: "Every connection is in use and threads are waiting (pool maximum is 4 on the launch set). Requests queue and time out."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-jvm
+
+      - alert: HikariConnectionTimeouts
+        expr: sum by (env, service, pool) (increase(hikaricp_connections_timeout_total[10m])) > 0
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.service }} timed out acquiring a database connection ({{ $value }} in 10 minutes)"
+          description: "Callers waited the full connection timeout; check slow queries and Layerbase max_connections."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-jvm
+
+  - name: afrotransact-launch-payments
+    rules:
+      # Meter confirmed: MicrometerPaymentsMetrics.webhook(type, outcome) from WebhookServiceImpl: stored|duplicate|ignored|processed|retry|failed.
+      - alert: StripeWebhookProcessingFailed
+        expr: sum by (env, type) (increase(payments_webhooks_total{outcome="failed"}[15m])) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "Stripe webhook {{ $labels.type }} gave up after retries ({{ $value }} in 15 minutes)"
+          description: "payments could not process the event and stopped retrying. Payment state may be out of step with Stripe: replay from the Stripe dashboard after the fix."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-payments
+
+      - alert: StripeWebhookRetrying
+        expr: sum by (env) (increase(payments_webhooks_total{outcome="retry"}[15m])) >= 5
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $value }} Stripe webhook processing retries in 15 minutes"
+          description: "Processing keeps failing and being retried (database, Kafka or a bug). It becomes StripeWebhookProcessingFailed when retries are exhausted."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-payments
+
+      # Capture failures: there is no dedicated capture meter. Two signals: the Stripe event stream recorded by payments
+      # (event type names are Stripe's; confirm payments records them in Explore) and the checkout SLI (UNCONFIRMED metric).
+      - alert: PaymentCaptureFailureRatioHigh
+        expr: |
+          sum by (env) (increase(payments_webhooks_total{type="payment_intent.payment_failed", outcome="processed"}[1h]))
+          / (
+            sum by (env) (increase(payments_webhooks_total{type=~"payment_intent.payment_failed|payment_intent.succeeded", outcome="processed"}[1h])) > 4
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of payment intents failed in the last hour"
+          description: "More than half of at least 5 payment outcomes failed. Customer declines are normal in small numbers; a ratio this high points at Stripe keys, a Stripe incident or our integration."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-payments
+
+      - alert: CheckoutFailuresHigh
+        expr: |
+          sum by (env) (increase(checkout_attempts_total{outcome="failure"}[30m]))
+          / (sum by (env) (increase(checkout_attempts_total{outcome=~"success|failure"}[30m])) > 4) > 0.1
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of checkouts failed in 30 minutes"
+          description: "UNCONFIRMED metric: checkout_attempts_total is in the metrics contract but the orders service does not emit it yet, so this stays silent until it does."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-payments
+
+      - alert: SettlementTransferFailed
+        expr: sum by (env) (increase(payments_transfers_total{outcome="failed"}[1h])) > 0
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $value }} settlement transfer(s) to sellers failed in the last hour"
+          description: "Stripe rejected a transfer to a connected account (SettlementServiceImpl outcome=failed). Sellers are not paid until it is resolved."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-payments
+
+      - alert: PaymentsReconciliationDrift
+        expr: max by (env) (abs(payments_reconciliation_drift_minor)) > 0
+        for: 2h
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Ledger and Stripe disagree by {{ $value }} minor units"
+          description: "The latest reconciliation found drift between ledger 1000 Stripe clearing and Stripe balance transactions."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-payments
+
+  - name: afrotransact-launch-workflows
+    rules:
+      # Temporal server metric names are UNVERIFIED for temporalio/auto-setup 1.28.1 (tally exposes workflow_failed, the OTel
+      # framework would add _total); both spellings are matched.
+      - alert: TemporalWorkflowFailures
+        expr: sum by (env, namespace) (increase({__name__=~"workflow_failed(_total)?", namespace="afrotransact"}[15m])) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value }} Temporal workflow(s) failed in the last 15 minutes ({{ $labels.namespace }})"
+          description: "A checkout or billing workflow ended in failure. Open the Temporal UI/CLI (docs/runbooks) for the failed executions. Metric name UNVERIFIED: if this never fires, check Explore for workflow_*."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-payments
+
+      - alert: TemporalDown
+        expr: absent(up{job="temporal", env="prod"})
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Temporal is not reporting in prod"
+          description: "No Temporal server series at all (pod gone or not scraped); a failing scrape is InfraTargetDown. Checkout saga cannot run. Also fires when Alloy itself is not shipping, see AlloyNotReporting."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+  - name: afrotransact-launch-edge
+    rules:
+      # TLS is terminated at Cloudflare and there are no certificates in the cluster (no cert-manager), so "certificate down" is
+      # the tunnel: cloudflared must hold at least one connection to Cloudflare. Add an external HTTPS uptime check for the
+      # public hostnames too (it also sees an expired Cloudflare edge certificate); see the runbook.
+      - alert: CloudflareTunnelDown
+        expr: |
+          absent(cloudflared_tunnel_ha_connections{env="prod"})
+          or
+          (max by (env) (cloudflared_tunnel_ha_connections{env="prod"}) == 0)
+        for: 3m
+        labels:
+          severity: page
+        annotations:
+          summary: "No Cloudflare Tunnel connection in prod"
+          description: "cloudflared reports zero HA connections or is not reporting: the public site and API are unreachable."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+  - name: afrotransact-launch-backup
+    rules:
+      # Backup CronJob pg-backup in namespace ops (infra/k8s/platform/lean/backup, schedule 03:15 UTC).
+      - alert: BackupJobFailed
+        expr: |
+          (
+            max by (env, namespace, cronjob) (kube_cronjob_status_last_schedule_time{namespace="ops", cronjob="pg-backup"})
+            - max by (env, namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="ops", cronjob="pg-backup"})
+          ) > 0
+          and on (env, namespace, cronjob)
+          (time() - max by (env, namespace, cronjob) (kube_cronjob_status_last_schedule_time{namespace="ops", cronjob="pg-backup"})) > 7200
+        labels:
+          severity: page
+        annotations:
+          summary: "The last pg-backup run did not succeed ({{ $labels.env }})"
+          description: "The most recent scheduled run is more than 2 hours old and no run has succeeded since. Check `kubectl -n ops get jobs` and the job logs (app=pg-backup in Loki)."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: BackupNotRunIn26h
+        expr: |
+          (time() - max by (env, namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="ops", cronjob="pg-backup"})) > 26 * 3600
+          or
+          (
+            (time() - max by (env, namespace, cronjob) (kube_cronjob_created{namespace="ops", cronjob="pg-backup"})) > 26 * 3600
+            unless on (env, namespace, cronjob) max by (env, namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="ops", cronjob="pg-backup"})
+          )
+        labels:
+          severity: page
+        annotations:
+          summary: "No successful database backup for more than 26 hours ({{ $labels.env }})"
+          description: "The nightly dump (RPO 24 h) has not completed, or has never completed. Layerbase's own backups are UNVERIFIED, so this dump is the guarantee."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: BackupCronJobSuspended
+        expr: max by (env, namespace, cronjob) (kube_cronjob_spec_suspend{namespace="ops", cronjob="pg-backup"}) == 1
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "The pg-backup CronJob is suspended"
+          description: "No backups are being taken."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+  - name: afrotransact-launch-catalog
+    rules:
+      # Gauge added by a separate change (catalog tax-decision gate). UNCONFIRMED in this branch: the alert is silent until the series exists.
+      - alert: CatalogLiveWithoutTaxDecision
+        expr: max by (env) (catalog_live_without_tax_decision) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $value }} live catalog item(s) have no tax decision"
+          description: "Listings are live although tax-returns has not resolved their tax treatment: checkout may quote the wrong tax. UNCONFIRMED metric at the time of writing."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+  - name: afrotransact-launch-telemetry
+    rules:
+      # Dead-man's switch for the shipper itself: if Alloy stops, EVERY other alert goes silent, so alert on its absence.
+      # Rules run in Grafana Cloud, so this still fires when the cluster is gone.
+      - alert: AlloyNotReporting
+        expr: absent(up{service="alloy", env="prod"})
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Grafana Alloy is not reporting metrics from the prod cluster"
+          description: "No up{service=\"alloy\"} for 10 minutes: the node, Alloy or the network path to Grafana Cloud is down. All other alerts are blind until it returns."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: AlloyRemoteWriteFailing
+        expr: |
+          sum by (env) (rate(prometheus_remote_storage_samples_failed_total[10m])) > 0
+          or sum by (env) (rate(prometheus_remote_storage_samples_dropped_total[10m])) > 0
+          or sum by (env) (rate(loki_write_dropped_entries_total[10m])) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Alloy is failing to send or is dropping telemetry ({{ $labels.env }})"
+          description: "Samples or log lines fail to reach Grafana Cloud (token expired or revoked, rate limit or quota reached, endpoint wrong). Check Alloy logs: kubectl -n observability logs deploy/alloy."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform
+
+      - alert: ScrapeTargetCardinalityHigh
+        expr: max by (env, job) (scrape_samples_post_metric_relabeling) > 3000
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.job }} exposes {{ $value }} samples per scrape after filtering"
+          description: "Above 75% of the 4000-sample guard in config.alloy (above it the scrape FAILS and up becomes 0). Tighten the allowlist or fix the label that explodes."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
+          dashboard: /d/at-launch-platform

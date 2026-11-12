@@ -63,6 +63,13 @@ platform() {
     # Production extras (no OpenFGA). Values come from secrets.local.env; an empty value is a mistake the apply step refuses.
     secret ingress cloudflared "token=${CLOUDFLARED_TUNNEL_TOKEN:-}"
     secret observability grafana-cloud-otlp "GRAFANA_OTLP_ENDPOINT=${GRAFANA_OTLP_ENDPOINT:-}" "GRAFANA_INSTANCE_ID=${GRAFANA_INSTANCE_ID:-}" "GRAFANA_API_TOKEN=${GRAFANA_API_TOKEN:-}"
+    # Grafana Alloy (metrics + logs, infra/k8s/platform/lean/alloy). ONE Grafana Cloud stack serves trial and prod: GRAFANA_ENV
+    # (trial | prod, default = the profile) becomes the external label `env` on every series and log line; use a separate
+    # access-policy token per env. VALKEY_PASSWORD and MEILI_MASTER_KEY let Alloy scrape those two (same values as their own Secrets).
+    secret observability grafana-cloud-alloy "CLUSTER_ENV=${GRAFANA_ENV:-$PROFILE}" \
+      "GRAFANA_PROM_URL=${GRAFANA_PROM_URL:-}" "GRAFANA_PROM_USER=${GRAFANA_PROM_USER:-}" \
+      "GRAFANA_LOKI_URL=${GRAFANA_LOKI_URL:-}" "GRAFANA_LOKI_USER=${GRAFANA_LOKI_USER:-}" \
+      "GRAFANA_TOKEN=${GRAFANA_ALLOY_TOKEN:-}" "VALKEY_PASSWORD=$VALKEY_PW" "MEILI_MASTER_KEY=$MEILI_KEY"
     # Nightly backup job (infra/k8s/platform/lean/backup): admin read access, the PUBLIC age key and this environment's Backblaze B2
     # bucket with its bucket-scoped key (pg-backup.sh builds the rclone remote from B2_*; docs/runbooks/backups-backblaze.md).
     secret ops pg-backup "PGHOST=$PG_HOST" "PGPORT=5432" "PGUSER=$PG_ADMIN" "PGPASSWORD=$(pg_admin_password)" "PGSSLMODE=$PG_SSL" \

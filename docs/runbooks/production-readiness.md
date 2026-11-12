@@ -23,7 +23,7 @@ Nothing is `Done` until it has been checked where it runs.
 Removed because they no longer apply: building, signing and submitting the mobile apps; mobile deep-link files
 (`apple-app-site-association`, `assetlinks.json`) as a launch item; the OpenFGA store, tuples and enforce rollout; WhatsApp
 run-announcement approval as a launch step (it stays off, see section 7); push notification set-up for native apps;
-Grafana Cloud as the assumed monitoring stack.
+(Grafana Cloud as the assumed monitoring stack is now a decision: see section 8.)
 Added: admin status audit and confirmation, authorisation expiry of manual capture, Stripe fee on post-capture refunds,
 Texas tax professional sign-off, counsel review of legal documents, Resend DNS, R2 bucket visibility (public images versus
 private KYC), ai-gateway spend cap, MCP exposure, same-account Stripe cutover, the existing connected accounts risk, PWA, Layerbase and OVH
@@ -222,8 +222,8 @@ specifics, a restore drill.
 
 ## 8. Observability and incident response
 
-- [ ] `ENGINEERING · Open` Metrics, logs and traces reach the monitoring stack chosen for OVH (name it here: ______); dashboards for checkout, payments, orders and delivery exist.
-- [ ] `ENGINEERING · Open` Alerts are routed to a real person/channel, and every alert has a runbook (`docs/runbooks/`).
+- [ ] `ENGINEERING · Open` Metrics (Alloy), logs (Alloy) and traces (OTel collector) reach Grafana Cloud (stack `afrotransact`, `env=prod`; `docs/runbooks/observability-grafana-cloud.md`); the `launch-payments` and `launch-platform` dashboards exist (orders and delivery have only the generic RED/JVM boards: delivery-runs is not deployed).
+- [ ] `ENGINEERING · Open` Alerts are routed to a real person/channel (contact point and `env=prod` notification policy, runbook section 8; a test notification arrived; `env=trial` alerts mail nobody), and every alert has a runbook (`docs/runbooks/`; the launch alerts point at the Alert reference in `observability-grafana-cloud.md`).
 - [ ] `ENGINEERING · Open` Error tracking is on for the web apps.
 - [ ] `ENGINEERING · Open` Health, readiness and `/actuator/prometheus` or `/metrics` endpoints are reachable by monitoring and **not** by the public.
 - [ ] `OWNER · Open` Status page / maintenance page text reviewed.

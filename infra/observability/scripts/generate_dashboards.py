@@ -344,6 +344,97 @@ def inventory():
     return b
 
 
+# --------------------------------------------------------------------------------------------- launch: platform (OVH single node)
+def launch_platform():
+    e = 'env=~"$env"'
+    svc_ns = 'namespace=~"afrotransact-.*"'
+    b = Board("at-launch-platform", "AfroTransact / Launch platform (node, pods, data stores)", ["launch", "platform"],
+              "Single-node launch: pod health and restarts, memory against limits, PVC usage, Valkey, Meilisearch, Temporal, tunnel, "
+              "backup age and the Alloy shipper. Metrics from Alloy (kube-state-metrics, cadvisor, kubelet, exporters).",
+              [ENV_VAR])
+    b.row("Health")
+    b.stat("Scrape targets down", f'count(up{{{e}}} == 0) or vector(0)', w=4,
+           thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}])
+    b.stat("Deployments below desired replicas",
+           f'count(kube_deployment_status_replicas_available{{{e}, {svc_ns}}} < kube_deployment_spec_replicas{{{e}, {svc_ns}}}) or vector(0)',
+           w=5, thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}])
+    b.stat("Container restarts (1 h)", f'sum(increase(kube_pod_container_status_restarts_total{{{e}}}[1h])) or vector(0)', w=5,
+           thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 1}, {"color": "red", "value": 5}])
+    b.stat("Tunnel connections (cloudflared)", f'sum(cloudflared_tunnel_ha_connections{{{e}}}) or vector(0)', w=5,
+           thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}])
+    b.stat("Last backup age", f'time() - max(kube_cronjob_status_last_successful_time{{{e}, cronjob="pg-backup"}})', w=5, unit="s",
+           thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 90000}, {"color": "red", "value": 93600}])
+    b.table("Scrape targets", f'up{{{e}}}', w=24, h=7,
+            mappings=[{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}])
+    b.row("Memory (one node: requests are not usage)")
+    b.ts("Working set / limit by container (our namespaces)",
+         [(f'container_memory_working_set_bytes{{{e}, {svc_ns}}} / (container_spec_memory_limit_bytes{{{e}, {svc_ns}}} > 0)', "{{namespace}}/{{pod}}")],
+         w=24, unit="percentunit", max_=1)
+    b.ts("Node working set / allocatable",
+         [(f'sum by (node) (container_memory_working_set_bytes{{{e}, container!=""}}) / sum by (node) (kube_node_status_allocatable{{{e}, resource="memory"}})', "{{node}}")],
+         unit="percentunit", max_=1)
+    b.ts("Pod restarts (15 m)", [(f'sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{{{e}}}[15m])) > 0', "{{namespace}}/{{pod}}")])
+    b.row("Volumes and data stores")
+    b.ts("PVC used / capacity",
+         [(f'kubelet_volume_stats_used_bytes{{{e}}} / kubelet_volume_stats_capacity_bytes{{{e}}}', "{{namespace}}/{{persistentvolumeclaim}}")],
+         unit="percentunit", max_=1)
+    b.ts("Valkey memory used / max", [(f'redis_memory_used_bytes{{{e}}}', "used"), (f'redis_memory_max_bytes{{{e}}}', "max")], unit="bytes")
+    b.ts("Valkey hit ratio", [(f'rate(redis_keyspace_hits_total{{{e}}}[{RI}]) / (rate(redis_keyspace_hits_total{{{e}}}[{RI}]) + rate(redis_keyspace_misses_total{{{e}}}[{RI}]))', "hit ratio")],
+         unit="percentunit", max_=1)
+    b.ts("Meilisearch database size", [(f'meilisearch_db_size_bytes{{{e}}}', "db size")], unit="bytes")
+    b.ts("Temporal workflow failures (15 m)", [(f'sum by (namespace) (increase({{__name__=~"workflow_failed(_total)?", {e}}}[15m]))', "{{namespace}} failed")],
+         description="Server metric names are UNVERIFIED for temporalio/auto-setup 1.28.1: check Explore for workflow_*.")
+    b.row("Telemetry pipeline")
+    b.ts("Alloy remote_write failed / dropped samples (/s)",
+         [(f'rate(prometheus_remote_storage_samples_failed_total{{{e}}}[{RI}])', "failed"), (f'rate(prometheus_remote_storage_samples_dropped_total{{{e}}}[{RI}])', "dropped")])
+    b.ts("Samples per scrape after relabeling", [(f'max by (job) (scrape_samples_post_metric_relabeling{{{e}}})', "{{job}}")],
+         description="The per-target cardinality guard: a scrape above sample_limit (4000) fails.")
+    b.logs("Error logs", '{env=~"$env", namespace=~"afrotransact-.*"} |~ "(?i)(\\"level\\":\\"(error|fatal)\\"|level=(error|fatal))"')
+    return b
+
+
+# --------------------------------------------------------------------------------------------- launch: checkout and payments funnel
+def launch_payments():
+    e = 'env=~"$env"'
+    b = Board("at-launch-payments", "AfroTransact / Checkout and payments funnel", ["launch", "payments", "business"],
+              "Traffic through cart, orders and payments, checkout outcomes, Stripe webhook processing, settlement transfers and "
+              "Temporal failures. checkout_attempts_total is a contract metric NOT yet emitted by the orders service (panels stay empty until it is).",
+              [ENV_VAR])
+    b.row("Funnel (traffic through the services)")
+    b.ts("Requests / s: gateway-bff, cart, orders, payments",
+         [(rate_total().replace(SEL, f'{e}, service=~"gateway-bff|cart|orders|payments"'), "{{service}}")], w=12, unit="reqps")
+    b.ts("5xx ratio: orders, payments",
+         [(f'({rate_total(extra=", status=~\"5..\"").replace(SEL, e + ", service=~\"orders|payments\"")}) / ({rate_total().replace(SEL, e + ", service=~\"orders|payments\"")})', "{{service}}")],
+         w=12, unit="percentunit", thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 0.05}])
+    b.ts("p95 latency: orders, payments, gateway-bff",
+         [(p_quantile(0.95).replace(SEL, e + ", service=~\"orders|payments|gateway-bff\""), "{{service}}")], w=12, unit="s")
+    b.ts("Inventory reservations by outcome (/s)", [(f'sum by (outcome) (rate(inventory_reservations_total{{{e}}}[{RI}]))', "{{outcome}}")], w=12, unit="ops")
+    b.row("Checkout (orders)")
+    b.ts("Checkout attempts by outcome (/s)", [(f'sum by (outcome) (rate(checkout_attempts_total{{{e}}}[{RI}]))', "{{outcome}}")], w=12, unit="ops",
+         description="UNCONFIRMED metric: in the metrics contract (infra/local/README.md) but no Micrometer meter in the orders code.")
+    b.stat("Checkout failure ratio (1 h)",
+           f'sum(increase(checkout_attempts_total{{{e}, outcome="failure"}}[1h])) / sum(increase(checkout_attempts_total{{{e}, outcome=~"success|failure"}}[1h]))',
+           w=6, unit="percentunit", thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 0.02}])
+    b.stat("Temporal workflow failures (1 h)", f'sum(increase({{__name__=~"workflow_failed(_total)?", {e}}}[1h])) or vector(0)', w=6,
+           thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}])
+    b.row("Payments (Stripe)")
+    b.ts("Stripe webhooks by outcome (/s)", [(f'sum by (outcome) (rate(payments_webhooks_total{{{e}}}[{RI}]))', "{{outcome}}")], w=12, unit="ops",
+         description="Outcomes set by WebhookServiceImpl: stored, duplicate, ignored, processed, retry, failed.")
+    b.stat("Webhooks failed (1 h)", f'sum(increase(payments_webhooks_total{{{e}, outcome="failed"}}[1h])) or vector(0)', w=6,
+           thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}])
+    b.stat("Webhooks retrying (1 h)", f'sum(increase(payments_webhooks_total{{{e}, outcome="retry"}}[1h])) or vector(0)', w=6,
+           thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 5}])
+    b.ts("Payment intents: succeeded vs failed (events/h)",
+         [(f'sum(increase(payments_webhooks_total{{{e}, type="payment_intent.succeeded", outcome="processed"}}[1h]))', "succeeded"),
+          (f'sum(increase(payments_webhooks_total{{{e}, type="payment_intent.payment_failed", outcome="processed"}}[1h]))', "failed")], w=12,
+         description="Stripe event type names; confirm in Explore that payments records these types.")
+    b.ts("Settlement transfers by outcome (/s)", [(f'sum by (outcome) (rate(payments_transfers_total{{{e}}}[{RI}]))', "{{outcome}}")], w=12, unit="ops",
+         description="Outcomes: created, failed, no_account, label_recovered.")
+    b.ts("Refund transfer reversals refused (1 h)", [(f'sum by (code) (increase(payments_transfer_reversals_refused_total{{{e}}}[1h]))', "{{code}}")], w=12)
+    b.ts("Reconciliation drift (minor units)", [(f'max(payments_reconciliation_drift_minor{{{e}}})', "drift")], w=12)
+    return b
+
+
 # --------------------------------------------------------------------------------------------- business SLOs
 def slo():
     b = Board("at-business-slo", "AfroTransact / Checkout & business SLOs", ["slo", "business"],
@@ -402,6 +493,8 @@ def main():
         "kafka-consumer-lag.json": kafka(),
         "inventory-reconciliation.json": inventory(),
         "business-slo.json": slo(),
+        "launch-platform.json": launch_platform(),
+        "launch-payments.json": launch_payments(),
     }
     K8S.mkdir(parents=True, exist_ok=True)
     for name, board in boards.items():

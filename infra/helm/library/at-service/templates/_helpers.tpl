@@ -77,6 +77,12 @@ azure.workload.identity/client-id: {{ required "workloadIdentity.azure.clientId 
 {{- end }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: {{ printf "http://%s" .Values.telemetry.otlpEndpoint | quote }}
+{{- /* Latency buckets for http.server.requests: without them Micrometer publishes no _bucket series and the p95 alert and
+       dashboards (infra/observability) have nothing to read. Six fixed buckets, not the ~70 of percentiles-histogram. */}}
+{{- if not (hasKey (.Values.extraEnv | default dict) "MANAGEMENT_METRICS_DISTRIBUTION_SLO_HTTP_SERVER_REQUESTS") }}
+- name: MANAGEMENT_METRICS_DISTRIBUTION_SLO_HTTP_SERVER_REQUESTS
+  value: "100ms,250ms,500ms,1s,2500ms,5s"
+{{- end }}
 {{- else }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT_HOST
   value: {{ .Values.telemetry.otlpEndpoint | quote }}

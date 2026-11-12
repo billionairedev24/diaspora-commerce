@@ -47,6 +47,7 @@ afrotransact-prod/media-secrets:R2_ACCOUNT_ID,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_
 afrotransact-prod/identity-secrets:SIGNING_KEY_PEM,IDENTITY_DATA_KEY,BOOTSTRAP_ADMIN_PASSWORD
 afrotransact-prod/ai-gateway-secrets:OPENROUTER_API_KEY
 ingress/cloudflared:token
+observability/grafana-cloud-alloy:CLUSTER_ENV,GRAFANA_PROM_URL,GRAFANA_PROM_USER,GRAFANA_LOKI_URL,GRAFANA_LOKI_USER,GRAFANA_TOKEN
 ops/pg-backup:AGE_RECIPIENT,B2_KEY_ID,B2_APPLICATION_KEY,B2_BUCKET,B2_ENDPOINT'
 
 check_mandatory() { # check_mandatory < decrypted-yaml ; prints the problems, exit 1 when any

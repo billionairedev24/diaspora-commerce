@@ -97,6 +97,12 @@ spec:
             matchLabels: {app.kubernetes.io/part-of: afrotransact}
       ports:
         - {port: 9092}
+    # Grafana Alloy (namespace observability) scrapes metrics.
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
+      ports:
+        - {port: 9092}
     # The DLQ topic Job below runs in this namespace.
     - from:
         - podSelector:

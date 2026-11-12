@@ -8,6 +8,7 @@ resources:
   - prometheus-rules/elasticsearch.yaml
   - prometheus-rules/inventory.yaml
   - prometheus-rules/kafka.yaml
+  - prometheus-rules/launch.yaml
   - prometheus-rules/postgres.yaml
   - prometheus-rules/services.yaml
   - prometheus-rules/slo-checkout.yaml
@@ -21,4 +22,6 @@ resources:
   - dashboards/inventory-reconciliation.yaml
   - dashboards/jvm.yaml
   - dashboards/kafka-consumer-lag.yaml
+  - dashboards/launch-payments.yaml
+  - dashboards/launch-platform.yaml
   - dashboards/platform-overview.yaml

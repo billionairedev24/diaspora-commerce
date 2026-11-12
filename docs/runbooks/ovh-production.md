@@ -96,7 +96,7 @@ Follow `infra/ops/secrets/README.md`: render with `PROFILE=prod ... infra/ovh-vp
 the three webhook secrets (`docs/runbooks/stripe-webhooks.md`), `STRIPE_PUBLISHABLE_KEY` (gateway-bff refuses to start without it),
 `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` (`docs/runbooks/resend-email.md`; no Resend = no sign-up codes and no staff email MFA; notifications refuses to start in prod without both), `OPENROUTER_API_KEY` (**and a credit limit on that key in the OpenRouter
 dashboard**: the USD 2 per day gateway ceiling in `ai-gateway`'s `values-prod.yaml` is the first guard, the key limit the second), geo and tax data keys, the
-Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-buckets.md`; media refuses to start in prod without them), the tunnel token, Grafana Cloud OTLP credentials, the Backblaze B2 bucket (`afrotransact-prod-backups`), its bucket-scoped application key and endpoint, `BACKUP_RETENTION_DAYS` (default 14; click by click in `docs/runbooks/backups-backblaze.md`; **never Cloudflare R2 for backups**) and the **age public key** of the backup, `GHCR_USER` /
+Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-buckets.md`; media refuses to start in prod without them), the tunnel token, Grafana Cloud credentials (OTLP traces, plus the Alloy metrics/logs endpoints, user ids and a token with `metrics:write` + `logs:write` only: `docs/runbooks/observability-grafana-cloud.md` sections 3-4; one stack, `GRAFANA_ENV=prod`), the Backblaze B2 bucket (`afrotransact-prod-backups`), its bucket-scoped application key and endpoint, `BACKUP_RETENTION_DAYS` (default 14; click by click in `docs/runbooks/backups-backblaze.md`; **never Cloudflare R2 for backups**) and the **age public key** of the backup, `GHCR_USER` /
 `GHCR_TOKEN` (read-only `read:packages`; creates the pull secret `ghcr`), `BOOTSTRAP_ADMIN_*` for identity's first admin.
 Generate **everything fresh** (never reuse trial or dev values: `STATE_DIR` must be a new directory).
 
@@ -143,7 +143,7 @@ Sync by Application name (`<component>-prod`). Wait for Healthy before the next 
 
 1. **Platform:** `namespaces-prod` (wave -10), `envoy-gateway-prod` (-4), `opentelemetry-collector-gateway-prod` (-2), `edge-prod` (-1: Gateway,
    routes, cloudflared; needs the `cloudflared` Secret), then **`lean-prod`** (0: Kafka, Temporal, Valkey, Meilisearch, the DLQ-topic Job, the
-   backup CronJob; needs the `temporal`, `valkey`, `meilisearch`, `grafana-cloud-otlp`, `pg-backup` Secrets). Check:
+   backup CronJob, **Grafana Alloy and kube-state-metrics**; needs the `temporal`, `valkey`, `meilisearch`, `grafana-cloud-otlp`, `grafana-cloud-alloy`, `pg-backup` Secrets). Check:
    `kubectl -n kafka get pods`, `kubectl -n temporal logs deploy/temporal` (both databases reachable, namespace `afrotransact` created),
    `kubectl -n ingress get pods`, `kubectl -n ops get cronjob`.
 2. **identity-prod first** (it issues the tokens every service needs and runs its Flyway migrations on its own database): wait until
@@ -175,7 +175,7 @@ Memory/CPU check after each wave: `kubectl top pods -A`, `kubectl describe node 
   (`docs/runbooks/production-readiness.md` section 5). `ORDERS_TAX_FALLBACK_TO_TABLE=false` means tax-returns profiles must be `ACTIVE`
   (`docs/runbooks/tax-provider-cutover.md`) or checkout fails.
 - AI: one Lola message works and `select * from ai_usage_daily where usage_day = current_date and scope = 'GLOBAL'` (in the `ai` database) shows a cost below USD 2.
-- Ops: `kubectl -n ops get jobs` shows the backup succeeded; the dead-man's-switch ping arrived; Grafana Cloud shows traces from gateway-bff.
+- Ops: `kubectl -n ops get jobs` shows the backup succeeded; the dead-man's-switch ping arrived; Grafana Cloud shows traces from gateway-bff, `up{env="prod"}` is 1 for every launch service, and logs arrive (`docs/runbooks/observability-grafana-cloud.md` section 5); the rules and dashboards are loaded (`infra/observability/scripts/grafana-cloud-load.sh all`) and a test notification reaches the owner.
 - Not a smoke item but required: nothing else is exposed: `nmap` the node's public IP from outside: no open ports.
 
 ## 11. Rollback
@@ -196,13 +196,13 @@ Memory/CPU check after each wave: `kubectl top pods -A`, `kubectl describe node 
 `kubectl top pods` RSS per JVM at idle and under a k6 run (`tools/perf`, 50 concurrent shoppers) against the requests in cloud-cost.md; node
 requests vs allocatable; CPU during a 3-service sync; downtime of a rolling update and of a node reboot (time to all-Ready, PVCs reattach, Kafka/
 Temporal/Valkey resume); `pg_stat_activity` peak vs the 74 steady / 90 peak plan; migration times; Layerbase RTT; backup run time and size; **restore time**;
-Kafka disk growth per day; Grafana Cloud series and log volume against the free limits; cost per day x 30 for node, disks and buckets.
+Kafka disk growth per day; Grafana Cloud series and log volume against the free limits (`docs/runbooks/observability-grafana-cloud.md` section 10; also `kubectl top pods -n observability` for Alloy); cost per day x 30 for node, disks and buckets.
 
 ## 13. Day 2
 
 - Monthly: restore drill, cost review, `kubectl describe node` headroom, certificate/tunnel check, rotate nothing unless needed.
 - OVH node upgrades need a maintenance window (downtime). Tell users.
-- Alerts that must exist (Grafana Cloud alerting + an external uptime check on the storefront, `/bff/healthz` and the OIDC discovery URL): site/API
+- Alerts that must exist (all but the uptime check are coded in `infra/observability/rules/launch.yaml` and loaded into Grafana Cloud, see the table in `docs/runbooks/observability-grafana-cloud.md` section 9; plus an external uptime check on the storefront, `/bff/healthz` and the OIDC discovery URL): site/API
   down, 5xx rate on gateway-bff, Stripe webhook failures, Kafka consumer lag / outbox backlog / DLQ above 0, Postgres connections near the limit,
   node memory above 85 %, OOMKilled/CrashLoop, PVC above 80 %, **missed backup** (alert `BackupStale`, 26 hours, and the dead-man's-switch), backup size (`BackupSizeHigh` above 600 MB per night, `BackupBucketSizeHigh` above 8 GB; `infra/observability/rules/backup.yaml`), Layerbase storage near the limit.
 - Pre-orders, community, retail and delivery-runs are **not launched**: hide their navigation in the storefront (delivery-runs is not deployed).

@@ -41,6 +41,8 @@ spec:
             - {name: MEILI_NO_ANALYTICS, value: "true"}
             - {name: MEILI_DB_PATH, value: /meili_data}
             - {name: MEILI_MAX_INDEXING_MEMORY, value: 256MiB}
+            # /metrics (Prometheus) is experimental in v1.12 and needs the master key as bearer token: scraped by Alloy.
+            - {name: MEILI_EXPERIMENTAL_ENABLE_METRICS, value: "true"}
           ports:
             - {name: http, containerPort: 7700}
           readinessProbe:
@@ -75,5 +77,11 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels: {app.kubernetes.io/part-of: afrotransact}
+      ports:
+        - {port: 7700}
+    # Grafana Alloy (namespace observability) scrapes metrics.
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
       ports:
         - {port: 7700}
