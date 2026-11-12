@@ -96,7 +96,7 @@ class ProductWriterImageTest {
                 new TaxGateEvaluator(request -> new TaxResolver.Resolution("RESOLVED", "EXEMPT", "AT.X", "S001", "0%",
                         null, "v", "r"), false),
                 RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()),
-                Clock.fixed(Instant.parse("2026-11-12T10:00:00Z"), ZoneOffset.UTC), gate);
+                mock(NewPageGuard.class), Clock.fixed(Instant.parse("2026-11-12T10:00:00Z"), ZoneOffset.UTC), gate);
     }
 
     private void mediaKnows(String url, int w, int h) {
