@@ -47,7 +47,7 @@ function Dot({ view, n }: { view: StepView; n: number }) {
 export function Stepper({ status, current }: { status: OnboardingStatus; current: string }) {
   const p = progressOf(status, current);
   return (
-    <nav aria-label="Application steps" className="flex flex-col gap-2">
+    <nav aria-label="Application steps" data-tour="onboarding-stepper" className="flex flex-col gap-2">
       <ol className="m-0 hidden list-none gap-1 p-0 md:flex">
         {status.steps.map((s, i) => {
           const view = stepView(status, s, current);

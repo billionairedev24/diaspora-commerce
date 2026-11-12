@@ -98,7 +98,7 @@ export function ReadinessPanel({ problems, tips, sections, titleOf, percent, pre
   const ready = problems.length === 0;
   const heading = ready ? t('sc.pf.ready.ready') : t('sc.pf.ready.missing', { count: problems.length });
   return (
-    <aside aria-label={t('sc.pf.ready.label')}
+    <aside aria-label={t('sc.pf.ready.label')} data-tour="product-form-readiness"
       className="sticky top-[calc(var(--at-sticky-header-h)+4.25rem)] hidden max-h-[calc(100dvh-var(--at-sticky-header-h)-4.25rem-var(--at-bottom-bar-h,3.5rem)-4.5rem)] flex-col gap-3 self-start overflow-y-auto rounded-md border border-border bg-surface p-4 xl:flex">
       <QualityBar percent={percent} />
       <h2 className="m-0 flex items-center gap-2 text-base font-semibold" data-testid="readiness">

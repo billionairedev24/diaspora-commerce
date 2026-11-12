@@ -47,7 +47,7 @@ export function SectionNav({ items }: { items: NavItem[] }) {
   return (
     <nav aria-label={t('sc.pf.nav.label')}
       className="sticky top-(--at-sticky-header-h) z-20 -mx-4 border-b border-border bg-canvas px-4 sm:-mx-8 sm:px-8">
-      <ol className="m-0 flex list-none gap-1 overflow-x-auto p-0">
+      <ol className="m-0 flex list-none gap-1 overflow-x-auto p-0" data-tour="product-form-nav">
         {items.map((i) => {
           const done = i.status.state === 'complete';
           return (

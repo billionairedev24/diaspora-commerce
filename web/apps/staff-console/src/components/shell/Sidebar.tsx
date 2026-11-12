@@ -62,6 +62,7 @@ function NavGroupSection({ group, active }: { group: StaffNavGroup; active: Staf
             <li key={m.key}>
               <Link
                 href={hrefOf(m.key)}
+                data-tour={`nav-${m.key}`}
                 aria-current={current ? 'page' : undefined}
                 className={cx(
                   'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline pointer-coarse:h-11',
@@ -84,7 +85,7 @@ function NavGroupSection({ group, active }: { group: StaffNavGroup; active: Staf
 export function Sidebar({ session, active, settingsActive = false }: { session: StaffSession; active: StaffModuleKey | null; settingsActive?: boolean }) {
   const t = useT();
   return (
-    <nav aria-label={t('st.sidebar.staffConsole')} className="flex h-full flex-col gap-0.5 px-3 py-4">
+    <nav aria-label={t('st.sidebar.staffConsole')} data-tour="sidebar" className="flex h-full flex-col gap-0.5 px-3 py-4">
       <div className="px-2 pb-3">
         <strong className="block text-md">{t('st.sidebar.afrotransactInc')}</strong>
         <span className="text-xs text-muted">{t('st.sidebar.staffUsaMarket')}</span>

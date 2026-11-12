@@ -58,6 +58,7 @@ export function AccountHealthView() {
             <Notice tone="success" title="Your account is in good standing.">Payments and payouts are on.</Notice>
           )}
           <StatStrip
+            tour="account-health-status"
             label="Account status"
             items={[
               ['Charges', q.data.chargesEnabled ? 'Enabled' : 'Disabled'],
@@ -83,7 +84,7 @@ export function AccountHealthView() {
           ) : (
             <p className="m-0 flex items-center gap-2 text-sm text-success"><CheckCircle size={18} weight="fill" aria-hidden /> Nothing outstanding.</p>
           )}
-          <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          <div className="flex flex-col gap-2 rounded-md border border-border p-3" data-tour="account-health-stripe">
             <div className="flex flex-wrap items-center gap-3">
               <ShieldCheck size={22} aria-hidden className="flex-none" />
               <span className="min-w-0 flex-1 text-sm">

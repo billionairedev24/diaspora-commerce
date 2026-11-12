@@ -96,13 +96,13 @@ export function OrdersView() {
           // Handing a pickup order over asks for the buyer's code, which the order sheet does.
           if (next === 'DELIVERED') {
             return (
-              <Button size="sm" variant="neutral" onClick={() => setOpen(r.orderNumber)}>
+              <Button size="sm" variant="neutral" data-tour="orders-next-step" onClick={() => setOpen(r.orderNumber)}>
                 {ACTION_LABEL[next]}
               </Button>
             );
           }
           return next ? (
-            <Button size="sm" variant="neutral" disabled={advance.isPending} onClick={() => advance.mutate({ row: r, to: next })}>
+            <Button size="sm" variant="neutral" data-tour="orders-next-step" disabled={advance.isPending} onClick={() => advance.mutate({ row: r, to: next })}>
               {ACTION_LABEL[next].replace(' order', '').replace(' to ship', '')}
             </Button>
           ) : null;
@@ -116,6 +116,7 @@ export function OrdersView() {
   return (
     <>
       <PageHeader
+        tour="page-orders"
         title={copy.title}
         description={copy.description}
         actions={

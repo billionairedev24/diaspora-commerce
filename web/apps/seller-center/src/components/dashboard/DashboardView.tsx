@@ -37,6 +37,7 @@ export function DashboardView() {
   return (
     <>
       <PageHeader
+        tour="page-home"
         title={copy.title}
         description={copy.description}
         actions={<PeriodSelect label={t('sc.dashboardView.period')} value={range} onChange={setRange} labels={{ '7': t('sc.dashboardView.days7'), '30': t('sc.dashboardView.days30'), '90': t('sc.dashboardView.days90') }} />}

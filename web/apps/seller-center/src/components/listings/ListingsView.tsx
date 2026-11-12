@@ -48,7 +48,7 @@ export function ListingsView() {
       module="listings"
       actions={editable ? (
         <>
-          <Link href="/listings/approvals" className={buttonClassName({ variant: 'neutral' })}>
+          <Link href="/listings/approvals" data-tour="listings-approvals" className={buttonClassName({ variant: 'neutral' })}>
             <ShieldCheck size={18} aria-hidden /> Selling approvals
           </Link>
           {has('imageLibrary') ? (
@@ -61,7 +61,7 @@ export function ListingsView() {
               <FileArrowUp size={18} aria-hidden /> {t('sc.listings.bulk')}
             </Link>
           ) : null}
-          <Link href="/listings/new" className={buttonClassName({ variant: 'primary' })}>
+          <Link href="/listings/new" data-tour="listings-add" className={buttonClassName({ variant: 'primary' })}>
             <Plus size={18} aria-hidden /> {t('sc.listings.add')}
           </Link>
         </>

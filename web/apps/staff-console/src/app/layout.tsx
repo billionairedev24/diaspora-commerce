@@ -1,6 +1,7 @@
 import '@afrotransact/tokens/fonts.css';
 import '@afrotransact/tokens/tokens.css';
 import '@afrotransact/ui/global.css';
+import '@afrotransact/tour/tour.css';
 import './globals.css';
 
 import { dirOf } from '@afrotransact/i18n';

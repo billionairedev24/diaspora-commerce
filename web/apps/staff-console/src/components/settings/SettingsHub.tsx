@@ -141,7 +141,7 @@ export function SettingsHub() {
   if (!current) {
     return (
       <>
-        <PageHeader title="Settings" description="Everything that sets how AfroTransact runs, in one place. Pick a section." />
+        <PageHeader tour="settings-hub" title="Settings" description="Everything that sets how AfroTransact runs, in one place. Pick a section." />
         <div className="flex flex-col gap-6">
           {SETTINGS_GROUPS.map((g) => {
             const items = sections.filter((s) => s.group === g.key);
@@ -154,6 +154,7 @@ export function SettingsHub() {
                     <li key={s.key}>
                       <Link
                         href={settingsHref(s.key)}
+                        data-tour={`settings-card-${s.key}`}
                         className="flex h-full items-start justify-between gap-3 rounded-md border border-border p-4 text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline"
                       >
                         <span className="flex min-w-0 flex-col gap-1">
@@ -180,7 +181,7 @@ export function SettingsHub() {
         <CaretRight size={12} aria-hidden />
         <span aria-current="page" className="text-text">{current.labelKey ? t(current.labelKey) : current.label}</span>
       </nav>
-      <section aria-labelledby="settings-section-title" className="flex min-w-0 flex-col gap-4">
+      <section aria-labelledby="settings-section-title" data-tour="settings-section" className="flex min-w-0 flex-col gap-4">
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
           <div className="flex min-w-0 flex-col gap-1">
             <h1 id="settings-section-title" className="m-0 flex items-center gap-2 text-2xl font-bold">

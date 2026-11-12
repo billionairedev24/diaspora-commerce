@@ -119,6 +119,7 @@ export function PayoutsView() {
       ) : null}
 
       <StatStrip
+        tour="payouts-balance"
         label="Balance"
         items={[
           {
@@ -160,7 +161,7 @@ export function PayoutsView() {
       {q.data.planFeeDeductions.length ? <PlanFeeDeductions items={q.data.planFeeDeductions} currency={b.currency} t={t} /> : null}
       <Card title={t('sc.tax.link')}>
         <p className="m-0 text-sm text-muted">{t('sc.tax.linkHelp')}</p>
-        <Link href="/payouts/tax" className="text-sm font-semibold">{t('sc.tax.link')}</Link>
+        <Link href="/payouts/tax" data-tour="payouts-tax" className="text-sm font-semibold">{t('sc.tax.link')}</Link>
       </Card>
       <h2 className="m-0 text-lg font-semibold">History</h2>
       {q.data.historyAvailable ? (

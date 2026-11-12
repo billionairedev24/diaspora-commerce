@@ -49,7 +49,7 @@ export function InventoryView() {
   const { can } = useSeller();
   const [adjusting, setAdjusting] = useState(false);
   return (
-    <ModulePage module="inventory" actions={tab === 'stock' && can('inventory') ? <Button variant="neutral" onClick={() => setAdjusting(true)}>Adjust stock</Button> : null}>
+    <ModulePage module="inventory" actions={tab === 'stock' && can('inventory') ? <Button variant="neutral" data-tour="inventory-adjust" onClick={() => setAdjusting(true)}>Adjust stock</Button> : null}>
       <Tabs
         label="Inventory"
         value={tab}
@@ -105,6 +105,7 @@ function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: bool
       ) : null}
       {t ? (
         <StatStrip
+          tour="inventory-stats"
           label="Stock summary"
           items={[
             { id: 'available', label: 'Available', value: t.available },

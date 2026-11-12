@@ -24,7 +24,7 @@ export function TaxGateBanner({ onShow }: { onShow: () => void }) {
   const count = useLiveWithoutDecisionCount();
   if (count < 1) return null;
   return (
-    <div data-testid="tax-gate-banner">
+    <div data-testid="tax-gate-banner" data-tour="tax-gate-banner">
       <Notice tone="danger" role="alert" title={t('st.tax.gate.banner.title', { n: count })} action={<Button variant="link" onClick={onShow}>{t('st.tax.gate.banner.show')}</Button>}>
         {t('st.tax.gate.banner.body')}
       </Notice>

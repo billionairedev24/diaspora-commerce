@@ -122,7 +122,7 @@ export function OnboardingView() {
   return (
     <div className="flex flex-col gap-6">
       <ApplicationHeading status={q.data} />
-      <div className="w-full max-w-[880px]">
+      <div className="w-full max-w-[880px]" data-tour="onboarding-status">
         <SubmittedView status={q.data} onRefresh={() => void q.refetch()} refreshing={q.isFetching} />
       </div>
     </div>

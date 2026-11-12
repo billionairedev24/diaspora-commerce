@@ -19,7 +19,7 @@ export function ModulePage({ module, actions, description, children, readOnlyNot
   const lv = level(module);
   return (
     <>
-      <PageHeader title={copy.title} description={description ?? copy.description} actions={actions} />
+      <PageHeader title={copy.title} description={description ?? copy.description} actions={actions} tour={`page-${module}`} />
       <PageStack>
         {readOnlyNote && lv === 'VIEW' ? (
           <Notice tone="info" icon="eye" title={t('sc.modulePage.readOnly')}>

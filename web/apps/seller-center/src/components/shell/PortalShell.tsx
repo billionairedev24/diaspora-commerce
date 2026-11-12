@@ -26,6 +26,7 @@ import { sessionReturnTo } from '@/lib/session-return';
 import { ComplianceBanner, PayoutsPausedBanner } from './ComplianceBanner';
 import { Header } from './Header';
 import { SellerSessionTimeout } from './SellerSessionTimeout';
+import { SellerTourHost } from './SellerTourHost';
 import { AutoSignIn, clearSignInAttempt, ShellFailed, ShellLoading, ShellLooped } from './ShellStates';
 import { Sidebar, SidebarRail } from './Sidebar';
 import { SupportChat } from './SupportChat';
@@ -281,6 +282,7 @@ function PortalShellContent({ children }: { children: ReactNode }) {
   const canOpen = accountPage || allowed(session, active);
   return (
     <SellerSessionProvider session={session}>
+      <SellerTourHost session={session}>
       <BackofficeFrame
         header={(menuButton) => <Header session={session} menuButton={menuButton} />}
         nav={<Sidebar session={session} active={active} onSwitch={(id) => switchOrg.mutate(id)} switching={switchOrg.isPending} />}
@@ -309,6 +311,7 @@ function PortalShellContent({ children }: { children: ReactNode }) {
           ) : null}
         </main>
       </BackofficeFrame>
+      </SellerTourHost>
       <SupportChat orgName={session.activeOrg.name} />
       {session.portal === 'SELLER_CENTER' && session.approved && session.capabilities.includes('lola') ? <LolaLauncher /> : null}
     </SellerSessionProvider>

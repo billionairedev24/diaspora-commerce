@@ -63,9 +63,11 @@ export function SellingApprovalsView() {
               {n.message}
             </Notice>
           ))}
-          <TextField label="Find a category or brand" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Supplements, Gucci, Apple…" />
-          {shown.length === 0 ? <EmptyState title="Nothing matches">Try another word.</EmptyState> : shown.map((g) => (
-            <section key={g.type} aria-labelledby={`sel-${g.type}`} className="flex flex-col gap-2">
+          <div data-tour="approvals-find">
+            <TextField label="Find a category or brand" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Supplements, Gucci, Apple…" />
+          </div>
+          {shown.length === 0 ? <EmptyState title="Nothing matches">Try another word.</EmptyState> : shown.map((g, i) => (
+            <section key={g.type} aria-labelledby={`sel-${g.type}`} data-tour={i === 0 ? 'approvals-first' : undefined} className="flex flex-col gap-2">
               <h2 id={`sel-${g.type}`} className="m-0 text-lg font-bold">{SCOPE_TITLE[g.type] ?? g.type}</h2>
               <ul className="m-0 flex list-none flex-col gap-2 p-0">
                 {g.rows.map((r) => <ApprovalRow key={`${r.scopeType}:${r.scopeKey}`} row={r} editable={editable} onApply={() => setOpened(`${r.scopeType}:${r.scopeKey}`)} />)}

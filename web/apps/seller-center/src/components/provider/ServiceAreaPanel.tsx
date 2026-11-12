@@ -41,7 +41,7 @@ export function ServiceAreaPanel() {
   if (view.isPending || view.isError) return null;
   return (
     <Card>
-      <div className="flex flex-wrap items-center justify-between gap-3" data-testid="service-area-summary">
+      <div className="flex flex-wrap items-center justify-between gap-3" data-testid="service-area-summary" data-tour="service-area">
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="m-0 flex items-center gap-2 text-base font-semibold">
             <MapPin size={18} aria-hidden /> {t('sc.svcArea.title')}

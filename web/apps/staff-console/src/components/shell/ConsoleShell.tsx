@@ -26,6 +26,7 @@ import { isSettingsPath, visibleSections } from '@/lib/settings-sections';
 import { Header } from './Header';
 import { Sidebar, SidebarRail } from './Sidebar';
 import { StaffSessionTimeout } from './StaffSessionTimeout';
+import { StaffTourHost } from './StaffTourHost';
 
 function Centered({ children }: { children: ReactNode }) {
   return <div className="mx-auto flex w-[min(560px,100%)] flex-col items-center gap-4 px-4 py-16 text-center">{children}</div>;
@@ -318,6 +319,7 @@ function ConsoleShellContent({ children }: { children: ReactNode }) {
   const canOpen = accountSectionOf(pathname) !== null || (settingsActive ? visibleSections(session).length > 0 : allowed(session, active));
   return (
     <StaffSessionProvider session={session}>
+      <StaffTourHost session={session}>
       <BackofficeFrame
         header={(menuButton) => <Header session={session} menuButton={menuButton} />}
         nav={<Sidebar session={session} active={active} settingsActive={settingsActive} />}
@@ -342,6 +344,7 @@ function ConsoleShellContent({ children }: { children: ReactNode }) {
           )}
         </main>
       </BackofficeFrame>
+      </StaffTourHost>
       <StaffLolaLauncher />
     </StaffSessionProvider>
   );

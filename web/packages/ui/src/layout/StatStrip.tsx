@@ -27,15 +27,17 @@ export interface StatStripProps {
   /** Names the group for assistive technology (translate it). */
   label?: string;
   className?: string;
+  /** `data-tour` id, so a guided tour can point at the strip. */
+  tour?: string;
 }
 
 /**
  * Flat row of key figures: no boxes, no shadows, thin vertical rules between stats. One row from 640px up (wrapping
  * if it must); two columns on phones. A stat with `href` or `onSelect` is a link or button.
  */
-export function StatStrip({ items, label, className }: StatStripProps) {
+export function StatStrip({ items, label, className, tour }: StatStripProps) {
   return (
-    <ul data-page-part="stats" aria-label={label} className={cx(styles.strip, className)}>
+    <ul data-page-part="stats" data-tour={tour} aria-label={label} className={cx(styles.strip, className)}>
       {items.map((item, i) => {
         const body = (
           <>

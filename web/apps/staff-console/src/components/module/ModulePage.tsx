@@ -28,7 +28,7 @@ export function ModulePage({ module, actions, children }: { module: StaffModuleK
   }
   return (
     <>
-      <PageHeader title={m?.label ?? module} description={m?.description} actions={actions} />
+      <PageHeader title={m?.label ?? module} description={m?.description} actions={actions} tour={`page-${module}`} />
       <PageStack>
         {m?.level === 'VIEW' ? (
           <Notice tone="info" icon="eye" title={t('st.modulePage.readOnly')}>

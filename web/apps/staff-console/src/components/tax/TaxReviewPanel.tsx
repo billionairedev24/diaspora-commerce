@@ -126,7 +126,7 @@ export function TaxReviewPanel() {
           : 'Products whose tax waits for a person. The seller supplied the facts; you check the category, the answers and the proof, then approve, move it to another category, or ask the seller for more. A product goes live only after it is approved.'}
       </p>
       )}
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3" data-tour="tax-review-views">
         <ChipGroup<View>
           label="Show"
           options={[

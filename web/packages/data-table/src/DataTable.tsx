@@ -535,7 +535,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
 
   return (
     // A size container: below 36rem (phones, side sheets) the rows become stacked cards and the toolbar wraps.
-    <div className="@container/dt flex flex-col gap-2" data-table-id={id}>
+    <div className="@container/dt flex flex-col gap-2" data-table-id={id} data-tour={`table-${id}`}>
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor={searchId} className="flex h-9 min-w-0 flex-1 basis-56 items-center gap-2 rounded-pill border border-border-strong bg-surface px-3 sm:max-w-96 pointer-coarse:h-11 @max-xl/dt:max-w-none @max-xl/dt:basis-full">
           <MagnifyingGlass size={16} aria-hidden className="shrink-0 text-muted" />

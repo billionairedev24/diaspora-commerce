@@ -94,6 +94,7 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
             <li key={m.key}>
               <Link
                 href={hrefOf(m.key)}
+                data-tour={`nav-${m.key}`}
                 aria-current={current ? 'page' : undefined}
                 className={cx(
                   'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline pointer-coarse:h-11',
@@ -117,8 +118,8 @@ export function Sidebar({ session, active, onSwitch, switching }: { session: Sel
   const t = useT();
   const single = session.navGroups.length === 1;
   return (
-    <nav aria-label={t('sc.sidebar.backOffice')} className="flex h-full flex-col gap-0.5 px-3 pt-4 pb-[calc(1rem+var(--at-chat-fab-clear,0px))]">
-      <div className="pb-3">
+    <nav aria-label={t('sc.sidebar.backOffice')} data-tour="sidebar" className="flex h-full flex-col gap-0.5 px-3 pt-4 pb-[calc(1rem+var(--at-chat-fab-clear,0px))]">
+      <div className="pb-3" data-tour="org-switcher">
         <OrgSwitcher session={session} onSwitch={onSwitch} busy={switching} />
       </div>
       {session.navGroups.map((g) => (
