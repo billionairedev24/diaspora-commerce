@@ -313,18 +313,6 @@ spec:
         description: No backups are being taken.
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
         dashboard: /d/at-launch-platform
-  - name: afrotransact-launch-catalog
-    rules:
-    - alert: CatalogLiveWithoutTaxDecision
-      expr: max by (env) (catalog_live_without_tax_decision) > 0
-      for: 15m
-      labels:
-        severity: ticket
-      annotations:
-        summary: '{{ $value }} live catalog item(s) have no tax decision'
-        description: 'Listings are live although tax-returns has not resolved their tax treatment: checkout may quote the wrong tax. UNCONFIRMED metric at the time of writing.'
-        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
-        dashboard: /d/at-launch-platform
   - name: afrotransact-launch-telemetry
     rules:
     - alert: AlloyNotReporting

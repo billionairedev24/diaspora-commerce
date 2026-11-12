@@ -10,8 +10,9 @@
 #                       (Micrometer); http_server_requests_total, http_server_request_duration_seconds_* (go/pkg/httpserver);
 #                       kube_*, container_*, kubelet_volume_stats_* , cloudflared_tunnel_* (standard exporters, names from their docs)
 #   UNCONFIRMED         outbox_pending_events and checkout_attempts_total (in the metrics contract, no Micrometer meter in the
-#                       code), workflow_failed* (Temporal server names, UNVERIFIED for 1.28.1), catalog_live_without_tax_decision
-#                       (added by a separate change), container_oom_events_total (cadvisor version dependent)
+#                       code), workflow_failed* (Temporal server names, UNVERIFIED for 1.28.1), container_oom_events_total
+#                       (cadvisor version dependent). catalog_live_without_tax_decision is confirmed (catalog) and alerted in
+#                       catalog-tax-gate.yaml, not here.
 # Alerts on an UNCONFIRMED metric stay silent until the series exists; they are marked in their description.
 groups:
   - name: afrotransact-launch-workloads
@@ -351,20 +352,6 @@ groups:
         annotations:
           summary: "The pg-backup CronJob is suspended"
           description: "No backups are being taken."
-          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
-          dashboard: /d/at-launch-platform
-
-  - name: afrotransact-launch-catalog
-    rules:
-      # Gauge added by a separate change (catalog tax-decision gate). UNCONFIRMED in this branch: the alert is silent until the series exists.
-      - alert: CatalogLiveWithoutTaxDecision
-        expr: max by (env) (catalog_live_without_tax_decision) > 0
-        for: 15m
-        labels:
-          severity: ticket
-        annotations:
-          summary: "{{ $value }} live catalog item(s) have no tax decision"
-          description: "Listings are live although tax-returns has not resolved their tax treatment: checkout may quote the wrong tax. UNCONFIRMED metric at the time of writing."
           runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
           dashboard: /d/at-launch-platform
 

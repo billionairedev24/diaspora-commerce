@@ -137,7 +137,7 @@ DRY_RUN=1 infra/observability/scripts/grafana-cloud-load.sh all
 infra/observability/scripts/grafana-cloud-load.sh all          # rules + dashboards; run again after every change (idempotent)
 ```
 
-- **Rules** loaded: `services.yaml`, `kafka.yaml`, `inventory.yaml`, `payments-transfer-recovery.yaml`, `backup.yaml`, `launch.yaml` (in `infra/observability/rules`). The LogQL backup
+- **Rules** loaded: `services.yaml`, `kafka.yaml`, `inventory.yaml`, `payments-transfer-recovery.yaml`, `backup.yaml`, `catalog-tax-gate.yaml`, `launch.yaml` (in `infra/observability/rules`). The LogQL backup
   alerts in `infra/observability/loki-rules/backup.yaml` (they read the `backup_metrics` line the job logs; the stream carries `app="pg-backup"`, `namespace="ops"` and `env` from Alloy) load with
   `grafana-cloud-load.sh lokirules` (needs `LOKI_ADDRESS` = Hosted logs URL without `/loki/api/v1/push` and `LOKI_TENANT_ID` = the logs user id; UNVERIFIED against Grafana Cloud).
   `mimirtool rules sync` makes the ruler equal to these files, so do not hand-create rules in this stack. Not loaded yet: `slo-*.yaml` (their
@@ -213,7 +213,7 @@ silent until the series exists.
 | Node memory pressure | `NodeMemoryPressure` (page), `NodeMemoryWorkingSetHigh` (ticket) | `kube_node_status_condition`, `kube_node_status_allocatable` + cadvisor | standard names |
 | Certificate / tunnel down | `CloudflareTunnelDown` (page) | `cloudflared_tunnel_ha_connections` | standard cloudflared name. There is no certificate in the cluster (Cloudflare terminates TLS): use the external uptime check of section 8 for the edge certificate |
 | Backup failed / not run in 26 h | `BackupJobFailed` (page), `BackupCronJobSuspended` (ticket) in `launch.yaml`; `BackupStale` (page, 26 h), `BackupSizeHigh`, `BackupBucketSizeHigh` in `backup.yaml` | `kube_cronjob_status_last_{schedule,successful}_time`, `kube_cronjob_created` (our kube-state-metrics); `afrotransact_backup_*` (needs a Pushgateway, none runs: silent; the Loki variant `loki-rules/backup.yaml` reads the `backup_metrics` log line instead) | standard kube-state-metrics names. Keep the dead-man's-switch `HEALTHCHECK_URL` too: it also works when the whole cluster is down |
-| `catalog_live_without_tax_decision` | `CatalogLiveWithoutTaxDecision` (ticket) | `catalog_live_without_tax_decision` | **UNCONFIRMED here**: added by another change; silent until it lands |
+| `catalog_live_without_tax_decision` | `CatalogLiveWithoutTaxDecision` (page), `CatalogTaxGateClosedListings`, `CatalogTaxGateMetricMissing` (`catalog-tax-gate.yaml`) | `catalog_live_without_tax_decision`, `catalog_tax_gate_closed_total` | confirmed (`MicrometerTaxGateMetrics` in catalog); the Alloy allowlist passes `catalog_.*` |
 | The shipper itself | `AlloyNotReporting` (page), `AlloyRemoteWriteFailing` (ticket), `ScrapeTargetCardinalityHigh` (ticket) | `up{service="alloy"}`, `prometheus_remote_storage_*`, `loki_write_dropped_*`, `scrape_samples_post_metric_relabeling` | `AlloyNotReporting` is the dead-man's switch: if Alloy or the node dies, every other alert goes blind |
 
 Runbook links on the alerts point at this page. Business SLO alerts (`slo-*.yaml`) are not loaded until `checkout_attempts_total`,
