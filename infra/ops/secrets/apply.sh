@@ -42,7 +42,8 @@ done
 MANDATORY='afrotransact-prod/payments-secrets:STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET
 afrotransact-prod/seller-secrets:STRIPE_SECRET_KEY,STRIPE_CONNECT_WEBHOOK_SECRET
 afrotransact-prod/gateway-bff-secrets:STRIPE_PUBLISHABLE_KEY,SESSION_SIGNING_KEY,OIDC_CLIENT_SECRET
-afrotransact-prod/notifications-secrets:RESEND_API_KEY
+afrotransact-prod/notifications-secrets:RESEND_API_KEY,RESEND_WEBHOOK_SECRET,UNSUBSCRIBE_SIGNING_KEY
+afrotransact-prod/media-secrets:R2_ACCOUNT_ID,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,R2_PRIVATE_ACCESS_KEY_ID,R2_PRIVATE_SECRET_ACCESS_KEY,LINK_SIGNING_KEY
 afrotransact-prod/identity-secrets:SIGNING_KEY_PEM,IDENTITY_DATA_KEY,BOOTSTRAP_ADMIN_PASSWORD
 afrotransact-prod/ai-gateway-secrets:OPENROUTER_API_KEY
 ingress/cloudflared:token

@@ -74,6 +74,16 @@ spec:
   hostnames: [auth.afrotransact.com]
   rules:
     - backendRefs: [{name: identity, port: 80}]
+# To publish mcp-server (OAuth bearer tokens required; McpExposureGuard checks the https URL), uncomment this and sync edge-prod:
+# ---
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: HTTPRoute
+# metadata: {name: mcp, namespace: afrotransact-prod}
+# spec:
+#   parentRefs: [{name: edge, namespace: ingress}]
+#   hostnames: [mcp.afrotransact.com]
+#   rules:
+#     - backendRefs: [{name: mcp-server, port: 80}]
 # No mcp. and no grafana. route: mcp-server stays cluster-internal until the developer program opens (it requires OAuth
 # bearer tokens either way) and Grafana lives in Grafana Cloud, not in the cluster. carrier-gateway is not deployed, so its
 # webhook route is gone too. The tunnel token Secret "cloudflared" (namespace ingress) is applied from SOPS by

@@ -18,13 +18,13 @@ The profile is `infra/tofu/envs/prod/sizing.tf` (`node_size = "lean"`, `zone_cou
 |---|---|
 | Kubernetes | OVH MKS **free plan** control plane, **one `b3-16` node** (4 vCPU / 16 GB), billed monthly, region `US-EAST-VA-1` (OVH US entity). No autoscaler, no spare pool |
 | Services | **21 of 26**: 14 Java (identity catalog offers inventory orders payments seller fulfilment bookings tax-returns content trust-ops ai-gateway mcp-server) and 7 Go (gateway-bff cart search indexer geo media notifications), 1 replica each. Explicit list in `infra/argocd/launch-set` |
-| Not deployed | promise (the BFF and orders degrade without it), carrier-gateway, retail, delivery-runs, authz-sync, OpenFGA (`FGA_ENABLED=false`), Kafka UI, Mailpit, MinIO, Elasticsearch, in-cluster Prometheus/Loki/Grafana, Kyverno, Argo Rollouts, cert-manager, External Secrets |
+| Not deployed | promise (the BFF runs with `PROMISE_DISABLED` in prod and keeps its own delivery estimates; orders degrade to stored estimates), carrier-gateway, retail, delivery-runs, authz-sync, OpenFGA (`FGA_ENABLED=false`), Kafka UI, Mailpit, MinIO, Elasticsearch, in-cluster Prometheus/Loki/Grafana, Kyverno, Argo Rollouts, cert-manager, External Secrets |
 | Postgres | **Layerbase** (external), 19 databases. Nothing is created by OpenTofu |
 | Valkey, Meilisearch | in the cluster (`lean/data`), PVC 2 GiB and 5 GiB |
 | Events, workflows | Kafka (KRaft, one pod, 10 GiB PVC), Temporal (one pod, state in Layerbase) |
 | Edge | Cloudflare Tunnel (cloudflared) to Envoy Gateway. No load balancer, no public node IP for users |
 | Web apps | Cloudflare Workers (unchanged) |
-| Images | product images in Cloudflare R2; private/KYC files in OVH Object Storage with object lock |
+| Images and private files | **Cloudflare R2 only**: public bucket `afrotransact-prod-media` (product images) and private bucket `afrotransact-prod-kyc-evidence` (quarantine, KYC, proof photos, exports), one token each (`docs/runbooks/r2-buckets.md`; the media service refuses to start in prod otherwise). OVH Object Storage is the Terraform state and the backup copy |
 | Registry | GHCR with a read-only pull secret (no OVH Harbor) |
 | Telemetry | one OTLP collector to Grafana Cloud free tier |
 | Secrets | SOPS + age files (`infra/ops/secrets`); OKMS + External Secrets optional and unverified |
@@ -56,12 +56,12 @@ sites is expected to be a few ms in the same metro (**UNVERIFIED**: measure it b
 | OVH MKS control plane (free plan) | 0 | UNVERIFIED (repo module header; confirm the free plan exists in US East and its SLA/limits) |
 | OVH node `b3-16`, monthly billing | **not in the repo** | UNVERIFIED: get the quote; monthly billing is said to be about half the hourly price and cannot be switched back |
 | OVH block storage for PVCs (Kafka 10 GiB + Valkey 2 + Meilisearch 5 = 17 GiB) and boot disk | not in the repo | UNVERIFIED |
-| OVH Object Storage (KYC bucket, exports, image backup copy) and the Terraform state bucket | not in the repo | UNVERIFIED |
+| OVH Object Storage (Terraform state, copy of the R2 buckets; the tofu `kyc-evidence` locked bucket is currently written by nothing) | not in the repo | UNVERIFIED |
 | OVH load balancer | **0, none is created** | by design (Cloudflare Tunnel); a `LoadBalancer` Service would create one |
 | Layerbase Dedicated 4 GB (Postgres only) | $35 | UNVERIFIED (Layerbase site / owner chat) |
 | Layerbase Dedicated 8 GB | $65 | UNVERIFIED. **Not needed**: Valkey and Meilisearch run in the cluster |
 | Cloudflare Workers Paid | 5 | UNVERIFIED (only if the bundle size needs it) |
-| Cloudflare R2, Grafana Cloud, GHCR | free tiers | UNVERIFIED (check the free limits: Grafana Cloud 10k metric series, 50 GB logs, 50 GB traces; R2 10 GB) |
+| Cloudflare R2 (both media buckets), Grafana Cloud, GHCR | free tiers | UNVERIFIED (check the free limits: Grafana Cloud 10k metric series, 50 GB logs, 50 GB traces; R2 10 GB, and whether private KYC objects need more than that or a retention lock, which R2 may not offer) |
 | Backup bucket at the second vendor | a few cents to a few dollars | UNVERIFIED (small: 19 compressed dumps x 14 days) |
 | Resend (email), Stripe fees, OpenRouter | usage based | not infrastructure; OpenRouter is capped (see below) |
 
@@ -142,9 +142,9 @@ environment variable overrides it by Spring's property precedence: confirm with 
 
 ## Cost guards that are real
 
-- **ai-gateway spend cap.** `application.yml` budgets default to USD 1,000+ per day in total. `values-prod.yaml` of ai-gateway
-  overrides every feature's `feature-daily-cost-usd` through `SPRING_APPLICATION_JSON` (USD 89 per day worst case, above a cap the
-  gateway degrades to the cheapest model then answers 429). Set a **credit limit on the OpenRouter key** as the second, independent cap.
+- **ai-gateway spend ceiling** (owner decision, enforced in code by `SpendGuard`, `docs/runbooks/ai-spend-and-mcp-access.md`): USD 2.00 per UTC day for the whole
+  gateway and USD 0.50 per caller, pinned in `values-prod.yaml` (`AI_GLOBAL_DAILY_COST_USD`, `AI_CALLER_DAILY_COST_USD`); above it every call answers 429.
+  Set a **credit limit on the OpenRouter key** as the second, independent cap.
 - **Connection counts** are capped (above). **Kafka** keeps 72 hours, dead letters 14 days, on a 10 GiB disk.
 - **Backups** keep 14 days at the second vendor.
 
@@ -164,8 +164,8 @@ deletion protection is on, no gateway when `egress = none`).
 
 What differs on OVH, all documented in the module headers:
 
-- **No workload identity.** Pods reach Object Storage with a per-service S3 user whose keys go into the service Secret
-  (`OVH_S3_ACCESS_KEY_ID`, `OVH_S3_SECRET_ACCESS_KEY` for media). OVH US uses the `.ovh.us` S3 endpoint.
+- **No workload identity.** Pods that need OVH Object Storage would use a per-service S3 user (module `identity`; OVH US uses the `.ovh.us` S3 endpoint).
+  No launch service does today: media is R2-only, so the module's buckets are an archive/backup target until a service writes them (decide whether to drop `kyc-evidence`).
 - **OKMS and Harbor are opt-in** (`ovh_okms`, `ovh_harbor`, both false). OKMS in the US regions is UNVERIFIED and the module refuses
   a US region. CORS for browser uploads cannot be set with the OVH provider (the media service signs server-side).
 - **Elastic, Confluent and Temporal Cloud** are not offered on OVH and are off in this profile.

@@ -18,9 +18,10 @@ extraEnv:
   # No database (no Hikari pool). OAuth 2.1 bearer tokens from identity are REQUIRED: at.security.enabled is only ever false in
   # the local profile, and it is pinned here so a stray override cannot open the server (McpSecurityConfiguration).
   AT_SECURITY_ENABLED: "true"
-  # External URL MCP clients use (resource indicator in the OAuth protected-resource metadata). There is NO public route to
-  # mcp-server in prod by default (infra/k8s/platform/edge/overlays/prod/routes.yaml): publish mcp.<domain> only when the
-  # developer program opens, after a security review. Until then the pod is reachable inside the cluster only.
+  # External URL MCP clients use (resource indicator in the OAuth protected-resource metadata; McpExposureGuard refuses to start
+  # unless it is https). The OVH launch ships NO public route to mcp-server (infra/k8s/platform/edge/overlays/prod/routes.yaml has the
+  # commented route to enable): every call needs a bearer token either way. docs/runbooks/ai-spend-and-mcp-access.md records the
+  # decision that it is public eventually; enabling it is one route plus the mcp. DNS name in infra/cloudflare.
   MCP_PUBLIC_URL: https://mcp.afrotransact.com
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080

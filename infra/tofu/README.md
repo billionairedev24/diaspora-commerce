@@ -31,7 +31,7 @@ Requires **OpenTofu >= 1.9** (provider `for_each`). The OVH provider is `ovh/ovh
 |---|---|
 | `network` | one private network + subnet (free); **no gateway** (`egress = "none"`): nodes keep public IPs, users never reach them (Tunnel) |
 | `cluster` | MKS **free plan**, ONE `b3-16` node in pool `general`, **monthly billed** (deletion protection on), no autoscaler, no spot pool; `ovh_cloud_project_kube_iprestrictions` from `admin_cidrs` |
-| `bucket` | Object Storage (S3): `kyc-evidence` with object lock (compliance, 7 years), `exports`, `labels`, `media` (versioned) |
+| `bucket` | Object Storage (S3): `kyc-evidence` with object lock (compliance, 7 years), `exports`, `labels`, `media` (versioned). Media is R2-only in prod (`docs/runbooks/r2-buckets.md`), so these start as the archive/backup copy of the R2 buckets |
 | `identity` | one Object Storage user per service that touches a bucket (policy limited to its buckets); the S3 keys are read from the state or the OVH panel and go into the service Secret |
 | `budget` | Public Cloud consumption alerts at 50/80/100 % of `monthly_budget` |
 | `github-oidc` | creates nothing (OVH has no CI identity federation); with GHCR as the registry the deploy job needs no OVH secret |
@@ -100,8 +100,8 @@ After the first apply (full runbook in `docs/runbooks/ovh-production.md`):
    cannot on a managed server; `temporal_visibility` shares the `temporal_app` role). It prints each database's URL and password once.
    For production the single source of passwords is `infra/ovh-vps/secrets.sh` with `PROFILE=prod` (it also creates roles and the
    same extensions and renders the Secrets): use one of the two, not both.
-3. Object Storage keys for the media service's private bucket: from the `identity` module's state or the OVH panel, into
-   `secrets.local.env` (`OVH_S3_ACCESS_KEY_ID`, `OVH_S3_SECRET_ACCESS_KEY`).
+3. Cloudflare R2 tokens for the media service (`R2_*` in `secrets.local.env`, `docs/runbooks/r2-buckets.md`). The OVH per-service S3 keys (module `identity`) are only
+   needed once something writes the OVH buckets (the R2 backup copy).
 
 Environments: `dev` and `uat` use the same roots with their own `sizing.tf` and are applied only for a short, deliberate test.
 `main.tf`, `providers.tf`, `variables.tf` and `outputs.tf` are identical in all three directories (`scripts/sync-interface.sh`).

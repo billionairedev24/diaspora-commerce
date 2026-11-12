@@ -49,7 +49,7 @@ tofu apply plan.out
 ```
 
 Expected: one MKS cluster (free plan) with one `b3-16` node, a private network, Object Storage buckets (`kyc-evidence` locked,
-`exports`, `labels`, `media`), per-service S3 users, consumption alerts. **No load balancer, no gateway, no database.** The plan fails
+`exports`, `labels`, `media`: currently written by no launch service, media is R2-only), per-service S3 users, consumption alerts. **No load balancer, no gateway, no database.** The plan fails
 on purpose if `admin_cidrs` is empty, if a `US-*` region is paired with a non-US endpoint, or if the region is not the Layerbase one.
 For the trial use a different project and `disposable = true` (hourly node, no deletion protection, KYC retention 1 day).
 These modules were never applied: expect to fix first-run provider errors (the OVH provider schema moves).
@@ -71,7 +71,8 @@ Workers). Take the token: `cloudflared tunnel token <tunnel id>` into `CLOUDFLAR
 `infra/k8s/platform/edge/overlays/prod/routes.yaml` expose **api** (BFF, identity, bookings, fulfilment, media, notifications and the three
 Stripe webhook paths) and **auth** only. **There is no `mcp.` route and no `grafana.` route**: `infra/cloudflare` still lists them in
 `origin_apps`, so those two hostnames reach the tunnel and get a 404 from Envoy. Remove them there if you do not want the names.
-mcp-server is cluster-internal and requires OAuth bearer tokens (`AT_SECURITY_ENABLED=true`); publish it only after a security review.
+mcp-server is cluster-internal and requires OAuth bearer tokens (`AT_SECURITY_ENABLED=true`). `docs/runbooks/ai-spend-and-mcp-access.md` records the owner decision that
+MCP is public eventually: the launch default here is no public route; the commented route in `routes.yaml` plus the `mcp.` name in `infra/cloudflare` publish it.
 The web apps (Workers) are not part of this runbook.
 
 ## 5. Layerbase PostgreSQL
@@ -94,9 +95,9 @@ The web apps (Workers) are not part of this runbook.
 Follow `infra/ops/secrets/README.md`: render with `PROFILE=prod ... infra/ovh-vps/secrets.sh platform|services` into a temp directory
 (`SECRETS_OUT`), encrypt with SOPS, apply with `infra/ops/secrets/apply.sh`. Prerequisites in `secrets.local.env`: Stripe **LIVE** keys and
 the three webhook secrets (`docs/runbooks/stripe-webhooks.md`), `STRIPE_PUBLISHABLE_KEY` (gateway-bff refuses to start without it),
-`RESEND_API_KEY` (no Resend = no sign-up codes and no staff email MFA), `OPENROUTER_API_KEY` (**and a credit limit on that key in the OpenRouter
-dashboard**: the daily caps in `ai-gateway`'s `values-prod.yaml` are the first guard, the key limit the second), geo and tax data keys, the OVH S3
-keys for media, the tunnel token, Grafana Cloud OTLP credentials, the backup remote and the **age public key** of the backup, `GHCR_USER` /
+`RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` (`docs/runbooks/resend-email.md`; no Resend = no sign-up codes and no staff email MFA; notifications refuses to start in prod without both), `OPENROUTER_API_KEY` (**and a credit limit on that key in the OpenRouter
+dashboard**: the USD 2 per day gateway ceiling in `ai-gateway`'s `values-prod.yaml` is the first guard, the key limit the second), geo and tax data keys, the
+Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-buckets.md`; media refuses to start in prod without them), the tunnel token, Grafana Cloud OTLP credentials, the backup remote and the **age public key** of the backup, `GHCR_USER` /
 `GHCR_TOKEN` (read-only `read:packages`; creates the pull secret `ghcr`), `BOOTSTRAP_ADMIN_*` for identity's first admin.
 Generate **everything fresh** (never reuse trial or dev values: `STATE_DIR` must be a new directory).
 
@@ -169,11 +170,12 @@ Memory/CPU check after each wave: `kubectl top pods -A`, `kubectl describe node 
   arrives, check Kafka and notifications before anything else.
 - Staff: sign in as the bootstrap admin with MFA, change the password, create the staff accounts.
 - Catalog and search: create a product in a seller account, approve it in trust-ops, see it in search (reindex if needed).
-- Home page with promise absent: the storefront renders; the "get it by" rail is missing and delivery dates are estimates (a test proves this in
-  gateway-bff).
+- Home page with promise absent: the storefront renders; the "get it by" rail is missing and delivery dates are estimates (gateway-bff runs with
+  `PROMISE_DISABLED` in prod; `TestHomeDegradesWhenThePromiseServiceIsNotDeployed` also proves the failing-upstream path).
 - Checkout (Temporal saga): **Stripe test-mode first in the trial**; in production one real small payment, one refund, one payout test
   (`docs/runbooks/production-readiness.md` section 5). `ORDERS_TAX_FALLBACK_TO_TABLE=false` means tax-returns profiles must be `ACTIVE`
   (`docs/runbooks/tax-provider-cutover.md`) or checkout fails.
+- AI: one Lola message works and `select * from ai_usage_daily where usage_day = current_date and scope = 'GLOBAL'` (in the `ai` database) shows a cost below USD 2.
 - Ops: `kubectl -n ops get jobs` shows the backup succeeded; the dead-man's-switch ping arrived; Grafana Cloud shows traces from gateway-bff.
 - Not a smoke item but required: nothing else is exposed: `nmap` the node's public IP from outside: no open ports.
 

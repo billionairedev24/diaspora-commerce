@@ -138,8 +138,16 @@ service_keys() {
     indexer)          out+=("KAFKA_BOOTSTRAP=$KAFKA" "SEARCH_PROVIDER=meilisearch" "MEILISEARCH_URL=http://meilisearch.data.svc.cluster.local:7700" "MEILISEARCH_API_KEY=$MEILI_KEY" "ES_URLS=http://elasticsearch.invalid:9200" "ES_API_KEY=" "INDEXER_CLIENT_SECRET=$(gen INDEXER_CLIENT_SECRET)") ;;
     inventory)        out+=("${common[@]}" "INVENTORY_CLIENT_SECRET=$(gen INVENTORY_CLIENT_SECRET)") ;;
     mcp-server)       out+=("KAFKA_BOOTSTRAP=$KAFKA" "REDIS_URL=$REDIS_URL") ;;
-    media)            out+=("UPLOADTHING_API_KEY=${UPLOADTHING_API_KEY:-}" "LINK_SIGNING_KEY=$(gen LINK_SIGNING_KEY)" "LINK_SIGNING_KEYS_PREVIOUS=" "MEDIA_CLIENT_SECRET=$(gen MEDIA_CLIENT_SECRET)" "R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}" "R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}" "OVH_S3_ACCESS_KEY_ID=${OVH_S3_ACCESS_KEY_ID:-}" "OVH_S3_SECRET_ACCESS_KEY=${OVH_S3_SECRET_ACCESS_KEY:-}" "AZURE_STORAGE_KEY=") ;;
-    notifications)    out+=("RESEND_API_KEY=${RESEND_API_KEY:-}" "UNSUBSCRIBE_SIGNING_KEY=$(gen UNSUBSCRIBE_SIGNING_KEY)" "NOTIFICATIONS_CLIENT_SECRET=$(gen NOTIFICATIONS_CLIENT_SECRET)") ;;
+    media)
+      # Production media is Cloudflare R2 only (docs/runbooks/r2-buckets.md): one token per bucket. The dev box keeps UploadThing.
+      if [[ "$PROFILE" == prod ]]; then
+        out+=("LINK_SIGNING_KEY=$(gen LINK_SIGNING_KEY)" "LINK_SIGNING_KEYS_PREVIOUS=" "MEDIA_CLIENT_SECRET=$(gen MEDIA_CLIENT_SECRET)" "R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-}"
+          "R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}" "R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}"
+          "R2_PRIVATE_ACCESS_KEY_ID=${R2_PRIVATE_ACCESS_KEY_ID:-}" "R2_PRIVATE_SECRET_ACCESS_KEY=${R2_PRIVATE_SECRET_ACCESS_KEY:-}")
+      else
+        out+=("UPLOADTHING_API_KEY=${UPLOADTHING_API_KEY:-}" "LINK_SIGNING_KEY=$(gen LINK_SIGNING_KEY)" "LINK_SIGNING_KEYS_PREVIOUS=" "MEDIA_CLIENT_SECRET=$(gen MEDIA_CLIENT_SECRET)" "R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}" "R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}" "AZURE_STORAGE_KEY=")
+      fi ;;
+    notifications)    out+=("RESEND_API_KEY=${RESEND_API_KEY:-}" "RESEND_WEBHOOK_SECRET=${RESEND_WEBHOOK_SECRET:-}" "UNSUBSCRIBE_SIGNING_KEY=$(gen UNSUBSCRIBE_SIGNING_KEY)" "NOTIFICATIONS_CLIENT_SECRET=$(gen NOTIFICATIONS_CLIENT_SECRET)") ;;
     offers)           out+=("${common[@]}" "OFFERS_CLIENT_SECRET=$(gen OFFERS_CLIENT_SECRET)" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"}) ;;
     orders)           out+=("${common[@]}" "ORDERS_CLIENT_SECRET=$(gen ORDERS_CLIENT_SECRET)" "TEMPORAL_TARGET=$TEMPORAL_TARGET" "TEMPORAL_NAMESPACE=afrotransact" "TEMPORAL_TLS_CERT=" "TEMPORAL_TLS_KEY=" "HANDOVER_CODE_KEY=$(gen HANDOVER_CODE_KEY)" "PAY_LINK_KEY=$(gen PAY_LINK_KEY)" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"}) ;;
     # Stripe webhook secrets (one whsec_ per Stripe endpoint; docs/runbooks/stripe-webhooks.md). A changed value reaches the pod only
@@ -170,6 +178,12 @@ signing_key() { # an RSA 3072 PKCS#8 key (identity signs RS256 and refuses any o
 
 services_secrets() {
   log "service secrets in namespace $NS"
+  if [[ "$PROFILE" == prod ]]; then
+    # Identity refuses to start in prod with a weak or published bootstrap admin (StartupProvisioning): fail here, not at 3 am.
+    local pw="${ADMIN_PASSWORD:-}"
+    [[ "${#pw}" -ge 16 && "$pw" != change-me-please-12 ]] || die "ADMIN_PASSWORD must be a real password of at least 16 characters for PROFILE=prod"
+    case "${ADMIN_EMAIL:-}" in ""|admin@example.com|*.test|*@example.com) die "ADMIN_EMAIL must be a real address for PROFILE=prod" ;; esac
+  fi
   ensure_namespaces
   local svc rt db wave kv
   while read -r svc rt db wave; do

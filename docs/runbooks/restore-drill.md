@@ -15,8 +15,7 @@ restored is not a backup: **the first drill is a launch blocker** (`production-r
 | Kafka (10 GiB PVC) | not backed up: services publish through an outbox; replay `docs/runbooks/kafka-replay.md`, `tools/ops/outbox-republish.sql` | | |
 | Valkey (carts, sessions, live feed) | not backed up: a cache; carts also live in the `cart` database; losing it signs everyone out | | |
 | Meilisearch | not backed up: rebuild with `kubectl -n afrotransact-prod create job reindex-1 --from=cronjob/indexer-reindex` | | |
-| Product images (R2) | not covered by this job: copy the bucket to the OVH `media` bucket nightly with `rclone sync` (to do; sources are not elsewhere) | | |
-| KYC private bucket (OVH Object Storage, object lock) | locked and versioned by tofu (object lock support in the US is UNVERIFIED) | | 7 years |
+| Product images and private files (both Cloudflare R2 buckets) | not covered by the database job. To do: nightly `rclone sync` of both buckets to the OVH `media` / `kyc-evidence` buckets (a second vendor; the sources are not stored elsewhere). R2 object retention/versioning is UNVERIFIED | | |
 
 **Why two layers.** Layerbase says it takes hourly backups (UNVERIFIED, PITR not mentioned): use them for a quick rollback if they exist,
 but never as the only copy. The age private key of the off-vendor backups must exist only **offline** (never in the cluster, never in the
