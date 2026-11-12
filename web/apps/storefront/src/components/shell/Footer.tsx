@@ -3,7 +3,7 @@
 import { type LegalDocumentKey, legalDocumentKeyOf, legalHref, NewsletterRequestSchema, type SiteConfig } from '@afrotransact/api-client';
 import { isLocale, localeCookie, LOCALES } from '@afrotransact/i18n';
 import { LANGUAGE_SWITCH_ENABLED, useLocale } from '@afrotransact/i18n/react';
-import { AppleGlyph, CaretDown, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink, useToast } from '@afrotransact/ui';
+import { AppleGlyph, CaretDown, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,7 @@ import { searchHref, siteQueries } from '@/lib/api/queries';
 import { useMediaQuery } from '@/lib/ui/useMediaQuery';
 
 import styles from './Footer.module.css';
+import { InstallApp } from './InstallApp';
 
 type FooterLink = { label: MessageKey | string; href: string; external?: boolean };
 
@@ -163,10 +164,10 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
   const active = useLocale();
   const t = useT();
   const router = useRouter();
-  const toast = useToast();
   const phone = config?.contacts.phone ?? '';
   // Phones: the link columns fold into accordions (one heading button each) so the footer stays short.
   const narrow = useMediaQuery('(max-width: 640px)');
+  // No native apps at launch: the store buttons appear only when a store link is configured (site config appLinks).
   const appLink = (href: string | null | undefined, small: string, big: string, icon: ReactNode) =>
     href ? (
       <a className={styles.appBtn} href={href} target="_blank" rel="noopener noreferrer">
@@ -176,15 +177,8 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
           <strong>{big}</strong>
         </span>
       </a>
-    ) : (
-      <button type="button" className={styles.appBtn} onClick={() => toast.show(t('footer.appSoon'))}>
-        {icon}
-        <span className={styles.appText}>
-          <span className={styles.appSmall}>{small}</span>
-          <strong>{big}</strong>
-        </span>
-      </button>
-    );
+    ) : null;
+  const hasStoreLinks = Boolean(config?.appLinks.ios || config?.appLinks.android);
 
   return (
     <footer className={styles.footer} data-noprint>
@@ -234,9 +228,10 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
         ))}
       </div>
       <div className={styles.apps}>
-        <span className={styles.appsTitle}>{t('footer.getApp')}</span>
+        {hasStoreLinks && <span className={styles.appsTitle}>{t('footer.getApp')}</span>}
         {appLink(config?.appLinks.ios, t('footer.appStoreSmall'), t('footer.appStore'), <AppleGlyph size={24} weight="fill" aria-hidden />)}
         {appLink(config?.appLinks.android, t('footer.playSmall'), t('footer.play'), <GooglePlayLogo size={24} weight="fill" aria-hidden />)}
+        <InstallApp />
         <span className={styles.flex} />
         <ul className={styles.chips} aria-label={t('footer.paymentMethods')}>
           {(config?.paymentMethods ?? []).map((p) => (

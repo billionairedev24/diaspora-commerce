@@ -1,0 +1,21 @@
+{
+  "name": "@afrotransact/pwa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Installable web app (PWA) helpers shared by the web apps: web app manifest builder, a conservative service worker (static assets cache-first, never anything personalised), offline page HTML and registration.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

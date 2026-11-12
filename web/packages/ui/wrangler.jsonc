@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Static hosting of the Storybook build (`pnpm --filter @afrotransact/ui build-storybook` -> ./storybook-static) as a
+  // Cloudflare Workers static-assets site: no Worker code, no bindings, no vars, no secrets, no backend calls (the stories
+  // render components from fixtures only). Deploy: `pnpm --filter @afrotransact/ui deploy-storybook`, which needs
+  // CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the environment (never in this file).
+  // CI deploys the same output to the Cloudflare Pages project afrotransact-storybook (.github/workflows/storybook.yml);
+  // the host can also be Vercel or any static host: docs/runbooks/storybook-hosting.md.
+  "name": "afrotransact-storybook",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./storybook-static",
+    // Unknown paths return Storybook's own 404 instead of falling back to the app shell.
+    "not_found_handling": "404-page"
+  },
+  "observability": { "enabled": false }
+}

@@ -1924,5 +1924,11 @@
   "dq.void.expired": "This delivery quote has expired. Ask for a new one.",
   "dq.void.used": "This delivery quote has already been used. Ask for a new one.",
   "dq.void.notReady": "This delivery quote isn’t ready yet. We’ll email you when it is.",
-  "dq.void.ask": "Ask for a new quote"
+  "dq.void.ask": "Ask for a new quote",
+  "pwa.install": "Install the app",
+  "pwa.iosSteps": "To install on iPhone or iPad: tap Share, then Add to Home Screen.",
+  "pwa.offline.title": "You are offline",
+  "pwa.offline.heading": "You are offline",
+  "pwa.offline.body": "AfroTransact needs a connection to show products, your cart and your orders. Check your connection and try again.",
+  "pwa.offline.retry": "Try again"
 }

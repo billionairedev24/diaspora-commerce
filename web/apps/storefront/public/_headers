@@ -1,0 +1,12 @@
+# Cloudflare Workers static assets headers (https://developers.cloudflare.com/workers/static-assets/headers/).
+# Applies to files served from the assets binding (public/ and .next/static output). Routes rendered by the Worker itself
+# (/sw.js, /manifest.webmanifest, /offline) set their own headers in code (src/app/*/route.ts): the service worker script
+# is never cached for long, and the manifest is served as application/manifest+json.
+
+# Content-hashed build output never changes.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The installable-app icons keep their names across releases: a day, then revalidate.
+/icons/*
+  Cache-Control: public, max-age=86400

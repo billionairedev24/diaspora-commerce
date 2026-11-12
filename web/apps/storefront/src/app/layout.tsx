@@ -13,6 +13,7 @@ import { type ReactNode } from 'react';
 
 import { maintenanceProps } from '@/components/shell/maintenanceProps';
 import { MaintenanceScreen } from '@/components/shell/MaintenanceScreen';
+import { ServiceWorkerRegistration } from '@/components/shell/ServiceWorkerRegistration';
 import { SignInPending } from '@/components/shell/SignInPending';
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
@@ -29,7 +30,10 @@ export async function generateMetadata(): Promise<Metadata> {
     description: t('meta.description'),
     metadataBase: publicWebUrl(),
     applicationName: 'AfroTransact',
-    icons: { icon: '/logo-mark.svg' },
+    // Installable web app (docs/engineering/pwa.md): the manifest link and the iOS Add to Home Screen icon and title.
+    manifest: '/manifest.webmanifest',
+    icons: { icon: '/logo-mark.svg', apple: '/icons/apple-touch-icon.png' },
+    appleWebApp: { capable: true, title: 'AfroTransact', statusBarStyle: 'default' },
     openGraph: { siteName: 'AfroTransact', type: 'website' }
   };
 }
@@ -54,6 +58,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         </a>
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
           <SignInPending />
+          <ServiceWorkerRegistration />
           <Providers consent={consent} gpc={headerGpc(h.get('sec-gpc'))}>
             {/* Page-performance measurement is an analytics cookie category: only with consent (S192). */}
             <ConsentGate category="analytics">

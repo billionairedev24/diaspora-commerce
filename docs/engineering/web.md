@@ -7,6 +7,7 @@ pnpm workspace (root `package.json`, `pnpm-workspace.yaml`): `web/apps/*`, `web/
 | `web/packages/tokens` | Single token source: `src/tokens.css` (`--at-*`, ported from `design/afrotransact-tokens.css`, plus global rules: white canvas, Inter body and Fraunces headings, hidden scrollbars, no horizontal scroll). `pnpm --filter @afrotransact/tokens generate` writes the typed object `src/generated/tokens.ts` (React Native). **Fonts are set in one file, `src/fonts.config.json`**; the same command regenerates `src/fonts.css`, the `--at-font-*` lines of `tokens.css` and `src/generated/fonts.ts` (`fonts.sans.stack`, `fonts.googleFontsUrl` for Stripe's iframes). |
 | `web/packages/ui` | Shared accessible React components + Storybook (`pnpm --filter @afrotransact/ui storybook`). |
 | `web/packages/api-client` | Typed gateway-BFF client, Zod schemas, TanStack Query key factories / `queryOptions`, OpenAPI-generated types (`src/generated`, never edited), MSW mock BFF over the design's sample catalogue. |
+| `web/packages/pwa` | Installable web app helpers (manifest, conservative service worker, offline page, install logic): [pwa.md](pwa.md). |
 | `web/apps/storefront` | Next.js 16 App Router storefront (port 3000). |
 
 ## Run

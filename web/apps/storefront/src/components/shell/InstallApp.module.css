@@ -1,0 +1,7 @@
+/* Sits in the dark footer: same look as the other footer buttons, quiet. */
+.install { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-3); }
+.button { display: inline-flex; align-items: center; gap: var(--at-space-2); min-height: 44px; padding: 0 var(--at-space-4); border: 1px solid var(--at-ink-600); border-radius: var(--at-radius-md); background: var(--at-ink-1000); color: var(--at-color-header-text); font: inherit; font-size: var(--at-text-sm); cursor: pointer; }
+@media (hover: hover) {
+  .button:hover { border-color: var(--at-ink-400); }
+}
+.help { margin: 0; max-width: 46ch; font-size: var(--at-text-sm); color: var(--at-color-header-muted); }

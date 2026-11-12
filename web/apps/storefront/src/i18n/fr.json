@@ -1931,5 +1931,11 @@
   "dq.void.expired": "Ce devis de livraison a expiré. Demandez-en un nouveau.",
   "dq.void.used": "Ce devis de livraison a déjà été utilisé. Demandez-en un nouveau.",
   "dq.void.notReady": "Ce devis de livraison n’est pas encore prêt. Nous vous écrirons quand il le sera.",
-  "dq.void.ask": "Demander un nouveau devis"
+  "dq.void.ask": "Demander un nouveau devis",
+  "pwa.install": "Installer l’application",
+  "pwa.iosSteps": "Pour installer sur iPhone ou iPad : touchez Partager, puis Sur l’écran d’accueil.",
+  "pwa.offline.title": "Vous êtes hors ligne",
+  "pwa.offline.heading": "Vous êtes hors ligne",
+  "pwa.offline.body": "AfroTransact a besoin d’une connexion pour afficher les produits, votre panier et vos commandes. Vérifiez votre connexion et réessayez.",
+  "pwa.offline.retry": "Réessayer"
 }

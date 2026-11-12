@@ -1931,5 +1931,11 @@
   "dq.void.expired": "Ìdíyelé ìfijíṣẹ́ yìí ti parí. Béèrè tuntun.",
   "dq.void.used": "A ti lò ìdíyelé ìfijíṣẹ́ yìí tẹ́lẹ̀. Béèrè tuntun.",
   "dq.void.notReady": "Ìdíyelé ìfijíṣẹ́ yìí kò tíì ṣetán. A ó kọ ìwé sí ọ nígbà tí ó bá ṣetán.",
-  "dq.void.ask": "Béèrè ìdíyelé tuntun"
+  "dq.void.ask": "Béèrè ìdíyelé tuntun",
+  "pwa.install": "Fi áàpù náà sórí ẹrọ",
+  "pwa.iosSteps": "Láti fi sórí iPhone tàbí iPad: tẹ Share, lẹ́yìn náà tẹ Add to Home Screen.",
+  "pwa.offline.title": "O kò sí lórí íńtánẹ́ẹ̀tì",
+  "pwa.offline.heading": "O kò sí lórí íńtánẹ́ẹ̀tì",
+  "pwa.offline.body": "AfroTransact nílò ìsopọ̀ láti fi àwọn ọjà, àpò rẹ àti àwọn ìbéèrè rẹ hàn. Ṣàyẹ̀wò ìsopọ̀ rẹ kí o tún gbìyànjú.",
+  "pwa.offline.retry": "Gbìyànjú lẹ́ẹ̀kan sí i"
 }

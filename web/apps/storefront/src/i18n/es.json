@@ -1931,5 +1931,11 @@
   "dq.void.expired": "Esta cotización de envío venció. Pida una nueva.",
   "dq.void.used": "Esta cotización de envío ya se usó. Pida una nueva.",
   "dq.void.notReady": "Esta cotización de envío aún no está lista. Le escribiremos cuando lo esté.",
-  "dq.void.ask": "Pedir una nueva cotización"
+  "dq.void.ask": "Pedir una nueva cotización",
+  "pwa.install": "Instalar la app",
+  "pwa.iosSteps": "Para instalar en iPhone o iPad: toca Compartir y luego Añadir a pantalla de inicio.",
+  "pwa.offline.title": "Sin conexión",
+  "pwa.offline.heading": "Sin conexión",
+  "pwa.offline.body": "AfroTransact necesita conexión para mostrar productos, tu carrito y tus pedidos. Revisa tu conexión e inténtalo de nuevo.",
+  "pwa.offline.retry": "Reintentar"
 }
