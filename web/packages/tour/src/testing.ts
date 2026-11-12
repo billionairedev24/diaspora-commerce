@@ -14,7 +14,9 @@ export const TEST_LABELS: TourLabels = {
   stepOf: 'Step {n} of {total}',
   stepDone: 'Done',
   started: 'Guided tour started.',
-  finished: 'Guided tour ended.'
+  finished: 'Guided tour ended.',
+  skipStep: 'Skip this step',
+  doItHint: 'Your turn: click the highlighted control.'
 };
 
 export interface FakeEngine extends TourEngine {

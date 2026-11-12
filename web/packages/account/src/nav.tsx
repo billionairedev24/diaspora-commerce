@@ -38,11 +38,11 @@ export function AccountShell({ active, children }: { active: AccountSection; chi
   ];
   return (
     <div className={styles.shell}>
-      <header className={styles.shellHead}>
+      <header className={styles.shellHead} data-tour="account-head">
         <h1 className={styles.h1}>{t('nav.title')}</h1>
         <p className={styles.lead}>{t('nav.subtitle')}</p>
       </header>
-      <nav aria-label={t('nav.label')} className={styles.nav}>
+      <nav aria-label={t('nav.label')} className={styles.nav} data-tour="account-nav">
         <p className={styles.navTitle}>{t('nav.label')}</p>
         {items.map((i) => (
           <Link key={i.key} href={ACCOUNT_ROUTES[i.key]} className={styles.navLink} aria-current={i.key === active ? 'page' : undefined}>
@@ -51,7 +51,7 @@ export function AccountShell({ active, children }: { active: AccountSection; chi
           </Link>
         ))}
       </nav>
-      <div className={styles.section}>{children}</div>
+      <div className={styles.section} data-tour="account-section">{children}</div>
     </div>
   );
 }

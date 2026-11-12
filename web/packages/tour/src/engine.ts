@@ -26,6 +26,10 @@ export interface TourLabels {
   started: string;
   /** Said aloud when a tour ends. */
   finished: string;
+  /** The button of a "do it" step that is waiting for the person's own click: "Skip this step". */
+  skipStep: string;
+  /** The line under a "do it" step's text: "Your turn: click the highlighted button. The tour moves on by itself." */
+  doItHint: string;
 }
 
 /** One step, fully resolved and ready to draw. */
@@ -48,6 +52,8 @@ export interface StepView {
   isLast: boolean;
   /** The step's success condition is met. */
   succeeded: boolean;
+  /** A "do it" step still waiting for the person to click the highlighted control (Next reads "Skip this step"). */
+  waiting: boolean;
   /** Whether "Don't show again" is ticked. */
   dontShowAgain: boolean;
   labels: TourLabels;

@@ -1,7 +1,17 @@
-import { audienceAllows, toursFor,type TourSubject } from './audience';
+import { audienceAllows, toursFor, type TourSubject } from './audience';
 import { type EngineCallbacks, type StepView, type TourEngine, type TourLabels } from './engine';
 import { type TourEnvironment } from './environment';
-import { type TourOutcome, type TourProgress, type TourProgressStore } from './progress';
+import {
+  type ChapterStatus,
+  fromRemote,
+  replaces,
+  statusOfLegacy,
+  toRemote,
+  type TourProgress,
+  type TourProgressRemote,
+  type TourProgressStore,
+  type TourStatus
+} from './progress';
 import { type Tour, tourSchema, type TourStep } from './schema';
 
 /** Below this width the popover has no room next to a target: tours do not start by themselves and steps open as a bottom sheet. */
@@ -12,21 +22,37 @@ export const AUTO_START_MIN_WIDTH = SHEET_MAX_WIDTH;
 export const TARGET_WAIT_MS = 2500;
 /** Wait for a target after navigating to another page. */
 export const ROUTE_TARGET_WAIT_MS = 6000;
+/** A step is saved to the server this long after the person moved on (so a quick walk through costs one call, not one per step). */
+export const STEP_SAVE_DELAY_MS = 2000;
+/** Waits before the next try to load progress from the server after a failure (the last one repeats). */
+export const SYNC_RETRY_MS = [5_000, 15_000, 60_000, 300_000] as const;
+/** After the person clicks the control of a "do it" step, the tour moves on once the page has had a moment to react. */
+export const DO_IT_ADVANCE_MS = 350;
 
 export type StartSource = 'auto' | 'manual';
 export type StartResult = 'started' | 'unknown-tour' | 'not-allowed' | 'no-steps';
 export type StopReason = 'completed' | 'skip' | 'close' | 'replaced' | 'destroyed';
+/** Whether the server copy of the progress has been loaded: first-time tours wait for `ready`. */
+export type SyncState = 'idle' | 'loading' | 'ready' | 'failed';
 
 /** What the UI can observe about the service. A new object is made on every change (useSyncExternalStore). */
 export interface TourState {
   readonly running: boolean;
   readonly tourId: string | null;
   readonly stepId: string | null;
+  readonly sync: SyncState;
+  /** Bumped whenever progress changes, so the hub and the Help menu redraw. */
+  readonly revision: number;
 }
 
 export interface TourServiceDeps {
   engine: TourEngine;
+  /** Local cache of the progress (instant render, offline). */
   store: TourProgressStore;
+  /** The server copy, the source of truth. Without it the service is local-only (tests, hosts with no backend). */
+  remote?: TourProgressRemote;
+  /** Prefix of the tour ids on the server (for example `sc` or `st`), so two apps never share a record. */
+  namespace?: string;
   env: TourEnvironment;
   subject: () => TourSubject;
   /** Translates an i18n key of the app's catalogue. */
@@ -42,23 +68,51 @@ export interface TourServiceDeps {
   guards?: Readonly<Record<string, () => boolean>>;
 }
 
+/** What the hub shows for one chapter. */
+export interface ChapterInfo {
+  status: ChapterStatus;
+  lastStep?: string;
+  /** The tour's content is newer than what the person last dealt with: a small "What's new" mark, never an automatic start. */
+  hasUpdate: boolean;
+  /** Started and not finished: the hub offers Resume. */
+  resumable: boolean;
+}
+
+export interface StartOptions {
+  /** Begin at this step instead of the first (Resume). */
+  fromStep?: string;
+}
+
 export interface TourService {
   /** Replaces the registered tours. Each definition is validated; an invalid one throws. */
   register(tours: readonly Tour[]): void;
   tours(): readonly Tour[];
   /** The registered tours this person may see. */
   available(): Tour[];
-  /** What the person last did with a tour (this version), if anything. */
+  /** What the person last did with a tour (any version), from the cache. */
   progressOf(tourId: string): TourProgress | undefined;
-  start(tourId: string, source?: StartSource): Promise<StartResult>;
-  /** Starts the first tour that is meant to begin on this page and has not been seen, if the page is calm enough. */
+  /** The hub's view of one chapter. */
+  info(tourId: string): ChapterInfo;
+  /**
+   * Loads the progress from the server (the source of truth) into the cache, copying what this browser kept the first
+   * time. Resolves true when the server copy is in. On failure it stays quiet (no tour starts by itself), resolves false,
+   * and tries again later by itself. Without a remote it resolves true at once.
+   */
+  sync(): Promise<boolean>;
+  getSync(): SyncState;
+  /** The platform flag: false means first-time tours never start by themselves (loaded with the progress). */
+  autoStartEnabled(): boolean;
+  start(tourId: string, source?: StartSource, options?: StartOptions): Promise<StartResult>;
+  /** Starts the first tour that is meant to begin on this page and has not been seen, if the page is calm enough and progress is loaded. */
   autoStart(): Promise<Tour | undefined>;
   next(): Promise<void>;
   back(): Promise<void>;
   skip(): void;
   close(): void;
-  /** Forgets progress for one tour, or all tours of the person ("Replay tours" with auto-start again). */
-  reset(tourId?: string): void;
+  /** Marks a chapter as dismissed without playing it ("Skip" in the hub). */
+  dismiss(tourId: string): void;
+  /** Forgets progress for one tour, or all tours of the person ("Reset my progress"), here and on the server. Resolves false when the server could not be reached (nothing was changed). */
+  reset(tourId?: string): Promise<boolean>;
   getState(): TourState;
   subscribe(listener: () => void): () => void;
   destroy(): void;
@@ -77,6 +131,7 @@ interface Run {
   shown: number;
   /** Bumped by every navigation so a slow step from before cannot draw over a newer one. */
   token: number;
+  advanceTimer: ReturnType<typeof setTimeout> | null;
 }
 
 /** Whether the page is the route: same path, and every query parameter the route names has that value. */
@@ -89,7 +144,7 @@ export function routeMatches(route: string, pathname: string, search = ''): bool
   return true;
 }
 
-const IDLE: TourState = { running: false, tourId: null, stepId: null };
+const IDLE: TourState = { running: false, tourId: null, stepId: null, sync: 'idle', revision: 0 };
 
 export function createTourService(deps: TourServiceDeps): TourService {
   return new TourServiceImpl(deps);
@@ -99,6 +154,14 @@ class TourServiceImpl implements TourService {
   private registry: readonly Tour[] = [];
   private state: TourState = IDLE;
   private run: Run | null = null;
+  private syncState: SyncState = 'idle';
+  private syncing: Promise<boolean> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retries = 0;
+  private autoStartFlag = true;
+  private destroyed = false;
+  /** Pending step saves (debounced) and tours whose last write is not yet confirmed by the server. */
+  private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** At most one tour starts by itself per visit (the service lives as long as the page does), so people are never walked through three in a row. */
   private autoStarted = false;
   private readonly listeners = new Set<() => void>();
@@ -112,7 +175,10 @@ class TourServiceImpl implements TourService {
     }
   };
 
-  constructor(private readonly deps: TourServiceDeps) {}
+  constructor(private readonly deps: TourServiceDeps) {
+    this.state = { ...IDLE, sync: deps.remote ? 'idle' : 'ready' };
+    this.syncState = this.state.sync;
+  }
 
   register(tours: readonly Tour[]): void {
     this.registry = tours.map((t) => tourSchema.parse(t));
@@ -127,21 +193,157 @@ class TourServiceImpl implements TourService {
   }
 
   progressOf(tourId: string): TourProgress | undefined {
-    const tour = this.registry.find((t) => t.id === tourId);
-    return tour ? this.deps.store.get(this.deps.subject().userId, tour.id, tour.version) : undefined;
+    return this.deps.store.get(this.userId(), tourId);
   }
 
-  async start(tourId: string, source: StartSource = 'manual'): Promise<StartResult> {
+  info(tourId: string): ChapterInfo {
+    const tour = this.registry.find((t) => t.id === tourId);
+    const p = this.progressOf(tourId);
+    if (!p) return { status: 'not-started', hasUpdate: false, resumable: false };
+    return { status: p.status, lastStep: p.lastStep, hasUpdate: tour ? p.version < tour.version : false, resumable: p.status === 'in-progress' && Boolean(p.lastStep) };
+  }
+
+  getSync(): SyncState {
+    return this.syncState;
+  }
+
+  autoStartEnabled(): boolean {
+    return this.autoStartFlag;
+  }
+
+  // ---------------------------------------------------------------- server sync
+
+  sync(): Promise<boolean> {
+    if (!this.deps.remote) return Promise.resolve(true);
+    if (this.syncState === 'ready') return Promise.resolve(true);
+    this.syncing ??= this.loadFromServer().finally(() => {
+      this.syncing = null;
+    });
+    return this.syncing;
+  }
+
+  private async loadFromServer(): Promise<boolean> {
+    const remote = this.deps.remote;
+    if (!remote || this.destroyed) return true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.setSync('loading');
+    const userId = this.userId();
+    try {
+      let snapshot = await remote.load();
+      // First sync from this browser: copy up what it kept (the first version's keys, and cache entries the server never confirmed).
+      const upload = this.localUploads(userId);
+      if (!this.deps.store.migrated(userId) || upload.length > 0) {
+        if (upload.length > 0) snapshot = await remote.merge(upload);
+        this.deps.store.dropLegacy(userId);
+        this.deps.store.markMigrated(userId);
+      }
+      if (this.destroyed || userId !== this.userId()) return false;
+      this.adopt(userId, snapshot.items);
+      this.autoStartFlag = snapshot.autoStartEnabled;
+      this.retries = 0;
+      this.setSync('ready');
+      await this.flushDirty(userId);
+      return true;
+    } catch (error) {
+      if (this.destroyed) return false;
+      this.deps.env.log(`tour progress could not be loaded (${error instanceof Error ? error.message : 'error'}); no tour starts by itself, trying again later`);
+      this.setSync('failed');
+      const wait = SYNC_RETRY_MS[Math.min(this.retries, SYNC_RETRY_MS.length - 1)] ?? 300_000;
+      this.retries += 1;
+      this.retryTimer = setTimeout(() => void this.sync(), wait);
+      return false;
+    }
+  }
+
+  /** What this browser kept that the server may not have: the first version's keys (highest version per tour) and cache entries written while offline. */
+  private localUploads(userId: string): ReturnType<typeof toRemote>[] {
+    const ns = this.deps.namespace ?? '';
+    const known = new Set(this.registry.map((t) => t.id));
+    const best = new Map<string, TourProgress>();
+    for (const l of this.deps.store.migrated(userId) ? [] : this.deps.store.legacy(userId)) {
+      if (known.size > 0 && !known.has(l.tourId)) continue;
+      const p: TourProgress = { status: statusOfLegacy(l.outcome), version: l.version, at: l.at };
+      const have = best.get(l.tourId);
+      if (!have || p.version > have.version) best.set(l.tourId, p);
+    }
+    for (const [tourId, p] of Object.entries(this.deps.store.all(userId))) if (p.dirty) best.set(tourId, p);
+    return [...best].map(([tourId, p]) => toRemote(ns, tourId, p)).slice(0, 100);
+  }
+
+  /** Makes the cache equal the server's copy (the source of truth), keeping what has not been confirmed yet. */
+  private adopt(userId: string, items: Parameters<typeof fromRemote>[1][]): void {
+    const ns = this.deps.namespace ?? '';
+    const server = new Map<string, TourProgress>();
+    for (const r of items) {
+      const mapped = fromRemote(ns, r);
+      if (mapped) server.set(mapped.tourId, mapped.progress);
+    }
+    for (const [tourId, local] of Object.entries(this.deps.store.all(userId))) {
+      if (!server.has(tourId) && !local.dirty) this.deps.store.remove(userId, tourId);
+    }
+    for (const [tourId, p] of server) {
+      const local = this.deps.store.get(userId, tourId);
+      // An unconfirmed local write that the server's rules would accept is sent right after; otherwise the server's copy stands.
+      if (local?.dirty && replaces(p, local.version, local.status)) continue;
+      this.deps.store.set(userId, tourId, p);
+    }
+    this.bump();
+  }
+
+  private async flushDirty(userId: string): Promise<void> {
+    for (const [tourId, p] of Object.entries(this.deps.store.all(userId))) {
+      if (p.dirty) await this.push(tourId, p);
+    }
+  }
+
+  /** Sends one tour's state to the server; on success the cache takes what the server answered (its rules decide). */
+  private async push(tourId: string, p: TourProgress): Promise<void> {
+    const remote = this.deps.remote;
+    if (!remote) return;
+    const ns = this.deps.namespace ?? '';
+    const userId = this.userId();
+    try {
+      const saved = await remote.save(toRemote(ns, tourId, p));
+      const mapped = fromRemote(ns, saved);
+      const current = this.deps.store.get(userId, tourId);
+      // Something newer was written while this was in flight: that write sends itself.
+      if (current && current.at !== p.at && current.dirty) return;
+      if (mapped) this.deps.store.set(userId, tourId, mapped.progress);
+      this.bump();
+    } catch {
+      // stays "dirty": sent again at the next sync or the next change
+      this.scheduleRetry();
+    }
+  }
+
+  private scheduleRetry(): void {
+    if (this.retryTimer || this.destroyed) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.flushDirty(this.userId());
+    }, SYNC_RETRY_MS[0]);
+  }
+
+  private setSync(next: SyncState): void {
+    this.syncState = next;
+    this.publish({ ...this.state, sync: next });
+  }
+
+  // ---------------------------------------------------------------- starting
+
+  async start(tourId: string, source: StartSource = 'manual', options: StartOptions = {}): Promise<StartResult> {
     const tour = this.registry.find((t) => t.id === tourId);
     if (!tour) return 'unknown-tour';
     if (!audienceAllows(tour.audience, this.deps.subject())) return 'not-allowed';
     if (this.run) this.finish('replaced');
-    const run: Run = { tour, source, index: -1, skipped: new Set(), succeeded: false, dontShowAgain: false, releaseSuccess: null, drift: [], shown: 0, token: 0 };
+    const run: Run = { tour, source, index: -1, skipped: new Set(), succeeded: false, dontShowAgain: false, releaseSuccess: null, drift: [], shown: 0, token: 0, advanceTimer: null };
     this.run = run;
-    // A tour that begins by itself is recorded as seen right away, so a reload in the middle never repeats it.
-    if (source === 'auto') this.record(tour, 'skipped');
-    this.publish({ running: true, tourId: tour.id, stepId: null });
-    const shown = await this.go(run, 0, 1);
+    // A tour that begins by itself is recorded as started right away, so a reload in the middle never repeats it.
+    if (source === 'auto') this.record(tour, 'in-progress', tour.steps[0]?.id, true);
+    this.publish({ ...this.state, running: true, tourId: tour.id, stepId: null });
+    const from = options.fromStep ? Math.max(0, tour.steps.findIndex((s) => s.id === options.fromStep)) : 0;
+    const shown = await this.go(run, from, 1);
     if (!shown && this.run === run) {
       this.finish('replaced');
       return 'no-steps';
@@ -151,12 +353,15 @@ class TourServiceImpl implements TourService {
 
   async autoStart(): Promise<Tour | undefined> {
     if (this.run || this.autoStarted) return undefined;
+    // Nothing starts by itself until the server has been asked, so a tour never flashes up and then turns out to be finished elsewhere.
+    if (this.syncState !== 'ready' || !this.autoStartFlag) return undefined;
     const { env } = this.deps;
     if (env.automated() || env.viewportWidth() < AUTO_START_MIN_WIDTH) return undefined;
     if (env.hasBlockingUi() || env.hasUnsavedInput()) return undefined;
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement && /^(input|textarea|select)$/i.test(document.activeElement.tagName)) return undefined;
     const path = this.deps.pathname();
     const onPage = (route: string) => (route.endsWith('/*') ? path.startsWith(route.slice(0, -1)) : route === path);
+    // Any record (even for an older version) means the person has met this tour: a new version is a "What's new" mark in the hub, not a pop-up.
     const candidate = this.available().find((t) => t.autoStart?.routes.some(onPage) && !this.progressOf(t.id) && this.firstStepReady(t));
     if (!candidate) return undefined;
     const result = await this.start(candidate.id, 'auto');
@@ -166,7 +371,7 @@ class TourServiceImpl implements TourService {
 
   /** A tour only starts by itself when its first step can be drawn right here, right now (the page has loaded); otherwise it would wander off to another page. */
   private firstStepReady(tour: Tour): boolean {
-    const run: Run = { tour, source: 'auto', index: 0, skipped: new Set(), succeeded: false, dontShowAgain: false, releaseSuccess: null, drift: [], shown: 0, token: 0 };
+    const run: Run = { tour, source: 'auto', index: 0, skipped: new Set(), succeeded: false, dontShowAgain: false, releaseSuccess: null, drift: [], shown: 0, token: 0, advanceTimer: null };
     const i = tour.steps.findIndex((s) => this.guardPasses(s));
     const step = tour.steps[i];
     if (!step) return false;
@@ -198,8 +403,26 @@ class TourServiceImpl implements TourService {
     this.finish('close');
   }
 
-  reset(tourId?: string): void {
-    this.deps.store.clear(this.deps.subject().userId, tourId);
+  dismiss(tourId: string): void {
+    const tour = this.registry.find((t) => t.id === tourId);
+    if (tour) this.record(tour, 'dismissed', undefined, true);
+  }
+
+  async reset(tourId?: string): Promise<boolean> {
+    const userId = this.userId();
+    const remote = this.deps.remote;
+    if (remote) {
+      try {
+        await remote.reset(tourId ? (this.deps.namespace ? `${this.deps.namespace}.${tourId}` : tourId) : undefined);
+      } catch {
+        return false;
+      }
+    }
+    if (tourId) this.deps.store.remove(userId, tourId);
+    else this.deps.store.clear(userId);
+    // Resetting everything also clears the person's tours in the other back office on the server: "Reset my progress" is per person, not per app.
+    this.bump();
+    return true;
   }
 
   getState(): TourState {
@@ -212,19 +435,55 @@ class TourServiceImpl implements TourService {
   }
 
   destroy(): void {
+    this.destroyed = true;
     this.finish('destroyed');
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    for (const t of this.saveTimers.values()) clearTimeout(t);
+    this.saveTimers.clear();
     this.listeners.clear();
   }
 
   // ---------------------------------------------------------------- internals
+
+  private userId(): string {
+    return this.deps.subject().userId;
+  }
 
   private publish(next: TourState): void {
     this.state = next;
     for (const l of [...this.listeners]) l();
   }
 
-  private record(tour: Tour, outcome: TourOutcome): void {
-    this.deps.store.set(this.deps.subject().userId, tour.id, tour.version, { outcome, at: new Date().toISOString() });
+  private bump(): void {
+    this.publish({ ...this.state, revision: this.state.revision + 1 });
+  }
+
+  /**
+   * Writes the person's progress for a tour to the cache and queues it for the server, under the rules both sides share (a newer
+   * version wins, an older one never does, "in progress" never undoes a final status). `immediate` sends it now; otherwise
+   * a step is sent a moment later so a quick walk through is one call.
+   */
+  private record(tour: Tour, status: TourStatus, lastStep?: string, immediate = status !== 'in-progress'): void {
+    const userId = this.userId();
+    const existing = this.deps.store.get(userId, tour.id);
+    if (!replaces(existing, tour.version, status)) return;
+    const keepStep = existing && existing.version === tour.version ? existing.lastStep : undefined;
+    const next: TourProgress = { status, version: tour.version, lastStep: lastStep ?? keepStep, at: new Date().toISOString(), dirty: this.deps.remote ? true : undefined };
+    this.deps.store.set(userId, tour.id, next);
+    this.bump();
+    if (!this.deps.remote) return;
+    const pending = this.saveTimers.get(tour.id);
+    if (pending) clearTimeout(pending);
+    this.saveTimers.delete(tour.id);
+    // Nothing is sent before the first load: the sync sends every unconfirmed entry once it has the server's copy.
+    if (this.syncState !== 'ready') return;
+    if (immediate) void this.push(tour.id, next);
+    else this.saveTimers.set(tour.id, setTimeout(() => {
+      this.saveTimers.delete(tour.id);
+      const current = this.deps.store.get(userId, tour.id);
+      if (current?.dirty) void this.push(tour.id, current);
+    }, STEP_SAVE_DELAY_MS));
   }
 
   private finish(reason: StopReason): void {
@@ -232,18 +491,28 @@ class TourServiceImpl implements TourService {
     if (!run) return;
     this.run = null;
     run.token += 1;
+    if (run.advanceTimer) clearTimeout(run.advanceTimer);
     run.releaseSuccess?.();
     this.deps.engine.hide();
     if (reason !== 'replaced' && reason !== 'destroyed') {
       this.deps.env.emit({ type: 'ended', tourId: run.tour.id, reason, shown: run.shown, drift: [...run.drift] });
-      const existing = this.deps.store.get(this.deps.subject().userId, run.tour.id, run.tour.version);
-      if (run.dontShowAgain) this.record(run.tour, 'never');
-      else if (reason === 'completed') this.record(run.tour, 'completed');
-      // closing a replay must not turn "completed" into "skipped"
-      else if (!existing) this.record(run.tour, 'skipped');
+      const lastShown = run.tour.steps[run.index]?.id;
+      if (run.dontShowAgain || reason === 'skip') this.record(run.tour, 'dismissed', lastShown);
+      else if (reason === 'completed') this.record(run.tour, 'completed', lastShown);
+      // closing part way keeps it "in progress" (the hub offers Resume); a replay never turns "completed" into "in progress"
+      else this.record(run.tour, 'in-progress', lastShown, true);
       this.deps.engine.announce(this.deps.labels().finished);
+    } else {
+      // a step save waiting for its delay goes out now
+      const pending = this.saveTimers.get(run.tour.id);
+      if (pending) {
+        clearTimeout(pending);
+        this.saveTimers.delete(run.tour.id);
+        const current = this.deps.store.get(this.userId(), run.tour.id);
+        if (current?.dirty && this.syncState === 'ready' && reason === 'replaced') void this.push(run.tour.id, current);
+      }
     }
-    this.publish(IDLE);
+    this.publish({ ...this.state, running: false, tourId: null, stepId: null });
   }
 
   private guardPasses(step: TourStep): boolean {
@@ -268,6 +537,8 @@ class TourServiceImpl implements TourService {
    */
   private async go(run: Run, from: number, dir: 1 | -1): Promise<boolean> {
     const token = ++run.token;
+    if (run.advanceTimer) clearTimeout(run.advanceTimer);
+    run.advanceTimer = null;
     const { env, engine } = this.deps;
     const steps = run.tour.steps;
     for (let i = from; i >= 0 && i < steps.length; i += dir) {
@@ -308,7 +579,9 @@ class TourServiceImpl implements TourService {
       run.succeeded = false;
       run.index = i;
       run.shown += 1;
-      this.publish({ running: true, tourId: run.tour.id, stepId: step.id });
+      this.publish({ ...this.state, running: true, tourId: run.tour.id, stepId: step.id });
+      // Where the person is, so the hub can offer Resume (a replay of a finished tour keeps its status).
+      this.record(run.tour, 'in-progress', step.id);
       await this.draw(run, step, target);
       const shown = this.view(run, step, target);
       env.emit({ type: 'step', tourId: run.tour.id, stepId: step.id, ordinal: shown.ordinal, total: shown.total });
@@ -346,6 +619,7 @@ class TourServiceImpl implements TourService {
       isFirst: !counts.slice(0, i).some(Boolean),
       isLast: !counts.slice(i + 1).some(Boolean),
       succeeded: run.succeeded,
+      waiting: Boolean(step.doIt) && !run.succeeded,
       dontShowAgain: run.dontShowAgain,
       labels: this.deps.labels()
     };
@@ -364,6 +638,10 @@ class TourServiceImpl implements TourService {
       run.succeeded = true;
       this.deps.engine.announce(this.deps.labels().stepDone);
       void this.draw(run, step, env.findTarget(step.target ?? cond.target));
+      // A "do it" step moves on by itself once the person has done the thing; the tour never does the thing for them.
+      if (step.doIt) run.advanceTimer = setTimeout(() => {
+        if (token === run.token && this.run === run) void this.next();
+      }, DO_IT_ADVANCE_MS);
     };
     if (cond.when === 'click') {
       const el = env.findTarget(cond.target);
@@ -392,3 +670,4 @@ class TourServiceImpl implements TourService {
     return routeMatches(route, this.deps.pathname(), this.deps.search?.() ?? '');
   }
 }
+

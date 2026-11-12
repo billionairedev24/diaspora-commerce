@@ -153,6 +153,7 @@ class DriverEngine implements TourEngine {
     document.querySelector('.driver-live-region')?.setAttribute('aria-live', 'off');
 
     if (view.succeeded) pop.description.append(el('p', 'at-tour-success', `✓ ${view.labels.stepDone}`));
+    else if (view.waiting) pop.description.append(el('p', 'at-tour-doit', view.labels.doItHint));
 
     const cb = this.callbacks;
     const count = el('span', 'at-tour-count', fill(view.labels.stepOf, { n: view.ordinal, total: view.total }));
@@ -176,7 +177,7 @@ class DriverEngine implements TourEngine {
       back.addEventListener('click', () => cb?.back());
       actions.append(back);
     }
-    const next = el('button', 'at-tour-btn at-tour-next', view.isLast ? view.labels.done : view.labels.next);
+    const next = el('button', 'at-tour-btn at-tour-next', view.waiting ? view.labels.skipStep : view.isLast ? view.labels.done : view.labels.next);
     next.type = 'button';
     next.addEventListener('click', () => cb?.next());
     actions.append(next);

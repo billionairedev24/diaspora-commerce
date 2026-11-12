@@ -62,7 +62,13 @@ export const stepSchema = z.strictObject({
   when: z.string().regex(TARGET_ID).optional(),
   /** The target depends on data (a banner that only shows when something is wrong, a table row): its absence is normal, not drift. */
   optional: z.boolean().optional(),
-  success: successSchema.optional()
+  success: successSchema.optional(),
+  /**
+   * A "do it" step: the highlighted control stays clickable and the step waits for the person to click it themselves
+   * (`success` must be `when: 'click'`). The tour never clicks for anyone. The step never blocks: its button reads "Skip this
+   * step", and when the person clicks the control the tour moves on by itself.
+   */
+  doIt: z.boolean().optional()
 });
 export type TourStep = z.infer<typeof stepSchema>;
 
@@ -83,6 +89,8 @@ export const tourSchema = z
     title: i18nKeySchema,
     /** One line for the Help menu. */
     summary: i18nKeySchema,
+    /** The journey this chapter belongs to (a group in the Tour hub); the app lists its journeys. */
+    journey: z.string().regex(TARGET_ID).optional(),
     /** The page the tour begins on (the Help menu opens it there). */
     route: routeSchema.optional(),
     autoStart: autoStartSchema.optional(),
@@ -91,6 +99,7 @@ export const tourSchema = z
   .superRefine((tour, ctx) => {
     const seen = new Set<string>();
     tour.steps.forEach((step, i) => {
+      if (step.doIt && step.success?.when !== 'click') ctx.addIssue({ code: 'custom', path: ['steps', i, 'doIt'], message: 'a doIt step needs success: { when: "click" }' });
       if (seen.has(step.id)) ctx.addIssue({ code: 'custom', path: ['steps', i, 'id'], message: `duplicate step id "${step.id}"` });
       seen.add(step.id);
     });
@@ -128,4 +137,60 @@ export function targetsOf(tour: Tour): string[] {
 /** Every i18n key a tour uses (tour title/summary and each step's title/body), for the catalogue check. */
 export function keysOf(tour: Tour): string[] {
   return [tour.title, tour.summary, ...tour.steps.flatMap((s) => [s.title, s.body])];
+}
+
+/** A group of chapters in the Tour hub (for example "Get set up"). Title and summary are i18n keys of the app. */
+export interface TourJourney {
+  id: string;
+  title: string;
+  summary: string;
+}
+
+/** `two-step` becomes `twoStep` (the i18n key of a step with a hyphenated id). */
+const camel = (id: string): string => id.replace(/[-.]([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
+
+export interface ChapterStepOptions {
+  placement?: Placement;
+  route?: string;
+  when?: string;
+  optional?: boolean;
+  success?: StepSuccess;
+  doIt?: boolean;
+}
+/** A step of a chapter: id, target (`null` or `undefined` for a centred step) and options. */
+export type ChapterStep = readonly [id: string, target?: string | null, options?: ChapterStepOptions];
+
+export interface ChapterInput {
+  id: string;
+  /** i18n prefix, e.g. `sc.tour.shippingSetup`: the chapter's own words are `<prefix>.title` and `<prefix>.summary`, each step's `<prefix>.<stepId>.title|body`. */
+  prefix: string;
+  journey: string;
+  version?: number;
+  route?: string;
+  audience?: Audience;
+  autoStart?: AutoStart;
+  steps: readonly ChapterStep[];
+}
+
+/**
+ * Defines a chapter (a short tour, 3 to 8 steps, inside a journey of the Tour hub) in a compact form, with the words found by
+ * convention. Validated like any tour, so a mistake fails the tests, not a customer.
+ */
+export function defineChapter(c: ChapterInput): Tour {
+  return defineTour({
+    id: c.id,
+    version: c.version ?? 1,
+    journey: c.journey,
+    title: `${c.prefix}.title`,
+    summary: `${c.prefix}.summary`,
+    route: c.route,
+    audience: c.audience,
+    autoStart: c.autoStart,
+    steps: c.steps.map(([id, target, options]) => ({
+      id,
+      ...(target ? { target } : {}),
+      ...(options ?? {}),
+      ...tourText(c.prefix, camel(id))
+    }))
+  });
 }

@@ -158,6 +158,52 @@
 .at-tour-help-entry { display: flex; flex-direction: column; gap: 2px; }
 .at-tour-help-summary { color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
 
+.at-tour-doit {
+  margin: var(--at-space-2) 0 0;
+  color: var(--at-color-text-muted);
+  font-weight: var(--at-weight-semibold);
+}
+.at-tour-dot { inline-size: 8px; block-size: 8px; border-radius: var(--at-radius-pill); background: var(--at-color-action-primary); }
+.at-tour-new {
+  display: inline-block;
+  margin-inline-start: var(--at-space-2);
+  padding: 0 var(--at-space-2);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-action-primary);
+  color: var(--at-color-action-primary-text);
+  font-size: var(--at-text-2xs);
+  font-weight: var(--at-weight-bold);
+  line-height: 1.6;
+  vertical-align: middle;
+}
+
+/* Tour hub page: journeys as flat sections, chapters as rows (no cards inside cards, white canvas). */
+.at-tour-hub { display: flex; flex-direction: column; gap: var(--at-space-6); max-inline-size: 60rem; }
+.at-tour-hub-intro { margin: 0; color: var(--at-color-text-muted); }
+.at-tour-hub-note { margin: 0; color: var(--at-color-text-muted); font-size: var(--at-text-sm); }
+.at-tour-journey { display: flex; flex-direction: column; gap: var(--at-space-3); padding-block-start: var(--at-space-4); border-block-start: 1px solid var(--at-color-border); }
+.at-tour-journey-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--at-space-3); }
+.at-tour-journey-text { flex: 1 1 18rem; min-inline-size: 0; }
+.at-tour-journey-title { margin: 0; font-family: var(--at-font-display); font-size: var(--at-text-xl); }
+.at-tour-journey-summary { margin: var(--at-space-1) 0 0; color: var(--at-color-text-muted); }
+.at-tour-journey-progress { margin: var(--at-space-2) 0 var(--at-space-1); font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); }
+.at-tour-journey-actions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
+.at-tour-bar { inline-size: min(20rem, 100%); block-size: 6px; overflow: hidden; border-radius: var(--at-radius-pill); background: var(--at-color-surface-hover); }
+.at-tour-bar > span { display: block; block-size: 100%; background: var(--at-color-success); }
+.at-tour-chapters { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.at-tour-chapter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--at-space-3); padding-block: var(--at-space-3); border-block-start: 1px solid var(--at-color-border); }
+.at-tour-chapter:first-child { border-block-start: 0; }
+.at-tour-chapter-text { flex: 1 1 18rem; min-inline-size: 0; }
+.at-tour-chapter-title { margin: 0; font-size: var(--at-text-md); font-weight: var(--at-weight-semibold); }
+.at-tour-chapter-summary { margin: var(--at-space-1) 0 0; color: var(--at-color-text-muted); font-size: var(--at-text-sm); }
+.at-tour-chapter-meta { margin: var(--at-space-1) 0 0; color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
+.at-tour-status { font-weight: var(--at-weight-semibold); }
+.at-tour-status-completed { color: var(--at-color-success); }
+.at-tour-chapter-actions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
+.at-tour-hub-foot { display: flex; flex-direction: column; align-items: flex-start; gap: var(--at-space-2); padding-block-start: var(--at-space-4); border-block-start: 1px solid var(--at-color-border); }
+.at-tour-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-2); }
+.at-tour-confirm p { margin: 0; }
+
 /* Reduced motion: no fades or nudges, the popover simply appears. */
 @media (prefers-reduced-motion: reduce) {
   .driver-fade .driver-overlay,

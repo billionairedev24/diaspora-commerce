@@ -68,7 +68,7 @@ describe('TourService', () => {
     await service.next();
     await service.next();
     expect(service.getState().running).toBe(false);
-    expect(store.get('u1', 'products', 1)?.outcome).toBe('completed');
+    expect(store.get('u1', 'products')?.status).toBe('completed');
     expect(engine.hidden).toBeGreaterThan(0);
     expect(engine.announcements.at(-1)).toBe(TEST_LABELS.finished);
   });
@@ -141,25 +141,46 @@ describe('TourService', () => {
     expect(nav).toEqual(['/orders']);
   });
 
-  it('Skip records "skipped"; "Don\'t show again" records "never"', async () => {
+  it('Skip and "Don\'t show again" record "dismissed"; closing part way keeps "in progress" with the last step', async () => {
     const a = setup();
     await a.service.start('products');
     a.service.skip();
-    expect(a.store.get('u1', 'products', 1)?.outcome).toBe('skipped');
+    expect(a.store.get('u1', 'products')?.status).toBe('dismissed');
 
     const b = setup();
     await b.service.start('products');
     b.engine.callbacks?.setDontShowAgain(true);
     b.service.close();
-    expect(b.store.get('u1', 'products', 1)?.outcome).toBe('never');
+    expect(b.store.get('u1', 'products')?.status).toBe('dismissed');
+
+    const c = setup();
+    await c.service.start('products');
+    await c.service.next();
+    c.service.close();
+    expect(c.store.get('u1', 'products')).toMatchObject({ status: 'in-progress', lastStep: 'add', version: 1 });
+    expect(c.service.info('products')).toMatchObject({ status: 'in-progress', resumable: true, hasUpdate: false });
   });
 
-  it('closing a replay does not turn "completed" into "skipped"', async () => {
+  it('closing a replay does not turn "completed" into "in progress"', async () => {
     const { service, store } = setup();
-    store.set('u1', 'products', 1, { outcome: 'completed', at: 'x' });
+    store.set('u1', 'products', { status: 'completed', version: 1, at: 'x' });
     await service.start('products');
+    await service.next();
     service.close();
-    expect(store.get('u1', 'products', 1)?.outcome).toBe('completed');
+    expect(store.get('u1', 'products')).toMatchObject({ status: 'completed', version: 1 });
+  });
+
+  it('resume starts at the last step', async () => {
+    const { service, engine } = setup();
+    await service.start('products', 'manual', { fromStep: 'table' });
+    expect(engine.last?.title).toBe('T(x.s3.title)');
+  });
+
+  it('a chapter can be skipped from the hub without playing it', () => {
+    const { service, store } = setup();
+    service.dismiss('products');
+    expect(store.get('u1', 'products')?.status).toBe('dismissed');
+    expect(service.info('products').status).toBe('dismissed');
   });
 
   it('rejects a person outside the audience and unknown tours', async () => {
@@ -169,13 +190,13 @@ describe('TourService', () => {
     expect(service.available()).toEqual([]);
   });
 
-  it('starting another tour replaces the running one without recording it', async () => {
+  it('starting another tour replaces the running one and keeps where the first one was', async () => {
     const other = tour({ id: 'orders', autoStart: undefined });
     const { service, store } = setup({ tours: [tour(), other] });
     await service.start('products');
     await service.start('orders');
     expect(service.getState().tourId).toBe('orders');
-    expect(store.get('u1', 'products', 1)).toBeUndefined();
+    expect(store.get('u1', 'products')?.status).toBe('in-progress');
   });
 
   it('shows a success mark when the success target appears, without blocking Next', async () => {
@@ -218,7 +239,7 @@ describe('auto-start', () => {
     expect((await service.autoStart())?.id).toBe('products');
     expect(engine.shown).toHaveLength(1);
     // recorded as seen right away: a reload in the middle never repeats it
-    expect(store.get('u1', 'products', 1)?.outcome).toBe('skipped');
+    expect(store.get('u1', 'products')).toMatchObject({ status: 'in-progress', lastStep: 'header' });
     service.close();
     expect(await service.autoStart()).toBeUndefined();
   });
@@ -279,12 +300,17 @@ describe('auto-start', () => {
     expect(await service.autoStart()).toBeUndefined();
   });
 
-  it('a version bump offers the tour again; "never" and "completed" on the same version do not', async () => {
+  it('a new version never starts by itself: it is a "What\'s new" mark in the hub', async () => {
     const { service, store } = setup();
-    store.set('u1', 'products', 1, { outcome: 'never', at: 'x' });
+    store.set('u1', 'products', { status: 'dismissed', version: 1, at: 'x' });
     expect(await service.autoStart()).toBeUndefined();
     service.register([tour({ version: 2 })]);
-    expect((await service.autoStart())?.id).toBe('products');
+    expect(await service.autoStart()).toBeUndefined();
+    expect(service.info('products')).toMatchObject({ status: 'dismissed', hasUpdate: true });
+    // replaying it and finishing acknowledges the update
+    await service.start('products');
+    service.close();
+    expect(service.info('products').hasUpdate).toBe(false);
   });
 
   it('only people in the audience get it', async () => {
@@ -294,9 +320,9 @@ describe('auto-start', () => {
 
   it('reset makes first-time tours start again', async () => {
     const { service, store } = setup();
-    store.set('u1', 'products', 1, { outcome: 'completed', at: 'x' });
+    store.set('u1', 'products', { status: 'completed', version: 1, at: 'x' });
     expect(await service.autoStart()).toBeUndefined();
-    service.reset();
+    expect(await service.reset()).toBe(true);
     expect((await service.autoStart())?.id).toBe('products');
   });
 });
