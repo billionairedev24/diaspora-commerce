@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createMemoryProgressStore, type RemoteTourProgress, type TourProgressRemote } from '../src/progress';
-import { TourHub, TourProvider, type HubLabels } from '../src/react';
+import { type HubLabels,TourHub, TourProvider } from '../src/react';
 import { defineChapter } from '../src/schema';
 import { createFakeEngine, createFakeEnvironment, TEST_LABELS } from '../src/testing';
 
