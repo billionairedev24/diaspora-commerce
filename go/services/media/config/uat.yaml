@@ -66,6 +66,41 @@ moderation:
     # tokenUrl: defaults to <auth.issuer>/oauth2/token (AUTH_TOKEN_URL overrides)
     clientId: media-service
     scopes: ["ai:use"]
+# S388: slot-aware image checks. Every threshold is configuration (nothing is hard-coded); the starred ones can also
+# be changed by staff at run time (PUT /v1/image-rules, stored per environment). Defaults are the owner-approved ones.
+#   enforce:  false = shadow mode (verdict and checks are recorded, nothing is rejected or deleted for quality; file
+#             type, size and prohibited content are always enforced). MEDIA_IMAGE_ENFORCE overrides.
+#   warnOnly: true turns the main image's appearance rejects (not white, product too small in the photo, border) into
+#             warnings. *  MEDIA_IMAGE_WARN_ONLY overrides.
+images:
+  enforce: true
+  warnOnly: false
+  maxBytes: 8388608            # 8 MB *
+  main:
+    minLongestSide: 1000       # zoom rule: reject below *
+    recommendedLongestSide: 2000
+    minShortestSide: 500       # *
+    whiteChannelMin: 250       # a ring pixel is white when all channels are at least this
+    ringFraction: 0.02         # outer ring: 2 percent of the shorter side
+    ringPassRatio: 0.95        # share of ring pixels that must be white (the four corners must be too)
+    fillReject: 0.75           # product fills less of the frame: reject *
+    fillWarn: 0.85             # below this: warn *
+    fillTolerance: 12
+    borderMinRatio: 0.01
+    borderMaxRatio: 0.12
+    aspectWarn: 2
+    blurWarnBelow: 100         # variance of the Laplacian; heuristic, warn only
+    allowOnModelApparel: false # apparel main images may show a person or mannequin *
+    apparelTypePrefixes: [APPAREL, CLOTHING, FASHION]
+    mismatchHold: 0.6          # AI title and brand mismatch score that holds the image *
+    placeholderHashes: []      # hex dHashes of known "no image available" pictures
+    placeholderDistance: 4
+    snapMaxPixels: 16000000    # larger images are measured on a reduced copy and not rewritten
+  other:
+    warnLongestSide: 1000      # *
+    minShortestSide: 500       # *
+    swatchMinShortestSide: 50
+    aspectWarn: 2
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampleRatio: 0.5

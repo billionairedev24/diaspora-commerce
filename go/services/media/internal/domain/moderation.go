@@ -44,6 +44,17 @@ type AIVerdict struct {
 	Decision AIDecision
 	Labels   []string
 	Model    string
+	// MismatchScore is how far the picture is from the title and brand it was given (0 matches, 1 clearly
+	// different); nil when the hook was not given a title or brand, or did not judge it.
+	MismatchScore *float64
+}
+
+// ModerationHint is what the seller's form knows about the image, so the hook can judge it in context.
+type ModerationHint struct {
+	Slot            ImageSlot `json:"slot,omitempty"`
+	Title           string    `json:"title,omitempty"`
+	Brand           string    `json:"brand,omitempty"`
+	ProductTypeCode string    `json:"productTypeCode,omitempty"`
 }
 
 // Moderation records the checks an image went through before it could become public.
@@ -57,6 +68,12 @@ type Moderation struct {
 	MetadataStripped bool `json:"metadataStripped"`
 	// DuplicateOf is the closest earlier image with the same perceptual hash, if any.
 	DuplicateOf string `json:"duplicateOf,omitempty"`
+	// DuplicateHeld is true when another seller's near-identical image is why the image was held.
+	DuplicateHeld bool `json:"duplicateHeld,omitempty"`
+	// MismatchScore is the AI's title and brand mismatch score, when it gave one.
+	MismatchScore *float64 `json:"mismatchScore,omitempty"`
+	// Checks are the seller-facing findings of the moderation (held for text, props, mismatch, a duplicate ...).
+	Checks []Check `json:"-"`
 	// ReviewedBy is the staff member who released or rejected a held image.
 	ReviewedBy string     `json:"reviewedBy,omitempty"`
 	ReviewedAt *time.Time `json:"reviewedAt,omitempty"`
@@ -94,6 +111,11 @@ type ModerationInput struct {
 	AIErr   error
 	AIOff   bool
 	Similar []SimilarImage
+	// Slot, ProductTypeCode and Rules make the AI labels slot-aware: props and people hold only a main image, and
+	// not even that for apparel when the rules allow on-model pictures. The zero Rules hold nothing extra.
+	Slot            ImageSlot
+	ProductTypeCode string
+	Rules           ImageRules
 }
 
 // Moderate combines the AI verdict and duplicate matches into a moderation result:
@@ -111,6 +133,10 @@ func Moderate(p ModerationPolicy, in ModerationInput) Moderation {
 		}
 		m.Reasons = append(m.Reasons, reason)
 	}
+	holdWith := func(reason string, checks ...Check) {
+		hold(reason)
+		m.Checks = append(m.Checks, checks...)
+	}
 	switch {
 	case in.AIOff:
 	case in.AIErr != nil || in.AI == nil:
@@ -118,18 +144,27 @@ func Moderate(p ModerationPolicy, in ModerationInput) Moderation {
 		if p.AIFailOpen {
 			m.Reasons = append(m.Reasons, "AI moderation skipped (unavailable)")
 		} else {
-			hold("AI moderation unavailable; held for review")
+			holdWith("AI moderation unavailable; held for review", NewCheck(CodeHeldReview, VerdictHold, nil))
 		}
 	default:
 		m.AI = AIChecked
 		m.AILabels = in.AI.Labels
+		m.MismatchScore = in.AI.MismatchScore
+		aiChecks := AIChecks(in.Rules, in.Slot, in.ProductTypeCode, in.AI.Labels, in.AI.MismatchScore)
 		switch in.AI.Decision {
 		case AIAllow:
+			if len(aiChecks) > 0 {
+				holdWith("needs review"+labelSuffix(in.AI.Labels)+mismatchSuffix(in.AI.MismatchScore), aiChecks...)
+			}
 		case AIBlock:
 			m.Verdict = VerdictBlocked
 			m.Reasons = append(m.Reasons, "prohibited content"+labelSuffix(in.AI.Labels))
+			m.Checks = append(m.Checks, NewCheck(CodeProhibited, VerdictReject, nil))
 		default: // REVIEW and anything unexpected
-			hold("needs review" + labelSuffix(in.AI.Labels))
+			if len(aiChecks) == 0 {
+				aiChecks = []Check{NewCheck(CodeHeldReview, VerdictHold, nil)}
+			}
+			holdWith("needs review"+labelSuffix(in.AI.Labels)+mismatchSuffix(in.AI.MismatchScore), aiChecks...)
 		}
 	}
 	if p.DuplicateDistance >= 0 {
@@ -141,8 +176,8 @@ func Moderate(p ModerationPolicy, in ModerationInput) Moderation {
 				m.DuplicateOf = s.AssetID
 			}
 			if s.OwnerOrg != in.OwnerOrg {
-				hold("matches an image uploaded by another seller")
-				m.DuplicateOf = s.AssetID
+				holdWith("matches an image uploaded by another seller", NewCheck(CodeHeldDuplicate, VerdictHold, nil))
+				m.DuplicateOf, m.DuplicateHeld = s.AssetID, true
 				break
 			}
 		}
@@ -151,6 +186,13 @@ func Moderate(p ModerationPolicy, in ModerationInput) Moderation {
 		}
 	}
 	return m
+}
+
+func mismatchSuffix(score *float64) string {
+	if score == nil {
+		return ""
+	}
+	return fmt.Sprintf(" (title and brand mismatch %.2f)", *score)
 }
 
 func labelSuffix(labels []string) string {

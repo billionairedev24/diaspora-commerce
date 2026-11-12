@@ -22,6 +22,9 @@ var privatePurposes = []string{"kyc-document", "proof-photo", "return-photo", "p
 // private purpose a different private R2 store (no public URL, its own bucket and credentials); UploadThing, MinIO,
 // path-style and plain-http stores are refused. Other environments are not restricted.
 func (c Config) Validate(env string, getenv func(string) string) error {
+	if p := c.Images.Problem(); p != "" {
+		return fmt.Errorf("images: %s", p)
+	}
 	if env != pkgconfig.EnvProd {
 		return nil
 	}

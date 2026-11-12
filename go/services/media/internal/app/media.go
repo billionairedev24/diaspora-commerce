@@ -11,6 +11,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,7 +53,30 @@ type MediaService interface {
 	RemoveFromLibrary(ctx context.Context, actor auth.Actor, id string) error
 	// RenameLibraryImage renames an image in the library and updates its parsed SKU/slot.
 	RenameLibraryImage(ctx context.Context, actor auth.Actor, id, newFileName string) (domain.LibraryImage, error)
+	// RequestImageUpload is RequestUpload of a product image for a slot, with what the form knows about it (S388).
+	RequestImageUpload(ctx context.Context, actor auth.Actor, p domain.Purpose, fileName, contentType string, size int64,
+		opts domain.ImageOptions) (domain.Asset, port.Upload, error)
+	// ImportImageFromURL is ImportFromURL for a slot, with what the bulk row knows about the image (S388).
+	ImportImageFromURL(ctx context.Context, actor auth.Actor, p domain.Purpose, rawURL, ownerOrg, uploadedBy string,
+		opts domain.ImageOptions) (domain.Asset, error)
+	// VerifyImages judges published images, by public URL, for the slot each is to be used in, from what was
+	// measured when they were uploaded (importer clients with media:import; catalog's defence in depth, S390).
+	VerifyImages(ctx context.Context, actor auth.Actor, items []domain.VerifyItem) ([]domain.VerifyResult, error)
+	// RescoreImages measures published images again (legacy images, changed rules) and stores the result (importer
+	// clients with media:import; the back-fill of S392).
+	RescoreImages(ctx context.Context, actor auth.Actor, items []domain.VerifyItem) ([]domain.VerifyResult, error)
+	// ImageRules returns the image rules in force and the staff override.
+	ImageRules(ctx context.Context, actor auth.Actor) (domain.ImageRulesView, error)
+	// SetImageRules replaces the staff override of the image rules (staff with media:moderate or catalog:moderate).
+	SetImageRules(ctx context.Context, actor auth.Actor, o domain.ImageRulesOverride) (domain.ImageRulesView, error)
 }
+
+// MaxVerifyBatch bounds the images of one verify call and MaxRescoreBatch those of one rescore call (rescoring reads
+// and decodes each file).
+const (
+	MaxVerifyBatch  = 100
+	MaxRescoreBatch = 20
+)
 
 // MaxLibraryLookup bounds the SKUs and the file names of one library lookup (a bulk upload has at most 5,000 rows).
 const MaxLibraryLookup = 5000
@@ -118,6 +142,12 @@ func WithQuarantine(st port.ObjectStore) Option {
 	return func(s *mediaServiceImpl) { s.quarantine = st }
 }
 
+// WithImageRules enables the slot-aware image checks (S388): base are the configured thresholds, analyzer measures the
+// pixels (nil: only the size rules apply) and store (may be nil) keeps the staff override on top of them.
+func WithImageRules(base domain.ImageRules, analyzer port.ImageAnalyzer, store port.ImageRulesStore) Option {
+	return func(s *mediaServiceImpl) { s.baseRules, s.analyzer, s.rulesStore = base, analyzer, store }
+}
+
 // WithClock replaces time.Now (tests).
 func WithClock(now func() time.Time) Option { return func(s *mediaServiceImpl) { s.now = now } }
 
@@ -145,6 +175,14 @@ type mediaServiceImpl struct {
 	fetcher    port.URLFetcher
 	library    port.LibraryRepository
 	quarantine port.ObjectStore
+
+	baseRules  domain.ImageRules
+	analyzer   port.ImageAnalyzer
+	rulesStore port.ImageRulesStore
+	rulesMu    sync.Mutex
+	rulesAt    time.Time
+	rulesNow   domain.ImageRules
+	rescoring  chan struct{}
 }
 
 var _ MediaService = (*mediaServiceImpl)(nil)
@@ -162,7 +200,8 @@ func NewMediaService(stores map[domain.Purpose]port.ObjectStore, repo port.Asset
 		links.MaxLong = domain.DefaultMaxLongLinkTTL
 	}
 	s := &mediaServiceImpl{stores: stores, repo: repo, inspector: inspector, links: links, now: time.Now,
-		uploadTTL: 10 * time.Minute, log: slog.Default()}
+		uploadTTL: 10 * time.Minute, log: slog.Default(), baseRules: domain.DefaultImageRules(),
+		rescoring: make(chan struct{}, 2)}
 	for _, o := range opts {
 		o(s)
 	}
@@ -213,7 +252,13 @@ func (s *mediaServiceImpl) moderated(p domain.Purpose) bool {
 func (s *mediaServiceImpl) RequestUpload(ctx context.Context, actor auth.Actor, p domain.Purpose, fileName,
 	contentType string, size int64,
 ) (domain.Asset, port.Upload, error) {
-	return s.requestUpload(ctx, actor, p, fileName, contentType, size, false)
+	return s.requestUpload(ctx, actor, p, fileName, contentType, size, false, domain.ImageOptions{})
+}
+
+func (s *mediaServiceImpl) RequestImageUpload(ctx context.Context, actor auth.Actor, p domain.Purpose, fileName,
+	contentType string, size int64, opts domain.ImageOptions,
+) (domain.Asset, port.Upload, error) {
+	return s.requestUpload(ctx, actor, p, fileName, contentType, size, false, opts)
 }
 
 func (s *mediaServiceImpl) RequestLibraryUpload(ctx context.Context, actor auth.Actor, fileName, contentType string,
@@ -225,14 +270,23 @@ func (s *mediaServiceImpl) RequestLibraryUpload(ctx context.Context, actor auth.
 	if actor.OrgID == "" || actor.Type == principalService {
 		return domain.Asset{}, port.Upload{}, fmt.Errorf("image library: %w", ErrForbidden)
 	}
-	return s.requestUpload(ctx, actor, domain.PurposeProductImage, domain.LibraryFileName(fileName), contentType, size, true)
+	return s.requestUpload(ctx, actor, domain.PurposeProductImage, domain.LibraryFileName(fileName), contentType, size,
+		true, domain.ImageOptions{})
 }
 
 func (s *mediaServiceImpl) requestUpload(ctx context.Context, actor auth.Actor, p domain.Purpose, fileName,
-	contentType string, size int64, library bool,
+	contentType string, size int64, library bool, opts domain.ImageOptions,
 ) (domain.Asset, port.Upload, error) {
-	if err := domain.CheckDeclared(p, fileName, contentType, size); err != nil {
+	rules, err := s.purposeRules(ctx, p)
+	if err != nil {
 		return domain.Asset{}, port.Upload{}, fmt.Errorf("request upload: %w", err)
+	}
+	if err := domain.CheckDeclaredRules(rules, fileName, contentType, size); err != nil {
+		return domain.Asset{}, port.Upload{}, fmt.Errorf("request upload: %w", err)
+	}
+	slot, ok := domain.ParseImageSlot(string(opts.Slot))
+	if !ok {
+		return domain.Asset{}, port.Upload{}, fmt.Errorf("%w: slot must be MAIN, OTHER, SWATCH or LABEL", domain.ErrRejected)
 	}
 	if !mayUse(actor, p) {
 		return domain.Asset{}, port.Upload{}, fmt.Errorf("upload %s: %w", p, ErrForbidden)
@@ -260,9 +314,13 @@ func (s *mediaServiceImpl) requestUpload(ctx context.Context, actor auth.Actor, 
 	a := domain.Asset{ID: id, OwnerOrg: ownerOf(actor), UploadedBy: actor.Subject, Purpose: p, Provider: st.Name(),
 		Key: up.Key, URL: up.PublicURL, FileName: fileName, ContentType: contentType, Bytes: size,
 		Status: domain.StatusPending, Flags: []string{}, CreatedAt: now, Library: library}
+	if p == domain.PurposeProductImage {
+		a.ImageSlot, a.Hint = slot, cleanHint(opts.Hint, slot)
+	}
 	if library {
 		if n, ok := domain.ParseLibraryName(fileName); ok {
 			a.SKU, a.Slot = n.SKU, n.Slot
+			a.ImageSlot = domain.SlotOfLibrary(n.Slot)
 		}
 	}
 	if err := s.repo.Insert(ctx, a); err != nil {
@@ -431,7 +489,8 @@ func (s *mediaServiceImpl) Complete(ctx context.Context, actor auth.Actor, id st
 	return s.finish(ctx, a)
 }
 
-// finish inspects a pending asset's object; public images are also moderated before they are published.
+// finish inspects a pending asset's object; public images are also checked, moderated and measured before they are
+// published (S388).
 func (s *mediaServiceImpl) finish(ctx context.Context, a domain.Asset) (domain.Asset, error) {
 	st, err := s.storeFor(a)
 	if err != nil {
@@ -454,26 +513,70 @@ func (s *mediaServiceImpl) finish(ctx context.Context, a domain.Asset) (domain.A
 	}
 	in, inspectErr := s.inspector.Inspect(reader, size, a.ContentType)
 	_ = body.Close()
-	status, flags := domain.Judge(a.Purpose, in)
+	rules, err := s.purposeRules(ctx, a.Purpose)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	status, flags := domain.JudgeRules(a.Purpose, rules, in)
+	isImage := a.Purpose == domain.PurposeProductImage
+	var checks []domain.Check
 	if inspectErr != nil {
 		status, flags = domain.StatusRejected, []string{"file could not be read as " + a.ContentType}
+		checks = []domain.Check{domain.NewCheck(domain.CodeNotAnImage, domain.VerdictReject, nil)}
+	} else if c := domain.ImageFileCheck(rules, in); isImage && status == domain.StatusRejected && c != nil {
+		checks = []domain.Check{*c}
+	}
+	if isImage && status != domain.StatusRejected {
+		flags = []string{} // quality is judged by the checks below, not by flags
 	}
 	a.ContentType, a.Bytes, a.Width, a.Height, a.Status, a.Flags = in.ContentType, in.Bytes, in.Width, in.Height, status, flags
 	switch {
 	case status == domain.StatusRejected:
 		_ = st.Delete(ctx, a.Key)
 		a.URL = ""
+		if isImage {
+			setChecks(&a, checks)
+		}
 	case moderated:
 		if err := s.moderate(ctx, st, &a, data); err != nil {
 			return domain.Asset{}, err
+		}
+	case isImage:
+		// No image processor: only the size rules can be applied.
+		imgRules := s.imageRules(ctx)
+		setChecks(&a, domain.EvaluateImage(imgRules, imageFacts(a, imageSlotOf(a))))
+		a.Status = domain.StatusOfVerdict(a.Verdict)
+		if a.Verdict == domain.VerdictReject && imgRules.Enforce {
+			_ = st.Delete(ctx, a.Key)
+			a.URL = ""
+		} else if a.Verdict == domain.VerdictReject {
+			a.Status, a.Shadow = domain.StatusReady, true
 		}
 	}
 	return s.save(ctx, a)
 }
 
+// imageSlotOf is the slot an asset's checks run for (OTHER when it has none).
+func imageSlotOf(a domain.Asset) domain.ImageSlot {
+	if a.ImageSlot == "" {
+		return domain.ImageSlotOther
+	}
+	return a.ImageSlot
+}
+
 func (s *mediaServiceImpl) ImportFromURL(ctx context.Context, actor auth.Actor, p domain.Purpose, rawURL, ownerOrg,
 	uploadedBy string,
 ) (domain.Asset, error) {
+	return s.ImportImageFromURL(ctx, actor, p, rawURL, ownerOrg, uploadedBy, domain.ImageOptions{})
+}
+
+func (s *mediaServiceImpl) ImportImageFromURL(ctx context.Context, actor auth.Actor, p domain.Purpose, rawURL, ownerOrg,
+	uploadedBy string, opts domain.ImageOptions,
+) (domain.Asset, error) {
+	slot, ok := domain.ParseImageSlot(string(opts.Slot))
+	if !ok {
+		return domain.Asset{}, fmt.Errorf("%w: slot must be MAIN, OTHER, SWATCH or LABEL", domain.ErrRejected)
+	}
 	if s.fetcher == nil {
 		return domain.Asset{}, fmt.Errorf("%w: importing from links is not enabled", domain.ErrRejected)
 	}
@@ -489,7 +592,10 @@ func (s *mediaServiceImpl) ImportFromURL(ctx context.Context, actor auth.Actor, 
 	if ownerOrg == "" {
 		return domain.Asset{}, fmt.Errorf("%w: ownerOrg is required", domain.ErrRejected)
 	}
-	rules, _ := domain.RulesFor(p)
+	rules, err := s.purposeRules(ctx, p)
+	if err != nil {
+		return domain.Asset{}, err
+	}
 	f, err := s.fetcher.Fetch(ctx, rawURL, rules.MaxBytes)
 	if err != nil {
 		return domain.Asset{}, fmt.Errorf("import image: %w", err)
@@ -523,7 +629,7 @@ func (s *mediaServiceImpl) ImportFromURL(ctx context.Context, actor auth.Actor, 
 	}
 	a := domain.Asset{ID: id, OwnerOrg: ownerOrg, UploadedBy: uploadedBy, Purpose: p, Provider: st.Name(),
 		Key: storedKey, FileName: fileName, ContentType: contentType, Bytes: int64(len(f.Data)),
-		Status: domain.StatusPending, Flags: []string{}, CreatedAt: now}
+		Status: domain.StatusPending, Flags: []string{}, CreatedAt: now, ImageSlot: slot, Hint: cleanHint(opts.Hint, slot)}
 	if err := s.repo.Insert(ctx, a); err != nil {
 		return domain.Asset{}, fmt.Errorf("record asset: %w", err)
 	}
@@ -558,19 +664,41 @@ func (s *mediaServiceImpl) save(ctx context.Context, a domain.Asset) (domain.Ass
 	return a, nil
 }
 
-// moderate runs the gate on an image that passed the purpose rules: strip metadata, hash, look for duplicates, ask
-// the AI hook, then publish (PASSED), keep it private for review (HELD) or delete it (BLOCKED).
+// moderate runs the gate on an image that passed the purpose rules: strip metadata, measure the pixels and apply the
+// image rules of its slot, hash, look for duplicates, ask the AI hook, then publish (PASSED), keep it private for
+// review (HELD) or delete it (BLOCKED, or REJECT by the image rules when they are enforced).
 func (s *mediaServiceImpl) moderate(ctx context.Context, st port.ObjectStore, a *domain.Asset, data []byte) error {
-	img, perr := s.processor.Process(data, a.ContentType)
+	isImage := a.Purpose == domain.PurposeProductImage
+	rules := s.imageRules(ctx)
+	img, metrics, perr := s.prepare(a, data, rules)
 	if perr != nil {
 		// Not a service failure: the file itself can't be cleaned (corrupt, too many pixels), so it is rejected.
 		a.Status, a.Flags, a.URL = domain.StatusRejected, []string{"image could not be processed: " + perr.Error()}, ""
+		if isImage {
+			setChecks(a, []domain.Check{domain.NewCheck(domain.CodeNotAnImage, domain.VerdictReject, nil)})
+		}
 		_ = st.Delete(ctx, a.Key)
 		return nil //nolint:nilerr // the outcome is recorded on the asset
 	}
+	slot := imageSlotOf(*a)
+	var quality []domain.Check
+	if isImage {
+		a.Metrics, a.Width, a.Height = metrics, img.Width, img.Height
+		quality = domain.EvaluateImage(rules, imageFacts(*a, slot))
+		if domain.VerdictOf(quality) == domain.VerdictReject {
+			if rules.Enforce {
+				setChecks(a, quality)
+				a.Status, a.URL = domain.StatusRejected, ""
+				_ = st.Delete(ctx, a.Key)
+				return nil
+			}
+			a.Shadow = true
+		}
+	}
 	hash := img.Hash
 	a.PHash = &hash
-	input := domain.ModerationInput{OwnerOrg: a.OwnerOrg, MetadataStripped: img.Stripped, AIOff: s.moderator == nil}
+	input := domain.ModerationInput{OwnerOrg: a.OwnerOrg, MetadataStripped: img.Stripped, AIOff: s.moderator == nil,
+		Slot: slot, ProductTypeCode: a.Hint.ProductTypeCode, Rules: rules}
 	if s.policy.DuplicateDistance >= 0 {
 		similar, err := s.repo.SimilarImages(ctx, publicPurposes(), hash, s.policy.DuplicateDistance, a.ID, 5)
 		if err != nil {
@@ -580,7 +708,9 @@ func (s *mediaServiceImpl) moderate(ctx context.Context, st port.ObjectStore, a 
 	}
 	if s.moderator != nil {
 		actx, cancel := context.WithTimeout(ctx, s.aiTimeout)
-		v, err := s.moderator.Moderate(actx, img.Preview, "image/jpeg", a.Purpose)
+		hint := a.Hint
+		hint.Slot = slot
+		v, err := s.moderator.Moderate(actx, img.Preview, "image/jpeg", a.Purpose, hint)
 		cancel()
 		if err != nil {
 			s.log.WarnContext(ctx, "AI moderation unavailable", "asset_id", a.ID, "fail_open", s.policy.AIFailOpen,
@@ -593,15 +723,26 @@ func (s *mediaServiceImpl) moderate(ctx context.Context, st port.ObjectStore, a 
 	m := domain.Moderate(s.policy, input)
 	a.Moderation = &m
 	a.URL = ""
+	reasons := m.Reasons
+	if isImage {
+		setChecks(a, append(slices.Clone(quality), m.Checks...))
+		reasons = nil // the flags already carry the plain messages
+	}
 	switch m.Verdict {
 	case domain.VerdictBlocked:
-		a.Status, a.Flags = domain.StatusRejected, append(a.Flags, m.Reasons...)
+		a.Status, a.Flags = domain.StatusRejected, append(a.Flags, reasons...)
+		if isImage {
+			a.Verdict = domain.VerdictReject
+		}
 		_ = st.Delete(ctx, a.Key)
 		return nil
 	case domain.VerdictHeld:
-		a.Status, a.Flags = domain.StatusFlagged, append(a.Flags, m.Reasons...)
+		a.Status, a.Flags = domain.StatusFlagged, append(a.Flags, reasons...)
 		return nil
 	case domain.VerdictPassed:
+	}
+	if isImage {
+		a.Status = domain.StatusReady
 	}
 	return s.publish(ctx, st, a, img)
 }
@@ -618,6 +759,10 @@ func (s *mediaServiceImpl) publish(ctx context.Context, st port.ObjectStore, a *
 		// The store named the upload itself (UploadThing file keys): publish under our own key.
 		finalKey = fmt.Sprintf("%s/%s/%s%s", a.Purpose, sanitize(a.OwnerOrg), a.ID, strings.ToLower(path.Ext(a.FileName)))
 	}
+	if ext := extFor(a.ContentType); ext != "" && !extMatches(path.Ext(finalKey), a.ContentType) {
+		// The pipeline wrote the image in another format (WebP flattened to PNG): the key says so.
+		finalKey = strings.TrimSuffix(finalKey, path.Ext(finalKey)) + ext
+	}
 	key, publicURL, err := pub.Put(ctx, finalKey, a.FileName, a.ContentType, img.Data, true)
 	if err != nil {
 		return fmt.Errorf("publish image: %w", err)
@@ -632,6 +777,14 @@ func (s *mediaServiceImpl) publish(ctx context.Context, st port.ObjectStore, a *
 		a.Width, a.Height = img.Width, img.Height
 	}
 	return nil
+}
+
+func extMatches(ext, contentType string) bool {
+	ext = strings.ToLower(ext)
+	if contentType == "image/jpeg" {
+		return ext == ".jpg" || ext == ".jpeg"
+	}
+	return ext == extFor(contentType)
 }
 
 func publicPurposes() []domain.Purpose {
@@ -757,7 +910,10 @@ func (s *mediaServiceImpl) Review(ctx context.Context, actor auth.Actor, id stri
 	at := s.now().UTC()
 	m.ReviewedBy, m.ReviewedAt = actor.Subject, &at
 	held := m.Reasons
-	a.Flags = slices.DeleteFunc(slices.Clone(a.Flags), func(f string) bool { return slices.Contains(held, f) })
+	isImage := a.Purpose == domain.PurposeProductImage
+	if !isImage {
+		a.Flags = slices.DeleteFunc(slices.Clone(a.Flags), func(f string) bool { return slices.Contains(held, f) })
+	}
 	note = strings.TrimSpace(note)
 	switch decision {
 	case domain.ReviewApprove:
@@ -765,7 +921,7 @@ func (s *mediaServiceImpl) Review(ctx context.Context, actor auth.Actor, id stri
 		if err != nil {
 			return domain.Asset{}, err
 		}
-		img, err := s.processor.Process(data, a.ContentType)
+		img, metrics, err := s.prepare(&a, data, s.imageRules(ctx))
 		if err != nil {
 			return domain.Asset{}, fmt.Errorf("%w: image could not be processed: %w", ErrState, err)
 		}
@@ -774,7 +930,16 @@ func (s *mediaServiceImpl) Review(ctx context.Context, actor auth.Actor, id stri
 		}
 		m.Verdict = domain.VerdictPassed
 		m.Reasons = append(slices.Clone(held), "released by staff")
-		a.Status = domain.StatusForFlags(a.Flags)
+		if isImage {
+			if metrics != nil {
+				a.Metrics = metrics
+			}
+			// Staff cleared the holds; the measured findings (warnings) stay.
+			setChecks(&a, slices.DeleteFunc(slices.Clone(a.Checks), func(c domain.Check) bool { return c.Level == domain.VerdictHold }))
+			a.Status = domain.StatusReady
+		} else {
+			a.Status = domain.StatusForFlags(a.Flags)
+		}
 	case domain.ReviewReject:
 		_ = st.Delete(ctx, a.Key)
 		reason := "rejected by staff"
@@ -783,6 +948,12 @@ func (s *mediaServiceImpl) Review(ctx context.Context, actor auth.Actor, id stri
 		}
 		m.Verdict, m.Reasons = domain.VerdictBlocked, append(slices.Clone(held), reason)
 		a.Status, a.URL, a.Flags = domain.StatusRejected, "", append(a.Flags, reason)
+		if isImage {
+			setChecks(&a, []domain.Check{domain.NewCheck(domain.CodeReviewRejected, domain.VerdictReject, nil)})
+			if note != "" {
+				a.Flags = append(a.Flags, note)
+			}
+		}
 	default:
 		return domain.Asset{}, fmt.Errorf("%w: decision must be APPROVE or REJECT", domain.ErrRejected)
 	}

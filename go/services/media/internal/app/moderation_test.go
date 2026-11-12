@@ -27,10 +27,12 @@ type fakeModerator struct {
 	err     error
 	calls   int
 	preview []byte
+	hint    domain.ModerationHint
 }
 
-func (f *fakeModerator) Moderate(_ context.Context, preview []byte, contentType string, _ domain.Purpose) (domain.AIVerdict, error) {
+func (f *fakeModerator) Moderate(_ context.Context, preview []byte, contentType string, _ domain.Purpose, hint domain.ModerationHint) (domain.AIVerdict, error) {
 	f.calls++
+	f.hint = hint
 	f.preview = preview
 	if contentType != "image/jpeg" {
 		return domain.AIVerdict{}, errors.New("previews are JPEG")
@@ -223,7 +225,7 @@ func TestAIReviewHoldsTheImageUntilStaffRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	if released.Status != domain.StatusReady || released.URL == "" || released.Moderation.Verdict != domain.VerdictPassed ||
-		released.Moderation.ReviewedBy != "staff-9" || len(released.Flags) != 1 {
+		released.Moderation.ReviewedBy != "staff-9" || len(released.Flags) != 0 {
 		t.Fatalf("released image %+v %+v", released, released.Moderation)
 	}
 	if _, err := f.svc.Review(ctx, moderator, held.ID, domain.ReviewReject, ""); !errors.Is(err, app.ErrState) {
@@ -238,8 +240,9 @@ func TestAIBlockRejectsAndDeletes(t *testing.T) {
 	if done.Status != domain.StatusRejected || done.Moderation.Verdict != domain.VerdictBlocked || done.URL != "" {
 		t.Fatalf("blocked image %+v", done)
 	}
-	if _, ok := f.store.objects[up.Key]; ok || !strings.Contains(strings.Join(done.Flags, ","), "WEAPONS") {
-		t.Fatalf("blocked upload must be deleted and the reason flagged: %v", done.Flags)
+	if _, ok := f.store.objects[up.Key]; ok || !strings.Contains(strings.Join(done.Moderation.Reasons, ","), "WEAPONS") ||
+		done.Verdict != domain.VerdictReject || len(done.Checks) != 1 || done.Checks[0].Code != "PROHIBITED" {
+		t.Fatalf("blocked upload must be deleted and rejected with the plain message: %v %v", done.Moderation.Reasons, done.Checks)
 	}
 }
 

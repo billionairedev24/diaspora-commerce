@@ -200,6 +200,17 @@ type Asset struct {
 	Library bool        `json:"library,omitempty"`
 	SKU     string      `json:"sku,omitempty"`
 	Slot    LibrarySlot `json:"slot,omitempty"`
+	// ImageSlot is the slot the checks were run for (product images; S388), Verdict their outcome (PASS, WARN,
+	// HOLD or REJECT) and Checks the findings with codes the seller's language is picked by.
+	ImageSlot ImageSlot    `json:"imageSlot,omitempty"`
+	Verdict   ImageVerdict `json:"verdict,omitempty"`
+	Checks    []Check      `json:"checks,omitempty"`
+	// Shadow is true when the verdict was recorded but not applied (media.image.enforce is off).
+	Shadow bool `json:"shadow,omitempty"`
+	// Metrics are the pixel measurements the verdict rests on (never serialised to clients).
+	Metrics *ImageMetrics `json:"-"`
+	// Hint is what the client told the checks about the image (title, brand, product type); never serialised.
+	Hint ModerationHint `json:"-"`
 }
 
 // ErrConflict is returned when an asset changed since it was read (concurrent completion or review).
@@ -219,6 +230,11 @@ func CheckDeclared(p Purpose, fileName, contentType string, size int64) error {
 	if err != nil {
 		return err
 	}
+	return CheckDeclaredRules(r, fileName, contentType, size)
+}
+
+// CheckDeclaredRules is CheckDeclared against the given rules (the size cap of product images is configurable).
+func CheckDeclaredRules(r Rules, fileName, contentType string, size int64) error {
 	if strings.TrimSpace(fileName) == "" || len(fileName) > 200 {
 		return fmt.Errorf("%w: file name is required (max 200 characters)", ErrRejected)
 	}
@@ -248,6 +264,28 @@ func Judge(p Purpose, in Inspection) (Status, []string) {
 	if err != nil {
 		return StatusRejected, []string{err.Error()}
 	}
+	return JudgeRules(p, r, in)
+}
+
+// ImageFileCheck explains in plain words why an image was refused on its type or size (nil when it was not).
+func ImageFileCheck(r Rules, in Inspection) *Check {
+	switch {
+	case !slices.Contains(r.ContentTypes, in.ContentType):
+		code := CodeFormat
+		if !strings.HasPrefix(in.ContentType, "image/") {
+			code = CodeNotAnImage
+		}
+		c := NewCheck(code, VerdictReject, nil)
+		return &c
+	case in.Bytes > r.MaxBytes:
+		c := NewCheck(CodeFileTooBig, VerdictReject, map[string]any{"mb": r.MaxBytes >> 20})
+		return &c
+	}
+	return nil
+}
+
+// JudgeRules is Judge against the given rules.
+func JudgeRules(p Purpose, r Rules, in Inspection) (Status, []string) {
 	if !slices.Contains(r.ContentTypes, in.ContentType) {
 		return StatusRejected, []string{"actual file type " + in.ContentType + " is not allowed"}
 	}

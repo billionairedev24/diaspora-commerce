@@ -28,7 +28,7 @@ func (f *fakeMedia) Get(_ context.Context, _ auth.Actor, id string, ttl time.Dur
 	return domain.Asset{ID: id, Purpose: domain.PurposePurchaseOrder, URL: "https://signed/po.pdf", URLExpiresAt: &exp}, nil
 }
 
-func (f *fakeMedia) RequestUpload(context.Context, auth.Actor, domain.Purpose, string, string, int64) (domain.Asset, port.Upload, error) {
+func (f *fakeMedia) RequestImageUpload(context.Context, auth.Actor, domain.Purpose, string, string, int64, domain.ImageOptions) (domain.Asset, port.Upload, error) {
 	return domain.Asset{}, port.Upload{}, app.ErrForbidden
 }
 

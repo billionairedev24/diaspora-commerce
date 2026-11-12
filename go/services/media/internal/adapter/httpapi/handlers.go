@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +37,10 @@ func (h *handlersImpl) Register(mux *http.ServeMux, authenticated func(http.Hand
 	mux.Handle("POST /v1/assets/{id}/complete", authenticated(http.HandlerFunc(h.complete)))
 	mux.Handle("POST /v1/assets/import", authenticated(http.HandlerFunc(h.importURL)))
 	mux.Handle("POST /v1/assets/{id}/review", authenticated(http.HandlerFunc(h.review)))
+	mux.Handle("POST /v1/assets/verify", authenticated(http.HandlerFunc(h.verify)))
+	mux.Handle("POST /v1/assets/rescore", authenticated(http.HandlerFunc(h.rescore)))
+	mux.Handle("GET /v1/image-rules", authenticated(http.HandlerFunc(h.imageRules)))
+	mux.Handle("PUT /v1/image-rules", authenticated(http.HandlerFunc(h.setImageRules)))
 	mux.Handle("GET /v1/assets/{id}", authenticated(http.HandlerFunc(h.get)))
 	mux.Handle("GET /v1/assets", authenticated(http.HandlerFunc(h.list)))
 	mux.Handle("GET /v1/library", authenticated(http.HandlerFunc(h.listLibrary)))
@@ -92,6 +97,17 @@ type uploadRequest struct {
 	ContentType string         `json:"contentType"`
 	Size        int64          `json:"size"`
 	Library     bool           `json:"library"`
+	// Slot is MAIN, OTHER (default), SWATCH or LABEL; the title, brand and product type let the AI check compare
+	// the picture with the listing.
+	Slot            string `json:"slot"`
+	Title           string `json:"title"`
+	Brand           string `json:"brand"`
+	ProductTypeCode string `json:"productTypeCode"`
+}
+
+func (r uploadRequest) options() domain.ImageOptions {
+	return domain.ImageOptions{Slot: domain.ImageSlot(r.Slot), Hint: domain.ModerationHint{Title: r.Title, Brand: r.Brand,
+		ProductTypeCode: r.ProductTypeCode}}
 }
 
 func (h *handlersImpl) request(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +130,8 @@ func (h *handlersImpl) request(w http.ResponseWriter, r *http.Request) {
 		}
 		a, up, err = h.media.RequestLibraryUpload(r.Context(), actor, req.FileName, req.ContentType, req.Size)
 	} else {
-		a, up, err = h.media.RequestUpload(r.Context(), actor, req.Purpose, req.FileName, req.ContentType, req.Size)
+		a, up, err = h.media.RequestImageUpload(r.Context(), actor, req.Purpose, req.FileName, req.ContentType, req.Size,
+			req.options())
 	}
 	if err != nil {
 		writeErr(w, r, err)
@@ -124,10 +141,14 @@ func (h *handlersImpl) request(w http.ResponseWriter, r *http.Request) {
 }
 
 type importRequest struct {
-	Purpose    domain.Purpose `json:"purpose"`
-	URL        string         `json:"url"`
-	OwnerOrg   string         `json:"ownerOrg"`
-	UploadedBy string         `json:"uploadedBy"`
+	Purpose         domain.Purpose `json:"purpose"`
+	URL             string         `json:"url"`
+	OwnerOrg        string         `json:"ownerOrg"`
+	UploadedBy      string         `json:"uploadedBy"`
+	Slot            string         `json:"slot"`
+	Title           string         `json:"title"`
+	Brand           string         `json:"brand"`
+	ProductTypeCode string         `json:"productTypeCode"`
 }
 
 // importURL copies a public image from a URL for an organisation (catalog-service, bulk product uploads).
@@ -138,12 +159,85 @@ func (h *handlersImpl) importURL(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-json", "Body must be an import request"))
 		return
 	}
-	a, err := h.media.ImportFromURL(r.Context(), actor, req.Purpose, req.URL, req.OwnerOrg, req.UploadedBy)
+	a, err := h.media.ImportImageFromURL(r.Context(), actor, req.Purpose, req.URL, req.OwnerOrg, req.UploadedBy,
+		domain.ImageOptions{Slot: domain.ImageSlot(req.Slot), Hint: domain.ModerationHint{Title: req.Title,
+			Brand: req.Brand, ProductTypeCode: req.ProductTypeCode}})
 	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, a)
+}
+
+type verifyRequest struct {
+	Images []struct {
+		URL             string `json:"url"`
+		Slot            string `json:"slot"`
+		ProductTypeCode string `json:"productTypeCode"`
+	} `json:"images"`
+}
+
+func (r verifyRequest) items() []domain.VerifyItem {
+	out := make([]domain.VerifyItem, 0, len(r.Images))
+	for _, i := range r.Images {
+		out = append(out, domain.VerifyItem{URL: i.URL, Slot: domain.ImageSlot(i.Slot), ProductTypeCode: i.ProductTypeCode})
+	}
+	return out
+}
+
+// verify judges published images for the slot each is used in (catalog-service, S390). The answer carries codes and
+// plain English messages, never a storage URL.
+func (h *handlersImpl) verify(w http.ResponseWriter, r *http.Request) {
+	h.judge(w, r, h.media.VerifyImages)
+}
+
+// rescore measures published images again and stores the result (catalog-service back-fill, S392).
+func (h *handlersImpl) rescore(w http.ResponseWriter, r *http.Request) {
+	h.judge(w, r, h.media.RescoreImages)
+}
+
+func (h *handlersImpl) judge(w http.ResponseWriter, r *http.Request,
+	call func(context.Context, auth.Actor, []domain.VerifyItem) ([]domain.VerifyResult, error),
+) {
+	actor, _ := auth.FromContext(r.Context())
+	var req verifyRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-json", "Body must be a list of images"))
+		return
+	}
+	results, err := call(r.Context(), actor, req.items())
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+func (h *handlersImpl) imageRules(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	view, err := h.media.ImageRules(r.Context(), actor)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (h *handlersImpl) setImageRules(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	var o domain.ImageRulesOverride
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&o); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-json", "Body must be an image rules override"))
+		return
+	}
+	view, err := h.media.SetImageRules(r.Context(), actor, o)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (h *handlersImpl) complete(w http.ResponseWriter, r *http.Request) {

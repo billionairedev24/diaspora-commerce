@@ -52,6 +52,12 @@ type request struct {
 	Image       string `json:"image"`
 	ContentType string `json:"contentType"`
 	Purpose     string `json:"purpose"`
+	// Slot, Title, Brand and ProductTypeCode let the hook judge the picture in context (the mismatch score, and
+	// whether props or a person are expected); empty ones are left out.
+	Slot            string `json:"slot,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Brand           string `json:"brand,omitempty"`
+	ProductTypeCode string `json:"productTypeCode,omitempty"`
 }
 
 type response struct {
@@ -60,11 +66,16 @@ type response struct {
 		Code string `json:"code"`
 	} `json:"labels"`
 	Model string `json:"model"`
+	// MismatchScore is 0 (the picture matches the title and brand) to 1 (clearly different); null when not judged.
+	MismatchScore *float64 `json:"mismatchScore"`
 }
 
-func (m *moderatorImpl) Moderate(ctx context.Context, preview []byte, contentType string, purpose domain.Purpose) (domain.AIVerdict, error) {
+func (m *moderatorImpl) Moderate(ctx context.Context, preview []byte, contentType string, purpose domain.Purpose,
+	hint domain.ModerationHint,
+) (domain.AIVerdict, error) {
 	body, err := json.Marshal(request{Image: base64.StdEncoding.EncodeToString(preview), ContentType: contentType,
-		Purpose: string(purpose)})
+		Purpose: string(purpose), Slot: string(hint.Slot), Title: hint.Title, Brand: hint.Brand,
+		ProductTypeCode: hint.ProductTypeCode})
 	if err != nil {
 		return domain.AIVerdict{}, fmt.Errorf("encode: %w", err)
 	}
@@ -89,6 +100,9 @@ func (m *moderatorImpl) Moderate(ctx context.Context, preview []byte, contentTyp
 		return domain.AIVerdict{}, fmt.Errorf("ai-gateway decode: %w", err)
 	}
 	v := domain.AIVerdict{Model: out.Model, Labels: []string{}}
+	if out.MismatchScore != nil && *out.MismatchScore >= 0 && *out.MismatchScore <= 1 {
+		v.MismatchScore = out.MismatchScore
+	}
 	switch d := domain.AIDecision(strings.ToUpper(out.Decision)); d {
 	case domain.AIAllow, domain.AIReview, domain.AIBlock:
 		v.Decision = d

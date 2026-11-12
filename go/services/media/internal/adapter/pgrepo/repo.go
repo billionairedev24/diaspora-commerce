@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,12 +28,14 @@ type repoImpl struct {
 var (
 	_ port.AssetRepository   = (*repoImpl)(nil)
 	_ port.LibraryRepository = (*repoImpl)(nil)
+	_ port.ImageRulesStore   = (*repoImpl)(nil)
 )
 
-// Repository is the asset store and the image library index.
+// Repository is the asset store, the image library index and the store of the image rules override.
 type Repository interface {
 	port.AssetRepository
 	port.LibraryRepository
+	port.ImageRulesStore
 }
 
 // New returns the repository (assets and the image library).
@@ -59,19 +62,26 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, files fs.FS) error {
 
 const cols = `id::text, owner_org, uploaded_by, purpose, provider, object_key, coalesce(url, ''), file_name,
 	content_type, bytes, coalesce(width, 0), coalesce(height, 0), status, flags, created_at, moderation, phash, version,
-	library, coalesce(library_sku, ''), coalesce(library_slot, '')`
+	library, coalesce(library_sku, ''), coalesce(library_slot, ''), coalesce(image_slot, ''), coalesce(verdict, ''), checks,
+	metrics, check_context, shadow`
 
 func (r *repoImpl) Insert(ctx context.Context, a domain.Asset) error {
 	flags, moderation, err := encode(a)
 	if err != nil {
 		return err
 	}
+	img, err := encodeImage(a)
+	if err != nil {
+		return err
+	}
 	_, err = r.pool.Exec(ctx, `insert into asset (id, owner_org, uploaded_by, purpose, provider, object_key, url,
 		file_name, content_type, bytes, status, flags, created_at, moderation, phash, version, library, library_sku,
-		library_slot)
-		values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,$16,nullif($17,''),nullif($18,''))`,
+		library_slot, image_slot, verdict, checks, metrics, fill_ratio, border_ratio, check_context, shadow)
+		values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,$16,nullif($17,''),nullif($18,''),
+		nullif($19,''),nullif($20,''),$21,$22,$23,$24,$25,$26)`,
 		a.ID, a.OwnerOrg, a.UploadedBy, a.Purpose, a.Provider, a.Key, a.URL, a.FileName, a.ContentType, a.Bytes,
-		a.Status, flags, a.CreatedAt, moderation, phash(a.PHash), a.Library, a.SKU, string(a.Slot))
+		a.Status, flags, a.CreatedAt, moderation, phash(a.PHash), a.Library, a.SKU, string(a.Slot),
+		string(a.ImageSlot), string(a.Verdict), img.checks, img.metrics, img.fill, img.border, img.context, a.Shadow)
 	if err != nil {
 		return fmt.Errorf("insert asset: %w", err)
 	}
@@ -90,6 +100,39 @@ func encode(a domain.Asset) (flags, moderation []byte, err error) {
 		}
 	}
 	return flags, moderation, nil
+}
+
+// imageColumns are the slot-aware image check columns of an asset, encoded for the database.
+type imageColumns struct {
+	checks, metrics, context []byte
+	fill, border             *float64
+}
+
+func encodeImage(a domain.Asset) (imageColumns, error) {
+	var c imageColumns
+	var err error
+	if a.Checks != nil {
+		if c.checks, err = json.Marshal(a.Checks); err != nil {
+			return c, fmt.Errorf("encode checks: %w", err)
+		}
+	}
+	if a.Metrics != nil {
+		if c.metrics, err = json.Marshal(a.Metrics); err != nil {
+			return c, fmt.Errorf("encode metrics: %w", err)
+		}
+		if a.Metrics.Measured {
+			c.border = &a.Metrics.BorderRatio
+			if a.Metrics.FillRatio >= 0 {
+				c.fill = &a.Metrics.FillRatio
+			}
+		}
+	}
+	if a.Hint != (domain.ModerationHint{}) {
+		if c.context, err = json.Marshal(a.Hint); err != nil {
+			return c, fmt.Errorf("encode check context: %w", err)
+		}
+	}
+	return c, nil
 }
 
 // phash stores the unsigned 64-bit hash in a bigint (same bits).
@@ -121,16 +164,98 @@ func (r *repoImpl) Update(ctx context.Context, a domain.Asset) error {
 	if err != nil {
 		return err
 	}
+	img, err := encodeImage(a)
+	if err != nil {
+		return err
+	}
 	tag, err := r.pool.Exec(ctx, `update asset set url = $2, content_type = $3, bytes = $4, width = $5, height = $6,
 		status = $7, flags = $8, provider = $9, object_key = $10, moderation = $11, phash = $12,
-		version = version + 1, updated_at = now() where id = $1 and version = $13`,
+		file_name = $14, verdict = nullif($15, ''), checks = $16, metrics = $17, fill_ratio = $18, border_ratio = $19,
+		shadow = $20, version = version + 1, updated_at = now() where id = $1 and version = $13`,
 		a.ID, a.URL, a.ContentType, a.Bytes, a.Width, a.Height, a.Status, flags, a.Provider, a.Key, moderation,
-		phash(a.PHash), a.Version)
+		phash(a.PHash), a.Version, a.FileName, string(a.Verdict), img.checks, img.metrics, img.fill, img.border, a.Shadow)
 	if err != nil {
 		return fmt.Errorf("update asset: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("update asset %s: %w", a.ID, domain.ErrConflict)
+	}
+	return nil
+}
+
+// FindByURL returns the newest READY image with the public URL.
+func (r *repoImpl) FindByURL(ctx context.Context, url string) (domain.Asset, bool, error) {
+	rows, err := r.pool.Query(ctx, `select `+cols+` from asset where url = $1 and status = 'READY'
+		order by created_at desc limit 1`, url)
+	if err != nil {
+		return domain.Asset{}, false, fmt.Errorf("find asset by url: %w", err)
+	}
+	as, err := collect(rows)
+	if err != nil || len(as) == 0 {
+		return domain.Asset{}, false, err
+	}
+	return as[0], true, nil
+}
+
+// UpdateChecks stores the slot, verdict, findings and measurements of a published image (a rescore).
+func (r *repoImpl) UpdateChecks(ctx context.Context, a domain.Asset) error {
+	img, err := encodeImage(a)
+	if err != nil {
+		return err
+	}
+	tag, err := r.pool.Exec(ctx, `update asset set width = $2, height = $3, verdict = nullif($4, ''), checks = $5,
+		metrics = $6, fill_ratio = $7, border_ratio = $8, flags = $9, updated_at = now() where id = $1`,
+		a.ID, a.Width, a.Height, string(a.Verdict), img.checks, img.metrics, img.fill, img.border, mustJSON(a.Flags))
+	if err != nil {
+		return fmt.Errorf("update checks: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func mustJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return []byte("null")
+	}
+	return b
+}
+
+// LoadImageRules reads the staff override of the image rules (empty when none was saved).
+func (r *repoImpl) LoadImageRules(ctx context.Context) (domain.StoredImageRules, error) {
+	var settings []byte
+	var by *string
+	var at *time.Time
+	err := r.pool.QueryRow(ctx, `select settings, updated_by, updated_at from image_rules_override where id = 1`).
+		Scan(&settings, &by, &at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.StoredImageRules{}, nil
+	}
+	if err != nil {
+		return domain.StoredImageRules{}, fmt.Errorf("load image rules: %w", err)
+	}
+	out := domain.StoredImageRules{UpdatedAt: at}
+	if by != nil {
+		out.UpdatedBy = *by
+	}
+	if err := json.Unmarshal(settings, &out.Override); err != nil {
+		return domain.StoredImageRules{}, fmt.Errorf("decode image rules: %w", err)
+	}
+	return out, nil
+}
+
+// SaveImageRules replaces the staff override.
+func (r *repoImpl) SaveImageRules(ctx context.Context, o domain.ImageRulesOverride, by string) error {
+	b, err := json.Marshal(o)
+	if err != nil {
+		return fmt.Errorf("encode image rules: %w", err)
+	}
+	if _, err := r.pool.Exec(ctx, `insert into image_rules_override (id, settings, updated_by, updated_at)
+		values (1, $1, $2, now()) on conflict (id) do update set settings = $1, updated_by = $2, updated_at = now()`,
+		b, by); err != nil {
+		return fmt.Errorf("save image rules: %w", err)
 	}
 	return nil
 }
@@ -276,12 +401,29 @@ func collect(rows pgx.Rows) ([]domain.Asset, error) {
 	out := []domain.Asset{}
 	for rows.Next() {
 		var a domain.Asset
-		var flags, moderation []byte
+		var flags, moderation, checks, metrics, hint []byte
 		var hash *int64
 		if err := rows.Scan(&a.ID, &a.OwnerOrg, &a.UploadedBy, &a.Purpose, &a.Provider, &a.Key, &a.URL, &a.FileName,
 			&a.ContentType, &a.Bytes, &a.Width, &a.Height, &a.Status, &flags, &a.CreatedAt, &moderation, &hash,
-			&a.Version, &a.Library, &a.SKU, &a.Slot); err != nil {
+			&a.Version, &a.Library, &a.SKU, &a.Slot, &a.ImageSlot, &a.Verdict, &checks, &metrics, &hint,
+			&a.Shadow); err != nil {
 			return nil, fmt.Errorf("scan asset: %w", err)
+		}
+		if len(checks) > 0 {
+			if err := json.Unmarshal(checks, &a.Checks); err != nil {
+				return nil, fmt.Errorf("decode checks: %w", err)
+			}
+		}
+		if len(metrics) > 0 {
+			a.Metrics = &domain.ImageMetrics{}
+			if err := json.Unmarshal(metrics, a.Metrics); err != nil {
+				return nil, fmt.Errorf("decode metrics: %w", err)
+			}
+		}
+		if len(hint) > 0 {
+			if err := json.Unmarshal(hint, &a.Hint); err != nil {
+				return nil, fmt.Errorf("decode check context: %w", err)
+			}
 		}
 		if err := json.Unmarshal(flags, &a.Flags); err != nil {
 			return nil, fmt.Errorf("decode flags: %w", err)

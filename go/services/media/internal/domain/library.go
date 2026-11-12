@@ -136,6 +136,10 @@ type LibraryImage struct {
 	ContentType string       `json:"contentType"`
 	Flags       []string     `json:"flags"`
 	CreatedAt   string       `json:"createdAt"`
+	// Verdict and Checks are the image rules' outcome for the slot the file name says (S388); flags carry the same
+	// findings as plain English.
+	Verdict ImageVerdict `json:"verdict,omitempty"`
+	Checks  []Check      `json:"checks"`
 }
 
 // ToLibraryImage shapes an asset for the library API; held and rejected images have no URL.
@@ -145,6 +149,10 @@ func ToLibraryImage(a Asset) LibraryImage {
 		CreatedAt: a.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z07:00")}
 	if out.Flags == nil {
 		out.Flags = []string{}
+	}
+	out.Verdict, out.Checks = a.Verdict, a.Checks
+	if out.Checks == nil {
+		out.Checks = []Check{}
 	}
 	if a.SKU != "" {
 		sku, slot := a.SKU, a.Slot

@@ -96,6 +96,23 @@ func (r *memRepo) SimilarImages(_ context.Context, purposes []domain.Purpose, ha
 	slices.SortFunc(out, func(x, y domain.SimilarImage) int { return x.Distance - y.Distance })
 	return out[:min(limit, len(out))], nil
 }
+func (r *memRepo) FindByURL(_ context.Context, url string) (domain.Asset, bool, error) {
+	for _, a := range r.assets {
+		if a.URL == url && a.Status == domain.StatusReady {
+			return a, true, nil
+		}
+	}
+	return domain.Asset{}, false, nil
+}
+func (r *memRepo) UpdateChecks(_ context.Context, a domain.Asset) error {
+	cur, ok := r.assets[a.ID]
+	if !ok {
+		return errors.New("not found")
+	}
+	cur.Width, cur.Height, cur.Verdict, cur.Checks, cur.Metrics, cur.Flags = a.Width, a.Height, a.Verdict, a.Checks, a.Metrics, a.Flags
+	r.assets[a.ID] = cur
+	return nil
+}
 func (r *memRepo) Ping(context.Context) error { return nil }
 
 func whiteJPEG(t *testing.T, w, h int) []byte {

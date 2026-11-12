@@ -53,6 +53,11 @@ type AssetRepository interface {
 	// maxDistance bits of hash, closest first.
 	SimilarImages(ctx context.Context, purposes []domain.Purpose, hash uint64, maxDistance int, excludeID string,
 		limit int) ([]domain.SimilarImage, error)
+	// FindByURL returns the newest READY image with this public URL; ok is false when there is none.
+	FindByURL(ctx context.Context, url string) (a domain.Asset, ok bool, err error)
+	// UpdateChecks stores an image's slot, verdict, checks and metrics without touching its status or object (a
+	// rescore of a published image).
+	UpdateChecks(ctx context.Context, a domain.Asset) error
 	Ping(ctx context.Context) error
 }
 
@@ -89,9 +94,32 @@ type ImageProcessor interface {
 	Process(data []byte, contentType string) (ProcessedImage, error)
 }
 
+// AnalyzedImage is the result of measuring an image's pixels.
+type AnalyzedImage struct {
+	Metrics domain.ImageMetrics
+	// Data is the image written again after the pipeline changed its pixels (background snapped to pure white,
+	// transparency flattened onto white, CMYK converted to RGB); nil when the file is unchanged.
+	Data []byte
+	// ContentType is the type of Data (WebP becomes PNG when it has to be written again), else the input's.
+	ContentType   string
+	Width, Height int
+}
+
+// ImageAnalyzer measures the main image rules on the pixels (S388). snap asks for the near-white background of a
+// passing image to be set to pure white.
+type ImageAnalyzer interface {
+	Analyze(data []byte, contentType string, snap bool, rules domain.MainRules) (AnalyzedImage, error)
+}
+
+// ImageRulesStore keeps the staff override of the image rules (one row per environment database).
+type ImageRulesStore interface {
+	LoadImageRules(ctx context.Context) (domain.StoredImageRules, error)
+	SaveImageRules(ctx context.Context, o domain.ImageRulesOverride, by string) error
+}
+
 // ImageModerator is the AI moderation hook (ai-gateway POST /v1/ai/moderate-image with media's service token).
 type ImageModerator interface {
-	Moderate(ctx context.Context, preview []byte, contentType string, purpose domain.Purpose) (domain.AIVerdict, error)
+	Moderate(ctx context.Context, preview []byte, contentType string, purpose domain.Purpose, hint domain.ModerationHint) (domain.AIVerdict, error)
 }
 
 // LinkSigner signs and verifies the tokens of media-hosted long-lived download links (GET /v1/l/{token}).

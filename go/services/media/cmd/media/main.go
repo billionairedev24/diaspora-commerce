@@ -55,7 +55,7 @@ func run() error {
 	defer stop()
 
 	loader := pkgconfig.NewLoader(media.Files)
-	var cfg config.Config
+	cfg := config.Default()
 	if err := loader.Load(&cfg); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -112,8 +112,8 @@ func run() error {
 	}
 	repo := pgrepo.New(pool)
 	// S308: catalog-service imports the images of bulk product uploads from their URLs (public addresses only).
-	opts := []app.Option{app.WithLogger(log), moderation(cfg, log), app.WithFetcher(urlfetch.New(urlfetch.Options{})),
-		app.WithLibrary(repo)}
+	opts := []app.Option{app.WithLogger(log), app.WithFetcher(urlfetch.New(urlfetch.Options{})), app.WithLibrary(repo)}
+	opts = append(opts, moderation(cfg, log, repo)...)
 	if cfg.QuarantineStore != "" {
 		qs, ok := named[cfg.QuarantineStore]
 		if !ok {
@@ -168,9 +168,9 @@ func resolveUploadThing(cfg *config.Config) error {
 	return nil
 }
 
-// moderation wires the S030 gate for public images: metadata stripping, perceptual hashes and, when enabled, the
-// AI hook on ai-gateway.
-func moderation(cfg config.Config, log *slog.Logger) app.Option {
+// moderation wires the S030 gate for public images (metadata stripping, perceptual hashes and, when enabled, the AI
+// hook on ai-gateway) and the S388 image checks (thresholds from config, the staff override from the database).
+func moderation(cfg config.Config, log *slog.Logger, repo port.ImageRulesStore) []app.Option {
 	m := cfg.Moderation
 	maxPixels := m.MaxPixels
 	if maxPixels <= 0 {
@@ -190,8 +190,11 @@ func moderation(cfg config.Config, log *slog.Logger) app.Option {
 	} else {
 		log.Info("AI image moderation off: public images are checked by rules and duplicates only")
 	}
-	return app.WithModeration(imageproc.New(maxPixels), moderator,
-		domain.ModerationPolicy{AIFailOpen: cfg.FailOpen(), DuplicateDistance: m.DuplicateDistance}, m.AI.Timeout)
+	return []app.Option{
+		app.WithModeration(imageproc.New(maxPixels), moderator,
+			domain.ModerationPolicy{AIFailOpen: cfg.FailOpen(), DuplicateDistance: m.DuplicateDistance}, m.AI.Timeout),
+		app.WithImageRules(cfg.Images, imageproc.NewAnalyzer(maxPixels), repo),
+	}
 }
 
 // links enables media-hosted long-lived links when a signing key is configured.

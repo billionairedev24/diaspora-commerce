@@ -238,3 +238,18 @@ func TestRemoveFromLibraryKeepsTheFile(t *testing.T) {
 		t.Fatalf("the published file stays (only the quarantined upload was deleted): %+v deleted=%v", kept, f.store.deleted)
 	}
 }
+
+// S388: the slot of a library file name decides which image rules apply to it.
+func TestLibraryFileNamesInferTheImageSlot(t *testing.T) {
+	f := newLibrary(&fakeModerator{verdict: allow})
+	ctx := context.Background()
+	for name, want := range map[string]domain.ImageSlot{
+		"AWD-M.MAIN.jpg": domain.ImageSlotMain, "AWD-M.PT01.jpg": domain.ImageSlotOther, "AWD-M.PT08.jpg": domain.ImageSlotOther,
+		"AWD-M.SWCH.jpg": domain.ImageSlotSwatch, "front.jpg": domain.ImageSlotOther,
+	} {
+		a, _, err := f.svc.RequestLibraryUpload(ctx, sellerMember, name, "image/jpeg", 1000)
+		if err != nil || a.ImageSlot != want {
+			t.Fatalf("%s: slot %q (want %s), %v", name, a.ImageSlot, want, err)
+		}
+	}
+}

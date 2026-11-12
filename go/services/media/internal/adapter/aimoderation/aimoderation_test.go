@@ -52,7 +52,7 @@ func moderator(srv *httptest.Server) func() (domain.AIVerdict, error) {
 	m := aimoderation.New(aimoderation.Config{BaseURL: srv.URL, TokenURL: srv.URL + "/oauth2/token",
 		ClientID: "media-service", ClientSecret: "s3cret", Scopes: []string{"ai:use"}}, &http.Client{Timeout: time.Second})
 	return func() (domain.AIVerdict, error) {
-		return m.Moderate(context.Background(), []byte("jpeg-preview"), "image/jpeg", domain.PurposeProductImage)
+		return m.Moderate(context.Background(), []byte("jpeg-preview"), "image/jpeg", domain.PurposeProductImage, domain.ModerationHint{})
 	}
 }
 

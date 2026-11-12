@@ -6,7 +6,12 @@ import (
 	"time"
 
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
+	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/domain"
 )
+
+// Default is the configuration before the environment file and variables are applied: every image threshold has
+// its approved value, so an environment file only names what it changes.
+func Default() Config { return Config{Images: domain.DefaultImageRules()} }
 
 // Store configures one object store.
 type Store struct {
@@ -138,6 +143,9 @@ type Config struct {
 			Scopes       []string      `yaml:"scopes" env:"MEDIA_CLIENT_SCOPES"`
 		} `yaml:"ai"`
 	} `yaml:"moderation"`
+	// Images are the thresholds of the slot-aware image checks (S388); defaults come from domain.DefaultImageRules
+	// (see Default) and staff may override the starred ones at run time (PUT /v1/image-rules).
+	Images    domain.ImageRules `yaml:"images"`
 	Telemetry struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`
 		SampleRatio  float64 `yaml:"sampleRatio" env:"TRACE_SAMPLING"`

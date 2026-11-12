@@ -13,6 +13,39 @@ Direct uploads and file inspection. Go 1.27.1 · PostgreSQL · local port **8207
    Public images then go through moderation (below) and the response carries `url`, `width`, `height`, `bytes`,
    `contentType`, `status`, `flags` and `moderation` for the product builder.
 
+### Image checks and verdicts (S388, S389)
+
+Product images are checked **per slot**: `POST /v1/uploads` and `POST /v1/assets/import` take `slot` (`MAIN`, `OTHER`
+(default), `SWATCH`, `LABEL`) and optional `title`, `brand`, `productTypeCode`; library file names infer it (`SKU.MAIN`
+is MAIN, `SKU.PT01` to `PT08` OTHER, `SKU.SWCH` SWATCH). The asset gets a `verdict` (`PASS`, `WARN`, `HOLD`, `REJECT`)
+and `checks` (`code`, `level`, `params`, English `message`; no ids, no jargon). `REJECT` = status `REJECTED`, deleted
+from quarantine; `HOLD` = `FLAGGED`, private; `PASS`/`WARN` publish. Nothing is public before the checks pass.
+
+| Rule (main image) | Default | Outcome |
+|---|---|---|
+| Longest side (zoom) / shortest side | 1000 px / 500 px | `MAIN_TOO_SMALL` / `TOO_SMALL`, reject (2000 px is only recommended) |
+| White background: share of the outer 2 % ring with all channels at least 250, and the four corners | 95 % | `NOT_WHITE`, reject; a passing background is set to pure 255 (JPEG and PNG; large images are only measured) |
+| Product fills the frame (bounding box of pixels more than 12 from white, after a 3 px blur) | reject under 0.75, warn under 0.85 | `FILL_LOW` / `FILL_OK_NEAR` |
+| Uniform non-white band along 3+ edges, 1 to 12 % thick, with white inside | | `BORDER`, reject |
+| Blank image or a hash in `placeholderHashes` | | `PLACEHOLDER`, reject |
+| Blur (variance of the Laplacian of the product, only when it fills the frame), aspect over 2:1 | 100, 2 | `BLUR`, `ASPECT`, warn only |
+| Transparent PNG / CMYK JPEG | | flattened on white / converted to RGB (WebP written again becomes PNG) |
+| Other slots | warn under 1000 px, reject under 500 px | `LOW_RES`, `TOO_SMALL` |
+
+Every number is configuration (`images.*` in `config/<env>.yaml`); `images.enforce: false` is **shadow mode** (verdict and
+checks recorded, `shadow: true`, nothing rejected for quality; type, size and prohibited content are always enforced).
+Staff change the starred settings at run time with `PUT /v1/image-rules` (per environment database): `warnOnly` (the
+appearance rejects become warnings), min sizes, fill thresholds, the size cap, `allowOnModelApparel`, the mismatch
+threshold. `GET /v1/image-rules` returns what is in force. Measurements (`asset.metrics`) are stored, so
+`POST /v1/assets/verify` (catalog, scope `media:import`) can judge a published image for the slot it is used in, from its
+URL, with today's thresholds, and `POST /v1/assets/rescore` measures old images again (at most 20 per call, two at a time).
+
+The AI hook adds held findings (always HOLD, never REJECT, also when the hook fails or its budget is spent): text, logos,
+watermarks (`HELD_TEXT`), props or people on a main image (`HELD_PROPS`, unless the product type is apparel and the
+setting allows it), a title and brand mismatch score at or above `mismatchHold` (`HELD_MISMATCH`), placeholder, border
+or not-a-product labels (`HELD_REVIEW`), another seller's photo (`HELD_DUPLICATE`). Staff see `moderation.aiLabels` and
+`moderation.mismatchScore` next to the image (signed 5-minute URL) when they review it.
+
 ### Moderation of public images (S030)
 
 `product-image` and `storefront` uploads land in **quarantine** (`quarantine/<key>` on S3-compatible stores. In prod
