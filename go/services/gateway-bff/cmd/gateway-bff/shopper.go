@@ -36,12 +36,16 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	if err != nil { // Validate refuses an unknown value at start-up; this is only the compiler's reassurance.
 		shippingAllocation = app.AllocateProportional
 	}
+	var promiseClient httpclient.Client // nil = no promise service: checkout keeps its estimated dates
+	if !up.Promise.Disabled {
+		promiseClient = client("promise", up.Promise)
+	}
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(sc.payments), Orders: upstreams.NewCustomerOrders(sc.orders),
 		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns), sc.serviceTokens), Payments: upstreams.NewOrderPayments(sc.payments),
 		Security: upstreams.NewSecurity(sc.identity), Bookings: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Limiter: sc.limiter,
 		Lola: upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
-		Delivery: upstreams.NewDeliveryFacts(client("promise", up.Promise), client("carrier-gateway", up.Carrier), client("geo", up.Geo),
+		Delivery: upstreams.NewDeliveryFacts(promiseClient, client("carrier-gateway", up.Carrier), client("geo", up.Geo),
 			sc.serviceTokens),
 		LocalDelivery: upstreams.NewLocalDelivery(client("seller", up.Seller), client("geo", up.Geo), sc.payments, sc.serviceTokens),
 		Offers:        sc.offers,

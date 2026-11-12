@@ -197,6 +197,27 @@ func TestStripePublishableKeyPerEnvironment(t *testing.T) {
 	}
 }
 
+// Prod runs without the promise service; PROMISE_DISABLED=false turns it back on, and no other upstream is optional.
+func TestPromiseIsOptionalAndDisabledInProd(t *testing.T) {
+	if c := load(t, "prod", nil); !c.Upstreams.Promise.Disabled {
+		t.Fatal("prod runs without promise by default")
+	}
+	if c := load(t, "prod", map[string]string{"PROMISE_DISABLED": "false"}); c.Upstreams.Promise.Disabled {
+		t.Fatal("PROMISE_DISABLED=false enables promise")
+	}
+	if c := load(t, "dev", nil); c.Upstreams.Promise.Disabled {
+		t.Fatal("dev keeps promise on")
+	}
+	if c := load(t, "dev", map[string]string{"PROMISE_DISABLED": "true"}); !c.Upstreams.Promise.Disabled {
+		t.Fatal("PROMISE_DISABLED=true disables promise")
+	}
+	c := load(t, "dev", nil)
+	c.Upstreams.Catalog.Disabled = true
+	if err := c.Validate("dev"); err == nil || !strings.Contains(err.Error(), "catalog") {
+		t.Fatalf("only promise may be disabled, got %v", err)
+	}
+}
+
 func TestLANMediaRewriteIsLocalOnly(t *testing.T) {
 	c := &config.Config{}
 	c.Web.LANMediaURL = "http://192.168.1.50:9000/media/"

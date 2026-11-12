@@ -196,7 +196,9 @@ chars), `OIDC_CLIENT_SECRET`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL`, `OIDC_CLIENT_ID`
 `PAYMENTS_URL`, `PROMISE_URL`, `ORDERS_URL`, `NOTIFICATIONS_URL`, `SELLER_URL`, `OFFERS_URL`, `BOOKINGS_URL`,
 `STOREFRONT_URL`, `MEDIA_URL`, `CARRIER_URL`, `TAX_RETURNS_URL`, `AI_GATEWAY_URL`), `STRIPE_PUBLISHABLE_KEY`, `RATE_LIMIT_AUTH_PER_MINUTE`,
 `RATE_LIMIT_LOOKUP_PER_MINUTE`, `TRUST_FORWARDED_FOR`, `RETAIL_ORG_ID`, `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`,
-`TRACE_SAMPLING`, `DOCS_ENABLED`. Secrets (`REDIS_URL`, `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY`) come from the
+`TRACE_SAMPLING`, `DOCS_ENABLED`, `PROMISE_DISABLED`. The promise service is optional: with `upstreams.promise.disabled` (prod default,
+`PROMISE_DISABLED=true`) the BFF makes no promise calls and keeps its own delivery estimates on the product page, cart and
+checkout, and the "deliverable fast" rail stays empty; `PROMISE_DISABLED=false` re-enables it once promise is deployed. No other upstream can be disabled. Secrets (`REDIS_URL`, `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY`) come from the
 cloud secret store via External Secrets (Helm chart in `deploy/helm`).
 
 Shared platform URLs (`docs/engineering/environments.md`): `PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`

@@ -514,12 +514,16 @@ type deliveryFactsImpl struct {
 var _ port.DeliveryFactsClient = (*deliveryFactsImpl)(nil)
 
 // NewDeliveryFacts returns the checkout/tracking client for promise dates, pickup locations, delivery zones and
-// carrier scans (carrier tracking with a gateway-bff service token, scope shipping:rate).
+// carrier scans (carrier tracking with a gateway-bff service token, scope shipping:rate). A nil promise client means
+// the deployment has no promise service: Promises answers nothing and the cart keeps its estimated dates.
 func NewDeliveryFacts(promise, carrier, geo httpclient.Client, tokens port.ServiceTokens) port.DeliveryFactsClient {
 	return &deliveryFactsImpl{promise: promise, carrier: carrier, geo: geo, tokens: tokens}
 }
 
 func (d *deliveryFactsImpl) Promises(ctx context.Context, zip string, offers []port.PromiseOffer) ([]port.PromiseQuote, error) {
+	if d.promise == nil {
+		return nil, nil
+	}
 	var out struct {
 		Promises []port.PromiseQuote `json:"promises"`
 	}

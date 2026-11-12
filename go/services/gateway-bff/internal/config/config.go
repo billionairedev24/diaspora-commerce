@@ -15,6 +15,9 @@ import (
 type Upstream struct {
 	URL     string        `yaml:"url"`
 	Timeout time.Duration `yaml:"timeout"`
+	// Disabled marks an optional upstream that is not deployed (<NAME>_DISABLED=true). Only promise is optional: with
+	// it disabled the BFF makes no promise calls and shows its own delivery estimates.
+	Disabled bool `yaml:"disabled"`
 	// SlowTimeout bounds calls that wait for a downstream saga or call chain (orders: POST /v1/checkout and its
 	// confirm, above orders' checkout-response-timeout; deliveryRuns: late pre-order adds, above its 15s orders
 	// timeout; seller: a final approval, which activates the Stripe subscription). Defaults to Timeout.
@@ -204,6 +207,9 @@ func (c *Config) ApplyUpstreamEnv(lookup func(string) (string, bool)) {
 		if v, ok := lookup(strings.ToUpper(name) + "_URL"); ok && v != "" {
 			u.URL = v
 		}
+		if v, ok := lookup(strings.ToUpper(name) + "_DISABLED"); ok && strings.TrimSpace(v) != "" {
+			u.Disabled = strings.EqualFold(strings.TrimSpace(v), "true") || strings.TrimSpace(v) == "1"
+		}
 	}
 }
 
@@ -305,6 +311,11 @@ func (c *Config) Validate(env string) error {
 	}
 	if v := strings.ToUpper(strings.TrimSpace(c.Checkout.ShippingAllocation)); v != "" && v != "PROPORTIONAL" && v != "FIRST_LINE" {
 		return fmt.Errorf("config: CHECKOUT_SHIPPING_ALLOCATION must be PROPORTIONAL or FIRST_LINE, not %q", c.Checkout.ShippingAllocation)
+	}
+	for name, u := range c.Upstreams.Named() {
+		if u.Disabled && name != "promise" {
+			return fmt.Errorf("config: upstream %s cannot be disabled; only promise is optional", name)
+		}
 	}
 	if c.RedisURL == "" {
 		return fmt.Errorf("config: REDIS_URL is required")
