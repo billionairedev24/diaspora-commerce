@@ -59,7 +59,8 @@ output "cache" {
 }
 
 output "buckets" {
-  value = local.p.bucket.bucket_names
+  description = "aws/gcp/azure only; empty on OVH (media + KYC on Cloudflare R2, backups on Backblaze B2)."
+  value       = try(local.p.bucket.bucket_names, {})
 }
 
 output "secret_names" {

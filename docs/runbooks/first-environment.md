@@ -26,6 +26,8 @@ else in the repository changes with it.
 
 ## 1. State bucket (once per account / project / subscription)
 
+This is the OpenTofu state bucket only. On OVH, OpenTofu creates no other Object Storage buckets: media and KYC evidence are in Cloudflare R2 (`docs/runbooks/r2-buckets.md`), backups in Backblaze B2.
+
 ```bash
 # AWS
 aws sso login

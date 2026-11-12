@@ -332,6 +332,8 @@ the Twilio console's **Monitor → Logs → Messaging** shows the reason (unveri
 
 ### Service secrets: the cloud secret store
 
+**Object storage on OVH:** none. Media and KYC evidence use Cloudflare R2 (`R2_*`, `docs/runbooks/r2-buckets.md`) and backups use Backblaze B2 (`B2_*`, `docs/runbooks/backups-backblaze.md`). OpenTofu creates no OVH buckets or per-service Object Storage users, so no `S3_*` secret is provisioned on OVH. The `S3_*` keys in the tables below apply only to carrier-gateway on aws/gcp/azure.
+
 Each service has **one secret holding a JSON object** whose keys are the environment variable names (the rows of the
 per-app table below). External Secrets Operator syncs it into the Kubernetes Secret `<service>-secrets`, which the pod
 loads with `envFrom` (`infra/helm/library/at-service`, `secrets.enabled: true` in the service's chart):

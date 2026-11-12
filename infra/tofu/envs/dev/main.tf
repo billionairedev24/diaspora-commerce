@@ -634,15 +634,6 @@ module "ovh_cache" {
   high_availability = local.size.ha
 }
 
-module "ovh_bucket" {
-  source    = "../../modules/ovh/bucket"
-  for_each  = local.on.ovh
-  providers = { ovh = ovh.this[each.key] }
-  context   = local.context
-  network   = module.ovh_network["ovh"].network
-  buckets   = local.buckets
-}
-
 # OPTIONAL (ovh_harbor = true): OVH Managed Private Registry (Harbor). Off by default: images are pulled from GHCR.
 module "ovh_registry" {
   source            = "../../modules/ovh/registry"
@@ -663,15 +654,12 @@ module "ovh_budget" {
   shared_account      = var.budget_shared_account
 }
 
+# OVHcloud has no object storage in this stack (media + KYC = Cloudflare R2, backups = Backblaze B2; docs/runbooks/r2-buckets.md),
+# so there are no per-service Object Storage users or S3_* secrets. The module only emits the Helm values fragment.
 module "ovh_identity" {
-  source       = "../../modules/ovh/identity"
-  for_each     = local.on.ovh
-  providers    = { ovh = ovh.this[each.key] }
-  context      = local.context
-  cluster      = module.ovh_cluster["ovh"].workload_identity
-  services     = local.workload_identities
-  buckets      = module.ovh_bucket["ovh"].buckets
-  secret_store = try(module.ovh_secrets["ovh"].store, null) # null = the S3 keys are not written anywhere (read them from the state, put them in the SOPS secrets)
+  source   = "../../modules/ovh/identity"
+  for_each = local.on.ovh
+  services = local.workload_identities
 }
 
 module "ovh_github_deploy" {
@@ -748,7 +736,8 @@ locals {
     cluster   = one(concat(values(module.aws_cluster), values(module.gcp_cluster), values(module.azure_cluster), values(module.ovh_cluster)))
     postgres  = one(concat(values(module.aws_postgres), values(module.gcp_postgres), values(module.azure_postgres), values(module.ovh_postgres)))
     cache     = one(concat(values(module.aws_cache), values(module.gcp_cache), values(module.azure_cache), values(module.ovh_cache)))
-    bucket    = one(concat(values(module.aws_bucket), values(module.gcp_bucket), values(module.azure_bucket), values(module.ovh_bucket)))
+    # null on OVH: no OVH buckets (media + KYC on Cloudflare R2, backups on Backblaze B2)
+    bucket    = one(concat(values(module.aws_bucket), values(module.gcp_bucket), values(module.azure_bucket)))
     # secrets and registry are null on OVH unless ovh_okms / ovh_harbor (the outputs below use try()).
     secrets   = one(concat(values(module.aws_secrets), values(module.gcp_secrets), values(module.azure_secrets), values(module.ovh_secrets)))
     registry  = one(concat(values(module.aws_registry), values(module.gcp_registry), values(module.azure_registry), values(module.ovh_registry)))

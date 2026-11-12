@@ -56,7 +56,7 @@ sites is expected to be a few ms in the same metro (**UNVERIFIED**: measure it b
 | OVH MKS control plane (free plan) | 0 | UNVERIFIED (repo module header; confirm the free plan exists in US East and its SLA/limits) |
 | OVH node `b3-16`, monthly billing | **not in the repo** | UNVERIFIED: get the quote; monthly billing is said to be about half the hourly price and cannot be switched back |
 | OVH block storage for PVCs (Kafka 10 GiB + Valkey 2 + Meilisearch 5 = 17 GiB) and boot disk | not in the repo | UNVERIFIED |
-| OVH Object Storage (Terraform state, copy of the R2 buckets; the tofu `kyc-evidence` locked bucket is currently written by nothing) | not in the repo | UNVERIFIED |
+| OVH Object Storage (OpenTofu state bucket only; no media, KYC or backup buckets) | not in the repo | UNVERIFIED |
 | OVH load balancer | **0, none is created** | by design (Cloudflare Tunnel); a `LoadBalancer` Service would create one |
 | Layerbase Dedicated 4 GB (Postgres only) | $35 | UNVERIFIED (Layerbase site / owner chat) |
 | Layerbase Dedicated 8 GB | $65 | UNVERIFIED. **Not needed**: Valkey and Meilisearch run in the cluster |
@@ -168,8 +168,7 @@ deletion protection is on, no gateway when `egress = none`).
 
 What differs on OVH, all documented in the module headers:
 
-- **No workload identity.** Pods that need OVH Object Storage would use a per-service S3 user (module `identity`; OVH US uses the `.ovh.us` S3 endpoint).
-  No launch service does today: media is R2-only, so the module's buckets are an archive/backup target until a service writes them (decide whether to drop `kyc-evidence`).
+- **No workload identity and no OVH object storage.** Media and KYC evidence are in Cloudflare R2, backups in Backblaze B2; OpenTofu creates no OVH buckets and no per-service S3 users (the module `identity` only emits Helm values). Only the OpenTofu state bucket is on OVH Object Storage.
 - **OKMS and Harbor are opt-in** (`ovh_okms`, `ovh_harbor`, both false). OKMS in the US regions is UNVERIFIED and the module refuses
   a US region. CORS for browser uploads cannot be set with the OVH provider (the media service signs server-side).
 - **Elastic, Confluent and Temporal Cloud** are not offered on OVH and are off in this profile.

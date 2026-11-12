@@ -48,8 +48,7 @@ tofu plan -out plan.out && tofu show -json plan.out > plan.json && conftest test
 tofu apply plan.out
 ```
 
-Expected: one MKS cluster (free plan) with one `b3-16` node, a private network, Object Storage buckets (`kyc-evidence` locked,
-`exports`, `labels`, `media`: currently written by no launch service, media is R2-only), per-service S3 users, consumption alerts. **No load balancer, no gateway, no database.** The plan fails
+Expected: one MKS cluster (free plan) with one `b3-16` node, a private network, consumption alerts. **No OVH Object Storage buckets and no per-service S3 users**: media and KYC evidence are in Cloudflare R2, backups in Backblaze B2. **No load balancer, no gateway, no database.** The plan fails
 on purpose if `admin_cidrs` is empty, if a `US-*` region is paired with a non-US endpoint, or if the region is not the Layerbase one.
 For the trial use a different project and `disposable = true` (hourly node, no deletion protection, KYC retention 1 day).
 These modules were never applied: expect to fix first-run provider errors (the OVH provider schema moves).

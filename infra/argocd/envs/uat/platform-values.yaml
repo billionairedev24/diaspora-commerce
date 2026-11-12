@@ -63,5 +63,5 @@ argocd:
 # cloud: ovh
 # image:
 #   registry: abcdef.gra7.container-registry.ovh.net/library       # tofu output registry_url
-# workloadIdentity: {}                                            # none on OVH: object storage uses per-service S3 keys from the secret store
+# workloadIdentity: {}                                            # none on OVH (and no OVH object storage: media/KYC on R2)
 # secrets: {enabled: true, store: platform-secrets, keySeparator: "/"}   # Secret Manager (OKMS) paths allow "/"

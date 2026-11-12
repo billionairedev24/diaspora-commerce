@@ -71,8 +71,8 @@ Encryption at rest is on for every data store on every cloud; deletion protectio
 
 Built on the `ovh/ovh` provider (v2): network = vRack private network (+ one gateway only when `egress != none`), cluster = Managed
 Kubernetes (free plan, B3 nodes, monthly-billed in prod), postgres/cache = Public Cloud Databases (PostgreSQL / Valkey),
-bucket = Object Storage (`ovh_cloud_project_storage` + lifecycle), secrets = Secret Manager (OKMS), registry = Managed Private Registry
-(Harbor), identity = one S3 user per service with buckets, budget = consumption alerts, github-oidc = nothing (OVH cannot federate
+no bucket module (media and KYC = Cloudflare R2, backups = Backblaze B2, OVH Object Storage is not used), secrets = Secret Manager (OKMS), registry = Managed Private Registry
+(Harbor), identity = no resources (Helm values fragment only), budget = consumption alerts, github-oidc = nothing (OVH cannot federate
 GitHub's OIDC token; see docs/engineering/ci-cd.md#ovhcloud). Every module ships `tests/*.tftest.hcl` (mocked provider) that pin the
 cost choices: `cd infra/tofu/modules/ovh/<module> && tofu init -backend=false && tofu test` (run in CI by `tofu.yml`).
 Cost rationale and the differences from the other clouds: docs/engineering/cloud-cost.md#ovhcloud.

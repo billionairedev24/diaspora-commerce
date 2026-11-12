@@ -73,4 +73,4 @@ argocd:
 # secrets: {enabled: true, store: platform-secrets, keySeparator: "-"}   # Key Vault names allow [A-Za-z0-9-] only
 # ---------------------------------------------------------------------------------------------- OVHcloud (MKS)  [ACTIVE ABOVE]
 # image.registry stays GHCR (no OVH Harbor: saves the registry fee and the mirror step); there is no workload identity on
-# OVH (`workloadIdentity: {}`), object storage uses per-service S3 keys that live in the service Secrets.
+# OVH (`workloadIdentity: {}`), there is no OVH object storage (media and KYC on Cloudflare R2, backups on Backblaze B2), so no S3 keys.

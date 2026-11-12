@@ -12,7 +12,8 @@ Temporal, all **in the cluster** (`infra/k8s/platform/lean`). Elastic Cloud, Con
 
 ```
 infra/tofu/
-  modules/{aws,gcp,azure,ovh}/{network,cluster,postgres,cache,bucket,secrets,registry,identity,github-oidc,budget}
+  modules/{aws,gcp,azure}/{network,cluster,postgres,cache,bucket,secrets,registry,identity,github-oidc,budget}
+  modules/ovh/{network,cluster,postgres,cache,secrets,registry,identity,github-oidc,budget}   (no ovh/bucket: see below)
   modules/shared/{elastic,confluent,temporal}  optional SaaS, off in the lean profile
   modules/README.md                        the shared module contract (read this next)
   envs/{dev,uat,prod}/                     main.tf (identical) + sizing.tf (per env) + tfvars/backends
@@ -31,8 +32,8 @@ Requires **OpenTofu >= 1.9** (provider `for_each`). The OVH provider is `ovh/ovh
 |---|---|
 | `network` | one private network + subnet (free); **no gateway** (`egress = "none"`): nodes keep public IPs, users never reach them (Tunnel) |
 | `cluster` | MKS **free plan**, ONE `b3-16` node in pool `general`, **monthly billed** (deletion protection on), no autoscaler, no spot pool; `ovh_cloud_project_kube_iprestrictions` from `admin_cidrs` |
-| `bucket` | Object Storage (S3): `kyc-evidence` with object lock (compliance, 7 years), `exports`, `labels`, `media` (versioned). Media is R2-only in prod (`docs/runbooks/r2-buckets.md`), so these start as the archive/backup copy of the R2 buckets |
-| `identity` | one Object Storage user per service that touches a bucket (policy limited to its buckets); the S3 keys are read from the state or the OVH panel and go into the service Secret |
+| `bucket` | **none on OVH.** media and KYC evidence = Cloudflare R2 (`docs/runbooks/r2-buckets.md`), backups = Backblaze B2 (`docs/runbooks/backups-backblaze.md`); OVH Object Storage is not used (only the OpenTofu state bucket lives there). The aws/gcp/azure `bucket` modules are unchanged |
+| `identity` | creates nothing on OVH (no per-service Object Storage users, no `S3_*` secrets); it only emits the `cloud = ovh` Helm values fragment |
 | `budget` | Public Cloud consumption alerts at 50/80/100 % of `monthly_budget` |
 | `github-oidc` | creates nothing (OVH has no CI identity federation); with GHCR as the registry the deploy job needs no OVH secret |
 | `postgres`, `cache` | **not created**: Postgres is external (Layerbase) and Valkey runs in the cluster (`managed_data = false`) |
@@ -100,8 +101,8 @@ After the first apply (full runbook in `docs/runbooks/ovh-production.md`):
    cannot on a managed server; `temporal_visibility` shares the `temporal_app` role). It prints each database's URL and password once.
    For production the single source of passwords is `infra/ovh-vps/secrets.sh` with `PROFILE=prod` (it also creates roles and the
    same extensions and renders the Secrets): use one of the two, not both.
-3. Cloudflare R2 tokens for the media service (`R2_*` in `secrets.local.env`, `docs/runbooks/r2-buckets.md`). The OVH per-service S3 keys (module `identity`) are only
-   needed once something writes the OVH buckets (the R2 backup copy).
+3. Cloudflare R2 tokens for the media service (`R2_*` in `secrets.local.env`, `docs/runbooks/r2-buckets.md`). There are no OVH per-service S3 keys: OVH Object Storage is not used
+   (backups go to Backblaze B2, `docs/runbooks/backups-backblaze.md`).
 
 Environments: `dev` and `uat` use the same roots with their own `sizing.tf` and are applied only for a short, deliberate test.
 `main.tf`, `providers.tf`, `variables.tf` and `outputs.tf` are identical in all three directories (`scripts/sync-interface.sh`).
@@ -115,12 +116,12 @@ Environments: `dev` and `uat` use the same roots with their own `sizing.tf` and 
 | Postgres | smallest managed | medium managed | **external (Layerbase)** |
 | Cache | small | medium | in the cluster (Valkey) |
 | Elastic / Confluent / Temporal Cloud | off | off | off |
-| Backups / KYC retention | 3 d / 1 d (governance) | 7 d / 30 d | Layerbase + nightly off-vendor dump / 7 years (compliance, locked) |
+| Backups / KYC retention | 3 d / 1 d (governance) | 7 d / 30 d | Layerbase + nightly dump to Backblaze B2 / KYC on Cloudflare R2 (no OpenTofu-managed lock on OVH) |
 | Deletion protection | off | on | on |
 | Monthly cloud budget (`monthly_budget`, UNVERIFIED placeholder in prod) | $1,000 | $1,500 | 150 until the OVH quote exists |
 
 Levers that exist in the modules: free MKS control plane unless `zone_count > 1`; monthly billing for the always-on pool; no NAT/gateway
-unless `egress != none`; Object Storage lifecycle (abort stale uploads, expire noncurrent versions, Standard-IA); consumption alerts.
+unless `egress != none`; bucket lifecycle on aws/gcp/azure (abort stale uploads, expire noncurrent versions, Standard-IA); consumption alerts.
 OVH has no arm64 and no spot market (the "spot" pool is tainted, hourly and scales from zero; there is no discount).
 
 ## 6. Tests and checks
