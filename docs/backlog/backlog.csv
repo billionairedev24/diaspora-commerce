@@ -1323,3 +1323,111 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Verified in an environment","E02","","High","5","identity checkout acting-as","identity","In Progress"
 "S352","Story","Dashboard gaps with no upstream data yet","Left out of the module-summary homes because no service exposes them: seller late and delivered counts, orders by status, out-of-stock count, listing quality score, ads; provider reviews; staff late and at-risk shipments, failed jobs and DLQ.","- Each metric gets an upstream endpoint
 - Modules appear with real data and keep empty states","E32","","Medium","8","dashboards seller staff","exports","To Do"
+"S353","Story","Manual status changes: reason, capture warning and audit entry","At launch staff set shipment statuses by hand and picked up captures the customer's payment. Today the change is kept in the order history (actor, time, optional note) behind a generic confirmation; there is no central audit entry and no money warning, and a note is optional for picked up.","- Setting picked up (or ready on a pickup order) in the staff console needs a reason of at least 5 characters
+- The confirmation names the amount that will be captured and says the customer is charged
+- Every manual status change by staff writes an audit-log entry with actor, time, reason, from and to, visible in the Audit log
+- The order history and the audit entry agree for 10 changes in an integration test
+- A test proves the capture task is not queued when the confirmation is declined","E08","","Highest","5","payments orders staff audit launch","orders","To Do"
+"S354","Story","Authorisation expiry guard for manual capture","Card authorisations lapse after about 7 days. Capture on first pickup is not retried past that for ordinary orders (12 retries then FAILED), so a late pickup ships unpaid goods.","- A staff list shows orders authorised and not captured for more than 3 days
+- A FAILED capture raises a staff alert within 5 minutes
+- Staff cannot mark picked up on an order whose authorisation has lapsed without choosing re-authorise or cancel-and-refund
+- Re-authorising on the saved card off-session works in a Stripe test-mode run
+- The runbook states the pickup-within-5-days rule","E07","","Highest","8","payments orders stripe launch","payments","To Do"
+"S355","Story","Invite-only beta gate for customer accounts","Launch is an invite-only beta. No customer sign-up gate was found in identity (only organisation team invitations). Migrated v1 users must still be able to sign in.","- Sign-up without a valid invite is refused with a clear message
+- Staff can create, list and revoke invites
+- A migrated v1 user signs in without an invite
+- The gate can be switched off by one setting for general launch
+- Social sign-in follows the same rule","E02","","Highest","5","identity beta launch","identity","To Do"
+"S356","Story","Verify application review workflow","Two-step staff review (claim, assign, approve step 1, final approve, flag, return to applicant, reject) is built and merged. It has not been walked on a real environment.","- One test application passes claim, approve step 1 and final approval in the staff console
+- Return to applicant sends the email and reopens the form
+- A reject keeps the reason and notifies the applicant
+- The second approver cannot be the first reviewer
+- Result recorded with date and name","E13","","High","3","seller staff verify","onboarding","In Progress"
+"S357","Story","Verify services zones and in-person-only","Metro zones, provider service areas and in-person-only services are merged (bookings, BFF, staff console, storefront). Not verified end to end.","- Staff create a metro zone and a provider picks it as a service area
+- A shopper inside the zone finds the service, outside it does not
+- An in-person-only service never shows as remote
+- Checked in the browser, result recorded with date and name","E15","","High","3","bookings staff verify","bookings","In Progress"
+"S358","Story","Verify home page ads and blocks","Home ad and block slots, placement stats, disclosure and counting are merged. Not verified with real content.","- A paid ad and a rule-based block appear on the home page in priority order
+- Each ad is labelled as an ad
+- Views and clicks are counted once and stop when the ad ends
+- Reprioritising in the staff console changes the order on the next load","E20","","Medium","3","content ads verify","content","In Progress"
+"S359","Story","Verify sign-up MFA","Sign-up and MFA (email codes, forced staff enrolment) are merged with integration tests and a runbook. Not verified in a browser.","- A new customer signs up and completes the email code step
+- A staff user is forced to enrol MFA at first sign-in
+- A wrong or expired code is refused with a clear message
+- Verified in Chrome and Firefox, result recorded","E02","","High","3","identity security verify","identity","In Progress"
+"S360","Story","Verify the language switch stays hidden at launch","The language switch is hidden in the storefront footer, seller center and staff console behind LANGUAGE_SWITCH_ENABLED. Launch is English only.","- No language switch is visible on the three web apps in the prod build
+- Setting LANGUAGE_SWITCH_ENABLED=true shows it again
+- Pages render English whatever the browser language
+- Result recorded for each app","E31","","Medium","1","web i18n verify","legal","In Progress"
+"S361","Story","Verify the image rule","The 1000 x 1000 px minimum for the main image was dropped (product form, API publish check, bulk import, image library). Confirm the rule that replaced it.","- A smaller image is accepted on the form, the API and the bulk import
+- A file that is not an image, or over the size limit, is refused with a message
+- Uploads reach the public R2 bucket and show on the listing
+- Result recorded","E03","","High","2","catalog images verify","catalog","In Progress"
+"S362","Story","Verify listing rules and the rule-driven form","Catalog's listing rules registry, per-variant package, rule-driven draft policy, bulk upload columns and the seller center form are merged with tests. Not walked by a seller.","- A seller creates one listing per kind and the form asks only what its rules need
+- A regulated product with no brand is refused
+- Bulk upload reports rule errors per row
+- Result recorded with date and name","E03","","High","5","catalog seller verify","catalog","In Progress"
+"S363","Story","Verify selling approvals","Selling approvals (rules, applications as staff cases, publish gate, holds and sweeps, seller center and staff console UI) are merged. Not verified end to end.","- A seller without approval cannot publish a restricted listing
+- A staff approval releases it
+- A hold pauses live listings and the restore sweep brings them back after approval
+- Documents upload to the private KYC bucket and open only for staff","E13","","High","5","seller catalog staff verify","onboarding","In Progress"
+"S364","Story","Risk-based tax review: keep ALL until sign-off","taxReview.mode ALL is the launch setting. RISK_BASED (system approves active-category variants with a 5 percent audit sample) must wait for a Texas tax professional's written agreement.","- Launch setting is ALL and checked on production
+- Every new variant waits for a reviewer and the queue is staffed
+- Switching to RISK_BASED requires a change reason that names the sign-off reference
+- The audit sample tab is empty before the switch and a reclassification re-closes the gate in a test
+- Rollback to ALL tested","E17","","High","3","tax launch blocked-owner","returns","In Progress"
+"S365","Story","Verify launch shipping and delivery quotes","Launch shipping model, flat fee settings, quote_required outside zones and the delivery quote desk are merged. Not verified with real carriers.","- Checkout shows the launch shipping options for a near and a far address
+- A far address asks for a quote, staff agree an amount and checkout applies it
+- Flat delivery fee changes in staff settings show at checkout
+- Result recorded with date and name","E11","","High","5","shipping orders verify","carriers","In Progress"
+"S366","Story","Verify the service search radius","The shopper-chosen radius (Within control, Search wider, staff default radius) is merged. Not verified in a browser.","- Changing the radius changes the services listed
+- An empty result offers Search wider
+- The staff default radius applies to a new visitor
+- Result recorded","E15","","Medium","2","bookings storefront verify","bookings","In Progress"
+"S367","Story","Verify make db-reset","make db-reset deletes every local database on the developer's Postgres after typing wipe, recreates them empty and clears seed state.","- It refuses to run against a non-local host or when APP_ENV is prod or uat
+- It asks for the word wipe and does nothing otherwise
+- After it, make up and make seed give a working stack
+- Documented in local-development.md","E33","","Medium","2","tooling dev verify","quality","In Progress"
+"S368","Story","Verify the website given to Stripe","The business website sent to Stripe at connected-account creation is configurable (local uses Stripe's test website). Production must send the storefront base https://www.afrotransact.com.","- In prod the value equals the public storefront URL and is not localhost
+- A test-mode connected account is created with it and Stripe accepts it
+- The business page URL shown to sellers matches
+- The config key is listed in secrets-and-configuration.md","E14","","High","2","seller stripe launch","billing","In Progress"
+"S369","Story","Checkout UX fixes from the owner walkthrough","A list of checkout fixes comes from the owner's browser pass. The list is needed from the owner before work starts.","- Each fix on the owner's list is written as one testable line here
+- Each has an automated test or a recorded manual check
+- Checkout success on the dashboard does not drop after release","E06","","High","5","checkout web blocked-owner","checkout","To Do"
+"S370","Story","OVH production path (Managed Kubernetes, Layerbase Postgres)","The OVH document covers a single-server test. Production needs OVH Managed Kubernetes, Layerbase Postgres, ingress, certificates, secrets and the deploy path, with the launch stack (FGA off, no native-app services).","- A fresh cluster is created from the repository's instructions and all launch services are healthy
+- Every service reaches its own Layerbase database over TLS
+- Cloudflare reaches the origin and the origin refuses direct traffic
+- Helm values and the deploy path are in the repository and rehearsed once
+- Production readiness section 1 lines for OVH are ticked","E30","","Highest","13","ovh infra launch","cicd","To Do"
+"S371","Story","Postgres restore drill on Layerbase","Backups are not proven until one is restored. Restore a production-shaped backup into a scratch database and run the services on it.","- A backup is restored into a scratch database and services start against it
+- An order and its payment read back correctly
+- Point-in-time recovery to a chosen minute is exercised if Layerbase offers it
+- Minutes taken, date and name recorded in the readiness checklist","E29","","Highest","3","ovh backup launch","infra","To Do"
+"S372","Story","v1 to v2 production cutover (same Stripe account)","Execute docs/runbooks/v1-to-v2-cutover.md: inventory, test-mode rehearsal, freeze, webhook swap, data load, DNS switch, rollback ready.","- Owner questions 1 to 11 in the runbook are answered
+- Test-mode rehearsal done within 14 days of cutover
+- Go/no-go checklist fully ticked and signed by the owner
+- Three live v2 webhook endpoints return 2xx and a real payment and refund are applied
+- v1 endpoints disabled, not deleted; v1 key rolled after 30 days","E30","","Highest","13","cutover stripe launch blocked-owner","cicd","To Do"
+"S373","Story","Installable web app (PWA) for the three web apps","No native apps at launch. Web apps must install to the home screen on iPhone and Android.","- Each app serves a valid manifest with icons and a service worker
+- Lighthouse installable check passes on the prod build
+- An offline page shows when the network is down
+- Install steps for iPhone and Android are on a help page
+- Prod CSP still passes after the service worker is added","E23","","High","5","web pwa launch","storefront-web","To Do"
+"S374","Story","Host Storybook","Host the UI package's Storybook for designers and reviewers behind sign-in.","- Storybook builds in CI and publishes on every merge to develop
+- The URL is behind Cloudflare Access or equivalent
+- It is not indexed
+- The link is in docs/engineering/web.md","E33","","Low","3","web docs","quality","To Do"
+"S375","Story","Build the inventory rules (blocked on owner decisions)","docs/engineering/inventory-rules.md drafts how AfroTransact stock and seller stock behave, walk-in conflicts, capture and refund exposure. Build waits for the owner to decide the open points in that document.","- Owner answers every open decision in inventory-rules.md and the answers are written there
+- Each rule is turned into a testable line before code starts
+- Rules are implemented behind a setting and tested with concurrent orders
+- No oversell in a 50-parallel-checkout test","E09","","Medium","13","inventory blocked-owner","inventory","To Do"
+"S376","Story","ai-gateway spend cap for launch","Shipped per-feature daily caps add up to about 1,200 US dollars a day. The beta needs a hard ceiling that does not depend on code.","- A monthly credit limit is set on the OpenRouter account and on the prod key
+- Prod per-feature daily caps are lowered to the agreed figure in config
+- An alert fires at 50 and 80 percent of the monthly cap
+- Exceeding a cap degrades then returns 429 ai.budget-exceeded in a test","E21","","High","3","ai launch cost","ai","To Do"
+"S377","Story","MCP exposure review for the beta","mcp-server is on: OAuth bearer, tool filtering, rate limit, durable audit. Decide who can reach it during the beta.","- Owner decision recorded: public, partner clients only, or staff only
+- Edge route, WAF and OAuth client redirect URIs match it
+- Staff and data-changing tools are off or need an explicit scope for beta users
+- A token without scope gets -32003 in a test
+- The mcp.tool.invoked audit events are visible in the chosen sink","E21","","High","3","mcp security launch","ai","To Do"
