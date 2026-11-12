@@ -41,6 +41,7 @@ import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
 import org.junit.jupiter.api.Test;
+import org.mockito.AdditionalAnswers;
 
 /**
  * A food-only seller is refused, in the seller's words, on every path that creates or changes something in the
@@ -89,7 +90,7 @@ class ScopedOperationsTest {
                 mock(ProductDraftRepository.class), mock(IdentifierIssuer.class), new DefaultProductDraftPolicy(),
                 new DefaultSizeChartPolicy(), mock(SizeChartRepository.class), mock(ProductEvents.class),
                 mock(BrandResolver.class), guard, new TaxGateEvaluator(request -> new TaxResolver.Resolution("RESOLVED", "EXEMPT", "AT.X", "S001", "0%", null, "v", "r"), false),
-                RulesFixtures.permissiveService(), clock);
+                RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()), clock);
         assertThatThrownBy(() -> writer.create(OWNER, create(DRESSES))).isInstanceOfSatisfying(
                 DepartmentNotAllowed.class, e -> assertThat(e.getMessage())
                         .contains("not set up to sell in Fashion"));

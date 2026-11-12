@@ -16,6 +16,9 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.TaxDecision;
+import com.afrotransact.catalog.domain.tax.TaxStatus;
+import com.afrotransact.catalog.domain.tax.VariantTax;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +73,17 @@ class ProductEventPayloadTest {
         assertThat(payload.variants().get(0).packaging()).isEqualTo(new ProductEventPayload.PackagePayload(20, 12, 6, 3));
         assertThat(payload.variants().get(1).packaging()).isEqualTo(new ProductEventPayload.PackagePayload(10, 8, 4, 2));
         assertThat(ProductEventPayload.of(product(Map.of(), List.of()), false).dangerousGoods()).isFalse();
+    }
+
+    @Test
+    void aLiveProductWithoutAResolvedTaxDecisionIsNeverAnnouncedAsLive() {
+        // Fail closed for offers, the search indexer and inventory: they read this status.
+        Product live = product(Map.of(), List.of());
+        assertThat(ProductEventPayload.of(live, false).status()).isEqualTo("IN_REVIEW");
+        Variant resolved = new Variant(UUID.randomUUID(), new Atin("AT0000VAR1"), "SKU-1", null, true, Map.of(), 899, "USD", 0,
+                null, List.of(), false, new VariantTax(Map.of(), TaxStatus.READY, List.of(),
+                        new TaxDecision("EXEMPT", "AT.GROCERY.X", "S001", "0%", "v1", "r")));
+        assertThat(ProductEventPayload.of(live.withVariants(List.of(resolved)), false).status()).isEqualTo("LIVE");
     }
 
     private static ProductImage image(String url) {

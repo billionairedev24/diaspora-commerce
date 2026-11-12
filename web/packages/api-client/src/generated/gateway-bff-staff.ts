@@ -2992,6 +2992,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/tax/live-without-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live listings that have no resolved tax decision (always empty)
+         * @description catalog `GET /v1/tax-gate/live-without-decision` (`tax:read`). A product must never be live without a stored, resolved tax decision on every variant; this list is empty when that holds, and the catalog sweep closes anything listed within a minute. The Tax review page shows a banner with `total` and links here when it is not zero. Sellers and categories by name, and why each variant has no decision in plain words.
+         */
+        get: operations["listStaffTaxLiveWithoutDecision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/tax/reviews/{atin}": {
         parameters: {
             query?: never;
@@ -10212,6 +10232,27 @@ export interface components {
             /** @description Reference of the signed-off decision or opinion letter; required when lifting a gate */
             decisionRef?: string;
         };
+        StaffTaxLiveWithoutDecisionPage: {
+            items: components["schemas"]["StaffTaxLiveWithoutDecisionRow"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        StaffTaxLiveWithoutDecisionRow: {
+            atin: string;
+            title: string;
+            sellerName: string;
+            categoryName: string;
+            updatedAt?: string;
+            variants: {
+                atin: string;
+                sku: string;
+                status: string;
+                statusLabel: string;
+                why: string;
+            }[];
+        };
         StaffTaxReviewPage: {
             items: components["schemas"]["StaffTaxReviewRow"][];
             total: number;
@@ -15378,6 +15419,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffTaxReviewPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTaxLiveWithoutDecision: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxLiveWithoutDecisionPage"];
                 };
             };
             401: components["responses"]["Problem"];

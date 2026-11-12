@@ -32,17 +32,20 @@ class SellingGatedProductWriter implements ProductWriter {
     private final ProductRepository products;
     private final CategoryRepository categories;
     private final ProductEvents events;
+    private final ProductLiveGate liveGate;
     private final Clock clock;
     private final boolean autoPublish;
 
     SellingGatedProductWriter(@Qualifier("productWriterImpl") ProductWriter delegate, SellingPublishGate gate,
-                              ProductRepository products, CategoryRepository categories, ProductEvents events, Clock clock,
+                              ProductRepository products, CategoryRepository categories, ProductEvents events,
+                              ProductLiveGate liveGate, Clock clock,
                               @Value("${at.catalog.listing.auto-publish:true}") boolean autoPublish) {
         this.delegate = delegate;
         this.gate = gate;
         this.products = products;
         this.categories = categories;
         this.events = events;
+        this.liveGate = liveGate;
         this.clock = clock;
         this.autoPublish = autoPublish;
     }
@@ -86,7 +89,8 @@ class SellingGatedProductWriter implements ProductWriter {
         if (!readiness.ready()) {
             return p;
         }
-        Product live = products.update(p.approve(Instant.now(clock)));
+        // Through the live gate (which re-checks the tax decision of every variant), never Product.approve directly.
+        Product live = products.update(liveGate.approve(p, Instant.now(clock)));
         events.publish(CatalogEvents.PRODUCT_APPROVED, live);
         return live;
     }

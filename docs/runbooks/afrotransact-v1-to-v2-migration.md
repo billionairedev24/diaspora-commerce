@@ -36,7 +36,7 @@ An automated toolchain at this volume would be more code, more bugs, and less ce
 |---|---|---|
 | Users, passwords, social logins, roles | Keycloak sessions and refresh tokens | Everyone signs in once after cutover. |
 | Addresses | TOTP / passkey enrolments | Keycloak's secrets are not portable. Re-enrol — it is a handful of people. |
-| Orders, shipments, order lines | **Products, variants, categories, images** | Being re-uploaded fresh. |
+| Orders, shipments, order lines | **Products, variants, categories, images** | Re-uploaded through v2 (bulk upload or the product form), never copied by SQL: v1 products have no tax facts, and in v2 nothing is live without a tax decision. See [4.7](#47-products--never-live-without-tax). |
 | Payments, refunds, transfers, saved cards | Carts and checkout sessions | Ephemeral. |
 | Store credit, coupons, referrals *(if any rows exist)* | Wishlists | Point at v1 product ids that will not exist. |
 | The one seller — by hand, not by SQL | Returns, disputes, order messages | None in production. |
@@ -129,7 +129,7 @@ The migration is not proven until a real user with a real password signs in on a
 
 1. Right-click the `afrotransact` database → **Tools → Backup**.
 2. Tick these schemas only: `keycloak`, `orders`, `seller`, `payment`, `profile`, `ledger`.
-   Leave `catalog` out — products are being re-uploaded.
+   Leave `catalog` out — products are re-uploaded through v2 and land in review ([4.7](#47-products--never-live-without-tax)).
 3. Settings page: **Format: Custom**, tick **No privileges** and **No owner**.
 4. Output: `afrotransact-prod.dump`.
 5. On a version-mismatch error, point **Preferences → Database → PostgreSQL → Local Client** at a PostgreSQL 16
@@ -324,6 +324,44 @@ This is the specification for the one-off SQL script.
 | `seller.seller_principals` | `connect_account.persons`, or skip | Stripe already holds it. Contains SSN last-4 — sensitive. |
 | `seller.seller_documents`, `.billing_events`, `.store_shipping_regions` | — | Archive. |
 
+### 4.7 products — never live without tax
+
+**Owner rule: a product or variant is never live (purchasable, in search) without a stored, resolved tax decision.** v1
+products carry no tax facts (no category tax questions, no weight, no proof), so a migrated product cannot have a decision
+and **must land not live**. This holds for every way products can come across, and the catalog enforces it so a mistake in a
+script cannot put an untaxed item on sale.
+
+| Rule | How it is enforced |
+|---|---|
+| Import through v2, not SQL: **bulk upload** (CSV, seller back office → Listings → Bulk upload) or `POST /v1/products` | Both create the product **in review** (draft state), every variant with its tax state `MISSING_FACTS` or `PENDING_REVIEW`. Nothing in the import path can set `LIVE`; the only way live is `ProductLiveGate` (`docs/engineering/tax-gate-paths.md`). |
+| Never `insert`/`update` the catalog database by hand or by script with `status = 'LIVE'` | The persistence adapter refuses to store a LIVE product whose variants do not all have a resolved decision. The catalog sweep closes any that appear (reason `TAX_...`), and `catalog_live_without_tax_decision` pages if it ever finds one. |
+| Imported products have **no tax hold**, so they never go live on their own | Only a listing that was live and then closed for tax comes back automatically. An imported product waits for the seller and tax review. |
+| Do not invent tax facts to make the import "complete" | A guessed weight, serving count or exemption is a tax decision nobody made. Leave the tax questions empty; the seller answers them. |
+
+**What the seller does — "Complete tax details to publish".** After the import the seller sees each product as *In
+review*. For every product they open it in Seller Center, answer the tax questions of its category (net weight, servings,
+label type, and so on), upload proof where it asks for a file, and save. Our tax review then checks the classification; once
+it is approved a moderator approves the listing in the moderation queue and it goes live (an approval is refused while any
+variant still lacks a resolved decision). Until then the seller reads "We are checking the tax details for this item" and the shopper sees nothing. Tell
+the seller this step in the cutover note, in these words: **complete tax details to publish.**
+
+**Order of work at cutover**
+
+1. Import products (bulk upload as the seller, or by an admin on their behalf). Expect every row to land in review.
+2. Run the check below: zero live products, zero `catalog_live_without_tax_decision`.
+3. The seller completes the tax details product by product (start with the best sellers). Staff work the queue in
+   **Fees & commissions → Sales tax → Tax review**.
+4. Products go live one by one as they are approved. Old orders keep rendering from the snapshot on the order line
+   (4.3), so they never depend on a live product.
+
+```sql
+-- catalog database, right after the import: nothing is live, nothing is without a decision
+select count(*) from product where status = 'LIVE';                                  -- expect 0 until tax review approves
+select count(*) from product p where p.status = 'LIVE' and exists (
+  select 1 from product_variant v where v.product_id = p.id
+    and (v.tax_status <> 'READY' or jsonb_typeof(v.tax_decision) is distinct from 'object'));   -- expect 0, always
+```
+
 ### 4.6 accounting — do not migrate
 
 `ledger.accounts`, `journal_entries`, `journal_lines`, `operating_expenses` are a double-entry ledger with no v2
@@ -352,6 +390,9 @@ select count(*) from customer_order o
 select (select sum(total_cents) from orders.orders) as v1_total,
        (select sum(total_minor) from customer_order) as v2_total;   -- must be equal
 ```
+
+If products were imported: `catalog_live_without_tax_decision` is 0 and no product is live before its tax review
+([4.7](#47-products--never-live-without-tax)). The staff console shows no red banner on Tax review.
 
 Then **read all 40 orders side by side** — v1 and v2, totals and line titles. That is a twenty-minute job and worth
 more than any automated check.

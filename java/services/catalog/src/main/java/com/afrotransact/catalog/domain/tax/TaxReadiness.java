@@ -55,8 +55,11 @@ public record TaxReadiness(UUID productId, TaxStatus status, String categoryCode
 
     private static VariantReadiness variant(Variant v) {
         VariantTax t = v.tax();
-        String reason = t.ready() ? null : TaxGate.variantMessage(t.status());
-        return new VariantReadiness(v.atin().value(), v.sellerSku(), t.status(), t.missing(), reason);
+        String reason = t.ready() ? null : TaxGate.variantMessage(
+                t.status() == TaxStatus.READY ? TaxStatus.MISSING_FACTS : t.status());
+        // A READY status with no stored decision is not ready: the decision is what checkout reads.
+        TaxStatus status = t.status() == TaxStatus.READY && !t.ready() ? TaxStatus.MISSING_FACTS : t.status();
+        return new VariantReadiness(v.atin().value(), v.sellerSku(), status, t.missing(), reason);
     }
 
     /** What stops the product from going live, keyed like the form's fields (empty when ready). */

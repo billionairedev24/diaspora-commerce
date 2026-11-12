@@ -456,6 +456,8 @@
   "sc.pf.loading": "A ń gbé fọ́ọ̀mù ọjà wá…",
   "sc.pf.formLabel": "Ọjà",
   "sc.pf.rejected": "A kò fọwọ́ sí i:",
+  "sc.pf.taxHold.title": "À ń ṣàyẹ̀wò àwọn àlàyé owó orí ọjà yìí",
+  "sc.pf.taxHold.body": "Kò sí lórí ìtajà fún ìgbà díẹ̀. O kò nílò láti ṣe nǹkankan àfi tí a bá béèrè àlàyé síwájú sí i lọ́wọ́ rẹ. Yóò padà sórí ìtajà fúnra rẹ̀ nígbà tí a bá ti ṣàyẹ̀wò.",
   "sc.pf.liveTitle": "Ìpolówó yìí ti wà lórí afẹ́fẹ́.",
   "sc.pf.liveBody": "Àwọn àyípadà máa hàn lẹ́sẹ̀kẹsẹ̀. Ẹ̀ka àti àwọn oríṣiríṣi rẹ̀ kò ní yí padà: fi iye ọjà oríṣi kan sí 0 láti dá títà rẹ̀ dúró.",
   "sc.pf.restoreTitle": "O ní àwọn àyípadà tí kò tíì jáde láti {time}.",

@@ -456,6 +456,8 @@
   "sc.pf.loading": "Chargement du formulaire produit…",
   "sc.pf.formLabel": "Produit",
   "sc.pf.rejected": "Non approuvé :",
+  "sc.pf.taxHold.title": "Nous vérifions les informations fiscales de cet article",
+  "sc.pf.taxHold.body": "Il n'est pas en vente pour le moment. Vous n'avez rien à faire, sauf si nous vous demandons plus d'informations. Il sera remis en vente automatiquement dès que nous aurons vérifié.",
   "sc.pf.liveTitle": "Cette annonce est en ligne.",
   "sc.pf.liveBody": "Les modifications sont publiées immédiatement. La catégorie et les variantes restent : mettez le stock d’une variante à 0 pour arrêter de la vendre.",
   "sc.pf.restoreTitle": "Vous avez des modifications non publiées du {time}.",

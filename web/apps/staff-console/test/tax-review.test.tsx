@@ -223,4 +223,41 @@ describe('Tax review', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Jollof seasoning blend, 4 oz')).toBeInTheDocument();
   });
+
+  describe('the live-without-a-tax-decision audit', () => {
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    const row = {
+      atin: 'AT00000001',
+      title: 'Ofada rice, 5 lb',
+      sellerName: 'Mama Nkechi’s Kitchen',
+      categoryName: 'Groceries and food > Rice and grains',
+      updatedAt: '2026-11-12T09:00:00Z',
+      variants: [{ atin: 'AT00000011', sku: 'OFADA-5', status: 'PENDING_REVIEW', statusLabel: 'Waiting for tax review', why: 'Waiting for our team to check the details.' }]
+    };
+
+    it('shows nothing when no live listing is missing a tax decision (the normal state)', async () => {
+      await renderScreen(<TaxReviewPanel />);
+      await screen.findByRole('table', { name: 'Tax review queue' });
+      expect(screen.queryByTestId('tax-gate-banner')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Live without a decision/ })).not.toBeInTheDocument();
+    });
+
+    it('warns with the count and opens the list, with the seller and category by name', async () => {
+      const user = userEvent.setup();
+      interceptStaff(async (req, next) => {
+        if (new URL(req.url).pathname.endsWith('/v1/staff/tax/live-without-decision')) return json({ items: [row], total: 1, page: 0, size: 25 });
+        return next(req);
+      });
+      await renderScreen(<TaxReviewPanel />);
+      const banner = await screen.findByTestId('tax-gate-banner');
+      expect(within(banner).getByText('1 listing is live without a tax decision')).toBeInTheDocument();
+      await user.click(within(banner).getByRole('button', { name: 'Show the list' }));
+      const table = await screen.findByRole('table', { name: 'Live listings without a tax decision' });
+      const line = within(table).getByText('Ofada rice, 5 lb').closest('tr') as HTMLElement;
+      expect(within(line).getByText('Mama Nkechi’s Kitchen')).toBeInTheDocument();
+      expect(within(line).getByText('Groceries and food > Rice and grains')).toBeInTheDocument();
+      expect(within(line).getByText(/Waiting for tax review/)).toBeInTheDocument();
+      expect(table).not.toHaveTextContent(/org-|prd-/);
+    });
+  });
 });

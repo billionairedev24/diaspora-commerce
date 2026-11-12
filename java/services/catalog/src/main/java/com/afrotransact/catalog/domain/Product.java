@@ -65,6 +65,28 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
         details = details == null ? ListingDetails.DEFAULT : details;
     }
 
+    /** What the seller reads while a listing is closed because its tax details are not complete. */
+    public static final String TAX_HOLD_NOTE = "We are checking the tax details for this item.";
+
+    /**
+     * Takes a live listing off sale because a variant has no stored, resolved tax decision. It goes back to review (never
+     * rejected: the seller did nothing wrong) with a plain note. Only the tax gate component may bring it back.
+     */
+    public Product holdForTax(Instant now) {
+        if (status != ProductStatus.LIVE) {
+            throw new IllegalStateException("Only live listings can be held for tax (was " + status + ")");
+        }
+        return withStatus(ProductStatus.IN_REVIEW, TAX_HOLD_NOTE, now);
+    }
+
+    /** Puts a listing that was held for tax back on sale. Only the tax gate component may call it. */
+    public Product restoreAfterTaxHold(Instant now) {
+        if (status != ProductStatus.IN_REVIEW) {
+            throw new IllegalStateException("Only a listing held for tax can be restored (was " + status + ")");
+        }
+        return withStatus(ProductStatus.LIVE, null, now);
+    }
+
     public Product approve(Instant now) {
         if (status != ProductStatus.IN_REVIEW) {
             throw new IllegalStateException("Only products in review can be approved (was " + status + ")");

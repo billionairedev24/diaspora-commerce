@@ -3971,6 +3971,8 @@ components:
           - REJECTED
           - PAUSED
           - TAKEN_DOWN
+          description: 'LIVE only when every variant has a stored, resolved tax decision (never guess: a product without one
+            is announced as IN_REVIEW, so offers, search and inventory never treat it as purchasable).'
         title:
           type: string
         categoryId:
@@ -3984,12 +3986,16 @@ components:
           type:
           - string
           - 'null'
-          description: 'Moderation note; on a takedown "[REASON_CODE] Taken down: note"'
+          description: 'Moderation note; on a takedown "[REASON_CODE] Taken down: note"; "We are checking the tax details
+            for this item." while the listing is held for tax'
         reasonCode:
           type:
           - string
           - 'null'
-          description: Takedown reason code (catalog.product.taken_down only; ListingReasonCode)
+          description: Takedown reason code (catalog.product.taken_down; ListingReasonCode), or on catalog.product.paused
+            the code TAX_<status> (TAX_MISSING_FACTS, TAX_PENDING_REVIEW, TAX_DECISION_MISSING ...) when a live listing was
+            closed because a variant has no resolved tax decision (status IN_REVIEW; catalog.product.resumed follows when
+            it is approved)
         sellerHidden:
           type: boolean
           description: The owner's listings are hidden by seller-service compliance enforcement (seller.listings.hidden).

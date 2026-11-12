@@ -9,13 +9,16 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMemo } from 'react';
 
 import { ErrorState } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 
 import { RecordPill } from './shared';
+import { TaxGateBanner, useLiveWithoutDecisionCount } from './TaxGateBanner';
+import { TaxGateList } from './TaxGateList';
 import { TaxReviewSheet } from './TaxReviewSheet';
 
-type View = 'queue' | 'audit' | 'decisions';
+type View = 'queue' | 'audit' | 'decisions' | 'gate';
 const DECISION_STATUSES = [
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Sent back to the seller' },
@@ -31,9 +34,13 @@ export function TaxReviewPanel() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const view: View = params.get('review.view') === 'decisions' ? 'decisions' : params.get('review.view') === 'audit' ? 'audit' : 'queue';
+  const t = useT();
+  const gateCount = useLiveWithoutDecisionCount();
+  const requested = params.get('review.view');
+  const view: View = requested === 'decisions' ? 'decisions' : requested === 'audit' ? 'audit' : requested === 'gate' ? 'gate' : 'queue';
   const decided = view === 'decisions';
   const audit = view === 'audit';
+  const gate = view === 'gate';
   const status = decided ? (params.get('review.status') ?? 'APPROVED') : audit ? TAX_AUDIT_SAMPLE : 'PENDING_REVIEW';
   const openAtin = params.get('variant');
   const action = params.get('do');
@@ -52,7 +59,7 @@ export function TaxReviewPanel() {
       else p.delete('do');
     });
 
-  const query = useQuery({ ...staffTaxQueries.reviews(api.tax, { status, q: state.q || undefined, page: state.pagination.pageIndex, size: state.pagination.pageSize }), placeholderData: keepPreviousData });
+  const query = useQuery({ ...staffTaxQueries.reviews(api.tax, { status, q: state.q || undefined, page: state.pagination.pageIndex, size: state.pagination.pageSize }), placeholderData: keepPreviousData, enabled: !gate });
   const data = query.data;
 
   const columns = useMemo<ColumnDef<TaxReviewRow>[]>(
@@ -100,8 +107,17 @@ export function TaxReviewPanel() {
     [decided, audit, data?.canDecide]
   );
 
+  const showGate = () =>
+    go((p) => {
+      p.set('review.view', 'gate');
+      p.delete('variant');
+      p.delete('do');
+    });
+
   return (
     <div className="flex flex-col gap-3">
+      {gate ? null : <TaxGateBanner onShow={showGate} />}
+      {gate ? null : (
       <p className="m-0 max-w-[80ch] text-sm text-muted">
         {audit
           ? 'Items the system approved under the risk-based rule. They are live. Check the category and the answers, then confirm each one, or move it to the right category, which closes it until it is reviewed again.'
@@ -109,13 +125,15 @@ export function TaxReviewPanel() {
           ? 'Every decision on a product’s tax: who made it, when, and under which rule version. A decision is used at checkout until the product changes.'
           : 'Products whose tax waits for a person. The seller supplied the facts; you check the category, the answers and the proof, then approve, move it to another category, or ask the seller for more. A product goes live only after it is approved.'}
       </p>
+      )}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <ChipGroup<View>
           label="Show"
           options={[
             { value: 'queue', label: 'Waiting for review' },
             { value: 'audit', label: 'Audit sample' },
-            { value: 'decisions', label: 'Decisions' }
+            { value: 'decisions', label: 'Decisions' },
+            ...(gateCount > 0 || gate ? [{ value: 'gate' as const, label: t('st.tax.gate.chip', { n: gateCount }) }] : [])
           ]}
           value={view}
           onChange={(v) =>
@@ -130,6 +148,8 @@ export function TaxReviewPanel() {
           <Select label="Decision" value={status} options={DECISION_STATUSES} onChange={(e) => go((p) => p.set('review.status', e.currentTarget.value))} className="min-w-56" />
         ) : null}
       </div>
+      {gate ? <TaxGateList /> : null}
+      {gate ? null : (
       <DataTable<TaxReviewRow>
         id={`staff.tax.review.${view}`}
         label={decided ? 'Tax decisions' : audit ? 'Tax audit sample' : 'Tax review queue'}
@@ -149,6 +169,7 @@ export function TaxReviewPanel() {
         activeRowId={openAtin}
         empty={decided ? 'No decisions of this kind yet.' : audit ? 'No items are in the audit sample.' : 'Nothing is waiting for tax review.'}
       />
+      )}
       <TaxReviewSheet atin={openAtin} action={action} onClose={() => go((p) => (p.delete('variant'), p.delete('do')))} onAction={(a) => go((p) => (a ? p.set('do', a) : p.delete('do')))} />
     </div>
   );

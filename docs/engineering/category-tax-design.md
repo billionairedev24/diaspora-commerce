@@ -139,6 +139,11 @@ The tax never appears as a guess.
 4. catalog publishes `catalog.product.tax-facts-changed`; tax-returns upserts the classification record and puts it in the review queue (`PENDING_REVIEW`).
 5. Staff approve or reclassify. tax-returns publishes `tax.classification.changed`; catalog recomputes the gate and, when READY and moderation passes, the product goes live.
 
+**Never live without a decision.** This is enforced at one choke point (`ProductLiveGate`), by an ArchUnit rule, by the
+persistence adapter, by fail-closed reads and events, by a sweep and by the `catalog_live_without_tax_decision` alert. A live
+listing that loses its decision is closed (in review, "We are checking the tax details for this item.") and comes back when it
+is resolved again. Every path that can make a product live, with its test, is in [tax-gate-paths.md](./tax-gate-paths.md).
+
 ## 7. Checkout behaviour
 
 - The cart and checkout never re-derive classification from product attributes. For each line `orders`/`cart` asks tax-returns for a quote with `atin` and `sellerOrgId`; tax-returns reads the stored `listing_tax_decision` and returns per line: `decisionStatus`, `outcome`, `internalTaxCode`, `providerTaxCode`, `ruleVersion`, plus rate and tax.

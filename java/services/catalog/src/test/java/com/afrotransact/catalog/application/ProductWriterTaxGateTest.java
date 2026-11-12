@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -45,6 +46,8 @@ import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SizeChartRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.AdditionalAnswers;
+import org.mockito.InOrder;
 
 /** The publish gate in the product writer: tax facts, the listing's behaviour answers and the optional, generated SKU. */
 class ProductWriterTaxGateTest {
@@ -59,6 +62,7 @@ class ProductWriterTaxGateTest {
     private final ProductRepository products = mock(ProductRepository.class);
     private final ProductEvents events = mock(ProductEvents.class);
     private final BrandResolver brands = mock(BrandResolver.class);
+    private final ProductLiveGate liveGate = mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg());
     private final UUID node = UUID.randomUUID();
     private ProductWriterImpl writer;
 
@@ -78,7 +82,7 @@ class ProductWriterTaxGateTest {
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
                 mock(SizeChartRepository.class), events, brands, new UnrestrictedScopeGuard(),
                 new TaxGateEvaluator(new LocalDatasetTaxResolver(SOURCE), true), RulesFixtures.permissiveService(),
-                Clock.fixed(Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
+                liveGate, Clock.fixed(Instant.parse("2026-11-09T10:00:00Z"), ZoneOffset.UTC));
     }
 
     private CreateProductCommand command(String sku, Map<String, Object> facts) {
@@ -168,5 +172,21 @@ class ProductWriterTaxGateTest {
         assertThat(edited.variants().getFirst().sellerSku()).isEqualTo(created.variants().getFirst().sellerSku());
         assertThat(edited.variants().getFirst().sellerSkuGenerated()).isTrue();
         assertThat(edited.variants().getFirst().priceMinor()).isEqualTo(700);
+    }
+
+    @Test
+    void everyEditGoesThroughTheLiveGateSoALiveListingWithAnUnresolvedVariantIsClosedBeforeItIsStored() {
+        Product created = writer.create(SELLER, command("", FACTS));
+        when(products.updateWithVariants(any())).thenAnswer(i -> i.getArgument(0));
+        String atin = created.variants().getFirst().atin().value();
+        VariantDraft byAtin = new VariantDraft(Map.of(), "", "", true, 700, 15, null, List.of(), atin, FACTS);
+        UpdateProductCommand edit = new UpdateProductCommand(null, "Crispy plantain chips, 8 oz bag", DETAILS, List.of(BIG), "",
+                List.of(byAtin), null, null, ListingDetails.DEFAULT, null, null);
+
+        writer.update(created, edit);
+
+        InOrder order = inOrder(liveGate, products);
+        order.verify(liveGate).closeIfNotReady(any(), any());
+        order.verify(products).updateWithVariants(any());
     }
 }

@@ -25,6 +25,8 @@ type StaffTaxService interface {
 	Profile(ctx context.Context, c *domain.Caller, code string) (any, error)
 	ChangeProfileStatus(ctx context.Context, c *domain.Caller, code string, body map[string]any) (any, error)
 	Reviews(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// LiveWithoutDecision lists live listings that have no resolved tax decision (always empty; the banner counts them).
+	LiveWithoutDecision(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	Review(ctx context.Context, c *domain.Caller, atin string) (any, error)
 	ApproveReview(ctx context.Context, c *domain.Caller, atin string, body map[string]any) (any, error)
 	ReclassifyReview(ctx context.Context, c *domain.Caller, atin string, body map[string]any) (any, error)

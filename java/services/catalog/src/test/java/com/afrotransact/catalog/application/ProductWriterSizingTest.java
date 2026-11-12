@@ -41,6 +41,7 @@ import com.afrotransact.catalog.port.SizeChartRepository;
 import com.afrotransact.catalog.port.TaxResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.AdditionalAnswers;
 
 /** The product writer applies the size rules of the product type to the form and to bulk uploads alike. */
 class ProductWriterSizingTest {
@@ -70,7 +71,8 @@ class ProductWriterSizingTest {
         when(brands.resolve(any(), any(), any(), any(), any())).thenAnswer(i -> i.getArgument(3));
         writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
-                charts, mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(), new TaxGateEvaluator(readyResolver(), false), RulesFixtures.permissiveService(), Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"),
+                charts, mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(), new TaxGateEvaluator(readyResolver(), false), RulesFixtures.permissiveService(), mock(ProductLiveGate.class, AdditionalAnswers.returnsFirstArg()),
+                Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"),
                         ZoneOffset.UTC));
     }
 

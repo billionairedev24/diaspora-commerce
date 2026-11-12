@@ -193,6 +193,25 @@ export const TaxReviewPageSchema = z.object({
 });
 export type TaxReviewPage = z.infer<typeof TaxReviewPageSchema>;
 
+/** A live listing with a variant that has no stored, resolved tax decision. Never expected: the page is empty when the tax gate holds. */
+export const TaxLiveWithoutDecisionRowSchema = z.object({
+  atin: z.string(),
+  title: z.string(),
+  sellerName: z.string(),
+  categoryName: z.string().default(''),
+  updatedAt: z.string().default(''),
+  variants: z.array(z.object({ atin: z.string(), sku: z.string(), status: z.string(), statusLabel: z.string(), why: z.string() }))
+});
+export type TaxLiveWithoutDecisionRow = z.infer<typeof TaxLiveWithoutDecisionRowSchema>;
+
+export const TaxLiveWithoutDecisionPageSchema = z.object({
+  items: z.array(TaxLiveWithoutDecisionRowSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int()
+});
+export type TaxLiveWithoutDecisionPage = z.infer<typeof TaxLiveWithoutDecisionPageSchema>;
+
 export const TaxEvidenceSchema = z.object({
   factId: z.string().default(''),
   factLabel: z.string(),
@@ -502,6 +521,9 @@ export function createStaffTaxApi(request: Requester) {
     reviews: (q: TaxReviewsQuery, signal?: AbortSignal): Promise<TaxReviewPage> =>
       request(`${T}/reviews`, TaxReviewPageSchema, { query: params({ status: q.status, categoryCode: q.categoryCode, q: q.q, page: q.page, size: q.size }), signal }),
     review: (atin: string, signal?: AbortSignal): Promise<TaxReview> => request(`${T}/reviews/${enc(atin)}`, TaxReviewSchema, { signal }),
+    /** Live listings that have no resolved tax decision (always empty); `total` is the banner count. */
+    liveWithoutDecision: (q: { page?: number; size?: number } = {}, signal?: AbortSignal): Promise<TaxLiveWithoutDecisionPage> =>
+      request(`${T}/live-without-decision`, TaxLiveWithoutDecisionPageSchema, { query: params({ page: q.page, size: q.size }), signal }),
     approve: (atin: string, body: TaxApproveInput): Promise<TaxReview> => request(`${T}/reviews/${enc(atin)}/approve`, TaxReviewSchema, { method: 'POST', body }),
     reclassify: (atin: string, body: { categoryCode: string; productTypeCode?: string; reason: string }): Promise<TaxReview> =>
       request(`${T}/reviews/${enc(atin)}/reclassify`, TaxReviewSchema, { method: 'POST', body }),
@@ -535,6 +557,7 @@ export const staffTaxKeys = {
   profile: (code: string) => [...staffTaxKeys.all, 'profile', code] as const,
   reviews: (q: TaxReviewsQuery) => [...staffTaxKeys.all, 'reviews', q] as const,
   review: (atin: string) => [...staffTaxKeys.all, 'review', atin] as const,
+  liveWithoutDecision: (q: { page?: number; size?: number }) => [...staffTaxKeys.all, 'live-without-decision', q] as const,
   codeMap: (q: TaxCodeMapQuery) => [...staffTaxKeys.all, 'code-map', q] as const,
   method: () => [...staffTaxKeys.all, 'method'] as const,
   reviewSettings: () => [...staffTaxKeys.all, 'review-settings'] as const,
@@ -547,6 +570,9 @@ export const staffTaxQueries = {
   profile: (api: StaffTaxApi, code: string) => queryOptions({ queryKey: staffTaxKeys.profile(code), queryFn: ({ signal }) => api.profile(code, signal), staleTime: 10_000 }),
   reviews: (api: StaffTaxApi, q: TaxReviewsQuery) =>
     queryOptions({ queryKey: staffTaxKeys.reviews(q), queryFn: ({ signal }) => api.reviews(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  /** Not polled (a poll must carry the background flag, docs/engineering/session-timeouts.md): it is read when the page opens and after each action. */
+  liveWithoutDecision: (api: StaffTaxApi, q: { page?: number; size?: number } = {}) =>
+    queryOptions({ queryKey: staffTaxKeys.liveWithoutDecision(q), queryFn: ({ signal }) => api.liveWithoutDecision(q, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),
   review: (api: StaffTaxApi, atin: string) => queryOptions({ queryKey: staffTaxKeys.review(atin), queryFn: ({ signal }) => api.review(atin, signal), staleTime: 10_000 }),
   codeMap: (api: StaffTaxApi, q: TaxCodeMapQuery) =>
     queryOptions({ queryKey: staffTaxKeys.codeMap(q), queryFn: ({ signal }) => api.codeMap(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),

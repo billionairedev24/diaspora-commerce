@@ -7,7 +7,9 @@ import java.util.UUID;
 
 import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.ShipFromRef;
+import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 
 /**
  * Payload of catalog.product.* events; consumed by offers, inventory, search indexer and trust-ops.
@@ -61,8 +63,11 @@ public record ProductEventPayload(UUID productId, String atin, String ownerKind,
     }
 
     static ProductEventPayload of(Product p, boolean sellerHidden, String reasonCode) {
+        // Fail closed for every consumer (offers, search indexer, inventory): a product is announced as LIVE only when
+        // every variant has a resolved tax decision; otherwise it reads as in review (never purchasable, never searchable).
+        String status = LiveRequiresTax.holds(p) ? p.status().name() : ProductStatus.IN_REVIEW.name();
         return new ProductEventPayload(p.id(), p.atin().value(), p.owner().kind().name(), p.owner().orgId(),
-                p.status().name(), p.title(), p.categoryId(), p.productTypeCode(),
+                status, p.title(), p.categoryId(), p.productTypeCode(),
                 p.variants().stream()
                         .map(v -> new VariantPayload(v.atin().value(), v.sellerSku(), v.gtin(), v.priceMinor(),
                                 v.currency(), v.quantity(), v.compareAtMinor(),

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,6 +29,7 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.TaxDecision;
 import com.afrotransact.catalog.domain.tax.TaxStatus;
 import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.port.CategoryRepository;
@@ -44,6 +46,7 @@ class SellingGatedProductWriterTest {
     private final ProductRepository products = mock(ProductRepository.class);
     private final CategoryRepository categories = mock(CategoryRepository.class);
     private final ProductEvents events = mock(ProductEvents.class);
+    private final ProductLiveGate liveGate = mock(ProductLiveGate.class);
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final ListingOwner owner = new ListingOwner(ListingOwnerKind.SELLER, "org_1");
     private final UUID categoryId = UUID.randomUUID();
@@ -51,12 +54,15 @@ class SellingGatedProductWriterTest {
 
     private SellingGatedProductWriter writer(boolean autoPublish) {
         when(gate.enabled()).thenReturn(true);
-        return new SellingGatedProductWriter(delegate, gate, products, categories, events, clock, autoPublish);
+        doAnswer(i -> ((Product) i.getArgument(0)).approve(i.getArgument(1))).when(liveGate).approve(any(), any());
+        return new SellingGatedProductWriter(delegate, gate, products, categories, events, liveGate, clock,
+                autoPublish);
     }
 
     private Product product(ProductStatus status, TaxStatus tax) {
         Variant v = new Variant(UUID.randomUUID(), new Atin("AT00000011"), "SKU-1", null, true, Map.of(), 100, "USD", 1,
-                null, List.of(), false, new VariantTax(Map.of(), tax, List.of(), null));
+                null, List.of(), false, new VariantTax(Map.of(), tax, List.of(),
+                        new TaxDecision("EXEMPT", "AT.X", "S001", "0%", "v", "r")));
         return new Product(UUID.randomUUID(), new Atin("AT00000001"), owner, categoryId, null, "packaged-snacks",
                 "Plantain chips 8 oz", Map.of(), List.<ProductImage>of(), "", List.of(v), status, null, NOW, NOW, 0);
     }
@@ -114,8 +120,8 @@ class SellingGatedProductWriterTest {
     void aDisabledGateChangesNothing() {
         Product created = product(ProductStatus.IN_REVIEW, TaxStatus.READY);
         when(delegate.create(owner, command)).thenReturn(created);
-        SellingGatedProductWriter off = new SellingGatedProductWriter(delegate, gate, products, categories, events, clock,
-                true);
+        SellingGatedProductWriter off = new SellingGatedProductWriter(delegate, gate, products, categories, events, liveGate,
+                clock, true);
         when(gate.enabled()).thenReturn(false);
         assertThat(off.create(owner, command)).isSameAs(created);
         verify(gate, never()).requireApprovable(any());

@@ -10,6 +10,7 @@ import {
   type TaxCodeEntry,
   type TaxCodeMap,
   type TaxCodeMapImportResult,
+  type TaxLiveWithoutDecisionPage,
   type TaxMethod,
   type TaxProfile,
   type TaxProfilePage,
@@ -890,6 +891,15 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         const all = tax(ctx).variants.filter((v) => (status === TAX_AUDIT_SAMPLE ? !!v.auditSample && v.status === 'APPROVED' : v.status === status) && (!q.get('categoryCode') || v.categoryCode === q.get('categoryCode')) && (!terms || `${v.title} ${v.atin} ${v.gtin}`.toLowerCase().includes(terms)));
         const { items, page, size } = paged(all.map(reviewRow), q);
         return { items, total: all.length, page, size, status, statuses: ['PENDING_REVIEW', TAX_AUDIT_SAMPLE, 'APPROVED', 'REJECTED', 'STALE'].map((s) => ({ value: s, label: s === TAX_AUDIT_SAMPLE ? 'Audit sample' : RECORD_STATUS[s]! })), canDecide: canAdmin(ctx) } satisfies TaxReviewPage;
+      })
+    ),
+    http.get(
+      `${W}/tax/live-without-decision`,
+      route((ctx) => {
+        read(ctx);
+        const q = new URL(ctx.request.url).searchParams;
+        // The tax gate keeps this list empty; the mock never invents a listing without a decision.
+        return { items: [], total: 0, page: Number(q.get('page') ?? 0), size: Number(q.get('size') ?? 25) } satisfies TaxLiveWithoutDecisionPage;
       })
     ),
     http.get(

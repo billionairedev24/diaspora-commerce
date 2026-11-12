@@ -391,6 +391,8 @@ export function ProductForm({ productId }: { productId?: string }) {
         actions={editing || !has('bulkUpload') ? null : <Link href="/listings/bulk" className="inline-flex min-h-11 items-center text-sm sm:min-h-8">{t('sc.pf.bulkLink')}</Link>}
       />
       {d?.status === 'REJECTED' && d.moderationNote ? <Notice tone="danger" title={t('sc.pf.rejected')} role="alert">{d.moderationNote}</Notice> : null}
+      {/* A listing in review that carries a note is one the tax gate took off sale (only a rejection sets another note, and that is REJECTED). */}
+      {d?.status === 'IN_REVIEW' && d.moderationNote ? <Notice tone="info" title={t('sc.pf.taxHold.title')}>{t('sc.pf.taxHold.body')}</Notice> : null}
       {live ? <Notice tone="info" title={t('sc.pf.liveTitle')}>{t('sc.pf.liveBody')}</Notice> : null}
       {restorable && !draft.current ? (
         <Notice tone="warning" title={t('sc.pf.restoreTitle', { time: time(restorable.updatedAt) })}

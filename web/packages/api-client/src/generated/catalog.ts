@@ -348,6 +348,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/internal/bakery-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Organisations whose listings say the seller is a bakery (service scope catalog:bakery-claims.read)
+         * @description seller-service opens a PENDING food service application for each; the answer is never auto-approved.
+         */
+        get: operations["bakeryClaims"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/labels": {
         parameters: {
             query?: never;
@@ -817,6 +837,26 @@ export interface paths {
          * @description Calls tax-returns POST /v1/tax/classifications/resolve for every variant with its facts and the seller's behaviour facts. A product goes live only when status is READY. Missing facts are listed in plain words; the tax is never guessed (TX-10).
          */
         get: operations["productTaxReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tax-gate/live-without-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live listings without a resolved tax decision (staff, tax:read)
+         * @description The audit behind catalog_live_without_tax_decision: live products that have a variant whose tax gate is not READY or that has no stored decision. Always empty when the publish gate holds; the sweep closes anything listed here within a minute.
+         */
+        get: operations["liveWithoutTaxDecision"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2527,6 +2567,9 @@ export interface components {
              */
             todo?: number;
         };
+        BakeryClaims: {
+            organisations?: string[];
+        };
         ProductImportPage: {
             items?: components["schemas"]["ProductImport"][];
             /** Format: int64 */
@@ -2631,6 +2674,35 @@ export interface components {
             label?: string;
             /** @description Plain words for the seller */
             message: string;
+        };
+        /** @description Live listings that have a variant without a stored, resolved tax decision. Must always be empty. */
+        LiveWithoutTaxDecisionPage: {
+            items?: components["schemas"]["LiveWithoutTaxDecisionItem"][];
+            /** Format: int64 */
+            total?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+        };
+        LiveWithoutTaxDecisionItem: {
+            /** Format: uuid */
+            productId?: string;
+            atin?: string;
+            title?: string;
+            ownerOrgId?: string;
+            categoryName?: string;
+            status?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            variants?: components["schemas"]["LiveWithoutTaxDecisionVariant"][];
+        };
+        LiveWithoutTaxDecisionVariant: {
+            atin?: string;
+            sellerSku?: string;
+            taxStatus?: string;
+            /** @description What is missing, in plain words */
+            reason?: string;
         };
         /** @description Publish gate for a product: it can go live only when status is READY (every variant READY) */
         TaxReadiness: {
@@ -3821,6 +3893,26 @@ export interface operations {
             };
         };
     };
+    bakeryClaims: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BakeryClaims"];
+                };
+            };
+        };
+    };
     renderLabel: {
         parameters: {
             query?: {
@@ -4581,6 +4673,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxReadiness"];
+                };
+            };
+        };
+    };
+    liveWithoutTaxDecision: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveWithoutTaxDecisionPage"];
                 };
             };
         };

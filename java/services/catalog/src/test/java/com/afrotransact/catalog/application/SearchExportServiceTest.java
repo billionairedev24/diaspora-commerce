@@ -17,6 +17,9 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.RatingSummary;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.TaxDecision;
+import com.afrotransact.catalog.domain.tax.TaxStatus;
+import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository.Decision;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -164,10 +167,15 @@ class SearchExportServiceTest {
         verify(products).findForExport(any(), isNull(), isNull(), eq(2));
     }
 
+    private static VariantTax resolved() {
+        return new VariantTax(Map.of(), TaxStatus.READY, List.of(),
+                new TaxDecision("EXEMPT", "AT.GROCERY.X", "S001", "0%", "v1", "r"));
+    }
+
     private static Product product(String orgId, ProductStatus status) {
         String suffix = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
         Variant v = new Variant(UUID.randomUUID(), new Atin("AT0000V" + suffix.substring(0, 3)), "SKU-1", null, true,
-                Map.of("Net weight", "1 lb"), 899, "USD", 4);
+                Map.of("Net weight", "1 lb"), 899, "USD", 4, null, List.of(), false, resolved());
         return new Product(UUID.randomUUID(), new Atin("AT0000PRD1"),
                 new ListingOwner(ListingOwnerKind.SELLER, orgId), UUID.randomUUID(), null, "grocery",
                 "Ofada Rice, Destoned, 5 lb", Map.of("brand", "Mama Tee"), List.of(), "Net weight", List.of(v), status,

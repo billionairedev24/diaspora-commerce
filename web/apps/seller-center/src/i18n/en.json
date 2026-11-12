@@ -469,6 +469,8 @@
   "sc.pf.loading": "Loading the product form…",
   "sc.pf.formLabel": "Product",
   "sc.pf.rejected": "Not approved:",
+  "sc.pf.taxHold.title": "We are checking the tax details for this item",
+  "sc.pf.taxHold.body": "It is off sale for now. You do not need to do anything unless we ask you for more information. It goes back on sale on its own once we have checked.",
   "sc.pf.liveTitle": "This listing is live.",
   "sc.pf.liveBody": "Changes go live straight away. Its category and variants stay: set a variant's stock to 0 to stop selling it.",
   "sc.pf.restoreTitle": "You have unsaved changes from {time}.",

@@ -13,6 +13,7 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductFlag;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.ProductTakedown;
+import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.catalog.port.ProductFlagRepository;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -35,12 +36,13 @@ class ListingModerationServiceImpl implements ListingModerationService {
     private final PermissionChecker permissions;
     private final ActorResolver actors;
     private final ProductEvents events;
+    private final ProductLiveGate liveGate;
     private final Clock clock;
 
     ListingModerationServiceImpl(ProductRepository products, ProductFlagRepository flags,
                                  ProductTakedownRepository takedowns, ListingSuppressionRepository suppressions,
                                  PermissionChecker permissions, ActorResolver actors, ProductEvents events,
-                                 Clock clock) {
+                                 ProductLiveGate liveGate, Clock clock) {
         this.products = products;
         this.flags = flags;
         this.takedowns = takedowns;
@@ -48,6 +50,7 @@ class ListingModerationServiceImpl implements ListingModerationService {
         this.permissions = permissions;
         this.actors = actors;
         this.events = events;
+        this.liveGate = liveGate;
         this.clock = clock;
     }
 
@@ -107,7 +110,7 @@ class ListingModerationServiceImpl implements ListingModerationService {
         Instant now = Instant.now(clock);
         Optional<ProductTakedown> active = takedowns.findActive(productId);
         ProductStatus previous = active.map(ProductTakedown::previousStatus).orElse(ProductStatus.LIVE);
-        Product updated = products.update(product.restoreFromTakedown(previous, now));
+        Product updated = products.update(liveGate.restoreFromTakedown(product, previous, now));
         active.ifPresent(t -> takedowns.update(t.restore(actor.subject(), note, now)));
         events.publish(CatalogEvents.PRODUCT_REINSTATED, updated);
         return updated;
@@ -122,7 +125,8 @@ class ListingModerationServiceImpl implements ListingModerationService {
             throw notFound(raw);
         }
         return products.findByAtin(atin)
-                .filter(p -> p.status() == ProductStatus.LIVE && !suppressions.isHidden(p.owner().orgId()))
+                .filter(p -> p.status() == ProductStatus.LIVE && LiveRequiresTax.holds(p)
+                        && !suppressions.isHidden(p.owner().orgId()))
                 .orElseThrow(() -> notFound(raw));
     }
 

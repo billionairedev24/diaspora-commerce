@@ -47,18 +47,21 @@ class ProductTaxServiceImpl implements ProductTaxService {
     private final TaxEvidenceRepository evidence;
     private final TaxGateEvaluator gate;
     private final ProductEvents events;
+    private final ProductLiveGate liveGate;
     private final PermissionChecker permissions;
     private final ResourceAccessChecker access;
     private final Clock clock;
 
     ProductTaxServiceImpl(ProductRepository products, CategoryRepository categories, TaxEvidenceRepository evidence,
-                          TaxGateEvaluator gate, ProductEvents events, PermissionChecker permissions,
+                          TaxGateEvaluator gate, ProductEvents events, ProductLiveGate liveGate,
+                          PermissionChecker permissions,
                           ResourceAccessChecker access, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.evidence = evidence;
         this.gate = gate;
         this.events = events;
+        this.liveGate = liveGate;
         this.permissions = permissions;
         this.access = access;
         this.clock = clock;
@@ -88,13 +91,22 @@ class ProductTaxServiceImpl implements ProductTaxService {
                 p.variants().stream().map(v -> v.tax().facts()).toList(),
                 p.variants().stream().map(Variant::tax).toList(), p.details().sellerBehaviour());
         List<Variant> next = new ArrayList<>();
+        boolean changed = false;
         for (int i = 0; i < p.variants().size(); i++) {
             Variant v = p.variants().get(i);
             VariantTax fresh = e.variants().get(i);
             if (!fresh.equals(v.tax())) {
                 products.saveVariantTax(v.id(), fresh);
+                changed = true;
             }
             next.add(v.withTax(fresh));
+        }
+        if (changed) {
+            // A live listing whose variants are no longer all resolved is closed; a held one that is now resolved reopens.
+            Product reconciled = liveGate.reconcile(p.id());
+            if (reconciled != null) {
+                return reconciled;
+            }
         }
         return p.withVariants(next);
     }
@@ -180,6 +192,9 @@ class ProductTaxServiceImpl implements ProductTaxService {
                 LOG.info("Variant {} tax status {} -> {} (tax-returns)", atin.value(), v.tax().status(), next);
             }
         }
+        // Every change of a variant's tax status goes through the gate: a live listing that stops being resolved is
+        // closed in the same transaction, and a listing held for tax comes back when it is approved.
+        liveGate.reconcile(product.get().id());
     }
 
     @Override
@@ -191,8 +206,21 @@ class ProductTaxServiceImpl implements ProductTaxService {
         categories.findByCode(categoryCode).filter(n -> n.taxProfileId() != null && !status.equals(n.taxStatus()))
                 .ifPresent(n -> {
                     categories.update(n.withTax(n.taxProfileId(), status));
-                    products.findByTaxProfile(n.taxProfileId(), RECHECK_LIMIT).forEach(this::recheck);
+                    recheckAll(n.taxProfileId());
                 });
+    }
+
+    /** Every product of the category, page by page (a category closing must reach all of its live listings). */
+    private void recheckAll(String taxProfileId) {
+        UUID after = null;
+        while (true) {
+            List<Product> page = products.findByTaxProfile(taxProfileId, after, RECHECK_LIMIT);
+            page.forEach(this::recheck);
+            if (page.size() < RECHECK_LIMIT) {
+                return;
+            }
+            after = page.getLast().id();
+        }
     }
 
     private static Atin parseAtin(String raw) {

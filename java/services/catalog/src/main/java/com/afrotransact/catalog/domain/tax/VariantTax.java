@@ -21,8 +21,12 @@ public record VariantTax(Map<String, Object> facts, TaxStatus status, List<Missi
         missing = missing == null ? List.of() : List.copyOf(missing);
     }
 
+    /**
+     * True only for a variant with a stored, resolved decision: the gate status is READY <em>and</em> the rules returned a
+     * decision. A READY status without a decision is never trusted (never guess): such a variant cannot be live.
+     */
     public boolean ready() {
-        return status == TaxStatus.READY;
+        return status == TaxStatus.READY && decision != null;
     }
 
     public VariantTax withStatus(TaxStatus next) {

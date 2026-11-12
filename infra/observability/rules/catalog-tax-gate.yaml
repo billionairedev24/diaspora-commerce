@@ -1,0 +1,42 @@
+# Never sell without a tax decision (docs/engineering/tax-gate-paths.md). The catalog service exposes
+# catalog_live_without_tax_decision: live listings that have a variant without a stored, resolved tax decision. It must always
+# be 0. The catalog sweep closes any such listing within a minute, so the page fires on the first scrape that sees one and
+# stays on until a person has looked at why a path skipped the gate.
+groups:
+  - name: afrotransact-catalog-tax-gate
+    rules:
+      - alert: CatalogLiveWithoutTaxDecision
+        expr: |
+          max by (env) (catalog_live_without_tax_decision) > 0
+        for: 0m
+        labels:
+          severity: page
+          team: catalog
+        annotations:
+          summary: "{{ $value }} live listing(s) have no resolved tax decision"
+          description: "A product is live (purchasable) although a variant has no stored, resolved tax decision. The sweep closes it, but a code path skipped the tax gate: find it (runbook) before it happens again. Staff console: Fees & commissions > Sales tax > Tax review shows the list."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
+
+      - alert: CatalogTaxGateClosedListings
+        expr: |
+          sum by (env) (increase(catalog_tax_gate_closed_total[15m])) > 0
+        for: 0m
+        labels:
+          severity: ticket
+          team: catalog
+        annotations:
+          summary: "{{ $value }} live listing(s) were closed in the last 15 minutes because their tax decision was missing"
+          description: "The tax gate closed live listings (a seller edit, a tax review result, or the sweep). Sellers see 'We are checking the tax details for this item'. Check the tax review queue is moving."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md
+
+      - alert: CatalogTaxGateMetricMissing
+        expr: |
+          absent(catalog_live_without_tax_decision)
+        for: 15m
+        labels:
+          severity: ticket
+          team: catalog
+        annotations:
+          summary: "catalog_live_without_tax_decision is not reported"
+          description: "The catalog service is down or its database count fails, so the live-without-tax-decision alert cannot fire."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CatalogLiveWithoutTaxDecision.md

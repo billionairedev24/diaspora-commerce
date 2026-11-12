@@ -23,6 +23,7 @@ import com.afrotransact.catalog.domain.ListingOwnerKind;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.TaxDecision;
 import com.afrotransact.catalog.domain.tax.TaxStatus;
 import com.afrotransact.catalog.domain.tax.VariantTax;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ class PublicVariantContractTest {
         facts.put("label_type", "NUTRITION_FACTS");
         Variant variant = new Variant(UUID.randomUUID(), new Atin("AT0000VAR1"), "AMK-1", null, true,
                 Map.of("Size", "8.5 oz"), 899, "USD", 5, null, List.of(), false,
-                new VariantTax(facts, TaxStatus.READY, List.of(), null));
+                new VariantTax(facts, TaxStatus.READY, List.of(), new TaxDecision("EXEMPT", "AT.X", "S001", "0%", "v1", "r")));
         Map<String, Object> behaviour = new LinkedHashMap<>();
         behaviour.put("sold_heated", false);
         behaviour.put("utensils_provided", true);

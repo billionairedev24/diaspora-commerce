@@ -3399,6 +3399,22 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/live-without-decision:
+    get:
+      tags: [Tax]
+      operationId: listStaffTaxLiveWithoutDecision
+      security: [{sessionCookie: []}]
+      summary: 'Live listings that have no resolved tax decision (always empty)'
+      description: 'catalog `GET /v1/tax-gate/live-without-decision` (`tax:read`). A product must never be live without a stored, resolved tax decision on every variant; this list is empty when that holds, and the catalog sweep closes anything listed within a minute. The Tax review page shows a banner with `total` and links here when it is not zero. Sellers and categories by name, and why each variant has no decision in plain words.'
+      parameters:
+        - {name: page, in: query, required: false, schema: {type: integer}}
+        - {name: size, in: query, required: false, schema: {type: integer}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxLiveWithoutDecisionPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/tax/reviews/{atin}:
     parameters:
       - {name: atin, in: path, required: true, schema: {type: string}}
@@ -10635,6 +10651,36 @@ components:
         reason: {type: string, minLength: 10, maxLength: 1000}
         approvedBy: {type: string, description: The tax professional or firm who signed off; required when lifting a gate}
         decisionRef: {type: string, description: Reference of the signed-off decision or opinion letter; required when lifting a gate}
+    StaffTaxLiveWithoutDecisionPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/StaffTaxLiveWithoutDecisionRow'}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    StaffTaxLiveWithoutDecisionRow:
+      type: object
+      required: [atin, title, sellerName, categoryName, variants]
+      properties:
+        atin: {type: string}
+        title: {type: string}
+        sellerName: {type: string}
+        categoryName: {type: string}
+        updatedAt: {type: string}
+        variants:
+          type: array
+          items:
+            type: object
+            required: [atin, sku, status, statusLabel, why]
+            properties:
+              atin: {type: string}
+              sku: {type: string}
+              status: {type: string}
+              statusLabel: {type: string}
+              why: {type: string}
     StaffTaxReviewPage:
       type: object
       required: [items, total, page, size, status, canDecide]

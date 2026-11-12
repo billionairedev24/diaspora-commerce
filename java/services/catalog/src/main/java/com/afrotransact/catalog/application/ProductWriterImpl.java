@@ -66,12 +66,13 @@ class ProductWriterImpl implements ProductWriter {
     private final SellerScopeGuard scopeGuard;
     private final TaxGateEvaluator taxGate;
     private final ListingRulesService rulesService;
+    private final ProductLiveGate liveGate;
     private final Clock clock;
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
                       SizeChartPolicy sizePolicy, SizeChartRepository charts, ProductEvents events, BrandResolver brands, SellerScopeGuard scopeGuard,
-                      TaxGateEvaluator taxGate, ListingRulesService rulesService, Clock clock) {
+                      TaxGateEvaluator taxGate, ListingRulesService rulesService, ProductLiveGate liveGate, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
@@ -85,6 +86,7 @@ class ProductWriterImpl implements ProductWriter {
         this.scopeGuard = scopeGuard;
         this.taxGate = taxGate;
         this.rulesService = rulesService;
+        this.liveGate = liveGate;
         this.clock = clock;
     }
 
@@ -219,8 +221,12 @@ class ProductWriterImpl implements ProductWriter {
         boolean preorder = cmd.preorderEligible() != null ? cmd.preorderEligible() : current.preorderEligible();
         boolean shipsNow = cmd.shipsNow() != null ? cmd.shipsNow() : current.shipsNow();
         ProductStatus before = current.status();
+        Instant editedAt = Instant.now(clock);
         Product edited = current.edited(categoryId, typeCode, cmd.title().trim(), attributes, ruled.images(),
-                draft.variationTheme(), next, details, preorder, shipsNow, Instant.now(clock));
+                draft.variationTheme(), next, details, preorder, shipsNow, editedAt);
+        // A live listing that no longer has a resolved tax decision on every variant (a new variant, a changed answer) is
+        // taken off sale until tax review approves it; search and offers hear about it before the edit is stored.
+        edited = liveGate.closeIfNotReady(edited, editedAt);
         Product saved = products.updateWithVariants(edited);
         dropDraft(cmd.draftId(), current.owner().orgId());
         events.publish(CatalogEvents.PRODUCT_UPDATED, saved);

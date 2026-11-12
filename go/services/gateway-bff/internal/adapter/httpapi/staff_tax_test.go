@@ -68,8 +68,11 @@ type fakeTax struct {
 	calls    []string
 	bodies   map[string]map[string]any
 	reqInfo  bool
-	shadow   map[string]any
-	review   map[string]any
+	// liveWithout is what catalog's audit of live listings without a tax decision returns (empty when the gate holds).
+	liveWithout []map[string]any
+	liveCalls   int
+	shadow      map[string]any
+	review      map[string]any
 }
 
 func newFakeTax(t *testing.T) *fakeTax {
@@ -196,6 +199,13 @@ func (f *fakeTax) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"id": "org-1", "displayName": "Mama's Pantry"}, map[string]any{"id": "org-2", "displayName": "Lagos Books"}}})
 	case p == "/v1/orders/ord-1":
 		writeJ(w, 200, map[string]any{"id": "ord-1", "orderNumber": "AT-000231"})
+	case p == "/v1/tax-gate/live-without-decision":
+		f.liveCalls++
+		items := []any{}
+		for _, it := range f.liveWithout {
+			items = append(items, it)
+		}
+		writeJ(w, 200, map[string]any{"items": items, "total": len(items), "page": 0, "size": 25})
 	default:
 		f.tax(w, r, p, body)
 	}
@@ -337,7 +347,7 @@ func taxBFF(t *testing.T) (*fakeTax, taxCall, func(token, method, path string, b
 		return upstreams.NewStaffUpstream(httpclient.New(httpclient.Options{Name: name, BaseURL: srv.URL, Timeout: 3 * time.Second, Metrics: metrics, Transport: http.DefaultTransport}))
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), TaxReturns: up("tax-returns"), Seller: up("seller"), Orders: up("orders")},
+	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), TaxReturns: up("tax-returns"), Seller: up("seller"), Orders: up("orders"), Catalog: up("catalog")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
 		Log:    log, Background: func(fn func()) { fn() }, Clock: func() time.Time { return time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC) }}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
@@ -934,4 +944,45 @@ func TestStaffTaxPermissionMatrix(t *testing.T) {
 	if m := do("auditor", "GET", "/v1/staff/tax/method", nil, 200); m["canConfigure"] != false {
 		t.Errorf("auditor canConfigure = %v", m["canConfigure"])
 	}
+}
+
+func TestStaffTaxLiveWithoutDecision(t *testing.T) {
+	f, do, raw := taxBFF(t)
+
+	// The gate holds: the list is empty and the page says so with a zero total.
+	none := do("auditor", "GET", "/v1/staff/tax/live-without-decision", nil, 200)
+	if none["total"] != float64(0) || len(items(t, none)) != 0 {
+		t.Fatalf("a healthy catalog lists nothing: %v", none)
+	}
+
+	// A listing slipped through: it is named by seller and category, with the reason in plain words.
+	f.liveWithout = []map[string]any{{"productId": "prd-1", "atin": "AT00000001", "title": "Ofada rice 5 lb", "ownerOrgId": "org-1",
+		"categoryName": "Groceries and food > Rice and grains", "status": "LIVE", "updatedAt": "2026-11-12T09:00:00Z",
+		"variants": []any{map[string]any{"atin": "AT00000011", "sellerSku": "OFADA-5", "taxStatus": "PENDING_REVIEW",
+			"reason": "Waiting for our team to check the details. This usually needs no action from you."}}}}
+	got := do("auditor", "GET", "/v1/staff/tax/live-without-decision", nil, 200)
+	rows := items(t, got)
+	if got["total"] != float64(1) || len(rows) != 1 {
+		t.Fatalf("one listing is live without a decision: %v", got)
+	}
+	row := rows[0]
+	if row["sellerName"] != "Mama's Pantry" || row["categoryName"] != "Groceries and food > Rice and grains" || row["title"] != "Ofada rice 5 lb" {
+		t.Errorf("names, not ids: %v", row)
+	}
+	v := row["variants"].([]any)[0].(map[string]any)
+	if v["statusLabel"] != "Waiting for tax review" || !strings.Contains(v["why"].(string), "Waiting for our team") {
+		t.Errorf("variant = %v", v)
+	}
+	if strings.Contains(got["items"].([]any)[0].(map[string]any)["sellerName"].(string), "org-") {
+		t.Errorf("seller shown by id: %v", row)
+	}
+
+	// Needs the staff tax permission and a session.
+	if rec := raw("noperm", "GET", "/v1/staff/tax/live-without-decision", nil); rec.Code != 403 {
+		t.Errorf("without tax:read = %d, want 403", rec.Code)
+	}
+	if rec := raw("", "GET", "/v1/staff/tax/live-without-decision", nil); rec.Code != 401 {
+		t.Errorf("without a session = %d, want 401", rec.Code)
+	}
+	do("auditor", "GET", "/v1/staff/tax/live-without-decision?size=0", nil, 422)
 }

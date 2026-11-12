@@ -9,14 +9,10 @@ import java.util.function.UnaryOperator;
 
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
-import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
-import com.afrotransact.catalog.domain.tax.TaxNotReady;
-import com.afrotransact.catalog.domain.tax.TaxReadiness;
-import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
@@ -39,12 +35,12 @@ class ProductServiceImpl implements ProductService {
     private final ActorResolver actors;
     private final OwnerResolver owners;
     private final ProductEvents events;
-    private final CategoryRepository categories;
+    private final ProductLiveGate liveGate;
     private final Clock clock;
 
     ProductServiceImpl(ProductRepository products, ProductWriter writer, PermissionChecker permissions,
                        ResourceAccessChecker access, ActorResolver actors, OwnerResolver owners,
-                       ProductEvents events, CategoryRepository categories, Clock clock, SellingPublishGate sellingGate) {
+                       ProductEvents events, ProductLiveGate liveGate, Clock clock, SellingPublishGate sellingGate) {
         this.products = products;
         this.writer = writer;
         this.permissions = permissions;
@@ -52,7 +48,7 @@ class ProductServiceImpl implements ProductService {
         this.actors = actors;
         this.owners = owners;
         this.events = events;
-        this.categories = categories;
+        this.liveGate = liveGate;
         this.clock = clock;
         this.sellingGate = sellingGate;
     }
@@ -130,9 +126,9 @@ class ProductServiceImpl implements ProductService {
     public Product approve(UUID id) {
         permissions.require(CatalogPermissions.MODERATE);
         return transition(id, p -> {
-            requireTaxReady(p);
             sellingGate.requireApprovable(p);
-            return p.approve(Instant.now(clock));
+            // The tax gate: refuses (TaxNotReady) unless every variant has a resolved tax decision.
+            return liveGate.approve(p, Instant.now(clock));
         }, CatalogEvents.PRODUCT_APPROVED);
     }
 
@@ -143,7 +139,12 @@ class ProductServiceImpl implements ProductService {
         if (note == null || note.isBlank()) {
             throw new CatalogRuleViolation("A rejection note is required", Map.of("note", "Required"));
         }
-        return transition(id, p -> p.reject(note.trim(), Instant.now(clock)), CatalogEvents.PRODUCT_REJECTED);
+        return transition(id, p -> {
+            Instant now = Instant.now(clock);
+            // A person decided: a listing that was held for tax never comes back on its own after this.
+            liveGate.releaseHold(p.id(), now);
+            return p.reject(note.trim(), now);
+        }, CatalogEvents.PRODUCT_REJECTED);
     }
 
     @Override
@@ -159,7 +160,7 @@ class ProductServiceImpl implements ProductService {
         requireEditable(id);
         return transition(id, p -> {
             sellingGate.requireResumable(p);
-            return p.resume(Instant.now(clock));
+            return liveGate.resume(p, Instant.now(clock));
         }, CatalogEvents.PRODUCT_RESUMED);
     }
 
@@ -176,17 +177,6 @@ class ProductServiceImpl implements ProductService {
         Product updated = products.update(change.apply(current));
         publish(eventType, updated);
         return updated;
-    }
-
-    /** Never guess: a product goes live only when every variant's tax gate is READY. */
-    private void requireTaxReady(Product p) {
-        CategoryNode node = p.categoryId() == null ? null : categories.findById(p.categoryId()).orElse(null);
-        TaxReadiness readiness = TaxReadiness.of(p, node == null ? null : node.taxProfileId(),
-                node == null ? null : node.taxStatus());
-        if (!readiness.ready()) {
-            throw new TaxNotReady("This product cannot go live yet: its tax details are not complete",
-                    readiness.blockers(), readiness);
-        }
     }
 
     private void ensureVisible(Product p) {

@@ -10,6 +10,7 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.sizing.SizeChart;
+import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -72,9 +73,12 @@ class PublicCatalogServiceImpl implements PublicCatalogService {
                 .map(CategoryNode::taxProfileId);
     }
 
-    /** LIVE and not hidden by seller-service compliance enforcement (seller.listings.hidden). */
+    /**
+     * LIVE, with a resolved tax decision on every variant (never guess: nothing is shown or offered without one), and not
+     * hidden by seller-service compliance enforcement (seller.listings.hidden).
+     */
     private boolean publiclyVisible(Product p) {
-        return p.status() == ProductStatus.LIVE && !suppressions.isHidden(p.owner().orgId());
+        return p.status() == ProductStatus.LIVE && LiveRequiresTax.holds(p) && !suppressions.isHidden(p.owner().orgId());
     }
 
     private static Atin parse(String raw) {

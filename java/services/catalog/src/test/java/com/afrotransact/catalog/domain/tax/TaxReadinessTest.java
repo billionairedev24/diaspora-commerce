@@ -31,13 +31,13 @@ class TaxReadinessTest {
 
     @Test
     void aProductIsReadyOnlyWhenEveryVariantIs() {
-        Product p = product(variant("AT00000011", new VariantTax(Map.of(), TaxStatus.READY, List.of(), null)),
+        Product p = product(variant("AT00000011", new VariantTax(Map.of(), TaxStatus.READY, List.of(), new TaxDecision("EXEMPT", "AT.X", "S001", "0%", "v1", "r"))),
                 variant("AT00000012", new VariantTax(Map.of(), TaxStatus.PENDING_REVIEW, List.of(), null)));
         TaxReadiness r = TaxReadiness.of(p, "packaged-snacks", "ACTIVE");
         assertThat(r.ready()).isFalse();
         assertThat(r.status()).isEqualTo(TaxStatus.PENDING_REVIEW);
         assertThat(r.blockers()).containsKey("variants[1].tax");
-        assertThat(TaxReadiness.of(product(variant("AT00000011", new VariantTax(Map.of(), TaxStatus.READY, List.of(), null))),
+        assertThat(TaxReadiness.of(product(variant("AT00000011", new VariantTax(Map.of(), TaxStatus.READY, List.of(), new TaxDecision("EXEMPT", "AT.X", "S001", "0%", "v1", "r")))),
                 "packaged-snacks", "ACTIVE").ready()).isTrue();
     }
 

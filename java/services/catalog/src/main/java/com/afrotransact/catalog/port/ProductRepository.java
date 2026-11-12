@@ -30,13 +30,27 @@ public interface ProductRepository {
     Optional<Product> findById(UUID id);
 
     /**
+     * LIVE products that have a variant without a stored, resolved tax decision (or no variant), ordered by id. This must
+     * always be empty: it is the audit behind {@code catalog_live_without_tax_decision}.
+     */
+    List<Product> findLiveWithoutTaxDecision(int offset, int limit);
+
+    /** How many products {@link #findLiveWithoutTaxDecision} would list. */
+    long countLiveWithoutTaxDecision();
+
+    /**
      * Stores a variant's tax state (facts, status, missing facts, decision summary) without touching the product or its
      * version: tax re-checks and tax-returns events must not make a form that is open fail with a stale version.
      */
     void saveVariantTax(UUID variantId, VariantTax tax);
 
-    /** Variants of this category (tax profile code) with their tax status, for re-checks after a status change. */
-    List<Product> findByTaxProfile(String taxProfileId, int limit);
+    /**
+     * Products of this category (tax profile code) with their variants' tax state, keyset by id, for re-checks after a
+     * status change.
+     *
+     * @param afterId exclusive lower bound (null for the first page)
+     */
+    List<Product> findByTaxProfile(String taxProfileId, UUID afterId, int limit);
 
     /** The organisation's product that has a variant with this seller SKU. */
     Optional<Product> findBySellerSku(String orgId, String sellerSku);

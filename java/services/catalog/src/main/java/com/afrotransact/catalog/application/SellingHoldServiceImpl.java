@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
+import com.afrotransact.catalog.domain.tax.TaxNotReady;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SellingHoldRepository;
 import org.slf4j.Logger;
@@ -25,17 +26,20 @@ class SellingHoldServiceImpl implements SellingHoldService {
     private final ProductRepository products;
     private final ProductEvents events;
     private final SellingPublishGate gate;
+    private final ProductLiveGate liveGate;
     private final Clock clock;
     private final int pageSize;
     private final TransactionTemplate tx;
 
     SellingHoldServiceImpl(SellingHoldRepository holds, ProductRepository products, ProductEvents events,
-                           SellingPublishGate gate, Clock clock, PlatformTransactionManager transactions,
+                           SellingPublishGate gate, ProductLiveGate liveGate, Clock clock,
+                           PlatformTransactionManager transactions,
                            @Value("${at.catalog.selling-gate.page-size:200}") int pageSize) {
         this.holds = holds;
         this.products = products;
         this.events = events;
         this.gate = gate;
+        this.liveGate = liveGate;
         this.clock = clock;
         this.pageSize = pageSize;
         this.tx = new TransactionTemplate(transactions);
@@ -143,7 +147,14 @@ class SellingHoldServiceImpl implements SellingHoldService {
         if (!last || p.status() != ProductStatus.PAUSED) {
             return false;
         }
-        Product resumed = products.update(p.resume(Instant.now(clock)));
+        Product resumed;
+        try {
+            resumed = products.update(liveGate.resume(p, Instant.now(clock)));
+        } catch (TaxNotReady ex) {
+            // Never guess: a listing without a resolved tax decision on every variant stays paused (the hold is released).
+            LOG.warn("Listing {} stays paused: its tax details are not complete", p.atin().value());
+            return false;
+        }
         events.publish(CatalogEvents.PRODUCT_RESUMED, resumed);
         return true;
     }

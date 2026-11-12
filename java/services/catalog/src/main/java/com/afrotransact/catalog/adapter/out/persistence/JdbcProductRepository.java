@@ -22,6 +22,7 @@ import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.web.error.ConflictException;
@@ -46,8 +47,21 @@ class JdbcProductRepository implements ProductRepository {
         this.json = json;
     }
 
+    /**
+     * LIVE products with a variant that has no stored, resolved tax decision (gate status not READY, or no decision
+     * object), or with no variant at all. Always empty when the tax gate holds (docs/engineering/tax-gate-paths.md).
+     */
+    private static final String LIVE_WITHOUT_DECISION = """
+            status = 'LIVE'
+              and (not exists (select 1 from product_variant v where v.product_id = product.id)
+                   or exists (select 1 from product_variant v
+                              where v.product_id = product.id
+                                and (v.tax_status <> 'READY' or jsonb_typeof(v.tax_decision) is distinct from 'object')))
+            """;
+
     @Override
     public Product insert(Product p) {
+        LiveRequiresTax.require(p);
         jdbc.sql("""
                 insert into product (id, atin, owner_kind, owner_org, category_id, category_request_id, product_type,
                                      title, attributes, images, variation_theme, status, moderation_note,
@@ -82,6 +96,7 @@ class JdbcProductRepository implements ProductRepository {
 
     @Override
     public Product update(Product p) {
+        LiveRequiresTax.require(p);
         Map<String, Object> params = params(p);
         params.put("version", p.version());
         int rows = jdbc.sql("""
@@ -103,6 +118,7 @@ class JdbcProductRepository implements ProductRepository {
 
     @Override
     public Product updateWithVariants(Product p) {
+        LiveRequiresTax.require(p);
         Product current = findById(p.id()).orElseThrow();
         Set<UUID> kept = new HashSet<>();
         p.variants().forEach(v -> kept.add(v.id()));
@@ -150,11 +166,27 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
-    public List<Product> findByTaxProfile(String taxProfileId, int limit) {
-        return withVariants(jdbc.sql(SELECT + " where category_id in (select id from category where tax_profile_id = :profile "
+    public List<Product> findByTaxProfile(String taxProfileId, UUID afterId, int limit) {
+        String sql = SELECT + " where category_id in (select id from category where tax_profile_id = :profile "
                 + "or parent_id in (select id from category where tax_profile_id = :profile)) "
-                + "order by id limit :limit").param("profile", taxProfileId).param("limit", limit)
+                + (afterId == null ? "" : "and id > :after ") + "order by id limit :limit";
+        JdbcClient.StatementSpec spec = jdbc.sql(sql).param("profile", taxProfileId).param("limit", limit);
+        if (afterId != null) {
+            spec = spec.param("after", afterId);
+        }
+        return withVariants(spec
                 .query(this::mapProduct).list());
+    }
+
+    @Override
+    public List<Product> findLiveWithoutTaxDecision(int offset, int limit) {
+        return withVariants(jdbc.sql(SELECT + " where " + LIVE_WITHOUT_DECISION + " order by id limit :limit offset :offset")
+                .param("limit", limit).param("offset", offset).query(this::mapProduct).list());
+    }
+
+    @Override
+    public long countLiveWithoutTaxDecision() {
+        return jdbc.sql("select count(*) from product where " + LIVE_WITHOUT_DECISION).query(Long.class).single();
     }
 
     @Override
