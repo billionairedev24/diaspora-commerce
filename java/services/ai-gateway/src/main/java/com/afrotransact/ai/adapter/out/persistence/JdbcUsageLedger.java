@@ -17,6 +17,8 @@ import org.springframework.transaction.support.TransactionOperations;
 @Repository
 class JdbcUsageLedger implements UsageLedger {
 
+    private static final String GLOBAL_KEY = "all";
+
     private final JdbcClient jdbc;
     private final TransactionOperations tx;
 
@@ -51,7 +53,19 @@ class JdbcUsageLedger implements UsageLedger {
                     .update();
             rollUp(day, "USER", userKey(e.subject(), e.feature()), e.usage().total(), e.costMicros());
             rollUp(day, "FEATURE", e.feature(), e.usage().total(), e.costMicros());
+            rollUp(day, "CALLER", e.subject(), e.usage().total(), e.costMicros());
+            rollUp(day, "GLOBAL", GLOBAL_KEY, e.usage().total(), e.costMicros());
         });
+    }
+
+    @Override
+    public UsageTotals callerTotals(String subject, LocalDate day) {
+        return totals(day, "CALLER", subject);
+    }
+
+    @Override
+    public UsageTotals globalTotals(LocalDate day) {
+        return totals(day, "GLOBAL", GLOBAL_KEY);
     }
 
     @Override

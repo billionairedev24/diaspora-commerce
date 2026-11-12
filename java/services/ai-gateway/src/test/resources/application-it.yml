@@ -5,6 +5,8 @@ spring:
       api-key: test-openrouter-key
 at:
   ai:
+    # The USD 2 ceiling and the call rates are unit-tested (SpendGuardTest); integration tests use many calls.
+    spend: {global-daily-cost-usd: 0, caller-daily-cost-usd: 0, user-calls-per-minute: 0, service-calls-per-minute: 0}
     lola:
       max-tool-rounds: 3
     embeddings:

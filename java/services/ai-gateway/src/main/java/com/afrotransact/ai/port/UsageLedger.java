@@ -16,6 +16,12 @@ public interface UsageLedger {
 
     UsageTotals featureTotals(String feature, LocalDate day);
 
+    /** Everything one caller (user or service client) used on the day, across all features. */
+    UsageTotals callerTotals(String subject, LocalDate day);
+
+    /** Everything used by all callers and features on the day: the figure the daily spend ceiling is checked against. */
+    UsageTotals globalTotals(LocalDate day);
+
     /** Billable usage per organisation and UTC day in [from, to], ordered by organisation and day. */
     List<OrgDayUsage> orgUsage(LocalDate from, LocalDate to);
 

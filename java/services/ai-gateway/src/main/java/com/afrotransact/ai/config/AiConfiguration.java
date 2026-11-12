@@ -19,6 +19,7 @@ import com.afrotransact.ai.domain.DefaultModelRoutingPolicy;
 import com.afrotransact.ai.domain.ModelRoute;
 import com.afrotransact.ai.domain.ModelRoutingPolicy;
 import com.afrotransact.ai.domain.PriceTable;
+import com.afrotransact.ai.domain.SpendLimits;
 import com.afrotransact.ai.domain.TaskType;
 import com.afrotransact.ai.domain.guardrail.DefaultGroundingVerifier;
 import com.afrotransact.ai.domain.guardrail.DefaultInjectionFilter;
@@ -67,6 +68,13 @@ class AiConfiguration {
     @Bean
     BudgetPolicy budgetPolicy() {
         return new DefaultBudgetPolicy();
+    }
+
+    @Bean
+    SpendLimits spendLimits(AiProperties props) {
+        AiProperties.Spend s = props.spend();
+        return new SpendLimits(micros(s.globalDailyCostUsd()), micros(s.callerDailyCostUsd()), s.userCallsPerMinute(),
+                s.serviceCallsPerMinute());
     }
 
     @Bean

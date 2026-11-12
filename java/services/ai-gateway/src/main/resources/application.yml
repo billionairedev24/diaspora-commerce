@@ -45,7 +45,7 @@ spring:
       chat:
         options:
           # Default only; every call sets the model chosen by the routing table below.
-          model: anthropic/claude-sonnet-4.5
+          model: google/gemini-2.5-flash-lite
       embedding:
         options:
           model: openai/text-embedding-3-small
@@ -186,6 +186,17 @@ at:
       - {model: google/gemini-2.5-flash, input: 0.30, output: 2.50}
       - {model: google/gemini-2.5-flash-lite, input: 0.10, output: 0.40}
       - {model: openai/text-embedding-3-small, input: 0.02, output: 0}
+    # SPEND CEILING (owner decision): USD 2.00 per UTC day for the whole gateway, every feature and caller together.
+    # At the ceiling every call answers 429 application/problem+json code ai.budget-exceeded (scope global, Retry-After
+    # = seconds to UTC midnight). caller-daily-cost-usd is the share one caller (user or service client such as
+    # media-service or the MCP server) may use, so one caller cannot exhaust the day for everyone; the per-minute rates
+    # answer 429 ai.rate-limited. 0 = unlimited. Cost is estimated from provider usage after each call, so the day can
+    # overshoot by the cost of the calls in flight. The OpenRouter key credit limit (set in OpenRouter) is the backstop.
+    spend:
+      global-daily-cost-usd: ${AI_GLOBAL_DAILY_COST_USD:2.00}
+      caller-daily-cost-usd: ${AI_CALLER_DAILY_COST_USD:0.50}
+      user-calls-per-minute: ${AI_USER_CALLS_PER_MINUTE:20}
+      service-calls-per-minute: ${AI_SERVICE_CALLS_PER_MINUTE:120}
     # Daily budgets per feature (UTC day). 0 = unlimited. Above a limit: degrade to the cheapest model of the route
     # while usage < hard-limit-factor × limit (when degrade-on-exceed), then 429 ai.budget-exceeded.
     budgets:

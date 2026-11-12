@@ -10,8 +10,10 @@ import com.afrotransact.mcp.application.ToolCatalog;
 import com.afrotransact.mcp.application.ToolGuardService;
 import com.afrotransact.mcp.domain.CallerProfile;
 import com.afrotransact.mcp.domain.ToolDescriptor;
+import com.afrotransact.mcp.domain.Toolset;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
+import com.afrotransact.platform.security.PlatformSecurityProperties;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,6 +21,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,12 +35,14 @@ class ToolsController {
     private final ObjectProvider<List<McpStatelessServerFeatures.SyncToolSpecification>> specs;
     private final ToolGuardService guard;
     private final ActorResolver actors;
+    private final PlatformSecurityProperties security;
 
     ToolsController(ObjectProvider<List<McpStatelessServerFeatures.SyncToolSpecification>> specs,
-                    ToolGuardService guard, ActorResolver actors) {
+                    ToolGuardService guard, ActorResolver actors, PlatformSecurityProperties security) {
         this.specs = specs;
         this.guard = guard;
         this.actors = actors;
+        this.security = security;
     }
 
     @Operation(summary = "List MCP tools", description = """
@@ -52,7 +58,12 @@ class ToolsController {
         Map<String, McpStatelessServerFeatures.SyncToolSpecification> byName = specs.stream()
                 .flatMap(List::stream)
                 .collect(Collectors.toMap(s -> s.tool().name(), s -> s, (a, b) -> a));
+        // The server is public: without a token only the shopper toolset is documented; seller and staff tools (and
+        // their schemas) are listed only to a caller whose token may call them.
+        boolean anonymous = security.enabled() && !(SecurityContextHolder.getContext()
+                .getAuthentication() instanceof JwtAuthenticationToken);
         return ToolCatalog.all().stream()
+                .filter(t -> !anonymous || t.toolset() == Toolset.SHOPPER)
                 .filter(t -> visible == null || visible.contains(t.name()))
                 .map(t -> view(t, Optional.ofNullable(byName.get(t.name()))))
                 .toList();
