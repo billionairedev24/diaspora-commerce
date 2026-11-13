@@ -1,0 +1,41 @@
+# delivery-runs tenant isolation matrix (docs/engineering/tenant-isolation.md). Format: METHOD /path | CLASS | enforcement | testClass
+@LocationController | STAFF_ONLY | delivery-runs:read/manage, preorders:manage/export/late-add: permissions granted only to platform.* staff roles (identity V20/V22/V28/V33), no org-member role holds them; permission-only, no principal-type check; no org-owned data (StaffOnlyTenantIsolationTest drives every use case as seller/provider/customer/driver) | -
+@EconomicsController | STAFF_ONLY | delivery-runs:read/manage, preorders:manage/export/late-add: permissions granted only to platform.* staff roles (identity V20/V22/V28/V33), no org-member role holds them; permission-only, no principal-type check; no org-owned data (StaffOnlyTenantIsolationTest drives every use case as seller/provider/customer/driver) | -
+@PreorderSettingsController | STAFF_ONLY | delivery-runs:read/manage, preorders:manage/export/late-add: permissions granted only to platform.* staff roles (identity V20/V22/V28/V33), no org-member role holds them; permission-only, no principal-type check; no org-owned data (StaffOnlyTenantIsolationTest drives every use case as seller/provider/customer/driver) | -
+@RunController | STAFF_ONLY | delivery-runs:read/manage, preorders:manage/export/late-add: permissions granted only to platform.* staff roles (identity V20/V22/V28/V33), no org-member role holds them; permission-only, no principal-type check; no org-owned data (StaffOnlyTenantIsolationTest drives every use case as seller/provider/customer/driver) | -
+@PreorderController | STAFF_ONLY | delivery-runs:read/manage, preorders:manage/export/late-add: permissions granted only to platform.* staff roles (identity V20/V22/V28/V33), no org-member role holds them; permission-only, no principal-type check; no org-owned data (StaffOnlyTenantIsolationTest drives every use case as seller/provider/customer/driver) | -
+@ServiceController | SERVICE_ONLY | delivery-runs:reserve/read service scope held by orders/fulfilment clients; sellers, customers and drivers refused (StaffOnlyTenantIsolationTest) | -
+@PublicRunController | PUBLIC | no sign-in; coverage, locations and open runs only, no PII, no org data | -
+GET /v1/advertorials | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+GET /v1/advertorials/{id} | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+POST /v1/advertorials/generate | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+POST /v1/advertorials | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+PUT /v1/advertorials/{id} | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+POST /v1/advertorials/{id}/publish | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+POST /v1/advertorials/{id}/pause | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+POST /v1/advertorials/{id}/end | STAFF_ONLY | AdvertorialServiceImpl permissions.require(delivery-runs:read | preorders:manage); platform roles only (StaffOnlyTenantIsolationTest) | -
+GET /v1/public/advertorials | PUBLIC | no sign-in; serves live marketing copy for a place, no PII | -
+POST /v1/public/advertorials/{id}/events | PUBLIC | no sign-in; counts a view or click, deduplicated per visitor/address, 204 and no effect when not live | -
+GET /v1/delivery-fees | STAFF_ONLY | DeliveryFeeServiceImpl delivery-runs:read, platform roles only | -
+GET /v1/public/delivery-fees | PUBLIC | no sign-in; fee table, no tenant data | -
+PUT /v1/delivery-fees/{method}/{currency} | STAFF_ONLY | preorders:manage + reason, platform roles only | -
+GET /v1/delivery-fees/changes | STAFF_ONLY | delivery-runs:read, platform roles only | -
+POST /v1/delivery-fees/preview | STAFF_ONLY | delivery-runs:read, platform roles only | -
+POST /v1/service/delivery-fees/carrier | SERVICE_ONLY | delivery-runs:reserve (orders-service client scope) | -
+POST /v1/public/locations/{slug}/visits | PUBLIC | no sign-in; counts UTM tags only, no visitor id; run must belong to the location | -
+GET /v1/locations/{id}/attribution | STAFF_ONLY | AttributionServiceImpl.report delivery-runs:read, platform roles only | -
+GET /v1/public/preorders/resolve | PUBLIC | no sign-in, no PII | -
+GET /v1/public/preorders/open | PUBLIC | no sign-in, no PII | -
+GET /v1/service/preorders/eligibility | SERVICE_ONLY | delivery-runs:reserve (orders-service client scope) | -
+GET /v1/service/preorders/{windowId}/audience | SERVICE_ONLY | delivery-runs:audience.read (notifications-service client scope); subscriber contacts, never a seller org | -
+POST /v1/public/subscriptions | PUBLIC | no sign-in; always 202 whether or not the address is known; confirmation by emailed token | -
+POST /v1/public/preorders/waitlist/unsubscribe | TOKEN_LINK | 256-bit random unsubscribe token looked up by value; unknown token 404; effect limited to that entry | -
+POST /v1/public/subscriptions/confirm | TOKEN_LINK | 256-bit random token, only its SHA-256 is stored and compared; unknown 404 | SubscriptionTenantIsolationTest
+POST /v1/public/subscriptions/unsubscribe | TOKEN_LINK | 256-bit random unsubscribe token; unknown or blank 404; effect limited to that subscription | SubscriptionTenantIsolationTest
+GET /v1/me/run-subscriptions | CUSTOMER_SELF | SubscriptionServiceImpl.mine queries by the token subject only | SubscriptionTenantIsolationTest
+POST /v1/me/run-subscriptions | CUSTOMER_SELF | subscribeMine keys the row by the token subject | SubscriptionTenantIsolationTest
+DELETE /v1/me/run-subscriptions/{locationId} | CUSTOMER_SELF | unsubscribeMine looks the row up by (location, token subject); another customer's row is 404 | SubscriptionTenantIsolationTest
+GET /v1/seller/run-pickups | ORG_SCOPED_LIST | PickListAccess.sellerOrg: org from the token, orgId param refused unless equal (staff must name it); lists filtered to that sellerOrgId | RunPickupTenantIsolationTest
+GET /v1/seller/run-pickups/{runId} | ORG_OWNED | PickListAccess.sellerOrg then the run's pick list of that org only, 404 when the org has nothing on the run | RunPickupTenantIsolationTest
+GET /v1/runs/{id}/pick-lists | STAFF_ONLY | PickListAccess.operator delivery-runs:read, platform roles only (every seller's list) | -
+GET /v1/runs/{id}/progress | STAFF_ONLY | RunProgressService delivery-runs:read, platform roles only; counts only | -
