@@ -185,10 +185,11 @@ export const STAFF_TOURS = [
     id: 'tax-review',
     prefix: 'st.tour.tax',
     journey: 'commerce',
-    route: '/settings?section=tax&tab=tax-review',
-    audience: { permissions: ['fees:view'] },
+    route: '/tax?tab=tax-review',
+    audience: { permissions: ['tax:view'] },
     steps: [
       ['views', 'tax-review-views'],
+      ['filters', 'tax-review-filters', { placement: 'bottom' }],
       ['queue', 'table-staff.tax.review.queue', { placement: 'top' }],
       ['banner', 'tax-gate-banner', { optional: true }],
       ['sellers']
@@ -198,13 +199,13 @@ export const STAFF_TOURS = [
     id: 'tax-profiles',
     prefix: 'st.tour.taxProfiles',
     journey: 'commerce',
-    route: '/settings?section=tax&tab=tax-method',
-    audience: { permissions: ['fees:view'] },
+    route: '/tax?tab=tax-method',
+    audience: { permissions: ['tax:view'] },
     steps: [
-      ['method', 'settings-section'],
-      ['profiles', 'table-staff.tax.profiles', { route: '/settings?section=tax&tab=tax-profiles', placement: 'top' }],
-      ['decisions', 'table-staff.tax.review.decisions', { route: '/settings?section=tax&tab=tax-review&review.view=decisions', placement: 'top' }],
-      ['codes', 'settings-section', { route: '/settings?section=tax&tab=tax-codes' }],
+      ['method', 'tax-tabs'],
+      ['profiles', 'table-staff.tax.profiles', { route: '/tax?tab=tax-profiles', placement: 'top' }],
+      ['decisions', 'table-staff.tax.review.decisions', { route: '/tax?tab=tax-review&review.view=decisions', placement: 'top' }],
+      ['codes', 'tax-tabs', { route: '/tax?tab=tax-codes' }],
       ['wrap']
     ]
   }),

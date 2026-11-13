@@ -65,6 +65,7 @@ var StaffNav = []StaffNavGroupDef{
 	{"finance", "Finance", []StaffModule{
 		{"payouts", "payouts", "Payouts & ledger", "Weekly Stripe Connect payouts. Holding or releasing money needs Approve."},
 		{"fees", "fees", "Fees, commissions & tax", "Fee schedule versions and marketplace-facilitator tax rates. Changes apply to new orders only."},
+		{TaxModule, "", "Sales tax", "What each item is for tax and who reviews it: the review queue, who calculates tax, category profiles, provider codes, filings and nexus."},
 		{"plans", "", "Plans & billing", "Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges."},
 	}},
 	{"growth", "Growth", []StaffModule{
@@ -147,6 +148,17 @@ func (a StaffAccess) Level(module string) string {
 		case a.Can(PermApplicationsApprove):
 			return LevelEdit
 		case a.Can(PermApplicationsReview):
+			return LevelView
+		default:
+			return LevelNone
+		}
+	case TaxModule:
+		// Derived from tax-returns' own permissions (identity's matrix has no Sales tax column): reading opens it,
+		// classifying (approve, reclassify, change a gate) is the edit level.
+		switch {
+		case a.Can(PermTaxRead) && a.Can(PermTaxClassifyAdmin):
+			return LevelEdit
+		case a.Can(PermTaxRead):
 			return LevelView
 		default:
 			return LevelNone

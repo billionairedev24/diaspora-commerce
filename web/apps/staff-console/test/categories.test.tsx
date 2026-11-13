@@ -200,13 +200,13 @@ describe('the category tree', () => {
 });
 
 describe('the category tax profile link', () => {
-  it('points at the real tax screen: Settings, Sales tax, Tax profiles', async () => {
+  it('points at the real tax screen: Sales tax, Tax profiles', async () => {
     asRoles(null);
     const { nodes } = await api().tree();
     const category = { ...nodes.find((n) => n.level === 'CATEGORY')!, taxProfileId: 'nuts-seeds', taxStatus: 'ACTIVE' as const };
     await renderScreen(<NodeSheet target={{ mode: 'view', node: category }} nodes={[category]} canEdit onTarget={() => {}} onClose={() => {}} />);
     const link = await screen.findByTestId('tax-screens-link');
-    expect(link).toHaveAttribute('href', '/settings?section=tax&tab=tax-profiles');
+    expect(link).toHaveAttribute('href', '/tax?tab=tax-profiles');
   });
 });
 

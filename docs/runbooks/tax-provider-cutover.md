@@ -77,7 +77,7 @@ The tax professional signs off the cutover; attach the signed note to the settin
 
 ## Risk-based tax review and a cutover
 
-`taxReview.mode` (Settings → Sales tax → *Review settings*, `GET|PUT /v1/tax/review-settings`) decides who approves a variant's tax
+`taxReview.mode` (Sales tax → *Review settings*, `GET|PUT /v1/tax/review-settings`) decides who approves a variant's tax
 classification: the system approves when the category is ACTIVE, the rules resolve and the category is not on the always-review list
 (`RISK_BASED`, the default, with a 5% audit sample) or every variant waits for a reviewer (`ALL`). It does not change which provider
 calculates the amount. For a cutover: record the tax professional's sign-off reference in the change reason when the list or the rate

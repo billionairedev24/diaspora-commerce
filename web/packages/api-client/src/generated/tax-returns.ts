@@ -788,7 +788,7 @@ export interface paths {
         };
         /**
          * Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)
-         * @description auditSample=true lists the audit sample instead (status is ignored): items the system approved under the risk-based review rule that are live and wait for a reviewer to confirm (POST approve) or reclassify them.
+         * @description auditSample=true lists the audit sample instead (status is ignored): items the system approved under the risk-based review rule that are live and wait for a reviewer to confirm (POST approve) or reclassify them. reason keeps the items that need a person for that reason (reviewReasonCode of each item). q matches the ATIN, GTIN or title, or a seller whose id is in qSellerOrgIds (the name lives in another service, so the caller resolves names to ids). Every item names its sellers (sellerOrgIds: the owner first, then every seller seen in a stored decision).
          */
         get: operations["listVariantClassifications"];
         put?: never;
@@ -870,6 +870,55 @@ export interface paths {
          * @description The previous decision is kept in the audit trail; the record returns to PENDING_REVIEW and tax.classification.changed is published.
          */
         post: operations["reclassifyVariant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tax/listing-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Does this seller have a stored tax decision on this variant? (service clients, offers-service, S384)
+         * @description The decision is stored per (variant ATIN, seller behaviour) and lists the selling organisations it applies to
+         *     (`listing_tax_decision`); the page owner's decision is **not** another seller's. `status` is `RESOLVED` only when a stored,
+         *     RESOLVED decision names this organisation. Anything else (`MISSING` for no decision, or the unresolved status such as
+         *     `NEEDS_APPROVAL`, `MISSING_FACTS`, `BLOCKED`) means the seller's offer must not be live. Read-only; never creates a
+         *     decision. Needs tax:read (service token).
+         */
+        get: operations["getListingDecision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tax/listing-decisions/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for the seller's decision on a variant from the page's facts (service clients, offers-service, S384)
+         * @description Resolves the variant's classification record (the page's facts, already reviewed for the page owner) under the
+         *     seller's own behaviour facts and, when the outcome is chargeable (status `RESOLVED`), stores the decision for this
+         *     organisation. **Never defaults a rate or an outcome**: when the record is not approved, facts are missing (a behaviour
+         *     fact the seller has not given), or the profile is gated, nothing is stored and the answer carries that status with
+         *     plain reasons, so the offer stays held. Idempotent: asking again returns the stored decision. For the page owner
+         *     the owner's listing behaviour is used; another seller's behaviour is never assumed. Needs tax:classify (service token).
+         */
+        post: operations["requestListingDecision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1086,7 +1135,7 @@ export interface components {
             /** Format: date-time */
             changedAt?: string;
         };
-        /** @description ALL until staff change it. RISK_BASED must only be switched on after the Texas tax professional agrees. */
+        /** @description RISK_BASED until staff change it: the rules decide and a person reviews only exceptions. Staff may choose ALL. Switching to RISK_BASED approves the records already waiting that the rules decide (actor auto). */
         TaxReviewSettings: {
             /**
              * @description RISK_BASED (the default when staff stored nothing): a classification is approved by the rules when the category is ACTIVE, the rules resolve, no required evidence is missing and the category is not on the always-review list; anything else (conflict, no matching rule, missing answer or proof, a category awaiting sign-off, a regulated category) waits for a tax reviewer. ALL: every classification waits for a tax reviewer.
@@ -1754,6 +1803,11 @@ export interface components {
             verified?: boolean;
             reason: string;
         };
+        /**
+         * @description Why a classification record needs a person: AUDIT_SAMPLE (approved by the system, live, waiting to be confirmed), CONFLICT (open decision on the category), REGULATED_CATEGORY (needs the tax professional's sign-off), CODE_TO_VERIFY (generic provider code), BLOCKED (mixed bundle), NO_MATCHING_RULE (no decision row matches), MISSING_FACT (a required answer is missing), CHANGED (facts or category changed after approval), WITH_SELLER (sent back), NEW_LISTING (resolved, waiting for its first check)
+         * @enum {string}
+         */
+        ClassificationReviewReason: "AUDIT_SAMPLE" | "CONFLICT" | "REGULATED_CATEGORY" | "CODE_TO_VERIFY" | "BLOCKED" | "NO_MATCHING_RULE" | "MISSING_FACT" | "CHANGED" | "WITH_SELLER" | "NEW_LISTING";
         VariantClassification: {
             /** @description The variant ATIN (the document's SKU) */
             atin?: string;
@@ -1790,6 +1844,10 @@ export interface components {
                 requestedAt?: string;
             } | null;
             ownerOrgId?: string;
+            /** @description Organisations that sell the variant: the owner first, then every seller seen in a stored decision (list items only) */
+            sellerOrgIds?: string[] | null;
+            /** @description Why a person has to review it, derived from the stored state; null when nothing waits (an approved item outside the audit sample) */
+            reviewReasonCode?: components["schemas"]["ClassificationReviewReason"] | null;
             evidence?: {
                 factId?: string;
                 fileName?: string;
@@ -1935,6 +1993,32 @@ export interface components {
             /** Format: int64 */
             taxMinor?: number;
             error?: string;
+        };
+        ListingDecisionRequest: {
+            atin: string;
+            sellerOrgId: string;
+            /** @description The seller's behaviour facts for this listing (sold_heated, utensils_provided ...). Empty means none given. */
+            sellerBehaviour?: {
+                [key: string]: unknown;
+            };
+        };
+        ListingDecisionState: {
+            atin: string;
+            sellerOrgId: string;
+            /**
+             * @description RESOLVED, MISSING (no stored decision) or the unresolved ResolveStatus (MISSING_FACTS, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN)
+             * @enum {string}
+             */
+            status: "RESOLVED" | "MISSING" | "MISSING_FACTS" | "BLOCKED" | "NEEDS_APPROVAL" | "REFINE_CODE" | "CONFLICT_OPEN";
+            /** @description True only for RESOLVED with a stored decision */
+            resolved: boolean;
+            outcome?: components["schemas"]["TaxOutcome"];
+            internalTaxCode?: string | null;
+            ruleVersion?: string | null;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            /** @description Plain reasons when not resolved */
+            reasons?: string[];
         };
     };
     responses: never;
@@ -3168,8 +3252,14 @@ export interface operations {
                 status?: components["schemas"]["ClassificationRecordStatus"];
                 categoryCode?: string;
                 sellerOrgId?: string;
-                /** @description ATIN */
+                /** @description ATIN, GTIN or title */
                 q?: string;
+                /** @description Organisations whose name matched the search text: an item sold by one of them matches q too */
+                qSellerOrgIds?: string[];
+                reason?: components["schemas"]["ClassificationReviewReason"];
+                /** @description Column to sort by; omitted keeps the queue order */
+                sort?: "title" | "atin" | "category" | "status" | "submitted" | "reviewed";
+                order?: "asc" | "desc";
                 page?: number;
                 size?: number;
             };
@@ -3318,6 +3408,75 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["VariantClassification"];
                 };
+            };
+        };
+    };
+    getListingDecision: {
+        parameters: {
+            query: {
+                /** @description Variant ATIN */
+                atin: string;
+                sellerOrgId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The seller's decision state (MISSING is an answer, not an error) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDecisionState"];
+                };
+            };
+            /** @description Missing tax:read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    requestListingDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListingDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description The state after the request (also 200 when not resolvable) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDecisionState"];
+                };
+            };
+            /** @description Missing tax:classify */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description tax.classification-not-found when tax-returns has no record for the ATIN (it asks catalog once) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

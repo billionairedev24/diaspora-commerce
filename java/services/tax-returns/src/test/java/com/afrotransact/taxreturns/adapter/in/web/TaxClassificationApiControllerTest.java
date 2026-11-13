@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.afrotransact.taxreturns.application.ClassificationResolveService;
 import com.afrotransact.taxreturns.application.LineDecisionService.ListingStatus;
@@ -35,13 +36,17 @@ import com.afrotransact.taxreturns.domain.profile.MissingFact;
 import com.afrotransact.taxreturns.domain.profile.Outcome;
 import com.afrotransact.taxreturns.domain.profile.ProfileStatus;
 import com.afrotransact.taxreturns.domain.profile.ProviderCode;
+import com.afrotransact.taxreturns.domain.profile.RecordStatus;
 import com.afrotransact.taxreturns.domain.profile.Resolution;
+import com.afrotransact.taxreturns.domain.profile.ReviewReason;
+import com.afrotransact.taxreturns.domain.profile.VariantClassification;
 import com.afrotransact.taxreturns.domain.profile.TaxMapFixture;
 import com.afrotransact.taxreturns.domain.profile.TaxProfile;
 import com.afrotransact.taxreturns.domain.shadow.ShadowKind;
 import com.afrotransact.taxreturns.domain.shadow.ShadowRow;
 import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.port.ShadowQuoteRepository;
+import com.afrotransact.taxreturns.port.VariantClassificationRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
@@ -168,5 +173,32 @@ class TaxClassificationApiControllerTest {
                 .andExpect(jsonPath("$.differences[0].orderId", is("6f1f5c0e-1111-4222-8333-444455556666")))
                 .andExpect(jsonPath("$.differences[0].inHouse.outcome", is("EXEMPT")))
                 .andExpect(jsonPath("$.differences[0].provider.taxMinor", is(625)));
+    }
+
+    @Test
+    void theReviewQueueBindsItsFiltersAndAnswersWithSellersAndTheReason() throws Exception {
+        Instant at = Instant.parse("2026-11-09T12:00:00Z");
+        VariantClassification record = new VariantClassification("AT20000101", null, UUID.randomUUID(), "Roasted cashews",
+                "org_mama", "nuts-seeds", "snack", Map.of(), Map.of(), Map.of(), Map.of(), RecordStatus.PENDING_REVIEW,
+                new Resolution(ResolveStatus.CONFLICT_OPEN, null, null, Map.of(), null, null, List.of(), "tx-1", "x", 2),
+                "tx-1", "seller_1", at, null, null, null, 0L, at, at);
+        when(variants.search(any(), eq(0), eq(10))).thenReturn(new VariantClassificationService.ReviewList(List.of(record), 1,
+                Map.of("AT20000101", List.of("org_mama", "org_other"))));
+
+        mvc.perform(get("/v1/tax/variant-classifications").param("status", "PENDING_REVIEW").param("q", "cashew")
+                        .param("qSellerOrgIds", "org_mama").param("reason", "CONFLICT").param("sort", "title")
+                        .param("order", "desc").param("size", "10"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total", is(1)))
+                .andExpect(jsonPath("$.items[0].sellerOrgIds", contains("org_mama", "org_other")))
+                .andExpect(jsonPath("$.items[0].reviewReasonCode", is("CONFLICT")));
+
+        ArgumentCaptor<VariantClassificationRepository.Filter> filter = ArgumentCaptor.forClass(VariantClassificationRepository.Filter.class);
+        verify(variants).search(filter.capture(), eq(0), eq(10));
+        assertThat(filter.getValue().status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        assertThat(filter.getValue().q()).isEqualTo("cashew");
+        assertThat(filter.getValue().qSellerOrgIds()).containsExactly("org_mama");
+        assertThat(filter.getValue().reason()).isEqualTo(ReviewReason.CONFLICT);
+        assertThat(filter.getValue().sort()).isEqualTo("title");
+        assertThat(filter.getValue().descending()).isTrue();
     }
 }

@@ -9,7 +9,7 @@
 The listing was visible in search and could be added to a cart for a short time. **Checkout still blocks it** (a line without a definite decision cannot be ordered), so no order can be placed without tax, but shoppers saw an item they could not buy.
 
 ## Diagnose
-1. Staff console: **Fees & commissions > Sales tax > Tax review**: the red banner shows the count and lists the products (seller and category by name), with what is missing for each variant.
+1. Staff console: **Sales tax > Tax review** (sidebar): the red banner shows the count and lists the products (seller and category by name), with what is missing for each variant.
 2. API: `GET /v1/tax-gate/live-without-decision` (permission `tax:read`).
 3. Find the path. Look at the catalog logs for `Listing ... closed for tax (<reason>)` (reason `TAX_<status>`), and at `catalog.product.updated` / `.approved` / `.resumed` / `.reinstated` events for the product around the time it went live. Compare with the path table in `docs/engineering/tax-gate-paths.md`: a path that is not in the table is the bug.
 4. Data written outside the service (SQL, a data tool, a restore from backup) is the other usual cause: it bypasses the gate; the sweep and the persistence guard catch it afterwards.

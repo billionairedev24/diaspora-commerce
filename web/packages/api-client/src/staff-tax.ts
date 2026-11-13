@@ -163,12 +163,19 @@ export const TaxReviewRowSchema = z.object({
   atin: z.string(),
   gtin: z.string().default(''),
   title: z.string(),
+  /** Seller names, never ids ("Unknown seller" when the directory cannot name one). */
   sellers: z.array(z.string()),
+  /** First public photo of the product; empty when catalog has none. */
+  imageUrl: z.string().default(''),
   categoryCode: z.string(),
   categoryName: z.string(),
   status: z.string(),
   statusLabel: z.string(),
   why: z.string(),
+  /** Why a person is needed, as a code derived from the stored state (read only); empty when nothing waits. */
+  reviewReasonCode: z.string().default(''),
+  /** English fallback for `reviewReasonCode`: the console translates the code. */
+  reviewReasonLabel: z.string().default(''),
   proposed: TaxProposedSchema,
   classifiedAt: z.string().default(''),
   classifiedByName: z.string().default(''),
@@ -189,6 +196,8 @@ export const TaxReviewPageSchema = z.object({
   size: z.number().int(),
   status: z.string(),
   statuses: z.array(z.object({ value: z.string(), label: z.string() })).default([]),
+  /** The reasons a person is needed, for the filter. */
+  reasons: z.array(z.object({ value: z.string(), label: z.string() })).default([]),
   canDecide: z.boolean()
 });
 export type TaxReviewPage = z.infer<typeof TaxReviewPageSchema>;
@@ -266,10 +275,20 @@ export type TaxReview = z.infer<typeof TaxReviewSchema>;
 export interface TaxReviewsQuery {
   status?: string;
   categoryCode?: string;
+  /** Only items sold by this organisation (the id of a seller found by `reviewSellers`). */
+  sellerOrgId?: string;
+  /** Only items that need a person for this reason (a `reasons` value). */
+  reason?: string;
+  /** Item name, ATIN, GTIN or seller name. */
   q?: string;
+  /** `<column>,asc|desc` by title, atin, category, status, submitted or reviewed. */
+  sort?: string[];
   page?: number;
   size?: number;
 }
+
+export const TaxReviewSellersSchema = z.object({ items: z.array(z.object({ id: z.string(), name: z.string() })) });
+export type TaxReviewSellers = z.infer<typeof TaxReviewSellersSchema>;
 
 export interface TaxApproveInput {
   reason: string;
@@ -521,7 +540,9 @@ export function createStaffTaxApi(request: Requester) {
     changeProfileStatus: (code: string, body: TaxProfileStatusChange): Promise<TaxProfile> =>
       request(`${T}/profiles/${enc(code)}/status`, TaxProfileSchema, { method: 'POST', body }),
     reviews: (q: TaxReviewsQuery, signal?: AbortSignal): Promise<TaxReviewPage> =>
-      request(`${T}/reviews`, TaxReviewPageSchema, { query: params({ status: q.status, categoryCode: q.categoryCode, q: q.q, page: q.page, size: q.size }), signal }),
+      request(`${T}/reviews`, TaxReviewPageSchema, { query: params({ status: q.status, categoryCode: q.categoryCode, sellerOrgId: q.sellerOrgId, reason: q.reason, q: q.q, page: q.page, size: q.size }, q.sort), signal }),
+    /** Finds sellers by name for the queue's seller filter. */
+    reviewSellers: (q: string, signal?: AbortSignal): Promise<TaxReviewSellers> => request(`${T}/review-sellers`, TaxReviewSellersSchema, { query: params({ q }), signal }),
     review: (atin: string, signal?: AbortSignal): Promise<TaxReview> => request(`${T}/reviews/${enc(atin)}`, TaxReviewSchema, { signal }),
     /** Live listings that have no resolved tax decision (always empty); `total` is the banner count. */
     liveWithoutDecision: (q: { page?: number; size?: number } = {}, signal?: AbortSignal): Promise<TaxLiveWithoutDecisionPage> =>
@@ -558,6 +579,7 @@ export const staffTaxKeys = {
   profiles: (q: TaxProfilesQuery) => [...staffTaxKeys.all, 'profiles', q] as const,
   profile: (code: string) => [...staffTaxKeys.all, 'profile', code] as const,
   reviews: (q: TaxReviewsQuery) => [...staffTaxKeys.all, 'reviews', q] as const,
+  reviewSellers: (q: string) => [...staffTaxKeys.all, 'review-sellers', q] as const,
   review: (atin: string) => [...staffTaxKeys.all, 'review', atin] as const,
   liveWithoutDecision: (q: { page?: number; size?: number }) => [...staffTaxKeys.all, 'live-without-decision', q] as const,
   codeMap: (q: TaxCodeMapQuery) => [...staffTaxKeys.all, 'code-map', q] as const,
@@ -572,6 +594,8 @@ export const staffTaxQueries = {
   profile: (api: StaffTaxApi, code: string) => queryOptions({ queryKey: staffTaxKeys.profile(code), queryFn: ({ signal }) => api.profile(code, signal), staleTime: 10_000 }),
   reviews: (api: StaffTaxApi, q: TaxReviewsQuery) =>
     queryOptions({ queryKey: staffTaxKeys.reviews(q), queryFn: ({ signal }) => api.reviews(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  reviewSellers: (api: StaffTaxApi, q: string) =>
+    queryOptions({ queryKey: staffTaxKeys.reviewSellers(q), queryFn: ({ signal }) => api.reviewSellers(q, signal), placeholderData: keepPreviousData, staleTime: 60_000 }),
   /** Not polled (a poll must carry the background flag, docs/engineering/session-timeouts.md): it is read when the page opens and after each action. */
   liveWithoutDecision: (api: StaffTaxApi, q: { page?: number; size?: number } = {}) =>
     queryOptions({ queryKey: staffTaxKeys.liveWithoutDecision(q), queryFn: ({ signal }) => api.liveWithoutDecision(q, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),

@@ -19,6 +19,7 @@ import com.afrotransact.taxreturns.domain.profile.MissingFact;
 import com.afrotransact.taxreturns.domain.profile.Outcome;
 import com.afrotransact.taxreturns.domain.profile.RecordStatus;
 import com.afrotransact.taxreturns.domain.profile.Resolution;
+import com.afrotransact.taxreturns.domain.profile.ReviewReason;
 import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
 import com.afrotransact.taxreturns.domain.profile.VariantClassification;
 import com.afrotransact.taxreturns.port.VariantClassificationRepository;
@@ -132,13 +133,21 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
             params.put("orgJson", json.write(List.of(f.sellerOrgId())));
         }
         if (f.q() != null && !f.q().isBlank()) {
-            where.append(" and (v.atin ilike :q or v.gtin ilike :q or v.title ilike :q)");
+            String sellers = f.qSellerOrgIds().isEmpty() ? "" : " or v.owner_org_id in (:qOrgs) or exists (select 1 from "
+                    + "listing_tax_decision d, jsonb_array_elements_text(d.seller_org_ids) as o(org) "
+                    + "where d.atin = v.atin and o.org in (:qOrgs))";
+            where.append(" and (v.atin ilike :q or v.gtin ilike :q or v.title ilike :q").append(sellers).append(")");
             params.put("q", "%" + f.q().trim().replace("%", "") + "%");
+            if (!f.qSellerOrgIds().isEmpty()) {
+                params.put("qOrgs", f.qSellerOrgIds());
+            }
+        }
+        if (f.reason() != null) {
+            where.append(" and ").append(reasonSql(f.reason()));
         }
         JdbcClient.StatementSpec count = jdbc.sql("select count(*) from variant_classification v" + where);
-        JdbcClient.StatementSpec rows = jdbc.sql("select v.* from variant_classification v" + where
-                + (f.status() == RecordStatus.PENDING_REVIEW || f.auditOnly() ? " order by v.updated_at asc, v.atin"
-                : " order by v.updated_at desc, v.atin") + " limit :limit offset :offset");
+        JdbcClient.StatementSpec rows = jdbc.sql("select v.* from variant_classification v" + where + orderBy(f)
+                + " limit :limit offset :offset");
         for (Map.Entry<String, Object> p : params.entrySet()) {
             count = count.param(p.getKey(), p.getValue());
             rows = rows.param(p.getKey(), p.getValue());
@@ -147,6 +156,72 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
         List<VariantClassification> items = rows.param("limit", size).param("offset", (long) page * size)
                 .query((rs, n) -> record(rs)).list();
         return new Page(items, total);
+    }
+
+    private static final String WAITING = "v.status in ('PENDING_REVIEW', 'MISSING_FACTS', 'DRAFT')";
+    private static final String NO_MISSING = "jsonb_array_length(coalesce(v.resolution -> 'missingFacts', '[]'::jsonb)) = 0";
+
+    /** The records {@link ReviewReason#of} gives this reason; keep in step with it. */
+    private static String reasonSql(ReviewReason reason) {
+        return switch (reason) {
+            case AUDIT_SAMPLE -> "(v.status = 'APPROVED' and v.audit_sampled_at is not null)";
+            case CHANGED -> "v.status = 'STALE'";
+            case WITH_SELLER -> "v.status = 'REJECTED'";
+            case CONFLICT -> resolutionIs("CONFLICT_OPEN");
+            case REGULATED_CATEGORY -> resolutionIs("NEEDS_APPROVAL");
+            case CODE_TO_VERIFY -> resolutionIs("REFINE_CODE");
+            case BLOCKED -> resolutionIs("BLOCKED");
+            case MISSING_FACT -> "(" + WAITING + " and v.resolution ->> 'status' = 'MISSING_FACTS' and not (" + NO_MISSING
+                    + "))";
+            case NO_MATCHING_RULE -> "(" + WAITING + " and (v.resolution is null or v.resolution = 'null'::jsonb or "
+                    + "(v.resolution ->> 'status' = 'MISSING_FACTS' and " + NO_MISSING + ")))";
+            case NEW_LISTING -> "(" + WAITING + " and v.resolution ->> 'status' = 'RESOLVED')";
+        };
+    }
+
+    private static String resolutionIs(String status) {
+        return "(" + WAITING + " and v.resolution ->> 'status' = '" + status + "')";
+    }
+
+    /** Sortable columns by name (never a client-supplied identifier); ties and the default keep the queue order. */
+    private static String orderBy(Filter f) {
+        String column = f.sort() == null ? null : switch (f.sort()) {
+            case "title" -> "lower(v.title)";
+            case "atin" -> "v.atin";
+            case "category" -> "v.category_code";
+            case "status" -> "v.status";
+            case "submitted" -> "v.classified_at";
+            case "reviewed" -> "v.reviewed_at";
+            default -> null;
+        };
+        if (column != null) {
+            return " order by " + column + (f.descending() ? " desc" : " asc") + " nulls last, v.atin";
+        }
+        return f.status() == RecordStatus.PENDING_REVIEW || f.auditOnly() ? " order by v.updated_at asc, v.atin"
+                : " order by v.updated_at desc, v.atin";
+    }
+
+    @Override
+    public Map<String, List<String>> sellerOrgIds(Collection<String> atins) {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        if (atins.isEmpty()) {
+            return out;
+        }
+        jdbc.sql("select atin, owner_org_id from variant_classification where atin in (:atins)").param("atins", atins)
+                .query((rs, n) -> Map.entry(rs.getString("atin"), rs.getString("owner_org_id") == null ? "" : rs.getString("owner_org_id")))
+                .list().forEach(e -> add(out, e.getKey(), e.getValue()));
+        jdbc.sql("select d.atin, o.org from listing_tax_decision d, jsonb_array_elements_text(d.seller_org_ids) as o(org) "
+                + "where d.atin in (:atins) order by d.decided_at desc").param("atins", atins)
+                .query((rs, n) -> Map.entry(rs.getString("atin"), rs.getString("org"))).list()
+                .forEach(e -> add(out, e.getKey(), e.getValue()));
+        return out;
+    }
+
+    private static void add(Map<String, List<String>> out, String atin, String org) {
+        List<String> orgs = out.computeIfAbsent(atin, k -> new ArrayList<>());
+        if (!org.isBlank() && !orgs.contains(org)) {
+            orgs.add(org);
+        }
     }
 
     @Override

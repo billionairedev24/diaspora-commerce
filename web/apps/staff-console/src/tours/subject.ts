@@ -12,7 +12,7 @@ export const TOUR_HUB_HREF = '/help/tours';
 
 /** Every module key, so each gets a `can-<module>` guard (a missing guard would count as "yes"). */
 const MODULES: StaffModuleKey[] = [
-  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'deptRequests', 'deliveryQuotes', 'support', 'rbac', 'payouts', 'fees', 'marketing',
+  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'deptRequests', 'deliveryQuotes', 'support', 'rbac', 'payouts', 'fees', 'tax', 'marketing',
   'disputes', 'audit', 'markets', 'siteCfg', 'dev', 'identity', 'notifications', 'preorders', 'plans'
 ];
 

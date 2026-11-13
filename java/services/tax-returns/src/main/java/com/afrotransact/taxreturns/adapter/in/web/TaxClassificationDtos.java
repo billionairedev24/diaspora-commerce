@@ -23,6 +23,7 @@ import com.afrotransact.taxreturns.domain.profile.ProfileFact;
 import com.afrotransact.taxreturns.domain.profile.ProfileStatus;
 import com.afrotransact.taxreturns.domain.profile.ProviderCode;
 import com.afrotransact.taxreturns.domain.profile.Resolution;
+import com.afrotransact.taxreturns.domain.profile.ReviewReason;
 import com.afrotransact.taxreturns.domain.profile.StatusReason;
 import com.afrotransact.taxreturns.domain.profile.TaxProfile;
 import com.afrotransact.taxreturns.domain.profile.VariantClassification;
@@ -271,15 +272,21 @@ final class TaxClassificationDtos {
                       @Schema(description = "Why a person has to review it, in plain words: a conflict, no matching "
                               + "rule, a missing answer or proof, a regulated category or a category that awaits "
                               + "sign-off. Null when nothing waits, or when the rules would approve it (a staff "
-                              + "move, an open question to the seller).") String reviewReason) {
+                              + "move, an open question to the seller).") String reviewReason,
+                      @Schema(description = "Organisations that sell the variant: the owner first, then every seller "
+                              + "seen in a stored decision (list items only)") List<String> sellerOrgIds,
+                      @Schema(description = "Why a person has to review it, as a code derived from the stored state "
+                              + "(filterable with reason); null when nothing waits (an approved item outside the audit "
+                              + "sample)") ReviewReason reviewReasonCode) {
 
-        /** A list item: the record without its audit, evidence and stored decisions. */
-        static VariantDto light(VariantClassification v, String reviewReason) {
+        /** A list item: the record without its audit, evidence and stored decisions, with its sellers. */
+        static VariantDto light(VariantClassification v, String reviewReason, List<String> sellerOrgIds) {
             return new VariantDto(v.atin(), v.gtin(), v.productId(), v.title(), v.categoryCode(), v.productTypeCode(),
                     v.status().name(), v.facts(), v.staffFacts(), null, v.refinedProviderCodes(),
                     v.resolution() == null ? null : ResolveResponse.of(v.resolution()), null, v.ownerOrgId(),
                     v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.ruleVersion(), null,
-                    InfoRequestDto.of(v), null, v.auditItem(), v.auditSampledAt(), reviewReason);
+                    InfoRequestDto.of(v), null, v.auditItem(), v.auditSampledAt(), reviewReason,
+                    sellerOrgIds == null ? List.of() : sellerOrgIds, ReviewReason.of(v));
         }
 
         static VariantDto of(VariantClassificationService.ClassificationView view) {
@@ -297,7 +304,7 @@ final class TaxClassificationDtos {
                     v.refinedProviderCodes(), view.resolution() == null ? null : ResolveResponse.of(view.resolution()),
                     decisions, v.ownerOrgId(), v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(),
                     v.ruleVersion(), view.audit().stream().map(AuditDto::of).toList(), InfoRequestDto.of(v),
-                    view.ordersAffected(), v.auditItem(), v.auditSampledAt(), view.reviewReason());
+                    view.ordersAffected(), v.auditItem(), v.auditSampledAt(), view.reviewReason(), null, ReviewReason.of(v));
         }
     }
 

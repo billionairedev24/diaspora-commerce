@@ -12,10 +12,14 @@ decided by their access to that module; a role that can only view a section sees
 | Sign-in & integrations | which social sign-in buttons appear | Developers |
 | Payments & payouts | hold before a seller can be paid, smallest payout, retry of a blocked transfer, Stripe mode (**read-only**: set by the deployment) | Payouts |
 | Fees & commissions | fee schedule versions, commission by category and plan, connection fees, negotiated rates, calculator, delivery pricing | Fees |
-| Sales tax | **who calculates tax** (our own rules, Stripe Tax or Avalara, with shadow mode), tax profiles, tax review, provider codes, shadow report, state and local rates | Fees |
 | Plans & billing | how sellers pay their plan fee | Plans |
 
 The old addresses (`/fees`, `/markets`, `/site-content`, `/developers`, `/notifications`) open the matching section.
+
+**Sales tax is not a Settings section any more.** It is a link of its own in the sidebar (Finance, `/tax`), shown to anyone with
+`tax:read`; `tax:classify-admin` is the edit level. Its tabs keep their keys, and the old addresses (`/settings?section=tax`,
+`/fees?tab=tax-review` and the other `tab=tax-…` links) redirect to `/tax` on the same tab. Tax filings, Nexus tracker and Tax rates
+are tables of the Fees module, so those three tabs only show to staff who can open Fees.
 Day-to-day money work stays where it was: Payouts & ledger (approvals, reconciliation, adjustments) and Plans & billing (plan
 catalogue, trials, rewards, each seller's billing).
 
@@ -36,7 +40,7 @@ Sales tax is worked out by **our own rules** by default: the state and local rat
 (the category tax profiles and each product's reviewed classification, including items that are never taxed). Nothing is sent to
 a tax service and nothing costs per order.
 
-Settings → Sales tax → *Who calculates tax* shows the method in force, explains each choice, and has the **shadow provider**
+Sales tax → *Who calculates tax* shows the method in force, explains each choice, and has the **shadow provider**
 (compared with our rules on real orders, never charged). To change either, pick it and give a reason (10+ characters); the change
 is recorded in the history. **Stripe Tax** and **Avalara** can only be chosen once they are set up *and* every outcome has a
 verified code in *Provider codes*; until then they are refused (the page says why) and our own rules keep answering. A change
@@ -46,7 +50,7 @@ provider: `docs/runbooks/tax-provider-cutover.md`. Profiles, review and provider
 
 `TAX_PROVIDER` (`RULES` by default) is only the starting value before anyone chooses.
 
-**Tax review mode.** Settings → Sales tax → *Review settings* (`taxReview.mode`): *Review by risk* is the default: the tax rules decide, so
+**Tax review mode.** Sales tax → *Review settings* (`taxReview.mode`): *Review by risk* is the default: the tax rules decide, so
 the system approves a variant's classification itself (ACTIVE category, clear rules, no missing proof, not on the always-review list)
 and puts 5% of those in the *Audit sample* tab for a person to confirm or reclassify. Only exceptions wait in *Tax review*, each with its
 reason (conflict, no matching rule, missing answer or proof, regulated category, category awaiting sign-off). *Review every item* sends
@@ -55,7 +59,7 @@ existing approvals alone. Needs `tax:classify-admin` and a reason (10+ character
 
 ## Tax filings: what we filed and paid to each state
 
-AfroTransact collects sales tax as marketplace facilitator, so it files and pays it to the states. **Settings → Sales tax →
+AfroTransact collects sales tax as marketplace facilitator, so it files and pays it to the states. **Sales tax →
 Tax filings** lists the last 12 months, one row per month and state, with:
 
 | Column | Meaning |
@@ -80,7 +84,7 @@ The amount due at that moment is saved with the record. Needs `tax:configure`; r
 
 ## Nexus tracker: where sales are close to a state's threshold
 
-**Settings → Sales tax → Nexus tracker** lists every state with sales (or a recorded setting): the gross sales shipped there over
+**Sales tax → Nexus tracker** lists every state with sales (or a recorded setting): the gross sales shipped there over
 the **last 12 months** (net of refunds) and the number of orders, against that state's threshold, most urgent first:
 
 | Status | Meaning |

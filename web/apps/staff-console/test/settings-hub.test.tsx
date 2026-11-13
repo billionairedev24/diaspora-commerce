@@ -26,7 +26,7 @@ describe('Settings', () => {
     const platform = await screen.findByRole('region', { name: 'Platform' });
     const labels = within(platform).getAllByRole('link').map((a) => a.querySelector('span span')?.textContent);
     expect(labels).toEqual(['Published pages', 'General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access', 'Application review: SLAs and escalation']);
-    expect(within(await screen.findByRole('region', { name: 'Money' })).getAllByRole('link')).toHaveLength(11);
+    expect(within(await screen.findByRole('region', { name: 'Money' })).getAllByRole('link')).toHaveLength(10);
     expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
   });
 
@@ -44,17 +44,6 @@ describe('Settings', () => {
     expect(await screen.findByText('Hold before a seller can be paid')).toBeInTheDocument();
   });
 
-  it('shows the tax method with the Stripe Tax state under Sales tax', async () => {
-    nav.set('/settings?section=tax');
-    renderWithProviders(
-      <ConsoleShell>
-        <SettingsHub />
-      </ConsoleShell>
-    );
-    expect(await screen.findByRole('heading', { name: 'Our own rules works out the tax now' })).toBeInTheDocument();
-    expect(await screen.findByText(/Can’t be chosen yet: Avalara isn’t set up yet/)).toBeInTheDocument();
-  });
-
   const hub = () =>
     renderWithProviders(
       <ConsoleShell>
@@ -69,7 +58,7 @@ describe('Settings', () => {
     // Finance runs the money sections; none of the other platform ones (pages, markets, notifications, sign-in, identity) are theirs.
     const money = await screen.findByRole('region', { name: 'Money' });
     expect(cardLabels(money)).toEqual([
-      'Payments & payouts', 'Credit & gift cards', 'Membership', 'Referral program', 'Fees & commissions', 'Flat delivery fee', 'Delivery fees', 'Run economics', 'Sales tax', 'Exchange rates', 'Plans & billing'
+      'Payments & payouts', 'Credit & gift cards', 'Membership', 'Referral program', 'Fees & commissions', 'Flat delivery fee', 'Delivery fees', 'Run economics', 'Exchange rates', 'Plans & billing'
     ]);
     // Finance can view Applications, so the review SLAs are theirs to read; the other platform sections are not.
     expect(cardLabels(await screen.findByRole('region', { name: 'Platform' }))).toEqual(['Application review: SLAs and escalation']);

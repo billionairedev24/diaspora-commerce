@@ -30,9 +30,11 @@ import com.afrotransact.taxreturns.application.ProviderCodeService;
 import com.afrotransact.taxreturns.application.SellerListingDecisionService;
 import com.afrotransact.taxreturns.application.TaxProfileService;
 import com.afrotransact.taxreturns.application.TaxShadowService;
+import com.afrotransact.taxreturns.application.VariantClassificationService.ReviewList;
 import com.afrotransact.taxreturns.application.VariantClassificationService;
 import com.afrotransact.taxreturns.domain.profile.ProfileStatus;
 import com.afrotransact.taxreturns.domain.profile.RecordStatus;
+import com.afrotransact.taxreturns.domain.profile.ReviewReason;
 import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.port.VariantClassificationRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -161,19 +163,30 @@ class TaxClassificationApiController {
     @Operation(summary = "Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)",
             description = "auditSample=true lists the audit sample instead: items the system approved under the "
                     + "risk-based review rule (taxReview.mode RISK_BASED) that are live and wait for a reviewer to "
-                    + "confirm (POST approve) or reclassify them. status is ignored then.")
+                    + "confirm (POST approve) or reclassify them. status is ignored then. reason keeps the records that "
+                    + "need a person for that reason (reviewReasonCode of each item). q matches the ATIN, GTIN or title, or "
+                    + "a seller named in qSellerOrgIds. sort is title, atin, category, status, submitted or reviewed, "
+                    + "with order asc or desc. Every item names its sellers (sellerOrgIds) and why it needs a person "
+                    + "(reviewReasonCode).")
     @GetMapping("/v1/tax/variant-classifications")
     VariantPage listVariants(@RequestParam(required = false) RecordStatus status,
                              @RequestParam(required = false) String categoryCode,
                              @RequestParam(required = false) String sellerOrgId, @RequestParam(required = false) String q,
+                             @RequestParam(required = false) List<String> qSellerOrgIds,
+                             @RequestParam(required = false) ReviewReason reason,
+                             @RequestParam(required = false) String sort,
+                             @RequestParam(defaultValue = "asc") String order,
                              @RequestParam(defaultValue = "false") boolean auditSample,
                              @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "25") int size) {
         int s = Math.min(Math.max(size, 1), 200);
         int p = Math.max(page, 0);
-        VariantClassificationRepository.Page result = variants.list(auditSample ? null : status, categoryCode, sellerOrgId, q,
-                auditSample, p, s);
+        VariantClassificationRepository.Filter filter = new VariantClassificationRepository.Filter(
+                auditSample ? null : status, categoryCode, sellerOrgId, q, auditSample, reason, qSellerOrgIds, sort,
+                "desc".equalsIgnoreCase(order));
+        ReviewList result = variants.search(filter, p, s);
         Map<String, String> why = variants.reviewReasons(result.items());
-        return new VariantPage(result.items().stream().map(v -> VariantDto.light(v, why.get(v.atin()))).toList(), p, s,
+        return new VariantPage(result.items().stream()
+                .map(v -> VariantDto.light(v, why.get(v.atin()), result.sellers().get(v.atin()))).toList(), p, s,
                 result.total());
     }
 

@@ -80,7 +80,7 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
         </div>
       );
     case 'fees':
-      return <FeesView scope="fees" />;
+      return <FeesView />;
     case 'shipping':
       return (
         <div className="flex flex-col gap-3">
@@ -95,8 +95,6 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
       return <DeliveryFeesView />;
     case 'run-economics':
       return <EconomicsSettingsView />;
-    case 'tax':
-      return <FeesView scope="tax" />;
     case 'exchange-rates':
       return (
         <div className="flex flex-col gap-3">

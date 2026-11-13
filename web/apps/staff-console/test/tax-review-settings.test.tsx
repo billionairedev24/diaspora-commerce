@@ -15,7 +15,7 @@ describe('Tax review settings', () => {
   beforeEach(() => {
     resetStaffDb(NOW);
     asRoles('platform.super_admin');
-    nav.set('/fees?tab=tax-review-settings');
+    nav.set('/tax?tab=tax-review-settings');
   });
   afterEach(() => interceptStaff(null));
 

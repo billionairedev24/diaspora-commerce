@@ -221,7 +221,7 @@ screens with no chapter, or things the brief named that the product does not hav
 | Disputes and returns `/disputes` | disputes-returns (commerce) | 4/4 | covered |
 | Customer support `/support` (refunds within a limit) | support-refunds (commerce) | 4/4 | covered |
 | Payouts and ledger `/payouts` | payouts (commerce) | 5/5 | covered (the other tabs, such as referrals and daily runs, are not toured) |
-| Tax review, tax gate banner (Settings → Sales tax) | tax-review (commerce) | 4/4 | covered |
+| Tax review, tax gate banner (Sales tax, sidebar) | tax-review (commerce) | 5/5 | covered |
 | Tax method, profiles, decision records, provider codes | tax-profiles (commerce) | 5/5 | covered, with a "not tax advice" step |
 | Fees and commissions (Settings → Fees), plans `/plans` | fees-plans (commerce) | 5/5 | covered |
 | Inventory hub `/inventory` | inventory (operations) | 7/7 | covered |

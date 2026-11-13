@@ -15,7 +15,7 @@ describe('Tax profiles', () => {
   beforeEach(() => {
     resetStaffDb(NOW);
     asRoles('platform.super_admin');
-    nav.set('/fees?tab=tax-profiles');
+    nav.set('/tax?tab=tax-profiles');
   });
   afterEach(() => interceptStaff(null));
 
@@ -47,7 +47,7 @@ describe('Tax profiles', () => {
   });
 
   it('opens a profile with its questions, the decision table as sentences and the notes for the tax professional', async () => {
-    nav.set('/fees?tab=tax-profiles&profile=nuts-seeds');
+    nav.set('/tax?tab=tax-profiles&profile=nuts-seeds');
     await renderScreen(<TaxProfilesPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Nuts & seeds' });
     expect(await within(sheet).findByText(/net weight is at least 2.5 oz/)).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('Tax profiles', () => {
 
   it('marks a category approved only with a reason of ten characters, the sign-off name and a reference', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-profiles&profile=downloadable-ebooks');
+    nav.set('/tax?tab=tax-profiles&profile=downloadable-ebooks');
     await renderScreen(<TaxProfilesPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Downloadable e-books' });
     expect(await within(sheet).findByText('Needs tax sign-off', { selector: 'span' })).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe('Tax profiles', () => {
   });
 
   it('is read only where the engine owns the gate', async () => {
-    nav.set('/fees?tab=tax-profiles&profile=cleaning-paper-products');
+    nav.set('/tax?tab=tax-profiles&profile=cleaning-paper-products');
     await renderScreen(<TaxProfilesPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Cleaning & paper products' });
     expect(await within(sheet).findByText(/lifted product by product/)).toBeInTheDocument();
@@ -97,7 +97,7 @@ describe('Tax profiles', () => {
   it('is read only for someone without tax:classify-admin, in the sheet and in the row menu', async () => {
     const user = userEvent.setup();
     asRoles('platform.auditor');
-    nav.set('/fees?tab=tax-profiles&profile=downloadable-ebooks');
+    nav.set('/tax?tab=tax-profiles&profile=downloadable-ebooks');
     await renderScreen(<TaxProfilesPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Downloadable e-books' });
     expect(await within(sheet).findByText(/Changing it needs the tax:classify-admin permission/)).toBeInTheDocument();

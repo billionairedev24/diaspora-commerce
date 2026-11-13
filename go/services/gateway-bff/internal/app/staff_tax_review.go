@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -23,6 +24,9 @@ var reviewStatuses = []string{"PENDING_REVIEW", "APPROVED", "REJECTED", "STALE",
 // person to confirm or reclassify them (tax-returns lists them with auditSample=true).
 const reviewAuditSample = "AUDIT_SAMPLE"
 
+// reviewAnyStatus lists records in every review state (with a reason, "any state" finds the item wherever it waits).
+const reviewAnyStatus = "ALL"
+
 func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Values) (any, error) {
 	sc, err := s.need(ctx, c, "")
 	if err != nil {
@@ -36,18 +40,38 @@ func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Valu
 	if status == "" {
 		status = "PENDING_REVIEW"
 	}
-	if status != reviewAuditSample && !slices.Contains(reviewStatuses, status) {
+	if status != reviewAuditSample && status != reviewAnyStatus && !slices.Contains(reviewStatuses, status) {
 		return nil, domain.ValidationProblem(map[string]string{"status": "Choose a review status"})
 	}
+	reason := strings.ToUpper(strings.TrimSpace(q.Get("reason")))
+	if reason != "" && !slices.ContainsFunc(reviewReasons, func(r reviewReasonText) bool { return r.code == reason }) {
+		return nil, domain.ValidationProblem(map[string]string{"reason": "Choose one of the reasons a person is needed"})
+	}
 	up := url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
-	if status == reviewAuditSample {
+	switch status {
+	case reviewAuditSample:
 		up.Set("auditSample", "true")
-	} else {
+	case reviewAnyStatus:
+	default:
 		up.Set("status", status)
 	}
-	for _, k := range []string{"categoryCode", "sellerOrgId", "q"} {
+	if reason != "" {
+		up.Set("reason", reason)
+	}
+	for _, k := range []string{"categoryCode", "sellerOrgId"} {
 		if v := strings.TrimSpace(q.Get(k)); v != "" {
 			up.Set(k, v)
+		}
+	}
+	if err := reviewSort(q["sort"], up); err != nil {
+		return nil, err
+	}
+	// One search box: the item's name, ATIN or GTIN (tax-returns) or its seller's name (the name lives in the seller
+	// directory, so the ids of the sellers whose name matches go along).
+	if text := strings.TrimSpace(q.Get("q")); text != "" {
+		up.Set("q", text)
+		for _, id := range sc.names.orgIDsNamed(ctx, sc, text) {
+			up.Add("qSellerOrgIds", id)
 		}
 	}
 	var raw any
@@ -58,9 +82,8 @@ func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Valu
 	names := s.categoryNames(ctx, sc)
 	nameSystemActors(list.items, "reviewedBy", "classifiedBy")
 	nameAll(ctx, sc, list.items, personRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
-	for _, it := range list.items {
-		nameAll(ctx, sc, objs(it, "decisions"), sellerRef("sellerOrgId"))
-	}
+	nameSellers(ctx, sc, list.items)
+	addProductImages(ctx, sc, list.items)
 	rows := make([]jobj, 0, len(list.items))
 	for _, it := range list.items {
 		rows = append(rows, reviewRow(it, names))
@@ -77,8 +100,33 @@ func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Valu
 	for _, st := range reviewStatuses[1:4] {
 		counts = append(counts, jobj{"value": st, "label": taxRecordStatus[st]})
 	}
-	return jobj{"items": rows, "total": total, "page": page, "size": size, "status": status, "statuses": counts,
+	reasons := make([]jobj, 0, len(reviewReasons))
+	for _, r := range reviewReasons {
+		reasons = append(reasons, jobj{"value": r.code, "label": r.label})
+	}
+	return jobj{"items": rows, "total": total, "page": page, "size": size, "status": status, "statuses": counts, "reasons": reasons,
 		"canDecide": sc.access.Can(permTaxClassifyAdmin)}, nil
+}
+
+// reviewSellerHits is the most sellers the seller filter lists at once.
+const reviewSellerHits = 20
+
+// ReviewSellers finds sellers by name for the queue's seller filter (the Sales tax module may not use the payouts
+// lookup). Typing is optional: with nothing typed the first sellers of the directory are listed.
+func (s *staffTaxImpl) ReviewSellers(ctx context.Context, c *domain.Caller, q url.Values) (any, error) {
+	sc, err := s.need(ctx, c, "")
+	if err != nil {
+		return nil, err
+	}
+	text := strings.TrimSpace(q.Get("q"))
+	if n := utf8.RuneCountInString(text); n == 1 || n > 120 {
+		return nil, domain.ValidationProblem(map[string]string{"q": "Type 2 to 120 characters"})
+	}
+	items := []jobj{}
+	for _, h := range sc.names.orgsNamed(ctx, sc, text, reviewSellerHits) {
+		items = append(items, jobj{"id": h.id, "name": h.name})
+	}
+	return jobj{"items": items}, nil
 }
 
 // categoryNames maps category codes to their names (one profile list read).
@@ -94,14 +142,126 @@ func (s *staffTaxImpl) categoryNames(ctx context.Context, sc staffCtx) map[strin
 	return out
 }
 
-func sellerNames(it jobj) []string {
-	out := []string{}
-	for _, d := range objs(it, "decisions") {
-		if n := jstr(d, "sellerOrgName"); n != "" && !slices.Contains(out, n) {
-			out = append(out, n)
+// reviewReasonText is one reason a person is needed (tax-returns' reviewReasonCode) in plain words.
+type reviewReasonText struct{ code, label string }
+
+// reviewReasons lists the reasons in the order the filter offers them. The label is the English fallback: the console
+// translates the code.
+var reviewReasons = []reviewReasonText{
+	{"CONFLICT", "Conflict"},
+	{"NO_MATCHING_RULE", "No matching rule"},
+	{"MISSING_FACT", "Missing fact"},
+	{"REGULATED_CATEGORY", "Regulated category"},
+	{"AUDIT_SAMPLE", "Audit sample"},
+	{"CODE_TO_VERIFY", "Code to verify"},
+	{"BLOCKED", "Blocked bundle"},
+	{"CHANGED", "Changed since approval"},
+	{"WITH_SELLER", "With the seller"},
+	{"NEW_LISTING", "New listing"},
+}
+
+// reviewSortKeys are the columns the queue can be ordered by, as tax-returns names them. The seller and the reason are
+// not here: a name lives in another service and the reason is derived, so neither can order a page of a larger list.
+var reviewSortKeys = []string{"title", "atin", "category", "status", "submitted", "reviewed"}
+
+// reviewSort passes the first requested sort to tax-returns (it orders by one column).
+func reviewSort(raw []string, up url.Values) error {
+	keys, bad := domain.ParseSort(raw, func(k string) bool { return slices.Contains(reviewSortKeys, k) })
+	if bad != nil {
+		return bad
+	}
+	if len(keys) > 0 {
+		up.Set("sort", keys[0].Key)
+		if keys[0].Desc {
+			up.Set("order", "desc")
 		}
 	}
-	return out
+	return nil
+}
+
+func reviewReasonLabel(code string) string {
+	for _, r := range reviewReasons {
+		if r.code == code {
+			return r.label
+		}
+	}
+	return ""
+}
+
+// nameSellers puts the display names of the organisations that sell each record on it ("sellerNames", never ids): the
+// owner, every seller of a stored decision and, in a list, the sellers tax-returns names in sellerOrgIds. A record whose
+// seller the directory cannot name reads "Unknown seller", never nothing: staff read a name or a plain notice.
+func nameSellers(ctx context.Context, sc staffCtx, items []jobj) {
+	orgIDs := make([][]string, len(items))
+	var all []string
+	for i, it := range items {
+		ids := []string{jstr(it, "ownerOrgId")}
+		if listed, ok := it["sellerOrgIds"].([]any); ok {
+			for _, v := range listed {
+				id, _ := v.(string)
+				ids = append(ids, id)
+			}
+		}
+		for _, d := range objs(it, "decisions") {
+			ids = append(ids, jstr(d, "sellerOrgId"))
+		}
+		orgIDs[i] = uniqueStrings(ids)
+		all = append(all, orgIDs[i]...)
+	}
+	names := sc.names.labels(ctx, sc, sellerRef("orgId"), all...)
+	for i, it := range items {
+		out := make([]string, 0, len(orgIDs[i]))
+		for _, id := range orgIDs[i] {
+			if n := names[id]; n != "" && !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+		it["sellerNames"] = out
+	}
+}
+
+func sellerNames(it jobj) []string {
+	if names, ok := it["sellerNames"].([]string); ok {
+		return names
+	}
+	return []string{}
+}
+
+// reviewImageLookups caps the product reads one page of the queue makes for its thumbnails.
+const reviewImageLookups = 50
+
+// addProductImages puts the first public photo of each record's product on it ("imageUrl"), one catalog read per
+// distinct product. A product catalog cannot answer for is left without a photo; the row still names it.
+func addProductImages(ctx context.Context, sc staffCtx, items []jobj) {
+	if sc.up.Catalog == nil {
+		return
+	}
+	var ids []string
+	for _, it := range items {
+		if id := jstr(it, "productId"); id != "" && !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) > reviewImageLookups {
+		ids = ids[:reviewImageLookups]
+	}
+	images := fanOut(ctx, ids, func(ctx context.Context, id string) string {
+		var product jobj
+		if sc.get(ctx, sc.up.Catalog, "/v1/products/"+url.PathEscape(id), nil, &product) != nil {
+			return ""
+		}
+		for _, img := range objs(product, "images") {
+			if u := jstr(img, "url"); strings.HasPrefix(u, "https://") {
+				return u
+			}
+		}
+		return ""
+	})
+	for _, it := range items {
+		if u := images[jstr(it, "productId")]; u != "" {
+			it["imageUrl"] = u
+		}
+	}
 }
 
 func proposedOf(it jobj) jobj {
@@ -124,7 +284,8 @@ func reviewRow(it jobj, names map[string]string) jobj {
 	cat := jstr(it, "categoryCode")
 	return jobj{"atin": jstr(it, "atin"), "gtin": jstr(it, "gtin"), "title": jstr(it, "title"), "sellers": sellerNames(it), "categoryCode": cat,
 		"categoryName": firstNonEmpty(names[cat], domain.Humanize(cat)), "status": status, "statusLabel": taxRecordStatus[status],
-		"why": reviewWhy(it), "proposed": proposedOf(it), "classifiedAt": jstr(it, "classifiedAt"), "classifiedByName": jstr(it, "classifiedByName"),
+		"why": reviewWhy(it), "reviewReasonCode": jstr(it, "reviewReasonCode"), "reviewReasonLabel": reviewReasonLabel(jstr(it, "reviewReasonCode")),
+		"imageUrl": jstr(it, "imageUrl"), "proposed": proposedOf(it), "classifiedAt": jstr(it, "classifiedAt"), "classifiedByName": jstr(it, "classifiedByName"),
 		"reviewedAt": jstr(it, "reviewedAt"), "reviewedByName": jstr(it, "reviewedByName"), "ruleVersion": jstr(it, "ruleVersion"),
 		"auditSample": boolean(it, "auditSample"), "autoApproved": status == "APPROVED" && jstr(it, "reviewedByName") == autoApprovalWho}
 }
@@ -203,6 +364,8 @@ func (s *staffTaxImpl) reviewView(ctx context.Context, sc staffCtx, rec jobj) jo
 	nameSystemActors(objs(rec, "audit"), "actor")
 	nameAll(ctx, sc, []jobj{rec}, personRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
 	nameAll(ctx, sc, objs(rec, "decisions"), sellerRef("sellerOrgId"))
+	nameSellers(ctx, sc, []jobj{rec})
+	addProductImages(ctx, sc, []jobj{rec})
 	nameAll(ctx, sc, objs(rec, "evidence"), personRef("uploadedBy", "Uploaded by"))
 	nameAll(ctx, sc, objs(rec, "audit"), personRef("actor", "Person"))
 	row := reviewRow(rec, map[string]string{cat: jstr(profile, "name")})
@@ -219,7 +382,7 @@ func (s *staffTaxImpl) reviewView(ctx context.Context, sc staffCtx, rec jobj) jo
 	status := jstr(rec, "status")
 	canDecide := sc.access.Can(permTaxClassifyAdmin)
 	view := jobj{"atin": row["atin"], "gtin": row["gtin"], "title": row["title"], "sellers": row["sellers"], "categoryCode": cat, "categoryName": row["categoryName"],
-		"departmentName": taxDepartmentName(jstr(profile, "department")), "productTypeCode": jstr(rec, "productTypeCode"), "status": status, "statusLabel": row["statusLabel"], "why": row["why"],
+		"departmentName": taxDepartmentName(jstr(profile, "department")), "productTypeCode": jstr(rec, "productTypeCode"), "status": status, "statusLabel": row["statusLabel"], "why": row["why"], "reviewReasonCode": row["reviewReasonCode"], "reviewReasonLabel": row["reviewReasonLabel"], "imageUrl": row["imageUrl"],
 		"profileStatus": profileStatus, "profileStatusLabel": taxGateLabel(profileStatus), "proposed": proposed,
 		"facts": factValues(rec, facts, profile), "sellerListings": sellerListings(rec, facts), "evidence": evidenceView(rec, facts),
 		"decision":         jobj{"reviewedByName": row["reviewedByName"], "reviewedAt": row["reviewedAt"], "ruleVersion": jstr(rec, "ruleVersion")},

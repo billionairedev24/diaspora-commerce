@@ -3,6 +3,7 @@ import { type Icon } from '@phosphor-icons/react';
 import {
   Bank,
   BellRinging,
+  Calculator,
   CalendarCheck,
   Code,
   CreditCard,
@@ -31,7 +32,7 @@ import { type MessageKey } from '@/i18n/t';
 /** Sidebar icon of each module (the Backoffice prototype's Phosphor icons). */
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
   dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
-  orgs: UsersThree, apps: IdentificationCard, deptRequests: Storefront, deliveryQuotes: Handshake, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
+  orgs: UsersThree, apps: IdentificationCard, deptRequests: Storefront, deliveryQuotes: Handshake, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, tax: Calculator, marketing: Megaphone, disputes: Scales,
   audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, identity: Key, notifications: BellRinging, preorders: CalendarCheck,
   plans: CreditCard
 };
@@ -39,7 +40,7 @@ export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
 /** URL path of each module. */
 export const MODULE_PATHS: Record<StaffModuleKey, string> = {
   dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
-  orgs: '/organisations', apps: '/applications', deptRequests: '/department-requests', deliveryQuotes: '/delivery-quotes', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
+  orgs: '/organisations', apps: '/applications', deptRequests: '/department-requests', deliveryQuotes: '/delivery-quotes', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', tax: '/tax', marketing: '/marketing', disputes: '/disputes',
   audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', identity: '/identity', notifications: '/notifications', preorders: '/preorders',
   plans: '/plans'
 };
@@ -119,8 +120,11 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'reconciliation-runs', label: 'Daily runs' },
     { resource: 'stripe-lookup', label: 'Stripe lookup' }
   ],
-  fees: [
-    { resource: 'fee-schedules', label: 'Fee schedules' },
+  fees: [{ resource: 'fee-schedules', label: 'Fee schedules' }],
+  // Sales tax has its own screen (tabs); the list lets recordHref find the right tab of a filing, a state or a rate.
+  tax: [
+    { resource: 'tax-filings', label: 'Tax filings' },
+    { resource: 'tax-nexus', label: 'Nexus tracker' },
     { resource: 'tax-rates', label: 'Tax rates' }
   ],
   marketing: [

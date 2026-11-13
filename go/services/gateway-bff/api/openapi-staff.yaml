@@ -3524,16 +3524,33 @@ paths:
       operationId: listStaffTaxReviews
       security: [{sessionCookie: []}]
       summary: 'Variants waiting for tax review, or the decisions already made'
-      description: 'tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. `status=AUDIT_SAMPLE` is the "Audit sample" tab (tax-returns `auditSample=true`): items the system approved under the risk-based review rule (setting `taxReview.mode` RISK_BASED) that are live and wait for a reviewer to confirm or reclassify them. Sellers and people by name; the system''s own approvals read "Automatic approval (risk-based rule)".'
+      description: 'tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. `status=AUDIT_SAMPLE` is the "Audit sample" tab (tax-returns `auditSample=true`): items the system approved under the risk-based review rule (setting `taxReview.mode` RISK_BASED) that are live and wait for a reviewer to confirm or reclassify them. Server-driven: search (`q`: item name, ATIN, GTIN or the seller''s name), filters (`status`, `categoryCode`, `sellerOrgId`, `reason`), `sort` and paging. Every row names its sellers (the seller directory resolves them from the ids tax-returns holds; an organisation nobody can name reads "Unknown seller", never nothing) and carries the product photo when catalog has one. Sellers and people by name; the system''s own approvals read "Automatic approval (risk-based rule)".'
       parameters:
-        - {name: status, in: query, required: false, description: 'PENDING_REVIEW (default), AUDIT_SAMPLE, APPROVED, REJECTED, STALE, MISSING_FACTS or DRAFT', schema: {type: string}}
+        - {name: status, in: query, required: false, description: 'PENDING_REVIEW (default), AUDIT_SAMPLE, APPROVED, REJECTED, STALE, MISSING_FACTS, DRAFT or ALL (every review state)', schema: {type: string}}
         - {name: categoryCode, in: query, required: false, schema: {type: string}}
-        - {name: sellerOrgId, in: query, required: false, schema: {type: string}}
-        - {name: q, in: query, required: false, schema: {type: string}}
+        - {name: sellerOrgId, in: query, required: false, description: 'Only items sold by this organisation (the id a seller lookup returns)', schema: {type: string}}
+        - {name: reason, in: query, required: false, description: 'Only items that need a person for this reason: CONFLICT, NO_MATCHING_RULE, MISSING_FACT, REGULATED_CATEGORY, AUDIT_SAMPLE, CODE_TO_VERIFY, BLOCKED, CHANGED, WITH_SELLER or NEW_LISTING (the `reasons` of the page)', schema: {type: string}}
+        - {name: q, in: query, required: false, description: 'Item name, ATIN, GTIN or seller name', schema: {type: string}}
+        - {name: sort, in: query, required: false, description: '`<column>,asc|desc` by title, atin, category, status, submitted or reviewed (one column; the seller and the reason are not sortable)', schema: {type: array, items: {type: string}}}
         - {name: page, in: query, required: false, schema: {type: integer}}
         - {name: size, in: query, required: false, schema: {type: integer}}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReviewPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/review-sellers:
+    get:
+      tags: [Tax]
+      operationId: listStaffTaxReviewSellers
+      security: [{sessionCookie: []}]
+      summary: 'Find sellers by name for the review queue''s seller filter'
+      description: 'Names come from the seller directory. The payouts lookup is not usable here because the Sales tax module follows tax:read. Nothing typed lists the first sellers; one character is refused.'
+      parameters:
+        - {name: q, in: query, required: false, description: 'Part of the seller''s name (2 to 120 characters)', schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReviewSellers'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
@@ -8122,8 +8139,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, deptRequests, deliveryQuotes, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes, tax and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; tax is the Sales tax module, derived from tax-returns' tax:read (view) and tax:classify-admin (edit); preorders follows the Pre-orders matrix column).
+      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, deptRequests, deliveryQuotes, support, rbac, payouts, fees, tax, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -10984,7 +11001,13 @@ components:
         size: {type: integer}
         status: {type: string}
         statuses: {type: array, items: {type: object, additionalProperties: true}}
+        reasons: {type: array, description: 'The reasons a person is needed, for the filter (value is the code, label the English fallback)', items: {type: object, required: [value, label], properties: {value: {type: string}, label: {type: string}}}}
         canDecide: {type: boolean}
+    StaffTaxReviewSellers:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {type: object, required: [id, name], properties: {id: {type: string}, name: {type: string}}}}
     StaffTaxReviewRow:
       type: object
       required: [atin, title, sellers, categoryCode, categoryName, status, statusLabel, why, proposed]
@@ -10992,12 +11015,15 @@ components:
         atin: {type: string}
         gtin: {type: string}
         title: {type: string}
-        sellers: {type: array, items: {type: string}, description: Seller names}
+        sellers: {type: array, items: {type: string}, description: 'Seller names (never ids; "Unknown seller" when the directory cannot name one)'}
+        imageUrl: {type: string, description: 'First public photo of the product; empty when catalog has none'}
         categoryCode: {type: string}
         categoryName: {type: string}
         status: {type: string}
         statusLabel: {type: string}
         why: {type: string, description: Plain reason this needs a person}
+        reviewReasonCode: {type: string, description: 'Why a person is needed, as a code derived from the stored state and read only: CONFLICT, NO_MATCHING_RULE, MISSING_FACT, REGULATED_CATEGORY, AUDIT_SAMPLE, CODE_TO_VERIFY, BLOCKED, CHANGED, WITH_SELLER or NEW_LISTING; empty when nothing waits'}
+        reviewReasonLabel: {type: string, description: English fallback for reviewReasonCode}
         proposed: {type: object, additionalProperties: true}
         classifiedAt: {type: string}
         classifiedByName: {type: string}

@@ -18,10 +18,11 @@ import { PlansView } from '@/components/plans/PlansView';
 import { PreordersView } from '@/components/preorders/PreordersView';
 import { RetailView } from '@/components/retail/RetailView';
 import { SupportView } from '@/components/support/SupportView';
+import { TaxView } from '@/components/tax/TaxView';
 
 import { ModuleView } from './ModuleView';
 
-/** The screen of a module: dashboard, exports, support, fees, dispatch, notifications, pre-orders, the inventory hub,
+/** The screen of a module: dashboard, exports, support, fees, sales tax, dispatch, notifications, pre-orders, the inventory hub,
     AfroTransact Retail, Catalog (listings, the category tree and category requests), Markets & locations (the location tree), Plans & billing and Identity & access have their own; the rest are server-driven tables. */
 export function ModuleScreen({ module }: { module: StaffModuleKey }) {
   switch (module) {
@@ -37,6 +38,8 @@ export function ModuleScreen({ module }: { module: StaffModuleKey }) {
       return <SupportView />;
     case 'fees':
       return <FeesView />;
+    case 'tax':
+      return <TaxView />;
     case 'dispatch':
       return <DispatchView />;
     case 'notifications':

@@ -29,6 +29,9 @@ const nextConfig: NextConfig = {
       { source: '/site-content', destination: '/settings?section=general', permanent: false },
       { source: '/developers', destination: '/settings?section=signin', permanent: false },
       { source: '/notifications', destination: '/settings?section=notifications', permanent: false },
+      // Sales tax is a module of its own: the old Settings section and the tax tabs of Fees open it (the tab and the rest of the query string are kept).
+      { source: '/settings', has: [{ type: 'query', key: 'section', value: 'tax' }], destination: '/tax', permanent: false },
+      { source: '/fees', has: [{ type: 'query', key: 'tab', value: 'tax-.*' }], destination: '/tax', permanent: false },
       { source: '/fees', destination: '/settings?section=fees', permanent: false }
     ];
   },

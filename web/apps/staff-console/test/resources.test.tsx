@@ -46,8 +46,8 @@ describe('server-driven tables and detail sheets', () => {
 
   it('validates the create form before it reaches the BFF', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-rates');
-    await renderScreen(<ModuleView module="fees" />);
+    nav.set('/tax?tab=tax-rates');
+    await renderScreen(<ModuleView module="tax" />);
     await user.click(await screen.findByRole('button', { name: 'New' }));
     const dialog = await screen.findByRole('dialog', { name: 'New local rate' });
     await user.type(within(dialog).getByLabelText('State'), 'Texas');
@@ -85,7 +85,7 @@ describe('forms that name their change fields', () => {
 
 describe('tables that share a tab and ?open=', () => {
   it('open the record in the table that holds it, and stay quiet in the other', async () => {
-    nav.set('/fees?tab=tax-rates&open=state%3ATX');
+    nav.set('/tax?tab=tax-rates&open=state%3ATX');
     await renderScreen(
       <>
         <ResourceTable resource="tax-rates" urlPrefix="tax-rates" />

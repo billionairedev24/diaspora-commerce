@@ -105,6 +105,10 @@ interface MockVariant {
   ordersAffected?: number;
   /** Approved by the system under the risk-based rule and waiting in the Audit sample. */
   auditSample?: boolean;
+  /** No decision row of the category matches the answers (resolveStatus MISSING_FACTS with no fact listed). */
+  noRule?: boolean;
+  /** The product's first public photo. */
+  imageUrl?: string;
   audit: { at: string; actorName: string; action: string; reason: string }[];
 }
 interface MockCode {
@@ -135,6 +139,10 @@ const rows = (c: Category) => c.decisionTable;
 const categoryOf = (code: string) => DATA.categories.find((c) => c.code === code);
 const ALL_ROWS = DATA.categories.flatMap((c) => rows(c).map((r) => ({ category: c, row: r })));
 
+/** A flat coloured tile standing in for a product photo (no network needed). */
+const tile = (label: string, fill: string): string =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="${fill}"/><text x="48" y="54" font-size="14" text-anchor="middle" fill="#fff">${label}</text></svg>`)}`;
+
 function seedVariants(): MockVariant[] {
   const v = (x: Partial<MockVariant> & Pick<MockVariant, 'atin' | 'title' | 'sellers' | 'categoryCode' | 'status'>): MockVariant => ({
     gtin: '',
@@ -155,6 +163,7 @@ function seedVariants(): MockVariant[] {
     v({
       atin: 'AT20000101',
       gtin: '00812345678905',
+      imageUrl: tile('Cashews', '#c98f4a'),
       title: 'Roasted cashews, 6 oz bag',
       sellers: ['Mama Nkechi’s Kitchen'],
       categoryCode: 'nuts-seeds',
@@ -168,6 +177,7 @@ function seedVariants(): MockVariant[] {
     }),
     v({
       atin: 'AT20000102',
+      imageUrl: tile('E-book', '#4a7bc9'),
       title: 'Yoruba for beginners (e-book)',
       sellers: ['Lagos Books Ltd'],
       categoryCode: 'downloadable-ebooks',
@@ -178,6 +188,7 @@ function seedVariants(): MockVariant[] {
     }),
     v({
       atin: 'AT20000103',
+      imageUrl: tile('Kente', '#b8453a'),
       title: 'Hand-woven Kente table runner',
       sellers: ['Accra Crafts Collective'],
       categoryCode: 'handmade-products',
@@ -190,6 +201,7 @@ function seedVariants(): MockVariant[] {
     }),
     v({
       atin: 'AT20000104',
+      imageUrl: tile('Plantain', '#d9b84a'),
       title: 'Plantain chips, 2 oz single serve',
       sellers: ['Naija Pantry Foods', 'Mama Nkechi’s Kitchen'],
       categoryCode: 'packaged-snacks',
@@ -209,6 +221,26 @@ function seedVariants(): MockVariant[] {
       status: 'PENDING_REVIEW',
       facts: {},
       resolveStatus: 'CONFLICT_OPEN'
+    }),
+    v({
+      atin: 'AT20000110',
+      imageUrl: tile('Hibiscus', '#8a2b4a'),
+      title: 'Dried hibiscus flowers, 8 oz',
+      sellers: ['Zobo Brothers'],
+      categoryCode: 'packaged-snacks',
+      status: 'PENDING_REVIEW',
+      facts: { is_candy: false, net_weight_oz: 8 },
+      resolveStatus: 'MISSING_FACTS',
+      noRule: true
+    }),
+    v({
+      atin: 'AT20000111',
+      title: 'Palm oil, 1 litre',
+      sellers: ['Naija Pantry Foods'],
+      categoryCode: 'packaged-snacks',
+      status: 'MISSING_FACTS',
+      facts: {},
+      resolveStatus: 'MISSING_FACTS'
     }),
     v({
       atin: 'AT20000106',
@@ -449,11 +481,50 @@ function whyOf(v: MockVariant): string {
   return 'New or changed listing: check the category, the answers and the tax decision.';
 }
 
+const REASONS: { value: string; label: string }[] = [
+  { value: 'CONFLICT', label: 'Conflict' },
+  { value: 'NO_MATCHING_RULE', label: 'No matching rule' },
+  { value: 'MISSING_FACT', label: 'Missing fact' },
+  { value: 'REGULATED_CATEGORY', label: 'Regulated category' },
+  { value: 'AUDIT_SAMPLE', label: 'Audit sample' },
+  { value: 'CODE_TO_VERIFY', label: 'Code to verify' },
+  { value: 'BLOCKED', label: 'Blocked bundle' },
+  { value: 'CHANGED', label: 'Changed since approval' },
+  { value: 'WITH_SELLER', label: 'With the seller' },
+  { value: 'NEW_LISTING', label: 'New listing' }
+];
+
+/** Why a person is needed, derived from the stored state like tax-returns' ReviewReason; '' when nothing waits. */
+function reasonOf(v: MockVariant): string {
+  if (v.status === 'APPROVED') return v.auditSample ? 'AUDIT_SAMPLE' : '';
+  if (v.status === 'STALE') return 'CHANGED';
+  if (v.status === 'REJECTED') return 'WITH_SELLER';
+  switch (v.resolveStatus) {
+    case 'CONFLICT_OPEN':
+      return 'CONFLICT';
+    case 'NEEDS_APPROVAL':
+      return 'REGULATED_CATEGORY';
+    case 'REFINE_CODE':
+      return 'CODE_TO_VERIFY';
+    case 'BLOCKED':
+      return 'BLOCKED';
+    case 'MISSING_FACTS':
+      return v.noRule ? 'NO_MATCHING_RULE' : 'MISSING_FACT';
+    default:
+      return 'NEW_LISTING';
+  }
+}
+
+const sellerId = (name: string): string => `org_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+
 const reviewRow = (v: MockVariant): TaxReviewRow => ({
   atin: v.atin,
   gtin: v.gtin,
   title: v.title,
   sellers: v.sellers,
+  imageUrl: v.imageUrl ?? '',
+  reviewReasonCode: reasonOf(v),
+  reviewReasonLabel: REASONS.find((r) => r.value === reasonOf(v))?.label ?? '',
   categoryCode: v.categoryCode,
   categoryName: categoryOf(v.categoryCode)?.name ?? humanizeCode(v.categoryCode),
   status: v.status,
@@ -793,7 +864,7 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
   const { route, json, problem } = deps;
   const tax = (ctx: PreorderCtx) => ctx.db.tax;
   const read = (ctx: PreorderCtx) => {
-    if (!allows(ctx.roles, 'fees')) throw problem(403, 'FORBIDDEN', 'Forbidden', 'Your roles can’t open fees, commissions & tax.');
+    if (!allows(ctx.roles, 'tax')) throw problem(403, 'FORBIDDEN', 'Forbidden', 'Your roles can’t open sales tax.');
     if (!ctx.permissions.includes('tax:read')) throw problem(403, 'FORBIDDEN', 'Forbidden', 'This needs the tax:read permission.');
   };
   const needs = (ctx: PreorderCtx, perm: string) => {
@@ -886,11 +957,52 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         read(ctx);
         const q = new URL(ctx.request.url).searchParams;
         const status = (q.get('status') ?? 'PENDING_REVIEW').toUpperCase();
-        if (status !== TAX_AUDIT_SAMPLE && !(status in RECORD_STATUS)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { status: 'Choose a review status' });
+        if (status !== TAX_AUDIT_SAMPLE && status !== 'ALL' && !(status in RECORD_STATUS)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { status: 'Choose a review status' });
+        const reason = (q.get('reason') ?? '').toUpperCase();
+        if (reason && !REASONS.some((r) => r.value === reason)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { reason: 'Choose one of the reasons a person is needed' });
         const terms = (q.get('q') ?? '').toLowerCase();
-        const all = tax(ctx).variants.filter((v) => (status === TAX_AUDIT_SAMPLE ? !!v.auditSample && v.status === 'APPROVED' : v.status === status) && (!q.get('categoryCode') || v.categoryCode === q.get('categoryCode')) && (!terms || `${v.title} ${v.atin} ${v.gtin}`.toLowerCase().includes(terms)));
+        const inState = (v: MockVariant) => (status === TAX_AUDIT_SAMPLE ? !!v.auditSample && v.status === 'APPROVED' : status === 'ALL' || v.status === status);
+        const found = tax(ctx).variants.filter(
+          (v) =>
+            inState(v) &&
+            (!q.get('categoryCode') || v.categoryCode === q.get('categoryCode')) &&
+            (!q.get('sellerOrgId') || v.sellers.some((s) => sellerId(s) === q.get('sellerOrgId'))) &&
+            (!reason || reasonOf(v) === reason) &&
+            (!terms || `${v.title} ${v.atin} ${v.gtin} ${v.sellers.join(' ')}`.toLowerCase().includes(terms))
+        );
+        const key: Record<string, (v: MockVariant) => string> = {
+          title: (v) => v.title,
+          atin: (v) => v.atin,
+          category: (v) => v.categoryCode,
+          status: (v) => v.status,
+          submitted: (v) => v.classifiedAt,
+          reviewed: (v) => v.reviewedAt
+        };
+        const [column = '', dir = 'asc'] = (q.getAll('sort')[0] ?? '').split(',');
+        if (column && !key[column]) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { sort: `This table can't be sorted by "${column}"` });
+        const by = key[column];
+        const all = by ? [...found].sort((a, b) => by(a).localeCompare(by(b)) * (dir === 'desc' ? -1 : 1)) : found;
         const { items, page, size } = paged(all.map(reviewRow), q);
-        return { items, total: all.length, page, size, status, statuses: ['PENDING_REVIEW', TAX_AUDIT_SAMPLE, 'APPROVED', 'REJECTED', 'STALE'].map((s) => ({ value: s, label: s === TAX_AUDIT_SAMPLE ? 'Audit sample' : RECORD_STATUS[s]! })), canDecide: canAdmin(ctx) } satisfies TaxReviewPage;
+        return {
+          items,
+          total: all.length,
+          page,
+          size,
+          status,
+          statuses: ['PENDING_REVIEW', TAX_AUDIT_SAMPLE, 'APPROVED', 'REJECTED', 'STALE'].map((s) => ({ value: s, label: s === TAX_AUDIT_SAMPLE ? 'Audit sample' : RECORD_STATUS[s]! })),
+          reasons: REASONS,
+          canDecide: canAdmin(ctx)
+        } satisfies TaxReviewPage;
+      })
+    ),
+    http.get(
+      `${W}/tax/review-sellers`,
+      route((ctx) => {
+        read(ctx);
+        const text = (new URL(ctx.request.url).searchParams.get('q') ?? '').trim();
+        if (text.length === 1) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { q: 'Type 2 to 120 characters' });
+        const names = [...new Set(tax(ctx).variants.flatMap((x) => x.sellers))].sort();
+        return { items: names.filter((n) => n.toLowerCase().includes(text.toLowerCase())).map((n) => ({ id: sellerId(n), name: n })) };
       })
     ),
     http.get(

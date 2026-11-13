@@ -234,7 +234,7 @@ draft until the Texas tax professional signs them off; the sign-off gate is the 
   checkout re-resolves the lines through the existing flow). The queue lists them with `GET /v1/tax/variant-classifications?auditSample=true`.
 - **Checkout safeguard, unchanged**: a line without a stored decision that is `READY` and `RESOLVED` is blocked; there is never a default
   rate or outcome. The mode only changes who approves, not what a decision is.
-- Staff console: Settings → Sales tax → *Tax review* has the tab **Audit sample**; *Review settings* shows the mode, the always-review
+- Staff console: Sales tax (sidebar) → *Tax review* has the tab **Audit sample**; *Review settings* shows the mode, the always-review
   categories (by name) and the sampling percentage with a plain-language note of what still waits for a person. The BFF maps `status=AUDIT_SAMPLE`
   and shows `reviewReason` as the queue's "why".
 

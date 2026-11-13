@@ -27,6 +27,8 @@ type StaffTaxService interface {
 	Reviews(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	// LiveWithoutDecision lists live listings that have no resolved tax decision (always empty; the banner counts them).
 	LiveWithoutDecision(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// ReviewSellers finds sellers by name for the review queue's seller filter.
+	ReviewSellers(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	Review(ctx context.Context, c *domain.Caller, atin string) (any, error)
 	ApproveReview(ctx context.Context, c *domain.Caller, atin string, body map[string]any) (any, error)
 	ReclassifyReview(ctx context.Context, c *domain.Caller, atin string, body map[string]any) (any, error)
@@ -50,8 +52,8 @@ var _ StaffTaxService = (*staffTaxImpl)(nil)
 func NewStaffTaxService(d StaffDeps) StaffTaxService { return &staffTaxImpl{r: newStaffResolver(d)} }
 
 const (
-	permTaxRead          = "tax:read"
-	permTaxClassifyAdmin = "tax:classify-admin"
+	permTaxRead          = domain.PermTaxRead
+	permTaxClassifyAdmin = domain.PermTaxClassifyAdmin
 	permTaxConfigure     = "tax:configure"
 
 	// taxReasonMin is the shortest reason any tax change may carry.
@@ -60,9 +62,9 @@ const (
 	taxMaxPage   = 200
 )
 
-// need resolves the staff member for a tax read (the Fees module and tax:read) or, with perm, a change (also perm).
+// need resolves the staff member for a tax read (the Sales tax module, which follows tax:read) or, with perm, a change (also perm).
 func (s *staffTaxImpl) need(ctx context.Context, c *domain.Caller, perm string) (staffCtx, error) {
-	sc, err := s.r.require(ctx, c, feesModule, domain.LevelView)
+	sc, err := s.r.require(ctx, c, domain.TaxModule, domain.LevelView)
 	if err != nil {
 		return sc, err
 	}

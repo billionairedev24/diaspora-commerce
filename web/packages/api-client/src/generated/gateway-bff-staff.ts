@@ -3109,9 +3109,29 @@ export interface paths {
         };
         /**
          * Variants waiting for tax review, or the decisions already made
-         * @description tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. `status=AUDIT_SAMPLE` is the "Audit sample" tab (tax-returns `auditSample=true`): items the system approved under the risk-based review rule (setting `taxReview.mode` RISK_BASED) that are live and wait for a reviewer to confirm or reclassify them. Sellers and people by name; the system's own approvals read "Automatic approval (risk-based rule)".
+         * @description tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. `status=AUDIT_SAMPLE` is the "Audit sample" tab (tax-returns `auditSample=true`): items the system approved under the risk-based review rule (setting `taxReview.mode` RISK_BASED) that are live and wait for a reviewer to confirm or reclassify them. Server-driven: search (`q`: item name, ATIN, GTIN or the seller's name), filters (`status`, `categoryCode`, `sellerOrgId`, `reason`), `sort` and paging. Every row names its sellers (the seller directory resolves them from the ids tax-returns holds; an organisation nobody can name reads "Unknown seller", never nothing) and carries the product photo when catalog has one. Sellers and people by name; the system's own approvals read "Automatic approval (risk-based rule)".
          */
         get: operations["listStaffTaxReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/review-sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find sellers by name for the review queue's seller filter
+         * @description Names come from the seller directory. The payouts lookup is not usable here because the Sales tax module follows tax:read. Nothing typed lists the first sellers; one character is refused.
+         */
+        get: operations["listStaffTaxReviewSellers"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7443,10 +7463,10 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /**
-         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
+         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes, tax and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; tax is the Sales tax module, derived from tax-returns' tax:read (view) and tax:classify-admin (edit); preorders follows the Pre-orders matrix column).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "search" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "deptRequests" | "deliveryQuotes" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "search" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "deptRequests" | "deliveryQuotes" | "support" | "rbac" | "payouts" | "fees" | "tax" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
         StaffUser: {
             id: string;
             firstName: string;
@@ -10553,20 +10573,37 @@ export interface components {
             statuses?: {
                 [key: string]: unknown;
             }[];
+            /** @description The reasons a person is needed, for the filter (value is the code, label the English fallback) */
+            reasons?: {
+                value: string;
+                label: string;
+            }[];
             canDecide: boolean;
+        };
+        StaffTaxReviewSellers: {
+            items: {
+                id: string;
+                name: string;
+            }[];
         };
         StaffTaxReviewRow: {
             atin: string;
             gtin?: string;
             title: string;
-            /** @description Seller names */
+            /** @description Seller names (never ids; "Unknown seller" when the directory cannot name one) */
             sellers: string[];
+            /** @description First public photo of the product; empty when catalog has none */
+            imageUrl?: string;
             categoryCode: string;
             categoryName: string;
             status: string;
             statusLabel: string;
             /** @description Plain reason this needs a person */
             why: string;
+            /** @description Why a person is needed, as a code derived from the stored state and read only: CONFLICT, NO_MATCHING_RULE, MISSING_FACT, REGULATED_CATEGORY, AUDIT_SAMPLE, CODE_TO_VERIFY, BLOCKED, CHANGED, WITH_SELLER or NEW_LISTING; empty when nothing waits */
+            reviewReasonCode?: string;
+            /** @description English fallback for reviewReasonCode */
+            reviewReasonLabel?: string;
             proposed: {
                 [key: string]: unknown;
             };
@@ -15899,11 +15936,17 @@ export interface operations {
     listStaffTaxReviews: {
         parameters: {
             query?: {
-                /** @description PENDING_REVIEW (default), AUDIT_SAMPLE, APPROVED, REJECTED, STALE, MISSING_FACTS or DRAFT */
+                /** @description PENDING_REVIEW (default), AUDIT_SAMPLE, APPROVED, REJECTED, STALE, MISSING_FACTS, DRAFT or ALL (every review state) */
                 status?: string;
                 categoryCode?: string;
+                /** @description Only items sold by this organisation (the id a seller lookup returns) */
                 sellerOrgId?: string;
+                /** @description Only items that need a person for this reason: CONFLICT, NO_MATCHING_RULE, MISSING_FACT, REGULATED_CATEGORY, AUDIT_SAMPLE, CODE_TO_VERIFY, BLOCKED, CHANGED, WITH_SELLER or NEW_LISTING (the `reasons` of the page) */
+                reason?: string;
+                /** @description Item name, ATIN, GTIN or seller name */
                 q?: string;
+                /** @description `<column>,asc|desc` by title, atin, category, status, submitted or reviewed (one column; the seller and the reason are not sortable) */
+                sort?: string[];
                 page?: number;
                 size?: number;
             };
@@ -15920,6 +15963,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffTaxReviewPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTaxReviewSellers: {
+        parameters: {
+            query?: {
+                /** @description Part of the seller's name (2 to 120 characters) */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReviewSellers"];
                 };
             };
             401: components["responses"]["Problem"];

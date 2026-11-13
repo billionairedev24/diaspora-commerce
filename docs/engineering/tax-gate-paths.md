@@ -55,7 +55,7 @@ or by the risk rule (`taxReview.mode` `RISK_BASED`, the default; a record held u
 provisional category such as Fabrics & textiles) the profile must be approved first. Auto-resolving would mean inventing a tax
 decision, which the owner's rule forbids.
 
-**Releasing a hold.** Staff open **Fees & commissions > Sales tax > Tax review**, find the product **by name**
+**Releasing a hold.** Staff open **Sales tax > Tax review** (sidebar), find the product **by name**
 (`variant_classification.title`, filled from the product title in `catalog.product.tax-facts-changed`) and approve. tax-returns
 publishes `tax.classification.changed` (APPROVED), catalog's listener calls `reconcile`, the hold is released and the listing goes
 back on sale (`catalog.product.resumed`) once the seller may still sell it. If the event is missed, the next sweep does it.
@@ -107,8 +107,8 @@ happens at Place order and answers with the same plain message (`orders.tax-line
    the search indexer (document `status`), inventory and the cart (live offers only) all follow that status.
 5. **Safety net and alarm.** A sweep (`TaxGateSweepJob`, every 60 s) closes anything that still slipped through, and
    `catalog_live_without_tax_decision` (gauge, must be 0) pages when it is above 0
-   ([runbook](../runbooks/CatalogLiveWithoutTaxDecision.md)). Staff see a red banner with the count on **Fees & commissions
-   > Sales tax > Tax review**, linking to the list (`GET /v1/tax-gate/live-without-decision`, permission `tax:read`).
+   ([runbook](../runbooks/CatalogLiveWithoutTaxDecision.md)). Staff see a red banner with the count on **Sales tax >
+   Tax review** (sidebar), linking to the list (`GET /v1/tax-gate/live-without-decision`, permission `tax:read`).
 
 **The held state.** A live listing that loses its decision (a new variant, a changed answer, tax-returns says STALE, its
 category closes) goes to **IN_REVIEW** with the note "We are checking the tax details for this item." and a row in

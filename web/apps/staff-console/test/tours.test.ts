@@ -21,7 +21,7 @@ function session(modules: [StaffModuleKey, AccessLevel][], over: Partial<StaffSe
 }
 
 const EVERY_MODULE: StaffModuleKey[] = [
-  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'deptRequests', 'deliveryQuotes', 'support', 'rbac', 'payouts', 'fees', 'marketing',
+  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'deptRequests', 'deliveryQuotes', 'support', 'rbac', 'payouts', 'fees', 'tax', 'marketing',
   'disputes', 'audit', 'markets', 'siteCfg', 'dev', 'identity', 'notifications', 'preorders', 'plans'
 ];
 const ADMIN = session(EVERY_MODULE.map((k): [StaffModuleKey, AccessLevel] => [k, 'FULL']));
@@ -120,8 +120,9 @@ describe('staff tour audiences: only the chapters a person\'s permissions allow'
     expect(idsFor(session([['dash', 'VIEW'], ['catalog', 'APPROVE']]))).toEqual(['admin-home', 'my-account', 'moderation-queue', 'catalogue-rules']);
   });
 
-  it('a finance-only reader gets the tax, fees and settings chapters through the fees area', () => {
-    expect(idsFor(session([['dash', 'VIEW'], ['fees', 'VIEW']]))).toEqual(['admin-home', 'my-account', 'tax-review', 'tax-profiles', 'fees-plans', 'settings']);
+  it('the tax chapters follow the Sales tax area, the fees and settings chapters the fees area', () => {
+    expect(idsFor(session([['dash', 'VIEW'], ['tax', 'VIEW']]))).toEqual(['admin-home', 'my-account', 'tax-review', 'tax-profiles']);
+    expect(idsFor(session([['dash', 'VIEW'], ['fees', 'VIEW']]))).toEqual(['admin-home', 'my-account', 'fees-plans', 'settings']);
   });
 
   it('the roles chapter needs the people-and-roles area', () => {

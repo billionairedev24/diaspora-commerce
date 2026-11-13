@@ -272,12 +272,12 @@ Careers roles and the cookie table are tabs of Site content. The About page stil
 ## Settings
 
 All configuration lives in one place: **Settings** (sidebar). Sections include General (including the Help
-center articles), Fees, Markets, Notifications, Developers and Tax. See the [settings runbook](../runbooks/settings.md).
-The **Sales tax** section holds the tax tools (below).
+center articles), Fees, Markets, Notifications and Developers. See the [settings runbook](../runbooks/settings.md).
+**Sales tax** is not in Settings: it has its own link in the sidebar, under Finance (below).
 
 ## Sales tax: classification, review and providers
 
-**Settings → Sales tax** has one tab per job. Reading needs `tax:read`; approving, moving a product to another category,
+**Sales tax** (sidebar, Finance) has one tab per job. The link shows for anyone with `tax:read`; the old addresses (`/fees?tab=tax-…`, `/settings?section=tax`) still open it on the same tab. Reading needs `tax:read`; approving, moving a product to another category,
 changing a category's status and editing provider codes need `tax:classify-admin`; changing who calculates tax needs
 `tax:configure`. Every change asks for a reason of at least 10 characters (the rule shows as you type) and is kept with your
 name. The tax rules are a **draft** until a Texas tax professional signs them off: nothing here goes to real customers before that.
@@ -292,7 +292,11 @@ name. The tax rules are a **draft** until a Texas tax professional signs them of
   and the reference of their sign-off; **Reopen for approval** takes a category back. A category that needs a specific provider
   code is lifted product by product in Tax review, so the profile is read only.
 - **Tax review** is the queue of products whose tax waits for a person. The tax rules decide everything they can, so only
-  exceptions are here, each with the reason in one line: a *Conflict* (the category waits on an open decision), *No matching rule*,
+  exceptions are here. Its table is a server-driven table like the others: each row shows the item (name and photo), its ATIN, the
+  seller by name, the category, the proposed tax, why it needs review and when it was submitted. One search box finds an item by its
+  name, ATIN, GTIN or the seller's name; filters narrow it by status, by *why it needs review*, by category and by seller; the Item,
+  ATIN, Category and Submitted headings sort; and there are pages. Asking for a reason looks in every state, so a missing answer
+  (which waits with the seller) is found too. The reason is one line: a *Conflict* (the category waits on an open decision), *No matching rule*,
   a *Missing answer* or *Missing proof*, a *Regulated category* (always reviewed) or a category that *Needs sign-off*. You see the
   product, the seller, the category, what the seller entered, the proof they attached and the proposed decision. **Approve**, **Move to another category** or
   **Ask the seller for more**. The **Audit sample** tab lists items the system approved by itself (items the system approved under *Review by risk*, which is the default):

@@ -15,7 +15,7 @@ describe('Tax review', () => {
   beforeEach(() => {
     resetStaffDb(NOW);
     asRoles('platform.super_admin');
-    nav.set('/fees?tab=tax-review');
+    nav.set('/tax?tab=tax-review');
   });
   afterEach(() => interceptStaff(null));
 
@@ -26,9 +26,12 @@ describe('Tax review', () => {
     expect(within(row).getByText('Mama Nkechi’s Kitchen')).toBeInTheDocument();
     expect(within(row).getByText('Nuts & seeds')).toBeInTheDocument();
     expect(within(row).getByText('Exempt (no tax)')).toBeInTheDocument();
+    expect(within(row).getByText('New listing')).toBeInTheDocument();
+    expect(within(row).getByText('AT20000101')).toBeInTheDocument();
     expect(within(row).getByText(/claims a tax exemption and attached proof/)).toBeInTheDocument();
+    expect(row.querySelector('img')?.getAttribute('src')).toMatch(/^data:image/);
     expect(within(table).getByText('Yoruba for beginners (e-book)')).toBeInTheDocument();
-    expect(table).not.toHaveTextContent(/org-|AT2000/);
+    expect(table).not.toHaveTextContent(/org_|org-/);
     // Decided variants are not in the queue.
     expect(within(table).queryByText('Jollof seasoning blend, 4 oz')).not.toBeInTheDocument();
   });
@@ -42,12 +45,12 @@ describe('Tax review', () => {
     expect(within(row).getByText('Approved')).toBeInTheDocument();
     expect(within(row).getByText('Ada Okafor')).toBeInTheDocument();
     expect(within(row).getByText('tx-2026.11.09-draft.1')).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Decision' }), 'REJECTED');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'REJECTED');
     expect(await within(table).findByText('Ankara print tote bag')).toBeInTheDocument();
   });
 
   it('shows the facts as entered, the proof with text alternatives, and the proposed decision in words', async () => {
-    nav.set('/fees?tab=tax-review&variant=AT20000101');
+    nav.set('/tax?tab=tax-review&variant=AT20000101');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Roasted cashews, 6 oz bag' });
     const facts = await within(sheet).findByRole('region', { name: 'Facts as entered' });
@@ -65,7 +68,7 @@ describe('Tax review', () => {
 
   it('approves only with a reason of ten characters, then lists the decision', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-review&variant=AT20000101');
+    nav.set('/tax?tab=tax-review&variant=AT20000101');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Roasted cashews, 6 oz bag' });
     await user.click(await within(sheet).findByRole('button', { name: 'Approve…' }));
@@ -86,7 +89,7 @@ describe('Tax review', () => {
 
   it('says in plain words why a variant cannot be approved yet', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-review&variant=AT20000102');
+    nav.set('/tax?tab=tax-review&variant=AT20000102');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Yoruba for beginners (e-book)' });
     await user.click(await within(sheet).findByRole('button', { name: 'Approve…' }));
@@ -99,7 +102,7 @@ describe('Tax review', () => {
 
   it('moves a variant to another category with a reason, and says what happens to orders', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-review&variant=AT20000103');
+    nav.set('/tax?tab=tax-review&variant=AT20000103');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Hand-woven Kente table runner' });
     expect(await within(sheet).findByText(/3 orders include this product/)).toBeInTheDocument();
@@ -123,7 +126,7 @@ describe('Tax review', () => {
         return new Response(JSON.stringify({ status: 503, code: 'UPSTREAM_UNAVAILABLE', title: 'Service unavailable' }), { status: 503, headers: { 'content-type': 'application/problem+json' } });
       return next(req);
     });
-    nav.set('/fees?tab=tax-review&variant=AT20000101');
+    nav.set('/tax?tab=tax-review&variant=AT20000101');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Roasted cashews, 6 oz bag' });
     await user.click(await within(sheet).findByRole('button', { name: 'Ask the seller for more…' }));
@@ -136,7 +139,7 @@ describe('Tax review', () => {
 
   it('is read only without tax:classify-admin', async () => {
     asRoles('platform.auditor');
-    nav.set('/fees?tab=tax-review&variant=AT20000101');
+    nav.set('/tax?tab=tax-review&variant=AT20000101');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Roasted cashews, 6 oz bag' });
     expect(await within(sheet).findByText(/Deciding needs the tax:classify-admin permission/)).toBeInTheDocument();
@@ -153,9 +156,9 @@ describe('Tax review', () => {
     expect(within(row).getByText('Skincare & cosmetics')).toBeInTheDocument();
     expect(within(row).getByText('Automatic approval (risk-based rule)')).toBeInTheDocument();
     expect(within(row).getByText(/confirm it or move it to the right category/)).toBeInTheDocument();
-    expect(table).not.toHaveTextContent(/org-|AT2000|auto$/);
+    expect(table).not.toHaveTextContent(/org_|org-|auto$/);
     // The audit item is live, so it is not in the queue.
-    await user.click(screen.getByRole('button', { name: 'Waiting for review' }));
+    await user.click(screen.getByRole('button', { name: 'Pending review' }));
     const queue = await screen.findByRole('table', { name: 'Tax review queue' });
     await within(queue).findByText('Roasted cashews, 6 oz bag');
     expect(within(queue).queryByText('Shea butter body cream, 8 oz')).not.toBeInTheDocument();
@@ -163,7 +166,7 @@ describe('Tax review', () => {
 
   it('confirms an audit item with a reason and takes it out of the sample', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-review&review.view=audit&variant=AT20000109');
+    nav.set('/tax?tab=tax-review&review.view=audit&variant=AT20000109');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Shea butter body cream, 8 oz' });
     expect(await within(sheet).findByText('Why it is in the audit sample')).toBeInTheDocument();
@@ -182,7 +185,7 @@ describe('Tax review', () => {
 
   it('moves an audit item to another category, which takes it out of the sample and back into review', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-review&review.view=audit&variant=AT20000109');
+    nav.set('/tax?tab=tax-review&review.view=audit&variant=AT20000109');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Shea butter body cream, 8 oz' });
     await user.click(await within(sheet).findByRole('button', { name: 'Move to another category…' }));
@@ -197,7 +200,7 @@ describe('Tax review', () => {
 
   it('cannot confirm an audit item without tax:classify-admin', async () => {
     asRoles('platform.auditor');
-    nav.set('/fees?tab=tax-review&review.view=audit&variant=AT20000109');
+    nav.set('/tax?tab=tax-review&review.view=audit&variant=AT20000109');
     await renderScreen(<TaxReviewPanel />);
     const sheet = await screen.findByRole('dialog', { name: 'Shea butter body cream, 8 oz' });
     expect(await within(sheet).findByText(/Deciding needs the tax:classify-admin permission/)).toBeInTheDocument();

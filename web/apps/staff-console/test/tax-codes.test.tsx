@@ -16,7 +16,7 @@ describe('Provider codes', () => {
   beforeEach(() => {
     resetStaffDb(NOW);
     asRoles('platform.super_admin');
-    nav.set('/fees?tab=tax-codes');
+    nav.set('/tax?tab=tax-codes');
   });
 
   it('shows the provider in use with a completeness meter for the outcomes still needing a verified code', async () => {
@@ -43,7 +43,7 @@ describe('Provider codes', () => {
 
   it('edits one code with a reason, checks its format, and verifies it', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-codes&codes.provider=AVALARA');
+    nav.set('/tax?tab=tax-codes&codes.provider=AVALARA');
     await renderScreen(<TaxCodeMapPanel />);
     const table = await screen.findByRole('table', { name: 'Avalara codes' });
     await user.type(screen.getByRole('searchbox'), 'PLAIN_MULTI_SERVING');
@@ -100,7 +100,7 @@ describe('Provider codes', () => {
 
   it('previews an imported CSV before saving, refuses a file with a bad row, and applies a good one with a reason', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-codes&codes.provider=AVALARA');
+    nav.set('/tax?tab=tax-codes&codes.provider=AVALARA');
     await renderScreen(<TaxCodeMapPanel />);
     await user.click(await screen.findByRole('button', { name: 'Import CSV…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Import Avalara codes from CSV' });

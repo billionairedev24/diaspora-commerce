@@ -70,7 +70,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     module: 'preorders',
     group: 'money'
   },
-  { key: 'tax', label: 'Sales tax', description: 'Who calculates sales tax, the state and local rates, and what each item is for tax.', module: 'fees', group: 'money' },
   {
     key: 'exchange-rates',
     label: 'Exchange rates',

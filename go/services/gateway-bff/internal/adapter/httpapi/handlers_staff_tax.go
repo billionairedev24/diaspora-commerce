@@ -9,6 +9,7 @@ func (h *handlersImpl) registerStaffTax(route func(pattern string, fn http.Handl
 	route("GET /v1/staff/tax/profiles/{code}", h.staffTaxProfile)
 	route("POST /v1/staff/tax/profiles/{code}/status", h.staffTaxProfileStatus)
 	route("GET /v1/staff/tax/reviews", h.staffTaxReviews)
+	route("GET /v1/staff/tax/review-sellers", h.staffTaxReviewSellers)
 	route("GET /v1/staff/tax/live-without-decision", h.staffTaxLiveWithoutDecision)
 	route("GET /v1/staff/tax/reviews/{atin}", h.staffTaxReview)
 	route("POST /v1/staff/tax/reviews/{atin}/approve", h.staffTaxApprove)
@@ -47,6 +48,11 @@ func (h *handlersImpl) staffTaxProfileStatus(w http.ResponseWriter, r *http.Requ
 
 func (h *handlersImpl) staffTaxReviews(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Tax.Reviews(r.Context(), callerFrom(r.Context()), r.URL.Query())
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTaxReviewSellers(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Tax.ReviewSellers(r.Context(), callerFrom(r.Context()), r.URL.Query())
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

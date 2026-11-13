@@ -283,6 +283,58 @@ func (n *staffNames) lookupOrgs(ctx context.Context, sc staffCtx, ids []string) 
 	return found
 }
 
+// namesSearchMax caps the organisations a text search turns into ids.
+const namesSearchMax = 50
+
+// orgHit is an organisation found by its name.
+type orgHit struct{ id, name string }
+
+// orgsNamed are the organisations whose display name contains the text (case does not matter; no text lists them in
+// directory order), at most limit of them, from the first orgDirectoryPages pages of seller's organisation directory.
+// AfroTransact Retail is matched by name without asking.
+func (n *staffNames) orgsNamed(ctx context.Context, sc staffCtx, text string, limit int) []orgHit {
+	needle := strings.ToLower(strings.TrimSpace(text))
+	var out []orgHit
+	if n == nil {
+		return out
+	}
+	has := func(id string) bool { return slices.ContainsFunc(out, func(h orgHit) bool { return h.id == id }) }
+	if n.retail != "" && strings.Contains(strings.ToLower(retailOrgName), needle) {
+		out = append(out, orgHit{n.retail, retailOrgName})
+	}
+	for page := range orgDirectoryPages {
+		var p jobj
+		if err := sc.get(ctx, sc.up.Seller, "/v1/orgs/directory", url.Values{"page": {strconv.Itoa(page)}, "size": {"200"}}, &p); err != nil {
+			break
+		}
+		items := objs(p, "items")
+		for _, it := range items {
+			id := firstNonEmpty(jstr(it, "id"), jstr(it, "orgId"))
+			name := firstNonEmpty(jstr(it, "displayName"), jstr(it, "legalName"))
+			if id != "" && name != "" && !has(id) && strings.Contains(strings.ToLower(name), needle) {
+				out = append(out, orgHit{id, name})
+			}
+		}
+		if len(out) >= limit || len(items) < 200 {
+			break
+		}
+	}
+	return out[:min(len(out), limit)]
+}
+
+// orgIDsNamed are the ids of the organisations whose name contains the text: what a search box that finds a record by
+// its seller's name sends to the service that holds the ids.
+func (n *staffNames) orgIDsNamed(ctx context.Context, sc staffCtx, text string) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	var ids []string
+	for _, h := range n.orgsNamed(ctx, sc, text, namesSearchMax) {
+		ids = append(ids, h.id)
+	}
+	return ids
+}
+
 // lookupUsers reads each distinct user (identity has no lookup by several ids yet); a person's name, else their email.
 func (n *staffNames) lookupUsers(ctx context.Context, sc staffCtx, ids []string) map[string]string {
 	if len(ids) > namesUserLookups {

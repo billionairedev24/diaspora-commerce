@@ -8,8 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -27,8 +30,8 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// taxStaff: Super Admin (everything), Finance (fees FULL, reads and configures tax but cannot classify), Auditor (reads
-// tax only), and a Catalog Manager (no fees module, even with tax:read).
+// taxStaff: Super Admin (everything), Finance (reads and configures tax but cannot classify), Auditor (reads tax only),
+// and a Catalog Manager (tax:read and tax:classify-admin, no Fees module access).
 var taxStaff = map[string][]any{
 	"admin":   {[]string{"platform.super_admin"}, []string{"tax:read", "tax:classify-admin", "tax:configure"}},
 	"finance": {[]string{"platform.finance"}, []string{"tax:read", "tax:configure"}},
@@ -100,7 +103,7 @@ func newFakeTax(t *testing.T) *fakeTax {
 		}
 	}
 	f.records = map[string]map[string]any{
-		"AT-NUTS": {"atin": "AT-NUTS", "gtin": "00812345678905", "title": "Roasted cashews 6 oz", "categoryCode": "nuts-seeds", "status": "PENDING_REVIEW",
+		"AT-NUTS": {"atin": "AT-NUTS", "gtin": "00812345678905", "title": "Roasted cashews 6 oz", "productId": "00000000-0000-0000-0000-0000000000a1", "ownerOrgId": "org-1", "reviewReasonCode": "NEW_LISTING", "categoryCode": "nuts-seeds", "status": "PENDING_REVIEW",
 			"facts": map[string]any{"is_candy": false, "candy_coated": false, "net_weight_oz": 6.0, "servings_per_package": 4.0, "individual_serving": false},
 			"evidence": []any{map[string]any{"factId": "label_evidence", "fileName": "label.jpg", "url": "/media/label.jpg", "uploadedBy": "usr-seller", "uploadedAt": "2026-11-08T12:00:00Z"},
 				map[string]any{"factId": "label_evidence", "fileName": "spec.pdf", "url": "/media/spec.pdf", "uploadedBy": "usr-seller", "uploadedAt": "2026-11-08T12:05:00Z"}},
@@ -109,16 +112,16 @@ func newFakeTax(t *testing.T) *fakeTax {
 			"decisions":    []any{map[string]any{"sellerOrgId": "org-1", "sellerBehaviour": map[string]any{}, "resolution": map[string]any{"status": "RESOLVED", "outcome": "EXEMPT", "missingFacts": []any{}, "ruleVersion": "x"}}},
 			"classifiedBy": "usr-seller", "classifiedAt": "2026-11-08T12:10:00Z", "ruleVersion": "tx-2026.11.09-draft.1",
 			"audit": []any{map[string]any{"at": "2026-11-08T12:10:00Z", "actor": "usr-seller", "action": "SUBMITTED", "ruleVersion": "tx-2026.11.09-draft.1"}}},
-		"AT-EBOOK": {"atin": "AT-EBOOK", "title": "Yoruba for beginners (ebook)", "categoryCode": "downloadable-ebooks", "status": "PENDING_REVIEW", "facts": map[string]any{},
+		"AT-EBOOK": {"atin": "AT-EBOOK", "title": "Yoruba for beginners (ebook)", "productId": "00000000-0000-0000-0000-0000000000a2", "ownerOrgId": "org-2", "reviewReasonCode": "REGULATED_CATEGORY", "categoryCode": "downloadable-ebooks", "status": "PENDING_REVIEW", "facts": map[string]any{},
 			"resolution":   map[string]any{"status": "NEEDS_APPROVAL", "missingFacts": []any{}, "ruleVersion": "tx-2026.11.09-draft.1"},
 			"decisions":    []any{map[string]any{"sellerOrgId": "org-2", "resolution": map[string]any{"status": "NEEDS_APPROVAL", "missingFacts": []any{}, "ruleVersion": "x"}}},
 			"classifiedBy": "usr-seller", "classifiedAt": "2026-11-08T13:00:00Z", "ordersAffected": 0, "audit": []any{}},
-		"AT-DONE": {"atin": "AT-DONE", "title": "Plantain chips 2 oz", "categoryCode": "packaged-snacks", "status": "APPROVED", "facts": map[string]any{},
+		"AT-DONE": {"atin": "AT-DONE", "title": "Plantain chips 2 oz", "productId": "00000000-0000-0000-0000-0000000000a3", "ownerOrgId": "org-1", "categoryCode": "packaged-snacks", "status": "APPROVED", "facts": map[string]any{},
 			"resolution": map[string]any{"status": "RESOLVED", "outcome": "TAXABLE", "rowId": "", "missingFacts": []any{}, "ruleVersion": "tx-2026.11.09-draft.1"},
 			"decisions":  []any{}, "reviewedBy": "stf-admin", "reviewedAt": "2026-11-07T08:00:00Z", "ruleVersion": "tx-2026.11.09-draft.1",
 			"audit": []any{map[string]any{"at": "2026-11-07T08:00:00Z", "actor": "stf-admin", "action": "APPROVED", "reason": "Label matches", "ruleVersion": "tx-2026.11.09-draft.1"}}},
 	}
-	f.records["AT-AUDIT"] = map[string]any{"atin": "AT-AUDIT", "title": "Shea butter 8 oz", "categoryCode": "skincare-cosmetics", "status": "APPROVED", "facts": map[string]any{},
+	f.records["AT-AUDIT"] = map[string]any{"atin": "AT-AUDIT", "title": "Shea butter 8 oz", "productId": "00000000-0000-0000-0000-0000000000a4", "ownerOrgId": "org-1", "reviewReasonCode": "AUDIT_SAMPLE", "categoryCode": "skincare-cosmetics", "status": "APPROVED", "facts": map[string]any{},
 		"resolution":   map[string]any{"status": "RESOLVED", "outcome": "TAXABLE", "rowId": "S041", "missingFacts": []any{}, "ruleVersion": "tx-2026.11.09-draft.1"},
 		"decisions":    []any{map[string]any{"sellerOrgId": "org-1", "resolution": map[string]any{"status": "RESOLVED", "outcome": "TAXABLE", "missingFacts": []any{}, "ruleVersion": "x"}}},
 		"classifiedBy": "auto", "classifiedAt": "2026-11-09T09:00:00Z", "reviewedBy": "auto", "reviewedAt": "2026-11-09T09:00:00Z", "ruleVersion": "tx-2026.11.09-draft.1",
@@ -197,6 +200,12 @@ func (f *fakeTax) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"name": "Chidi Eze"})
 	case p == "/v1/orgs/directory":
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"id": "org-1", "displayName": "Mama's Pantry"}, map[string]any{"id": "org-2", "displayName": "Lagos Books"}}})
+	case strings.HasPrefix(p, "/v1/products/00000000-0000-0000-0000-0000000000a"):
+		if strings.HasSuffix(p, "a2") { // a product without a public photo
+			writeJ(w, 200, map[string]any{"id": strings.TrimPrefix(p, "/v1/products/"), "images": []any{map[string]any{"url": "", "assetId": "held"}}})
+			return
+		}
+		writeJ(w, 200, map[string]any{"id": strings.TrimPrefix(p, "/v1/products/"), "images": []any{map[string]any{"url": "https://media.afrotransact.test/" + strings.TrimPrefix(p, "/v1/products/") + ".webp"}}})
 	case p == "/v1/orders/ord-1":
 		writeJ(w, 200, map[string]any{"id": "ord-1", "orderNumber": "AT-000231"})
 	case p == "/v1/tax-gate/live-without-decision":
@@ -209,6 +218,49 @@ func (f *fakeTax) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		f.tax(w, r, p, body)
 	}
+}
+
+// list answers like tax-returns' list: a light record (no decisions, evidence or audit) that names its sellers by id.
+func (f *fakeTax) list(q url.Values) map[string]any {
+	ids := []string{"AT-NUTS", "AT-EBOOK", "AT-DONE", "AT-AUDIT"}
+	if q.Get("sort") == "title" {
+		sort.Slice(ids, func(i, j int) bool { return f.records[ids[i]]["title"].(string) < f.records[ids[j]]["title"].(string) })
+		if q.Get("order") == "desc" {
+			slices.Reverse(ids)
+		}
+	}
+	items := []any{}
+	for _, id := range ids {
+		rec := f.records[id]
+		if q.Get("auditSample") == "true" {
+			if rec["auditSample"] != true {
+				continue
+			}
+		} else if st := q.Get("status"); st != "" && rec["status"] != st {
+			continue
+		}
+		if want := q.Get("reason"); want != "" && rec["reviewReasonCode"] != want {
+			continue
+		}
+		if text := strings.ToLower(q.Get("q")); text != "" {
+			hit := strings.Contains(strings.ToLower(rec["title"].(string)), text) || strings.Contains(strings.ToLower(id), text) || slices.Contains(q["qSellerOrgIds"], rec["ownerOrgId"].(string))
+			if !hit {
+				continue
+			}
+		}
+		if org := q.Get("sellerOrgId"); org != "" && rec["ownerOrgId"] != org {
+			continue
+		}
+		light := map[string]any{}
+		for k, v := range rec {
+			if k != "decisions" && k != "evidence" && k != "audit" {
+				light[k] = v
+			}
+		}
+		light["sellerOrgIds"] = []any{rec["ownerOrgId"]}
+		items = append(items, light)
+	}
+	return map[string]any{"items": items, "page": 0, "size": 25, "total": len(items)}
 }
 
 func (f *fakeTax) tax(w http.ResponseWriter, r *http.Request, p string, body map[string]any) {
@@ -256,18 +308,7 @@ func (f *fakeTax) tax(w http.ResponseWriter, r *http.Request, p string, body map
 	case p == "/v1/tax/review-settings":
 		writeJ(w, 200, f.review)
 	case p == "/v1/tax/variant-classifications":
-		status := r.URL.Query().Get("status")
-		items := []any{}
-		if r.URL.Query().Get("auditSample") == "true" {
-			items = append(items, f.records["AT-AUDIT"])
-		} else {
-			for _, id := range []string{"AT-NUTS", "AT-EBOOK", "AT-DONE"} {
-				if f.records[id]["status"] == status {
-					items = append(items, f.records[id])
-				}
-			}
-		}
-		writeJ(w, 200, map[string]any{"items": items, "page": 0, "size": 25, "total": len(items)})
+		writeJ(w, 200, f.list(r.URL.Query()))
 	case strings.HasPrefix(p, "/v1/tax/variant-classifications/"):
 		rest := strings.TrimPrefix(p, "/v1/tax/variant-classifications/")
 		atin, action, _ := strings.Cut(rest, "/")
@@ -607,8 +648,12 @@ func TestStaffTaxReviewQueue(t *testing.T) {
 	if strings.Contains(nuts["sellers"].([]any)[0].(string), "org-") {
 		t.Errorf("seller shown by id: %v", nuts["sellers"])
 	}
-	if !strings.Contains(nuts["why"].(string), "exemption") || !strings.Contains(ebook["why"].(string), "sign-off") {
+	// The list carries no evidence, so the proof-based reason is the sheet's; the list says why from the stored decision.
+	if !strings.Contains(nuts["why"].(string), "New or changed listing") || !strings.Contains(ebook["why"].(string), "sign-off") {
 		t.Errorf("why = %q / %q", nuts["why"], ebook["why"])
+	}
+	if sheetWhy := do("admin", "GET", "/v1/staff/tax/reviews/AT-NUTS", nil, 200)["why"].(string); !strings.Contains(sheetWhy, "exemption") {
+		t.Errorf("sheet why = %q", sheetWhy)
 	}
 	if p := nuts["proposed"].(map[string]any); p["outcomeLabel"] != "Exempt (no tax)" || p["internalTaxCode"] == "" {
 		t.Errorf("proposed = %v", p)
@@ -671,6 +716,116 @@ func TestStaffTaxReviewQueue(t *testing.T) {
 	do("admin", "POST", "/v1/staff/tax/reviews/AT-NUTS/request-information", map[string]any{"message": "Please upload a clearer label photo"}, 200)
 	f.reqInfo = false
 	do("admin", "POST", "/v1/staff/tax/reviews/AT-NUTS/request-information", map[string]any{"message": "Please upload a clearer label photo"}, 503)
+}
+
+// TestStaffTaxReviewQueueNamesItsSellers is the guard for the blank Seller column: tax-returns' list carries no stored
+// decisions, only the ids of the organisations that sell each variant, so the seller must be named from those ids. An
+// organisation nobody can name reads "Unknown seller": the column is never empty.
+func TestStaffTaxReviewQueueNamesItsSellers(t *testing.T) {
+	f, do, _ := taxBFF(t)
+	for _, status := range []string{"PENDING_REVIEW", "APPROVED"} {
+		for _, row := range items(t, do("admin", "GET", "/v1/staff/tax/reviews?status="+status, nil, 200)) {
+			sellers := row["sellers"].([]any)
+			if len(sellers) == 0 || sellers[0] == "" {
+				t.Errorf("%v row %v has a blank seller: %v", status, row["atin"], row)
+			}
+			if strings.Contains(sellers[0].(string), "org-") {
+				t.Errorf("seller shown by id: %v", sellers)
+			}
+		}
+	}
+	// A seller the directory cannot name is said to be unknown, not left blank.
+	f.records["AT-NUTS"]["ownerOrgId"] = "org-gone"
+	row := items(t, do("admin", "GET", "/v1/staff/tax/reviews", nil, 200))[0]
+	if got := row["sellers"].([]any); len(got) != 1 || got[0] != "Unknown seller" {
+		t.Errorf("an organisation nobody can name = %v", got)
+	}
+}
+
+// TestStaffTaxReviewQueueSearchFilterAndSort: the queue is server-driven. The search box finds an item by its name or
+// ATIN and by its seller's name; the reason, seller and category filter it; the columns that can sort do; each row
+// carries the item's photo and the reason it needs a person.
+func TestStaffTaxReviewQueueSearchFilterAndSort(t *testing.T) {
+	f, do, _ := taxBFF(t)
+	atins := func(path string) []string {
+		var out []string
+		for _, r := range items(t, do("admin", "GET", path, nil, 200)) {
+			out = append(out, r["atin"].(string))
+		}
+		return out
+	}
+	if got := atins("/v1/staff/tax/reviews"); !slices.Equal(got, []string{"AT-NUTS", "AT-EBOOK"}) {
+		t.Fatalf("queue = %v", got)
+	}
+	if got := atins("/v1/staff/tax/reviews?q=cashews"); !slices.Equal(got, []string{"AT-NUTS"}) {
+		t.Errorf("search by item name = %v", got)
+	}
+	if got := atins("/v1/staff/tax/reviews?q=at-eb"); !slices.Equal(got, []string{"AT-EBOOK"}) {
+		t.Errorf("search by ATIN = %v", got)
+	}
+	// The seller's name is not in tax-returns: the BFF turns it into the organisations' ids first.
+	if got := atins("/v1/staff/tax/reviews?q=lagos"); !slices.Equal(got, []string{"AT-EBOOK"}) {
+		t.Errorf("search by seller name = %v", got)
+	}
+	if last := f.calls[len(f.calls)-1]; !strings.Contains(last, "qSellerOrgIds=org-2") && !strings.Contains(strings.Join(f.calls, "\n"), "qSellerOrgIds=org-2") {
+		t.Errorf("tax-returns was not given the matching sellers: %v", f.calls)
+	}
+	if got := atins("/v1/staff/tax/reviews?reason=REGULATED_CATEGORY"); !slices.Equal(got, []string{"AT-EBOOK"}) {
+		t.Errorf("filter by reason = %v", got)
+	}
+	if got := atins("/v1/staff/tax/reviews?sellerOrgId=org-1"); !slices.Equal(got, []string{"AT-NUTS"}) {
+		t.Errorf("filter by seller = %v", got)
+	}
+	if got := atins("/v1/staff/tax/reviews?sort=title,desc"); !slices.Equal(got, []string{"AT-EBOOK", "AT-NUTS"}) {
+		t.Errorf("sorted by title descending = %v", got)
+	}
+	if got := atins("/v1/staff/tax/reviews?status=AUDIT_SAMPLE&reason=AUDIT_SAMPLE"); !slices.Equal(got, []string{"AT-AUDIT"}) {
+		t.Errorf("audit sample = %v", got)
+	}
+	if got := atins("/v1/staff/tax/reviews?status=ALL"); len(got) != 4 {
+		t.Errorf("any state lists records in every review state: %v", got)
+	}
+	if last := f.calls[len(f.calls)-1]; strings.Contains(last, "status=") {
+		t.Errorf("any state must not send a status to tax-returns: %v", last)
+	}
+	do("admin", "GET", "/v1/staff/tax/reviews?reason=BECAUSE", nil, 422)
+	do("admin", "GET", "/v1/staff/tax/reviews?sort=sellers,asc", nil, 422)
+	do("admin", "GET", "/v1/staff/tax/reviews?sort=title,sideways", nil, 422)
+
+	page := do("admin", "GET", "/v1/staff/tax/reviews", nil, 200)
+	rows := items(t, page)
+	if rows[0]["reviewReasonCode"] != "NEW_LISTING" || rows[1]["reviewReasonCode"] != "REGULATED_CATEGORY" || rows[1]["reviewReasonLabel"] != "Regulated category" {
+		t.Errorf("reasons = %v / %v", rows[0]["reviewReasonCode"], rows[1]["reviewReasonCode"])
+	}
+	if rows[0]["imageUrl"] != "https://media.afrotransact.test/00000000-0000-0000-0000-0000000000a1.webp" || rows[1]["imageUrl"] != "" {
+		t.Errorf("photos = %v / %v (a held photo has no public address)", rows[0]["imageUrl"], rows[1]["imageUrl"])
+	}
+	if reasons := page["reasons"].([]any); len(reasons) != 10 || reasons[0].(map[string]any)["value"] != "CONFLICT" {
+		t.Errorf("reasons offered = %v", reasons)
+	}
+}
+
+// TestStaffTaxReviewSellers: the seller filter finds sellers by name with the Sales tax module alone (the payouts lookup
+// would refuse a tax reviewer).
+func TestStaffTaxReviewSellers(t *testing.T) {
+	_, do, raw := taxBFF(t)
+	names := func(path, who string) []string {
+		var out []string
+		for _, h := range items(t, do(who, "GET", path, nil, 200)) {
+			out = append(out, h["name"].(string))
+		}
+		return out
+	}
+	if got := names("/v1/staff/tax/review-sellers?q=lagos", "catalog"); !slices.Equal(got, []string{"Lagos Books"}) {
+		t.Errorf("by name = %v", got)
+	}
+	if got := names("/v1/staff/tax/review-sellers", "auditor"); !slices.Equal(got, []string{"AfroTransact Retail", "Mama's Pantry", "Lagos Books"}) {
+		t.Errorf("nothing typed lists AfroTransact Retail and the first sellers: %v", got)
+	}
+	do("admin", "GET", "/v1/staff/tax/review-sellers?q=l", nil, 422)
+	if rec := raw("noperm", "GET", "/v1/staff/tax/review-sellers", nil); rec.Code != 403 {
+		t.Errorf("without tax:read = %d", rec.Code)
+	}
 }
 
 func TestStaffTaxCodeMap(t *testing.T) {
@@ -909,10 +1064,11 @@ func TestStaffTaxPermissionMatrix(t *testing.T) {
 		if rec := raw("noperm", s.method, s.path, s.body); rec.Code != 403 {
 			t.Errorf("staff without tax:read %s %s = %d", s.method, s.path, rec.Code)
 		}
-		if rec := raw("catalog", s.method, s.path, s.body); rec.Code != 403 {
-			t.Errorf("staff without the Fees module %s %s = %d (tax:read alone does not open it)", s.method, s.path, rec.Code)
-		}
 	}
+	// The Sales tax module follows the tax permissions, not the Fees module: a Catalog Manager (tax:read and
+	// tax:classify-admin, no Fees access) reviews tax like a Tax Reviewer.
+	do("catalog", "GET", "/v1/staff/tax/reviews", nil, 200)
+	do("catalog", "POST", "/v1/staff/tax/reviews/AT-NUTS/approve", map[string]any{"reason": "Label and weight match"}, 200)
 	for _, s := range reads {
 		for _, who := range []string{"admin", "finance", "auditor"} {
 			do(who, s.method, s.path, s.body, 200)

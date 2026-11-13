@@ -26,6 +26,8 @@ import com.afrotransact.taxreturns.domain.profile.AuditAction;
 import com.afrotransact.taxreturns.domain.profile.AuditEntry;
 import com.afrotransact.taxreturns.domain.profile.ProfileStatus;
 import com.afrotransact.taxreturns.domain.profile.RecordStatus;
+import com.afrotransact.taxreturns.domain.profile.ReviewReason;
+import com.afrotransact.taxreturns.domain.profile.VariantClassification;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.port.TaxTelemetry;
 import com.afrotransact.taxreturns.port.VariantClassificationRepository;
@@ -279,5 +281,21 @@ class VariantClassificationServiceImplTest {
         assertThat(records.records.get("AT00000090").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
         assertThat(records.audit("AT00000090")).hasSize(1);
         verify(publisher, times(1)).publish(any(), any(), eq("AT00000090"), any());
+    }
+
+    @Test
+    void searchFiltersByReasonAndTextAndNamesTheSellersOfEachRecord() {
+        VariantClassificationService service = service(ApprovalPolicy.ALL);
+        service.onCatalogFactsChanged(event("nuts-seeds", "AT00000001", EXEMPT_NUTS, Map.of(), false));
+        service.onCatalogFactsChanged(event("nuts-seeds", "AT00000002", Map.of("is_candy", false), Map.of(), false));
+
+        VariantClassificationService.ReviewList missing = service.search(new VariantClassificationRepository.Filter(null, null, null,
+                null, false, ReviewReason.MISSING_FACT, null, null, false), 0, 25);
+        VariantClassificationService.ReviewList bySeller = service.search(new VariantClassificationRepository.Filter(null, null, null,
+                "org name matched", false, null, List.of("org_a"), null, false), 0, 25);
+
+        assertThat(missing.items()).extracting(VariantClassification::atin).containsExactly("AT00000002");
+        assertThat(bySeller.items()).extracting(VariantClassification::atin).containsExactlyInAnyOrder("AT00000001", "AT00000002");
+        assertThat(bySeller.sellers()).containsEntry("AT00000001", List.of("org_a")).containsEntry("AT00000002", List.of("org_a"));
     }
 }

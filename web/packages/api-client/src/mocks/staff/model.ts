@@ -30,6 +30,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
     label: 'Plans & billing',
     description: 'Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges.'
   },
+  tax: { label: 'Sales tax', description: 'What each item is for tax and who reviews it: the review queue, who calculates tax, category profiles, provider codes, filings and nexus.' },
   marketing: { label: 'Marketing', description: 'Announcements, placements & ads, the home page, and platform checkout coupons.' },
   disputes: { label: 'Disputes & returns', description: 'A-to-z claims and returns with SLAs.' },
   audit: { label: 'Audit log', description: 'Immutable, hash-chained record of every privileged action.' },
@@ -54,7 +55,7 @@ export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKe
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
   { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'deliveryQuotes', 'preorders'] },
   { key: 'partners', label: 'Partners', modules: ['orgs', 'apps', 'deptRequests', 'support', 'rbac'] },
-  { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'plans'] },
+  { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'tax', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
   { key: 'trust', label: 'Trust & compliance', modules: ['disputes', 'audit'] },
   { key: 'settings', label: 'Settings', modules: ['markets', 'siteCfg', 'dev', 'identity', 'notifications'] }
@@ -167,6 +168,11 @@ export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | 
     // Derived from the seller service's permissions, as the BFF does (identity's matrix has no Plans & billing column).
     const perms = permissionsOf(roles);
     return perms.includes('plans:manage') || perms.includes('billing:adjust') ? 'EDIT' : perms.includes('seller:billing') || perms.includes('billing:usage') ? 'VIEW' : null;
+  }
+  if (module === 'tax') {
+    // Derived from tax-returns' permissions, as the BFF does (identity's matrix has no Sales tax column).
+    const perms = permissionsOf(roles);
+    return perms.includes('tax:read') && perms.includes('tax:classify-admin') ? 'EDIT' : perms.includes('tax:read') ? 'VIEW' : null;
   }
   if (module === 'deliveryQuotes') {
     // Derived from orders' delivery-quotes permissions, as the BFF does (identity V41; the matrix has no column for it).

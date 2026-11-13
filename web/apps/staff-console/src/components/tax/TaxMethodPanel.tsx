@@ -133,7 +133,7 @@ function Loaded({ m }: { m: TaxMethod }) {
             ) : null
           )}
           <p className="m-0 text-sm">
-            <Link href="/fees?tab=tax-codes">Open the provider codes</Link>
+            <Link href="/tax?tab=tax-codes">Open the provider codes</Link>
           </p>
         </div>
       </Section>

@@ -62,9 +62,8 @@ func TestStaffTaxAuditSampleTab(t *testing.T) {
 	}
 
 	do("admin", "POST", "/v1/staff/tax/reviews/AT-AUDIT/approve", map[string]any{"reason": "Checked the label and the answers"}, 200)
-	if left := items(t, do("admin", "GET", "/v1/staff/tax/reviews?status=AUDIT_SAMPLE", nil, 200)); len(left) != 1 {
-		// the fake keeps listing its single sample record; what matters is that tax-returns got the confirm
-		t.Fatalf("unexpected sample list %v", left)
+	if left := items(t, do("admin", "GET", "/v1/staff/tax/reviews?status=AUDIT_SAMPLE", nil, 200)); len(left) != 0 {
+		t.Fatalf("a confirmed item leaves the audit sample: %v", left)
 	}
 	if f.bodies["POST /v1/tax/variant-classifications/AT-AUDIT/approve"]["reason"] != "Checked the label and the answers" {
 		t.Fatalf("approve body = %v", f.bodies["POST /v1/tax/variant-classifications/AT-AUDIT/approve"])

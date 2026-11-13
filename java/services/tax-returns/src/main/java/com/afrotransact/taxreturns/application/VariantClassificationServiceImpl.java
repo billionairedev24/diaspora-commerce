@@ -244,6 +244,15 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
 
     @Override
     @Transactional(readOnly = true)
+    public ReviewList search(VariantClassificationRepository.Filter filter, int page, int size) {
+        access.staff(TaxReturnsPermissions.TAX_READ);
+        VariantClassificationRepository.Page found = records.list(filter, page, size);
+        return new ReviewList(found.items(), found.total(),
+                records.sellerOrgIds(found.items().stream().map(VariantClassification::atin).toList()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ClassificationView get(String atin) {
         access.staff(TaxReturnsPermissions.TAX_READ);
         return view(load(atin));

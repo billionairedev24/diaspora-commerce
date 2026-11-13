@@ -61,6 +61,12 @@ public interface VariantClassificationService {
     VariantClassificationRepository.Page list(RecordStatus status, String categoryCode, String sellerOrgId, String q,
                                               boolean auditOnly, int page, int size);
 
+    /**
+     * The review queue: records within the filter (state, category, seller, reason, search text, sort), a page of them,
+     * with the organisations that sell each one (tax:read).
+     */
+    ReviewList search(VariantClassificationRepository.Filter filter, int page, int size);
+
     /** One record with its audit, evidence and stored decisions (tax:read); 404 tax.classification-not-found. */
     ClassificationView get(String atin);
 
@@ -157,5 +163,13 @@ public interface VariantClassificationService {
     record ClassificationView(VariantClassification record, Resolution resolution, List<Evidence> evidence,
                               List<AuditEntry> audit, List<ListingDecision> decisions, long ordersAffected,
                               String reviewReason) {
+    }
+
+    /**
+     * A page of the review queue.
+     *
+     * @param sellers organisation ids by ATIN: the owner first, then every seller seen in a stored decision
+     */
+    record ReviewList(List<VariantClassification> items, long total, Map<String, List<String>> sellers) {
     }
 }

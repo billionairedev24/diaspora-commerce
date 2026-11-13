@@ -20,7 +20,6 @@ import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
-import { settingsHref } from '@/lib/settings-sections';
 
 import { canHaveChildren, CHILD_LEVEL, moveTargets, productsInUse } from './model';
 import { TypeEditor } from './TypeEditor';
@@ -304,7 +303,7 @@ function NodeDetails({ node, nodes, canEdit, onMode }: { node: TaxonomyNode; nod
         {node.level === 'CATEGORY' && node.taxStatus ? (
           <Detail label={t('st.catalog.detail.taxStatus')}>
             <span data-testid="tax-status">{t(`st.catalog.taxStatus.${node.taxStatus}` as MessageKey)}</span>{' '}
-            <Link href={`${settingsHref('tax')}&tab=tax-profiles`} className="text-xs text-link hover:underline" data-testid="tax-screens-link">{t('st.catalog.detail.taxScreens')}</Link>
+            <Link href="/tax?tab=tax-profiles" className="text-xs text-link hover:underline" data-testid="tax-screens-link">{t('st.catalog.detail.taxScreens')}</Link>
           </Detail>
         ) : null}
         {!node.active && node.retiredReason ? <Detail label={t('st.catalog.detail.retiredFor')}>{node.retiredReason}</Detail> : null}

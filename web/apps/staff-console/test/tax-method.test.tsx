@@ -16,7 +16,7 @@ describe('Who calculates tax', () => {
   beforeEach(() => {
     resetStaffDb(NOW);
     asRoles('platform.super_admin');
-    nav.set('/fees?tab=tax-method');
+    nav.set('/tax?tab=tax-method');
   });
   afterEach(() => interceptStaff(null));
 
@@ -88,7 +88,7 @@ describe('Shadow report', () => {
   beforeEach(() => {
     resetStaffDb(NOW);
     asRoles('platform.super_admin');
-    nav.set('/fees?tab=tax-shadow');
+    nav.set('/tax?tab=tax-shadow');
   });
 
   it('says whether it is ready to cut over, check by check, with disagreement by category and sample lines', async () => {
@@ -109,7 +109,7 @@ describe('Shadow report', () => {
 
   it('explains that shadow mode is off instead of showing empty numbers', async () => {
     const user = userEvent.setup();
-    nav.set('/fees?tab=tax-method');
+    nav.set('/tax?tab=tax-method');
     const { unmount } = await renderScreen(<TaxMethodPanel />);
     await screen.findByRole('heading', { name: 'Our own rules works out the tax now' });
     await user.selectOptions(screen.getByLabelText('Shadow mode'), '');
@@ -118,14 +118,14 @@ describe('Shadow report', () => {
     await user.click(screen.getByRole('button', { name: 'Change' }));
     await screen.findByText(/Shadow mode: off/);
     unmount();
-    nav.set('/fees?tab=tax-shadow');
+    nav.set('/tax?tab=tax-shadow');
     await renderScreen(<TaxShadowPanel />);
     expect(await screen.findByText('Shadow mode is off')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Ready to cut over?' })).not.toBeInTheDocument();
   });
 
   it('refuses an end date before the start date', async () => {
-    nav.set('/fees?tab=tax-shadow&shadow.from=2026-11-09&shadow.to=2026-11-01');
+    nav.set('/tax?tab=tax-shadow&shadow.from=2026-11-09&shadow.to=2026-11-01');
     await renderScreen(<TaxShadowPanel />);
     expect(await screen.findByText('The end date must be after the start.')).toBeInTheDocument();
   });
