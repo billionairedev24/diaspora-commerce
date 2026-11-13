@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.imports.ImportMode;
@@ -44,6 +45,9 @@ public interface ProductImportRepository {
 
     /** The first {@code limit} importable rows still pending, in file order (offer and feed uploads: one row each). */
     List<StoredRow> pendingRows(UUID importId, int limit);
+
+    /** Of these row numbers, the ones that are still pending (the job saves only those). */
+    Set<Integer> pendingAmong(UUID importId, Collection<Integer> rowNumbers);
 
     /** Records what the job did with single rows: outcome, note, and the page, offer and ATIN they ended on. */
     void setRowResults(UUID importId, List<RowResult> results);

@@ -7,9 +7,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -209,6 +211,16 @@ class JdbcProductImportRepository implements ProductImportRepository {
         return jdbc.sql(ROW_SELECT + " where import_id = :id and outcome = 'PENDING' and status <> 'ERROR' "
                 + "order by row_number limit :limit").param("id", importId).param("limit", limit).query(this::mapRow)
                 .list();
+    }
+
+    @Override
+    public Set<Integer> pendingAmong(UUID importId, Collection<Integer> rowNumbers) {
+        if (rowNumbers.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(jdbc.sql("select row_number from product_import_row where import_id = :id "
+                + "and outcome = 'PENDING' and row_number in (:rows)").param("id", importId)
+                .param("rows", new ArrayList<>(rowNumbers)).query(Integer.class).list());
     }
 
     @Override

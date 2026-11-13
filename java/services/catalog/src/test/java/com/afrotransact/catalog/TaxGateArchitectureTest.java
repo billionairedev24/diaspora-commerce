@@ -142,9 +142,10 @@ class TaxGateArchitectureTest {
         // The offer writer is the only way a bulk row reaches an offer: offers-service applies the selling approval and
         // the tax rule. Nothing else in catalog creates or changes offers.
         ArchRule onlyTheJob = ArchRuleDefinition.noClasses()
-                .that().doNotHaveSimpleName("OfferImportJobImpl")
+                .that().doNotHaveSimpleName("OfferRowProcessorImpl")
                 .and().doNotHaveSimpleName("HttpOfferWriter")
-                .should().dependOnClassesThat().haveSimpleName("OfferWriter")
+                .and().resideOutsideOfPackage("..port..")
+                .should().dependOnClassesThat().haveSimpleNameStartingWith("OfferWriter")
                 .allowEmptyShould(true);
         onlyTheJob.check(CLASSES);
     }

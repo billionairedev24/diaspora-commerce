@@ -5,6 +5,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
@@ -22,6 +23,7 @@ import com.afrotransact.catalog.domain.Gtin;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ProductType;
+import com.afrotransact.catalog.domain.imports.CreateMatchSplit;
 import com.afrotransact.catalog.domain.imports.ExistingListing;
 import com.afrotransact.catalog.domain.imports.ImageColumns;
 import com.afrotransact.catalog.domain.imports.ImageLibrary;
@@ -43,7 +45,9 @@ import com.afrotransact.catalog.domain.imports.ParsedSheet;
 import com.afrotransact.catalog.domain.imports.ProductImport;
 import com.afrotransact.catalog.domain.imports.ReportRow;
 import com.afrotransact.catalog.domain.imports.RowImage;
+import com.afrotransact.catalog.domain.imports.RowHashes;
 import com.afrotransact.catalog.domain.imports.RowImages;
+import com.afrotransact.catalog.domain.imports.RowMessage;
 import com.afrotransact.catalog.domain.imports.RowOutcome;
 import com.afrotransact.catalog.domain.imports.RowStatus;
 import com.afrotransact.catalog.domain.imports.Severity;
@@ -51,7 +55,9 @@ import com.afrotransact.catalog.domain.imports.SheetRow;
 import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
 import com.afrotransact.catalog.domain.imports.SpreadsheetRejected;
 import com.afrotransact.catalog.domain.imports.StoredRow;
+import com.afrotransact.catalog.domain.imports.TargetKey;
 import com.afrotransact.catalog.domain.imports.TemplateSpec;
+import com.afrotransact.catalog.domain.imports.ValidatedRow;
 import com.afrotransact.catalog.domain.imports.ValidationResult;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
@@ -187,7 +193,7 @@ class ProductImportServiceImpl implements ProductImportService {
             PriceQtyResult feed = PriceQtyValidator.validate(sheet, settings.rowCap(wanted));
             result = feed.validation();
         } else {
-            result = ImportValidator.validate(sheet, context(sheet, wanted, fixed, owner));
+            result = validateProducts(sheet, wanted, fixed, owner);
         }
         UUID sameFile = imports.findLatestByHash(owner.orgId(), wanted, sha256).map(ProductImport::id).orElse(null);
         String name = fileName.replaceAll("[\\\\/]", "_");
@@ -203,6 +209,124 @@ class ProductImportServiceImpl implements ProductImportService {
                 owner.orgId(), upload.totalRows(), upload.validRows(), upload.warningRows(), upload.errorRows(),
                 upload.mode());
         return imports.findById(upload.id()).orElseThrow();
+    }
+
+    /**
+     * Create and update uploads. In a CREATE file, a row whose barcode matches a page somebody else owns is an offer row, not a
+     * new page (a warning tells the seller, the report shows the ATIN); the children of a parent group that is only partly on
+     * the page are filed as NEW_VARIANT requests (S393). Everything else is validated as before.
+     */
+    private ValidationResult validateProducts(ParsedSheet sheet, ImportMode mode, ProductType fixed, ListingOwner owner) {
+        if (mode != ImportMode.CREATE) {
+            return ImportValidator.validate(sheet, context(sheet, mode, fixed, owner));
+        }
+        // The same file again (S393): rows whose SKU is listed and whose content is unchanged are skipped, not duplicates.
+        Map<Integer, String> unchanged = unchangedRows(sheet, owner.orgId());
+        if (unchanged.isEmpty()) {
+            return validateNew(sheet, fixed, owner);
+        }
+        ParsedSheet remaining = new ParsedSheet(sheet.header(),
+                sheet.rows().stream().filter(r -> !unchanged.containsKey(r.rowNumber())).toList());
+        ValidationResult rest = remaining.rows().isEmpty() ? null : validateNew(remaining, fixed, owner);
+        List<ValidatedRow> rows = new ArrayList<>(rest == null ? List.of() : rest.rows());
+        for (SheetRow r : sheet.rows()) {
+            if (unchanged.containsKey(r.rowNumber())) {
+                rows.add(new ValidatedRow(r.rowNumber(), MatchedRowsJob.SKIP_GROUP + r.rowNumber(),
+                        unchanged.get(r.rowNumber()), RowStatus.VALID, List.of(), r.cells()));
+            }
+        }
+        rows.sort((a, b) -> Integer.compare(a.rowNumber(), b.rowNumber()));
+        return new ValidationResult(sheet.header(), rest == null ? List.of() : rest.fileWarnings(), rows,
+                rest == null ? List.of() : rest.products(), (rest == null ? 0 : rest.productCount()) + unchanged.size());
+    }
+
+    /**
+     * Rows of the file that are the same as when they were imported: the SKU is the organisation's and its stored content hash
+     * equals the row's. A parent group is skipped only when every one of its rows is.
+     */
+    private Map<Integer, String> unchangedRows(ParsedSheet sheet, String orgId) {
+        Integer skuCol = ImportColumns.resolve(sheet.header(), OfferImportColumns.readable(ImportMode.OFFER))
+                .get(OfferImportColumns.SELLER_SKU);
+        if (skuCol == null) {
+            return Map.of();
+        }
+        Set<String> skus = new LinkedHashSet<>();
+        for (SheetRow r : sheet.rows()) {
+            String sku = r.cell(skuCol).strip().toUpperCase(Locale.ROOT);
+            if (!sku.isEmpty()) {
+                skus.add(sku);
+            }
+        }
+        Map<String, String> stored = imports.rowHashes(orgId, skus);
+        if (stored.isEmpty()) {
+            return Map.of();
+        }
+        int parentCol = CreateMatchSplit.parentColumn(sheet.header());
+        Map<Integer, String> same = new HashMap<>();
+        Map<String, Boolean> groupAllSame = new HashMap<>();
+        for (SheetRow r : sheet.rows()) {
+            String sku = r.cell(skuCol).strip().toUpperCase(Locale.ROOT);
+            boolean unchangedRow = !sku.isEmpty() && RowHashes.of(r.cells()).equals(stored.get(sku));
+            if (unchangedRow) {
+                same.put(r.rowNumber(), sku.length() > 60 ? sku.substring(0, 60) : sku);
+            }
+            String parent = parentCol < 0 ? "" : r.cell(parentCol).strip().toUpperCase(Locale.ROOT);
+            if (!parent.isEmpty()) {
+                groupAllSame.merge(parent, unchangedRow, (a, b) -> a && b);
+            }
+        }
+        if (parentCol >= 0) {
+            same.keySet().removeIf(n -> {
+                SheetRow row = sheet.rows().stream().filter(x -> x.rowNumber() == n).findFirst().orElseThrow();
+                String parent = row.cell(parentCol).strip().toUpperCase(Locale.ROOT);
+                return !parent.isEmpty() && !groupAllSame.getOrDefault(parent, true);
+            });
+        }
+        return same;
+    }
+
+    private ValidationResult validateNew(ParsedSheet sheet, ProductType fixed, ListingOwner owner) {
+        ImportMode mode = ImportMode.CREATE;
+        ImportContext ctx = context(sheet, mode, fixed, owner);
+        List<TargetKey> keys = CreateMatchSplit.keysOf(sheet);
+        if (keys.isEmpty()) {
+            return ImportValidator.validate(sheet, ctx);
+        }
+        Map<String, OfferTarget> targets = matcher.resolve(owner.orgId(), keys);
+        CreateMatchSplit.Result split = CreateMatchSplit.split(sheet, targets, owner.orgId());
+        if (!split.any()) {
+            return ImportValidator.validate(sheet, ctx);
+        }
+        ValidationResult rest = split.rest().isEmpty() ? null
+                : ImportValidator.validate(new ParsedSheet(sheet.header(), split.rest()), ctx);
+        OfferImportResult offers = OfferImportValidator.validate(new ParsedSheet(sheet.header(), split.offers()),
+                new OfferImportContext(targets, Integer.MAX_VALUE));
+        List<ValidatedRow> rows = new ArrayList<>(rest == null ? List.of() : rest.rows());
+        for (ValidatedRow v : offers.validation().rows()) {
+            OfferTarget target = split.matched().get(v.rowNumber());
+            List<RowMessage> messages = new ArrayList<>();
+            messages.add(RowMessage.warning(ImportColumns.GTIN, -1, "This barcode is already on AfroTransact"
+                    + (target == null ? "" : " (" + target.atin() + ")") + ". We added your offer to that page and used its "
+                    + "photos and details."));
+            messages.addAll(v.messages());
+            boolean error = messages.stream().anyMatch(m -> m.severity() == Severity.ERROR);
+            rows.add(new ValidatedRow(v.rowNumber(), MatchedRowsJob.OFFER_GROUP + v.rowNumber(), v.sku(),
+                    error ? RowStatus.ERROR : RowStatus.WARNING, messages, v.cells()));
+        }
+        Integer skuCol = ImportColumns.resolve(sheet.header(), OfferImportColumns.readable(ImportMode.OFFER))
+                .get(OfferImportColumns.SELLER_SKU);
+        for (SheetRow r : split.variants()) {
+            String sku = skuCol == null ? "" : r.cell(skuCol).strip().toUpperCase(Locale.ROOT);
+            rows.add(new ValidatedRow(r.rowNumber(), MatchedRowsJob.VARIANT_GROUP + r.rowNumber(),
+                    sku.length() > 60 ? sku.substring(0, 60) : sku, RowStatus.WARNING, List.of(RowMessage.warning(null, -1,
+                    "This size or colour is not on the page yet. We send it for review, and the other sizes or colours "
+                            + "become offers.")), r.cells()));
+        }
+        rows.sort((a, b) -> Integer.compare(a.rowNumber(), b.rowNumber()));
+        List<String> fileWarnings = new ArrayList<>(rest == null ? List.of() : rest.fileWarnings());
+        offers.validation().fileWarnings().stream().filter(w -> !fileWarnings.contains(w)).forEach(fileWarnings::add);
+        return new ValidationResult(sheet.header(), fileWarnings, rows, rest == null ? List.of() : rest.products(),
+                (rest == null ? 0 : rest.productCount()) + split.offers().size() + split.variants().size());
     }
 
     /** One upload per mode at a time and a daily limit per organisation (S396); refused before anything is stored. */

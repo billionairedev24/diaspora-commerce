@@ -233,6 +233,26 @@ class OfferImportValidatorTest {
     }
 
     @Test
+    void aProductUploadsHeaderIsReadAsOfferTermsWhenItsBarcodeMatchedAPage() {
+        List<String> create = List.of("Parent SKU", "SKU", "Title", "Description", "Barcode (GTIN/UPC/EAN)", "Condition",
+                "Price (USD)", "Compare-at price (USD)", "Quantity", "Fulfilment", "Handling time (days)", "Image URLs");
+        OfferImportResult r = OfferImportValidator.validate(ImportFixtures.sheet(create,
+                new String[] {"", "tote-1", "Ankara tote bag", "Hand made", GTIN, "New", "24.99", "29.99", "7",
+                        "Ships from you", "3", "https://cdn.example.com/a.jpg"}), context(Map.of("gtin:" + GTIN, FOUND)));
+
+        ValidatedRow v = r.validation().rows().getFirst();
+        assertThat(v.status()).isEqualTo(RowStatus.WARNING);
+        assertThat(v.summary()).contains("This product is already in the catalog, so we used the existing photos and details.");
+        OfferRow o = r.importable().getFirst();
+        assertThat(o.sku()).isEqualTo("TOTE-1");
+        assertThat(o.atin()).isEqualTo("AT00000002");
+        assertThat(o.priceMinor()).isEqualTo(2499);
+        assertThat(o.listPriceMinor()).isEqualTo(2999L);
+        assertThat(o.quantity()).isEqualTo(7);
+        assertThat(o.handlingDays()).isEqualTo(3);
+    }
+
+    @Test
     void theKeysOfASheetAreTheLookupsTheCallerMustMake() {
         ParsedSheet sheet = ImportFixtures.sheet(HEADER, row(GTIN, "", "", "", "", "1", "", "1", "", "", ""),
                 row("", "at00000003", "", "", "", "1", "", "1", "", "", ""),

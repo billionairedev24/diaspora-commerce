@@ -37,6 +37,7 @@ import com.afrotransact.catalog.domain.imports.ImportedVariant;
 import com.afrotransact.catalog.domain.imports.LibraryImage;
 import com.afrotransact.catalog.domain.imports.ParsedSheet;
 import com.afrotransact.catalog.domain.imports.ProductImport;
+import com.afrotransact.catalog.domain.imports.RowHashes;
 import com.afrotransact.catalog.domain.imports.RowImages;
 import com.afrotransact.catalog.domain.imports.RowOutcome;
 import com.afrotransact.catalog.domain.imports.RowStatus;
@@ -89,11 +90,13 @@ class ImportJobImpl implements ImportJob {
     private final TransactionTemplate savepoint;
     private final ListingRulesService rules;
     private final OfferImportJob offerJob;
+    private final MatchedRowsJob matchedRows;
 
     ImportJobImpl(ProductImportRepository imports, ProductRepository products, SizeChartRepository sizeCharts,
                   CategoryRepository categories, ProductWriter writer, ImageImporter images, ImageLibraryLookup library,
                   SellerScopeGuard scopeGuard, DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions,
-                  ListingRulesService rules, OfferImportJob offerJob) {
+                  ListingRulesService rules, OfferImportJob offerJob, MatchedRowsJob matchedRows) {
+        this.matchedRows = matchedRows;
         this.offerJob = offerJob;
         this.rules = rules;
         this.imports = imports;
@@ -123,6 +126,11 @@ class ImportJobImpl implements ImportJob {
                 Next next = tx.execute(s -> next(importId));
                 if (next == null) {
                     return;
+                }
+                if (MatchedRowsJob.handles(next.groupKey())) {
+                    // Rows whose barcode matched an existing page: an offer on it, or a NEW_VARIANT request (S393).
+                    matchedRows.apply(next.upload(), next.groupKey(), next.rows());
+                    continue;
                 }
                 Prepared prepared = prepare(next.upload(), next.rows());
                 tx.executeWithoutResult(s -> write(importId, next.groupKey(), prepared));
@@ -396,6 +404,9 @@ class ImportJobImpl implements ImportJob {
             boolean created = prepared.create() != null;
             imports.setOutcome(importId, pending, created ? RowOutcome.CREATED : RowOutcome.UPDATED,
                     blankToNull(prepared.note()), Objects.requireNonNull(written).id());
+            if (created) {
+                rememberRows(u, groupKey, pending, written.id(), now);
+            }
             imports.update(u.progressed(pending.size(), created ? 1 : 0, created ? 0 : 1, 0, now));
         } catch (CatalogRuleViolation ex) {
             String fields = ex.fieldErrors().isEmpty() ? "" : " (" + String.join(", ", ex.fieldErrors().entrySet()
@@ -406,6 +417,18 @@ class ImportJobImpl implements ImportJob {
         } catch (ConflictException | NotFoundException | IllegalStateException | IllegalArgumentException ex) {
             fail(importId, u, pending, ex.getMessage(), now);
         }
+    }
+
+    /** The content hash of each row of a created product, so the same file uploaded again skips it (S393). */
+    private void rememberRows(ProductImport u, String groupKey, List<Integer> rowNumbers, UUID productId, Instant now) {
+        Map<String, ProductImportRepository.RowHash> hashes = new LinkedHashMap<>();
+        for (StoredRow r : imports.group(u.id(), groupKey)) {
+            if (rowNumbers.contains(r.rowNumber()) && r.sku() != null && !r.sku().isBlank()) {
+                hashes.put(r.sku().toUpperCase(Locale.ROOT), new ProductImportRepository.RowHash(
+                        RowHashes.of(r.cells()), productId));
+            }
+        }
+        imports.saveRowHashes(u.owner().orgId(), u.id(), now, hashes);
     }
 
     private void fail(UUID importId, ProductImport u, List<Integer> rows, String why, Instant now) {

@@ -100,6 +100,13 @@ public final class OfferImportColumns {
         all.add(new ImportColumn(ImportColumns.GTIN, "Barcode", "", false, ColumnKind.GTIN, null, "", false));
         all.add(new ImportColumn(ImportColumns.GTIN, "GTIN", "", false, ColumnKind.GTIN, null, "", false));
         all.add(new ImportColumn(MPN, "MPN", "", false, ColumnKind.TEXT, null, "", false));
+        // The product upload's own headers, so a CREATE row whose barcode matches a page is read as an offer (S393).
+        all.add(new ImportColumn(ImportColumns.PRICE, "Price (USD)", "", false, ColumnKind.MONEY, null, "", false));
+        all.add(new ImportColumn(LIST_PRICE, "Compare-at price (USD)", "", false, ColumnKind.MONEY, null, "", false));
+        all.add(new ImportColumn(ImportColumns.HANDLING, "Handling time (days)", "", false, ColumnKind.INTEGER, null, "",
+                false));
+        all.add(new ImportColumn(ImportColumns.GTIN, "Barcode (GTIN/UPC/EAN)", "", false, ColumnKind.GTIN, null, "", false));
+        all.add(new ImportColumn(ImportColumns.GTIN, "ISBN-13", "", false, ColumnKind.GTIN, null, "", false));
         return all;
     }
 

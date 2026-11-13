@@ -18,6 +18,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -71,7 +72,9 @@ class OfferImportJobTest {
     void setUp() {
         PlatformTransactionManager tm = mock(PlatformTransactionManager.class);
         when(tm.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
-        job = new OfferImportJobImpl(imports, matcher, offers, events, metrics, Clock.fixed(NOW, ZoneOffset.UTC), tm);
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        job = new OfferImportJobImpl(imports, new OfferRowProcessorImpl(imports, matcher, offers, metrics, clock, tm),
+                events, clock, tm);
         when(imports.update(any())).thenAnswer(i -> i.getArgument(0));
     }
 
@@ -88,10 +91,11 @@ class OfferImportJobTest {
     private void pending(ProductImport u, StoredRow... rows) {
         upload = u;
         when(imports.lock(IMPORT)).thenAnswer(i -> Optional.of(upload));
-        when(imports.pendingRows(eq(IMPORT), anyInt())).thenReturn(List.of(rows)).thenReturn(List.of(rows))
-                .thenReturn(List.of());
+        when(imports.pendingRows(eq(IMPORT), anyInt())).thenReturn(List.of(rows)).thenReturn(List.of());
         when(imports.rows(any(), any(), any(), anyInt(), anyInt())).thenReturn(
                 new ProductImportRepository.Page<>(List.of(), 0, 0, 1));
+        when(imports.pendingAmong(eq(IMPORT), any())).thenAnswer(i -> new HashSet<>(
+                (Collection<Integer>) i.getArgument(1)));
     }
 
     private void matches(OfferTarget target) {

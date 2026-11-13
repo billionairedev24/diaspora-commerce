@@ -71,7 +71,18 @@ class ImportMatcherImpl implements ImportMatcher {
                 blockers(e.blockers()));
     }
 
-    private static OfferTarget fromMatch(MatchResult r) {
+    /** A match with the organisation that owns the page, so a CREATE row for the seller's own page is not turned into an offer. */
+    private OfferTarget fromMatch(MatchResult r) {
+        OfferTarget target = fromResult(r);
+        if (target.kind() != OfferTarget.Kind.MATCH || target.ownerOrg() != null || target.atin() == null) {
+            return target;
+        }
+        String owner = products.findByVariantAtin(new Atin(target.atin())).map(pg -> pg.owner().orgId()).orElse(null);
+        return OfferTarget.match(target.atin(), target.parentAtin(), target.title(), owner, target.canOffer(),
+                target.blockers());
+    }
+
+    private static OfferTarget fromResult(MatchResult r) {
         return switch (r.result()) {
             case NO_MATCH -> OfferTarget.of(OfferTarget.Kind.NO_MATCH, "We could not find this product on AfroTransact. "
                     + "Add it with the products template.");
