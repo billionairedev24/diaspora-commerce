@@ -1668,7 +1668,7 @@
   "st.catalog.add.typeHelp": "Reuse the details of another product type, or start new ones you can edit next.",
   "st.catalog.add.basedOn": "New details start from",
   "st.catalog.add.basedOnHelp": "You can add, remove and change them right after.",
-  "st.catalog.add.general": "A general product (brand, material, details, made in)",
+  "st.catalog.add.general": "A general product (brand, material, details)",
   "st.catalog.add.done": "Added {name}",
   "st.catalog.add.doneType": "Added {name}. Refine the details sellers fill in below.",
   "st.catalog.rename.title": "Rename",

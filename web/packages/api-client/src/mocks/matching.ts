@@ -41,7 +41,7 @@ const cache = new Map<string, ProductWords>();
 function productWords(p: FixtureProduct): ProductWords {
   let w = cache.get(p.id);
   if (!w) {
-    w = { name: words(p.name), all: words([p.name, p.brand, p.comm, p.cat, p.origin].join(' ')) };
+    w = { name: words(p.name), all: words([p.name, p.brand, p.comm, p.cat].join(' ')) };
     cache.set(p.id, w);
   }
   return w;

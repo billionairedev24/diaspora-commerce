@@ -49,18 +49,18 @@ type Product struct {
 func defaultProducts() []Product {
 	return []Product{
 		{ATIN: "ATJOLLOF01", Title: "Jollof Seasoning", OwnerKind: "PLATFORM", SellerOrgID: "org_afrotransact_retail",
-			SellerName: "AfroTransact Retail", CategoryID: "cat-spices", Attributes: map[string]string{"brand": "Mama's", "origin": "Nigeria",
+			SellerName: "AfroTransact Retail", CategoryID: "cat-spices", Attributes: map[string]string{"brand": "Mama's",
 				"bullets": "Smoky tomato blend\nNo MSG", "community": "Nigerian"},
 			Variants: []Variant{{ATIN: "ATJOLLOFV1", Options: map[string]string{"Size": "6 oz"}, PriceMinor: 599, Stock: 3}}},
 		{ATIN: "ATSHEA0001", Title: "Raw Shea Butter", OwnerKind: "SELLER", SellerOrgID: "org_kente", SellerName: "Kente Naturals",
-			CategoryID: "cat-skin", Attributes: map[string]string{"brand": "Kente", "origin": "Ghana"},
+			CategoryID: "cat-skin", Attributes: map[string]string{"brand": "Kente"},
 			Variants: []Variant{{ATIN: "ATSHEAV001", Options: map[string]string{"Size": "8 oz"}, PriceMinor: 1250, Stock: 40},
 				{ATIN: "ATSHEAV002", Options: map[string]string{"Size": "16 oz"}, PriceMinor: 2000, Stock: 0}}},
 		{ATIN: "ATGARI0001", Title: "Ijebu Garri", OwnerKind: "PLATFORM", SellerOrgID: "org_afrotransact_retail",
 			SellerName: "AfroTransact Retail", CategoryID: "cat-grains", Attributes: map[string]string{"unit": "2 lb bag"},
 			Variants: []Variant{{ATIN: "ATGARIV001", PriceMinor: 899, Stock: 0}}},
 		{ATIN: SizedProductATIN, Title: "Adire Wrap Dress, Puff Sleeve", OwnerKind: "SELLER", SellerOrgID: "org_adire",
-			SellerName: "Adire Lagos", CategoryID: "cat-dresses", Attributes: map[string]string{"brand": "Adire Lagos", "origin": "Nigeria"},
+			SellerName: "Adire Lagos", CategoryID: "cat-dresses", Attributes: map[string]string{"brand": "Adire Lagos"},
 			Variants: []Variant{
 				{ATIN: "ATADIREV01", Options: map[string]string{"Size": "S", "Color": "Indigo adire"}, PriceMinor: 8900, Stock: 6},
 				{ATIN: "ATADIREV02", Options: map[string]string{"Size": "UK 12", "Color": "Indigo adire"}, PriceMinor: 8900, Stock: 4},

@@ -451,8 +451,7 @@ const PRODUCT_TYPE_SOURCES: Record<string, z.input<typeof ProductTypeSchemaSchem
     attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
     attr('allergens', 'Allergens (FALCPA)', ['None', 'Contains peanuts', 'Contains shellfish', 'Contains fish', 'Contains wheat', 'Contains soy'], { section: 'FOOD' }),
     attr('shelf', 'Shelf life', [], { kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'From the date of manufacture, unopened' }),
-    attr('storage', 'Storage', ['Room temperature', 'Refrigerate after opening'], { section: 'FOOD' }),
-    attr('origin', 'Country of origin')
+    attr('storage', 'Storage', ['Room temperature', 'Refrigerate after opening'], { section: 'FOOD' })
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['8 oz', '1 lb', '2 lb', '5 lb', '10 lb'] }] }, { name: 'Net weight × Pack', dimensions: [{ name: 'Net weight', options: ['1 lb', '5 lb'] }, { name: 'Pack', options: ['1', '2', '4'] }] }] },
   perishable: { code: 'perishable', label: 'frozen & perishable food', identifierRule: 'gtin', traits: { food: true, perishable: true, regulated: true, preorder: true }, attributes: [
     brandAttr('Brand', false, ['UNBRANDED'], 'The brand on the package. Leave it empty or choose “No brand” for loose or unlabelled produce.'),

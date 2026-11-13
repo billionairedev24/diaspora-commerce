@@ -133,8 +133,6 @@ export function ProductView({ atin }: { atin: string }) {
           <dl className={styles.facts}>
             <dt>{t('pdp.community')}</dt>
             <dd>{p.community}</dd>
-            <dt>{t('pdp.origin')}</dt>
-            <dd>{p.origin}</dd>
             <dt>{t('pdp.size')}</dt>
             <dd>{p.unit}</dd>
             <dt>{t('pdp.brand')}</dt>

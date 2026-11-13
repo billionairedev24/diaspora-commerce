@@ -3736,7 +3736,6 @@ export interface components {
                 community: string;
                 department: string;
                 unit: string;
-                origin: string;
                 bullets: string[];
                 rating: number;
                 reviewCount: number;

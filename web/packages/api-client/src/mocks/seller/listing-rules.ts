@@ -18,7 +18,7 @@ const META: Record<string, { control: string; attributeKey?: string; options?: s
   description: { control: 'long_text' }, keywords: { control: 'keywords' }, images: { control: 'images' }, label_photo: { control: 'photo' },
   condition: { control: 'condition' }, price: { control: 'money', perVariant: true }, quantity: { control: 'whole_number', perVariant: true },
   handling_days: { control: 'whole_number' }, ship_from: { control: 'ship_from' }, package_size: { control: 'package', perVariant: true },
-  package_weight: { control: 'package', perVariant: true }, country_of_origin: { control: 'text', attributeKey: 'origin' }, dangerous_goods: { control: 'yes_no' },
+  package_weight: { control: 'package', perVariant: true }, dangerous_goods: { control: 'yes_no' },
   net_weight: { control: 'measure', attributeKey: 'net_weight', units: ['oz', 'lb', 'g', 'kg', 'fl oz', 'ml', 'l'] },
   servings: { control: 'whole_number', attributeKey: 'servings' }, shelf_life: { control: 'measure', attributeKey: 'shelf', units: ['days', 'months', 'years'] },
   storage: { control: 'choice', attributeKey: 'storage', options: ['Room temperature', 'Cool and dry', 'Refrigerate', 'Freeze'] },

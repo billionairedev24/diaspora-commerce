@@ -116,7 +116,6 @@ type ProductInfo struct {
 	Community   string          `json:"community"`
 	Department  string          `json:"department"`
 	Unit        string          `json:"unit"`
-	Origin      string          `json:"origin"`
 	Bullets     []string        `json:"bullets"`
 	Rating      float64         `json:"rating"`
 	ReviewCount int             `json:"reviewCount"`

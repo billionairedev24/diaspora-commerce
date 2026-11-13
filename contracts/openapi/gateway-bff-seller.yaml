@@ -5539,7 +5539,7 @@ components:
       type: object
       required: [id, group, label, status, note, control, options, units, perVariant]
       properties:
-        id: {type: string, description: 'Stable field id (title, brand, product_id, label_photo, condition, package_size, country_of_origin, dangerous_goods, net_weight ...)'}
+        id: {type: string, description: 'Stable field id (title, brand, product_id, label_photo, condition, package_size, dangerous_goods, net_weight ...)'}
         group: {type: string}
         label: {type: string}
         status: {type: string, enum: [required, required_or_exemption, document, optional, hidden], description: 'hidden = not shown, not required, a submitted value is ignored. required_or_exemption = answer it, or give a reason in listing.exemptions.'}

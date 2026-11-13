@@ -267,7 +267,7 @@ func TestProductDetail(t *testing.T) {
 	pd := b.do("GET", "/v1/products/ATSHEA0001", nil).json(t)
 	prod := pd["product"].(map[string]any)
 	bb := pd["buyBox"].(map[string]any)
-	if prod["brand"] != "Kente" || prod["department"] != "Beauty" || prod["origin"] != "Ghana" || len(prod["variants"].([]any)) != 2 {
+	if prod["brand"] != "Kente" || prod["department"] != "Beauty" || len(prod["variants"].([]any)) != 2 {
 		t.Fatalf("product = %v", prod)
 	}
 	if bb["offerId"] != "ATSHEAV001" || num(bb, "availableQty") != 40 || bb["stockStatus"] != "IN_STOCK" ||

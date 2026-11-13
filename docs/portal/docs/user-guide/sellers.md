@@ -51,18 +51,17 @@ checklist where every item opens its field. Chips next to the category tell you 
 straight away, **Apply to sell** once (then every listing in that category or brand goes live), or whether it is **Not
 available**.
 
-- **Photos.** At least one picture. Packaged food, baby feeding, beauty, health products and pet food also need a
-  **label photo** (the ingredients and nutrition panel, the Supplement Facts or the Drug Facts). It is a slot of its own;
-  other pictures do not count. For packaged groceries you do not type the ingredients: the label photo covers it, and you
-  can tick the allergens it contains. Prepared food (cooked or baked by you) asks for typed ingredients and the allergen
-  list instead.
+- **Photos.** At least one picture. Baby feeding, beauty, health products and pet food also need a **label photo** (the
+  ingredients and nutrition panel, the Supplement Facts or the Drug Facts). It is a slot of its own; other pictures do not
+  count. For groceries the label photo is optional (it helps shoppers, and we may ask for it if we need it to check the tax
+  details); you can tick the allergens the product contains. Prepared food (cooked or baked by you) asks for typed
+  ingredients and the allergen list instead.
 - **Package size and weight.** Every physical product needs the length, width, height and weight of the box as shipped
   (at most 108 in on each side and 150 lb; you can type cm and kg). Give each size or colour its own box when they
   differ: a variant you leave empty starts from the first one, and **Same package for all variants** copies it down.
   Digital products, gift cards and services have no package.
-- **Country of origin** for every physical product, and the **dangerous goods** question (aerosols, flammables,
-  batteries, candles, cleaners) where it applies. A *yes* keeps the item out of Fulfilled by AfroTransact until we review
-  it.
+- **Dangerous goods.** Asked where it applies (aerosols, flammables, batteries, candles, cleaners). A *yes* keeps the
+  item out of Fulfilled by AfroTransact until we review it.
 - **Condition** (New, Renewed, Used) is asked only for electronics, books, general goods and toys. Everything else is
   listed as New, and car seats are always New.
 - **Product facts**: net weight, servings, shelf life or expiry, storage, material, model number, age grade. Where a

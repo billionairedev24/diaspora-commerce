@@ -653,7 +653,7 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]any{"categoryCode": code, "categoryName": "Rice & grains", "department": "Groceries & Food",
 			"kind": "PKG", "kindName": "Packaged food and drink", "approval": "open", "note": "", "provisional": false,
-			"fields": []map[string]any{{"id": "label_photo", "group": "Content", "label": "Label photo", "status": "required", "note": "", "control": "photo", "options": []string{}, "units": []string{}, "perVariant": false}},
+			"fields": []map[string]any{{"id": "label_photo", "group": "Content", "label": "Label photo", "status": "optional", "note": "", "control": "photo", "options": []string{}, "units": []string{}, "perVariant": false}},
 			"replacedAttributeKeys": []string{"allergens", "shelf"}})
 	})
 	mux.HandleFunc("GET /v1/product-types/{code}", func(w http.ResponseWriter, r *http.Request) {

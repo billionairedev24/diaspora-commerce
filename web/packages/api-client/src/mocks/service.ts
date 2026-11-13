@@ -164,7 +164,6 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
       community: p.comm,
       department: p.cat,
       unit: p.unit,
-      origin: p.origin,
       bullets: p.bullets,
       rating: p.rating,
       reviewCount: p.reviews,

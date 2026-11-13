@@ -82,7 +82,7 @@ function categoryCodeOf(leafId: string): string {
   return found;
 }
 
-const SAMPLE_ANSWER: Record<string, string> = { net_weight: '12 oz', shelf_life: '12 months', servings: '4', storage: 'Room temperature', allergens: 'None', country_of_origin: 'Nigeria' };
+const SAMPLE_ANSWER: Record<string, string> = { net_weight: '12 oz', shelf_life: '12 months', servings: '4', storage: 'Room temperature', allergens: 'None' };
 
 /** What a seeded listing already says to satisfy its category's listing rules (the seeded listings are good data). */
 function ruleAnswers(code: string): { attributes: Record<string, string>; label: boolean; package: boolean; dangerous: boolean; description: boolean } {
@@ -338,7 +338,7 @@ export function templateCsv(productType: string | undefined): string {
 /** The sample an .xlsx upload yields in the mock (three products, two rows with errors). */
 export const SAMPLE_UPLOAD: string[][] = [
   GENERIC_COLUMNS.map((c) => (c.required ? `${c.label} *` : c.label)),
-  ['', 'JOLLOF-SPICE-4', 'Groceries › Pantry › Spices & seasonings', 'Jollof Rice Seasoning, Smoky, 4 oz', 'Ade’s Kitchen', 'Our house blend.', 'New', 'https://example.com/jollof.jpg', 'jollof, spice', '6.99', '', '40', '', 'Yes', '', '', 'ingredients: Paprika, thyme, curry; allergens: None; shelf: 12 months; storage: Room temperature; origin: Nigeria', 'Ships from you', '2'],
+  ['', 'JOLLOF-SPICE-4', 'Groceries › Pantry › Spices & seasonings', 'Jollof Rice Seasoning, Smoky, 4 oz', 'Ade’s Kitchen', 'Our house blend.', 'New', 'https://example.com/jollof.jpg', 'jollof, spice', '6.99', '', '40', '', 'Yes', '', '', 'ingredients: Paprika, thyme, curry; allergens: None; shelf: 12 months; storage: Room temperature', 'Ships from you', '2'],
   ['', 'EGUSI-GROUND-1', 'Groceries › Pantry › Rice, grains & flours', 'Egusi, Ground, 1 lb', 'Ade’s Kitchen', '', 'New', 'https://example.com/egusi.jpg', '', '12.5O', '', '25', '4006381333932', 'No', '', '', '', 'Ships from you', '2'],
   ['ANKARA', 'ANKARA-M', 'Fashion › Women › Dresses', 'Ankara Wrap Dress, Puff Sleeve', 'Adire Lagos', '', 'New', 'https://example.com/ankara.jpg', 'ankara', '49.00', '65.00', '6', '', 'Yes', 'Size', 'Size: M', 'material: Cotton wax print; fit: Regular; length: Midi', 'Ships from you', '3'],
   ['ANKARA', 'ANKARA-L', 'Fashion › Women › Dresses', 'Ankara Wrap Dress, Puff Sleeve', 'Adire Lagos', '', 'New', 'https://example.com/ankara.jpg', 'ankara', '49.00', '65.00', '4', '', 'Yes', 'Size', 'Size: L', 'material: Cotton wax print; fit: Regular; length: Midi', 'Ships from you', '3'],

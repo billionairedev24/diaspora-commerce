@@ -4658,7 +4658,7 @@ components:
             - {type: 'null'}
         product:
           type: object
-          required: [atin, title, brand, community, department, unit, origin, bullets, rating, reviewCount, images, variants]
+          required: [atin, title, brand, community, department, unit, bullets, rating, reviewCount, images, variants]
           properties:
             atin: {$ref: '#/components/schemas/Atin'}
             title: {type: string}
@@ -4666,7 +4666,6 @@ components:
             community: {type: string}
             department: {type: string}
             unit: {type: string}
-            origin: {type: string}
             bullets: {type: array, items: {type: string}}
             rating: {type: number}
             reviewCount: {type: integer}

@@ -240,8 +240,7 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 		Product: domain.ProductInfo{
 			ATIN: productATIN, Title: p.Title, Brand: attr(p.Attributes, "brand"),
 			Community: attr(p.Attributes, "community", "communities", "cuisine"), Department: department, Unit: unit,
-			Origin: attr(p.Attributes, "origin", "countryOfOrigin", "country_of_origin"), Bullets: bulletsOf(p.Attributes),
-			Rating: p.Rating.Average, ReviewCount: p.Rating.Count, Images: images, Variants: variants,
+			Bullets: bulletsOf(p.Attributes), Rating: p.Rating.Average, ReviewCount: p.Rating.Count, Images: images, Variants: variants,
 		},
 		BuyBox:         buyBox,
 		OtherOffers:    otherOffers,

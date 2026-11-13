@@ -146,7 +146,6 @@ export const ProductDetailSchema = z.object({
     community: z.string(),
     department: z.string(),
     unit: z.string(),
-    origin: z.string(),
     bullets: z.array(z.string()),
     rating: z.number().min(0).max(5),
     reviewCount: z.number().int().min(0),

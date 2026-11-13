@@ -70,7 +70,6 @@ const choice = (key: string, label: string, options: string[], extra: Partial<Ta
 const BRAND = attr('brand', 'Brand or label', { kind: 'BRAND', options: ['UNBRANDED', 'HANDMADE'], help: 'The label on the garment. Choose “No brand” or “Handmade” if it has none.' });
 const BRAND_REQUIRED = attr('brand', 'Brand', { kind: 'BRAND', help: 'The brand printed on the product.' });
 const BRAND_OPTIONAL = attr('brand', 'Brand', { kind: 'BRAND', required: false, options: ['UNBRANDED'], help: 'The brand on the package.' });
-const ORIGIN = attr('origin', 'Made in');
 const traits = (t: Partial<TaxonomyTraits> = {}): TaxonomyTraits => ({ food: false, perishable: false, regulated: false, preorder: false, sizing: null, ...t });
 const measure = (key: string, label: string, help: string): TaxonomySuggestedMeasurement => ({ key, label, unit: 'CM', help });
 /** A sized product type (fashion): sellers write the charts, the type only suggests measurements. */
@@ -123,8 +122,7 @@ const TYPES: MockTaxonomyState['types'] = [
       choice('material', 'Material', ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend']),
       choice('fit', 'Fit', ['Regular', 'Fitted', 'Relaxed', 'Plus size']),
       choice('length', 'Length', ['Mini', 'Knee', 'Midi', 'Maxi']),
-      attr('care', 'Care'),
-      ORIGIN
+      attr('care', 'Care')
     ]
   },
   {
@@ -139,7 +137,7 @@ const TYPES: MockTaxonomyState['types'] = [
     version: 0,
     updatedAt: null,
     themes: [sizeColour(true)],
-    attributes: [BRAND, choice('material', 'Material', ['Cotton wax print', 'Cotton', 'Aso-oke', 'Lace']), attr('care', 'Care'), ORIGIN]
+    attributes: [BRAND, choice('material', 'Material', ['Cotton wax print', 'Cotton', 'Aso-oke', 'Lace']), attr('care', 'Care')]
   },
   {
     code: 'grocery',
@@ -155,8 +153,7 @@ const TYPES: MockTaxonomyState['types'] = [
       choice('allergens', 'Allergens', ['None', 'Contains peanuts', 'Contains gluten', 'Contains soy'], { section: 'FOOD' }),
       attr('shelf', 'Shelf life', { kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'From the date of manufacture, unopened' }),
       choice('storage', 'Storage', ['Room temperature', 'Refrigerate', 'Freeze'], { section: 'FOOD' }),
-      choice('tax_class', 'What best describes this food? (used for sales tax)', ['Packaged, shelf-stable', 'Fresh fruit or vegetables', 'Candy or sweets'], { required: false }),
-      ORIGIN
+      choice('tax_class', 'What best describes this food? (used for sales tax)', ['Packaged, shelf-stable', 'Fresh fruit or vegetables', 'Candy or sweets'], { required: false })
     ]
   },
   {
@@ -171,8 +168,7 @@ const TYPES: MockTaxonomyState['types'] = [
       BRAND_REQUIRED,
       attr('inci', 'Ingredients (INCI)', { kind: 'MULTILINE' }),
       choice('skin', 'Skin type', ['All', 'Dry', 'Oily', 'Sensitive']),
-      attr('mocra', 'MoCRA product listing number', { section: 'REGULATED', help: 'FDA Cosmetics Direct product listing number (MoCRA)' }),
-      ORIGIN
+      attr('mocra', 'MoCRA product listing number', { section: 'REGULATED', help: 'FDA Cosmetics Direct product listing number (MoCRA)' })
     ]
   },
   {
@@ -198,7 +194,7 @@ const TYPES: MockTaxonomyState['types'] = [
     version: 0,
     updatedAt: null,
     themes: [option()],
-    attributes: [BRAND, attr('material', 'Material'), attr('dims', 'Dimensions', { help: 'e.g. 18 × 18 in' }), ORIGIN]
+    attributes: [BRAND, attr('material', 'Material'), attr('dims', 'Dimensions', { help: 'e.g. 18 × 18 in' })]
   },
   {
     code: 'custom',
@@ -208,7 +204,7 @@ const TYPES: MockTaxonomyState['types'] = [
     version: 0,
     updatedAt: null,
     themes: [option(), sizeColour(false)],
-    attributes: [BRAND, attr('material', 'Material'), attr('details', 'Details', { kind: 'MULTILINE' }), ORIGIN]
+    attributes: [BRAND, attr('material', 'Material'), attr('details', 'Details', { kind: 'MULTILINE' })]
   }
 ];
 
@@ -432,7 +428,7 @@ export const categoryRequestsDef: MockResource = {
             field('categoryName', 'Category name (only when it goes under a department)', 'text', false, { maxLength: 80, help: 'Defaults to the requested name' }),
             field('productType', 'Details sellers fill in', 'select', true, { options: typeOptions(), value: NEW_TYPE }),
             field('basedOn', 'A new product type starts from', 'select', false, {
-              options: [{ value: 'custom', label: 'A general product (material, details, brand, made in)' }, ...typeOptions().slice(1)],
+              options: [{ value: 'custom', label: 'A general product (material, details, brand)' }, ...typeOptions().slice(1)],
               value: 'custom',
               help: 'Refine its details afterwards under Categories'
             }),

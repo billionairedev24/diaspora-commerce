@@ -5299,7 +5299,7 @@ export interface components {
             status?: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
         };
         ListingRuleField: {
-            /** @description Stable field id (title, brand, product_id, label_photo, condition, package_size, country_of_origin, dangerous_goods, net_weight ...) */
+            /** @description Stable field id (title, brand, product_id, label_photo, condition, package_size, dangerous_goods, net_weight ...) */
             id: string;
             group: string;
             label: string;
