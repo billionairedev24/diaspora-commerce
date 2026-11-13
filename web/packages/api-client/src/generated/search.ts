@@ -219,6 +219,8 @@ export interface components {
              * @enum {string}
              */
             semanticSkipped?: "SHORT_QUERY" | "NOT_CONFIGURED" | "SORTED" | "DEEP_PAGE" | "EMBEDDER_UNAVAILABLE" | "EMBEDDER_TIMEOUT";
+            /** @description Distinct sellers among the matching products. Present only with eligibleOnly=true (exact up to 1000, an estimate above). */
+            distinctSellers?: number;
             /** Format: int64 */
             tookMs?: number;
             /** @description Identifies this search for click reporting */
@@ -272,6 +274,13 @@ export interface operations {
                 /** @description Delivery within N days */
                 maxDays?: number;
                 inStock?: boolean;
+                /**
+                 * @description Home, nav, footer and sitemap counts (S415). Restricts hits AND facets to products a shopper may be shown: live,
+                 *     in stock and `photo_ok` (a real photograph: http(s) or site-relative, not svg, ico, data: or a placeholder path).
+                 *     With it the page also carries `distinctSellers` and the `department`, `communities` and `sellers` facets count only
+                 *     eligible products. Same behaviour on Meilisearch and Elasticsearch.
+                 */
+                eligibleOnly?: boolean;
                 lat?: number;
                 lon?: number;
                 withinMiles?: number;

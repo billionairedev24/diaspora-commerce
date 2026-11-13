@@ -45,7 +45,7 @@ import {
 import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type SearchPage, SearchPageSchema, type SearchQuery, type Suggestions, SuggestionsSchema } from './schemas/search';
 import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './schemas/site';
-import { type SiteNavigation, SiteNavigationSchema } from './schemas/site-nav';
+import { type SiteCommunityResolution, SiteCommunityResolutionSchema, type SiteNavigation, SiteNavigationSchema, type SiteSitemap, SiteSitemapSchema } from './schemas/site-nav';
 import { toApiSearchParams } from './search-params';
 import { shopperMethods } from './shopper-client';
 
@@ -61,9 +61,15 @@ export function createApiClient(options: ApiClientOptions) {
   return {
     /* Site & content */
     getSiteConfig: (signal?: AbortSignal): Promise<SiteConfig> => request('/v1/site-config', SiteConfigSchema, { signal }),
-    getHome: (signal?: AbortSignal): Promise<Home> => request('/v1/home', HomeSchema, { signal }),
-    /** Departments and communities that exist right now (eligible-only counts), plus whether Services has any provider. */
-    getNavigation: (signal?: AbortSignal): Promise<SiteNavigation> => request('/v1/site/departments', SiteNavigationSchema, { signal }),
+    /** The composed home. The variety headers (visitor, visit window, seen keys, variant, crawler flag) travel as client `headers`; without them the page is the deterministic default. */
+    getHome: (signal?: AbortSignal, locale?: string): Promise<Home> => request('/v1/home', HomeSchema, { query: { locale }, signal }),
+    /** Header bar, All menu, footer communities and the Services, Deals and Brand entries, from the same eligible-only counts as the home. */
+    getNavigation: (locale?: string, signal?: AbortSignal): Promise<SiteNavigation> => request('/v1/site/navigation', SiteNavigationSchema, { query: { locale }, signal }),
+    /** Resolves /communities/{slug}: 200 when visible (`canonical: false` = redirect to `community.key`), a 404 problem when hidden or unknown. */
+    getCommunity: (slug: string, locale?: string, signal?: AbortSignal): Promise<SiteCommunityResolution> =>
+      request(`/v1/site/communities/${encodeURIComponent(slug)}`, SiteCommunityResolutionSchema, { query: { locale }, signal }),
+    /** Department and community URLs for the sitemap: only entries with eligible products, communities only above the thresholds. */
+    getSitemapSources: (signal?: AbortSignal): Promise<SiteSitemap> => request('/v1/site/sitemap', SiteSitemapSchema, { signal }),
     getRecentlyViewed: (atins: readonly string[], signal?: AbortSignal): Promise<ProductSummary[]> =>
       request('/v1/home/recently-viewed', RecentlyViewedSchema, { query: { atins: atins.join(',') }, signal }).then((r) => r.items),
     subscribeNewsletter: (email: string) => request('/v1/newsletter/subscriptions', NewsletterResponseSchema, { method: 'POST', body: { email } }),

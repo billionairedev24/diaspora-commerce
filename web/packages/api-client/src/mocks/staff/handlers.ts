@@ -10,9 +10,9 @@ import { bffProblemType } from '../../problem-types';
 import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import { type AccessLevel, type ChartSpec } from '../../schemas/seller';
 import {
-  type DetailSection,
   type Customer360,
   DeliveryTariffSchema,
+  type DetailSection,
   type DriverSuggestions,
   FieldValueSchema,
   NotificationCategorySchema,
@@ -53,11 +53,11 @@ import { parseSort, queryRows, type SortKey } from '../table';
 import { contentPageHandlers } from './content-pages';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { departmentHandlers, pendingDepartmentRequests } from './departments';
-import { homeSettingsHandlers } from './home-settings';
 import { canAdvance, planRun } from './dispatch';
 import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, FEE_ORGS, feeRecords, feesOverview, feeView, MOCK_RETAIL_ORG_ID, quoteDelivery, searchFeeOrgs } from './fees';
 import { staffHomeModules } from './home-modules';
+import { homeSettingsHandlers } from './home-settings';
 import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop, stepUpErrors } from './identity';
 import { MOCK_DRIVERS, MOCK_STAFF } from './lookups';
 import { marketHandlers } from './markets';

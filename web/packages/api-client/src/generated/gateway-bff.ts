@@ -60,8 +60,175 @@ export interface paths {
          *     photograph (never a placeholder or icon); the same rule applies to every product rail. A rule with nothing eligible
          *     drops its cell, and a tile left with fewer than two rule cells is dropped. Signed-in shoppers with past orders get a
          *     leading "Based on your orders" rail (id `based-on-orders`), absent when there is nothing to show.
+         *
+         *     **Dynamic home (version 2, S416 to S430).** When `home.dynamic` is `on` the page is built from what exists. A signals
+         *     snapshot (eligible-only counts, cached 60 s) is evaluated against the staff-editable module rules BEFORE any module
+         *     resolves; a hidden module costs no upstream call. The catalogue decides the page: 0 products gives a text-only
+         *     `brand-hero` plus a `sell-band`; more products add department tiles, rails, deals, top sellers, communities (only when
+         *     3 communities each have 8 eligible products and 2 sellers, by default), services and so on. Every threshold is a staff
+         *     setting (`GET /v1/staff/home/settings`).
+         *
+         *     **Variety (the page differs between visits).** Each module draws from a pool larger than it shows and picks a different
+         *     subset per visit with a seeded, quality-weighted shuffle. The seed is `visitor + visit window`: the same within one visit
+         *     (refresh and back do not reshuffle) and new after 30 minutes of inactivity (guests: the storefront starts a new window
+         *     on each full page load of a new visit). Items shown on the last few loads are down-weighted (novelty memory: server
+         *     side per signed-in shopper, the `X-Home-Seen` header for guests, kept in a first-party cookie by the storefront), and
+         *     items in Recently viewed or the cart are excluded from discovery modules. Module order rotates inside staff-defined
+         *     bands (the hero stays first, the sponsored cap is respected). Crawlers (`X-Crawler: 1` or a known bot user agent) and
+         *     `noindex` variants get the deterministic default order: no randomness. A seller supplies at most `sellerShare` items
+         *     (default 2) of one module and a product appears once on the page.
+         *
+         *     **Caching.** The response is per visit and `private, no-store` (storefront HTML stays uncached, see seo.md). The
+         *     gateway caches the shared data it draws from (signals and candidate pools, keyed by market, region, locale and variant)
+         *     for 60 s fresh and 300 s stale. Crawler responses are `public, max-age=60, stale-while-revalidate=300` with
+         *     `Vary: X-Crawler, Accept-Language`. Blocks with `scope: shared` hold no visitor field.
+         *
+         *     **Copy.** Generated modules carry `titleKey`/`subKey`/`ctaKey` and `titleParams`, never English sentences; the storefront
+         *     resolves them from `contracts/i18n/home-copy.json` (en, fr, es, ar, yo; non-English entries are machine drafts marked
+         *     `needsReview`). Staff-authored placement copy stays as authored (English fallback).
+         *
+         *     **Staff reproduction.** With a staff session and `debug=1` the response carries `debug` (per-module eligibility reason
+         *     and the variety seed), and `seed` replays an exact view.
          */
         get: operations["getHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/home/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count an impression or a click on an organic home module (aggregate, no identity)
+         * @description The storefront reports each module once per view (impression: 50 percent visible for 500 ms) and on click, only with
+         *     analytics consent. Counted per module, event, variant and locale; nothing identifies the shopper. `module` must be a
+         *     registry module key (unknown keys are rejected, which keeps the metric label set small and fixed).
+         */
+        post: operations["recordHomeModuleEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/site/navigation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Header bar, All departments menu, footer communities and the Services and Deals entries, from live counts
+         * @description Replaces every literal department or community list in the storefront. Generated from the live catalog taxonomy and
+         *     the eligible-only counts (live, RESOLVED tax decision, in stock, real photo), so nav, footer, sitemap and the home
+         *     agree. A department with no eligible product is not linked. `bar` is the largest departments by count (at most 7);
+         *     `all` is every department with at least one eligible product. Labels are short display labels derived from the
+         *     catalog full names (staff can edit them in Home settings) in the requested locale, falling back to the catalog name.
+         *     `services.available` is true whenever any provider exists in the market; `deals.available` and `brand.available`
+         *     follow their module rules. Communities appear only above the staff thresholds (default 3 communities, each with 8
+         *     eligible products and 2 sellers).
+         */
+        get: operations["getSiteNavigation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/site/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catalog departments with eligible counts, display labels and a real product photo
+         * @description The single source of department choices: the nav, the department tiles and the staff tile-rule picker all read this.
+         *     Only departments with at least one eligible product are listed (`includeEmpty=true`, staff picker only, adds the
+         *     empty ones with `count: 0` and no `href`).
+         */
+        get: operations["listSiteDepartments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/site/communities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Visible communities (above the thresholds) with canonical keys, locale labels and a real product photo
+         * @description A community is the optional facet over the product `community` attribute. Case and alias variants (`nigerian`,
+         *     `Nigerian`) merge into one canonical key through the community registry. The list is empty unless the module
+         *     threshold is met (default 3 communities each with 8 eligible products and 2 sellers); below it a community is absent
+         *     from home, nav, footer and sitemap. The photo is the best eligible product of the community unless staff uploaded an
+         *     editorial image that passes the real-photo check. `label` and `href` come from the same `key`.
+         */
+        get: operations["listSiteCommunities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/site/communities/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve a /communities/{slug} route
+         * @description 200 with the community when it is visible. An alias or a case variant answers 200 with `canonical: false`; the
+         *     storefront redirects (308) to `community.key`. A community below the thresholds, or an unknown one, answers 404 with
+         *     problem type `community.not-visible`; the storefront shows its 404 (never a zero-result page).
+         */
+        get: operations["getSiteCommunity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/site/sitemap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Department and community URLs for the sitemap, from the same counts as the home and the nav
+         * @description Only entries with eligible products (and communities above the thresholds). `lastmod` is the newest eligible product
+         *     change in that entry. The sitemap and the home read one snapshot, so they cannot disagree.
+         */
+        get: operations["getSiteSitemapSources"];
         put?: never;
         post?: never;
         delete?: never;
@@ -80,7 +247,7 @@ export interface paths {
         /**
          * Product cards for the products this browser viewed last
          * @description The storefront remembers viewed ATINs in the browser (nothing is stored server side) and asks for their cards here.
-         *     Order is kept (most recent first); unknown, unavailable, out-of-stock and photo-less products are dropped. The
+         *     Order is kept (most recent first); a product is listed once (variant ATINs collapse to their product, at most 12 cards); unknown, unavailable, out-of-stock, held-for-tax and photo-less products are dropped. The
          *     storefront hides the rail when `items` is empty.
          */
         get: operations["getRecentlyViewed"];
@@ -4092,6 +4259,148 @@ export interface components {
             href: string;
             items: components["schemas"]["ProductSummary"][];
         };
+        /** @description Label per locale. `en` is always present; a missing locale falls back to `en`, never to a key. */
+        LocaleLabels: {
+            en: string;
+            fr?: string;
+            es?: string;
+            ar?: string;
+            yo?: string;
+        };
+        SiteDepartment: {
+            /**
+             * @description Stable slug of the catalog department, for example groceries-food.
+             * @example groceries-food
+             */
+            key: string;
+            /**
+             * @description Catalog full name (the `department` search filter value)
+             * @example Groceries & Food
+             */
+            name: string;
+            /**
+             * @description Short display label in the requested locale (derived from the full name, staff-editable).
+             * @example Groceries
+             */
+            label: string;
+            labels: components["schemas"]["LocaleLabels"];
+            /** @description i18n key `dept.<key>` when the storefront catalog has one. */
+            labelKey?: string;
+            /** @description Eligible products */
+            count: number;
+            /** @description Distinct sellers of those products */
+            sellers: number;
+            /**
+             * @description Absent when count is 0 (not linked).
+             * @example /s?dept=Groceries+%26+Food
+             */
+            href?: string;
+            /** @description Photo of the best eligible product of the department; never an icon or emoji */
+            imageUrl?: string | null;
+        };
+        SiteCommunity: {
+            /**
+             * @description Canonical slug from the registry (lowercase), for example nigerian.
+             * @example nigerian
+             */
+            key: string;
+            label: string;
+            labels: components["schemas"]["LocaleLabels"];
+            count: number;
+            sellers: number;
+            /** @example /communities/nigerian */
+            href: string;
+            /** @description A real top product photo */
+            imageUrl?: string | null;
+            /** @enum {string} */
+            imageSource?: "product" | "editorial" | "none";
+        };
+        SiteServices: {
+            /** @description True whenever any provider exists in the market */
+            available: boolean;
+            providers?: number;
+            /** @example /services */
+            href: string;
+        };
+        SiteNavigation: {
+            bar: components["schemas"]["SiteDepartment"][];
+            all: components["schemas"]["SiteDepartment"][];
+            communities: components["schemas"]["SiteCommunity"][];
+            services: components["schemas"]["SiteServices"];
+            deals: {
+                available: boolean;
+            };
+            brand: {
+                available: boolean;
+            };
+            /** Format: date-time */
+            generatedAt: string;
+        };
+        SitemapEntry: {
+            href: string;
+            count: number;
+            /** Format: date-time */
+            lastmod?: string;
+        };
+        /** @description A bookable service (provider, from price, real photo, city). Needs no physical product. */
+        ServiceCard: {
+            id: string;
+            title: string;
+            provider: string;
+            city?: string;
+            /** Format: int64 */
+            fromPriceMinor?: number | null;
+            currency?: string;
+            /** @description Null when there is no real photo: render text only, never an icon or emoji. */
+            imageUrl?: string | null;
+            href: string;
+        };
+        HomeTracking: {
+            module: string;
+            position: number;
+            variant: string;
+        };
+        /** @description What the storefront needs to continue the visit. */
+        HomeVisit: {
+            /** @description The visit window the page was composed for (echo of X-Visit-Window */
+            window: string;
+            /** @description Short keys of the items this page shows. Guests append them to the `at_hs` cookie (keep the last 3 loads, about 120 keys) and send it back as X-Home-Seen. Not the product ids. */
+            seen: string[];
+            /** @description True when the order is the default one (crawler */
+            deterministic?: boolean;
+        };
+        HomeModuleDecision: {
+            module: string;
+            /** @description Staff-readable module name */
+            label: string;
+            shown: boolean;
+            order?: number;
+            /** @enum {string} */
+            reason: "shown" | "disabled-by-staff" | "not-enough-products" | "not-enough-sellers" | "not-fresh-enough" | "not-enough-departments" | "no-shopper-signal" | "nothing-to-show" | "sponsored-cap" | "page-full";
+            /** @description Sentence in staff words, naming modules and units, never ids. */
+            detail: string;
+            /** @description Live count against the threshold */
+            have?: number;
+            need?: number;
+            units?: string[];
+            /** @description Eligible items in the variety pool */
+            pool?: number;
+            /** @description Items shown after the shuffle and guards */
+            picked?: number;
+            band?: string;
+        };
+        /** @description Staff only (session with marketing access and debug=1). */
+        HomeDebug: {
+            /** @description Replay with ?seed=...: same visitor, window, variant and as-of produce the same view. */
+            seed: string;
+            visitor?: string;
+            visitWindow?: string;
+            /** @description Items remembered from earlier loads */
+            noveltyMemory?: number;
+            /** @enum {string} */
+            dynamic?: "off" | "shadow" | "on";
+            decisions: components["schemas"]["HomeModuleDecision"][];
+        };
         /**
          * @description One module of the home page body, in the order staff set. `type` decides which fields are filled; clients ignore
          *     types they do not know. Paid modules (`brand-banner`, `sponsored-products`, `ad-row`, `advertorial`, `banner`) always carry
@@ -4101,7 +4410,7 @@ export interface components {
          */
         HomeBlock: {
             id: string;
-            /** @description rail, banner, brand-banner, sponsored-products, ad-row, advertorial, deals, based-on-orders, recently-viewed, preorders, services-near-you, community-spotlight, seller-spotlight, membership-promo, signin-promo, occasions */
+            /** @description rail, banner, brand-banner, sponsored-products, ad-row, advertorial, deals, based-on-orders, recently-viewed, preorders, services-near-you, community-spotlight, seller-spotlight, membership-promo, signin-promo, occasions, brand-hero, sell-band, department-tiles, community-tiles, service-cards */
             type: string;
             sponsored: boolean;
             advertiser?: string;
@@ -4126,6 +4435,11 @@ export interface components {
                 href: string;
                 imageUrl: string | null;
                 sub?: string;
+                /** @description Department or community key the label and href were both made from. */
+                key?: string;
+                labelKey?: string;
+                labels?: components["schemas"]["LocaleLabels"];
+                count?: number;
             }[];
             /**
              * Format: date-time
@@ -4136,8 +4450,39 @@ export interface components {
             searchId?: string;
             /** @description Most times one browser session shows this paid module (0 = no cap) */
             maxPerSession?: number;
+            /** @description Registry module that produced a generated block (hero, deals, department-tiles, communities, services-near-you, new-arrivals, top-sellers, groceries-rail, department-rail, preorder, plus, brand-hero, sell-band). */
+            module?: string;
+            /**
+             * @description `shared` blocks are the same for every visitor of a market, region, locale and variant and hold no personal field; `visitor` blocks (continue shopping, recently viewed) depend on the visitor.
+             * @enum {string}
+             */
+            scope?: "shared" | "visitor";
+            /** @description i18n key in contracts/i18n/home-copy.json. When present `title` is empty. */
+            titleKey?: string;
+            /** @description Values for {city}, {department}, {community}, {day}. */
+            titleParams?: {
+                [key: string]: string;
+            };
+            subKey?: string;
+            ctaKey?: string;
+            bodyKey?: string;
+            services?: components["schemas"]["ServiceCard"][];
+            /** @description True when the block has no real photo and must render as text (a brand hero, a hero slide without an image). */
+            textOnly?: boolean;
+            tracking?: components["schemas"]["HomeTracking"];
         };
         Home: {
+            /**
+             * @description 2 when the dynamic home composed the page.
+             * @enum {integer}
+             */
+            version?: 1 | 2;
+            /** Format: date-time */
+            generatedAt?: string;
+            locale?: string;
+            variant?: string;
+            visit?: components["schemas"]["HomeVisit"];
+            debug?: components["schemas"]["HomeDebug"];
             announcements: components["schemas"]["Announcement"][];
             hero: components["schemas"]["HeroSlide"][];
             tiles: components["schemas"]["Tile"][];
@@ -6398,8 +6743,26 @@ export interface operations {
     };
     getHome: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                /** @description Language of department and community labels (default: Accept-Language, then en). */
+                locale?: "en" | "fr" | "es" | "ar" | "yo";
+                /** @description Staff session only: include `debug`. Ignored (no field) for everyone else. */
+                debug?: boolean;
+                /** @description Staff session only: replay a variety seed (`debug.seed` of an earlier view). */
+                seed?: string;
+            };
+            header?: {
+                /** @description Opaque first-party visitor id (cookie `at_vid`, set by the storefront). Absent: the page is the deterministic default. */
+                "X-Visitor-Id"?: string;
+                /** @description Opaque id of the current visit (cookie `at_visit`, 30 minute sliding expiry, new on a new visit). Part of the variety seed. */
+                "X-Visit-Window"?: string;
+                /** @description Guests: comma separated item keys (`Home.visit.seen`) of the last few home loads, kept in a first-party cookie. Signed-in shoppers: ignored, the server remembers. */
+                "X-Home-Seen"?: string;
+                /** @description Experiment variant assigned by the Worker cookie; part of the shared cache key. */
+                "X-Home-Variant"?: string;
+                /** @description Set by the Worker for known crawlers and for noindex variants: deterministic page, no randomness. */
+                "X-Crawler"?: boolean;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6408,6 +6771,9 @@ export interface operations {
             /** @description Placements */
             200: {
                 headers: {
+                    /** @description `private, no-store` for visitors; `public, max-age=60, stale-while-revalidate=300` for crawlers. */
+                    "Cache-Control"?: string;
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6416,10 +6782,177 @@ export interface operations {
             };
         };
     };
+    recordHomeModuleEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @example department-tiles */
+                    module: string;
+                    /** @enum {string} */
+                    event: "impression" | "click";
+                    position?: number;
+                    variant?: string;
+                    /** @enum {string} */
+                    target?: "product" | "department" | "community" | "service" | "other";
+                };
+            };
+        };
+        responses: {
+            /** @description Counted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["ValidationProblem"];
+        };
+    };
+    getSiteNavigation: {
+        parameters: {
+            query?: {
+                locale?: "en" | "fr" | "es" | "ar" | "yo";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Navigation */
+            200: {
+                headers: {
+                    /** @example public, max-age=60, stale-while-revalidate=300 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteNavigation"];
+                };
+            };
+        };
+    };
+    listSiteDepartments: {
+        parameters: {
+            query?: {
+                locale?: "en" | "fr" | "es" | "ar" | "yo";
+                includeEmpty?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Departments */
+            200: {
+                headers: {
+                    /** @example public, max-age=60, stale-while-revalidate=300 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        departments: components["schemas"]["SiteDepartment"][];
+                        /** Format: date-time */
+                        generatedAt: string;
+                    };
+                };
+            };
+        };
+    };
+    listSiteCommunities: {
+        parameters: {
+            query?: {
+                locale?: "en" | "fr" | "es" | "ar" | "yo";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Communities */
+            200: {
+                headers: {
+                    /** @example public, max-age=60, stale-while-revalidate=300 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        communities: components["schemas"]["SiteCommunity"][];
+                        /** Format: date-time */
+                        generatedAt: string;
+                    };
+                };
+            };
+        };
+    };
+    getSiteCommunity: {
+        parameters: {
+            query?: {
+                locale?: "en" | "fr" | "es" | "ar" | "yo";
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Visible community */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        community: components["schemas"]["SiteCommunity"];
+                        /** @description True when the requested slug is the canonical key; false means redirect to community.key. */
+                        canonical: boolean;
+                    };
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    getSiteSitemapSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entries */
+            200: {
+                headers: {
+                    /** @example public, max-age=300 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        departments: components["schemas"]["SitemapEntry"][];
+                        communities: components["schemas"]["SitemapEntry"][];
+                    };
+                };
+            };
+        };
+    };
     getRecentlyViewed: {
         parameters: {
             query: {
-                /** @description Comma separated ATINs, most recent first; at most 12 are used. */
+                /** @description Comma separated ATINs (product or variant), most recent first; at most 20 are used. */
                 atins: string;
             };
             header?: never;

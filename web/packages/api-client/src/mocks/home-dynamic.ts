@@ -1,22 +1,54 @@
 /* The mock BFF's dynamic home (docs/engineering/dynamic-home.md): a TypeScript model of the gateway's eligibility engine, used only by
-   the MSW handlers, the Playwright mock BFF and the staff preview mock. The real gateway composes in Go; this mirrors its contract so the
-   storefront and the staff console can be built and tested against 0 / 10 / 100 / 10,000-product catalogues.
-   Rules (all staff-editable defaults): communities only when 3 or more have 8 or more eligible products and 2 or more sellers; departments
+   the MSW handlers, the Playwright mock BFF and the staff preview mock. The real gateway composes in Go; this mirrors its contract
+   (contracts/openapi/gateway-bff.yaml `getHome`, gateway-bff-staff.yaml `previewStaffHome`) so the storefront and the staff console
+   can be built and tested against 0 / 10 / 100 / 10,000-product catalogues.
+   Defaults (all staff-editable): communities only when 3 or more have 8 or more eligible products and 2 or more sellers; departments
    with nothing in them are not linked; Services when any provider exists ("near you" with a ZIP, else "popular"); at zero products a
    text-only brand hero and a sell band; at most 1 sponsored module per 3 organic ones; a product appears once on the page.
-   Variety: a visit seed picks WHICH eligible items fill each module and breaks ties between modules of one band. The same seed always
-   gives the same page; no seed (crawlers) gives the deterministic default. */
+   Variety: the seed is `visitor + visit window`. It picks WHICH eligible items fill each module (quality-weighted shuffle of a pool
+   larger than the module shows, items of earlier loads down-weighted, at most `sellerShare` items of one seller) and rotates modules
+   inside the discovery band. The same seed always gives the same page; no seed (crawlers, no visitor id) gives the deterministic default. */
+import { CRAWLER_HEADER, HOME_SEEN_HEADER, HOME_VARIANT_HEADER,VISIT_WINDOW_HEADER, type VisitHeaders, VISITOR_HEADER } from '../home-visit';
 import { type ProductSummary } from '../schemas/catalog';
-import { type HeroSlide, type Home, type HomeBlock, type ServiceCard } from '../schemas/home';
+import { type HeroSlide, type Home, type HomeBlock, type HomeCell, type HomeModuleDecision, type ServiceCard } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
-import { type NavCommunity, type NavDepartment, type SiteNavigation } from '../schemas/site-nav';
-import { HOME_MODULE_KEYS, type HomeDecision, type HomeModuleKey, type HomeModuleRule, type HomePreview, type HomePreviewQuery, type HomeReasonCode, type HomeSettings, type HomeSettingsInput } from '../staff-home';
+import { type LocaleLabels, type SiteCommunity, type SiteDepartment, type SiteNavigation, type SiteSitemap } from '../schemas/site-nav';
+import { type HomeBand, type HomeCaps, type HomeModuleRule, type HomePreview, type HomePreviewQuery, type HomeSettings } from '../staff-home';
 
 /* ── Settings ─────────────────────────────────────────────── */
 
-const rule = (key: HomeModuleKey, name: string, band: HomeModuleRule['band'], weight: number, over: Partial<HomeModuleRule> = {}): HomeModuleRule => ({
-  key,
-  name,
+export const MODULE_KEYS = [
+  'hero',
+  'continue-shopping',
+  'recently-viewed',
+  'department-tiles',
+  'preorder',
+  'deals',
+  'services-near-you',
+  'groceries-rail',
+  'new-arrivals',
+  'communities',
+  'top-sellers',
+  'plus'
+] as const;
+export type ModuleKey = (typeof MODULE_KEYS)[number];
+
+export const MODULE_NAMES: Record<ModuleKey, string> = {
+  hero: 'Hero campaigns',
+  'continue-shopping': 'Continue shopping',
+  'recently-viewed': 'Recently viewed',
+  'department-tiles': 'Shop by department',
+  preorder: 'Pre-order',
+  deals: 'Deals',
+  'services-near-you': 'Services',
+  'groceries-rail': 'Groceries',
+  'new-arrivals': 'New arrivals',
+  communities: 'Shop by community',
+  'top-sellers': 'Top sellers',
+  plus: 'AfroTransact Plus'
+};
+
+const rule = (band: HomeBand, weight: number, over: Partial<HomeModuleRule> = {}): HomeModuleRule => ({
   enabled: true,
   minProducts: 0,
   minSellers: 0,
@@ -26,48 +58,57 @@ const rule = (key: HomeModuleKey, name: string, band: HomeModuleRule['band'], we
   maxAgeDays: 0,
   weight,
   band,
-  labels: {},
-  startsAt: null,
-  endsAt: null,
   ...over
 });
+
+export const DEFAULT_CAPS: HomeCaps = {
+  maxModules: 12,
+  minModules: 3,
+  sellerShare: 2,
+  sponsoredPerOrganic: 3,
+  poolMultiplier: 3,
+  noveltyLoads: 3,
+  noveltyPenalty: 0.6,
+  visitWindowMinutes: 30,
+  hysteresis: 2,
+  dealMinPercent: 10,
+  navBarSize: 7
+};
 
 /** The defaults the owner chose; they equal DefaultHomeRules() in the gateway. */
 export function defaultHomeSettings(): HomeSettings {
   return {
-    version: 1,
-    dynamic: 'on',
-    organicPerSponsored: 3,
-    minModules: 3,
-    maxModules: 12,
-    modules: [
-      rule('hero', 'Hero', 'top', 100),
-      rule('continue-shopping', 'Continue shopping', 'top', 90, { minProducts: 2 }),
-      rule('recently-viewed', 'Recently viewed', 'top', 80, { minProducts: 1 }),
-      rule('departments', 'Shop by department', 'upper', 85, { minUnits: 2, unitMinProducts: 1 }),
-      rule('pre-order', 'Pre-order', 'upper', 75),
-      rule('deals', 'Deals', 'upper', 70, { minProducts: 6, minSellers: 2 }),
-      rule('services', 'Services', 'upper', 65, { minProducts: 1, minUnits: 3 }),
-      rule('groceries', 'Groceries', 'upper', 60, { minProducts: 6 }),
-      rule('new-arrivals', 'New arrivals', 'middle', 55, { minProducts: 8, minSellers: 1, maxAgeDays: 30 }),
-      rule('communities', 'Shop by community', 'middle', 50, { minUnits: 3, unitMinProducts: 8, unitMinSellers: 2 }),
-      rule('top-sellers', 'Top sellers', 'middle', 45, { minProducts: 8, minSellers: 2 }),
-      rule('plus', 'AfroTransact Plus', 'lower', 30),
-      rule('sell', 'Sell on AfroTransact', 'lower', 20)
-    ],
+    version: 0,
+    dynamic: null,
+    effectiveDynamic: 'on',
+    modules: {
+      hero: rule('hero', 100),
+      'continue-shopping': rule('personal', 90, { minProducts: 2, show: 6 }),
+      'recently-viewed': rule('personal', 80, { minProducts: 1 }),
+      'department-tiles': rule('discovery', 85, { minUnits: 2, unitMinProducts: 1, show: 8 }),
+      preorder: rule('discovery', 75),
+      deals: rule('discovery', 70, { minProducts: 6, minSellers: 2, show: 12 }),
+      'services-near-you': rule('discovery', 65, { minProducts: 1, show: 6 }),
+      'groceries-rail': rule('discovery', 60, { minProducts: 6, show: 12 }),
+      'new-arrivals': rule('discovery', 55, { minProducts: 8, minSellers: 1, maxAgeDays: 30, show: 12 }),
+      communities: rule('discovery', 50, { minUnits: 3, unitMinProducts: 8, unitMinSellers: 2, show: 6 }),
+      'top-sellers': rule('discovery', 45, { minProducts: 8, minSellers: 2, show: 12 }),
+      plus: rule('promo', 30)
+    },
+    moduleNames: { ...MODULE_NAMES },
+    caps: { ...DEFAULT_CAPS },
+    departmentLabels: {},
     updatedAt: null,
-    updatedByName: null,
-    canEdit: true
+    updatedBy: null
   };
 }
 
-export function settingsInputOf(s: HomeSettings): HomeSettingsInput {
-  const { version: _v, updatedAt: _u, updatedByName: _n, canEdit: _c, ...rest } = s;
-  return rest;
-}
-
 /** Mock state shared by the storefront and staff handlers: the staff settings and which synthetic catalogue (if any) the mock home serves. */
-export const homeMock: { settings: HomeSettings; catalogue: number | null } = { settings: defaultHomeSettings(), catalogue: null };
+export const homeMock: { settings: HomeSettings; catalogue: number | null; versions: Array<{ version: number; reason: string; changedBy: string; changedAt: string; revertOf: number | null; changes: Array<{ field: string; from: unknown; to: unknown }>; snapshot: HomeSettings }> } = {
+  settings: defaultHomeSettings(),
+  catalogue: null,
+  versions: []
+};
 
 /** The catalogue size the mock BFF serves: set by a test, or MOCK_HOME_CATALOGUE for a dev server; null keeps the classic mock home. */
 export function mockCatalogueSize(): number | null {
@@ -79,14 +120,12 @@ export function mockCatalogueSize(): number | null {
 export function resetHomeMock(): void {
   homeMock.settings = defaultHomeSettings();
   homeMock.catalogue = null;
+  homeMock.versions = [];
 }
 
 /* ── Seeded randomness ────────────────────────────────────── */
 
-/** The request header that carries the visit seed from the storefront to the gateway (read from the short-lived `at_hv` cookie). */
-export const HOME_SEED_HEADER = 'x-home-seed';
-
-/** The seed meaning "no variety": crawlers and anyone without a visit cookie get exactly this page. */
+/** The seed meaning "no variety": crawlers and anyone without a visitor id get exactly this page. */
 export const DEFAULT_SEED = 'default';
 
 function hash(text: string): number {
@@ -106,16 +145,64 @@ export function rng(seed: string, salt: string): () => number {
   };
 }
 
-/** Picks `count` items: the first `count` in rank order for the default seed, else a seeded draw from the best `count * 4`. */
-export function pick<T>(items: readonly T[], count: number, seed: string, salt: string): T[] {
-  if (seed === DEFAULT_SEED || items.length <= count) return items.slice(0, count);
-  const pool = items.slice(0, Math.max(count, count * 4));
-  const r = rng(seed, salt);
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(r() * (i + 1));
-    [pool[i], pool[j]] = [pool[j] as T, pool[i] as T];
+/** The short key the page reports for an item (`visit.seen`); not the product id. */
+export const seenKey = (id: string): string => hash(`seen|${id}`).toString(36).slice(0, 5);
+
+export interface DrawOptions<T> {
+  seed: string;
+  salt: string;
+  /** Ranked best first. */
+  items: readonly T[];
+  count: number;
+  idOf: (t: T) => string;
+  sellerOf?: (t: T) => string;
+  seen?: ReadonlySet<string>;
+  caps: Pick<HomeCaps, 'poolMultiplier' | 'noveltyPenalty' | 'sellerShare'>;
+}
+
+/**
+ * Picks `count` items. The default seed takes the best in rank order. Any other seed draws from the best `count * poolMultiplier`
+ * by a seeded, quality-weighted shuffle (Efraimidis-Spirakis): a better rank is likelier, an item shown on an earlier load keeps
+ * only `1 - noveltyPenalty` of its chance, and one seller supplies at most `sellerShare` items.
+ */
+export function draw<T>(o: DrawOptions<T>): T[] {
+  const { seed, items, count, caps } = o;
+  const share = Math.max(1, caps.sellerShare);
+  const out: T[] = [];
+  const perSeller = new Map<string, number>();
+  const take = (t: T): boolean => {
+    const seller = o.sellerOf?.(t);
+    if (seller !== undefined && (perSeller.get(seller) ?? 0) >= share) return false;
+    if (seller !== undefined) perSeller.set(seller, (perSeller.get(seller) ?? 0) + 1);
+    out.push(t);
+    return true;
+  };
+  if (seed === DEFAULT_SEED) {
+    for (const t of items) {
+      if (out.length >= count) break;
+      take(t);
+    }
+    return out;
   }
-  return pool.slice(0, count);
+  const pool = items.slice(0, Math.max(count, count * Math.max(1, caps.poolMultiplier)));
+  const r = rng(seed, o.salt);
+  const ranked = pool
+    .map((t, i) => {
+      const novelty = o.seen?.has(seenKey(o.idOf(t))) ? Math.max(0.01, 1 - caps.noveltyPenalty) : 1;
+      const w = (1 / (1 + i * 0.08)) * novelty;
+      return { t, k: Math.pow(r(), 1 / w) };
+    })
+    .sort((a, b) => b.k - a.k);
+  for (const { t } of ranked) {
+    if (out.length >= count) break;
+    take(t);
+  }
+  // Too few after the seller share: fill from the rest in rank order rather than show a short row.
+  for (const t of items) {
+    if (out.length >= count) break;
+    if (!out.includes(t)) take(t);
+  }
+  return out;
 }
 
 /* ── Catalogues ───────────────────────────────────────────── */
@@ -197,7 +284,7 @@ export function fixtureCatalog(n: number): Catalog {
   const providers = n === 0 ? 0 : n <= 10 ? 2 : n <= 100 ? 6 : 40;
   const services: ServiceCard[] = Array.from({ length: providers }, (_, i) => ({
     id: `svc_${i + 1}`,
-    name: SERVICE_NAMES[i % SERVICE_NAMES.length] as string,
+    title: SERVICE_NAMES[i % SERVICE_NAMES.length] as string,
     provider: `Provider ${i + 1}`,
     city: SERVICE_CITIES[i % SERVICE_CITIES.length] as string,
     fromPriceMinor: 4000 + i * 500,
@@ -211,6 +298,7 @@ export function fixtureCatalog(n: number): Catalog {
   return out;
 }
 
+
 /* ── Signals and eligibility ──────────────────────────────── */
 
 interface Unit {
@@ -223,6 +311,15 @@ interface Unit {
 const slug = (s: string) => s.toLowerCase().replace(/&/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const distinct = (items: readonly CatalogProduct[]) => new Set(items.map((p) => p.sellerName)).size;
 const rank = (a: CatalogProduct, b: CatalogProduct) => b.reviewCount * b.rating - a.reviewCount * a.rating || a.ageDays - b.ageDays || a.atin.localeCompare(b.atin);
+
+/** Short display labels over the catalog's full names (staff can override them in Home settings). */
+const SHORT_LABELS: Record<string, string> = {
+  'groceries-food': 'Groceries',
+  'fashion-accessories': 'Fashion',
+  'beauty-personal-care': 'Beauty',
+  'home-household': 'Home',
+  'health-wellness': 'Health'
+};
 
 function group(products: readonly CatalogProduct[], by: (p: CatalogProduct) => string): Unit[] {
   const m = new Map<string, CatalogProduct[]>();
@@ -251,76 +348,78 @@ export interface EvalContext {
   hasZip: boolean;
   /** Providers near the visitor's ZIP (city match), computed by the caller. */
   nearServices: ServiceCard[];
+  caps: HomeCaps;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 interface Verdict {
   shown: boolean;
-  reason: HomeReasonCode;
+  reason: string;
   detail: string;
-  qualifying: number;
-  required: number;
+  have: number;
+  need: number;
   units?: string[];
 }
 
-function verdict(r: HomeModuleRule, catalog: Catalog, sig: Signals, ctx: EvalContext): Verdict {
-  const v = (shown: boolean, reason: HomeReasonCode, detail: string, qualifying: number, required: number, units: string[] = []): Verdict => ({ shown, reason, detail, qualifying, required, units });
-  const now = ctx.now.getTime();
-  if (!r.enabled) return v(false, 'disabled', `${r.name} is switched off in Home settings.`, 0, 0);
-  if (r.startsAt && Date.parse(r.startsAt) > now) return v(false, 'scheduled-later', `${r.name} starts on ${r.startsAt.slice(0, 10)}.`, 0, 0);
-  if (r.endsAt && Date.parse(r.endsAt) <= now) return v(false, 'scheduled-ended', `${r.name} ended on ${r.endsAt.slice(0, 10)}.`, 0, 0);
+const isDeal = (p: CatalogProduct, minPercent: number) => !!p.listPriceMinor && p.listPriceMinor > p.priceMinor && ((p.listPriceMinor - p.priceMinor) * 100) / p.listPriceMinor >= minPercent;
+
+/** The rule table: shown or hidden, with a code and a sentence in staff words that names the module. */
+export function verdict(key: ModuleKey, r: HomeModuleRule, name: string, catalog: Catalog, sig: Signals, ctx: EvalContext): Verdict {
+  const v = (shown: boolean, reason: string, detail: string, have: number, need: number, units: string[] = []): Verdict => ({ shown, reason, detail, have, need, units });
+  if (!r.enabled) return v(false, 'disabled-by-staff', `${name} is switched off in Home settings.`, 0, 0);
   const products = catalog.products;
-  switch (r.key) {
+  switch (key) {
     case 'hero':
-      return v(true, products.length === 0 || !heroSlides(catalog).length ? 'fallback' : 'ok', heroSlides(catalog).length ? 'An approved slide with a real photo is in its schedule.' : 'No approved slide with a real photo: the text-only brand hero is shown.', heroSlides(catalog).length, 1);
+      return heroSlides(catalog).length
+        ? v(true, 'shown', 'An approved slide with a real photo is scheduled today.', heroSlides(catalog).length, 1)
+        : v(true, 'shown', 'No approved slide with a real photo is scheduled: the text-only brand hero is shown instead.', 0, 1);
     case 'continue-shopping':
-      if (!ctx.signedIn) return v(false, 'needs-sign-in', `${r.name} is for signed-in shoppers with past orders; this preview is a guest.`, 0, r.minProducts);
-      return products.length >= r.minProducts ? v(true, 'ok', `${r.name} shows the shopper's bought products.`, products.length, r.minProducts) : v(false, 'no-signal', `${r.name} needs ${plural(r.minProducts, 'bought product', 'bought products')} still in stock.`, products.length, r.minProducts);
+      if (!ctx.signedIn) return v(false, 'no-shopper-signal', `${name} needs a signed-in shopper with past orders; this view is a guest.`, 0, r.minProducts);
+      return products.length >= r.minProducts ? v(true, 'shown', `${name} is built from the products the shopper bought.`, products.length, r.minProducts) : v(false, 'no-shopper-signal', `${name} needs ${plural(r.minProducts, 'bought product', 'bought products')} still in stock.`, products.length, r.minProducts);
     case 'recently-viewed':
-      return products.length >= r.minProducts ? v(true, 'ok', `${r.name} fills from the browser's own history; it takes no space until the shopper has viewed something.`, products.length, r.minProducts) : v(false, 'no-signal', `${r.name} needs at least ${r.minProducts} product in the catalogue.`, products.length, r.minProducts);
-    case 'departments': {
-      const q = sig.departments.filter((d) => d.products.length >= r.unitMinProducts);
-      return q.length >= r.minUnits ? v(true, 'ok', `${plural(q.length, 'department has', 'departments have')} eligible products.`, q.length, r.minUnits, q.map((d) => d.name)) : v(false, 'not-enough-units', `${r.name} needs ${r.minUnits} departments with at least ${r.unitMinProducts} eligible product; ${q.length} qualify.`, q.length, r.minUnits, q.map((d) => d.name));
+      return products.length >= r.minProducts ? v(true, 'shown', `${name} fills from the browser's own history and takes no room until the shopper has viewed something.`, products.length, r.minProducts) : v(false, 'nothing-to-show', `${name} has no eligible product to remember.`, products.length, r.minProducts);
+    case 'department-tiles': {
+      const q = sig.departments.filter((d) => d.products.length >= Math.max(1, r.unitMinProducts));
+      return q.length >= r.minUnits ? v(true, 'shown', `${plural(q.length, 'department has', 'departments have')} eligible products.`, q.length, r.minUnits, q.map((d) => d.name)) : v(false, 'not-enough-departments', `${name} needs ${r.minUnits} departments with at least ${Math.max(1, r.unitMinProducts)} eligible product; ${q.length} qualify.`, q.length, r.minUnits, q.map((d) => d.name));
     }
     case 'communities': {
       const q = sig.communities.filter((c) => c.products.length >= r.unitMinProducts && c.sellers >= r.unitMinSellers);
       return q.length >= r.minUnits
-        ? v(true, 'ok', `${q.length} communities have ${r.unitMinProducts} or more eligible products from ${r.unitMinSellers} or more sellers.`, q.length, r.minUnits, q.map((c) => c.name))
-        : v(false, 'not-enough-units', `${r.name} needs ${r.minUnits} communities with ${r.unitMinProducts} eligible products and ${r.unitMinSellers} sellers each; ${q.length} qualify.`, q.length, r.minUnits, q.map((c) => c.name));
+        ? v(true, 'shown', `${q.length} communities have ${r.unitMinProducts} or more eligible products from ${r.unitMinSellers} or more sellers.`, q.length, r.minUnits, q.map((c) => c.name))
+        : v(false, 'not-enough-products', `${name} needs ${r.minUnits} communities with ${r.unitMinProducts} eligible products and ${r.unitMinSellers} sellers each; ${q.length} qualify.`, q.length, r.minUnits, q.map((c) => c.name));
     }
     case 'deals': {
-      const deals = products.filter((p) => p.listPriceMinor && p.listPriceMinor > p.priceMinor && ((p.listPriceMinor - p.priceMinor) * 100) / p.listPriceMinor >= 10);
-      if (deals.length < r.minProducts) return v(false, 'not-enough-products', `${r.name} needs ${r.minProducts} products at least 10 percent off; ${deals.length} qualify.`, deals.length, r.minProducts);
-      if (distinct(deals) < r.minSellers) return v(false, 'not-enough-sellers', `${r.name} needs ${r.minSellers} sellers; ${distinct(deals)} have a deal.`, distinct(deals), r.minSellers);
-      return v(true, 'ok', `${deals.length} products are at least 10 percent off.`, deals.length, r.minProducts);
+      const deals = products.filter((p) => isDeal(p, ctx.caps.dealMinPercent));
+      if (deals.length < r.minProducts) return v(false, 'not-enough-products', `${name} needs ${r.minProducts} products at least ${ctx.caps.dealMinPercent} percent off; ${deals.length} qualify.`, deals.length, r.minProducts);
+      if (distinct(deals) < r.minSellers) return v(false, 'not-enough-sellers', `${name} needs products from ${r.minSellers} sellers; ${distinct(deals)} have a deal.`, distinct(deals), r.minSellers);
+      return v(true, 'shown', `${deals.length} products are at least ${ctx.caps.dealMinPercent} percent off.`, deals.length, r.minProducts);
     }
-    case 'groceries': {
+    case 'groceries-rail': {
       const g = products.filter((p) => p.department === 'Groceries & Food');
-      return g.length >= r.minProducts ? v(true, 'ok', `${g.length} grocery products are eligible.`, g.length, r.minProducts) : v(false, 'not-enough-products', `${r.name} needs ${r.minProducts} eligible grocery products; ${g.length} qualify.`, g.length, r.minProducts);
+      return g.length >= r.minProducts ? v(true, 'shown', `${g.length} grocery products are eligible.`, g.length, r.minProducts) : v(false, 'not-enough-products', `${name} needs ${r.minProducts} eligible grocery products; ${g.length} qualify.`, g.length, r.minProducts);
     }
     case 'new-arrivals': {
       const fresh = products.filter((p) => !r.maxAgeDays || p.ageDays <= r.maxAgeDays);
-      if (!products.length || !fresh.length) return v(false, 'stale', `${r.name} needs products listed in the last ${r.maxAgeDays} days; none qualify.`, 0, r.minProducts);
-      if (fresh.length < r.minProducts) return v(false, 'not-enough-products', `${r.name} needs ${r.minProducts} recent products; ${fresh.length} qualify.`, fresh.length, r.minProducts);
-      return distinct(fresh) >= r.minSellers ? v(true, 'ok', `${fresh.length} products were listed in the last ${r.maxAgeDays} days.`, fresh.length, r.minProducts) : v(false, 'not-enough-sellers', `${r.name} needs ${r.minSellers} seller.`, distinct(fresh), r.minSellers);
+      if (products.length > 0 && fresh.length === 0) return v(false, 'not-fresh-enough', `The newest product is older than ${r.maxAgeDays} days.`, 0, r.minProducts);
+      if (fresh.length < r.minProducts) return v(false, 'not-enough-products', `${name} needs ${r.minProducts} recent products; ${fresh.length} qualify.`, fresh.length, r.minProducts);
+      return distinct(fresh) >= r.minSellers ? v(true, 'shown', `${fresh.length} products were listed in the last ${r.maxAgeDays || 'any number of'} days.`, fresh.length, r.minProducts) : v(false, 'not-enough-sellers', `${name} needs ${r.minSellers} seller.`, distinct(fresh), r.minSellers);
     }
     case 'top-sellers': {
       const rated = products.filter((p) => p.rating > 0 && p.reviewCount > 0);
-      if (rated.length < r.minProducts) return v(false, 'not-enough-products', `${r.name} needs ${r.minProducts} products with a real rating; ${rated.length} qualify.`, rated.length, r.minProducts);
-      return distinct(rated) >= r.minSellers ? v(true, 'ok', `${rated.length} products have a real rating.`, rated.length, r.minProducts) : v(false, 'not-enough-sellers', `${r.name} needs ${r.minSellers} sellers; ${distinct(rated)} have rated products.`, distinct(rated), r.minSellers);
+      if (rated.length < r.minProducts) return v(false, 'not-enough-products', `${name} needs ${r.minProducts} products with a real rating; ${rated.length} qualify.`, rated.length, r.minProducts);
+      return distinct(rated) >= r.minSellers ? v(true, 'shown', `${rated.length} products have a real rating.`, rated.length, r.minProducts) : v(false, 'not-enough-sellers', `${name} needs products from ${r.minSellers} sellers; ${distinct(rated)} have rated products.`, distinct(rated), r.minSellers);
     }
-    case 'services': {
-      if (ctx.nearServices.length >= r.minProducts && ctx.hasZip) return v(true, 'ok', `${plural(ctx.nearServices.length, 'provider serves', 'providers serve')} the visitor's ZIP: shown as Services near you.`, ctx.nearServices.length, r.minProducts);
-      if (catalog.services.length >= r.minUnits) return v(true, 'ok', `${catalog.services.length} providers in the market: shown as Popular services${ctx.hasZip ? '' : ' (no ZIP)'}.`, catalog.services.length, r.minUnits);
-      return v(false, 'no-provider', `${r.name} needs 1 provider near the ZIP or ${r.minUnits} in the market; ${catalog.services.length} exist.`, catalog.services.length, r.minUnits);
+    case 'services-near-you': {
+      const need = Math.max(1, r.minProducts);
+      if (ctx.hasZip && ctx.nearServices.length >= need) return v(true, 'shown', `${plural(ctx.nearServices.length, 'provider serves', 'providers serve')} the visitor's ZIP: shown as Services near you.`, ctx.nearServices.length, need);
+      if (catalog.services.length >= need) return v(true, 'shown', `${plural(catalog.services.length, 'provider exists', 'providers exist')} in the market: shown as Popular services${ctx.hasZip ? ' (none near this ZIP)' : ' (no ZIP)'}.`, catalog.services.length, need);
+      return v(false, 'nothing-to-show', `${name} needs ${plural(need, 'provider', 'providers')} in the market; ${catalog.services.length} exist.`, catalog.services.length, need);
     }
-    case 'pre-order':
-      return catalog.preorderOpen ? v(true, 'ok', 'A pre-order window is open.', 1, 1) : v(false, 'no-open-window', `${r.name} needs an open pre-order window; none is open.`, 0, 1);
+    case 'preorder':
+      return catalog.preorderOpen ? v(true, 'shown', 'A pre-order window is open.', 1, 1) : v(false, 'nothing-to-show', `${name} needs an open pre-order window; none is open.`, 0, 1);
     case 'plus':
-      return v(true, 'ok', 'AfroTransact Plus is on sale in this market.', 1, 1);
-    case 'sell':
-      return v(true, 'ok', 'Always shown to guests and sellers-to-be, low on the page.', 1, 1);
+      return v(true, 'shown', 'AfroTransact Plus is on sale in this market.', 1, 1);
   }
 }
 
@@ -334,184 +433,241 @@ function heroSlides(catalog: Catalog): HeroSlide[] {
   ];
 }
 
-const BAND_ORDER = { top: 0, upper: 1, middle: 2, lower: 3 } as const;
+/** Staff-edited season windows (S424): inside the window the listed modules gain weight. Mock data; the gateway reads them from content. */
+export const SEASONS = [
+  { name: 'Black Friday', startsAt: '2026-11-20T00:00:00Z', endsAt: '2026-12-02T00:00:00Z', boosted: ['deals'] as ModuleKey[], boost: 40 },
+  { name: 'Detty December', startsAt: '2026-12-10T00:00:00Z', endsAt: '2027-01-06T00:00:00Z', boosted: ['services-near-you', 'groceries-rail'] as ModuleKey[], boost: 35 }
+];
+const seasonAt = (now: Date) => SEASONS.find((s) => Date.parse(s.startsAt) <= now.getTime() && now.getTime() < Date.parse(s.endsAt)) ?? null;
+
+const BAND_ORDER: Record<HomeBand, number> = { hero: 0, personal: 1, discovery: 2, promo: 3, brand: 4 };
 
 export interface ComposeInput {
   catalog: Catalog;
   settings: HomeSettings;
+  /** `visitor|window`, or DEFAULT_SEED. */
   seed: string;
+  /** Short keys of items shown on earlier loads. */
+  seen?: ReadonlySet<string>;
   now: Date;
   signedIn: boolean;
   loc: DeliveryLocation;
   /** True when the visitor chose a ZIP (a guest with none is a first visit). */
   hasZip: boolean;
-  locale?: string;
+  variant?: string;
 }
 export interface Composed {
   home: Home;
-  decisions: HomeDecision[];
+  decisions: HomeModuleDecision[];
 }
 
 const nearOf = (services: ServiceCard[], loc: DeliveryLocation) => services.filter((s) => s.city === loc.city);
 
+/** Seed of a visit: crawlers and visitors without a cookie get the deterministic default. */
+export function seedOfVisit(v: VisitHeaders): string {
+  if (v.crawler || !v.visitor) return DEFAULT_SEED;
+  return `${v.visitor}|${v.window ?? ''}`;
+}
+
+/** Reads the visit headers (case-insensitive) off a request. */
+export function visitOfHeaders(h: Headers): VisitHeaders {
+  const seen = (h.get(HOME_SEEN_HEADER) ?? '').split(',').map((k) => k.trim()).filter(Boolean);
+  return { visitor: h.get(VISITOR_HEADER) ?? undefined, window: h.get(VISIT_WINDOW_HEADER) ?? undefined, seen, variant: h.get(HOME_VARIANT_HEADER) ?? undefined, crawler: h.get(CRAWLER_HEADER) === '1' };
+}
+
+const departmentLabel = (key: string, name: string, settings: HomeSettings): { label: string; labels: LocaleLabels } => {
+  const staff = settings.departmentLabels[key];
+  const en = staff?.en || SHORT_LABELS[key] || name;
+  return { label: en, labels: { ...staff, en } };
+};
+
 /** Pure: the same input is always the same page. */
 export function composeDynamicHome(input: ComposeInput): Composed {
   const { catalog, settings, seed, now, loc } = input;
+  const caps = settings.caps;
   const sig = signalsOf(catalog);
-  const ctx: EvalContext = { now, signedIn: input.signedIn, hasZip: input.hasZip, nearServices: nearOf(catalog.services, loc) };
-  const verdicts = new Map<HomeModuleKey, Verdict>();
-  for (const r of settings.modules) verdicts.set(r.key, verdict(r, catalog, sig, ctx));
+  const seen = input.seen ?? new Set<string>();
+  const season = seasonAt(now);
+  const ctx: EvalContext = { now, signedIn: input.signedIn, hasZip: input.hasZip, nearServices: nearOf(catalog.services, loc), caps };
+  const variant = input.variant || 'control';
+  const verdicts = new Map<ModuleKey, Verdict>();
+  const keys = MODULE_KEYS.filter((k) => settings.modules[k] !== undefined);
+  for (const k of keys) verdicts.set(k, verdict(k, settings.modules[k] as HomeModuleRule, settings.moduleNames[k] ?? MODULE_NAMES[k], catalog, sig, ctx));
 
-  // Order: band, then weight plus a small seeded jitter so neighbouring modules swap between visits (none for the default seed).
+  // Order: band, then weight (plus the season boost and, inside the discovery band, a seeded rotation; none for the default seed).
   const jitter = rng(seed, 'order');
-  const shown = settings.modules
-    .filter((r) => verdicts.get(r.key)?.shown)
-    .map((r) => ({ r, k: BAND_ORDER[r.band] * 1000 - (r.weight + (seed === DEFAULT_SEED ? 0 : jitter() * 12)) }))
-    .sort((a, b) => a.k - b.k)
-    .map((x) => x.r);
+  const ordered = keys
+    .filter((k) => verdicts.get(k)?.shown)
+    .map((k) => {
+      const r = settings.modules[k] as HomeModuleRule;
+      const band = r.band ?? 'discovery';
+      const rotate = seed !== DEFAULT_SEED && band === 'discovery' ? jitter() * 24 : 0;
+      const boost = season?.boosted.includes(k) ? season.boost : 0;
+      return { k, r, score: BAND_ORDER[band] * 1000 - (r.weight + boost + rotate) };
+    })
+    .sort((a, b) => a.score - b.score);
 
   const used = new Set<string>();
+  const strip = ({ ageDays: _a, ...p }: CatalogProduct): ProductSummary => p;
   const claim = (items: CatalogProduct[], n: number, salt: string, min = 4): ProductSummary[] | null => {
     const free = items.filter((p) => !used.has(p.atin));
-    const chosen = pick(free, n, seed, salt);
-    if (chosen.length < min) return null;
+    const chosen = draw({ seed, salt, items: free, count: n, idOf: (p) => p.atin, sellerOf: (p) => p.sellerName, seen, caps });
+    if (chosen.length < Math.min(min, n)) return null;
     for (const p of chosen) used.add(p.atin);
     return chosen.map(strip);
   };
-  const strip = ({ ageDays: _a, ...p }: CatalogProduct): ProductSummary => p;
+  const track = (module: string): HomeBlock['tracking'] => ({ module, position: 0, variant });
 
-  const blocks: HomeBlock[] = [];
-  const dropped = new Map<HomeModuleKey, HomeReasonCode>();
-  const modulePlace = new Map<HomeModuleKey, number>();
+  const blocks: Array<HomeBlock & { key: ModuleKey | 'sell' | 'sponsored' | 'department-rail' }> = [];
+  const dropped = new Map<ModuleKey, string>();
   const heroes = heroSlides(catalog);
+  const show = (k: ModuleKey, fallback: number) => (settings.modules[k] as HomeModuleRule).show ?? fallback;
 
-  const rail = (key: HomeModuleKey, id: string, titleKey: string, title: string, href: string, items: ProductSummary[] | null, extra: Partial<HomeBlock> = {}): HomeBlock | null =>
-    items ? { id, type: 'rail', sponsored: false, scope: 'shared', titleKey, title, rail: { id, title, href, items }, tracking: { module: key, position: 0, variant: 'control' }, ...extra } : null;
+  const rail = (key: ModuleKey, id: string, titleKey: string, href: string, items: ProductSummary[] | null, extra: Partial<HomeBlock> = {}): HomeBlock | null =>
+    items ? { id, type: 'rail', sponsored: false, scope: 'shared', titleKey, module: id.replace(/^rail_/, ''), rail: { id, title: '', href, items }, tracking: track(key), ...extra } : null;
 
-  for (const r of shown) {
+  for (const { k, r } of ordered) {
     let b: HomeBlock | null = null;
-    switch (r.key) {
+    switch (k) {
       case 'hero':
         if (!heroes.length) {
-          b = {
-            id: 'brand-hero',
-            type: 'brand-hero',
-            sponsored: false,
-            scope: 'shared',
-            titleKey: 'home.brandHero.title',
-            title: 'African and Caribbean food, fashion and services, from sellers near you',
-            sub: catalog.products.length === 0 ? 'The marketplace is opening. Sellers and providers are joining now.' : undefined,
-            cta: catalog.products.length === 0 ? 'Sell on AfroTransact' : 'Shop now',
-            href: catalog.products.length === 0 ? '/sell' : '/s',
-            tracking: { module: 'hero', position: 0, variant: 'control' }
-          };
+          b = { id: 'brand-hero', type: 'brand-hero', sponsored: false, scope: 'shared', module: 'brand-hero', titleKey: 'home.brandHero.title', subKey: 'home.brandHero.sub', ctaKey: 'home.brandHero.cta', href: '/sell', textOnly: true, imageUrl: null, tracking: track('hero') };
         }
         break;
-      case 'departments': {
-        const top = sig.departments.slice(0, 8);
-        const cells = pick(top, 8, seed, 'dept').map((d) => ({
-          key: d.key,
-          label: d.name,
-          href: `/s?dept=${encodeURIComponent(d.name)}`,
-          // Photo: the best eligible product of the department; a visit seed picks among its top three.
-          imageUrl: (pick(d.products.slice(0, 3), 1, seed, `dept-img-${d.key}`)[0] as CatalogProduct).imageUrl,
-          count: d.products.length
-        }));
-        b = { id: 'department-tiles', type: 'department-tiles', sponsored: false, scope: 'shared', titleKey: 'home.departments.title', title: 'Shop by department', cells, tracking: { module: 'departments', position: 0, variant: 'control' } };
+      case 'department-tiles': {
+        const picked = draw({ seed, salt: 'dept', items: sig.departments.slice(0, 12), count: show(k, 8), idOf: (d) => d.key, caps: { ...caps, poolMultiplier: 1 } });
+        const cells: HomeCell[] = picked.map((d) => {
+          const { label, labels } = departmentLabel(d.key, d.name, settings);
+          return {
+            key: d.key,
+            label,
+            labels,
+            labelKey: `dept.${d.key}`,
+            href: `/s?dept=${encodeURIComponent(d.name)}`,
+            // Photo: the best eligible product of the department; a visit seed picks among its top three.
+            imageUrl: draw({ seed, salt: `dept-img-${d.key}`, items: d.products.slice(0, 3), count: 1, idOf: (p) => p.atin, caps: { ...caps, poolMultiplier: 1 } })[0]?.imageUrl ?? null,
+            count: d.products.length
+          };
+        });
+        b = { id: 'department-tiles', type: 'department-tiles', sponsored: false, scope: 'shared', module: 'department-tiles', titleKey: 'home.departments.title', cells, tracking: track(k) };
         break;
       }
       case 'communities': {
         const q = sig.communities.filter((c) => c.products.length >= r.unitMinProducts && c.sellers >= r.unitMinSellers);
-        const cells = pick(q, 6, seed, 'comm').map((c) => ({
+        const picked = draw({ seed, salt: 'comm', items: q, count: show(k, 6), idOf: (c) => c.key, caps: { ...caps, poolMultiplier: 2 } });
+        const cells: HomeCell[] = picked.map((c) => ({
           key: c.key,
           label: c.name,
+          labels: { en: c.name },
           href: `/communities/${c.key}`,
-          imageUrl: (pick(c.products.slice(0, 3), 1, seed, `comm-img-${c.key}`)[0] as CatalogProduct).imageUrl,
+          imageUrl: draw({ seed, salt: `comm-img-${c.key}`, items: c.products.slice(0, 3), count: 1, idOf: (p) => p.atin, caps: { ...caps, poolMultiplier: 1 } })[0]?.imageUrl ?? null,
           count: c.products.length
         }));
-        b = { id: 'community-tiles', type: 'community-tiles', sponsored: false, scope: 'shared', titleKey: 'home.communities.title', title: 'Shop by community', cells, tracking: { module: 'communities', position: 0, variant: 'control' } };
+        b = { id: 'community-tiles', type: 'community-tiles', sponsored: false, scope: 'shared', module: 'communities', titleKey: 'home.communities.title', cells, tracking: track(k) };
         break;
       }
-      case 'services': {
-        const near = ctx.hasZip && ctx.nearServices.length >= r.minProducts;
+      case 'services-near-you': {
+        const near = ctx.hasZip && ctx.nearServices.length >= Math.max(1, r.minProducts);
         const list = near ? ctx.nearServices : catalog.services;
+        const picked = draw({ seed, salt: 'svc', items: list, count: show(k, 6), idOf: (s) => s.id, seen, caps: { ...caps, poolMultiplier: 2, sellerShare: 2 } });
         b = {
           id: 'service-cards',
           type: 'service-cards',
           sponsored: false,
           scope: 'shared',
-          titleKey: near ? 'home.services.near' : 'home.services.popular',
+          module: 'services-near-you',
+          titleKey: near ? 'home.services.nearYou.title' : 'home.services.popular.title',
           titleParams: { city: loc.city },
-          title: near ? `Services near ${loc.city}` : 'Popular services',
+          ctaKey: 'home.services.cta',
           href: '/services',
-          services: pick(list, 6, seed, 'svc'),
-          tracking: { module: 'services', position: 0, variant: 'control' }
+          services: picked,
+          tracking: track(k)
         };
         break;
       }
-      case 'deals': {
-        const deals = catalog.products.filter((p) => p.listPriceMinor && p.listPriceMinor > p.priceMinor && ((p.listPriceMinor - p.priceMinor) * 100) / p.listPriceMinor >= 10);
-        b = rail('deals', 'plc_deals', 'home.deals.title', 'Deals of the day', '/s?sort=rating', claim(deals, 12, 'deals', 6), { type: 'deals' });
+      case 'deals':
+        b = rail(k, 'plc_deals', 'home.deals.title', '/s?sort=price_asc', claim(catalog.products.filter((p) => isDeal(p, caps.dealMinPercent)), show(k, 12), 'deals', 6), { type: 'deals', module: 'deals' });
         break;
-      }
-      case 'groceries':
-        b = rail('groceries', 'rail_groceries', 'home.groceries.title', 'Groceries', '/s?dept=Groceries+%26+Food', claim(catalog.products.filter((p) => p.department === 'Groceries & Food'), 12, 'groc', 6));
+      case 'groceries-rail':
+        b = rail(k, 'rail_groceries-rail', 'home.groceries.title', '/s?dept=Groceries+%26+Food', claim(catalog.products.filter((p) => p.department === 'Groceries & Food'), show(k, 12), 'groc', 6));
         break;
       case 'new-arrivals':
-        b = rail('new-arrivals', 'rail_new', 'home.newArrivals.title', 'New arrivals', '/s?sort=newest', claim([...catalog.products.filter((p) => !r.maxAgeDays || p.ageDays <= r.maxAgeDays)].sort((a, c) => a.ageDays - c.ageDays || a.atin.localeCompare(c.atin)), 12, 'new', 4));
+        b = rail(k, 'rail_new-arrivals', 'home.newArrivals.title', '/s?sort=newest', claim([...catalog.products.filter((p) => !r.maxAgeDays || p.ageDays <= r.maxAgeDays)].sort((a, c) => a.ageDays - c.ageDays || a.atin.localeCompare(c.atin)), show(k, 12), 'new', 4));
         break;
       case 'top-sellers':
-        b = rail('top-sellers', 'rail_top', 'home.topSellers.title', 'Top sellers', '/s?sort=rating', claim(catalog.products.filter((p) => p.rating > 0 && p.reviewCount > 0).sort(rank), 12, 'top', 4));
+        b = rail(k, 'rail_top-sellers', 'home.topSellers.title', '/s?sort=rating', claim(catalog.products.filter((p) => p.rating > 0 && p.reviewCount > 0).sort(rank), show(k, 12), 'top', 4));
         break;
       case 'continue-shopping':
-        b = rail('continue-shopping', 'based-on-orders', 'home.continue.title', 'Continue shopping', '/account/orders', claim(catalog.products.slice(0, 12), 6, 'cont', 2), { type: 'based-on-orders', scope: 'visitor' });
+        b = rail(k, 'based-on-orders', 'home.continue.title', '/account/orders', claim(catalog.products.slice(0, 12), show(k, 6), 'cont', 2), { type: 'based-on-orders', scope: 'visitor', module: 'continue-shopping' });
         break;
       case 'recently-viewed':
-        b = { id: 'recently-viewed', type: 'recently-viewed', sponsored: false, scope: 'visitor', tracking: { module: 'recently-viewed', position: 0, variant: 'control' } };
+        b = { id: 'recently-viewed', type: 'recently-viewed', sponsored: false, scope: 'visitor', module: 'recently-viewed', titleKey: 'home.recent.title', tracking: track(k) };
         break;
-      case 'pre-order':
-        b = { id: 'plc_preorders', type: 'preorders', sponsored: false, scope: 'shared', tracking: { module: 'pre-order', position: 0, variant: 'control' } };
+      case 'preorder':
+        b = { id: 'plc_preorders', type: 'preorders', sponsored: false, scope: 'shared', module: 'preorder', titleKey: 'home.preorder.title', tracking: track(k) };
         break;
       case 'plus':
-        b = { id: 'plc_membership', type: 'membership-promo', sponsored: false, scope: 'shared', titleKey: 'home.plus.title', title: 'AfroTransact Plus: free delivery and early access', sub: 'Members get free delivery on every order.', cta: 'Try Plus', href: '/membership', tone: 'sand', tracking: { module: 'plus', position: 0, variant: 'control' } };
-        break;
-      case 'sell':
-        b = { id: 'sell-band', type: 'sell-band', sponsored: false, scope: 'shared', titleKey: 'home.sell.title', title: 'Sell on AfroTransact', sub: 'Reach shoppers who are looking for what you make.', cta: 'Start selling', href: '/sell', tone: 'ink', tracking: { module: 'sell', position: 0, variant: 'control' } };
+        b = { id: 'plc_membership', type: 'membership-promo', sponsored: false, scope: 'shared', module: 'plus', titleKey: 'home.plus.title', bodyKey: 'home.plus.body', ctaKey: 'home.plus.cta', href: '/membership', tone: 'sand', tracking: track(k) };
         break;
     }
-    if (b) blocks.push(b);
-    else if (r.key !== 'hero') dropped.set(r.key, 'page-full');
+    if (b) blocks.push({ ...b, key: k });
+    else if (k !== 'hero') dropped.set(k, 'nothing-to-show');
   }
 
-  // Cap: at most `maxModules`; sponsored modules never exceed 1 per `organicPerSponsored` organic ones.
-  const withSponsored = insertSponsored(blocks, catalog, settings.organicPerSponsored, seed, claim);
-  const final = withSponsored.slice(0, Math.max(1, settings.maxModules));
+  // Generated "Top in {department}" rails for the biggest departments of a big catalogue: never adjacent to each other.
+  if (catalog.products.length >= 1000) {
+    const biggest = sig.departments.slice(0, 2);
+    biggest.forEach((d, i) => {
+      const items = claim(d.products, 12, `topin-${d.key}`, 6);
+      if (!items) return;
+      const { label } = departmentLabel(d.key, d.name, settings);
+      const at = Math.min(blocks.length, 3 + i * 3);
+      blocks.splice(at, 0, { id: `rail_topin_${d.key}`, type: 'rail', sponsored: false, scope: 'shared', module: 'department-rail', titleKey: 'home.topIn.title', titleParams: { department: label }, rail: { id: `rail_topin_${d.key}`, title: '', href: `/s?dept=${encodeURIComponent(d.name)}`, items }, tracking: track('department-tiles'), key: 'department-rail' });
+    });
+  }
+
+  // The sell band closes the page (it is the only thing besides the hero on an empty marketplace).
+  const sell: HomeBlock & { key: 'sell' } = { id: 'sell-band', type: 'sell-band', sponsored: false, scope: 'shared', module: 'sell-band', titleKey: 'home.sellBand.title', bodyKey: 'home.sellBand.body', ctaKey: 'home.sellBand.cta', href: '/sell', tone: 'ink', tracking: track('sell-band'), key: 'sell' };
+
+  // Sponsored: never more than 1 per `sponsoredPerOrganic` organic modules; it never fills a thin page.
+  const withSponsored = insertSponsored(blocks, catalog, caps.sponsoredPerOrganic, seed, claim);
+  // Cap: at most `maxModules` (the sell band is reserved a place); trimmed modules are reported as page-full.
+  const room = Math.max(1, caps.maxModules - 1);
+  const kept = withSponsored.slice(0, room);
+  for (const b of withSponsored.slice(room)) if (b.key !== 'sponsored' && b.key !== 'department-rail' && b.key !== 'sell') dropped.set(b.key, 'page-full');
+  const final: HomeBlock[] = [...kept, sell].map(({ key: _k, ...b }) => b);
   final.forEach((b, i) => {
     if (b.tracking) b.tracking = { ...b.tracking, position: i + 1 };
   });
-  for (const b of final) {
-    const key = b.tracking?.module as HomeModuleKey | undefined;
-    if (key && !modulePlace.has(key)) modulePlace.set(key, final.indexOf(b) + 1);
-  }
+  const placeOf = new Map<string, number>();
+  [...kept, sell].forEach((b, i) => {
+    if (b.tracking && !placeOf.has(b.tracking.module)) placeOf.set(b.tracking.module, i + 1);
+  });
 
-  const decisions: HomeDecision[] = HOME_MODULE_KEYS.map((key) => {
-    const r = settings.modules.find((m) => m.key === key) as HomeModuleRule;
-    const vd = verdicts.get(key) as Verdict;
-    const place = modulePlace.get(key) ?? (key === 'hero' && vd.shown ? 1 : null);
+  const decisions: HomeModuleDecision[] = keys.map((k) => {
+    const r = settings.modules[k] as HomeModuleRule;
+    const vd = verdicts.get(k) as Verdict;
+    const name = settings.moduleNames[k] ?? MODULE_NAMES[k];
+    const place = placeOf.get(k) ?? null;
     const lost = vd.shown && place === null;
+    const reason = lost ? (dropped.get(k) ?? 'nothing-to-show') : vd.reason;
     return {
-      module: key,
-      label: r.name,
+      module: k,
+      label: name,
       shown: vd.shown && !lost,
-      reason: lost ? (dropped.get(key) ?? 'page-full') : vd.reason,
-      detail: lost ? `${r.name} qualified, but the products it needed were already used higher on the page or the page is full.` : vd.detail,
-      metrics: { qualifying: vd.qualifying, required: vd.required },
+      order: place ?? undefined,
+      reason,
+      detail: lost ? (reason === 'page-full' ? `${name} qualified, but the page already holds ${caps.maxModules} modules.` : `${name} qualified, but the products it needed were already used higher on the page.`) : vd.detail,
+      have: vd.have,
+      need: vd.need,
       units: vd.units ?? [],
-      pinned: false,
-      position: place
+      band: r.band
     };
   });
 
+  const shownIds = new Set<string>();
+  for (const b of final) for (const p of [...(b.rail?.items ?? []), ...(b.products ?? [])]) shownIds.add(p.atin);
+  for (const b of final) for (const s of b.services ?? []) shownIds.add(s.id);
   const home: Home = {
     announcements: [],
     hero: heroes,
@@ -519,23 +675,26 @@ export function composeDynamicHome(input: ComposeInput): Composed {
     blocks: final,
     deliverTo: loc,
     version: 2,
-    seed
+    generatedAt: now.toISOString(),
+    locale: 'en',
+    variant,
+    visit: { window: seed === DEFAULT_SEED ? '' : seed.split('|')[1] ?? '', seen: [...shownIds].map(seenKey).slice(0, 60), deterministic: seed === DEFAULT_SEED }
   };
   return { home, decisions };
 }
 
-function insertSponsored(
-  organic: HomeBlock[],
+function insertSponsored<B extends HomeBlock & { key: string }>(
+  organic: B[],
   catalog: Catalog,
   perSponsored: number,
   seed: string,
   claim: (items: CatalogProduct[], n: number, salt: string, min?: number) => ProductSummary[] | null
-): HomeBlock[] {
+): Array<B | (HomeBlock & { key: 'sponsored' })> {
   const allowed = Math.floor(organic.length / Math.max(1, perSponsored));
   if (allowed < 1 || catalog.products.length < 100) return organic;
   const items = claim(catalog.products.filter((p) => p.sellerKind === 'SELLER'), 6, 'sponsored', 2);
   if (!items) return organic;
-  const sponsoredBlock: HomeBlock = {
+  const sponsoredBlock: HomeBlock & { key: 'sponsored' } = {
     id: 'plc_sp_products',
     type: 'sponsored-products',
     sponsored: true,
@@ -543,7 +702,8 @@ function insertSponsored(
     title: 'Sponsored products from sellers',
     href: '/s',
     searchId: `srch_${seed}`,
-    rail: { id: 'plc_sp_products', title: 'Sponsored products from sellers', href: '/s', items: items.map((p, i) => ({ ...p, sponsor: { advertiser: p.sellerName, campaignId: 'cmp_mock', slot: i + 1, adToken: `tok-${p.atin}` } })) }
+    rail: { id: 'plc_sp_products', title: 'Sponsored products from sellers', href: '/s', items: items.map((p, i) => ({ ...p, sponsor: { advertiser: p.sellerName, campaignId: 'cmp_mock', slot: i + 1, adToken: `tok-${p.atin}` } })) },
+    key: 'sponsored'
   };
   const at = Math.min(organic.length, perSponsored + 1);
   return [...organic.slice(0, at), sponsoredBlock, ...organic.slice(at)];
@@ -551,39 +711,67 @@ function insertSponsored(
 
 /* ── Navigation (departments, communities, services) ─────── */
 
+function communityRule(settings: HomeSettings): HomeModuleRule {
+  return settings.modules.communities ?? { enabled: true, minProducts: 0, minSellers: 0, minUnits: 3, unitMinProducts: 8, unitMinSellers: 2, maxAgeDays: 0, weight: 50 };
+}
+
+/** Communities above the staff thresholds: the same rule as the home module, so the footer, the routes and the home cannot disagree. */
+export function visibleCommunities(catalog: Catalog, settings: HomeSettings): SiteCommunity[] {
+  const comm = communityRule(settings);
+  const qualifying = signalsOf(catalog).communities.filter((c) => c.products.length >= comm.unitMinProducts && c.sellers >= comm.unitMinSellers);
+  if (!comm.enabled || qualifying.length < comm.minUnits) return [];
+  return qualifying.map((c) => ({ key: c.key, label: c.name, labels: { en: c.name }, count: c.products.length, sellers: c.sellers, href: `/communities/${c.key}`, imageUrl: c.products[0]?.imageUrl ?? null, imageSource: 'product' as const }));
+}
+
 /** The department bar, footer and routes: the same eligible-only counts as the home, same community threshold. */
-export function navigationOf(catalog: Catalog, settings: HomeSettings): SiteNavigation {
+export function navigationOf(catalog: Catalog, settings: HomeSettings, now: Date = new Date()): SiteNavigation {
   const sig = signalsOf(catalog);
-  const comm = settings.modules.find((m) => m.key === 'communities') as HomeModuleRule;
-  const qualifying = sig.communities.filter((c) => c.products.length >= comm.unitMinProducts && c.sellers >= comm.unitMinSellers);
-  const communities: NavCommunity[] = comm.enabled && qualifying.length >= comm.minUnits ? qualifying.map((c) => ({ key: c.key, label: c.name, count: c.products.length, href: `/communities/${c.key}` })) : [];
-  const departments: NavDepartment[] = sig.departments.map((d) => ({ key: d.key, name: d.name, count: d.products.length, href: `/s?dept=${encodeURIComponent(d.name)}` }));
+  const all: SiteDepartment[] = sig.departments
+    .filter((d) => d.products.length > 0)
+    .map((d) => {
+      const { label, labels } = departmentLabel(d.key, d.name, settings);
+      return { key: d.key, name: d.name, label, labels, labelKey: `dept.${d.key}`, count: d.products.length, sellers: d.sellers, href: `/s?dept=${encodeURIComponent(d.name)}`, imageUrl: d.products[0]?.imageUrl ?? null };
+    });
+  const dealsRule = settings.modules.deals;
+  const dealsShown = dealsRule ? verdict('deals', dealsRule, 'Deals', catalog, sig, { now, signedIn: false, hasZip: false, nearServices: [], caps: settings.caps }).shown : false;
   return {
-    departments,
-    communities,
-    servicesAvailable: catalog.services.length > 0,
-    brandAvailable: catalog.products.some((p) => p.sellerKind === 'PLATFORM'),
-    dealsAvailable: verdict(settings.modules.find((m) => m.key === 'deals') as HomeModuleRule, catalog, sig, { now: new Date(), signedIn: false, hasZip: false, nearServices: [] }).shown
+    bar: all.slice(0, settings.caps.navBarSize),
+    all,
+    communities: visibleCommunities(catalog, settings),
+    services: { available: catalog.services.length > 0, providers: catalog.services.length, href: '/services' },
+    deals: { available: dealsShown },
+    brand: { available: catalog.products.some((p) => p.sellerKind === 'PLATFORM') },
+    generatedAt: now.toISOString()
   };
 }
 
+/** `/communities/{slug}`: the canonical community, or null when it is hidden or unknown (a 404, never a zero-result page). */
+export function resolveCommunity(catalog: Catalog, settings: HomeSettings, slugIn: string): { community: SiteCommunity; canonical: boolean } | null {
+  const want = slugIn.trim().toLowerCase();
+  const found = visibleCommunities(catalog, settings).find((c) => c.key === want || slug(c.label) === want);
+  return found ? { community: found, canonical: slugIn === found.key } : null;
+}
+
+export function sitemapOf(catalog: Catalog, settings: HomeSettings, now: Date = new Date()): SiteSitemap {
+  const nav = navigationOf(catalog, settings, now);
+  const lastmod = now.toISOString();
+  return { departments: nav.all.map((d) => ({ href: d.href ?? '/s', count: d.count, lastmod })), communities: nav.communities.map((c) => ({ href: c.href, count: c.count, lastmod })) };
+}
+
 /** Staff preview: the same composition for a chosen catalogue, ZIP, sign-in state, locale and date. */
-export function previewHome(q: HomePreviewQuery, input: Omit<ComposeInput, 'seed' | 'now' | 'signedIn' | 'hasZip'> & { seed?: string; now: Date }): HomePreview {
-  const asOf = q.asOf ? new Date(`${q.asOf}T00:00:00Z`) : input.now;
-  const seed = q.seed?.trim() || DEFAULT_SEED;
-  const out = composeDynamicHome({ ...input, seed, now: asOf, signedIn: q.signedIn ?? false, hasZip: !!q.zip?.trim() });
-  const catalog = input.catalog;
+export function previewHome(q: HomePreviewQuery, input: { catalog: Catalog; catalogName: string; settings: HomeSettings; loc: DeliveryLocation; now: Date }): HomePreview {
+  const asOf = q.asOf ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(q.asOf) ? `${q.asOf}T00:00:00Z` : q.asOf) : input.now;
+  const seed = q.seed?.trim() || (q.deterministic ? DEFAULT_SEED : `preview-${hash(`${asOf.toISOString().slice(0, 10)}|${q.zip ?? ''}|${input.catalogName}`).toString(36)}`);
+  const out = composeDynamicHome({ catalog: input.catalog, settings: input.settings, seed, now: asOf, signedIn: q.signedIn ?? false, hasZip: !!q.zip?.trim(), loc: input.loc, variant: q.variant });
+  const season = seasonAt(asOf);
   return {
-    home: out.home,
-    decisions: out.decisions,
-    seed,
     asOf: asOf.toISOString(),
-    signals: {
-      products: catalog.products.length,
-      departments: signalsOf(catalog).departments.length,
-      communities: signalsOf(catalog).communities.length,
-      sellers: distinct(catalog.products),
-      providers: catalog.services.length
-    }
+    locale: q.locale ?? 'en',
+    catalog: input.catalogName,
+    seed,
+    deliverTo: { zip: input.loc.zip, city: input.loc.city, state: input.loc.state },
+    blocks: out.home.blocks,
+    decisions: out.decisions,
+    season: season ? { name: season.name, startsAt: season.startsAt, endsAt: season.endsAt, boosted: season.boosted.map((k) => MODULE_NAMES[k]) } : null
   };
 }

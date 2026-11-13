@@ -7,7 +7,7 @@ export { atinOf, COMMUNITIES, DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER,
 export { DEMO_ACCOUNTS, DEMO_CODE, JOBS, PLACEMENTS, SITE_CONFIG } from './fixtures/content';
 export { ADDRESSES, STREETS, US_STATES } from './fixtures/geo';
 export { handlers, SESSION_COOKIE } from './handlers';
-export { composeDynamicHome, DEFAULT_SEED, defaultHomeSettings, fixtureCatalog, HOME_SEED_HEADER, homeMock, mockCatalogueSize, navigationOf, previewHome, resetHomeMock } from './home-dynamic';
+export { composeDynamicHome, DEFAULT_SEED, defaultHomeSettings, fixtureCatalog, homeMock, mockCatalogueSize, navigationOf, previewHome, resetHomeMock, seedOfVisit } from './home-dynamic';
 export { completePhrases, levenshtein, matchScore, PHRASES, SYNONYMS, words } from './matching';
 export { markTrialUsed, MOCK_DECLINED_CARD, MOCK_MEMBERSHIP_TIERS } from './membership';
 export { handleMockRequest } from './runtime';

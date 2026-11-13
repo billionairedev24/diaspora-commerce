@@ -116,6 +116,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/home/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Home module thresholds, caps, variety settings and department labels (Marketing > Home)
+         * @description content `GET /v1/home-settings` through the staff session (marketing at VIEW or above). Defaults load when nothing is
+         *     stored (`version: 0`) and equal the documented thresholds (communities: 3 communities with 8 products and 2 sellers each).
+         *     Each module row is listed by its name, never an id. `effectiveDynamic` is what the page runs now: the stored `dynamic`
+         *     value, else the environment default (on in local, dev, uat and trial, off in prod).
+         */
+        get: operations["getStaffHomeSettings"];
+        /**
+         * Save the home settings as a new version (marketing at EDIT); a reason is mandatory
+         * @description content `PUT /v1/home-settings`. Rejected with a 422 problem (RFC 9457, `errors` by field) for a negative threshold, a
+         *     weight outside 0 to 100, an unknown module or no reason. Audit-logged with who, old and new values. A stale
+         *     `expectedVersion` is a 409. The gateway picks the change up within its cache TTL (60 s).
+         */
+        put: operations["saveStaffHomeSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/home/settings/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who changed which home setting, when and why */
+        get: operations["listStaffHomeSettingsVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/home/settings/revert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make an earlier version current again (a new version; reason mandatory) */
+        post: operations["revertStaffHomeSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/home/communities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Community registry plus the communities seen in products (with counts) that have no entry yet
+         * @description Staff see each community as the shopper does: canonical key, labels in five locales, aliases and the editorial image
+         *     (accepted only if it passes the real-photo check). `unregistered` lists raw product values (with eligible counts) that
+         *     map to no entry, so staff can merge `nigerian` and `Nigerian` by adding an alias.
+         */
+        get: operations["listStaffHomeCommunities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/home/communities/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or replace a community registry entry (reason mandatory, audit-logged) */
+        put: operations["putStaffHomeCommunity"];
+        post?: never;
+        /** Remove a registry entry */
+        delete: operations["deleteStaffHomeCommunity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/home/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The home page for a chosen ZIP, signed-in state, language and date, with every module shown or hidden and why
+         * @description Read only; no personal data. `blocks` is what shoppers see (same composition as `GET /v1/home`); `decisions` lists
+         *     EVERY module by name with shown or hidden, a reason code, a sentence, and the live count against the threshold.
+         *     `asOf` evaluates scheduled placements (starts, ends) and seasons at that instant, so it shows exactly what goes live
+         *     then; staff pins win ties over automatic modules and the decision says so. `catalog` replays a fixture (0, 10, 100 or
+         *     10000 eligible products) instead of the live catalogue. `seed` reproduces a visitor view (copy `debug.seed`);
+         *     `deterministic=true` shows the default order shoppers' crawlers get.
+         */
+        get: operations["previewStaffHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/resources/{resource}": {
         parameters: {
             query?: never;
@@ -5730,6 +5858,167 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        StaffLocaleLabels: {
+            en: string;
+            fr?: string;
+            es?: string;
+            ar?: string;
+            yo?: string;
+        };
+        StaffHomeModuleRule: {
+            enabled?: boolean;
+            minProducts?: number;
+            minSellers?: number;
+            minUnits?: number;
+            unitMinProducts?: number;
+            unitMinSellers?: number;
+            maxAgeDays?: number;
+            weight?: number;
+            show?: number;
+            /** @enum {string} */
+            band?: "hero" | "personal" | "discovery" | "promo" | "brand";
+        };
+        StaffHomeCaps: {
+            /** @default 12 */
+            maxModules: number;
+            /** @default 3 */
+            minModules: number;
+            /** @default 2 */
+            sellerShare: number;
+            /** @default 3 */
+            sponsoredPerOrganic: number;
+            /** @default 3 */
+            poolMultiplier: number;
+            /** @default 3 */
+            noveltyLoads: number;
+            /** @default 0.6 */
+            noveltyPenalty: number;
+            /** @default 30 */
+            visitWindowMinutes: number;
+            /** @default 2 */
+            hysteresis: number;
+            /** @default 10 */
+            dealMinPercent: number;
+            /** @default 7 */
+            navBarSize: number;
+        };
+        StaffHomeSettings: {
+            version: number;
+            /** @enum {string|null} */
+            dynamic?: "off" | "shadow" | "on" | null;
+            /** @enum {string} */
+            effectiveDynamic: "off" | "shadow" | "on";
+            modules: {
+                [key: string]: components["schemas"]["StaffHomeModuleRule"];
+            };
+            /** @description Module key to the name staff read (never show the key). */
+            moduleNames: {
+                [key: string]: string;
+            };
+            caps: components["schemas"]["StaffHomeCaps"];
+            departmentLabels: {
+                [key: string]: components["schemas"]["StaffLocaleLabels"];
+            };
+            /** Format: date-time */
+            updatedAt?: string;
+            updatedBy?: string;
+        };
+        StaffHomeSettingsSave: {
+            expectedVersion: number;
+            /** @enum {string|null} */
+            dynamic: "off" | "shadow" | "on" | null;
+            modules: {
+                [key: string]: components["schemas"]["StaffHomeModuleRule"];
+            };
+            caps: components["schemas"]["StaffHomeCaps"];
+            departmentLabels: {
+                [key: string]: components["schemas"]["StaffLocaleLabels"];
+            };
+            reason: string;
+        };
+        StaffHomeSettingsVersion: {
+            version: number;
+            reason: string;
+            changedBy: string;
+            /** Format: date-time */
+            changedAt: string;
+            revertOf?: number | null;
+            changes: {
+                field: string;
+                from: unknown;
+                to: unknown;
+            }[];
+        };
+        StaffHomeCommunity: {
+            key: string;
+            labels: components["schemas"]["StaffLocaleLabels"];
+            aliases: string[];
+            imageUrl?: string | null;
+            /** @description False when the editorial image fails the real-photo check (then the top product photo is used). */
+            imageAccepted?: boolean;
+            eligibleProducts?: number;
+            sellers?: number;
+            /** @description Above the thresholds now */
+            visible?: boolean;
+        };
+        StaffHomeCommunityWrite: {
+            labels: components["schemas"]["StaffLocaleLabels"];
+            aliases?: string[];
+            imageUrl?: string | null;
+            reason: string;
+        };
+        StaffHomeCommunities: {
+            registered: components["schemas"]["StaffHomeCommunity"][];
+            unregistered: {
+                value: string;
+                eligibleProducts: number;
+            }[];
+        };
+        StaffHomePreview: {
+            /** Format: date-time */
+            asOf: string;
+            locale: string;
+            catalog: string;
+            seed: string;
+            deliverTo?: {
+                zip?: string;
+                city?: string;
+                state?: string;
+            };
+            /** @description Same shape as `HomeBlock` of gateway-bff.yaml. */
+            blocks: {
+                [key: string]: unknown;
+            }[];
+            decisions: components["schemas"]["StaffHomeDecision"][];
+            /** @description The season window active at asOf and the modules it boosted. */
+            season?: {
+                name?: string;
+                /** Format: date-time */
+                startsAt?: string;
+                /** Format: date-time */
+                endsAt?: string;
+                boosted?: string[];
+            } | null;
+        };
+        StaffHomeDecision: {
+            module: string;
+            label: string;
+            shown: boolean;
+            order?: number;
+            /** @enum {string} */
+            reason: "shown" | "disabled-by-staff" | "not-enough-products" | "not-enough-sellers" | "not-fresh-enough" | "not-enough-departments" | "no-shopper-signal" | "nothing-to-show" | "sponsored-cap" | "page-full";
+            detail: string;
+            have?: number;
+            need?: number;
+            units?: string[];
+            pool?: number;
+            picked?: number;
+            band?: string;
+            /** @description A staff placement won this slot over the automatic module */
+            pinned?: boolean;
+            /** @description Anchor of the rule row in Home settings. */
+            editRule?: string;
+        };
         /** @description Why the change is made; recorded in the audit trail with the person's name */
         StaffTaxonomyReason: string;
         StaffBrandScope: {
@@ -10754,6 +11043,216 @@ export interface operations {
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    getStaffHomeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffHomeSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    saveStaffHomeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffHomeSettingsSave"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffHomeSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+        };
+    };
+    listStaffHomeSettingsVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versions newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffHomeSettingsVersion"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    revertStaffHomeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    toVersion: number;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Reverted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffHomeSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+        };
+    };
+    listStaffHomeCommunities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffHomeCommunities"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    putStaffHomeCommunity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffHomeCommunityWrite"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffHomeCommunity"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+        };
+    };
+    deleteStaffHomeCommunity: {
+        parameters: {
+            query: {
+                reason: string;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    previewStaffHome: {
+        parameters: {
+            query?: {
+                zip?: string;
+                signedIn?: boolean;
+                locale?: "en" | "fr" | "es" | "ar" | "yo";
+                /** @description Default now. May be in the future. */
+                asOf?: string;
+                catalog?: "live" | "0" | "10" | "100" | "10000";
+                seed?: string;
+                deterministic?: boolean;
+                variant?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffHomePreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
         };
     };
     listStaffResource: {

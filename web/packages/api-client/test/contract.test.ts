@@ -15,7 +15,8 @@ describe('Zod schemas stay aligned with contracts/openapi/gateway-bff.yaml', () 
     expectTypeOf<SearchPage>().toExtend<S['SearchPage']>();
     expectTypeOf<Suggestions>().toExtend<S['Suggestions']>();
     expectTypeOf<Cart>().toExtend<S['Cart']>();
-    expectTypeOf<Home>().toExtend<S['Home']>();
+    // `debug` (staff only) keeps `reason` a free string, and `version` a number, so a new value from a newer gateway never breaks the page.
+    expectTypeOf<Omit<Home, 'debug' | 'version'>>().toExtend<Omit<S['Home'], 'debug' | 'version'>>();
     expectTypeOf<SiteConfig>().toExtend<S['SiteConfig']>();
     expectTypeOf<Me>().toExtend<S['Me']>();
   });

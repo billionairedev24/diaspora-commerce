@@ -8,8 +8,8 @@ import { CodeSchema } from '../schemas/auth';
 import { JobApplicationFormSchema } from '../schemas/careers';
 import { AddToCartRequestSchema, SelectAllRequestSchema, UpdateCartLineRequestSchema } from '../schemas/cart';
 import { StockAlertRequestSchema } from '../schemas/catalog';
-import { ZipSchema } from '../schemas/location';
 import { HomeModuleEventSchema } from '../schemas/home';
+import { ZipSchema } from '../schemas/location';
 import { NewsletterRequestSchema } from '../schemas/site';
 import { fromApiSearchParams } from '../search-params';
 import { mockAddressSuggestions, mockResolveAddress } from './addresses';
@@ -20,8 +20,8 @@ import { deliveryQuoteHandlers } from './delivery-quotes';
 import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
-import { composeDynamicHome, DEFAULT_SEED, fixtureCatalog, HOME_SEED_HEADER, homeMock, mockCatalogueSize, navigationOf } from './home-dynamic';
 import { helpRequestHandlers } from './help-requests';
+import { composeDynamicHome, fixtureCatalog, homeMock, mockCatalogueSize, navigationOf, resolveCommunity, seedOfVisit, sitemapOf, visitOfHeaders } from './home-dynamic';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
 import { membershipHandlers } from './membership';
@@ -109,22 +109,44 @@ export const handlers = [
   http.get('*/v1/home', route((ctx) => {
     const size = mockCatalogueSize();
     if (size === null) return json(home(sessionLocation(ctx.session), ctx.now, ctx.session.userId ?? null));
-    // The dynamic home: the visit seed arrives as a header (the storefront reads its short-lived cookie); none means the crawler default.
+    // The dynamic home: the visit arrives as headers (the storefront relays its first-party cookies); no visitor id or a crawler means the default page.
     const loc = sessionLocation(ctx.session);
-    const seed = ctx.request.headers.get(HOME_SEED_HEADER)?.trim() || DEFAULT_SEED;
-    const { home: h } = composeDynamicHome({ catalog: fixtureCatalog(size), settings: homeMock.settings, seed, now: ctx.now, signedIn: !!ctx.session.userId, loc, hasZip: loc.source === 'chosen' });
-    return json(h);
+    const visit = visitOfHeaders(ctx.request.headers);
+    const { home: h } = composeDynamicHome({
+      catalog: fixtureCatalog(size),
+      settings: homeMock.settings,
+      seed: seedOfVisit(visit),
+      seen: new Set(visit.seen),
+      variant: visit.variant,
+      now: ctx.now,
+      signedIn: !!ctx.session.userId,
+      loc,
+      hasZip: loc.source === 'chosen'
+    });
+    return new Response(JSON.stringify(h), { headers: { 'Content-Type': 'application/json', 'Cache-Control': visit.crawler ? 'public, max-age=60, stale-while-revalidate=300' : 'private, no-store' } });
   })),
   /* Departments, communities and Services availability: the same eligible-only counts the home uses. */
-  http.get('*/v1/site/departments', route((ctx) => {
+  http.get('*/v1/site/navigation', route((ctx) => {
     const size = mockCatalogueSize();
     const loc = sessionLocation(ctx.session);
-    const nav = navigationOf(size === null ? liveCatalog(loc, ctx.now) : fixtureCatalog(size), homeMock.settings);
-    return json(size === null ? { ...nav, servicesAvailable: true } : nav);
+    const nav = navigationOf(size === null ? liveCatalog(loc, ctx.now) : fixtureCatalog(size), homeMock.settings, ctx.now);
+    return json(size === null ? { ...nav, services: { available: true, providers: 6, href: '/services' } } : nav);
   })),
-  http.post('*/v1/home/module-events', route(async (ctx) => {
+  http.get('*/v1/site/communities/:slug', route((ctx) => {
+    const size = mockCatalogueSize();
+    const catalog = size === null ? liveCatalog(sessionLocation(ctx.session), ctx.now) : fixtureCatalog(size);
+    const slug = decodeURIComponent(new URL(ctx.request.url).pathname.split('/').pop() ?? '');
+    const found = resolveCommunity(catalog, homeMock.settings, slug);
+    if (!found) throw new MockProblem(404, 'community.not-visible', 'Not found', 'That community has no products to show.');
+    return json(found);
+  })),
+  http.get('*/v1/site/sitemap', route((ctx) => {
+    const size = mockCatalogueSize();
+    return json(sitemapOf(size === null ? liveCatalog(sessionLocation(ctx.session), ctx.now) : fixtureCatalog(size), homeMock.settings, ctx.now));
+  })),
+  http.post('*/v1/home/events', route(async (ctx) => {
     await body(ctx.request, HomeModuleEventSchema);
-    return new Response(null, { status: 204 });
+    return new Response(null, { status: 202 });
   })),
   http.get('*/v1/home/recently-viewed', route((ctx) => {
     const atins = (new URL(ctx.request.url).searchParams.get('atins') ?? '').split(',').filter(Boolean);
