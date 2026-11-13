@@ -79,6 +79,30 @@ type Home struct {
 	Banners   []Banner         `json:"-"`
 	Rails     []Rail           `json:"-"`
 	DeliverTo DeliveryLocation `json:"deliverTo"`
+	// Dynamic home (version 2); absent from the legacy composition.
+	Version     int        `json:"version,omitempty"`
+	GeneratedAt string     `json:"generatedAt,omitempty"`
+	Locale      string     `json:"locale,omitempty"`
+	Variant     string     `json:"variant,omitempty"`
+	Visit       *HomeVisit `json:"visit,omitempty"`
+	Debug       *HomeDebug `json:"debug,omitempty"`
+}
+
+// HomeVisit describes the visit the page was composed for.
+type HomeVisit struct {
+	Window        string   `json:"window"`
+	Seen          []string `json:"seen"`
+	Deterministic bool     `json:"deterministic,omitempty"`
+}
+
+// HomeDebug is what staff see in debug mode: the seed and why each module is shown or hidden. Never sent to shoppers.
+type HomeDebug struct {
+	Seed          string           `json:"seed"`
+	Visitor       string           `json:"visitor,omitempty"`
+	VisitWindow   string           `json:"visitWindow,omitempty"`
+	NoveltyMemory int              `json:"noveltyMemory"`
+	Dynamic       string           `json:"dynamic"`
+	Decisions     []ModuleDecision `json:"decisions"`
 }
 
 // RailSource says how a placement rail (or a rule-based tile cell) is filled: a search (query/department/fulfilment,

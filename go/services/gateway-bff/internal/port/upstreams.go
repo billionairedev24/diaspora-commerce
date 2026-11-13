@@ -24,9 +24,12 @@ type SearchParams struct {
 	MaxPrice   int64
 	MaxDays    int
 	InStock    bool
-	Sort       string
-	Page       int
-	Size       int
+	// EligibleOnly restricts hits and facet counts to live, in-stock products with a real photo (search eligibleOnly, S415)
+	// and asks for DistinctSellers.
+	EligibleOnly bool
+	Sort         string
+	Page         int
+	Size         int
 	// Ads blends sponsored products into the page (results pages only; S240).
 	Ads bool
 	// NoTrack keeps machine-made queries (home rails, Lola) out of search events (track=false).
@@ -72,6 +75,8 @@ type SearchResult struct {
 	TookMs int64                          `json:"tookMs"`
 	// SearchID identifies the search for click reporting.
 	SearchID string `json:"searchId"`
+	// DistinctSellers is present with EligibleOnly: the sellers of the matching products.
+	DistinctSellers int64 `json:"distinctSellers"`
 }
 
 // SuggestResult is the search-service typeahead.

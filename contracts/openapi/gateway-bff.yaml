@@ -220,6 +220,7 @@ paths:
         - {name: X-Visitor-Id, in: header, schema: {type: string, maxLength: 64}, description: 'Opaque first-party visitor id (cookie `at_vid`, set by the storefront). Absent: the page is the deterministic default.'}
         - {name: X-Visit-Window, in: header, schema: {type: string, maxLength: 64}, description: 'Opaque id of the current visit (cookie `at_visit`, 30 minute sliding expiry, new on a new visit). Part of the variety seed.'}
         - {name: X-Home-Seen, in: header, schema: {type: string, maxLength: 600}, description: 'Guests: comma separated item keys (`Home.visit.seen`) of the last few home loads, kept in a first-party cookie. Signed-in shoppers: ignored, the server remembers.'}
+        - {name: X-Home-Exclude, in: header, schema: {type: string, maxLength: 600}, description: 'Additive (S425): comma separated ATINs the visitor already has in Recently viewed and in the cart. Discovery modules leave them out. Read from the request only, never stored or logged: guest history stays in the browser.'}
         - {name: X-Home-Variant, in: header, schema: {type: string, maxLength: 32}, description: 'Experiment variant assigned by the Worker cookie; part of the shared cache key.'}
         - {name: X-Crawler, in: header, schema: {type: boolean}, description: 'Set by the Worker for known crawlers and for noindex variants: deterministic page, no randomness.'}
       responses:
@@ -5254,7 +5255,7 @@ components:
       required: [window, seen]
       properties:
         window: {type: string, description: The visit window the page was composed for (echo of X-Visit-Window, or empty).}
-        seen: {type: array, maxItems: 60, items: {type: string, maxLength: 8}, description: 'Short keys of the items this page shows. Guests append them to the `at_hs` cookie (keep the last 3 loads, about 120 keys) and send it back as X-Home-Seen. Not the product ids.'}
+        seen: {type: array, maxItems: 60, items: {type: string, maxLength: 8}, description: 'Short keys of the items this page shows. A refresh inside one visit must REPLACE the cookie entry of the same `visit.window` instead of appending, or the page would reshuffle on refresh. Guests append them to the `at_hs` cookie (keep the last 3 loads, about 120 keys) and send it back as X-Home-Seen. Not the product ids.'}
         deterministic: {type: boolean, description: True when the order is the default one (crawler, noindex variant or no visitor id).}
     HomeModuleDecision:
       type: object

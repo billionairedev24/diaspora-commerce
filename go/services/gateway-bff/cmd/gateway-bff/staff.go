@@ -31,7 +31,7 @@ type staffClients struct {
 // It also returns Seller Center's export stores (same job store, renderer and file directory; seller links are served by
 // /v1/seller/export-files/{id}).
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
-	cache port.Cache, counter port.DailyCounter, maintenance app.MaintenanceService, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
+	cache port.Cache, counter port.DailyCounter, maintenance app.MaintenanceService, site app.SiteService, env string, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
 	up := cfg.Upstreams
 	media := client("media", up.Media)
 	d := app.StaffDeps{
@@ -84,6 +84,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Exports, out.Support, out.Fees = app.NewStaffExportsService(d), app.NewStaffSupportService(d), app.NewStaffFeesService(d)
 	out.Dispatch, out.Notifications = app.NewStaffDispatchService(d), app.NewStaffNotificationsService(d)
 	out.Preorders = app.NewStaffPreordersService(d)
+	out.Home = app.NewStaffHomeService(d, site, env)
 	out.Inventory = app.NewStaffInventoryService(d)
 	out.Markets = app.NewStaffMarketsService(d)
 	out.Tax = app.NewStaffTaxService(d)

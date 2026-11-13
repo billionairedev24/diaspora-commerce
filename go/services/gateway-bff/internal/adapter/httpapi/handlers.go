@@ -135,6 +135,12 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/home", h.home)
 	route("GET /v1/home/recently-viewed", h.recentlyViewed)
 	route("POST /v1/home/ad-events", h.adEvent)
+	route("POST /v1/home/events", h.homeEvent)
+	route("GET /v1/site/navigation", h.siteNavigation)
+	route("GET /v1/site/departments", h.siteDepartments)
+	route("GET /v1/site/communities", h.siteCommunities)
+	route("GET /v1/site/communities/{slug}", h.siteCommunity)
+	route("GET /v1/site/sitemap", h.siteSitemap)
 	route("POST /v1/newsletter/subscriptions", lookup(h.newsletter))
 	// Legal & privacy center
 	route("GET /v1/legal", h.legalIndex)
@@ -289,8 +295,7 @@ func (h *handlersImpl) siteConfig(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) home(w http.ResponseWriter, r *http.Request) {
 	h.detectLocation(r)
-	v, err := h.s.Site.Home(r.Context(), callerFrom(r.Context()))
-	h.reply(w, r, http.StatusOK, v, err)
+	h.homeV2(w, r)
 }
 
 // recentlyViewed resolves the ATINs the browser remembers (comma separated, most recent first) into product cards.

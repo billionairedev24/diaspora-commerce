@@ -24,6 +24,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	gatewaybff "github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/homemetrics"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/memcache"
@@ -185,7 +186,8 @@ func run() error {
 		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, serviceTokens), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
 			Offers: storefrontOffers, Orders: orders, Services: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Promise: sitePromise,
-			Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
+			Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log,
+			Env: loader.Env(), HomeContent: upstreams.NewContentHome(client("content", up.Content)), Memory: valkey.NewHomeMemory(rdb), Metrics: homemetrics.New(reg)}),
 		Location: location,
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil,
 			app.WithServices(upstreams.NewCustomerBookings(client("bookings", up.Bookings)))),
@@ -241,7 +243,7 @@ func run() error {
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,
 		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient,
-		proofLinks: proofLinks}, rdb, cache, store, maintenance, log); err != nil {
+		proofLinks: proofLinks}, rdb, cache, store, maintenance, services.Site, loader.Env(), log); err != nil {
 		return err
 	}
 	// Seller Center exports share the staff console's job store, renderer and file directory.

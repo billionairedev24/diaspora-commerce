@@ -33,6 +33,8 @@ type StaffServices struct {
 	Notifications app.StaffNotificationsService
 	// Preorders serves the Pre-orders module (S270–S275); routes are registered when it is set.
 	Preorders app.StaffPreordersService
+	// Home serves Marketing > Home (the dynamic home's settings, community registry and preview); registered when set.
+	Home app.StaffHomeService
 	// Markets serves Settings → Markets & locations as a location tree and the shared place pickers; routes are
 	// registered when it is set.
 	Markets app.StaffMarketsService
@@ -120,6 +122,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/notifications/templates/{key}/preview", h.staffTemplatePreview)
 		route("POST /v1/staff/notifications/templates/{key}/versions", h.staffTemplateVersion)
 		route("POST /v1/staff/notifications/templates/{key}/test-send", h.staffTemplateTestSend)
+	}
+	if s.Home != nil {
+		h.registerStaffHome(route)
 	}
 	if s.Preorders != nil {
 		h.registerStaffPreorders(route)

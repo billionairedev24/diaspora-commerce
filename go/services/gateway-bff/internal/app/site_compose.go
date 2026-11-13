@@ -161,7 +161,11 @@ var defaultCap = map[string]int{domain.BlockBrandBanner: 3, domain.BlockAdvertor
 // shows. Sponsored products and brand-banner strips claim their products before organic modules, so an advertised
 // product is not repeated further down as an organic card.
 func (s *siteServiceImpl) composeBody(ctx context.Context, c *domain.Caller, loc domain.DeliveryLocation, pl domain.Placements, sc shopperScope, now time.Time, used map[string]bool) []domain.HomeBlock {
-	signedIn := c != nil && c.Authenticated()
+	return s.composeBodyAs(ctx, c, c != nil && c.Authenticated(), loc, pl, sc, now, used)
+}
+
+// composeBodyAs is composeBody with the signed-in state given (a staff preview chooses it without a shopper).
+func (s *siteServiceImpl) composeBodyAs(ctx context.Context, c *domain.Caller, signedIn bool, loc domain.DeliveryLocation, pl domain.Placements, sc shopperScope, now time.Time, used map[string]bool) []domain.HomeBlock {
 	entries := orderedBody(pl, loc, signedIn)
 	if !hasBlockType(entries, domain.BlockBasedOnOrders) {
 		entries = append([]bodyEntry{{slot: "home_block", id: BasedOnOrdersRailID, p: blockPayload{Type: domain.BlockBasedOnOrders}}}, entries...)

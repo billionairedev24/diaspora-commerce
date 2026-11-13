@@ -51,6 +51,9 @@ func (s *searchImpl) Search(ctx context.Context, p port.SearchParams) (port.Sear
 	if p.InStock {
 		q.Set("inStock", "true")
 	}
+	if p.EligibleOnly {
+		q.Set("eligibleOnly", "true")
+	}
 	q.Set("page", strconv.Itoa(p.Page))
 	if p.Size > 0 {
 		q.Set("size", strconv.Itoa(p.Size))

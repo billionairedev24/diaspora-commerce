@@ -184,12 +184,205 @@ paths:
         photograph (never a placeholder or icon); the same rule applies to every product rail. A rule with nothing eligible
         drops its cell, and a tile left with fewer than two rule cells is dropped. Signed-in shoppers with past orders get a
         leading "Based on your orders" rail (id `based-on-orders`), absent when there is nothing to show.
+
+        **Dynamic home (version 2, S416 to S430).** When `home.dynamic` is `on` the page is built from what exists. A signals
+        snapshot (eligible-only counts, cached 60 s) is evaluated against the staff-editable module rules BEFORE any module
+        resolves; a hidden module costs no upstream call. The catalogue decides the page: 0 products gives a text-only
+        `brand-hero` plus a `sell-band`; more products add department tiles, rails, deals, top sellers, communities (only when
+        3 communities each have 8 eligible products and 2 sellers, by default), services and so on. Every threshold is a staff
+        setting (`GET /v1/staff/home/settings`).
+
+        **Variety (the page differs between visits).** Each module draws from a pool larger than it shows and picks a different
+        subset per visit with a seeded, quality-weighted shuffle. The seed is `visitor + visit window`: the same within one visit
+        (refresh and back do not reshuffle) and new after 30 minutes of inactivity (guests: the storefront starts a new window
+        on each full page load of a new visit). Items shown on the last few loads are down-weighted (novelty memory: server
+        side per signed-in shopper, the `X-Home-Seen` header for guests, kept in a first-party cookie by the storefront), and
+        items in Recently viewed or the cart are excluded from discovery modules. Module order rotates inside staff-defined
+        bands (the hero stays first, the sponsored cap is respected). Crawlers (`X-Crawler: 1` or a known bot user agent) and
+        `noindex` variants get the deterministic default order: no randomness. A seller supplies at most `sellerShare` items
+        (default 2) of one module and a product appears once on the page.
+
+        **Caching.** The response is per visit and `private, no-store` (storefront HTML stays uncached, see seo.md). The
+        gateway caches the shared data it draws from (signals and candidate pools, keyed by market, region, locale and variant)
+        for 60 s fresh and 300 s stale. Crawler responses are `public, max-age=60, stale-while-revalidate=300` with
+        `Vary: X-Crawler, Accept-Language`. Blocks with `scope: shared` hold no visitor field.
+
+        **Copy.** Generated modules carry `titleKey`/`subKey`/`ctaKey` and `titleParams`, never English sentences; the storefront
+        resolves them from `contracts/i18n/home-copy.json` (en, fr, es, ar, yo; non-English entries are machine drafts marked
+        `needsReview`). Staff-authored placement copy stays as authored (English fallback).
+
+        **Staff reproduction.** With a staff session and `debug=1` the response carries `debug` (per-module eligibility reason
+        and the variety seed), and `seed` replays an exact view.
+      parameters:
+        - {name: locale, in: query, schema: {type: string, enum: [en, fr, es, ar, yo]}, description: 'Language of department and community labels (default: Accept-Language, then en).'}
+        - {name: debug, in: query, schema: {type: boolean}, description: 'Staff session only: include `debug`. Ignored (no field) for everyone else.'}
+        - {name: seed, in: query, schema: {type: string, maxLength: 80}, description: 'Staff session only: replay a variety seed (`debug.seed` of an earlier view).'}
+        - {name: X-Visitor-Id, in: header, schema: {type: string, maxLength: 64}, description: 'Opaque first-party visitor id (cookie `at_vid`, set by the storefront). Absent: the page is the deterministic default.'}
+        - {name: X-Visit-Window, in: header, schema: {type: string, maxLength: 64}, description: 'Opaque id of the current visit (cookie `at_visit`, 30 minute sliding expiry, new on a new visit). Part of the variety seed.'}
+        - {name: X-Home-Seen, in: header, schema: {type: string, maxLength: 600}, description: 'Guests: comma separated item keys (`Home.visit.seen`) of the last few home loads, kept in a first-party cookie. Signed-in shoppers: ignored, the server remembers.'}
+        - {name: X-Home-Exclude, in: header, schema: {type: string, maxLength: 600}, description: 'Additive (S425): comma separated ATINs the visitor already has in Recently viewed and in the cart. Discovery modules leave them out. Read from the request only, never stored or logged: guest history stays in the browser.'}
+        - {name: X-Home-Variant, in: header, schema: {type: string, maxLength: 32}, description: 'Experiment variant assigned by the Worker cookie; part of the shared cache key.'}
+        - {name: X-Crawler, in: header, schema: {type: boolean}, description: 'Set by the Worker for known crawlers and for noindex variants: deterministic page, no randomness.'}
       responses:
         '200':
           description: Placements
+          headers:
+            Cache-Control: {schema: {type: string}, description: '`private, no-store` for visitors; `public, max-age=60, stale-while-revalidate=300` for crawlers.'}
+            Vary: {schema: {type: string}}
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Home'}
+  /v1/home/events:
+    post:
+      tags: [Site]
+      operationId: recordHomeModuleEvent
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Count an impression or a click on an organic home module (aggregate, no identity)
+      description: |
+        The storefront reports each module once per view (impression: 50 percent visible for 500 ms) and on click, only with
+        analytics consent. Counted per module, event, variant and locale; nothing identifies the shopper. `module` must be a
+        registry module key (unknown keys are rejected, which keeps the metric label set small and fixed).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [module, event]
+              properties:
+                module: {type: string, examples: [department-tiles]}
+                event: {type: string, enum: [impression, click]}
+                position: {type: integer, minimum: 0, maximum: 30}
+                variant: {type: string, maxLength: 32}
+                target: {type: string, enum: [product, department, community, service, other]}
+      responses:
+        '202': {description: Counted}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/site/navigation:
+    get:
+      tags: [Site]
+      operationId: getSiteNavigation
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Header bar, All departments menu, footer communities and the Services and Deals entries, from live counts
+      description: |
+        Replaces every literal department or community list in the storefront. Generated from the live catalog taxonomy and
+        the eligible-only counts (live, RESOLVED tax decision, in stock, real photo), so nav, footer, sitemap and the home
+        agree. A department with no eligible product is not linked. `bar` is the largest departments by count (at most 7);
+        `all` is every department with at least one eligible product. Labels are short display labels derived from the
+        catalog full names (staff can edit them in Home settings) in the requested locale, falling back to the catalog name.
+        `services.available` is true whenever any provider exists in the market; `deals.available` and `brand.available`
+        follow their module rules. Communities appear only above the staff thresholds (default 3 communities, each with 8
+        eligible products and 2 sellers).
+      parameters:
+        - {name: locale, in: query, schema: {type: string, enum: [en, fr, es, ar, yo]}}
+      responses:
+        '200':
+          description: Navigation
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60, stale-while-revalidate=300'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteNavigation'}
+  /v1/site/departments:
+    get:
+      tags: [Site]
+      operationId: listSiteDepartments
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Catalog departments with eligible counts, display labels and a real product photo
+      description: |
+        The single source of department choices: the nav, the department tiles and the staff tile-rule picker all read this.
+        Only departments with at least one eligible product are listed (`includeEmpty=true`, staff picker only, adds the
+        empty ones with `count: 0` and no `href`).
+      parameters:
+        - {name: locale, in: query, schema: {type: string, enum: [en, fr, es, ar, yo]}}
+        - {name: includeEmpty, in: query, schema: {type: boolean, default: false}}
+      responses:
+        '200':
+          description: Departments
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60, stale-while-revalidate=300'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [departments, generatedAt]
+                properties:
+                  departments: {type: array, items: {$ref: '#/components/schemas/SiteDepartment'}}
+                  generatedAt: {type: string, format: date-time}
+  /v1/site/communities:
+    get:
+      tags: [Site]
+      operationId: listSiteCommunities
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Visible communities (above the thresholds) with canonical keys, locale labels and a real product photo
+      description: |
+        A community is the optional facet over the product `community` attribute. Case and alias variants (`nigerian`,
+        `Nigerian`) merge into one canonical key through the community registry. The list is empty unless the module
+        threshold is met (default 3 communities each with 8 eligible products and 2 sellers); below it a community is absent
+        from home, nav, footer and sitemap. The photo is the best eligible product of the community unless staff uploaded an
+        editorial image that passes the real-photo check. `label` and `href` come from the same `key`.
+      parameters:
+        - {name: locale, in: query, schema: {type: string, enum: [en, fr, es, ar, yo]}}
+      responses:
+        '200':
+          description: Communities
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60, stale-while-revalidate=300'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [communities, generatedAt]
+                properties:
+                  communities: {type: array, items: {$ref: '#/components/schemas/SiteCommunity'}}
+                  generatedAt: {type: string, format: date-time}
+  /v1/site/communities/{slug}:
+    get:
+      tags: [Site]
+      operationId: getSiteCommunity
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Resolve a /communities/{slug} route
+      description: |
+        200 with the community when it is visible. An alias or a case variant answers 200 with `canonical: false`; the
+        storefront redirects (308) to `community.key`. A community below the thresholds, or an unknown one, answers 404 with
+        problem type `community.not-visible`; the storefront shows its 404 (never a zero-result page).
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, maxLength: 80}}
+        - {name: locale, in: query, schema: {type: string, enum: [en, fr, es, ar, yo]}}
+      responses:
+        '200':
+          description: Visible community
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [community, canonical]
+                properties:
+                  community: {$ref: '#/components/schemas/SiteCommunity'}
+                  canonical: {type: boolean, description: 'True when the requested slug is the canonical key; false means redirect to community.key.'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/site/sitemap:
+    get:
+      tags: [Site]
+      operationId: getSiteSitemapSources
+      security: [{}]
+      summary: Department and community URLs for the sitemap, from the same counts as the home and the nav
+      description: |
+        Only entries with eligible products (and communities above the thresholds). `lastmod` is the newest eligible product
+        change in that entry. The sitemap and the home read one snapshot, so they cannot disagree.
+      responses:
+        '200':
+          description: Entries
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=300'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [departments, communities]
+                properties:
+                  departments: {type: array, items: {$ref: '#/components/schemas/SitemapEntry'}}
+                  communities: {type: array, items: {$ref: '#/components/schemas/SitemapEntry'}}
   /v1/home/recently-viewed:
     get:
       tags: [Site]
@@ -4976,6 +5169,121 @@ components:
         title: {type: string}
         href: {type: string}
         items: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+    LocaleLabels:
+      type: object
+      description: 'Label per locale. `en` is always present; a missing locale falls back to `en`, never to a key.'
+      required: [en]
+      properties:
+        en: {type: string}
+        fr: {type: string}
+        es: {type: string}
+        ar: {type: string}
+        yo: {type: string}
+    SiteDepartment:
+      type: object
+      required: [key, name, label, labels, count, sellers]
+      properties:
+        key: {type: string, description: 'Stable slug of the catalog department, for example groceries-food.', examples: [groceries-food]}
+        name: {type: string, description: Catalog full name (the `department` search filter value), examples: [Groceries & Food]}
+        label: {type: string, description: 'Short display label in the requested locale (derived from the full name, staff-editable).', examples: [Groceries]}
+        labels: {$ref: '#/components/schemas/LocaleLabels'}
+        labelKey: {type: string, description: 'i18n key `dept.<key>` when the storefront catalog has one.'}
+        count: {type: integer, description: Eligible products}
+        sellers: {type: integer, description: Distinct sellers of those products}
+        href: {type: string, description: 'Absent when count is 0 (not linked).', examples: ['/s?dept=Groceries+%26+Food']}
+        imageUrl: {type: [string, 'null'], description: Photo of the best eligible product of the department; never an icon or emoji}
+    SiteCommunity:
+      type: object
+      required: [key, label, labels, count, sellers, href]
+      properties:
+        key: {type: string, description: 'Canonical slug from the registry (lowercase), for example nigerian.', examples: [nigerian]}
+        label: {type: string}
+        labels: {$ref: '#/components/schemas/LocaleLabels'}
+        count: {type: integer}
+        sellers: {type: integer}
+        href: {type: string, examples: [/communities/nigerian]}
+        imageUrl: {type: [string, 'null'], description: A real top product photo, or the editorial image when staff set one that passes the real-photo check}
+        imageSource: {type: string, enum: [product, editorial, none]}
+    SiteServices:
+      type: object
+      required: [available, href]
+      properties:
+        available: {type: boolean, description: True whenever any provider exists in the market}
+        providers: {type: integer}
+        href: {type: string, examples: [/services]}
+    SiteNavigation:
+      type: object
+      required: [bar, all, communities, services, deals, brand, generatedAt]
+      properties:
+        bar: {type: array, items: {$ref: '#/components/schemas/SiteDepartment'}}
+        all: {type: array, items: {$ref: '#/components/schemas/SiteDepartment'}}
+        communities: {type: array, items: {$ref: '#/components/schemas/SiteCommunity'}}
+        services: {$ref: '#/components/schemas/SiteServices'}
+        deals: {type: object, required: [available], properties: {available: {type: boolean}}}
+        brand: {type: object, required: [available], properties: {available: {type: boolean}}}
+        generatedAt: {type: string, format: date-time}
+    SitemapEntry:
+      type: object
+      required: [href, count]
+      properties:
+        href: {type: string}
+        count: {type: integer}
+        lastmod: {type: string, format: date-time}
+    ServiceCard:
+      type: object
+      description: A bookable service (provider, from price, real photo, city). Needs no physical product.
+      required: [id, title, provider, href]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        provider: {type: string}
+        city: {type: string}
+        fromPriceMinor: {type: [integer, 'null'], format: int64}
+        currency: {type: string}
+        imageUrl: {type: [string, 'null'], description: 'Null when there is no real photo: render text only, never an icon or emoji.'}
+        href: {type: string}
+    HomeTracking:
+      type: object
+      required: [module, position, variant]
+      properties:
+        module: {type: string}
+        position: {type: integer}
+        variant: {type: string}
+    HomeVisit:
+      type: object
+      description: What the storefront needs to continue the visit.
+      required: [window, seen]
+      properties:
+        window: {type: string, description: The visit window the page was composed for (echo of X-Visit-Window, or empty).}
+        seen: {type: array, maxItems: 60, items: {type: string, maxLength: 8}, description: 'Short keys of the items this page shows. A refresh inside one visit must REPLACE the cookie entry of the same `visit.window` instead of appending, or the page would reshuffle on refresh. Guests append them to the `at_hs` cookie (keep the last 3 loads, about 120 keys) and send it back as X-Home-Seen. Not the product ids.'}
+        deterministic: {type: boolean, description: True when the order is the default one (crawler, noindex variant or no visitor id).}
+    HomeModuleDecision:
+      type: object
+      required: [module, label, shown, reason, detail]
+      properties:
+        module: {type: string}
+        label: {type: string, description: Staff-readable module name}
+        shown: {type: boolean}
+        order: {type: integer}
+        reason: {type: string, enum: [shown, disabled-by-staff, not-enough-products, not-enough-sellers, not-fresh-enough, not-enough-departments, no-shopper-signal, nothing-to-show, sponsored-cap, page-full]}
+        detail: {type: string, description: 'Sentence in staff words, naming modules and units, never ids.'}
+        have: {type: integer, description: Live count against the threshold}
+        need: {type: integer}
+        units: {type: array, items: {type: string}}
+        pool: {type: integer, description: Eligible items in the variety pool}
+        picked: {type: integer, description: Items shown after the shuffle and guards}
+        band: {type: string}
+    HomeDebug:
+      type: object
+      description: Staff only (session with marketing access and debug=1).
+      required: [seed, decisions]
+      properties:
+        seed: {type: string, description: 'Replay with ?seed=...: same visitor, window, variant and as-of produce the same view.'}
+        visitor: {type: string}
+        visitWindow: {type: string}
+        noveltyMemory: {type: integer, description: Items remembered from earlier loads}
+        dynamic: {type: string, enum: [off, shadow, on]}
+        decisions: {type: array, items: {$ref: '#/components/schemas/HomeModuleDecision'}}
     HomeBlock:
       type: object
       description: |
@@ -4989,7 +5297,7 @@ components:
         id: {type: string}
         type:
           type: string
-          description: rail, banner, brand-banner, sponsored-products, ad-row, advertorial, deals, based-on-orders, recently-viewed, preorders, services-near-you, community-spotlight, seller-spotlight, membership-promo, signin-promo, occasions
+          description: rail, banner, brand-banner, sponsored-products, ad-row, advertorial, deals, based-on-orders, recently-viewed, preorders, services-near-you, community-spotlight, seller-spotlight, membership-promo, signin-promo, occasions, brand-hero, sell-band, department-tiles, community-tiles, service-cards
         sponsored: {type: boolean}
         advertiser: {type: string}
         title: {type: string}
@@ -5022,13 +5330,33 @@ components:
               href: {type: string}
               imageUrl: {type: [string, 'null']}
               sub: {type: string}
+              key: {type: string, description: 'Department or community key the label and href were both made from.'}
+              labelKey: {type: string}
+              labels: {$ref: '#/components/schemas/LocaleLabels'}
+              count: {type: integer}
         endsAt: {type: string, format: date-time, description: When a deals module ends (countdown)}
         searchId: {type: string, description: The search a sponsored products module came from; send it with each click}
         maxPerSession: {type: integer, description: Most times one browser session shows this paid module (0 = no cap)}
+        module: {type: string, description: 'Registry module that produced a generated block (hero, deals, department-tiles, communities, services-near-you, new-arrivals, top-sellers, groceries-rail, department-rail, preorder, plus, brand-hero, sell-band).'}
+        scope: {type: string, enum: [shared, visitor], description: '`shared` blocks are the same for every visitor of a market, region, locale and variant and hold no personal field; `visitor` blocks (continue shopping, recently viewed) depend on the visitor.'}
+        titleKey: {type: string, description: 'i18n key in contracts/i18n/home-copy.json. When present `title` is empty.'}
+        titleParams: {type: object, additionalProperties: {type: string}, description: 'Values for {city}, {department}, {community}, {day}.'}
+        subKey: {type: string}
+        ctaKey: {type: string}
+        bodyKey: {type: string}
+        services: {type: array, items: {$ref: '#/components/schemas/ServiceCard'}}
+        textOnly: {type: boolean, description: 'True when the block has no real photo and must render as text (a brand hero, a hero slide without an image).'}
+        tracking: {$ref: '#/components/schemas/HomeTracking'}
     Home:
       type: object
       required: [announcements, hero, tiles, blocks, deliverTo]
       properties:
+        version: {type: integer, enum: [1, 2], description: '2 when the dynamic home composed the page.'}
+        generatedAt: {type: string, format: date-time}
+        locale: {type: string}
+        variant: {type: string}
+        visit: {$ref: '#/components/schemas/HomeVisit'}
+        debug: {$ref: '#/components/schemas/HomeDebug'}
         announcements: {type: array, items: {$ref: '#/components/schemas/Announcement'}}
         hero: {type: array, items: {$ref: '#/components/schemas/HeroSlide'}}
         tiles: {type: array, items: {$ref: '#/components/schemas/Tile'}}

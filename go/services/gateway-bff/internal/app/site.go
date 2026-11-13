@@ -24,6 +24,20 @@ import (
 type SiteService interface {
 	SiteConfig(ctx context.Context) (domain.SiteConfig, error)
 	Home(ctx context.Context, c *domain.Caller) (domain.Home, error)
+	// HomeFor composes the home in the mode the settings give (off: the legacy composition; shadow: legacy returned, the
+	// dynamic one compared; on: the dynamic home, version 2).
+	HomeFor(ctx context.Context, req HomeRequest) (domain.Home, error)
+	// Navigation, Departments, Communities, Community and SitemapSources read the one signals snapshot (S419, S420).
+	Navigation(ctx context.Context, locale string) (domain.SiteNavigation, error)
+	Departments(ctx context.Context, locale string, includeEmpty bool) ([]domain.SiteDepartment, time.Time, error)
+	Communities(ctx context.Context, locale string) ([]domain.SiteCommunity, time.Time, error)
+	// Community resolves a /communities/{slug} route; port.ErrNotFound when it is not visible.
+	Community(ctx context.Context, slug, locale string) (domain.SiteCommunity, bool, error)
+	SitemapSources(ctx context.Context) (domain.SitemapSources, error)
+	// RecordModuleEvent counts an impression or click on an organic home module (aggregate, no identity).
+	RecordModuleEvent(ctx context.Context, ev domain.HomeModuleEvent) error
+	// PreviewHome is the staff preview: the home for an as-of instant, ZIP, signed-in state and catalogue, with the decisions.
+	PreviewHome(ctx context.Context, req HomeRequest) (domain.Home, []domain.ModuleDecision, error)
 	// RecentlyViewed resolves browser-remembered ATINs (most recent first) into eligible product cards; the storefront
 	// hides the rail when the result is empty.
 	RecentlyViewed(ctx context.Context, atins []string) ([]domain.ProductSummary, error)
@@ -70,9 +84,24 @@ type SiteDeps struct {
 	Market    string
 	Clock     Clock
 	Log       *slog.Logger
+	// Dynamic home (S416 onward). All optional: without HomeContent the settings are the defaults, without Memory
+	// novelty is per request only, without Metrics nothing is counted.
+	Env         string // APP_ENV: the default of home.dynamic (on in local, dev, uat and trial; off in prod)
+	HomeContent port.ContentHomeClient
+	Memory      port.HomeMemory
+	Metrics     port.HomeMetrics
 }
 
-type siteServiceImpl struct{ d SiteDeps }
+type siteServiceImpl struct {
+	d             SiteDeps
+	settingsCache *ttlCache[domain.HomeSettings]
+	registryCache *ttlCache[[]domain.CommunityEntry]
+	snapCache     *ttlCache[homeSnapshot]
+	poolCache     *ttlCache[[]domain.ProductSummary]
+	nearCache     *ttlCache[[]port.UpBkListing]
+	prevMu        sync.Mutex
+	prevShown     map[string]bool
+}
 
 var _ SiteService = (*siteServiceImpl)(nil)
 
@@ -81,7 +110,11 @@ func NewSiteService(d SiteDeps) SiteService {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
-	return &siteServiceImpl{d: d}
+	fresh, stale := time.Minute, 5*time.Minute
+	return &siteServiceImpl{d: d, prevShown: map[string]bool{},
+		settingsCache: newTTLCache[domain.HomeSettings](fresh, stale), registryCache: newTTLCache[[]domain.CommunityEntry](fresh, stale),
+		snapCache: newTTLCache[homeSnapshot](fresh, stale), poolCache: newTTLCache[[]domain.ProductSummary](fresh, stale),
+		nearCache: newTTLCache[[]port.UpBkListing](fresh, stale)}
 }
 
 // SiteConfig maps content's public site configuration onto the contract and merges identity's enabled social

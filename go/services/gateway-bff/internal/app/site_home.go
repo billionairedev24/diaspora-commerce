@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
@@ -31,37 +32,9 @@ const (
 	minRuleCells   = 2
 )
 
-// placeholderMarks are path fragments of the stand-in images the platform and its sellers use when there is no photo.
-var placeholderMarks = []string{"placeholder", "no-image", "noimage", "no_image", "default-image", "coming-soon", "image-not-available", "/icons/", "/icon-"}
-
-// realPhoto reports whether url points at an actual photograph: an http(s) or site-relative address that is not an
-// inline/vector image and not one of the known placeholders.
-func realPhoto(u *string) bool {
-	if u == nil {
-		return false
-	}
-	raw := strings.TrimSpace(*u)
-	if raw == "" {
-		return false
-	}
-	low := strings.ToLower(raw)
-	if !strings.HasPrefix(low, "https://") && !strings.HasPrefix(low, "http://") && !strings.HasPrefix(low, "/") {
-		return false
-	}
-	parsed, err := url.Parse(low)
-	if err != nil {
-		return false
-	}
-	if strings.HasSuffix(parsed.Path, ".svg") || strings.HasSuffix(parsed.Path, ".ico") {
-		return false
-	}
-	for _, m := range placeholderMarks {
-		if strings.Contains(parsed.Path, m) {
-			return false
-		}
-	}
-	return true
-}
+// realPhoto reports whether u points at an actual photograph. It is the ONE shared rule (searchindex.PhotoOK): the indexer
+// stores it as photo_ok and search counts with it, so nav, footer, sitemap and the home agree with what a shopper is shown.
+func realPhoto(u *string) bool { return u != nil && searchindex.PhotoOK(*u) }
 
 // eligibleCard is the home eligibility rule: in stock and a real photo.
 func eligibleCard(p domain.ProductSummary) bool {
