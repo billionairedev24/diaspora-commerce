@@ -34,7 +34,13 @@ public interface OfferWriter {
     }
 
     record PriceStock(String rowKey, String sellerSku, String atin, Long priceMinor, Long listPriceMinor,
-                      Integer quantity) {
+                      Integer quantity, String gtin) {
+
+        /** A row named by SKU or ATIN. */
+        public PriceStock(String rowKey, String sellerSku, String atin, Long priceMinor, Long listPriceMinor,
+                          Integer quantity) {
+            this(rowKey, sellerSku, atin, priceMinor, listPriceMinor, quantity, null);
+        }
     }
 
     /**

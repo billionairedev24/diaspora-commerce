@@ -11,7 +11,7 @@ const csvCell = (v: string) => {
 const toCsv = (rows: string[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
 
 export const OFFER_HEADER = ['Product name', 'Category', 'Brand', 'Size or pack', 'Barcode (UPC, EAN, ISBN)', 'ATIN', 'Seller SKU', 'Condition', 'Condition note', 'Price *', 'List price', 'Quantity', 'Shipping charge', 'Fulfilment', 'Handling days'];
-export const PRICE_QTY_HEADER = ['Seller SKU', 'ATIN', 'Price', 'List price', 'Quantity'];
+export const PRICE_QTY_HEADER = ['Seller SKU', 'ATIN', 'Barcode (UPC, EAN, ISBN)', 'Price', 'List price', 'Quantity'];
 export const STOCK_HEADER: Record<StockImportMode, string[]> = {
   ABSOLUTE: ['Seller SKU', 'Location', 'On hand', 'Lot', 'Expiry'],
   DELTA: ['Seller SKU', 'Location', 'Change', 'Lot', 'Expiry']
@@ -20,7 +20,7 @@ export const STOCK_HEADER: Record<StockImportMode, string[]> = {
 export const offerTemplateCsv = () =>
   `# AfroTransact offer upload. Sell products that are already on AfroTransact: no photos, titles or details needed.\r\n# Type the product name and its size or pack. A barcode or ATIN, when you have one, is an exact match.\r\n${toCsv([OFFER_HEADER, ['Tilda basmati rice', '', 'Tilda', '5 kg', '', '', 'MY-SKU-1', 'New', '', '24.99', '', '10', '0', 'Ships from you', '2']])}`;
 export const priceQtyTemplateCsv = () =>
-  `# AfroTransact price and quantity feed. A blank cell leaves that value unchanged.\r\n${toCsv([PRICE_QTY_HEADER, ['MY-SKU-1', '', '24.99', '', '10']])}`;
+  `# AfroTransact price and quantity feed. A blank cell leaves that value unchanged.\r\n${toCsv([PRICE_QTY_HEADER, ['MY-SKU-1', '', '', '24.99', '', '10']])}`;
 export const stockTemplateCsv = (mode: StockImportMode) => toCsv([STOCK_HEADER[mode], ['MY-SKU-1', 'HOU-FC', '120', '', '']]);
 
 /** The sample an .xlsx offer upload yields in the mock: a page that exists, one held for tax, a bad barcode and an unknown page. */
@@ -32,7 +32,14 @@ export const OFFER_SAMPLE: string[][] = [
   ['', '', '', '', '4006381333955', '', 'OFADA-OFFER-4', 'New', '', '12.50', '', '3', '0', 'Ships from you', '2']
 ];
 /** The sample an .xlsx feed yields: two SKUs of the seller and one that is not. */
-export const FEED_SAMPLE: string[][] = [PRICE_QTY_HEADER, ['OFADA-5LB', '', '24.99', '', '40'], ['OFADA-10LB', '', '', '', '12'], ['NOT-MINE-1', '', '5.00', '', '1']];
+export const FEED_SAMPLE: string[][] = [PRICE_QTY_HEADER, ['OFADA-5LB', '', '', '24.99', '', '40'], ['OFADA-10LB', '', '', '', '', '12'], ['NOT-MINE-1', '', '', '5.00', '', '1']];
+
+/** The seller's own listings by barcode in the mock: the second barcode is on two of them (for example a new and a used one). */
+export const OWN_BARCODES: Record<string, string[]> = {
+  '4006381333931': ['OFADA-5LB'],
+  '4006381333948': ['OFADA-5LB', 'OFADA-10LB']
+};
+export const BARCODE_AMBIGUOUS = 'This barcode matches more than one of your listings. Use your SKU.';
 
 /** Pages the mock catalog knows by barcode: the second one has no tax decision yet, so an offer on it is held. */
 export const KNOWN_PAGES: Record<string, { atin: string; heldForTax: boolean }> = {
@@ -117,9 +124,10 @@ export function validateFeedSheet(sheet: string[][], mySkus: Set<string>, maxRow
   const [header = [], ...data] = sheet;
   const sku = indexOf(header, 'seller sku', 'sku', 'seller_sku');
   const atin = indexOf(header, 'atin');
+  const gtin = indexOf(header, 'barcode', 'barcode (upc, ean, isbn)', 'gtin');
   const price = indexOf(header, 'price');
   const qty = indexOf(header, 'quantity');
-  if (sku < 0 && atin < 0) return { header, rows: [], fileProblem: 'The file needs a Seller SKU or ATIN column. Download the template and keep its first row.' };
+  if (sku < 0 && atin < 0 && gtin < 0) return { header, rows: [], fileProblem: 'The file needs a Seller SKU column (or ATIN, or Barcode). Download the template and keep its first row.' };
   if (data.length === 0) return { header, rows: [], fileProblem: 'The file has no rows under the header.' };
   if (data.length > maxRows) return { header, rows: [], fileProblem: `The file has ${data.length.toLocaleString()} rows; upload at most ${maxRows.toLocaleString()} at a time.` };
   const rows = data.map((cells, i) => {
@@ -129,7 +137,14 @@ export function validateFeedSheet(sheet: string[][], mySkus: Set<string>, maxRow
     const s = get(sku).toUpperCase();
     // A SKU of another seller looks exactly like an unknown one.
     if (s && !mySkus.has(s)) msg(sku, 'No listing of yours has this SKU.');
-    if (!s && !get(atin)) msg(sku >= 0 ? sku : atin, 'Give the Seller SKU or the ATIN.');
+    const code = get(gtin).replace(/\D/g, '');
+    if (!s && !get(atin) && !code) msg(sku >= 0 ? sku : atin >= 0 ? atin : gtin, 'Give the Seller SKU or the ATIN.');
+    // A barcode is only a shortcut: it must name exactly one of the seller's own listings.
+    if (!s && !get(atin) && code) {
+      const own = OWN_BARCODES[code] ?? [];
+      if (own.length > 1) msg(gtin, BARCODE_AMBIGUOUS);
+      else if (own.length === 0) msg(gtin, 'No listing of yours has this barcode. Use your SKU.');
+    }
     if (get(price) && !/^\d+(\.\d{1,2})?$/.test(get(price).replace(/^\$/, ''))) msg(price, `"${get(price)}" is not a price; use digits like 24.99`);
     if (get(qty) && (!/^\d+$/.test(get(qty)) || Number(get(qty)) > 99_999)) msg(qty, 'Use a whole number from 0 to 99,999');
     if (!get(price) && !get(qty)) messages.push({ column: null, columnIndex: -1, severity: 'WARNING', message: 'Price and quantity are both blank, so nothing changes.' });

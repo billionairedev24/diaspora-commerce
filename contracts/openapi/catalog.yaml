@@ -532,7 +532,7 @@ paths:
         SKUs in the file and against the organisation''s listings, image URL format). 422 catalog.upload-rejected when the
         file cannot be read (format, 10 MB (25 MB for PRICE_QTY), 5,000 rows (50,000 for PRICE_QTY), missing required columns);
         nothing is stored then. mode=OFFER matches each row to an existing page (barcode, ATIN or brand and part number)
-        and PRICE_QTY reads a price and quantity feed (S393, S394). 409 catalog.import-already-running (one active upload
+        and PRICE_QTY reads a price and quantity feed, one row per listing named by Seller SKU first, else ATIN, else a barcode that matches exactly one of the organisation''s own listings (a barcode that matches more than one fails that row with the plain message "This barcode matches more than one of your listings. Use your SKU.") (S393, S394). 409 catalog.import-already-running (one active upload
         per mode) and catalog.import-daily-limit (20 a day). fileSha256 and sameFileAs say when the organisation uploaded
         the same file before. Starts nothing: see POST /v1/imports/{id}/start.'
       operationId: uploadImport
@@ -600,7 +600,7 @@ paths:
       - name: mode
         in: query
         required: false
-        description: 'OFFER (sell products already on AfroTransact: barcode, ATIN or brand and part number, with price, quantity, condition, shipping and handling; no image, title or attribute columns) and PRICE_QTY (seller SKU or ATIN with price, list price and quantity) are generated server-side and do not depend on a category (S393, S394)'
+        description: 'OFFER (sell products already on AfroTransact: barcode, ATIN or brand and part number, with price, quantity, condition, shipping and handling; no image, title or attribute columns) and PRICE_QTY (Seller SKU, or ATIN, or a barcode that matches exactly one of the seller''s listings, with price, list price and quantity) are generated server-side and do not depend on a category (S393, S394)'
         schema:
           type: string
           default: CREATE

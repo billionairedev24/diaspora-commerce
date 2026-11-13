@@ -84,10 +84,14 @@ public final class OfferImportColumns {
     /** The columns of the price and quantity feed. */
     public static List<ImportColumn> priceQty() {
         return List.of(
-                new ImportColumn(SELLER_SKU, "Seller SKU", "Your code for the offer. Give the SKU, or the ATIN.", false,
-                        ColumnKind.TEXT, null, "MY-SKU-1", false),
+                new ImportColumn(SELLER_SKU, "Seller SKU", "Your own code for the listing. This is the key we use. Give the "
+                        + "SKU; the ATIN or the barcode is only for a row without one.", false, ColumnKind.TEXT, null,
+                        "MY-SKU-1", false),
                 new ImportColumn(ImportColumns.ATIN, "ATIN", "The product's AfroTransact number, when there is no SKU.",
                         false, ColumnKind.TEXT, null, "", false),
+                new ImportColumn(ImportColumns.GTIN, "Barcode (UPC, EAN, ISBN)", "Only when there is no SKU or ATIN. Used "
+                        + "only if it matches exactly one of your listings; otherwise use your SKU.", false,
+                        ColumnKind.GTIN, null, "", false),
                 new ImportColumn(ImportColumns.PRICE, "Price", "New price in US dollars. Blank leaves it as it is.", false,
                         ColumnKind.MONEY, null, "22.50", false),
                 new ImportColumn(LIST_PRICE, "List price", "New crossed-out price. Blank leaves it; 0 removes it.", false,
@@ -138,7 +142,9 @@ public final class OfferImportColumns {
 
     public static TemplateSpec priceQtyTemplate() {
         return new TemplateSpec("Price and quantity feed", "afrotransact-price-quantity", priceQty(), List.of(
-                "One row per offer. Name it by your Seller SKU, or by its ATIN. Only your own offers can be changed.",
+                "One row per listing. Name it by your Seller SKU. The ATIN is also accepted. A barcode is accepted only when it "
+                        + "matches exactly one of your listings; if it matches more than one, the row is left out and "
+                        + "says to use your SKU. Only your own listings can be changed.",
                 "Blank cells leave the value as it is. List price 0 removes the crossed-out price. Quantity changes items "
                         + "you ship yourself; stock of Fulfilled by AfroTransact items comes from the fulfilment centre.",
                 "A price change never puts an item on sale: an item waiting for its tax approval stays held.",

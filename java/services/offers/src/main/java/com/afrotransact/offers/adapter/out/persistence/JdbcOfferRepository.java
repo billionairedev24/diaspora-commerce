@@ -203,6 +203,13 @@ class JdbcOfferRepository implements OfferRepository {
     }
 
     @Override
+    public List<Offer> findOpenBySellerAndGtin(String sellerOrgId, String gtin14) {
+        return jdbc.sql(SELECT + " where seller_org = :org and gtin is not null and lpad(gtin, 14, '0') = :gtin and" + OPEN
+                        + "order by created_at, id")
+                .param("org", sellerOrgId).param("gtin", gtin14).query(this::map).list();
+    }
+
+    @Override
     public List<Offer> findTaxHeld(String atin, int limit) {
         String where = atin == null ? "" : " and atin = :atin";
         JdbcClient.StatementSpec spec = jdbc.sql(SELECT + " where status = 'TAX_HELD'" + where

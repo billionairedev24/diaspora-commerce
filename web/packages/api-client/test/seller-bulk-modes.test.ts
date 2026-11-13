@@ -118,6 +118,18 @@ describe('Offer upload, price and quantity feed and stock import (S393 to S395)'
     expect(job).toMatchObject({ status: 'COMPLETED', updatedProducts: 1 });
   });
 
+  it('a feed row without a SKU may use a barcode only when it matches exactly one of the seller\'s listings', async () => {
+    const api = client();
+    const upload = await api.uploadImport(csv('Seller SKU,Barcode,Price', ',4006381333931,10.00', ',4006381333948,10.00', ',4006381333955,10.00'), 'PRICE_QTY');
+    expect(upload).toMatchObject({ mode: 'PRICE_QTY', totalRows: 3, errorRows: 2 });
+    const rows = (await api.listImportRows(upload.id, { page: 0, size: 50 })).items;
+    expect(rows[0]?.status).toBe('VALID');
+    expect(rows[1]?.messages[0]?.message).toBe('This barcode matches more than one of your listings. Use your SKU.');
+    expect(rows[2]?.messages[0]?.message).toBe('No listing of yours has this barcode. Use your SKU.');
+    const template = await api.downloadImportTemplate({ format: 'csv', mode: 'PRICE_QTY' });
+    expect(await template.blob.text()).toContain('Barcode (UPC, EAN, ISBN)');
+  });
+
   it('a feed needs edit access to inventory as well', async () => {
     const api = client(`${MOCK_ROLE_COOKIE}=seller.support`);
     await expect(api.uploadImport(csv('Seller SKU,Price', 'X-1,1.00'), 'PRICE_QTY')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);

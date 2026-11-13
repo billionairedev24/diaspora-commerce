@@ -109,6 +109,59 @@ class OfferBatchServiceTest {
     // ---------------------------------------------------------------- S394 prices and stock
 
     @Test
+    void aBarcodeNamesTheListingOnlyWhenItMatchesExactlyOneOfTheSellersOwn() {
+        Offer o = offer("org_b", "SKU-1", OfferStatus.ACTIVE, Fulfilment.SELLER, 1000, null, 5);
+        when(offers.findOpenBySellerAndGtin("org_b", "00036000291452")).thenReturn(List.of(o));
+
+        RowResult r = service.setPricesAndStock(priceStock(new PriceStockRow("2", null, null, 900L, null, null,
+                "036000291452"))).getFirst();
+
+        assertThat(r.outcome()).isEqualTo(Outcome.UPDATED);
+        verify(offers).findOpenBySellerAndGtin("org_b", "00036000291452");
+        verify(offers, never()).findOpenBySellerSku(anyString(), anyString());
+    }
+
+    @Test
+    void aBarcodeThatMatchesMoreThanOneListingFailsThePlainRowAndChangesNothing() {
+        Offer first = offer("org_b", "SKU-1", OfferStatus.ACTIVE, Fulfilment.SELLER, 1000, null, 5);
+        Offer second = offer("org_b", "SKU-1-USED", OfferStatus.ACTIVE, Fulfilment.SELLER, 800, null, 2);
+        when(offers.findOpenBySellerAndGtin("org_b", "00036000291452")).thenReturn(List.of(first, second));
+
+        RowResult r = service.setPricesAndStock(priceStock(new PriceStockRow("2", null, null, 900L, null, null,
+                "00036000291452"))).getFirst();
+
+        assertThat(r.outcome()).isEqualTo(Outcome.FAILED);
+        assertThat(r.code()).isEqualTo("offers.barcode-ambiguous");
+        assertThat(r.message()).isEqualTo("This barcode matches more than one of your listings. Use your SKU.");
+        verify(offers, never()).update(any());
+    }
+
+    @Test
+    void aBarcodeOfNoListingOfTheSellerLooksLikeAMissingOneWhoeverElseSellsIt() {
+        when(offers.findOpenBySellerAndGtin("org_b", "00036000291452")).thenReturn(List.of());
+
+        RowResult r = service.setPricesAndStock(priceStock(new PriceStockRow("2", null, null, 900L, null, null,
+                "036000291452"))).getFirst();
+
+        assertThat(r.outcome()).isEqualTo(Outcome.FAILED);
+        assertThat(r.code()).isEqualTo("offers.sku-not-found");
+        assertThat(r.message()).endsWith("Use your SKU.");
+        verify(offers, never()).update(any());
+    }
+
+    @Test
+    void theSkuWinsOverABarcodeOnTheSameRow() {
+        Offer o = offer("org_b", "SKU-1", OfferStatus.ACTIVE, Fulfilment.SELLER, 1000, null, 5);
+        when(offers.findOpenBySellerSku("org_b", "SKU-1")).thenReturn(List.of(o));
+
+        RowResult r = service.setPricesAndStock(priceStock(new PriceStockRow("2", "SKU-1", null, 900L, null, null,
+                "036000291452"))).getFirst();
+
+        assertThat(r.outcome()).isEqualTo(Outcome.UPDATED);
+        verify(offers, never()).findOpenBySellerAndGtin(anyString(), anyString());
+    }
+
+    @Test
     void blankFieldsStayAndChangedFieldsAreAuditedWithTheImportId() {
         Offer o = offer("org_b", "SKU-1", OfferStatus.ACTIVE, Fulfilment.SELLER, 1000, 1500L, 5);
         when(offers.findOpenBySellerSku("org_b", "SKU-1")).thenReturn(List.of(o));

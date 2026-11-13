@@ -2032,7 +2032,7 @@
   "sc.bulk.tip.OFFER.terms": "Después indica tu precio, cantidad, estado, gastos de envío y días de preparación.",
   "sc.bulk.tip.OFFER.noPhotos": "Sin fotos, títulos ni detalles: la página del producto ya los tiene. Para añadir un producto nuevo, usa Crear productos nuevos.",
   "sc.bulk.tip.OFFER.held": "Una fila que necesita una revisión fiscal o una aprobación queda En espera y no se vende hasta que se aclare.",
-  "sc.bulk.tip.PRICE_QTY.keys": "Usa tu SKU de vendedor, o el ATIN del producto, con el nuevo precio, precio de lista y cantidad.",
+  "sc.bulk.tip.PRICE_QTY.keys": "Usa tu SKU de vendedor: es la clave que usamos. El ATIN del producto también sirve. Un código de barras solo sirve si coincide con exactamente uno de tus anuncios; si coincide con más de uno, usa tu SKU.",
   "sc.bulk.tip.PRICE_QTY.blank": "Una celda vacía conserva el valor actual, así puedes cambiar solo los precios o solo las cantidades.",
   "sc.bulk.tip.PRICE_QTY.own": "Solo cambian tus propios anuncios. Un SKU que no es tuyo aparece como desconocido.",
   "sc.bulk.tip.STOCK.columns": "Columnas: SKU de vendedor, Ubicación, En existencia (o Cambio), y Lote y Caducidad para productos perecederos.",

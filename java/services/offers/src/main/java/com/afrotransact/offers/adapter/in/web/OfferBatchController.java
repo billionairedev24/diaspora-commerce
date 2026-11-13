@@ -116,10 +116,13 @@ class OfferBatchController {
     record PriceStockRowDto(@NotBlank @Size(max = 80) String rowKey, @Size(max = 40) String sellerSku,
                             @Pattern(regexp = "AT[0-9A-Z]{8}") String atin, @Min(1) Long priceMinor,
                             @Schema(description = "0 clears the list price") @PositiveOrZero Long listPriceMinor,
-                            @PositiveOrZero Integer quantity) {
+                            @PositiveOrZero Integer quantity,
+                            @Schema(description = "Barcode digits, used only when there is no sellerSku or atin and only "
+                                    + "when it matches exactly one of the seller's own listings")
+                            @Pattern(regexp = "[0-9]{8,14}") String gtin) {
 
         PriceStockRow toDomain() {
-            return new PriceStockRow(rowKey, sellerSku, atin, priceMinor, listPriceMinor, quantity);
+            return new PriceStockRow(rowKey, sellerSku, atin, priceMinor, listPriceMinor, quantity, gtin);
         }
     }
 

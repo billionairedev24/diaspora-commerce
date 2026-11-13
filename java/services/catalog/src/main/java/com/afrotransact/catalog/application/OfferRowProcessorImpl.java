@@ -124,7 +124,7 @@ class OfferRowProcessorImpl implements OfferRowProcessor {
                         "Nothing to change on this row.", row.atin(), null, null));
             } else {
                 toSend.add(new PriceStock(Integer.toString(row.rowNumber()), row.sku(), row.atin(), row.priceMinor(),
-                        row.listPriceMinor(), row.quantity()));
+                        row.listPriceMinor(), row.quantity(), row.gtin()));
             }
         }
         if (!toSend.isEmpty()) {

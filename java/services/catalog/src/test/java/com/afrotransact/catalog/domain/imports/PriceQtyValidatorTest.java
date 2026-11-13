@@ -53,6 +53,35 @@ class PriceQtyValidatorTest {
     }
 
     @Test
+    void aBarcodeIsAcceptedOnlyForARowWithoutASkuOrAtin() {
+        List<String> header = List.of("Seller SKU", "ATIN", "Barcode (UPC, EAN, ISBN)", "Price");
+        PriceQtyResult r = PriceQtyValidator.validate(ImportFixtures.sheet(header,
+                new String[] {"", "", "036000291452", "5.00"}, new String[] {"SKU-1", "", "036000291452", "5.00"},
+                new String[] {"", "", "12345", "5.00"}, new String[] {"", "", "0036000291452", "6.00"}), 100);
+
+        assertThat(r.importable()).hasSize(2);
+        PriceQtyRow byBarcode = r.importable().get(0);
+        assertThat(byBarcode.sku()).isNull();
+        assertThat(byBarcode.atin()).isNull();
+        assertThat(byBarcode.gtin()).isEqualTo("036000291452");
+        // The SKU is the key: the barcode on a row that has one is ignored.
+        PriceQtyRow bySku = r.importable().get(1);
+        assertThat(bySku.sku()).isEqualTo("SKU-1");
+        assertThat(bySku.gtin()).isNull();
+        assertThat(r.validation().rows().get(2).summary()).isEqualTo("That barcode does not look right. Use your SKU instead");
+        // The UPC-A and its GTIN-13 form are the same barcode: the second is a duplicate of the first.
+        assertThat(r.validation().rows().get(3).summary()).startsWith("This barcode appears twice in your file. Row 2");
+    }
+
+    @Test
+    void aFileWithOnlyABarcodeColumnIsAccepted() {
+        PriceQtyResult r = PriceQtyValidator.validate(ImportFixtures.sheet(List.of("Barcode", "Price"),
+                new String[] {"036000291452", "5.00"}), 100);
+
+        assertThat(r.importable()).singleElement().extracting(PriceQtyRow::gtin).isEqualTo("036000291452");
+    }
+
+    @Test
     void theSameSkuTwiceFirstRowWins() {
         PriceQtyResult r = validate(new String[] {"A", "", "10.00", "", ""}, new String[] {"a", "", "9.00", "", ""});
 
@@ -88,7 +117,7 @@ class PriceQtyValidatorTest {
     @Test
     void aFileWithoutAnIdentityOrAChangeColumnIsRefused() {
         assertThatThrownBy(() -> PriceQtyValidator.validate(ImportFixtures.sheet(List.of("Price"),
-                new String[] {"1"}), 100)).isInstanceOf(SpreadsheetRejected.class).hasMessageContaining("Seller SKU or ATIN");
+                new String[] {"1"}), 100)).isInstanceOf(SpreadsheetRejected.class).hasMessageContaining("Seller SKU column");
         assertThatThrownBy(() -> PriceQtyValidator.validate(ImportFixtures.sheet(List.of("Seller SKU"),
                 new String[] {"A"}), 100)).isInstanceOf(SpreadsheetRejected.class)
                 .hasMessageContaining("Price, List price or Quantity");
@@ -98,8 +127,9 @@ class PriceQtyValidatorTest {
     void theFeedTemplateHasOnlyTheFeedColumns() {
         TemplateSpec spec = OfferImportColumns.priceQtyTemplate();
 
-        assertThat(spec.columns()).extracting(ImportColumn::key).containsExactly("seller_sku", "atin", "price",
+        assertThat(spec.columns()).extracting(ImportColumn::key).containsExactly("seller_sku", "atin", "gtin", "price",
                 "list_price", "quantity");
+        assertThat(spec.instructions()).anyMatch(i -> i.contains("Seller SKU") && i.contains("exactly one of your listings"));
         assertThat(spec.instructions()).anyMatch(i -> i.contains("50,000 rows"));
     }
 }

@@ -45,6 +45,12 @@ public interface OfferRepository {
     List<Offer> findOpenBySellerAndAtin(String sellerOrgId, String atin);
 
     /**
+     * Every open offer of a seller whose variant carries this barcode ({@code gtin14}: the barcode padded with zeros to 14
+     * digits, so a UPC-A and its GTIN-14 form are the same barcode), oldest first.
+     */
+    List<Offer> findOpenBySellerAndGtin(String sellerOrgId, String gtin14);
+
+    /**
      * Offers waiting for the seller's tax decision (TAX_HELD), oldest first, at most {@code limit}; with {@code atin}
      * only those on that variant.
      */

@@ -444,7 +444,9 @@ paths:
       tags:
       - Offers
       summary: Change price, list price and stock of many offers (price and quantity feed, S394)
-      description: Up to 500 rows per call. A row names the offers by sellerSku, or by atin when no SKU is given; null fields are
+      description: Up to 500 rows per call. A row names the offers by sellerSku (the primary key), or by atin when no SKU is given, or
+        by gtin when it has neither (a barcode is accepted only when it matches exactly one of the organisation's own open
+        listings; more than one answers offers.barcode-ambiguous, none offers.sku-not-found); null fields are
         left as they are, listPriceMinor 0 clears the list price. Only the organisation's own open offers are visible (another
         seller's SKU answers offers.sku-not-found). Quantity applies to seller-fulfilled offers; a Fulfilled-by-AfroTransact
         offer answers offers.stock-managed-by-inventory. The status of an offer never changes here, so a TAX_HELD offer stays
@@ -1072,7 +1074,7 @@ components:
             $ref: '#/components/schemas/PriceStockRow'
     PriceStockRow:
       type: object
-      description: sellerSku, or atin when there is no SKU; null fields stay as they are
+      description: sellerSku, or atin when there is no SKU, or gtin when there is neither; null fields stay as they are
       required:
       - rowKey
       properties:
@@ -1098,6 +1100,11 @@ components:
           type: integer
           format: int32
           minimum: 0
+        gtin:
+          type: string
+          pattern: '[0-9]{8,14}'
+          description: Barcode digits, used only when there is no sellerSku or atin and only when it matches exactly one of the
+            seller's own listings
     OfferBatchResponse:
       type: object
       required:

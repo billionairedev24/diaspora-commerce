@@ -61,13 +61,21 @@ public interface OfferBatchService {
     }
 
     /**
-     * Price and stock of the offers with this seller SKU, or on this ATIN when no SKU is given.
+     * Price and stock of the offers with this seller SKU, or on this ATIN when no SKU is given, or (with neither) the one
+     * listing of the seller that carries this barcode: a barcode that matches none or more than one of the seller's listings
+     * fails the row.
      *
      * @param listPriceMinor 0 clears the list price; null leaves it
      * @param quantity       seller-fulfilled stock only; null leaves it
      */
     record PriceStockRow(String rowKey, String sellerSku, String atin, Long priceMinor, Long listPriceMinor,
-                         Integer quantity) {
+                         Integer quantity, String gtin) {
+
+        /** A row named by SKU or ATIN. */
+        public PriceStockRow(String rowKey, String sellerSku, String atin, Long priceMinor, Long listPriceMinor,
+                             Integer quantity) {
+            this(rowKey, sellerSku, atin, priceMinor, listPriceMinor, quantity, null);
+        }
     }
 
     enum Outcome {

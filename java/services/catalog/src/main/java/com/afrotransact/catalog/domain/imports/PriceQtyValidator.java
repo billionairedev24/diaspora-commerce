@@ -7,10 +7,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import com.afrotransact.catalog.domain.Gtin;
+
 /**
- * Validates a price and quantity feed (mode PRICE_QTY, S394): one row per offer, named by seller SKU or ATIN, with a new
- * price, list price and quantity. A blank cell changes nothing. Whether the offer is the organisation's own is decided by
- * offers-service when the row is applied (another seller's SKU looks like a missing one).
+ * Validates a price and quantity feed (mode PRICE_QTY, S394): one row per offer, with a new price, list price and quantity.
+ * A row names its offer by Seller SKU first; the ATIN is accepted, and a barcode only when the row has neither (offers-service
+ * then accepts it only when it matches exactly one of the seller's own listings, else the row fails and says to use the SKU).
+ * A blank cell changes nothing. Whether the offer is the organisation's own is decided by offers-service when the row is
+ * applied (another seller's SKU looks like a missing one).
  */
 public final class PriceQtyValidator {
 
@@ -38,8 +42,10 @@ public final class PriceQtyValidator {
             throw new SpreadsheetRejected("The file has " + sheet.rows().size() + " rows; upload at most " + maxRows
                     + " rows per file");
         }
-        if (!index.containsKey(OfferImportColumns.SELLER_SKU) && !index.containsKey(ImportColumns.ATIN)) {
-            throw new SpreadsheetRejected("The file needs a Seller SKU or ATIN column to say which offer each row changes");
+        if (!index.containsKey(OfferImportColumns.SELLER_SKU) && !index.containsKey(ImportColumns.ATIN)
+                && !index.containsKey(ImportColumns.GTIN)) {
+            throw new SpreadsheetRejected("The file needs a Seller SKU column (or ATIN, or Barcode) to say which listing "
+                    + "each row changes");
         }
         if (!index.containsKey(ImportColumns.PRICE) && !index.containsKey(OfferImportColumns.LIST_PRICE)
                 && !index.containsKey(ImportColumns.QUANTITY)) {
@@ -77,9 +83,15 @@ public final class PriceQtyValidator {
     private PriceQtyRow row(SheetRow r, Map<String, Integer> seen) {
         String sku = cell(r, OfferImportColumns.SELLER_SKU).toUpperCase(Locale.ROOT);
         String atin = cell(r, ImportColumns.ATIN).toUpperCase(Locale.ROOT);
-        if (sku.isEmpty() && atin.isEmpty()) {
+        String gtin = Gtin.digits(cell(r, ImportColumns.GTIN));
+        if (sku.isEmpty() && atin.isEmpty() && gtin.isEmpty()) {
             add(r, RowMessage.error(OfferImportColumns.SELLER_SKU, idx(OfferImportColumns.SELLER_SKU),
                     "Give the seller SKU or the ATIN"));
+            return null;
+        }
+        if (sku.isEmpty() && atin.isEmpty() && !Gtin.isValid(gtin)) {
+            add(r, RowMessage.error(ImportColumns.GTIN, idx(ImportColumns.GTIN), "That barcode does not look right. "
+                    + "Use your SKU instead"));
             return null;
         }
         if (!atin.isEmpty() && !ATIN.matcher(atin).matches()) {
@@ -106,17 +118,23 @@ public final class PriceQtyValidator {
             add(r, RowMessage.warning(null, -1, "Nothing to change on this row: the price, list price and quantity are "
                     + "blank"));
         }
-        String key = sku.isEmpty() ? "atin:" + atin : "sku:" + sku;
+        boolean byGtin = sku.isEmpty() && atin.isEmpty();
+        String key = !sku.isEmpty() ? "sku:" + sku : !atin.isEmpty() ? "atin:" + atin : "gtin:" + padded(gtin);
         Integer first = seen.putIfAbsent(key, r.rowNumber());
         if (first != null) {
-            add(r, RowMessage.error(sku.isEmpty() ? ImportColumns.ATIN : OfferImportColumns.SELLER_SKU,
-                    idx(sku.isEmpty() ? ImportColumns.ATIN : OfferImportColumns.SELLER_SKU),
-                    "This " + (sku.isEmpty() ? "ATIN" : "SKU") + " appears twice in your file. Row " + first
-                            + " is used and this one is left out"));
+            String column = !sku.isEmpty() ? OfferImportColumns.SELLER_SKU : !atin.isEmpty() ? ImportColumns.ATIN
+                    : ImportColumns.GTIN;
+            add(r, RowMessage.error(column, idx(column), "This " + (!sku.isEmpty() ? "SKU" : !atin.isEmpty() ? "ATIN"
+                    : "barcode") + " appears twice in your file. Row " + first + " is used and this one is left out"));
             return null;
         }
         return new PriceQtyRow(r.rowNumber(), sku.isEmpty() ? null : sku, atin.isEmpty() ? null : atin, price, list,
-                quantity);
+                quantity, byGtin ? gtin : null);
+    }
+
+    /** The barcode as 14 digits, so a UPC-A and its GTIN-14 form count as the same barcode. */
+    private static String padded(String digits) {
+        return digits.length() >= 14 ? digits : "0".repeat(14 - digits.length()) + digits;
     }
 
     private Long money(SheetRow r, String column, boolean positive) {

@@ -2032,7 +2032,7 @@
   "sc.bulk.tip.OFFER.terms": "Lẹ́yìn náà, kọ owó rẹ, iye, ipò, owó ìfìránṣẹ́ àti ọjọ́ ìmúrasílẹ̀.",
   "sc.bulk.tip.OFFER.noPhotos": "Kò sí fọ́tò, àkọlé tàbí àlàyé: ojú-ìwé ọjà náà ti ní wọn. Láti fi ọjà tuntun kún un, lo Ṣẹ̀dá àwọn ọjà tuntun.",
   "sc.bulk.tip.OFFER.held": "Ìlà tó nílò àyẹ̀wò owó-orí tàbí ìfọwọ́sí yóò dúró Ní ìdádúró, a kò sì ní tà á títí a ó fi yọ̀ǹda rẹ̀.",
-  "sc.bulk.tip.PRICE_QTY.keys": "Lo SKU olùtà rẹ, tàbí ATIN ọjà náà, pẹ̀lú owó tuntun, owó àtòjọ àti iye.",
+  "sc.bulk.tip.PRICE_QTY.keys": "Lo SKU olùtà rẹ: òun ni kọ́kọ́rọ́ tí a ń lò. ATIN ọjà náà náà ṣiṣẹ́. Kóòdù ìdámọ̀ ṣiṣẹ́ nìkan tí ó bá bá ọ̀kan péré nínú àwọn ìpolówó rẹ mu; tí ó bá bá ju ọ̀kan lọ, lo SKU rẹ.",
   "sc.bulk.tip.PRICE_QTY.blank": "Àyè òfo máa jẹ́ kí iye tó wà nílẹ̀ wà bẹ́ẹ̀, nítorí náà o lè yí owó nìkan padà tàbí iye nìkan.",
   "sc.bulk.tip.PRICE_QTY.own": "Àwọn ìpolówó rẹ nìkan ni yóò yípadà. SKU tí kìí ṣe tìrẹ yóò hàn bí àìmọ̀.",
   "sc.bulk.tip.STOCK.columns": "Àwọn òpó: SKU olùtà, Ibùdó, Tó wà nílẹ̀ (tàbí Àyípadà), àti Lọ́ọ̀tì àti Ọjọ́ ìparí fún àwọn ọjà tó lè bàjẹ́.",

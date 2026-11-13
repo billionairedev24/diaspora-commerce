@@ -2025,7 +2025,7 @@
   "sc.bulk.tip.OFFER.terms": "Then give your price, quantity, condition, shipping charge and handling days.",
   "sc.bulk.tip.OFFER.noPhotos": "No photos, titles or details: the product page already has them. To add a new product, use Create new products.",
   "sc.bulk.tip.OFFER.held": "A row that needs a tax check or an approval waits On hold and is not for sale until it is cleared.",
-  "sc.bulk.tip.PRICE_QTY.keys": "Use your Seller SKU, or the product’s ATIN, with the new price, list price and quantity.",
+  "sc.bulk.tip.PRICE_QTY.keys": "Use your Seller SKU: it is the key we use. The product’s ATIN works too. A barcode works only when it matches exactly one of your listings; if it matches more than one, use your SKU.",
   "sc.bulk.tip.PRICE_QTY.blank": "A blank cell keeps the current value, so you can change only prices or only quantities.",
   "sc.bulk.tip.PRICE_QTY.own": "Only your own listings change. A SKU that is not yours shows as unknown.",
   "sc.bulk.tip.STOCK.columns": "Columns: Seller SKU, Location, On hand (or Change), and Lot and Expiry for perishable items.",

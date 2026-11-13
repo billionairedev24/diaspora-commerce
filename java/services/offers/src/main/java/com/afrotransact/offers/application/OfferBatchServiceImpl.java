@@ -192,7 +192,8 @@ class OfferBatchServiceImpl implements OfferBatchService {
                                     Set<String> changedAtins) {
         String sku = row.sellerSku() == null ? "" : row.sellerSku().strip().toUpperCase(Locale.ROOT);
         String atin = row.atin() == null ? "" : row.atin().strip().toUpperCase(Locale.ROOT);
-        if (sku.isEmpty() && atin.isEmpty()) {
+        String gtin = row.gtin() == null ? "" : row.gtin().replaceAll("[^0-9]", "");
+        if (sku.isEmpty() && atin.isEmpty() && gtin.isEmpty()) {
             return failed(row.rowKey(), null, "offers.rule-violation", "Give the seller SKU or the ATIN.");
         }
         Map<String, String> problems = new LinkedHashMap<>();
@@ -210,9 +211,19 @@ class OfferBatchServiceImpl implements OfferBatchService {
                     String.join(". ", problems.values()) + ".");
         }
         // Only this organisation's open offers are ever read: another seller's SKU looks exactly like a missing one.
-        List<Offer> owned = sku.isEmpty() ? offers.findOpenBySellerAndAtin(org, atin) : offers.findOpenBySellerSku(org, sku);
+        boolean byBarcode = sku.isEmpty() && atin.isEmpty();
+        List<Offer> owned = byBarcode ? offers.findOpenBySellerAndGtin(org, padded(gtin))
+                : sku.isEmpty() ? offers.findOpenBySellerAndAtin(org, atin) : offers.findOpenBySellerSku(org, sku);
         if (!sku.isEmpty() && !atin.isEmpty()) {
             owned = owned.stream().filter(o -> o.atin().equals(atin)).toList();
+        }
+        if (byBarcode && owned.size() > 1) {
+            // A barcode is only a shortcut when it names one listing: never change several on a guess.
+            return failed(row.rowKey(), null, "offers.barcode-ambiguous", BARCODE_AMBIGUOUS);
+        }
+        if (byBarcode && owned.isEmpty()) {
+            return failed(row.rowKey(), null, "offers.sku-not-found",
+                    "None of your listings has the barcode " + gtin + ". Use your SKU.");
         }
         if (owned.isEmpty()) {
             return failed(row.rowKey(), atin.isEmpty() ? null : atin, "offers.sku-not-found",
@@ -274,6 +285,13 @@ class OfferBatchServiceImpl implements OfferBatchService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    static final String BARCODE_AMBIGUOUS = "This barcode matches more than one of your listings. Use your SKU.";
+
+    /** The barcode as 14 digits, so a UPC-A and its GTIN-14 form are the same barcode. */
+    private static String padded(String digits) {
+        return digits.length() >= 14 ? digits : "0".repeat(14 - digits.length()) + digits;
+    }
 
     /** Who the rows are for: a seller's own organisation only; staff and service callers name it. */
     private String scope(Actor actor, String requested) {
