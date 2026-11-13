@@ -75,6 +75,8 @@ Every service owns the matrix next to its tests; a drift guard fails the build w
 | orders: customer reads, cancel, returns | CUSTOMER_SELF | `OrdersAccess.viewerOf/ensureOwner` | `OrdersTenantIsolationTest` |
 | orders: seller queue, shipments, transitions | ORG_OWNED / ORG_SCOPED_LIST | `sellerOrg`, `transitionActor` | `OrdersTenantIsolationTest` |
 | payments: balances, payouts, statements, bank | ORG_OWNED / ORG_SCOPED_LIST | `PaymentsAccess.balanceViewer`, `orgOf` | `PaymentsTenantIsolationTest` |
+| payments: payout request (live role) | ORG_SCOPED_LIST | `PaymentsAccess.payoutRequester` reads the role from seller, fail closed | `OrgDataTenantIsolationTest` |
+| seller: member role lookup for services | SERVICE_ONLY | `OrgMembershipService` (`sellers:membership.read`, SERVICE principal only) | `SellerTenantIsolationTest` |
 | offers, coupons | ORG_OWNED | `requireOwned`, `customerOf` | `OffersTenantIsolationTest` |
 | inventory lots, cycle counts, receipts, returns | ORG_OWNED, staff-gated platform ops | `InventoryAccess.requireOwnedLot/staffRequire` | `InventoryTenantIsolationTest` |
 | catalog seller routes | ORG_OWNED / ORG_SCOPED_LIST | `owners.ownerFor(actor)`, `requireOwned` | catalog tenant tests |
@@ -105,9 +107,18 @@ Every service owns the matrix next to its tests; a drift guard fails the build w
   plan-fee collection, usage, rewards), Stripe account session, account health, branding (`PUT business-page`) and org rename. A removed or
   downgraded member is refused on the next call (`seller.org-role-required`). Reads that are not sensitive (ship-from addresses, the org, catalog scope,
   selling status, business page read) keep the cheap `orgRole` (token role or member list).
-- Still token-based (5 minute window): payments (payout requests, bank, balances, statements), media (KYC upload) and the other
-  services read the `org` claim and role permissions from the token; they have no members table. Closing this needs either a short
-  membership introspection call to identity or a much shorter access token for those routes (see section 5).
+- Immediate (new): **payout requests** (payments `POST /v1/payouts/requests`). Payments has no members table, so
+  `PaymentsAccess.payoutRequester` asks the seller service (`GET /v1/orgs/{orgId}/members/{userId}/role`, which reads the member list, no
+  cache there) with the `payments-service` client's own scope `sellers:membership.read` (identity V48 and `application-*.yml`; the
+  receiver, `OrgMembershipService`, accepts SERVICE principals holding only that scope). The live role replaces the token role in the payout
+  policy; a removed member gets 403 `payments.not-a-member`. Payments remembers an answer for at most `at.payments.membership-check.cache-ttl`
+  (3 s default, hard cap 10 s). **Fails closed**: seller unreachable, timeout, 4xx/5xx, or no `SELLER_URL`/client secret configured gives 503
+  `payments.membership-unavailable`, never an allow. Staff and service principals are not asked. `membership-check.mode=off` exists for the
+  local profile only (the adapter refuses to start on any other profile). Deploy seller and identity first.
+- Bank account changes are not a payments action: the bank is collected and changed inside Stripe's account-management component, opened by
+  the seller Stripe account session route (live member check above) and mirrored back by webhooks. There is no payments endpoint to
+  guard. The remaining 5-minute window is **media (KYC upload)** (owner decision: left alone). Balances and statements (reads) keep the token.
+- Bank change notification and a payout cooling period do not exist; see section 5.
 
 ## 4. Findings from the pass (fixed)
 
@@ -125,14 +136,22 @@ Every service owns the matrix next to its tests; a drift guard fails the build w
 
 ## 5. Not fixed, residual risk (owner decisions needed)
 
-- Payout requests, bank details and KYC upload trust the token role for up to 5 minutes (see section 3); the members table lives in
-  seller and identity, not in payments or media.
+- KYC upload trusts the token role for up to 5 minutes (owner decision, left alone; media has no members table). Payout requests no longer do
+  (section 3).
+- No email when a seller's payout bank account changes, and no payout cooling period after a change. Stripe webhooks already reach
+  seller (`account.external_account.created/updated/deleted`, mirrored in `connect_account.payout_bank`, written to the compliance
+  history), but only a failed bank raises a notification. Proposed, needs a product decision (cooling length, which changes count, whether
+  Finance may waive it): seller publishes `seller.payout-bank.changed` when a bank is replaced, notifications mails every org owner, payments
+  records the time and refuses payout requests and approvals until it plus a configurable period (default 24 h) has passed.
 - `GtinAlreadyUsed` (409 on create, add variant) and `CatalogMatchService` still name the ATIN of an existing page whatever its status; only
   the GTIN check and prefill routes were scoped to live pages, the caller's own pages and staff.
 - carrier-gateway `ready` cannot check `orderRef`/`customerRef` itself (no orders access); it now accepts only SERVICE or STAFF callers with
   `shipping:label`. A caller that serves sellers (orders or the BFF) must check the order first. No caller exists today.
 - Handover-code limiting for tax-returns pickups is in memory (per instance): with several replicas the budget multiplies. Prod runs one.
-- With FGA off, any staff member with `payments:read` or `payouts:approve` sees every org (no market scoping).
+- With FGA off, any staff member with `payments:read` or `payouts:approve` sees every org (no market scoping). **Owner decision (accepted
+  for launch):** keep it. Limit who holds `payouts:approve` and `payments:read` to the few Finance people who need them, rely on the
+  audit log of payout approvals, holds and releases, and revisit market scoping when market-specific staff exist. OpenFGA is not needed
+  for that later step: it can be done with a market claim on the staff roles checked in `PaymentsAccess`.
 - Inventory idempotency keys are not scoped by actor. Repository SQL is not owner-scoped by id in most services; checks run after the
   fetch in the service layer (defence-in-depth SQL scoping not added: not trivially safe per service).
 - Pay links for an already paid order never expire.

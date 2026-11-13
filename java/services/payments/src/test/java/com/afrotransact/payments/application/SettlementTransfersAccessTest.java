@@ -23,6 +23,7 @@ import com.afrotransact.payments.port.PaymentsMetrics;
 import com.afrotransact.payments.port.PlanFeeWithholdingRepository;
 import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
+import com.afrotransact.payments.port.OrgMembershipDirectory;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
@@ -51,7 +52,8 @@ class SettlementTransfersAccessTest {
 
     @BeforeEach
     void service() {
-        PaymentsAccess access = new PaymentsAccess(permissions, relationships, actors);
+        PaymentsAccess access = new PaymentsAccess(permissions, relationships, actors,
+                mock(OrgMembershipDirectory.class));
         service = new SettlementServiceImpl(settlements, mock(PaymentRepository.class), mock(LedgerRepository.class),
                 mock(ConnectedAccountRepository.class), mock(StripeGateway.class), mock(LedgerPoster.class),
                 mock(MoneyTransactions.class), access, mock(DomainEventPublisher.class), mock(PaymentsMetrics.class),

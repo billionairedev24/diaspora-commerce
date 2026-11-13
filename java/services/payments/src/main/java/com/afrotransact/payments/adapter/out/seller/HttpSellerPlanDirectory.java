@@ -43,7 +43,8 @@ class HttpSellerPlanDirectory implements SellerPlanDirectory {
         RestClient base = builder.clone().requestFactory(factory).build();
         this.enabled = baseUrl != null && !baseUrl.isBlank();
         this.client = enabled ? base.mutate().baseUrl(baseUrl).build() : base;
-        this.tokens = new SellerServiceTokens(base, tokenUri, clientId, clientSecret, clock);
+        this.tokens = new SellerServiceTokens(base, tokenUri, clientId, clientSecret, "seller:billing",
+                clock);
     }
 
     @Override

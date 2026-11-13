@@ -233,3 +233,45 @@ Not run: Docker integration tests (all `*IT`; orders, fulfilment and tax-returns
 touched: identity `DesignTokensSyncTest` (tokens.css copy) and media `TestEmbeddedContractIsIdentical` (api/openapi.yaml vs contracts/openapi/media.yaml).
 Not in scope and still open: market-scoped staff payments reads; the 5-minute token window of payments (payout requests, bank) and media (KYC upload);
 `GtinAlreadyUsed` still names the ATIN. Deploy note: identity V47 must run before staff are expected to open KYC documents.
+
+### 2026-11-13 Payout role re-check and shopper step-up (owner-approved)
+
+**A. Payout requests re-check the role live.** Payments asks seller (`GET /v1/orgs/{orgId}/members/{userId}/role`) with the `payments-service`
+client's own scope `sellers:membership.read` (F14 pattern: identity V48 permission row, scope in the four `application-*.yml` grants, the
+receiver accepts a SERVICE principal with that scope only). Cache of at most 3 s (cap 10 s); seller unreachable or unconfigured gives 503
+`payments.membership-unavailable`, never an allow; staff and service principals are unaffected. Tests: `OrgDataTenantIsolationTest`
+(removed, downgraded, fail closed, staff skipped), `SellerTenantIsolationTest` (scope and principal), both matrices updated and green.
+Bank account changes are not a payments action (Stripe's component, behind the seller Stripe account session, which already uses the live
+check), so there was nothing to guard in payments. **Not added:** the email to the seller when the bank changes and a payout cooling period.
+Neither exists today (only a failed bank notifies); both are cross-service (seller event, notifications template and rule, payments hold) and the
+cooling length is a product decision. Design and the open choices are in `tenant-isolation.md` section 5. KYC upload left alone (owner).
+
+**B. Shopper step-up (F17: the 92-day session stays).** Audit of what re-authentication protects today:
+
+| Action | Protected by | Where |
+|---|---|---|
+| Change password | current password re-entered; other devices signed out | identity `PUT /v1/me/password` |
+| Turn off TOTP, email code, SMS code | account password again | identity (BFF `requirePassword`) |
+| Change email | no endpoint (cannot be changed) | n/a |
+| Change phone | PATCH /v1/me sets it, SMS code to confirm; no password, no step-up | identity `MeController` (gap, SMS-verified) |
+| Staff identity-admin actions (rotate key, sign users out, auth settings, session policy) | S291 step-up: password proof (`X-Step-Up`) or `auth_time` within 5 min | identity `StepUpService`; staff only |
+| View saved payment methods (list: brand, last 4) | session only | payments `GET /v1/customers/me/payment-methods` (display data, left open) |
+| Add / default / remove saved method, PaymentSheet ephemeral key | **was: session only. Now: `auth_time` within 30 min when enabled** | payments `PaymentMethodServiceImpl` via `ShopperStepUp` |
+| Place an order above a value | session only. **Not added** (below) | orders `POST /v1/checkout` |
+| Change payout details (bank) | Stripe's own component; seller route needs a live owner/finance role | seller Stripe account session |
+| Payout request | live role (A); no step-up | payments |
+
+The existing S291 mechanism only serves staff (its proof is a password check bound to `identity:admin`). For shoppers I reused its second rule,
+the token's `auth_time` (kept across refreshes, so a 92-day session reads as old), in the shared `SignInFreshness` (platform-security): stale
+gives 403 `auth.step-up-required`, the BFF passes that code through (it used to flatten every 403), and the client sends the shopper through
+`/v1/auth/login?prompt=login` (already supported) and retries. No new mechanism. Config: `at.payments.shopper-step-up.enabled`
+(`SHOPPER_STEP_UP_ENABLED`) and `max-age` (30 min). **Default is off in prod, on in dev and uat**: the storefront and the customer app do not
+yet react to the new code, so turning it on in prod today would show a generic error to every returning shopper until they sign in again.
+Typing a new card into Stripe's field is not gated. **High-value orders are not gated:** the order total is computed inside the checkout saga
+(no JWT there), the saved method is confirmed client-side with Stripe, and the threshold needs a per-currency decision. The clean place is the
+BFF checkout route (it has the signed shown total, `taxGuard`, and the session token), once the clients handle the code. Tests:
+`SignInFreshnessTest`, `ShopperStepUpTest`, BFF `TestMapErrKeepsTheStepUpRequiredCode`.
+
+**Not run:** Docker integration tests (all `*IT`); payments ITs run with `membership-check.mode=off` through the local profile and compile.
+**Deploy order:** identity (V48, grants), seller (new route), payments (needs `SELLER_URL`, `PAYMENTS_CLIENT_SECRET`, `AUTH_TOKEN_URL`, all already
+set in its chart for the plan lookup; otherwise payout requests answer 503), gateway-bff.

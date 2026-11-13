@@ -33,15 +33,17 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     private final StripeGateway stripe;
     private final MoneyTransactions tx;
     private final PaymentsAccess access;
+    private final ShopperStepUp stepUp;
     private final Clock clock;
 
     PaymentMethodServiceImpl(WalletRepository wallet, WalletSync sync, StripeGateway stripe, MoneyTransactions tx,
-                             PaymentsAccess access, Clock clock) {
+                             PaymentsAccess access, ShopperStepUp stepUp, Clock clock) {
         this.wallet = wallet;
         this.sync = sync;
         this.stripe = stripe;
         this.tx = tx;
         this.access = access;
+        this.stepUp = stepUp;
         this.clock = clock;
     }
 
@@ -85,6 +87,7 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     @Override
     public SetupIntentResult createSetupIntent(List<String> types, String idempotencyKey) {
         String customerId = access.customer().subject();
+        stepUp.require("add a payment method");
         List<String> wanted = normaliseTypes(types);
         return tx.serializable(() -> {
             StripeCustomer customer = ensureCustomer(customerId);
@@ -98,6 +101,7 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     @Override
     public EphemeralKeyResult createEphemeralKey(String stripeVersion, String idempotencyKey) {
         String customerId = access.customer().subject();
+        stepUp.require("manage your payment methods");
         String version = stripeVersion == null || stripeVersion.isBlank() ? DEFAULT_EPHEMERAL_KEY_VERSION
                 : stripeVersion.trim();
         if (!version.matches("\\d{4}-\\d{2}-\\d{2}(\\.[a-z]+)?")) {
@@ -117,6 +121,7 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     @Override
     public WalletMethod setDefault(String paymentMethodId) {
         String customerId = access.customer().subject();
+        stepUp.require("change your default payment method");
         return tx.serializable(() -> {
             StripeCustomer customer = wallet.lockCustomer(customerId).orElseThrow(() -> notFound(paymentMethodId));
             SavedPaymentMethod method = owned(customerId, paymentMethodId);
@@ -134,6 +139,7 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     @Override
     public void remove(String paymentMethodId) {
         String customerId = access.customer().subject();
+        stepUp.require("remove a payment method");
         tx.serializable(() -> {
             StripeCustomer customer = wallet.lockCustomer(customerId).orElseThrow(() -> notFound(paymentMethodId));
             owned(customerId, paymentMethodId);

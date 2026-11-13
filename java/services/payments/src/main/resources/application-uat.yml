@@ -10,6 +10,8 @@ at:
   api-docs:
     enabled: true
   payments:
+    shopper-step-up:
+      enabled: ${SHOPPER_STEP_UP_ENABLED:true}
     stripe:
       require-live-key: false
 spring:

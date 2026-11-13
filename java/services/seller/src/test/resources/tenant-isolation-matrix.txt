@@ -24,7 +24,8 @@ GET /v1/department-requests/{id} | STAFF_ONLY | AccessGuard.staff/staffAny (STAF
 GET /v1/departments | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
 GET /v1/markets | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
 GET /v1/orgs/directory | SERVICE_ONLY | sellers:directory permission plus SERVICE or STAFF principal (OrgDirectory/OrgMirror service) | -
-GET /v1/orgs/mirror | SERVICE_ONLY | sellers:directory permission plus SERVICE or STAFF principal (OrgDirectory/OrgMirror service) | -
+GET /v1/orgs/{orgId}/members/{userId}/role | SERVICE_ONLY | sellers:membership.read permission plus SERVICE principal only (OrgMembershipService, payments-service client; staff and members refused) | SellerTenantIsolationTest
+GET /v1/orgs/mirror |SERVICE_ONLY | sellers:directory permission plus SERVICE or STAFF principal (OrgDirectory/OrgMirror service) | -
 GET /v1/orgs/{id} | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{id}/mirror | SERVICE_ONLY | sellers:directory permission plus SERVICE or STAFF principal (OrgDirectory/OrgMirror service) | -
 GET /v1/orgs/{id}/public | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -

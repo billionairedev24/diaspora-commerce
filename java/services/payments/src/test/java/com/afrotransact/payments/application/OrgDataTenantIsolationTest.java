@@ -1,6 +1,7 @@
 package com.afrotransact.payments.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -25,9 +26,11 @@ import com.afrotransact.payments.domain.FeeKind;
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.NegotiatedRate;
 import com.afrotransact.payments.domain.NegotiatedRateType;
+import com.afrotransact.payments.domain.PaymentsForbidden;
 import com.afrotransact.payments.domain.PayoutBalance;
 import com.afrotransact.payments.domain.PayoutPolicy;
 import com.afrotransact.payments.domain.PayoutRequest;
+import com.afrotransact.payments.domain.Requester;
 import com.afrotransact.payments.port.ConnectedAccountRepository;
 import com.afrotransact.payments.port.DisputeRepository;
 import com.afrotransact.payments.port.FeeScheduleRepository;
@@ -35,6 +38,8 @@ import com.afrotransact.payments.port.IdempotencyStore;
 import com.afrotransact.payments.port.LabelChargeRepository;
 import com.afrotransact.payments.port.LedgerRepository;
 import com.afrotransact.payments.port.NegotiatedRateRepository;
+import com.afrotransact.payments.port.OrgMembershipDirectory;
+import com.afrotransact.payments.port.OrgMembershipUnavailableException;
 import com.afrotransact.payments.port.PayoutHoldRepository;
 import com.afrotransact.payments.port.PayoutRepository;
 import com.afrotransact.payments.port.PlanFeeWithholdingRepository;
@@ -60,8 +65,9 @@ class OrgDataTenantIsolationTest {
     private static final String ORG_B = TenantFixture.ORG_B;
 
     private final TenantFixture tenants = new TenantFixture();
+    private final OrgMembershipDirectory membership = mock(OrgMembershipDirectory.class);
     private final PaymentsAccess access = new PaymentsAccess(tenants.permissions(), tenants.access(),
-            tenants.resolver());
+            tenants.resolver(), membership);
     private final PaymentsSettings settings = new PaymentsSettings("org_retail", Duration.ofDays(7), ZoneId.of("UTC"),
             "USD", 5, Duration.ofHours(1));
     private final MoneyTransactions tx = mock(MoneyTransactions.class);
@@ -156,6 +162,47 @@ class OrgDataTenantIsolationTest {
 
         assertThat(made.orgId()).isEqualTo(ORG_A);
         verify(payouts, never()).requestsOn(eq(ORG_B), any());
+    }
+
+    @Test
+    void payoutRequestsReadTheRoleLiveNotFromTheToken() {
+        when(membership.enabled()).thenReturn(true);
+        tenants.as(TenantFixture.sellerOf(ORG_A, "payouts:request")); // the token says seller.owner
+        String subject = "user-" + ORG_A;
+
+        // removed from the organisation since the token was issued: refused, whatever the token says
+        when(membership.roleOf(ORG_A, subject)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> access.payoutRequester(ORG_A)).isInstanceOf(PaymentsForbidden.class)
+                .hasMessageContaining("no longer a member");
+
+        // downgraded: the live role, not the token's owner, reaches the payout policy
+        when(membership.roleOf(ORG_A, subject)).thenReturn(Optional.of("seller.support"));
+        Requester downgraded = access.payoutRequester(ORG_A);
+        assertThat(downgraded.roles()).containsExactly("seller.support");
+        assertThat(downgraded.staff()).isFalse();
+
+        when(membership.roleOf(ORG_A, subject)).thenReturn(Optional.of("seller.finance"));
+        assertThat(access.payoutRequester(ORG_A).roles()).containsExactly("seller.finance");
+    }
+
+    @Test
+    void payoutRequestsFailClosedWhenTheSellerServiceCannotAnswer() {
+        when(membership.enabled()).thenReturn(true);
+        when(membership.roleOf(anyString(), anyString()))
+                .thenThrow(new OrgMembershipUnavailableException("down", null));
+        tenants.as(TenantFixture.sellerOf(ORG_A, "payouts:request"));
+
+        assertThatThrownBy(() -> access.payoutRequester(ORG_A)).isInstanceOf(OrgMembershipUnavailableException.class);
+    }
+
+    @Test
+    void staffAndServicePrincipalsAreNeverAskedForALiveRole() {
+        when(membership.enabled()).thenReturn(true);
+        tenants.as(TenantFixture.staff("payouts:request"));
+        assertThat(access.payoutRequester(ORG_A).staff()).isTrue();
+        tenants.as(TenantFixture.service("payouts:request"));
+        assertThat(access.payoutRequester(ORG_A).staff()).isTrue();
+        verify(membership, never()).roleOf(anyString(), anyString());
     }
 
     @Test

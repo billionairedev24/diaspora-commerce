@@ -12,28 +12,31 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /**
- * OAuth2 client-credentials access token of the {@code payments-service} client (identity-service, scope
- * {@code seller:billing}), cached until shortly before it expires. A blank secret sends no token (local profile).
+ * OAuth2 client-credentials access token of the {@code payments-service} client (identity-service) for ONE scope
+ * ({@code seller:billing} for the plan, {@code sellers:membership.read} for membership), cached until shortly before it
+ * expires. Each use asks for its own minimal scope. A blank secret sends no token (local profile).
  */
 final class SellerServiceTokens {
 
-    static final String SCOPE = "seller:billing";
     private static final Duration EARLY_REFRESH = Duration.ofSeconds(30);
 
     private final RestClient client;
     private final String tokenUri;
     private final String clientId;
     private final String clientSecret;
+    private final String scope;
     private final Clock clock;
     private final ReentrantLock lock = new ReentrantLock();
     private String token;
     private Instant expiresAt = Instant.EPOCH;
 
-    SellerServiceTokens(RestClient client, String tokenUri, String clientId, String clientSecret, Clock clock) {
+    SellerServiceTokens(RestClient client, String tokenUri, String clientId, String clientSecret, String scope,
+                        Clock clock) {
         this.client = client;
         this.tokenUri = tokenUri;
         this.clientId = clientId;
         this.clientSecret = clientSecret;
+        this.scope = scope;
         this.clock = clock;
     }
 
@@ -49,7 +52,7 @@ final class SellerServiceTokens {
             if (token == null || now.isAfter(expiresAt.minus(EARLY_REFRESH))) {
                 MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
                 form.add("grant_type", "client_credentials");
-                form.add("scope", SCOPE);
+                form.add("scope", scope);
                 JsonNode body = client.post().uri(tokenUri)
                         .headers(h -> h.setBasicAuth(clientId, clientSecret))
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)

@@ -194,4 +194,20 @@ class SellerTenantIsolationTest {
         fx.as(TenantFixture.sellerOf(TenantFixture.ORG_A, "billing:read"));
         CrossTenant.assertDenied(adjustments::reasonCodes);
     }
+
+    @Test
+    void membershipLookupIsForTheScopedServiceClientOnly() {
+        OrgMembershipService membership = new OrgMembershipServiceImpl(orgs, fx.permissions());
+        when(orgs.findMember(TenantFixture.ORG_A, "user-1")).thenReturn(Optional.of(new OrgMember(
+                TenantFixture.ORG_A, "user-1", "seller.finance", NOW, NOW)));
+        fx.as(TenantFixture.sellerOf(TenantFixture.ORG_A, OrgMembershipService.MEMBERSHIP_READ));
+        CrossTenant.assertDenied(() -> membership.roleOf(TenantFixture.ORG_A, "user-1"));
+        fx.as(TenantFixture.staff(OrgMembershipService.MEMBERSHIP_READ));
+        CrossTenant.assertDenied(() -> membership.roleOf(TenantFixture.ORG_A, "user-1"));
+        fx.as(TenantFixture.service("payments:service"));
+        CrossTenant.assertDenied(() -> membership.roleOf(TenantFixture.ORG_A, "user-1"));
+        fx.as(TenantFixture.service(OrgMembershipService.MEMBERSHIP_READ));
+        assertThat(membership.roleOf(TenantFixture.ORG_A, "user-1")).contains("seller.finance");
+        assertThat(membership.roleOf(TenantFixture.ORG_A, "someone-else")).isEmpty();
+    }
 }

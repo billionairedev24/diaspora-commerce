@@ -60,6 +60,12 @@ func mapErr(upstream string, err error) error {
 				// The catalog's department refusal is written for the seller and says how to add the department.
 				return domain.NewProblem(http.StatusForbidden, p.Code, "Department not available to your store", p.Detail).WithCause(err)
 			}
+			if p.Code == stepUpRequiredCode {
+				// F17: the shopper's 92-day session stays, saved payment methods ask for a recent sign-in. The client
+				// starts a fresh sign-in (/v1/auth/login?prompt=login) when it sees this code, then retries.
+				return domain.NewProblem(http.StatusForbidden, stepUpRequiredCode, "Confirm it is you",
+					firstNonEmpty(p.Detail, "Sign in again to continue.")).WithCause(err)
+			}
 			return domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", "You can't do that.").WithCause(err)
 		case http.StatusNotFound:
 			return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "We couldn't find that.").WithCause(err)
@@ -90,6 +96,9 @@ func mapErr(upstream string, err error) error {
 	}
 	return domain.UpstreamError(upstream, 0).WithCause(err)
 }
+
+// stepUpRequiredCode is the 403 of a service that wants a recent sign-in (platform-security SignInFreshness).
+const stepUpRequiredCode = "auth.step-up-required"
 
 // scopeRefusals are the 403 codes of catalog's department scope; their detail reaches the seller as written.
 var scopeRefusals = map[string]bool{"catalog.department-not-allowed": true, "catalog.no-departments": true}

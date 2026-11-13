@@ -1504,6 +1504,32 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Organisation'
+  /v1/orgs/{orgId}/members/{userId}/role:
+    get:
+      tags:
+      - Organisations
+      summary: One user's role in one organisation, read live from the member list (service clients only)
+      description: Needs sellers:membership.read (the payments-service client). member=false, roleKey=null when the user is
+        not (or no longer) a member. Not cached here; payments caches for a few seconds at most.
+      operationId: role
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MemberRole'
   /v1/orgs/{id}/mirror:
     get:
       tags:
@@ -7031,6 +7057,17 @@ components:
         updatedAt:
           type: string
           format: date-time
+    MemberRole:
+      type: object
+      properties:
+        orgId:
+          type: string
+        userId:
+          type: string
+        member:
+          type: boolean
+        roleKey:
+          type: string
     OrgDirectoryPage:
       type: object
       properties:

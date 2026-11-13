@@ -4,6 +4,7 @@ import com.afrotransact.payments.domain.PaymentsForbidden;
 import com.afrotransact.payments.domain.PaymentsRateLimited;
 import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.PaymentsStateConflict;
+import com.afrotransact.payments.port.OrgMembershipUnavailableException;
 import com.afrotransact.payments.port.StripeGatewayException;
 import com.afrotransact.payments.port.StripeWebhookVerifier.InvalidWebhookSignatureException;
 import com.afrotransact.platform.web.error.ProblemTypes;
@@ -76,6 +77,15 @@ class PaymentsErrorAdvice {
         pd.setProperty("stripeCode", ex.stripeCode());
         pd.setProperty("declineCode", ex.declineCode());
         return pd;
+    }
+
+    /** The seller service could not confirm a membership: the money action is refused, never allowed (503). */
+    @ExceptionHandler(OrgMembershipUnavailableException.class)
+    ProblemDetail membershipUnavailable(OrgMembershipUnavailableException ex) {
+        LOG.error("Live membership check failed; refusing the action: {}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "payments.membership-unavailable",
+                "Membership check unavailable",
+                "We could not confirm your role in this organisation right now; nothing was done. Try again shortly");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

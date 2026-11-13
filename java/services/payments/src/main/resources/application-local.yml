@@ -12,6 +12,9 @@ at:
       enabled: ${FGA_ENABLED:false}
       api-url: ${FGA_API_URL:http://localhost:8091}
   payments:
+    # No seller service in the minimal local stack: payout requests trust the (local) token roles.
+    membership-check:
+      mode: ${MEMBERSHIP_CHECK_MODE:off}
     stripe:
       mode: ${STRIPE_MODE:auto}
       secret-key: ${STRIPE_SECRET_KEY:sk_test_replace_with_your_stripe_test_key}

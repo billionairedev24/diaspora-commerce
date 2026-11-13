@@ -1,8 +1,11 @@
 package com.afrotransact.payments.application;
 
+import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.payments.domain.PaymentsForbidden;
 import com.afrotransact.payments.domain.Requester;
+import com.afrotransact.payments.port.OrgMembershipDirectory;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PermissionChecker;
@@ -24,11 +27,14 @@ class PaymentsAccess {
     private final PermissionChecker permissions;
     private final ResourceAccessChecker relationships;
     private final ActorResolver actors;
+    private final OrgMembershipDirectory membership;
 
-    PaymentsAccess(PermissionChecker permissions, ResourceAccessChecker relationships, ActorResolver actors) {
+    PaymentsAccess(PermissionChecker permissions, ResourceAccessChecker relationships, ActorResolver actors,
+                   OrgMembershipDirectory membership) {
         this.permissions = permissions;
         this.relationships = relationships;
         this.actors = actors;
+        this.membership = membership;
     }
 
     /** Intents, captures, refunds and delivery notices come from other services (SERVICE principals) only. */
@@ -235,7 +241,21 @@ class PaymentsAccess {
         Actor actor = permissions.requireForOrg(PaymentsPermissions.PAYOUTS_REQUEST, orgId);
         relationships.requireForOrg(PaymentsPermissions.PAYOUTS_REQUEST, isStaff(actor)
                 ? PaymentsRelations.ORG_VIEW_PAYOUTS : PaymentsRelations.ORG_REQUEST_PAYOUTS, orgId);
-        return new Requester(actor.subject(), actor.roles(), isStaff(actor));
+        return new Requester(actor.subject(), isStaff(actor) ? actor.roles() : liveRoles(actor, orgId), isStaff(actor));
+    }
+
+    /**
+     * Payout requests move money: a member's role is read live from the seller service's member list, never from the
+     * token (a removed or downgraded member would otherwise keep requesting for the rest of the 5-minute access token).
+     * Not a member any more: 403. The seller service cannot answer: {@code OrgMembershipUnavailableException}, which
+     * the error advice maps to 503 (fail closed). Staff and service principals never get here.
+     */
+    private Set<String> liveRoles(Actor actor, String orgId) {
+        if (!membership.enabled()) {
+            return actor.roles();
+        }
+        return Set.of(membership.roleOf(orgId, actor.subject()).orElseThrow(() -> new PaymentsForbidden(
+                "payments.not-a-member", "You are no longer a member of this organisation")));
     }
 
     /** The signed-in shopper (gateway-bff relays the customer's token); the JWT subject is the customer id. */

@@ -42,6 +42,7 @@ import com.afrotransact.payments.port.ReferralSettingsRepository;
 import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.payments.port.WalletRepository;
+import com.afrotransact.payments.port.OrgMembershipDirectory;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.test.tenant.CrossTenant;
 import com.afrotransact.platform.test.tenant.TenantFixture;
@@ -60,7 +61,7 @@ class CustomerSelfTenantIsolationTest {
 
     private final TenantFixture tenants = new TenantFixture();
     private final PaymentsAccess access = new PaymentsAccess(tenants.permissions(), tenants.access(),
-            tenants.resolver());
+            tenants.resolver(), mock(OrgMembershipDirectory.class));
     private final PaymentsSettings settings = new PaymentsSettings("org_retail", Duration.ofDays(7), ZoneId.of("UTC"),
             "USD", 5, Duration.ofHours(1));
     private final MoneyTransactions tx = mock(MoneyTransactions.class);
@@ -80,7 +81,7 @@ class CustomerSelfTenantIsolationTest {
         when(wallet.findMethod("pm-2")).thenReturn(Optional.of(theirs));
         when(wallet.lockCustomer(C1)).thenReturn(Optional.of(new WalletRepository.StripeCustomer(C1, "cus_1", null)));
         PaymentMethodService service = new PaymentMethodServiceImpl(wallet, mock(WalletSync.class),
-                mock(StripeGateway.class), tx, access, clock);
+                mock(StripeGateway.class), tx, access, mock(ShopperStepUp.class), clock);
         tenants.as(TenantFixture.customer(C1));
 
         CrossTenant.assertDenied(() -> service.setDefault("pm-2"));
@@ -91,7 +92,7 @@ class CustomerSelfTenantIsolationTest {
     @Test
     void sellersAndDriversHaveNoWallet() {
         PaymentMethodService service = new PaymentMethodServiceImpl(mock(WalletRepository.class),
-                mock(WalletSync.class), mock(StripeGateway.class), tx, access, clock);
+                mock(WalletSync.class), mock(StripeGateway.class), tx, access, mock(ShopperStepUp.class), clock);
         tenants.as(TenantFixture.sellerOf(TenantFixture.ORG_A, "payments:read"));
         CrossTenant.assertDenied(service::list);
         tenants.as(TenantFixture.driver("drv-1"));

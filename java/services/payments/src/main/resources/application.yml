@@ -134,6 +134,18 @@ at:
       client-id: ${PAYMENTS_CLIENT_ID:payments-service}
       client-secret: ${PAYMENTS_CLIENT_SECRET:}
       timeout: ${SELLER_TIMEOUT:3s}
+    # Payout requests re-check the requester's role live with the seller service (sellers:membership.read, the
+    # payments-service client) instead of trusting the 5-minute token role. live (default everywhere) fails closed with 503
+    # when the seller service cannot answer; off exists for the local profile only (refused elsewhere at start).
+    # F17: saved payment method management (add, default, remove, PaymentSheet ephemeral key) needs a sign-in within max-age
+    # (the token's auth_time, identity's step-up rule). The client answers 403 auth.step-up-required with a fresh sign-in
+    # (/v1/auth/login?prompt=login). Off until the storefront and apps handle that code (on in dev and uat).
+    shopper-step-up:
+      enabled: ${SHOPPER_STEP_UP_ENABLED:false}
+      max-age: ${SHOPPER_STEP_UP_MAX_AGE:30m}
+    membership-check:
+      mode: live
+      cache-ttl: ${MEMBERSHIP_CACHE_TTL:3s}
     stripe:
       # Keys only from the environment. No default here: every profile must provide them.
       secret-key: ${STRIPE_SECRET_KEY}

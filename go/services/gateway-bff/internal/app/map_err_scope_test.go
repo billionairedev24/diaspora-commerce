@@ -24,3 +24,14 @@ func TestMapErrKeepsTheDepartmentRefusalMessage(t *testing.T) {
 		t.Fatalf("other 403 = %+v", other)
 	}
 }
+
+// A service that wants a recent sign-in (saved payment methods) keeps its code so the client can start a fresh sign-in.
+func TestMapErrKeepsTheStepUpRequiredCode(t *testing.T) {
+	err := mapErr("payments", &port.UpstreamProblem{Upstream: "payments", Status: http.StatusForbidden,
+		Code: "auth.step-up-required", Detail: "Confirm it is you: sign in again to remove a payment method"})
+	p, ok := domain.AsProblem(err)
+	if !ok || p.Status != http.StatusForbidden || p.Code != "auth.step-up-required" ||
+		p.Detail != "Confirm it is you: sign in again to remove a payment method" {
+		t.Fatalf("problem = %+v", p)
+	}
+}

@@ -1,5 +1,6 @@
 package com.afrotransact.payments.config;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -13,6 +14,7 @@ import com.afrotransact.payments.adapter.out.persistence.HmacSignalHasher;
 import com.afrotransact.payments.adapter.out.stripe.StripeJavaGateway;
 import com.afrotransact.payments.application.GiftCardSettings;
 import com.afrotransact.payments.application.PaymentsSettings;
+import com.afrotransact.payments.application.ShopperStepUp;
 import com.afrotransact.payments.application.SupplierPaymentSettings;
 import com.afrotransact.payments.domain.DefaultLocalTestPaymentsPolicy;
 import com.afrotransact.payments.domain.DefaultPaymentSplitter;
@@ -65,6 +67,13 @@ class PaymentsConfiguration {
     PaymentsSettings paymentsSettings(PaymentsProperties props) {
         return new PaymentsSettings(props.retailOrgId(), props.settlementHold(), ZoneId.of(props.zone()),
                 props.currency(), props.webhooks().maxAttempts(), props.jobs().settlementRecheck());
+    }
+
+    /** Saved payment method management asks for a recent sign-in (F17), see {@link ShopperStepUp}. */
+    @Bean
+    ShopperStepUp shopperStepUp(@Value("${at.payments.shopper-step-up.enabled:false}") boolean enabled,
+                                @Value("${at.payments.shopper-step-up.max-age:30m}") Duration maxAge, Clock clock) {
+        return new ShopperStepUp(enabled, maxAge, clock);
     }
 
     /** Net terms for AfroTransact Retail supplier payments (S226), {@code SUPPLIER_PAYMENT_TERMS_DAYS} (30). */
