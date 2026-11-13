@@ -31,4 +31,10 @@
 # secrets.plain: true   the pod still reads envFrom Secret <service>-secrets, but no ExternalSecret is rendered: the Secret is
 #                       created by hand (single-node k3s without External Secrets: infra/ovh-vps/secrets.sh). Default false.
 #
+# postgresCA: {enabled: true, secretName: pg-ca, mountPath: /etc/pg-ca}   (F11, set per environment in platform-values.yaml)
+#                       mounts the Secret <secretName> (key ca.crt: the managed Postgres provider's CA bundle) read-only at
+#                       <mountPath> in every service, so DB_URL may carry sslmode=verify-full&sslrootcert=<mountPath>/ca.crt.
+#                       Default off (sslmode=require). infra/ovh-vps/secrets.sh creates the Secret and the URLs from
+#                       EXTERNAL_PG_SSLMODE / EXTERNAL_PG_SSLROOTCERT / EXTERNAL_PG_CA_FILE (docs/runbooks/postgres-tls.md).
+#
 # imagePullSecrets: [{name: ghcr}]   private registry credentials (kubectl create secret docker-registry); default none.

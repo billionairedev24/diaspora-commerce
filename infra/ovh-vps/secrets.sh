@@ -20,7 +20,23 @@ set -euo pipefail
 load_config
 
 PG_HOST="postgres.data.svc.cluster.local"; PG_SSL="disable"; PG_ADMIN="at_admin"
+PG_SSLROOTCERT=""   # path of the CA bundle INSIDE the pods; only set when the sslmode verifies the server (F11)
 if [[ "$DB_MODE" == external ]]; then PG_HOST="$EXTERNAL_PG_HOST"; PG_SSL="${EXTERNAL_PG_SSLMODE:-require}"; PG_ADMIN="$EXTERNAL_PG_ADMIN_USER"; fi
+# F11: verify-ca / verify-full need the provider's CA bundle: EXTERNAL_PG_CA_FILE (operator side, PEM) becomes the Secret pg-ca
+# (key ca.crt), which the at-service chart mounts at the directory of EXTERNAL_PG_SSLROOTCERT (chart value postgresCA.enabled).
+case "$PG_SSL" in
+  verify-ca|verify-full)
+    PG_SSLROOTCERT="${EXTERNAL_PG_SSLROOTCERT:-/etc/pg-ca/ca.crt}"
+    [[ "$(basename "$PG_SSLROOTCERT")" == ca.crt ]] || die "EXTERNAL_PG_SSLROOTCERT must end in /ca.crt (the key of the Secret pg-ca)"
+    [[ -r "${EXTERNAL_PG_CA_FILE:-}" ]] || die "EXTERNAL_PG_SSLMODE=$PG_SSL needs EXTERNAL_PG_CA_FILE (readable PEM of the Postgres provider's CA)"
+    grep -q 'BEGIN CERTIFICATE' "$EXTERNAL_PG_CA_FILE" || die "EXTERNAL_PG_CA_FILE is not a PEM certificate bundle" ;;
+  disable|allow|prefer|require) ;;
+  *) die "EXTERNAL_PG_SSLMODE must be disable, require, verify-ca or verify-full (got '$PG_SSL')" ;;
+esac
+if [[ "$DB_MODE" == external && "$PROFILE" == prod && "$PG_SSL" != verify-full ]]; then
+  [[ "${EXTERNAL_PG_REQUIRE_VERIFY:-false}" != true ]] || die "EXTERNAL_PG_REQUIRE_VERIFY=true: prod must use EXTERNAL_PG_SSLMODE=verify-full (got '$PG_SSL')"
+  printf '\033[33mwarning:\033[0m prod database TLS is sslmode=%s: encrypted, but the server is not verified (audit F11). Switch to verify-full: docs/runbooks/postgres-tls.md. EXTERNAL_PG_REQUIRE_VERIFY=true turns this into an error.\n' "$PG_SSL" >&2
+fi
 KAFKA="kafka-0.kafka.kafka.svc.cluster.local:9092"
 VALKEY_PW="$(gen VALKEY_PASSWORD)"
 REDIS_URL="redis://:${VALKEY_PW}@valkey.data.svc.cluster.local:6379"
@@ -35,15 +51,16 @@ psql_admin() { # psql_admin DB SQL...   through the Postgres pod (cluster) or fr
   if [[ "$DB_MODE" == cluster ]]; then
     kubectl -n data exec postgres-0 -- env PGPASSWORD="$(pg_admin_password)" psql -h 127.0.0.1 -U "$PG_ADMIN" -d "$db" -v ON_ERROR_STOP=1 -qtA "$@"
   else
-    PGPASSWORD="$(pg_admin_password)" PGSSLMODE="$PG_SSL" psql -h "$PG_HOST" -U "$PG_ADMIN" -d "$db" -v ON_ERROR_STOP=1 -qtA "$@"
+    env PGPASSWORD="$(pg_admin_password)" PGSSLMODE="$PG_SSL" ${EXTERNAL_PG_CA_FILE:+PGSSLROOTCERT="$EXTERNAL_PG_CA_FILE"} psql -h "$PG_HOST" -U "$PG_ADMIN" -d "$db" -v ON_ERROR_STOP=1 -qtA "$@"
   fi
 }
 
 is_java() { services | awk -v s="$1" '$1==s && $2=="java"{f=1} END{exit !f}'; }
 role_of() { printf '%s_app' "$1"; }
 db_password() { gen "DBPW_$1" 27; }
-jdbc_url() { printf 'jdbc:postgresql://%s:5432/%s?sslmode=%s' "$PG_HOST" "$1" "$PG_SSL"; }
-go_url() { printf 'postgres://%s:%s@%s:5432/%s?sslmode=%s' "$(role_of "$1")" "$(db_password "$1")" "$PG_HOST" "$1" "$PG_SSL"; }
+pg_ssl_params() { printf 'sslmode=%s' "$PG_SSL"; [[ -z "$PG_SSLROOTCERT" ]] || printf '&sslrootcert=%s' "$PG_SSLROOTCERT"; }
+jdbc_url() { printf 'jdbc:postgresql://%s:5432/%s?%s' "$PG_HOST" "$1" "$(pg_ssl_params)"; }
+go_url() { printf 'postgres://%s:%s@%s:5432/%s?%s' "$(role_of "$1")" "$(db_password "$1")" "$PG_HOST" "$1" "$(pg_ssl_params)"; }
 
 ensure_namespaces() {
   [[ -z "${SECRETS_OUT:-}" ]] || return 0   # render-only mode: no cluster
@@ -195,6 +212,8 @@ services_secrets() {
     case "${ADMIN_EMAIL:-}" in ""|admin@example.com|*.test|*@example.com) die "ADMIN_EMAIL must be a real address for PROFILE=prod" ;; esac
   fi
   ensure_namespaces
+  # F11: the CA bundle every service mounts (chart value postgresCA.enabled=true in infra/argocd/envs/<env>/platform-values.yaml).
+  [[ -z "$PG_SSLROOTCERT" ]] || secret "$NS" pg-ca "ca.crt=$(cat "$EXTERNAL_PG_CA_FILE")"
   local svc rt db wave kv
   while read -r svc rt db wave; do
     mapfile -t kv < <(service_keys "$svc" "$db")

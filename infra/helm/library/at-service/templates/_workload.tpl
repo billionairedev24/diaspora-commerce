@@ -103,7 +103,17 @@ spec:
               sleep: {seconds: 5}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            {{- if (default dict .Values.postgresCA).enabled }}
+            {{- /* F11: CA bundle for sslmode=verify-full (JDBC sslrootcert / Go DSN sslrootcert point at <mountPath>/ca.crt). */}}
+            - {name: pg-ca, mountPath: {{ .Values.postgresCA.mountPath | default "/etc/pg-ca" }}, readOnly: true}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if (default dict .Values.postgresCA).enabled }}
+        - name: pg-ca
+          secret:
+            secretName: {{ .Values.postgresCA.secretName | default "pg-ca" }}
+            defaultMode: 0444
+        {{- end }}
 {{- end -}}

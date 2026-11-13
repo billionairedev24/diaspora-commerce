@@ -38,6 +38,14 @@ secrets:
   keySeparator: "/"               # OKMS paths allow "/"
   store: platform-secrets          # only used on the optional OKMS path
 
+# F11 Postgres TLS: false = DB_URL carries sslmode=require (encrypted, server not verified). When Layerbase gives its CA: run
+# infra/ovh-vps/secrets.sh with EXTERNAL_PG_SSLMODE=verify-full and EXTERNAL_PG_CA_FILE (creates the Secret pg-ca and the URLs),
+# then set enabled: true so every service mounts it at /etc/pg-ca (docs/runbooks/postgres-tls.md). Order matters: Secret first.
+postgresCA:
+  enabled: false
+  secretName: pg-ca
+  mountPath: /etc/pg-ca
+
 # GHCR packages are private: read-only token (read:packages), created by infra/ops/secrets/apply.sh as the pull Secret "ghcr".
 imagePullSecrets:
   - name: ghcr

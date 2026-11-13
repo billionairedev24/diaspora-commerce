@@ -95,7 +95,8 @@ The web apps (Workers) are deployed by `.github/workflows/trial.yml` (trial) or 
    Both create `<db>_app` roles (`temporal_visibility` uses `temporal_app`) and, **as the admin**, `postgis` in **`geo` and `fulfilment`** and
    `btree_gist` in `bookings`. Fulfilment's `V3__nearest_driver.sql` runs `create extension if not exists postgis` as the service role, which fails
    on a managed server unless the extension already exists. Verify: `psql ... -d fulfilment -c "select postgis_version()"`.
-4. If Layerbase requires mTLS or `verify-full`, every service needs the client certificate and `sslmode=verify-full` in its URL
+4. `verify-full` is wired end to end (CA Secret, chart mount, URLs): ask Layerbase for the CA and follow [postgres-tls.md](postgres-tls.md).
+   If Layerbase requires mTLS, every service needs the client certificate and `sslmode=verify-full` in its URL
    (`EXTERNAL_PG_SSLMODE`; libpq `PGSSLROOTCERT`): this is a Layerbase answer to get first.
 
 ## 6. Secrets (SOPS + age)

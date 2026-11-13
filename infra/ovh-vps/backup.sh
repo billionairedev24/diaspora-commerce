@@ -58,7 +58,7 @@ dump_db() { # dump_db DB  -> custom-format dump on stdout
   if [[ "$DB_MODE" == cluster ]]; then
     kubectl -n data exec postgres-0 -- env PGPASSWORD="$(pg_admin_password)" pg_dump -h 127.0.0.1 -U at_admin -Fc "$1"
   else
-    PGPASSWORD="$(pg_admin_password)" PGSSLMODE="${EXTERNAL_PG_SSLMODE:-require}" pg_dump -h "$EXTERNAL_PG_HOST" -U "$EXTERNAL_PG_ADMIN_USER" -Fc "$1"
+    env PGPASSWORD="$(pg_admin_password)" PGSSLMODE="${EXTERNAL_PG_SSLMODE:-require}" ${EXTERNAL_PG_CA_FILE:+PGSSLROOTCERT="$EXTERNAL_PG_CA_FILE"} pg_dump -h "$EXTERNAL_PG_HOST" -U "$EXTERNAL_PG_ADMIN_USER" -Fc "$1"
   fi
 }
 
