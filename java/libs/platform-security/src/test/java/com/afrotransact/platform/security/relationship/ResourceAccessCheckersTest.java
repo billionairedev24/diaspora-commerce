@@ -33,7 +33,35 @@ class ResourceAccessCheckersTest {
                 .isInstanceOf(ForbiddenActionException.class).hasFieldOrPropertyWithValue("code", "auth.wrong-org");
         assertThatThrownBy(() -> access.requireForOrg("payouts:read", "can_view_payouts", "org_a"))
                 .hasFieldOrPropertyWithValue("code", "auth.missing-permission");
-        assertThat(access.require("offers:read", "can_view", OFFER)).isEqualTo(current);
+        assertThat(access.require("offers:read", "can_view", OFFER,
+                RelationshipTuple.ownedBy(OFFER, "org_a"))).isEqualTo(current);
+    }
+
+    @Test
+    void rbacOnlyRequireChecksTheOwnerForOrgMembersAndFailsClosedWhenTheOwnerIsUnknown() {
+        ResourceAccessChecker access = ResourceAccessCheckers.rbacOnly(permissions);
+
+        assertThatThrownBy(() -> access.require("offers:read", "can_view", OFFER,
+                RelationshipTuple.ownedBy(OFFER, "org_b")))
+                .isInstanceOf(ForbiddenActionException.class).hasFieldOrPropertyWithValue("code", "auth.wrong-org");
+        assertThatThrownBy(() -> access.require("offers:read", "can_view", OFFER))
+                .isInstanceOf(ForbiddenActionException.class).hasFieldOrPropertyWithValue("code", "auth.wrong-org");
+        assertThatThrownBy(() -> access.require("offers:read", "can_view", FgaObject.PLATFORM))
+                .hasFieldOrPropertyWithValue("code", "auth.wrong-org");
+        // a tuple about another resource is not an owner of this one
+        assertThatThrownBy(() -> access.require("offers:read", "can_view", OFFER,
+                RelationshipTuple.ownedBy(FgaObject.of("offer", "o-2"), "org_a")))
+                .hasFieldOrPropertyWithValue("code", "auth.wrong-org");
+    }
+
+    @Test
+    void rbacOnlyRequireLeavesStaffAndServicesPlatformWide() {
+        ResourceAccessChecker access = ResourceAccessCheckers.rbacOnly(new DefaultPermissionChecker(
+                () -> new Actor("ops", PrincipalType.STAFF, Optional.empty(), Set.of(), Set.of("offers:read"))));
+        assertThat(access.require("offers:read", "platform_view_all", FgaObject.PLATFORM)).isNotNull();
+        ResourceAccessChecker svc = ResourceAccessCheckers.rbacOnly(new DefaultPermissionChecker(
+                () -> new Actor("svc", PrincipalType.SERVICE, Optional.empty(), Set.of(), Set.of("offers:read"))));
+        assertThat(svc.require("offers:read", "can_view", OFFER)).isNotNull();
     }
 
     @Test
