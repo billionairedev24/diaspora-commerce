@@ -1,7 +1,8 @@
 # Production: live Stripe keys required, reference pages off (published on developers.afrotransact.com).
 at:
   security:
-    # S248 OpenFGA relationship checks. Off until uat has run enforced; flip FGA_ENABLED (shadow) then FGA_ENFORCE per runbook.
+    # S248 OpenFGA relationship checks. OFF in prod by owner decision (ADR 0010 "No OpenFGA at launch"): isolation is RBAC + the
+    # signed org claim + owner checks (docs/engineering/tenant-isolation.md). Do not set FGA_ENABLED in prod without that ADR's shadow-then-enforce plan.
     fga:
       enabled: ${FGA_ENABLED:false}
       enforce: ${FGA_ENFORCE:false}
