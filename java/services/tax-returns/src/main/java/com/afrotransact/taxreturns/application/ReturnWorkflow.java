@@ -176,6 +176,22 @@ class ReturnWorkflow {
         }
     }
 
+    /**
+     * The driver fulfilment assigned to this RMA's pickup stop. Empty when no pickup is scheduled, no driver is
+     * assigned yet, or fulfilment cannot say (fails closed: nobody is then accepted as the collecting driver).
+     */
+    Optional<String> assignedPickupDriver(UUID rmaId) {
+        return rmas.pickupId(rmaId).flatMap(pickupId -> {
+            try {
+                return pickups.assignedDriver(pickupId);
+            } catch (UpstreamException ex) {
+                LOG.warn("Return {}: assigned driver of pickup {} unknown ({}): {}", rmaId, pickupId, ex.status(),
+                        ex.getMessage());
+                return Optional.empty();
+            }
+        });
+    }
+
     /** The RMA was cancelled: cancel its driver pickup at fulfilment (best effort; logged when it fails). */
     void cancelPickup(UUID rmaId, String reason) {
         rmas.pickupId(rmaId).ifPresent(pickupId -> {

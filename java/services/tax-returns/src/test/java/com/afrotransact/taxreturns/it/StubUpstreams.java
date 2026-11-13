@@ -173,6 +173,13 @@ class StubUpstreams {
         final Map<UUID, PickupRequest> scheduled = new ConcurrentHashMap<>();
         final List<String> cancelled = new CopyOnWriteArrayList<>();
         volatile boolean failNext;
+        /** The driver fulfilment put the pickup on; the flow tests sign in as driver_1. */
+        volatile String assignedDriver = "driver_1";
+
+        @Override
+        public Optional<String> assignedDriver(String pickupId) {
+            return Optional.ofNullable(assignedDriver);
+        }
 
         @Override
         public String schedule(PickupRequest request) {

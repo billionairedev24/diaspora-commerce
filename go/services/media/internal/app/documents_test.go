@@ -22,6 +22,8 @@ var (
 	bffGuest     = auth.Actor{Subject: "gateway-bff", Type: "SERVICE", Permissions: []string{domain.PermissionCareerResume}}
 	otherService = auth.Actor{Subject: "catalog-service", Type: "SERVICE"}
 	staff        = auth.Actor{Subject: "staff-1", Type: "STAFF"}
+	// Staff holding kyc:read may open KYC documents and proof photos (identity V47).
+	kycStaff     = auth.Actor{Subject: "staff-kyc", Type: "STAFF", Permissions: []string{domain.PermissionKYCRead}}
 	sellerMember = auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_lagos"}
 	customer     = auth.Actor{Subject: "c1", Type: "CUSTOMER"}
 )

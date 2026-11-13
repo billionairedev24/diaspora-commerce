@@ -1011,7 +1011,7 @@ func (s *mediaServiceImpl) owned(ctx context.Context, actor auth.Actor, id strin
 	if err != nil {
 		return domain.Asset{}, fmt.Errorf("get asset: %w", err)
 	}
-	if actor.Subject != a.UploadedBy && (!actor.IsStaff() || !mayUse(actor, a.Purpose)) {
+	if actor.Subject != a.UploadedBy && (!actor.IsStaff() || !mayUse(actor, a.Purpose) || !staffMayView(actor, a.Purpose)) {
 		return domain.Asset{}, ErrForbidden
 	}
 	return a, nil
@@ -1056,9 +1056,19 @@ func mayRead(actor auth.Actor, a domain.Asset) bool {
 		return true
 	}
 	if actor.IsStaff() {
-		return mayUse(actor, a.Purpose)
+		return mayUse(actor, a.Purpose) && staffMayView(actor, a.Purpose)
 	}
 	return ownerOf(actor) == a.OwnerOrg
+}
+
+// staffMayView holds a STAFF principal to the dedicated kyc:read permission for KYC documents and proof photos, so
+// the broader media or catalog staff permissions never open them. Service principals are decided by mayUse and the
+// named clients' own scopes.
+func staffMayView(actor auth.Actor, p domain.Purpose) bool {
+	if actor.Type != principalStaff || !domain.StaffNeedsKYCRead(p) {
+		return true
+	}
+	return actor.Can(domain.PermissionKYCRead)
 }
 
 const (

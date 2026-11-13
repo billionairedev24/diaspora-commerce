@@ -116,7 +116,7 @@ at:
       token-path: /oauth2/token
       client-id: ${FULFILMENT_CLIENT_ID:fulfilment-service}
       client-secret: ${FULFILMENT_CLIENT_SECRET:}
-      scopes: ${FULFILMENT_CLIENT_SCOPES:orders:update-status inventory:reserve delivery-runs:read}
+      scopes: ${FULFILMENT_CLIENT_SCOPES:orders:update-status inventory:reserve delivery:relay delivery-runs:read}
     upstreams:
       timeout: ${UPSTREAM_TIMEOUT:5s}
       geo-timeout: ${GEO_TIMEOUT:2s}

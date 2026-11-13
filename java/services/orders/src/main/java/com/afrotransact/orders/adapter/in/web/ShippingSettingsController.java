@@ -3,6 +3,7 @@ package com.afrotransact.orders.adapter.in.web;
 import java.time.Instant;
 import java.util.List;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.orders.application.ShippingSettingsCommand;
 import com.afrotransact.orders.application.ShippingSettingsService;
 import com.afrotransact.orders.domain.ShippingSettings;
@@ -41,6 +42,7 @@ class ShippingSettingsController {
         return SettingsResponse.of(settings.view(currency));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Change the shipping settings (orders:shipping.edit)",
             description = "A reason of 10 to 500 characters is required (422 orders.reason-required) and is logged with "
                     + "who and when. expectedVersion is the version the editor saw (409 "
@@ -53,6 +55,7 @@ class ShippingSettingsController {
                 body.expectedVersion()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Audit trail of the shipping settings, newest first (orders:shipping.view)",
             description = "Every version with the settings before and after, who changed it, when and why.")
     @GetMapping("/v1/shipping-settings/{currency}/changes")

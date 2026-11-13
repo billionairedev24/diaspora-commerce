@@ -2,6 +2,7 @@ package com.afrotransact.deliveryruns.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.AdvertorialDtos.AdvertorialRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.AdvertorialDtos.AdvertorialResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.AdvertorialDtos.EventRequest;
@@ -46,6 +47,7 @@ class AdvertorialController {
         this.serving = serving;
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Advertorials, newest first, with views, clicks and orders (delivery-runs:read)")
     @GetMapping("/v1/advertorials")
     ListResponse listAdvertorials(@RequestParam(required = false) AdvertorialSource source,
@@ -55,12 +57,14 @@ class AdvertorialController {
         return ListResponse.of(advertorials.list(source, sourceId, status, limit));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "One advertorial with its results (delivery-runs:read)")
     @GetMapping("/v1/advertorials/{id}")
     ResponseEntity<AdvertorialResponse> getAdvertorial(@PathVariable UUID id) {
         return tagged(advertorials.get(id));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Draft the advertorial of a window or run from its data (preorders:manage)",
             description = "Town, delivery day, closing time and fee become the words, live at once. Asking again "
                     + "re-drafts the generated one. 404 for an unknown window or run; 409 for one that is over.")
@@ -69,6 +73,7 @@ class AdvertorialController {
         return tagged(advertorials.generate(body.source(), body.sourceId()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Write an advertorial for a window or run (preorders:manage)",
             description = "Created as a draft; publish it to make it live. Several variants (A, B…) of one window or "
                     + "run share its visitors by weight.")
@@ -78,6 +83,7 @@ class AdvertorialController {
         return AdvertorialResponse.of(advertorials.create(body.toCommand()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Edit an advertorial (preorders:manage)",
             description = "Not an ended one. The words stop following the window or run. If-Match is the version "
                     + "seen (412 delivery-runs.version-mismatch when it changed).")
@@ -88,6 +94,7 @@ class AdvertorialController {
         return tagged(advertorials.update(id, body.toCommand(), Versions.expected(ifMatch)));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Draft or paused to live (preorders:manage)")
     @PostMapping("/v1/advertorials/{id}/publish")
     ResponseEntity<AdvertorialResponse> publishAdvertorial(@PathVariable UUID id,
@@ -96,6 +103,7 @@ class AdvertorialController {
         return tagged(advertorials.publish(id, Versions.expected(ifMatch)));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Live to paused (preorders:manage)")
     @PostMapping("/v1/advertorials/{id}/pause")
     ResponseEntity<AdvertorialResponse> pauseAdvertorial(@PathVariable UUID id,
@@ -104,6 +112,7 @@ class AdvertorialController {
         return tagged(advertorials.pause(id, Versions.expected(ifMatch)));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "End an advertorial for good (preorders:manage)")
     @PostMapping("/v1/advertorials/{id}/end")
     ResponseEntity<AdvertorialResponse> endAdvertorial(@PathVariable UUID id,

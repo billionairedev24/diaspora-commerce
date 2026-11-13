@@ -358,6 +358,9 @@ class InventoryTenantIsolationTest {
         forbidden(() -> storageService.snapshotToday());
         forbidden(() -> storageService.setDimensions("SKU-B", BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ONE));
+        // Dimensions have no owner: a seller holding inventory:read cannot read them either.
+        forbidden(() -> storageService.dimensions("SKU-B"));
+        verify(storage, never()).findDimensions(anyString());
         verify(storage, never()).saveDimensions(any(), anyString(), any());
         verify(nodes, never()).updateAddress(anyString(), any());
     }

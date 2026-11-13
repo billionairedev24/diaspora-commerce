@@ -80,7 +80,8 @@ class GtinPrefillServiceImpl implements GtinPrefillService {
             throw new CatalogRuleViolation("Invalid GTIN: " + message, Map.of("gtin", message));
         }
         Gtin gtin = new Gtin(digits);
-        Optional<String> existing = products.findByVariantGtin(digits).map(p -> p.atin().value());
+        Optional<String> existing = products.findByVariantGtin(digits)
+                .filter(p -> GtinPageVisibility.visibleTo(p, actor)).map(p -> p.atin().value());
         if (existing.isPresent()) {
             return new GtinPrefill(digits, false, existing.get(), null, null, null, null, List.of(), Map.of(),
                     List.of(), List.of(), false, "Matches existing product " + existing.get()

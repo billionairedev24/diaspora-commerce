@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.net.URI;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.CreateProductRequest;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.FlagRequest;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.FlagResponse;
@@ -89,6 +90,7 @@ class ProductController {
         return ProductResponse.of(products.getByAtin(atin));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Approve a product in review (catalog:moderate)",
             description = "Only a product in review can be approved, and only through the selling approval and the tax "
                     + "gate. Any other status (already live, say) is a 409 with a plain message and changes nothing.")
@@ -97,6 +99,7 @@ class ProductController {
         return ProductResponse.of(products.approve(id));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Reject a product with a note (catalog:moderate)")
     @PostMapping("/{id}/reject")
     ProductResponse reject(@PathVariable UUID id, @Valid @RequestBody NoteRequest body) {
@@ -124,6 +127,7 @@ class ProductController {
         return ProductResponse.of(products.setPreorderFlags(id, body.preorderEligible(), body.shipsNow()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Flag a live listing for review (catalog:moderate)",
             description = "Staff flags are source STAFF; service clients (principal type SERVICE) are AUTOMATED. "
                     + "Publishes catalog.product.flagged; trust-ops queues it as a live-listing moderation item.")
@@ -133,6 +137,7 @@ class ProductController {
                 body.riskLevel()), true));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Take a live or paused listing down with a reason (catalog:moderate)",
             description = "Status becomes TAKEN_DOWN: hidden from public reads and the owner cannot resume it. "
                     + "Publishes catalog.product.taken_down. Idempotent.")
@@ -141,6 +146,7 @@ class ProductController {
         return ProductResponse.of(listings.takeDown(id, body.reasonCode(), body.note()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Reverse a takedown (catalog:moderate)",
             description = "Returns the listing to its status before the takedown (LIVE or PAUSED) and publishes "
                     + "catalog.product.reinstated. Idempotent.")

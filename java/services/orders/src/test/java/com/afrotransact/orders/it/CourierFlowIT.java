@@ -33,7 +33,7 @@ class CourierFlowIT extends OrdersIntegrationTest {
     }
 
     private String event(String eventId, String status, String proof) {
-        return "{\"eventId\":\"" + eventId + "\",\"status\":\"" + status + "\",\"occurredAt\":\"2026-10-01T15:00:"
+        return "{\"eventId\":\"" + eventId + "\",\"driverId\":\"driver-7\",\"status\":\"" + status + "\",\"occurredAt\":\"2026-10-01T15:00:"
                 + String.format("%02d", Math.abs(eventId.hashCode()) % 60) + "Z\"" + (proof == null ? ""
                 : ",\"proof\":" + proof) + "}";
     }
@@ -57,7 +57,7 @@ class CourierFlowIT extends OrdersIntegrationTest {
         transition(shipment, "packed", null, null);
         transition(shipment, "ready", null, null);
 
-        TestSupport.as(TestSupport.driver());
+        TestSupport.as(TestSupport.relay());
         JsonNode brief = ok(send("GET", "/v1/shipments/" + shipment + "/delivery-brief", null));
         assertThat(brief.path("perishable").asBoolean()).isTrue();
         assertThat(brief.path("handoverRequired").asBoolean()).isTrue();
@@ -76,7 +76,7 @@ class CourierFlowIT extends OrdersIntegrationTest {
                 .filter(l -> l.startsWith("data:") && l.contains(shipment) && l.contains("picked_up"))
                 .findFirst().orElse(""));
 
-        TestSupport.as(TestSupport.driver());
+        TestSupport.as(TestSupport.relay());
         JsonNode picked = ok(send("POST", "/v1/shipments/" + shipment + "/courier-events",
                 event("drv-1", "picked_up", null)));
         assertThat(picked.path("outcome").asString()).isEqualTo("applied");
@@ -123,7 +123,7 @@ class CourierFlowIT extends OrdersIntegrationTest {
     }
 
     @Test
-    void onlyDriversSendCourierEventsAndOnlyForAfroTransactDelivery() {
+    void onlyTheFulfilmentRelaySendsCourierEventsAndOnlyForAfroTransactDelivery() {
         Order carrier = placedOrder(id("cust"), UUID.randomUUID().toString(),
                 spec(id("org"), FulfilmentType.FBA_AFROTRANSACT, DeliveryMethod.CARRIER));
         String shipment = carrier.shipments().getFirst().id();
@@ -133,8 +133,12 @@ class CourierFlowIT extends OrdersIntegrationTest {
         transition(shipment, "ready", null, null);
 
         problem(send("POST", "/v1/shipments/" + shipment + "/courier-events", event("x-1", "picked_up", null)), 403,
-                "auth.missing-permission");
+                "orders.relay-only");
         TestSupport.as(TestSupport.driver());
+        problem(send("POST", "/v1/shipments/" + shipment + "/courier-events", event("x-3", "picked_up", null)), 403,
+                "orders.relay-only");
+        assertThat(send("GET", "/v1/shipments/" + shipment + "/delivery-brief", null).statusCode()).isEqualTo(403);
+        TestSupport.as(TestSupport.relay());
         problem(send("POST", "/v1/shipments/" + shipment + "/courier-events", event("x-2", "picked_up", null)), 403,
                 "orders.transition-forbidden");
         problem(transitionRaw(shipment, "picked_up"), 403, "orders.use-courier-events");

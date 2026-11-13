@@ -133,7 +133,7 @@ The Expo driver app is built against this API (`contracts/openapi/fulfilment.yam
 `GET /v1/driver/routes` (or `/v1/driver/routes/{id}`) returns each open route with stops (order, kind, address/ZIP,
 window, `handoverRequired`, `safePlaceAllowed`) and packages (label, origin FC/SELLER, pickup and drop-off stop,
 perishable, status, scan flags). Customer address details, instructions and contact come from orders-service
-`GET /v1/shipments/{id}/delivery-brief` with the driver's token. Cache both for offline work.
+`GET /v1/shipments/{id}/delivery-brief`, which orders now serves only to dispatch or the fulfilment relay (never a driver token), so the driver app must not call it directly. Cache both for offline work.
 
 ### Sync protocol (S087)
 
@@ -232,10 +232,10 @@ Consumed (group `fulfilment-service`, inbox-deduplicated): `orders.order.placed`
 | `delivery:operate` | platform.driver (or direct grant) | driver app (`/v1/driver/**`) |
 
 Service calls use the `fulfilment-service` client-credentials token (`/oauth2/token`, scopes
-`orders:update-status inventory:reserve`, cached until a minute before expiry): orders transitions / tracking, inventory
-reservations. Courier events are sent with the **driver's own token** during a live sync; queued retries use the
-service token, which orders-service does not accept on courier events yet (see the gap below — such commands retry,
-then show up in `forward-failures`). geo-service ZIP / zone lookups are public. 4xx = refusal, 5xx / 408 / 429 / I/O
+`orders:update-status inventory:reserve delivery:relay`, cached until a minute before expiry): orders transitions /
+tracking, inventory reservations. Courier events are always sent with the **service token** (orders-service accepts
+them only from the fulfilment relay and takes the driver from `driverId`, which fulfilment has already checked against
+the route; a driver token is refused there). Orders `GET /v1/shipments/{id}/delivery-brief` is dispatch or relay only. geo-service ZIP / zone lookups are public. 4xx = refusal, 5xx / 408 / 429 / I/O
 (and 401 / 403 for queued relays) = retried.
 
 Known gaps in other services (tracked in the hand-off report): orders-service should accept courier events relayed by

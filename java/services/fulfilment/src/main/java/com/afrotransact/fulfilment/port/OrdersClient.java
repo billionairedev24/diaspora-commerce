@@ -7,8 +7,9 @@ public interface OrdersClient {
     void transition(String shipmentId, String to, String reason, String idempotencyKey);
 
     /**
-     * {@code POST /v1/shipments/{id}/courier-events}. Sent with the driver's own token when {@code driverBearer} is
-     * given (live sync), otherwise with the service token (queued retries).
+     * {@code POST /v1/shipments/{id}/courier-events}. Always sent with the service token (orders accepts courier
+     * events only from the fulfilment relay and takes the driver from {@code event.driverId()}); {@code driverBearer}
+     * is no longer forwarded and is kept only so callers need not change.
      */
     void courierEvent(String shipmentId, CourierEvent event, String driverBearer);
 

@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.adapter.in.web.TaxonomyDtos.AuditResponse;
 import com.afrotransact.catalog.adapter.in.web.TaxonomyDtos.CreateNodeBody;
 import com.afrotransact.catalog.adapter.in.web.TaxonomyDtos.CreateTypeBody;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Taxonomy (back office)", description = "Staff create, rename, move, reorder and retire departments, "
         + "categories and product types, and edit each product type's attributes (catalog:taxonomy)")
+@StaffOrServiceOnly
 @RestController
 class TaxonomyController {
 

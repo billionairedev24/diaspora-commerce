@@ -2,6 +2,7 @@ package com.afrotransact.retail.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.adapter.in.web.InvoiceDtos.InvoiceResponse;
 import com.afrotransact.retail.adapter.in.web.InvoiceDtos.RegisterInvoiceRequest;
 import com.afrotransact.retail.adapter.in.web.PurchaseOrderDtos.NoteRequest;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Supplier invoices", description = "Three-way match: PO price × received quantity vs supplier invoice "
         + "(±1%) → MATCHED, EXCEPTION (routed to the buyer) or ON_HOLD (S074). retail:finance")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/invoices")
 class InvoiceController {

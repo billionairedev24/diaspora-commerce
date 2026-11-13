@@ -58,4 +58,4 @@ POST /v1/stock/imports/{id}/start | ORG_OWNED | StockImportServiceImpl.start: lo
 GET /v1/storage/usage | ORG_SCOPED_LIST | StorageServiceImpl.scope: ownerFilter for sellers; SERVICE storage.read may name an org | InventoryTenantIsolationTest
 POST /v1/storage/snapshots | STAFF_ONLY | StorageServiceImpl.snapshotToday: staffRequire(adjust) | InventoryTenantIsolationTest
 PUT /v1/skus/{sku}/dimensions | STAFF_ONLY | StorageServiceImpl.setDimensions: staff principal (table is keyed by SKU only, feeds all owners' metering) | InventoryTenantIsolationTest
-GET /v1/skus/{sku}/dimensions | UNVERIFIED | dimensions are keyed by SKU without owner and readable by any inventory:read holder; low sensitivity physical size only, needs an owner column to scope | -
+GET /v1/skus/{sku}/dimensions | STAFF_ONLY | StorageServiceImpl.dimensions: InventoryAccess.staffRequire(inventory:read), STAFF or SERVICE principal only (table is keyed by SKU without an owner; no seller screen calls it) | InventoryTenantIsolationTest

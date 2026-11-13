@@ -36,7 +36,10 @@ func TestModerateCombinesAIAndDuplicates(t *testing.T) {
 			domain.VerdictPassed, domain.AIChecked, "x1"},
 		{"another seller's photo is held", closed, domain.ModerationInput{OwnerOrg: "a", AI: allow,
 			Similar: []domain.SimilarImage{{AssetID: "x1", OwnerOrg: "a", Distance: 1}, {AssetID: "y1", OwnerOrg: "b", Distance: 3}}},
-			domain.VerdictHeld, domain.AIChecked, "y1"},
+			domain.VerdictHeld, domain.AIChecked, "x1"},
+		{"another seller's photo alone never names its asset", closed, domain.ModerationInput{OwnerOrg: "a", AI: allow,
+			Similar: []domain.SimilarImage{{AssetID: "y1", OwnerOrg: "b", Distance: 3}}},
+			domain.VerdictHeld, domain.AIChecked, ""},
 		{"too far is not a duplicate", closed, domain.ModerationInput{OwnerOrg: "a", AI: allow,
 			Similar: []domain.SimilarImage{{AssetID: "y1", OwnerOrg: "b", Distance: 7}}},
 			domain.VerdictPassed, domain.AIChecked, ""},
@@ -44,7 +47,7 @@ func TestModerateCombinesAIAndDuplicates(t *testing.T) {
 			AI: allow, Similar: []domain.SimilarImage{{AssetID: "y1", OwnerOrg: "b"}}}, domain.VerdictPassed, domain.AIChecked, ""},
 		{"block wins over a duplicate hold", closed, domain.ModerationInput{OwnerOrg: "a",
 			AI:      &domain.AIVerdict{Decision: domain.AIBlock},
-			Similar: []domain.SimilarImage{{AssetID: "y1", OwnerOrg: "b"}}}, domain.VerdictBlocked, domain.AIChecked, "y1"},
+			Similar: []domain.SimilarImage{{AssetID: "y1", OwnerOrg: "b"}}}, domain.VerdictBlocked, domain.AIChecked, ""},
 	}
 	for _, c := range cases {
 		m := domain.Moderate(c.policy, c.in)

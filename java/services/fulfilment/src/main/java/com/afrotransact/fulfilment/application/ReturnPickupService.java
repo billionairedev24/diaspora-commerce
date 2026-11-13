@@ -1,6 +1,7 @@
 package com.afrotransact.fulfilment.application;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.afrotransact.fulfilment.domain.DeliveryRoute;
 import com.afrotransact.fulfilment.domain.ReturnPickup;
@@ -16,6 +17,12 @@ public interface ReturnPickupService {
     Result schedule(ScheduleReturnPickupCommand command);
 
     ReturnPickup get(String id);
+
+    /**
+     * The driver of the route carrying the pickup's stop (empty while the pickup is not on a route or the route has
+     * no driver yet). tax-returns checks it before it accepts a driver's handover code.
+     */
+    Optional<String> assignedDriver(String id);
 
     List<ReturnPickup> list(ReturnPickupStatus status, String depotNodeId, int limit);
 

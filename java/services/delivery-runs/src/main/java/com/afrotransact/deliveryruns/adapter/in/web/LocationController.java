@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.DeactivateRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.LocationHistoryResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.LocationRequest;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Locations", description = "Staff: towns / areas served by delivery runs (delivery-runs:read / :manage)")
+@StaffOrServiceOnly
 @RestController
 class LocationController {
 

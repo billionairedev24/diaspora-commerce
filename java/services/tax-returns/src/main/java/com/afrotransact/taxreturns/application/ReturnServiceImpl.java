@@ -64,13 +64,15 @@ class ReturnServiceImpl implements ReturnService {
     private final TransactionOperations tx;
     private final Clock clock;
     private final OrderIntakeService intake;
+    private final HandoverAttempts handoverAttempts;
     private final SecureRandom random = new SecureRandom();
 
     ReturnServiceImpl(OrderSnapshotRepository orders, RmaRepository rmas, SellerPolicyRepository sellers,
                       ReturnPolicy policy, RefundOrchestrator refunds, ReturnWorkflow workflow, RmaEvents rmaEvents,
                       InboxDeduplicator inbox, Access access, TransactionOperations tx, Clock clock,
-                      OrderIntakeService intake) {
+                      OrderIntakeService intake, HandoverAttempts handoverAttempts) {
         this.intake = intake;
+        this.handoverAttempts = handoverAttempts;
         this.orders = orders;
         this.rmas = rmas;
         this.sellers = sellers;
@@ -270,18 +272,20 @@ class ReturnServiceImpl implements ReturnService {
 
     @Override
     public Rma pickedUp(UUID id, String handoverCode) {
+        Actor caller = access.current();
+        if (caller.type() == PrincipalType.DRIVER) {
+            authoriseCollectingDriver(caller, id);
+        }
         Rma moved = tx.execute(s -> {
             Rma before = workflow.load(id);
             Actor a = access.current();
             if (a.type() == PrincipalType.DRIVER) {
-                if (!a.can(TaxReturnsPermissions.DELIVERY_OPERATE)) {
-                    throw new ForbiddenActionException("auth.missing-permission",
-                            "Missing permission " + TaxReturnsPermissions.DELIVERY_OPERATE);
-                }
                 if (before.handoverCode() == null || !before.handoverCode().equals(handoverCode)) {
+                    handoverAttempts.failed(id.toString());
                     throw new ReturnRuleViolation("returns.wrong-handover-code", "The handover code doesn't match",
                             Map.of("handoverCode", "Ask the customer for the 6-digit code"));
                 }
+                handoverAttempts.succeeded(id.toString());
             } else {
                 a = access.staff(TaxReturnsPermissions.RETURNS_MANAGE);
             }
@@ -292,6 +296,24 @@ class ReturnServiceImpl implements ReturnService {
                     Access.describe(a), "Collected by driver");
         });
         return firstScanRefund(moved);
+    }
+
+    /**
+     * A driver may collect only the return fulfilment put on their own route, and only a limited number of wrong
+     * handover codes are tried per return. Both checks run before the code is compared.
+     */
+    private void authoriseCollectingDriver(Actor driver, UUID id) {
+        if (!driver.can(TaxReturnsPermissions.DELIVERY_OPERATE)) {
+            throw new ForbiddenActionException("auth.missing-permission",
+                    "Missing permission " + TaxReturnsPermissions.DELIVERY_OPERATE);
+        }
+        workflow.load(id);
+        handoverAttempts.requireOpen(id.toString());
+        boolean assigned = workflow.assignedPickupDriver(id).map(driver.subject()::equals).orElse(false);
+        if (!assigned) {
+            throw new ForbiddenActionException("returns.not-assigned-driver",
+                    "This return is not on your route");
+        }
     }
 
     @Override

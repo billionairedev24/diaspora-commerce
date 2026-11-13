@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.time.Instant;
 import java.util.List;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.application.CatalogSettingsService;
 import com.afrotransact.catalog.domain.CatalogPolicy;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Catalog settings", description = "Staff-editable thresholds for matching, exemptions and the review queue")
+@StaffOrServiceOnly
 @RestController
 class CatalogSettingsController {
 

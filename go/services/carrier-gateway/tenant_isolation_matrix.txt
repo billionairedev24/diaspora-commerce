@@ -15,7 +15,7 @@ GET /v1/pickup-locations | PUBLIC | active locations only, audit fields stripped
 GET /v1/pickup-locations/{id} | PUBLIC | inactive drafts visible only to managers (mayManageLocation); audit fields stripped | TestCrossTenantPickupLocationsAndLabels
 POST /v1/pickup-locations | ORG_OWNED | requiredAuth; canManage (own org SELLER locations, or shipping:admin) | TestPickupLocationsAreOrgScoped
 PUT /v1/pickup-locations/{id} | ORG_OWNED | canManage on the stored row and on the new body | TestCrossTenantPickupLocationsAndLabels
-POST /v1/pickup-locations/{id}/ready | ORG_OWNED | canManage or staff with shipping:label (orderRef/customerRef are not checked against orders: residual) | TestCrossTenantPickupLocationsAndLabels
+POST /v1/pickup-locations/{id}/ready | SERVICE_ONLY | PickupService.MarkReady: SERVICE or STAFF principal with shipping:label only (carrier-gateway holds no orders, so orderRef/customerRef cannot be checked here; sellers and customers are refused, the orchestrator verifies the order first) | TestCrossTenantPickupLocationsAndLabels
 GET /v1/pickup-prompt | ORG_OWNED | requiredAuth; org from claim, shipping:label | TestPickupPromptSnoozeReappearsAfterTheSetting
 PUT /v1/pickup-prompt | ORG_OWNED | requiredAuth; org from claim, shipping:label | TestPickupPromptSnoozeReappearsAfterTheSetting
 GET /v1/pickup-prompt/settings | PUBLIC | requiredAuth; one global number, no tenant data | n/a

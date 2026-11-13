@@ -5,6 +5,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.BulkSwitchRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.BulkSwitchResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.CreativeRequest;
@@ -56,6 +57,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 @Tag(name = "Pre-orders", description = "Staff: pre-order windows, creatives, orders, analytics, exports and late adds "
         + "(delivery-runs:read to view; preorders:manage, preorders:export, preorders:late-add)")
+@StaffOrServiceOnly
 @RestController
 class PreorderController {
 

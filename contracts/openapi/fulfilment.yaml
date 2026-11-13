@@ -1388,6 +1388,9 @@ components:
         updatedAt:
           type: string
           format: date-time
+        driverId:
+          type: string
+          description: Driver of the route carrying the stop; only on GET by id
     CancelReturnPickupRequest:
       type: object
       properties:

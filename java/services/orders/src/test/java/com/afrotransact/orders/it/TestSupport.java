@@ -47,6 +47,12 @@ class TestSupport {
                 Set.of("orders:read", "fulfilment:operate"));
     }
 
+    /** fulfilment-service relaying driver events: SERVICE with delivery:relay (the only courier-event writer). */
+    static Actor relay() {
+        return new Actor("fulfilment-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
+                Set.of("delivery:relay", "orders:update-status"));
+    }
+
     static Actor driver() {
         return new Actor("driver-7", PrincipalType.DRIVER, Optional.empty(), Set.of("platform.driver"),
                 Set.of("delivery:operate"));

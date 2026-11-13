@@ -190,6 +190,7 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
 
     @Override
     public List<BillingGrantRepository.ReasonCode> reasonCodes() {
+        access.staffAny(SellerPermissions.PLANS_MANAGE, SellerPermissions.BILLING, SellerPermissions.BILLING_ADJUST);
         return tx.execute(s -> grants.reasonCodes());
     }
 

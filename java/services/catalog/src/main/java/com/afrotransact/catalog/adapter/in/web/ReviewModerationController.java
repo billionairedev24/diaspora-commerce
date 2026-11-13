@@ -2,6 +2,7 @@ package com.afrotransact.catalog.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.adapter.in.web.ReviewDtos.ApproveReviewRequest;
 import com.afrotransact.catalog.adapter.in.web.ReviewDtos.RemoveReviewRequest;
 import com.afrotransact.catalog.adapter.in.web.ReviewDtos.StaffReviewPageResponse;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Review moderation", description = "Trust and safety staff and the trust-ops service client "
         + "(catalog:moderate) approve, reject and remove product reviews. Decisions are idempotent, so a retried "
         + "queue decision is safe; the product's rating follows each decision.")
+@StaffOrServiceOnly
 @RestController
 class ReviewModerationController {
 

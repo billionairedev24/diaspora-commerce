@@ -53,38 +53,40 @@ class OrdersAccess {
         return actor;
     }
 
-    /** AfroTransact Delivery driver with delivery:operate. */
-    Actor driver() {
-        Actor actor = permissions.require(OrdersPermissions.DELIVERY);
-        if (actor.type() != PrincipalType.DRIVER && !superAdmin(actor)) {
-            throw new ForbiddenActionException("orders.driver-only", "Courier events come from the driver app");
+    /**
+     * The courier of a driver-app event. Orders does not know route assignment (fulfilment does), so only the
+     * fulfilment relay may post courier events: a SERVICE principal with delivery:relay, naming the driver it has
+     * already verified against the route. A driver token is refused here.
+     */
+    String courier(String relayedDriverId) {
+        relay();
+        if (relayedDriverId == null || relayedDriverId.isBlank()) {
+            throw new OrdersRuleViolation("orders.driver-id-required",
+                    "Relayed courier events must name the driver (driverId)");
+        }
+        return relayedDriverId.trim();
+    }
+
+    /** The fulfilment relay: SERVICE principal holding delivery:relay. */
+    private Actor relay() {
+        Actor actor = actors.current();
+        if (actor.type() != PrincipalType.SERVICE || !actor.can(OrdersPermissions.RELAY)) {
+            throw new ForbiddenActionException("orders.relay-only",
+                    "Courier events and delivery briefs are served through the fulfilment relay");
         }
         return actor;
     }
 
     /**
-     * The courier of a driver-app event: the driver themself (delivery:operate), or the driver named by
-     * fulfilment-service when it relays queued events (SERVICE principal with delivery:relay).
+     * Delivery briefs: dispatch (delivery:dispatch, staff or the fulfilment service) or the fulfilment relay. Drivers
+     * get the brief through fulfilment, which checks the route assignment first.
      */
-    String courier(String relayedDriverId) {
-        Actor actor = actors.current();
-        if (actor.type() == PrincipalType.SERVICE && actor.can(OrdersPermissions.RELAY)) {
-            if (relayedDriverId == null || relayedDriverId.isBlank()) {
-                throw new OrdersRuleViolation("orders.driver-id-required",
-                        "Relayed courier events must name the driver (driverId)");
-            }
-            return relayedDriverId.trim();
-        }
-        return driver().subject();
-    }
-
-    /** Delivery briefs: drivers (delivery:operate) and dispatch (delivery:dispatch). */
     Actor briefReader() {
         Actor actor = actors.current();
         if (actor.can(OrdersPermissions.DISPATCH) || superAdmin(actor)) {
             return actor;
         }
-        return driver();
+        return relay();
     }
 
     /** Staff (or a service) with orders:read, platform-wide (search spans every market and organisation). */

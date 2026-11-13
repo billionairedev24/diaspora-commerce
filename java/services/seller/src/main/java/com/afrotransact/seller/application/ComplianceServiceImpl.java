@@ -133,7 +133,7 @@ class ComplianceServiceImpl implements ComplianceService {
     @Override
     @Transactional(readOnly = true)
     public AccountHealthView accountHealth(String orgId) {
-        access.orgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.COMPLIANCE_REMIND,
+        access.liveOrgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.COMPLIANCE_REMIND,
                 SellerPermissions.COMPLIANCE_HOLD, SellerPermissions.SELLERS_ENFORCE);
         ConnectAccount a = accounts.findByOrg(orgId).orElseThrow(() -> noAccount(orgId));
         return view(a, false);

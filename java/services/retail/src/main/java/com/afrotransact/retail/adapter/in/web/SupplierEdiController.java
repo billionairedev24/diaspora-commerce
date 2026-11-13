@@ -3,6 +3,7 @@ package com.afrotransact.retail.adapter.in.web;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.application.PoDispatchService;
 import com.afrotransact.retail.application.PoDispatchService.EdiProfileCommand;
 import com.afrotransact.retail.domain.EdiProtocol;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Suppliers", description = "Supplier records, lifecycle and receipt-driven scorecards (S069)")
+@StaffOrServiceOnly
 @RestController
 class SupplierEdiController {
 

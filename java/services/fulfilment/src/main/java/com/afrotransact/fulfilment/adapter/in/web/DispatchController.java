@@ -3,6 +3,7 @@ package com.afrotransact.fulfilment.adapter.in.web;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.AddShipmentsRequest;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.AssignRequest;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.BuildRoutesRequest;
@@ -42,6 +43,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Tag(name = "Dispatch", description = "Delivery dispatch console (delivery:dispatch): routes per zone, drivers, "
         + "reassignment of failed stops, SOS and defects, live driver events")
+@StaffOrServiceOnly
 @RestController
 class DispatchController {
 

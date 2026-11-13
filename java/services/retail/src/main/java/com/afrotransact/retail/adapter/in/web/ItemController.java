@@ -2,6 +2,7 @@ package com.afrotransact.retail.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.adapter.in.web.ItemDtos.ItemRequest;
 import com.afrotransact.retail.adapter.in.web.ItemDtos.ItemResponse;
 import com.afrotransact.retail.adapter.in.web.ItemDtos.LinkAtinRequest;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Product master", description = "1P items linked to catalog ATINs: GTIN, customs, pack sizes, supplier "
         + "SKUs, cost, price and listing readiness (S068)")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/items")
 class ItemController {

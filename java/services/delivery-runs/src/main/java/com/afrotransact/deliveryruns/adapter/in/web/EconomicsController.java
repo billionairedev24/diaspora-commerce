@@ -2,6 +2,7 @@ package com.afrotransact.deliveryruns.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.EconomicsDtos.ChangesResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.EconomicsDtos.PlanRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.EconomicsDtos.SettingsRequest;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Economics", description = "Staff: run and window P&L, break-even for a window being created, and the "
         + "driver cost model behind them (delivery-runs:read to view; preorders:manage to change the cost model)")
+@StaffOrServiceOnly
 @RestController
 class EconomicsController {
 

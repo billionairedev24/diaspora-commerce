@@ -320,8 +320,20 @@ func TestPickupLocationsAreOrgScoped(t *testing.T) {
 	if _, err := svc.SaveLocation(ctx, auth.Actor{Type: "STAFF", Permissions: []string{app.PermAdmin}}, counter); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.MarkReady(ctx, seller, saved.ID, app.ReadyRequest{OrderRef: "ORD-9", CustomerRef: "cus_1", PickupCode: "4821"}); err != nil {
+	// carrier-gateway cannot check orderRef and customerRef, so not even the location's owner may notify customers:
+	// only a service (or staff) holding shipping:label, after the orchestrator has checked the order.
+	if err := svc.MarkReady(ctx, seller, saved.ID, app.ReadyRequest{OrderRef: "ORD-9", CustomerRef: "cus_1"}); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("a seller token must not mark ready: %v", err)
+	}
+	if store.outboxLen() != 0 {
+		t.Fatalf("a refused call must enqueue nothing: %+v", store.outbox)
+	}
+	orders := auth.Actor{Subject: "orders-service", Type: "SERVICE", Permissions: []string{app.PermLabel}}
+	if err := svc.MarkReady(ctx, orders, saved.ID, app.ReadyRequest{OrderRef: "ORD-9", CustomerRef: "cus_1", PickupCode: "4821"}); err != nil {
 		t.Fatal(err)
+	}
+	if err := svc.MarkReady(ctx, auth.Actor{Subject: "svc", Type: "SERVICE"}, saved.ID, app.ReadyRequest{OrderRef: "o", CustomerRef: "c"}); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("a service without shipping:label must not mark ready: %v", err)
 	}
 	if store.outboxLen() != 1 || store.outbox[0].Type != domain.EventPickupReady {
 		t.Fatalf("pickup ready event not enqueued: %+v", store.outbox)

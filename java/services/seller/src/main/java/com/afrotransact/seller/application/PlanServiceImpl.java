@@ -52,7 +52,7 @@ class PlanServiceImpl implements PlanService {
     @Override
     @Transactional(readOnly = true)
     public List<PlanOffer> listFor(String orgId) {
-        access.orgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
+        access.liveOrgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
                 SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> new NotFoundException("seller.org-not-found",
                 "Organisation " + orgId + " not found"));

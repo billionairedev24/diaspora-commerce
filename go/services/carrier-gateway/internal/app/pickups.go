@@ -220,12 +220,16 @@ func (s *pickupServiceImpl) MarkReady(ctx context.Context, actor auth.Actor, id 
 	if req.OrderRef == "" || req.CustomerRef == "" {
 		return fmt.Errorf("%w: orderRef and customerRef are required", domain.ErrInvalid)
 	}
+	// carrier-gateway holds no orders: it cannot check that orderRef and customerRef belong together, nor that the
+	// order is the caller's. A seller's token (which never sees the buyer's id) is therefore not enough; the
+	// orchestrator that does know (orders, the BFF after checking the seller's own order) calls with a service
+	// token, and staff with shipping:label may call too.
+	if !actor.IsStaff() || !actor.Can(PermLabel) {
+		return fmt.Errorf("%w: only services and staff mark orders ready", ErrForbidden)
+	}
 	loc, err := s.repo.GetLocation(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get location: %w", err)
-	}
-	if !canManage(actor, loc) && (!actor.IsStaff() || !actor.Can(PermLabel)) {
-		return fmt.Errorf("%w: cannot mark orders ready at this location", ErrForbidden)
 	}
 	payload, err := json.Marshal(domain.PickupReady{LocationID: loc.ID, Name: loc.Name, Kind: string(loc.Kind), Address: loc.Address,
 		Hours: loc.Hours, OrderRef: req.OrderRef, CustomerRef: req.CustomerRef, PickupCode: req.PickupCode, ReadyAt: s.now().UTC()})

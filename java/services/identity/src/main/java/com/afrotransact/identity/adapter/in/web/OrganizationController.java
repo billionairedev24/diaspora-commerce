@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.TreeSet;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.identity.application.AssignableRoles;
 import com.afrotransact.identity.application.InvitationView;
 import com.afrotransact.identity.application.OrgInvitationService;
@@ -108,6 +109,7 @@ class OrganizationController {
     record InvitationList(String orgId, List<InvitationResponse> items) {
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Create or update an organisation and its approval status")
     @PutMapping("/v1/orgs/{orgId}")
     OrgResponse upsert(@PathVariable String orgId, @Valid @RequestBody UpsertOrgRequest body) {

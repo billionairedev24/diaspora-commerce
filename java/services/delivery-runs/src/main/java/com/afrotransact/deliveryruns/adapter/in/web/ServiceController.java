@@ -3,6 +3,7 @@ package com.afrotransact.deliveryruns.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.DispatchResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.ReservationResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.ReserveRequest;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Service", description = "Service clients: orders (run slots), fulfilment (dispatch), notifications (audience)")
+@StaffOrServiceOnly
 @RestController
 class ServiceController {
 

@@ -49,7 +49,7 @@ class BusinessBrandingServiceImpl implements BusinessBrandingService {
     @Override
     @Transactional
     public PublicBusinessPage update(String orgId, BusinessSection.Branding branding) {
-        guard.orgRole(orgId, EDITORS, STAFF_PERMISSION);
+        guard.liveOrgRole(orgId, EDITORS, STAFF_PERMISSION);
         BusinessSection.Branding clean = BrandingRules.clean(branding);
         Application app = apps.lockById(apps.findByOrg(orgId).map(Application::id).orElseThrow(
                 () -> new NotFoundException("seller.application-not-found", "No business details for " + orgId)))

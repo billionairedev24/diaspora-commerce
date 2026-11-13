@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.List;
 import java.util.Map;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.application.TaxonomyImportService;
 import com.afrotransact.catalog.application.TaxonomyImportService.Report;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Taxonomy (back office)")
+@StaffOrServiceOnly
 @RestController
 class TaxonomyImportController {
 

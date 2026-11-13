@@ -1,6 +1,7 @@
 package com.afrotransact.taxreturns.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -26,6 +27,7 @@ import com.afrotransact.taxreturns.domain.returns.DeliveryMethod;
 import com.afrotransact.taxreturns.domain.returns.FulfilmentType;
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
 import com.afrotransact.taxreturns.domain.returns.ReturnMethod;
+import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.domain.returns.ReturnPolicy;
 import com.afrotransact.taxreturns.domain.returns.Rma;
 import com.afrotransact.taxreturns.domain.returns.SellerReturnPolicy;
@@ -74,7 +76,7 @@ class TaxReturnsTenantIsolationTest {
         Access access = new Access(fx.resolver(), fx.permissions());
         TransactionOperations tx = TransactionOperations.withoutTransaction();
         returns = new ReturnServiceImpl(orders, rmas, policies, mock(ReturnPolicy.class), orchestrator, workflow,
-                mock(RmaEvents.class), mock(InboxDeduplicator.class), access, tx, clock, intake);
+                mock(RmaEvents.class), mock(InboxDeduplicator.class), access, tx, clock, intake, new HandoverAttemptsImpl(clock));
         refunds = new RefundServiceImpl(orchestrator, refundRepo, orders, access, tx);
         policyService = new ReturnPolicyServiceImpl(policies, access);
         ledger = new TaxLedgerServiceImpl(transactions, mock(TaxLedger.class), mock(InboxDeduplicator.class), access,
@@ -187,5 +189,36 @@ class TaxReturnsTenantIsolationTest {
         when(transactions.liability(YearMonth.of(2026, 10), TenantFixture.ORG_A)).thenReturn(List.of());
         assertThat(ledger.sellerStatement(TenantFixture.ORG_A, YearMonth.of(2026, 10)).sellerOrgId())
                 .isEqualTo(TenantFixture.ORG_A);
+    }
+
+    // ------------------------------------------------------------- POST /v1/returns/{id}/pickup
+
+    private static Actor driver(String subject) {
+        return new Actor(subject, PrincipalType.DRIVER, Optional.empty(), Set.of("platform.driver"),
+                Set.of("delivery:operate"));
+    }
+
+    @Test
+    void aDriverCollectsOnlyTheReturnFulfilmentPutOnTheirRoute() {
+        fx.as(driver("drv-1"));
+        when(workflow.assignedPickupDriver(rmaOfB.id())).thenReturn(Optional.of("drv-2"));
+        CrossTenant.assertDenied(() -> returns.pickedUp(rmaOfB.id(), "123456"));
+        // not on any route yet, or fulfilment cannot say: nobody is accepted
+        when(workflow.assignedPickupDriver(rmaOfB.id())).thenReturn(Optional.empty());
+        CrossTenant.assertDenied(() -> returns.pickedUp(rmaOfB.id(), "123456"));
+    }
+
+    @Test
+    void wrongHandoverCodesAreLimitedPerReturnWhoeverTries() {
+        when(workflow.assignedPickupDriver(rmaOfB.id())).thenReturn(Optional.of("drv-1"));
+        fx.as(driver("drv-1"));
+        for (int i = 0; i < HandoverAttemptsImpl.MAX_FAILURES; i++) {
+            assertThatThrownBy(() -> returns.pickedUp(rmaOfB.id(), "000000")).isInstanceOf(ReturnRuleViolation.class);
+        }
+        // locked now, even for the right driver; and a second driver account shares the same budget
+        CrossTenant.assertDenied(() -> returns.pickedUp(rmaOfB.id(), "000000"));
+        when(workflow.assignedPickupDriver(rmaOfB.id())).thenReturn(Optional.of("drv-3"));
+        fx.as(driver("drv-3"));
+        CrossTenant.assertDenied(() -> returns.pickedUp(rmaOfB.id(), "000000"));
     }
 }

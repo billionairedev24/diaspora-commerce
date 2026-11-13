@@ -245,12 +245,12 @@ class RunDispatchIT extends FulfilmentIntegrationTest {
         assertThat(outcomes.subList(outcomes.size() - 3, outcomes.size())).containsExactly(
                 "REJECTED:fulfilment.handover-code-required", "APPLIED", "APPLIED");
 
-        // orders-service saw every step of both shipments, with the driver's own token
+        // orders-service saw every step of both shipments, with the service token (never the driver's)
         for (String shipment : List.of(s1, s2)) {
             for (String step : List.of("picked_up", "out_for_delivery", "delivered")) {
                 WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/shipments/" + shipment
                                 + "/courier-events"))
-                        .withHeader("Authorization", WireMock.equalTo("Bearer " + BEARER))
+                        .withHeader("Authorization", WireMock.notMatching("Bearer " + BEARER))
                         .withRequestBody(WireMock.containing("\"status\":\"" + step + "\"")));
             }
         }

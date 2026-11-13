@@ -66,7 +66,8 @@ type Moderation struct {
 	AILabels []string `json:"aiLabels,omitempty"`
 	// MetadataStripped is true when EXIF / XMP / text metadata (camera, GPS, …) was removed before publishing.
 	MetadataStripped bool `json:"metadataStripped"`
-	// DuplicateOf is the closest earlier image with the same perceptual hash, if any.
+	// DuplicateOf is the closest earlier image of the SAME organisation with the same perceptual hash, if any. It
+	// never names another organisation's asset (see DuplicateHeld).
 	DuplicateOf string `json:"duplicateOf,omitempty"`
 	// DuplicateHeld is true when another seller's near-identical image is why the image was held.
 	DuplicateHeld bool `json:"duplicateHeld,omitempty"`
@@ -172,14 +173,17 @@ func Moderate(p ModerationPolicy, in ModerationInput) Moderation {
 			if s.Distance > p.DuplicateDistance {
 				continue
 			}
-			if m.DuplicateOf == "" {
-				m.DuplicateOf = s.AssetID
+			if s.OwnerOrg == in.OwnerOrg {
+				if m.DuplicateOf == "" {
+					m.DuplicateOf = s.AssetID
+				}
+				continue
 			}
-			if s.OwnerOrg != in.OwnerOrg {
-				holdWith("matches an image uploaded by another seller", NewCheck(CodeHeldDuplicate, VerdictHold, nil))
-				m.DuplicateOf, m.DuplicateHeld = s.AssetID, true
-				break
-			}
+			// Another organisation's image: held for staff, but its asset id is never put in DuplicateOf (the
+			// uploader reads this record), so a seller cannot collect another seller's asset ids.
+			holdWith("matches an image uploaded by another seller", NewCheck(CodeHeldDuplicate, VerdictHold, nil))
+			m.DuplicateHeld = true
+			break
 		}
 		if m.DuplicateOf != "" && m.Verdict == VerdictPassed {
 			m.Reasons = append(m.Reasons, "duplicate of your image "+m.DuplicateOf)

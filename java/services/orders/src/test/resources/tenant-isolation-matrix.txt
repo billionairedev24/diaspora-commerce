@@ -6,8 +6,8 @@ POST /v1/orders/{id}/shipments/{shipmentId}/missed-delivery | CUSTOMER_SELF | Pr
 GET /v1/orders/{number}/payment-split | ORG_OWNED | viewerOf (404 for foreign), customers refused, seller gets own recipient rows and own charge only | OrdersTenantIsolationTest
 @OrderLookupController | SERVICE_ONLY | OrdersAccess.lookupCaller/purchaseCheckCaller: SERVICE with orders:lookup or purchase-check, or staff with orders:read; org members refused | -
 POST /v1/shipments/{id}/transitions | ORG_OWNED | OrdersAccess.transitionActor: seller org claim == shipment.sellerOrgId else 404, plus RBAC require() owner tuple | OrdersTenantIsolationTest
-POST /v1/shipments/{id}/courier-events | UNVERIFIED | DRIVER with delivery:operate (or relaying SERVICE) may post for any AfroTransact Delivery shipment id; orders does not know the route assignment (fulfilment does) | -
-GET /v1/shipments/{id}/delivery-brief | UNVERIFIED | any driver with delivery:operate or dispatcher can read the ship-to of any AfroTransact Delivery shipment id; assignment is known to fulfilment only | -
+POST /v1/shipments/{id}/courier-events | SERVICE_ONLY | OrdersAccess.courier: SERVICE principal with delivery:relay only (the fulfilment relay, which has checked the driver against the route and names them in driverId); driver tokens are refused (orders.relay-only) | OrdersTenantIsolationTest
+GET /v1/shipments/{id}/delivery-brief | SERVICE_ONLY | OrdersAccess.briefReader: delivery:dispatch (dispatch, fulfilment service) or SERVICE with delivery:relay; driver tokens are refused | OrdersTenantIsolationTest
 POST /v1/shipments/{id}/tracking | ORG_OWNED | ShipmentServiceImpl.attachTracking: transitionActor (seller org claim == shipment owner) | OrdersTenantIsolationTest
 GET /v1/seller/shipments | ORG_SCOPED_LIST | OrdersAccess.sellerOrg: org from the token for non-staff (param ignored), staff must name it; SQL where seller_org_id | OrdersTenantIsolationTest
 GET /v1/admin/orders | STAFF_ONLY | OrdersAccess.staffReader: orders:read and STAFF/SERVICE principal | -
@@ -25,5 +25,5 @@ GET /v1/delivery-quotes/{id} | CUSTOMER_SELF | own(): quote.customerId == token 
 @DeliveryQuoteStaffController | STAFF_ONLY | OrdersAccess.quoteStaff: STAFF principal (or super admin) with delivery-quotes permission | -
 @LatePreorderController | SERVICE_ONLY | OrdersAccess.onBehalfCaller: SERVICE with orders:on-behalf | -
 GET /v1/public/shipping-settings | PUBLIC | platform-wide flat fee, no tenant data | -
-PUT /v1/shipping-settings/{currency} | STAFF_ONLY | orders:shipping.edit, granted only to platform roles | -
-GET /v1/shipping-settings/{currency}/changes | STAFF_ONLY | orders:shipping.view, granted only to platform roles | -
+PUT /v1/shipping-settings/{currency} | STAFF_ONLY | orders:shipping.edit, granted only to platform roles [principal-guard] | -
+GET /v1/shipping-settings/{currency}/changes | STAFF_ONLY | orders:shipping.view, granted only to platform roles [principal-guard] | -

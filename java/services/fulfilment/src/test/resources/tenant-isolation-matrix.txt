@@ -1,9 +1,9 @@
 # Tenant isolation matrix of fulfilment-service. Format: METHOD /path | CLASS | enforcement | testClass
 # Dispatch, fulfilment-centre and return-pickup permissions (delivery:dispatch, fulfilment:operate, delivery:returns) are granted only to platform.* roles and the tax-returns service client; these services hold no org-owned data.
-@DispatchController | STAFF_ONLY | FulfilmentAccess.dispatcher/opsReader: delivery:dispatch or fulfilment:operate (platform roles only); SSE stream authorizeStream | -
-@CentreController | STAFF_ONLY | FulfilmentAccess.operator/opsReader: fulfilment:operate (platform roles only) | -
-@RunDispatchController | STAFF_ONLY | FulfilmentAccess.dispatcher/opsReader | -
-@ReturnPickupController | SERVICE_ONLY | FulfilmentAccess.returnScheduler: SERVICE with delivery:returns (tax-returns) or dispatcher | -
+@DispatchController | STAFF_ONLY | FulfilmentAccess.dispatcher/opsReader: delivery:dispatch or fulfilment:operate (platform roles only); SSE stream authorizeStream [principal-guard] | -
+@CentreController | STAFF_ONLY | FulfilmentAccess.operator/opsReader: fulfilment:operate (platform roles only) [principal-guard] | -
+@RunDispatchController | STAFF_ONLY | FulfilmentAccess.dispatcher/opsReader [principal-guard] | -
+@ReturnPickupController | SERVICE_ONLY | FulfilmentAccess.returnScheduler: SERVICE with delivery:returns (tax-returns) or dispatcher [principal-guard] | -
 GET /v1/driver/me | DRIVER_SELF | DriverAccessServiceImpl.check: driver id is the token subject | FulfilmentTenantIsolationTest
 GET /v1/driver/routes | DRIVER_SELF | DriverQueryServiceImpl.myRoutes: openForDriver(token subject) | FulfilmentTenantIsolationTest
 GET /v1/driver/routes/{routeId} | DRIVER_SELF | DriverQueryServiceImpl.myRoute: route.driverId == token subject else 404 | FulfilmentTenantIsolationTest
@@ -11,6 +11,6 @@ POST /v1/driver/sync | DRIVER_SELF | DriverEventApplierImpl.handle: route.requir
 POST /v1/driver/sos | DRIVER_SELF | driver id from the token subject, never from the body | FulfilmentTenantIsolationTest
 GET /v1/driver/stream | DRIVER_SELF | SseHub.driver(token subject) | FulfilmentTenantIsolationTest
 POST /v1/driver/location | DRIVER_SELF | DriverLocationServiceImpl.ping stores the position of the token subject | FulfilmentTenantIsolationTest
-GET /v1/dispatch/pickups/{id}/driver-suggestions | STAFF_ONLY | PickupAssignmentServiceImpl.suggestions: dispatcher | -
-POST /v1/dispatch/pickups/{id}/assign | STAFF_ONLY | PickupAssignmentServiceImpl.assign: dispatcher | -
-GET /v1/dispatch/pickups/{id}/assignments | STAFF_ONLY | PickupAssignmentServiceImpl.history: dispatcher | -
+GET /v1/dispatch/pickups/{id}/driver-suggestions | STAFF_ONLY | PickupAssignmentServiceImpl.suggestions: dispatcher [principal-guard] | -
+POST /v1/dispatch/pickups/{id}/assign | STAFF_ONLY | PickupAssignmentServiceImpl.assign: dispatcher [principal-guard] | -
+GET /v1/dispatch/pickups/{id}/assignments | STAFF_ONLY | PickupAssignmentServiceImpl.history: dispatcher [principal-guard] | -

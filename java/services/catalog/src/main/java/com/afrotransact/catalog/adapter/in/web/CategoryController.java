@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.adapter.in.web.CategoryDtos.ApprovalPlanResponse;
 import com.afrotransact.catalog.adapter.in.web.CategoryDtos.ApproveCategoryRequest;
 import com.afrotransact.catalog.adapter.in.web.CategoryDtos.CategoryRequestDetailResponse;
@@ -79,6 +80,7 @@ class CategoryController {
         return categories.myRequests().stream().map(CategoryRequestResponse::of).toList();
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Review queue of category requests (catalog:taxonomy)")
     @GetMapping("/v1/category-requests")
     List<CategoryRequestResponse> queue(@RequestParam(required = false) CategoryRequestStatus status) {
@@ -86,18 +88,21 @@ class CategoryController {
                 .map(q -> CategoryRequestResponse.of(q.request(), q.productsWaiting())).toList();
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "One category request with the products waiting on it (catalog:taxonomy)")
     @GetMapping("/v1/category-requests/{id}")
     CategoryRequestDetailResponse requestDetail(@PathVariable UUID id) {
         return CategoryRequestDetailResponse.of(categories.requestDetail(id));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "What approving would create, without creating it (catalog:taxonomy)")
     @PostMapping("/v1/category-requests/{id}/approval-preview")
     ApprovalPlanResponse previewApproval(@PathVariable UUID id, @Valid @RequestBody ApproveCategoryRequest body) {
         return ApprovalPlanResponse.of(categories.planApproval(id, body.toChoice()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Approve a category request, creating its category and product type in one step; waiting "
             + "products move into listing review")
     @PostMapping("/v1/category-requests/{id}/approve")
@@ -105,6 +110,7 @@ class CategoryController {
         return CategoryRequestResponse.of(categories.approve(id, body.toChoice(), body.note()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Reject a category request; waiting products are rejected with the note")
     @PostMapping("/v1/category-requests/{id}/reject")
     CategoryRequestResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectCategoryRequest body) {

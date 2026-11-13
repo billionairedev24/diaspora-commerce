@@ -2,6 +2,7 @@ package com.afrotransact.retail.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.adapter.in.web.PurchaseOrderDtos.CreatePoRequest;
 import com.afrotransact.retail.adapter.in.web.PurchaseOrderDtos.LinesRequest;
 import com.afrotransact.retail.adapter.in.web.PurchaseOrderDtos.NoteRequest;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Purchase orders", description = "Draft → Pending approval → Approved → Sent → Confirmed → (Partially) "
         + "received → Closed, or Cancelled until a shipment is booked; FX captured at the PO date (S070). "
         + "Writes accept If-Match with the version from the ETag.")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/purchase-orders")
 class PurchaseOrderController {

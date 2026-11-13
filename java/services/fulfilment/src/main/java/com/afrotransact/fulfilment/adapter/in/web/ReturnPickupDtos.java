@@ -62,13 +62,18 @@ final class ReturnPickupDtos {
                             String city, String state, String postalCode, String country, String depotNodeId,
                             LocalDate readyFrom, LocalDate collectBy, int units,
                             @Schema(description = "REQUESTED | ROUTED | COLLECTED | FAILED | CANCELLED") String status,
-                            String routeId, String stopId, String note, Instant createdAt, Instant updatedAt) {
+                            String routeId, String stopId, String note, Instant createdAt, Instant updatedAt,
+                            @Schema(description = "Driver of the route carrying the stop; only on GET by id") String driverId) {
 
         static ReturnPickupView of(ReturnPickup p) {
+            return of(p, null);
+        }
+
+        static ReturnPickupView of(ReturnPickup p, String driverId) {
             return new ReturnPickupView(p.id(), p.rmaId(), p.rmaNumber(), p.orderId(), p.orderNumber(),
                     p.shipmentId(), p.customerId(), p.sellerOrgId(), p.name(), p.addressLine(), p.city(), p.state(),
                     p.postalCode(), p.country(), p.depotNodeId(), p.readyFrom(), p.collectBy(), p.units(),
-                    p.status().name(), p.routeId(), p.stopId(), p.note(), p.createdAt(), p.updatedAt());
+                    p.status().name(), p.routeId(), p.stopId(), p.note(), p.createdAt(), p.updatedAt(), driverId);
         }
     }
 }

@@ -152,7 +152,7 @@ class RewardServiceImpl implements RewardService {
 
     @Override
     public List<RewardProgress> progress(String orgId) {
-        access.orgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
+        access.liveOrgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
                 SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
         Instant now = Instant.now(clock);
         return tx.execute(s -> {
@@ -177,7 +177,7 @@ class RewardServiceImpl implements RewardService {
 
     @Override
     public List<Earned> earned(String orgId) {
-        access.orgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
+        access.liveOrgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
                 SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
         return tx.execute(s -> {
             Map<UUID, RewardComparison> comparisons = new HashMap<>();

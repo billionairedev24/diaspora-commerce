@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.application.RunPickListService;
 import com.afrotransact.deliveryruns.application.RunPickLists;
 import com.afrotransact.deliveryruns.application.RunProgressService;
@@ -47,6 +48,7 @@ class RunPickupController {
         return RunPickListResponse.of(pickLists.forSeller(orgId, runId));
     }
 
+    @StaffOrServiceOnly
     @Operation(operationId = "runPickLists",
             summary = "Every seller's pick list of a run, largest first (delivery-runs:read)")
     @GetMapping("/v1/runs/{id}/pick-lists")
@@ -54,6 +56,7 @@ class RunPickupController {
         return new RunPickListPage(pickLists.forRun(id).stream().map(RunPickListResponse::of).toList());
     }
 
+    @StaffOrServiceOnly
     @Operation(operationId = "runProgress",
             summary = "How far the run has got: orders per stage, from the drivers' shipment events (delivery-runs:read)")
     @GetMapping("/v1/runs/{id}/progress")

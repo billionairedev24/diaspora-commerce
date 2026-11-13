@@ -76,7 +76,7 @@ func TestDocumentStaysQuarantinedWhileScannerIsDown(t *testing.T) {
 	if a.Status != domain.StatusPending || a.Notice != domain.NoticeChecking {
 		t.Fatalf("want PENDING with the checking notice, got %s %q", a.Status, a.Notice)
 	}
-	got, err := f.svc.Get(context.Background(), staff, a.ID, 0)
+	got, err := f.svc.Get(context.Background(), kycStaff, a.ID, 0)
 	if err != nil || got.URL != "" || got.Notice != domain.NoticeChecking {
 		t.Fatalf("pending file must not be served: %+v %v", got, err)
 	}

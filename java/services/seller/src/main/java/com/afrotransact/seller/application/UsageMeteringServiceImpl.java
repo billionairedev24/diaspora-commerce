@@ -103,7 +103,7 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
 
     @Override
     public UsageStatement statement(String orgId, LocalDate from, LocalDate to) {
-        access.orgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
+        access.liveOrgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
                 SellerPermissions.USAGE);
         LocalDate start = from;
         LocalDate end = to;

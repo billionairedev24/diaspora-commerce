@@ -161,12 +161,12 @@ class DriverDayIT extends FulfilmentIntegrationTest {
         assertThat(done.path("stops").get(1).path("handoverMethod").asString()).isEqualTo("CUSTOMER");
         assertThat(done.path("stops").get(0).path("handedOverBy").asString()).isEqualTo("Titi");
 
-        // ---- orders-service received the courier events with the driver's own token
+        // ---- orders-service received the courier events with the service token (never the driver's)
         for (String[] step : new String[][] {{a, "picked_up"}, {a, "out_for_delivery"}, {a, "delivered"},
             {b, "picked_up"}, {b, "out_for_delivery"}, {b, "delivered"}, {c, "picked_up"}, {c, "delivery_failed"}}) {
             WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/shipments/" + step[0]
                             + "/courier-events"))
-                    .withHeader("Authorization", WireMock.equalTo("Bearer " + BEARER))
+                    .withHeader("Authorization", WireMock.notMatching("Bearer " + BEARER))
                     .withRequestBody(WireMock.containing("\"status\":\"" + step[1] + "\"")));
         }
         WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/shipments/" + a + "/courier-events"))

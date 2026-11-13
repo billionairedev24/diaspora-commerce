@@ -45,6 +45,14 @@ const (
 // PermissionMediaRead is the scope a reader client's token must carry.
 const PermissionMediaRead = "media:read"
 
+// PermissionKYCRead is the permission a STAFF principal needs to read or manage seller KYC documents and driver
+// proof-of-delivery photos (identity V47 grants it to the platform roles that review them). Service clients keep
+// their own scopes (see ProofReaderClients).
+const PermissionKYCRead = "kyc:read"
+
+// StaffNeedsKYCRead reports whether staff must hold PermissionKYCRead for a purpose: KYC documents and proof photos.
+func StaffNeedsKYCRead(p Purpose) bool { return p == PurposeKYCDocument || p == PurposeProofPhoto }
+
 // PermissionCareerResume is the scope of the gateway-bff's guest token for career resumes (upload and complete).
 const PermissionCareerResume = "media:career-resume"
 

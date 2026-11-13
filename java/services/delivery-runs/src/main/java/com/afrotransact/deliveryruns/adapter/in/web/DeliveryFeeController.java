@@ -1,5 +1,6 @@
 package com.afrotransact.deliveryruns.adapter.in.web;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.DeliveryFeeDtos.CarrierRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.DeliveryFeeDtos.ChangesResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.DeliveryFeeDtos.PreviewRequest;
@@ -37,6 +38,7 @@ class DeliveryFeeController {
         this.fees = fees;
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Every delivery fee rule (delivery-runs:read)",
             description = "One rule per method and currency: AFROTRANSACT_DELIVERY (flat fee by distance band, inside "
                     + "covered locations), CARRIER (carrier-gateway quote plus handling, beyond coverage) and "
@@ -55,6 +57,7 @@ class DeliveryFeeController {
         return RulesResponse.of(fees.publicRules(currency));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Set the delivery fee of one method and currency (preorders:manage)",
             description = "Creates the rule or makes its next version. A reason is required (422 "
                     + "delivery-runs.reason-required) and is logged with who and when; numbers that are not a valid "
@@ -71,6 +74,7 @@ class DeliveryFeeController {
         return Versions.tagged(RuleResponse.of(saved), saved.version());
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Audit trail of the delivery fees, newest first (delivery-runs:read)",
             description = "Every version of every rule (or one method and currency) with the rule before and after, "
                     + "who changed it, when and why.")
@@ -81,6 +85,7 @@ class DeliveryFeeController {
         return ChangesResponse.of(fees.changes(method, currency, limit));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "What would a customer pay? (delivery-runs:read)",
             description = "The same resolution checkout runs: the window's own fee first, then the method's rule. "
                     + "applies is false when no rule can price it (no rule, or beyond how far AfroTransact "
@@ -90,6 +95,7 @@ class DeliveryFeeController {
         return ResolutionResponse.of(fees.preview(body.toCommand()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "The carrier rate of an order shipped beyond coverage (delivery-runs:reserve, orders-service)",
             description = "The carrier-gateway quote plus the rule's handling fee; the rule's fallback fee when there "
                     + "is no quote; 0 over the free-shipping threshold. applies is false without a CARRIER rule for "

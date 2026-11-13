@@ -96,7 +96,7 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
     @Override
     @Transactional(readOnly = true)
     public AccountSession accountSession(String orgId) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, null);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, null);
         ConnectAccount a = accounts.findByOrg(orgId).orElseThrow(() -> new NotFoundException(
                 "seller.no-connected-account", "Organisation " + orgId + " has no Stripe account yet"));
         if (a.deauthorized()) {

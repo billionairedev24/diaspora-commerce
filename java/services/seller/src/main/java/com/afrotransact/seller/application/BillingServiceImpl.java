@@ -128,7 +128,7 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional(readOnly = true)
     public BillingOverview overview(String orgId) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         return build(subscription(orgId));
     }
 
@@ -184,7 +184,7 @@ class BillingServiceImpl implements BillingService {
     private PlanChangeResult changePlanLocked(String orgId, String planCode, Cadence cadence, List<String> toCollect,
                                               Actor byStaff) {
         if (byStaff == null) {
-            access.orgRole(orgId, AccessGuard.OWNER, null);
+            access.liveOrgRole(orgId, AccessGuard.OWNER, null);
         }
         requireNotRetail(orgId);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
@@ -247,13 +247,13 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional(readOnly = true)
     public List<PaymentMethod> paymentMethods(String orgId) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         return methods.list(orgId);
     }
 
     @Override
     public SetupIntentView setupIntent(String orgId) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+        access.liveOrgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
         tx.execute(t -> subs.find(orgId)).orElseThrow(() -> noSubscription(orgId));
         String customer = tx.execute(t -> customers.find(orgId)).orElseGet(() -> {
@@ -270,7 +270,7 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional
     public PaymentMethod addPaymentMethod(String orgId, AddPaymentMethodCommand cmd) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+        access.liveOrgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
         validate(cmd);
         subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
@@ -289,7 +289,7 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional
     public List<PaymentMethod> makeDefault(String orgId, UUID paymentMethodId) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+        access.liveOrgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
         method(orgId, paymentMethodId);
         methods.makeDefault(orgId, paymentMethodId);
@@ -299,7 +299,7 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional
     public List<PaymentMethod> removePaymentMethod(String orgId, UUID paymentMethodId) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+        access.liveOrgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
         PaymentMethod pm = method(orgId, paymentMethodId);
         if (pm.isDefault()) {
@@ -318,14 +318,14 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional(readOnly = true)
     public List<Invoice> invoices(String orgId) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         return invoices.list(orgId, 100);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Invoice invoice(String orgId, String invoiceId) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         return invoices.find(orgId, invoiceId).orElseThrow(() -> new NotFoundException("seller.invoice-not-found",
                 "Invoice " + invoiceId + " not found"));
     }
@@ -333,7 +333,7 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional(readOnly = true)
     public PlanChangePreview previewPlanChange(String orgId, String planCode, Cadence cadence) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         requireNotRetail(orgId);
         Subscription sub = subscription(orgId);
         requireActive(sub);
@@ -380,14 +380,14 @@ class BillingServiceImpl implements BillingService {
     @Override
     @Transactional(readOnly = true)
     public String billedTo(String orgId) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
         return org.legalName() != null ? org.legalName() : org.displayName();
     }
 
     @Override
     public Invoice retryInvoice(String orgId, String invoiceId) {
-        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         requireNotRetail(orgId);
         Invoice inv = tx.execute(t -> invoices.find(orgId, invoiceId)).orElseThrow(() -> new NotFoundException(
                 "seller.invoice-not-found", "Invoice " + invoiceId + " not found"));
@@ -602,7 +602,7 @@ class BillingServiceImpl implements BillingService {
     }
 
     private BillingOverview setCancel(String orgId, boolean cancel) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+        access.liveOrgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         if (sub.anchorDate() == null) {

@@ -57,10 +57,11 @@ class HttpOrdersClient implements OrdersClient {
         body.put("status", e.status());
         put(body, "occurredAt", e.occurredAt() == null ? null : e.occurredAt().toString());
         put(body, "note", e.note() == null || e.note().length() <= 500 ? e.note() : e.note().substring(0, 500));
-        // Actor when relayed with the service token (orders-service gap: see README).
+        // orders accepts courier events only from this relay (SERVICE with delivery:relay); the driver was already
+        // checked against the route here, and is named as the actor.
         put(body, "driverId", e.driverId());
         body.put("proof", proof);
-        String bearer = driverBearer == null || driverBearer.isBlank() ? tokens.token() : driverBearer;
+        String bearer = tokens.token();
         orders.call(c -> c.post().uri("/v1/shipments/{id}/courier-events", shipmentId)
                 .headers(h -> h.setBearerAuth(bearer))
                 .body(body).retrieve().toBodilessEntity());

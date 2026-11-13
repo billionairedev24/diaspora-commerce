@@ -209,3 +209,27 @@ cycle-count and platform-wide operations open to sellers (High), trust-ops suppo
 orders payment-split leak, payments balance check only under FGA (Medium), plus several low items. Open items, the 5-minute org-claim
 window and sensitive-action membership re-checks are listed in `docs/engineering/tenant-isolation.md` sections 3 and 5. Docker ITs
 were not run. F6 stays Medium until the open items are decided.
+
+### 2026-11-13 F6 follow-ups (owner-approved after the tenant isolation pass)
+
+Details and the per-route matrix are in `tenant-isolation.md`. Each service keeps its matrix and drift guard; new guard: `[principal-guard]`
+in a matrix row must match `@StaffOrServiceOnly` on the handler, both ways (`TenantIsolationMatrix`).
+
+| # | Change | Verified |
+|---|---|---|
+| 1 | Seller `AccessGuard.liveOrgRole/liveOrgRoleOrStaff`: the member list is read on every call, the token role is ignored, for billing and plan routes, Stripe account session, account health, branding write and org rename. Reads keep `orgRole`. Payments (payout requests, bank) and media (KYC upload) have no members table and are unchanged. API-key creation does not exist in the code base. | `SellerTenantIsolationTest` |
+| 2 | Orders `courier-events` and `delivery-brief`: fulfilment relay only (`SERVICE` + `delivery:relay`; the brief also for `delivery:dispatch`). Fulfilment always sends the service token (it already names the driver in `driverId`) and its default client scope now includes `delivery:relay`. Driver tokens are refused (`orders.relay-only`). Orders ITs and fulfilment ITs adapted. | orders unit tests; ITs compile, not run |
+| 3 | `@StaffOrServiceOnly` interceptor (platform-security) on retail, delivery-runs, fulfilment dispatch, orders shipping settings, identity `PUT /v1/orgs/{orgId}`, catalog moderate and taxonomy routes. | platform-security unit test, all drift guards |
+| 4 | Media `kyc:read` (STAFF principals need it for KYC documents and proof photos, read and manage); identity V47 grants it to super admin, operations manager, trust and safety, application reviewer and approver. Test personas pick it up through roles. | `kyc_read_test.go` |
+| 5 | Seller center: no UI change needed. The BFF fetches the rate card with its own service token, tolerates a refused plan-fee call and returns empty arrays; roles without `payouts:read` have the payouts, fees and billing modules at NONE. | `fee_visibility_test.go` |
+| 6 | Seller `GET /v1/billing/reason-codes`: staff only (`plans:manage`, `seller:billing` or `billing:adjust`). Only the staff console calls it (via the BFF staff route). | `SellerTenantIsolationTest` |
+| 7a | Catalog GTIN prefill and identifier check name an existing ATIN only for live pages, the caller's own org or staff. | `GtinPageVisibilityTest` |
+| 7b | Inventory `GET /v1/skus/{sku}/dimensions`: staff or service only (no seller caller exists; no owner column added). | `InventoryTenantIsolationTest` |
+| 7c | carrier-gateway `ready`: SERVICE or STAFF with `shipping:label` only. carrier-gateway has no orders access, so the order check itself belongs to the caller (not done here, no caller exists). | carrier-gateway tests |
+| 7d | tax-returns `pickup`: the driver must be the driver of the route fulfilment put the return on (new `driverId` on `GET /v1/return-pickups/{id}`, fails closed); 5 wrong handover codes per RMA per 15 minutes, in memory. | `TaxReturnsTenantIsolationTest` |
+| 7e | Media `duplicateOf` never holds another organisation's asset id (held cross-seller matches set `duplicateHeld` only). | media domain and app tests |
+
+Not run: Docker integration tests (all `*IT`; orders, fulfilment and tax-returns ITs were edited and compile). Pre-existing failures seen and not
+touched: identity `DesignTokensSyncTest` (tokens.css copy) and media `TestEmbeddedContractIsIdentical` (api/openapi.yaml vs contracts/openapi/media.yaml).
+Not in scope and still open: market-scoped staff payments reads; the 5-minute token window of payments (payout requests, bank) and media (KYC upload);
+`GtinAlreadyUsed` still names the ATIN. Deploy note: identity V47 must run before staff are expected to open KYC documents.

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.application.PoDispatchService;
 import com.afrotransact.retail.domain.PoDispatch;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Purchase order delivery", description = "The PO PDF and the delivery of sent POs to suppliers: email "
         + "with a signed link to the PDF (media + notifications) and EDI 850 for EDI-enabled suppliers (S225).")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/purchase-orders/{id}")
 class PoDispatchController {

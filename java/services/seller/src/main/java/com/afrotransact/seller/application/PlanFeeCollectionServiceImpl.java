@@ -67,14 +67,14 @@ class PlanFeeCollectionServiceImpl implements PlanFeeCollectionService {
 
     @Override
     public PlanFeeCollectionView view(String orgId) {
-        access.orgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
+        access.liveOrgRoleOrStaff(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING,
                 SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
         return tx.execute(s -> build(orgId));
     }
 
     @Override
     public PlanFeeCollectionView choose(String orgId, String mode) {
-        Actor actor = access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, null);
+        Actor actor = access.liveOrgRole(orgId, AccessGuard.OWNER_OR_FINANCE, null);
         PlanFeeCollection next = PlanFeeCollection.parse(mode, "mode");
         requireAvailable();
         return tx.execute(s -> change(orgId, next, SOURCE_SELLER, actor.subject(), null, null));

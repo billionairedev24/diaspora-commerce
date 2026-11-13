@@ -2,6 +2,7 @@ package com.afrotransact.fulfilment.adapter.in.web;
 
 import java.util.List;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.RouteView;
 import com.afrotransact.fulfilment.adapter.in.web.ReturnPickupDtos.AddRequest;
 import com.afrotransact.fulfilment.adapter.in.web.ReturnPickupDtos.CancelRequest;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Return pickups", description = "Customer returns collected by AfroTransact Delivery (RETURN_PICKUP stops)")
+@StaffOrServiceOnly
 @RestController
 class ReturnPickupController {
 
@@ -47,7 +49,7 @@ class ReturnPickupController {
     @Operation(operationId = "getReturnPickup", summary = "One return pickup (tax-returns or dispatch)")
     @GetMapping("/v1/return-pickups/{id}")
     ReturnPickupView get(@PathVariable String id) {
-        return ReturnPickupView.of(pickups.get(id));
+        return ReturnPickupView.of(pickups.get(id), pickups.assignedDriver(id).orElse(null));
     }
 
     @Operation(operationId = "listReturnPickups", summary = "Return pickups by status and depot (dispatch)")

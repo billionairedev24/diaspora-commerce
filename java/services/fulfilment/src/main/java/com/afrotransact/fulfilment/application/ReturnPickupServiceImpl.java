@@ -99,6 +99,17 @@ class ReturnPickupServiceImpl implements ReturnPickupService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<String> assignedDriver(String id) {
+        access.returnReader();
+        ReturnPickup p = pickups.find(id).orElseThrow(() -> notFound(id));
+        if (p.routeId() == null) {
+            return Optional.empty();
+        }
+        return routes.find(p.routeId()).map(DeliveryRoute::driverId).filter(d -> d != null && !d.isBlank());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<ReturnPickup> list(ReturnPickupStatus status, String depotNodeId, int limit) {
         access.dispatcher();
         return pickups.list(status, depotNodeId == null || depotNodeId.isBlank() ? null

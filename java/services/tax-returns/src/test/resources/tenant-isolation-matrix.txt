@@ -11,7 +11,7 @@ POST /v1/returns/{id}/reject | ORG_OWNED | ReturnServiceImpl.reject: decider/han
 POST /v1/returns/{id}/receive | ORG_OWNED | ReturnServiceImpl.receive: decider/handler = requireForOrg(returns:manage, rma.sellerOrgId) for seller-fulfilled, staff otherwise | TaxReturnsTenantIsolationTest
 POST /v1/returns/{id}/inspect | ORG_OWNED | ReturnServiceImpl.inspect: decider/handler = requireForOrg(returns:manage, rma.sellerOrgId) for seller-fulfilled, staff otherwise | TaxReturnsTenantIsolationTest
 POST /v1/returns/{id}/label | STAFF_ONLY | ReturnServiceImpl.issueLabel: Access.staff(returns:manage) | -
-POST /v1/returns/{id}/pickup | TOKEN_LINK | DRIVER with delivery:operate must present the rma handover code (customer-held secret); staff otherwise. Not bound to an assigned driver (residual risk) | -
+POST /v1/returns/{id}/pickup | DRIVER_SELF | ReturnServiceImpl.pickedUp: DRIVER with delivery:operate must be the driver of the route fulfilment put the return on (ReturnWorkflow.assignedPickupDriver, fails closed), at most 5 wrong handover codes per RMA per 15 min (HandoverAttempts), then the customer-held code; staff otherwise | TaxReturnsTenantIsolationTest
 GET /v1/return-policies/{orgId} | ORG_OWNED | ReturnPolicyServiceImpl.get: requireForOrg(returns:manage, orgId) | TaxReturnsTenantIsolationTest
 PUT /v1/return-policies/{orgId} | ORG_OWNED | ReturnPolicyServiceImpl.put: requireForOrg on the path org, which is the org written (body has no org) | TaxReturnsTenantIsolationTest
 POST /v1/refunds | ORG_OWNED | RefundServiceImpl.adjust: requireForOrg(refunds:issue) for the seller of EVERY line, derived from the order snapshot | TaxReturnsTenantIsolationTest

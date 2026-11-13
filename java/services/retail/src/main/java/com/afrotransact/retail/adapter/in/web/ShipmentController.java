@@ -3,6 +3,7 @@ package com.afrotransact.retail.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.adapter.in.web.ShipmentDtos.AsnRequest;
 import com.afrotransact.retail.adapter.in.web.ShipmentDtos.BookShipmentRequest;
 import com.afrotransact.retail.adapter.in.web.ShipmentDtos.ChargesRequest;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Inbound shipments", description = "Shipments and ASNs against POs: packing-list batches and cartons, "
         + "customs documents, nine-step timeline, landed-cost charges (S071)")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/shipments")
 class ShipmentController {

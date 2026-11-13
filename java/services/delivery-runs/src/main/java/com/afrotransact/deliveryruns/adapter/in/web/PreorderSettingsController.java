@@ -1,5 +1,6 @@
 package com.afrotransact.deliveryruns.adapter.in.web;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.AreaRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.AreaToggleRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.RegionCoverageRequest;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Pre-order settings", description = "Staff: master switch, fallback, placements, payment setup and "
         + "coverage areas (delivery-runs:read to view; preorders:manage to change)")
+@StaffOrServiceOnly
 @RestController
 class PreorderSettingsController {
 

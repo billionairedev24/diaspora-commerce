@@ -2,6 +2,7 @@ package com.afrotransact.fulfilment.adapter.in.web;
 
 import java.util.List;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.fulfilment.adapter.in.web.RunDispatchDtos.RunDispatchResponse;
 import com.afrotransact.fulfilment.application.RunDispatchService;
 import com.afrotransact.fulfilment.domain.RunDispatchStatus;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Dispatch", description = "Delivery dispatch console (delivery:dispatch): routes per zone, drivers, "
         + "reassignment of failed stops, SOS and defects, live driver events")
+@StaffOrServiceOnly
 @RestController
 class RunDispatchController {
 

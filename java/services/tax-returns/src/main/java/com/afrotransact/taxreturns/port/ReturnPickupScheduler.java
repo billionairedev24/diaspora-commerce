@@ -1,6 +1,7 @@
 package com.afrotransact.taxreturns.port;
 
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
@@ -13,6 +14,9 @@ public interface ReturnPickupScheduler {
 
     /** Schedules the pickup (idempotent per RMA) and returns fulfilment's pickup id. */
     String schedule(PickupRequest request);
+
+    /** The driver of the route carrying the pickup's stop; empty when it is not on a route or the route has none. */
+    Optional<String> assignedDriver(String pickupId);
 
     /** Cancels a scheduled pickup (idempotent). */
     void cancel(String pickupId, String reason);

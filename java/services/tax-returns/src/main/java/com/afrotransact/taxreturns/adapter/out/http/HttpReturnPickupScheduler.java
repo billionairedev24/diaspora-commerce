@@ -2,6 +2,7 @@ package com.afrotransact.taxreturns.adapter.out.http;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
@@ -46,6 +47,14 @@ class HttpReturnPickupScheduler implements ReturnPickupScheduler {
             throw new UpstreamException("fulfilment", 0, null, "fulfilment returned no pickup id", null);
         }
         return id;
+    }
+
+    @Override
+    public Optional<String> assignedDriver(String pickupId) {
+        JsonNode n = fulfilment.call(c -> c.get().uri("/v1/return-pickups/{id}", pickupId)
+                .headers(h -> fulfilment.headers(h, null)).retrieve().body(JsonNode.class));
+        String driver = n == null ? "" : n.path("driverId").asString("");
+        return driver.isBlank() ? Optional.empty() : Optional.of(driver);
     }
 
     @Override

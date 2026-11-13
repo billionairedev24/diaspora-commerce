@@ -25,6 +25,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /** Stateless resource-server defaults. API docs, health and metrics stay public; everything else needs a JWT. */
 @AutoConfiguration(beforeName = "org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration")
@@ -68,6 +70,18 @@ public class PlatformSecurityAutoConfiguration {
     @ConditionalOnMissingBean
     public PermissionChecker permissionChecker(ActorResolver actors) {
         return new DefaultPermissionChecker(actors);
+    }
+
+    /** Enforces {@link StaffOrServiceOnly} on controllers and handlers (principal-type guard, F6). */
+    @Bean
+    public WebMvcConfigurer staffOrServiceOnlyConfigurer(ActorResolver actors) {
+        StaffOrServiceOnlyInterceptor interceptor = new StaffOrServiceOnlyInterceptor(actors);
+        return new WebMvcConfigurer() {
+            @Override
+            public void addInterceptors(InterceptorRegistry registry) {
+                registry.addInterceptor(interceptor);
+            }
+        };
     }
 
     /**

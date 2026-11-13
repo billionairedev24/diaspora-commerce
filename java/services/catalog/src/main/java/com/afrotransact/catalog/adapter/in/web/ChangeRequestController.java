@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.adapter.in.web.ChangeRequestDtos.ChangeRequestInput;
 import com.afrotransact.catalog.adapter.in.web.ChangeRequestDtos.ChangeRequestPageResponse;
 import com.afrotransact.catalog.adapter.in.web.ChangeRequestDtos.ChangeRequestResponse;
@@ -83,6 +84,7 @@ class ChangeRequestController {
         return ChangeRequestResponse.of(changeRequests.withdraw(id));
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Review queue")
     @Operation(operationId = "listChangeRequests", summary = "Staff queue of change requests (catalog:moderate)",
             description = "Oldest first by default (the SLA clock), server-side paging.")
@@ -96,6 +98,7 @@ class ChangeRequestController {
                 !"NEWEST".equalsIgnoreCase(sort), page, size));
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Review queue")
     @Operation(operationId = "decideChangeRequest",
             summary = "Approve (apply) or reject a change request with a reason (catalog:moderate)",
@@ -114,6 +117,7 @@ class ChangeRequestController {
         return exemptions.mine().stream().map(ExemptionResponse::of).toList();
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Review queue")
     @Operation(operationId = "listGtinExemptions", summary = "Staff queue of no-barcode exemption requests (catalog:moderate)",
             description = "Oldest first, with duplicate hints.")
@@ -124,6 +128,7 @@ class ChangeRequestController {
         return ExemptionPageResponse.of(exemptions.queue(status, page, size));
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Review queue")
     @Operation(operationId = "decideGtinExemption",
             summary = "Approve or reject a no-barcode exemption with a reason (catalog:moderate)",
@@ -133,6 +138,7 @@ class ChangeRequestController {
         return ExemptionResponse.of(exemptions.decide(id, body.approve(), body.reason()));
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Review queue")
     @Operation(operationId = "reviewQueue",
             summary = "One queue for staff - change requests and no-barcode exemptions, with age and SLA (catalog:moderate)")

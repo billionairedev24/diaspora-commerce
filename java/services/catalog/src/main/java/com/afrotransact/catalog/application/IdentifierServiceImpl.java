@@ -46,7 +46,8 @@ class IdentifierServiceImpl implements IdentifierService {
         if (isbnRequired && !new Gtin(digits).isIsbn13()) {
             return new GtinCheck(digits, reading.gtin14(), "INVALID", false, null, null, "Must be ISBN-13 (978/979)");
         }
-        String existing = products.findByVariantGtin(digits).map(p -> p.atin().value()).orElse(null);
+        String existing = products.findByVariantGtin(digits).filter(p -> GtinPageVisibility.visibleTo(p, actor))
+                .map(p -> p.atin().value()).orElse(null);
         return new GtinCheck(digits, reading.gtin14(), existing == null ? "NO_MATCH" : "MATCH", true, null, existing,
                 existing == null ? "Valid" : "Matches existing product " + existing + " — add your offer to it");
     }

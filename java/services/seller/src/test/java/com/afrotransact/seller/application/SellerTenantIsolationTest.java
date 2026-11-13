@@ -165,4 +165,33 @@ class SellerTenantIsolationTest {
         assertThat(guard.orgRole(TenantFixture.ORG_A, AccessGuard.OWNER, null)).isSameAs(user);
         CrossTenant.assertDenied(() -> guard.orgRole(TenantFixture.ORG_B, AccessGuard.OWNER, null));
     }
+
+    @Test
+    void sensitiveActionsRecheckTheMemberListNotTheTokenRole() {
+        Actor tokenOwner = TenantFixture.sellerOf(TenantFixture.ORG_A);
+        fx.as(tokenOwner);
+        when(orgs.findMember(TenantFixture.ORG_A, tokenOwner.subject())).thenReturn(Optional.empty());
+        // removed from the member list but the 5-minute token still says owner: refused at once
+        CrossTenant.assertDenied(() -> guard.liveOrgRole(TenantFixture.ORG_A, AccessGuard.OWNER, null));
+        CrossTenant.assertDenied(() -> guard.liveOrgRoleOrStaff(TenantFixture.ORG_A, AccessGuard.OWNER_OR_FINANCE,
+                "billing:read"));
+        CrossTenant.assertDenied(() -> orgService.rename(TenantFixture.ORG_A, "Renamed"));
+        CrossTenant.assertDenied(() -> branding.update(TenantFixture.ORG_A, null));
+        // downgraded to a role without the required suffix
+        when(orgs.findMember(TenantFixture.ORG_A, tokenOwner.subject())).thenReturn(Optional.of(new OrgMember(
+                TenantFixture.ORG_A, tokenOwner.subject(), "seller.support", NOW, NOW)));
+        CrossTenant.assertDenied(() -> guard.liveOrgRole(TenantFixture.ORG_A, AccessGuard.OWNER, null));
+        // still a member with the role: allowed
+        when(orgs.findMember(TenantFixture.ORG_A, tokenOwner.subject())).thenReturn(Optional.of(new OrgMember(
+                TenantFixture.ORG_A, tokenOwner.subject(), "seller.owner", NOW, NOW)));
+        assertThat(guard.liveOrgRole(TenantFixture.ORG_A, AccessGuard.OWNER, null)).isSameAs(tokenOwner);
+    }
+
+    @Test
+    void billingReasonCodesAreStaffOnly() {
+        BillingAdjustmentService adjustments = new BillingAdjustmentServiceImpl(null, null, null, null, guard, null,
+                null, null, null);
+        fx.as(TenantFixture.sellerOf(TenantFixture.ORG_A, "billing:read"));
+        CrossTenant.assertDenied(adjustments::reasonCodes);
+    }
 }

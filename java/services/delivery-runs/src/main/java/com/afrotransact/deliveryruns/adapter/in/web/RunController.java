@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.CancelRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.ConfirmRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.EconomicsPreviewRequest;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Runs", description = "Staff: schedule runs and move them through their lifecycle (delivery-runs:manage)")
+@StaffOrServiceOnly
 @RestController
 class RunController {
 

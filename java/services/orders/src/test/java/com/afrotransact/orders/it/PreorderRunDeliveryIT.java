@@ -42,7 +42,7 @@ class PreorderRunDeliveryIT extends OrdersIntegrationTest {
     }
 
     private String event(String eventId, String status, String at, String proof) {
-        return "{\"eventId\":\"" + eventId + "\",\"status\":\"" + status + "\",\"occurredAt\":\"" + at + "\""
+        return "{\"eventId\":\"" + eventId + "\",\"driverId\":\"driver-7\",\"status\":\"" + status + "\",\"occurredAt\":\"" + at + "\""
                 + (proof == null ? "" : ",\"proof\":" + proof) + "}";
     }
 
@@ -105,7 +105,7 @@ class PreorderRunDeliveryIT extends OrdersIntegrationTest {
         transition(shipment, "confirmed", null, null);
 
         // the driver collects it from the sellers, drives, and hands it over at the pickup point
-        TestSupport.as(TestSupport.driver());
+        TestSupport.as(TestSupport.relay());
         assertThat(ok(send("POST", "/v1/shipments/" + shipment + "/courier-events",
                 event("run-1", "picked_up", "2026-10-24T14:10:00Z", null))).path("outcome").asString())
                 .isEqualTo("applied");
@@ -151,7 +151,7 @@ class PreorderRunDeliveryIT extends OrdersIntegrationTest {
         String shipment = door.shipments().getFirst().id();
         TestSupport.as(TestSupport.fulfilmentOps());
         transition(shipment, "confirmed", null, null);
-        TestSupport.as(TestSupport.driver());
+        TestSupport.as(TestSupport.relay());
         assertThat(ok(send("POST", "/v1/shipments/" + shipment + "/courier-events",
                 event("door-1", "picked_up", "2026-10-24T14:10:00Z", null))).path("outcome").asString())
                 .isEqualTo("applied");
@@ -159,7 +159,7 @@ class PreorderRunDeliveryIT extends OrdersIntegrationTest {
         Order sellerPickup = placedOrder(id("cust"), UUID.randomUUID().toString(),
                 spec(id("org"), FulfilmentType.SELLER_FULFILLED, DeliveryMethod.PICKUP));
         String pickupShipment = sellerPickup.shipments().getFirst().id();
-        TestSupport.as(TestSupport.driver());
+        TestSupport.as(TestSupport.relay());
         problem(send("POST", "/v1/shipments/" + pickupShipment + "/courier-events",
                 event("pk-1", "picked_up", "2026-10-24T14:10:00Z", null)), 403, "orders.transition-forbidden");
     }

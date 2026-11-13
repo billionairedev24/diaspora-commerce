@@ -49,6 +49,7 @@ import com.afrotransact.orders.port.SellerAnalyticsRepository;
 import com.afrotransact.orders.port.ShipmentFeed;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
+import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.test.tenant.CrossTenant;
 import com.afrotransact.platform.test.tenant.TenantFixture;
 import org.junit.jupiter.api.BeforeEach;
@@ -152,6 +153,23 @@ class OrdersTenantIsolationTest {
         tenants.as(TenantFixture.sellerOf(TenantFixture.ORG_A));
 
         CrossTenant.assertDenied(() -> queries.get(orderAB.number()));
+    }
+
+    // ------------------------------------------- POST courier-events, GET delivery-brief (relay only)
+
+    @Test
+    void courierEventsAndDeliveryBriefsAreServedOnlyThroughTheFulfilmentRelay() {
+        CourierEventCommand event = new CourierEventCommand("e-1", "picked_up", null, null, null, "driver-7");
+        tenants.as(new Actor("driver-7", PrincipalType.DRIVER, Optional.empty(), Set.of("platform.driver"),
+                Set.of("delivery:operate")));
+        CrossTenant.assertDenied(() -> shipments.courierEvent(orderAB.shipments().getFirst().id(), event));
+        CrossTenant.assertDenied(() -> shipments.deliveryBrief(orderAB.shipments().getFirst().id()));
+        tenants.as(TenantFixture.sellerOf(TenantFixture.ORG_A, "delivery:relay", "delivery:operate"));
+        CrossTenant.assertDenied(() -> shipments.courierEvent(orderAB.shipments().getFirst().id(), event));
+        tenants.as(new Actor("fulfilment-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
+                Set.of("delivery:relay")));
+        assertThat(access.courier("driver-7")).isEqualTo("driver-7");
+        assertThat(access.briefReader().subject()).isEqualTo("fulfilment-service");
     }
 
     // ----------------------------------------------------------------- GET /v1/orders (mine)

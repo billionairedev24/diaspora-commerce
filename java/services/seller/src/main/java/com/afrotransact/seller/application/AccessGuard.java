@@ -83,6 +83,40 @@ class AccessGuard {
     }
 
     /**
+     * Sensitive actions (billing, payment methods, Stripe onboarding, branding): the organisation's member list is
+     * authoritative. The token role is never enough, so a removed or downgraded member is refused immediately rather
+     * than after the access token expires.
+     */
+    Actor liveOrgRole(String orgId, Set<String> roles, String staffPermission) {
+        Actor actor = actors.current();
+        if (isStaff(actor) && staffPermission != null && actor.can(staffPermission)) {
+            return actor;
+        }
+        requireLiveMember(orgId, roles, actor);
+        return actor;
+    }
+
+    /** {@link #liveOrgRole(String, Set, String)} where staff pass with any one of {@code staffAnyOf}. */
+    Actor liveOrgRoleOrStaff(String orgId, Set<String> roles, String... staffAnyOf) {
+        Actor actor = actors.current();
+        if (isStaff(actor) && Arrays.stream(staffAnyOf).anyMatch(actor::can)) {
+            return actor;
+        }
+        requireLiveMember(orgId, roles, actor);
+        return actor;
+    }
+
+    private void requireLiveMember(String orgId, Set<String> roles, Actor actor) {
+        boolean member = orgs.findMember(orgId, actor.subject()).map(OrgMember::roleKey)
+                .map(k -> roles.stream().anyMatch(s -> k.endsWith("." + s))).orElse(false);
+        if (!member) {
+            throw new ForbiddenActionException("seller.org-role-required",
+                    "Only the organisation's " + String.join(" or ", roles.stream().sorted().toList())
+                            + " can do this");
+        }
+    }
+
+    /**
      * Like {@link #orgRole(String, Set, String)}, but staff and service clients (principal type SERVICE) pass with any
      * one of {@code staffAnyOf}.
      */

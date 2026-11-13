@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
@@ -36,6 +37,12 @@ import org.springframework.web.bind.annotation.RequestMethod;
  * that exists in the service; UNVERIFIED rows must say why.
  */
 public final class TenantIsolationMatrix {
+
+    /**
+     * Marker in a row's enforcement column: the handler (or its controller) carries {@code @StaffOrServiceOnly}, the
+     * principal-type guard on top of the permission check. The guard and the marker must agree in both directions.
+     */
+    public static final String PRINCIPAL_GUARD = "[principal-guard]";
 
     private TenantIsolationMatrix() {
     }
@@ -63,6 +70,19 @@ public final class TenantIsolationMatrix {
                 }
                 if (row != null && wide != null) {
                     problems.add("route declared twice (route row and controller row): " + route);
+                }
+                Row effective = row != null ? row : wide;
+                if (effective != null) {
+                    boolean marked = markedRoutes(controller).getOrDefault(route, false);
+                    boolean declared = effective.enforcement.contains(PRINCIPAL_GUARD);
+                    if (marked && !declared) {
+                        problems.add(route + ": handler carries @StaffOrServiceOnly but the row does not say "
+                                + PRINCIPAL_GUARD);
+                    }
+                    if (declared && !marked) {
+                        problems.add(route + ": row says " + PRINCIPAL_GUARD + " but neither the handler nor "
+                                + controller.getSimpleName() + " carries @StaffOrServiceOnly");
+                    }
                 }
             }
         }
@@ -143,6 +163,32 @@ public final class TenantIsolationMatrix {
                     for (RequestMethod method : methods) {
                         String full = (prefix + path).isEmpty() ? "/" : prefix + path;
                         out.add(method.name() + " " + full);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Route -> whether its handler method or controller class carries {@code @StaffOrServiceOnly}. */
+    static Map<String, Boolean> markedRoutes(Class<?> controller) {
+        Map<String, Boolean> out = new LinkedHashMap<>();
+        boolean classMarked = AnnotatedElementUtils.hasAnnotation(controller, StaffOrServiceOnly.class);
+        RequestMapping base = AnnotatedElementUtils.findMergedAnnotation(controller, RequestMapping.class);
+        List<String> prefixes = base == null || base.path().length == 0 ? List.of("") : List.of(base.path());
+        for (Method m : controller.getDeclaredMethods()) {
+            RequestMapping rm = AnnotatedElementUtils.findMergedAnnotation(m, RequestMapping.class);
+            if (rm == null) {
+                continue;
+            }
+            boolean marked = classMarked || AnnotatedElementUtils.hasAnnotation(m, StaffOrServiceOnly.class);
+            List<String> paths = rm.path().length == 0 ? List.of("") : List.of(rm.path());
+            RequestMethod[] methods = rm.method().length == 0 ? RequestMethod.values() : rm.method();
+            for (String prefix : prefixes) {
+                for (String path : paths) {
+                    for (RequestMethod method : methods) {
+                        String full = (prefix + path).isEmpty() ? "/" : prefix + path;
+                        out.merge(method.name() + " " + full, marked, (x, y) -> x && y);
                     }
                 }
             }

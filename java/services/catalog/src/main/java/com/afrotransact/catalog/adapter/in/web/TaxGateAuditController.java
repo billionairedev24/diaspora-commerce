@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.application.LiveTaxAuditService;
 import com.afrotransact.catalog.application.LiveTaxAuditService.Audit;
 import com.afrotransact.catalog.application.TaxGateSweepService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Products", description = "Product builder, listing moderation and lookup")
+@StaffOrServiceOnly
 @RestController
 class TaxGateAuditController {
 

@@ -26,6 +26,27 @@ org where it relays them, and strips org and user keys from relayed FBA and size
 Startup: services without FGA log `FGA disabled: isolation by RBAC + org claim` (`RelationshipAutoConfiguration`). Prod configs for
 catalog, offers, orders and payments keep `at.security.fga.enabled: ${FGA_ENABLED:false}` and point at ADR 0010.
 
+### The principal-type guard (`@StaffOrServiceOnly`)
+
+`com.afrotransact.platform.security.StaffOrServiceOnly` (platform-security) marks a controller or one handler. A Spring MVC interceptor
+(`StaffOrServiceOnlyInterceptor`, registered by `PlatformSecurityAutoConfiguration`) refuses any principal that is not STAFF or SERVICE
+(or the super-admin `*`) with 403 `auth.staff-only` before the handler runs. It sits on top of the permission check in the use case, so a
+permission that is ever granted to a seller, provider, driver, shopper or agent role does not open a platform-wide route. Applied to:
+
+- retail: every controller (9);
+- delivery-runs: locations, economics, preorder settings, runs, preorders, `/v1/service/*` (service controller, carrier fee route, preorder
+  eligibility and audience), advertorial and delivery-fee admin routes, attribution, pick lists and run progress;
+- fulfilment: dispatch, centre, run dispatch, return pickups and the nearest-driver dispatch routes;
+- orders: `PUT /v1/shipping-settings/{currency}` and its changes route;
+- identity: `PUT /v1/orgs/{orgId}`;
+- catalog: product approve, reject, takedown, restore and flag, change-request and GTIN-exemption queues and decisions, category-request
+  admin, image-quality admin, brand, taxonomy, taxonomy import, catalog settings, review moderation, tax gate audit.
+
+The matrix drift guard (`TenantIsolationMatrix.assertComplete`) checks both directions: a handler (or its controller) with the annotation
+must carry `[principal-guard]` in its row, and a row with `[principal-guard]` must have the annotation. Staff console and service clients keep
+working because their tokens have principal type STAFF (staff user token relayed by the BFF) or SERVICE (client credentials). Agent
+(AI_AGENT, PARTNER_APP) and customer tokens on these routes are now refused.
+
 ## 2. Isolation classes and the matrix
 
 | Class | Meaning | Enforcing code (typical) |
@@ -62,11 +83,12 @@ Every service owns the matrix next to its tests; a drift guard fails the build w
 | tax-returns, returns | ORG_OWNED / CUSTOMER_SELF | seller ownership of every line | `TaxReturnsTenantIsolationTest` |
 | identity team, memberships, active org | ORG_OWNED | `OrgTeamAccess.resolve` (store re-read) | `IdentityTenantIsolationTest` |
 | trust-ops, content, ai-gateway, mcp | STAFF_ONLY / CUSTOMER_SELF / ORG_OWNED (ads) | `staffOnly`, tool policy | `TrustOpsTenantIsolationTest`, `ContentTenantIsolationTest`, `AiTenantIsolationTest`, `McpTenantIsolationTest` |
-| retail | STAFF_ONLY (first party) | `retail:*` permissions on `platform.*` roles | matrix only |
-| delivery-runs, fulfilment | STAFF/SERVICE/TOKEN_LINK/DRIVER_SELF | permissions, route ownership | `*TenantIsolationTest` |
+| retail | STAFF_ONLY (first party) | `retail:*` permissions on `platform.*` roles, plus `@StaffOrServiceOnly` on every controller | matrix `[principal-guard]` (drift guard) |
+| delivery-runs, fulfilment | STAFF/SERVICE/TOKEN_LINK/DRIVER_SELF | permissions, route ownership, `@StaffOrServiceOnly` on the staff and `/v1/service/*` routes | `*TenantIsolationTest`, matrix `[principal-guard]` |
+| orders courier events, delivery brief | SERVICE_ONLY | `OrdersAccess.courier/briefReader`: fulfilment relay only (`delivery:relay`), dispatch for the brief | `OrdersTenantIsolationTest` |
 | gateway-bff seller, customer, staff | see Go matrix | session org, user token relay | `TestSellerMatrix`, `TestCustomerMatrix`, `TestStaffGate` |
 | carrier-gateway labels, pickups, tracking | ORG_OWNED | org that bought the label, own origin node only | carrier-gateway httpapi tests |
-| media assets, KYC, library | ORG_OWNED / ORG_SCOPED_LIST | owner check, org-prefixed keys, short signed URLs | media app tests |
+| media assets, KYC, library | ORG_OWNED / ORG_SCOPED_LIST | owner check, org-prefixed keys, short signed URLs; staff need `kyc:read` for KYC documents and proof photos | media app tests (`kyc_read_test.go`) |
 
 ## 3. The org claim and its staleness window
 
@@ -78,8 +100,14 @@ Every service owns the matrix next to its tests; a drift guard fails the build w
 - Immediate: identity team routes (store re-read per call), the BFF seller routes (live `/v1/me`; removal returns `NO_ORGANISATION`),
   org switching (membership verified server-side; the BFF now rotates session tokens after a switch), password change and reset
   (sessions revoked), account disable (authorisations deleted).
-- Not immediate: sensitive seller actions (billing, payout requests, bank and Stripe onboarding, branding) use `AccessGuard.orgRole`,
-  which accepts the token role OR the members table. Making the store lookup mandatory is an open hardening item (owner decision).
+- Immediate (new): sensitive seller actions use `AccessGuard.liveOrgRole/liveOrgRoleOrStaff`, which ignore the token role and read the
+  organisation's member list on every call: all billing and plan routes (invoices, payment methods, plan change, cancel, resume,
+  plan-fee collection, usage, rewards), Stripe account session, account health, branding (`PUT business-page`) and org rename. A removed or
+  downgraded member is refused on the next call (`seller.org-role-required`). Reads that are not sensitive (ship-from addresses, the org, catalog scope,
+  selling status, business page read) keep the cheap `orgRole` (token role or member list).
+- Still token-based (5 minute window): payments (payout requests, bank, balances, statements), media (KYC upload) and the other
+  services read the `org` claim and role permissions from the token; they have no members table. Closing this needs either a short
+  membership introspection call to identity or a much shorter access token for those routes (see section 5).
 
 ## 4. Findings from the pass (fixed)
 
@@ -91,21 +119,23 @@ Every service owns the matrix next to its tests; a drift guard fails the build w
 | Medium | orders | payment-split returned whole-order charge to a seller on a shared order |
 | Medium | payments | `balanceViewer` checked `payouts:read` only with FGA on; now in both modes |
 | Medium | inventory returns, SKU dimensions; carrier tracking and pickup locations; search stock quantity | see commit messages |
+| Medium | orders courier events and delivery brief open to any driver token | relay only (follow-up 2) |
+| Low | seller billing reason codes unguarded; catalog GTIN prefill and identifier check named other sellers' non-live ATINs; inventory SKU dimensions readable by sellers; media `duplicateOf` named another seller's asset; carrier `ready` open to sellers; tax-returns pickup not bound to the assigned driver and unlimited code guesses | follow-ups 6 and 7 |
 | Low | fulfilment, offers coupons, geo zones, cart guest ids, gateway-bff relayed bodies and org-switch token rotation, identity password change | see commit messages |
 
 ## 5. Not fixed, residual risk (owner decisions needed)
 
-- Orders `POST /v1/shipments/{id}/courier-events` and `GET .../delivery-brief`: any driver token can act on any Delivery shipment id
-  (orders does not know route assignment). UNVERIFIED in the matrix.
-- Catalog `GET /v1/identifiers/gtin/{code}/prefill` and inventory `GET /v1/skus/{sku}/dimensions`: low cross-tenant disclosure, UNVERIFIED.
-- carrier-gateway `POST /v1/pickup-locations/{id}/ready` does not verify `orderRef`/`customerRef` against the seller's orders.
-- Several staff and service routes rest on the permission only (no principal-type check); safe while those permissions are on
-  `platform.*` roles and service clients only (retail, delivery-runs `/v1/service/*`, `PUT /v1/orgs/{orgId}`).
+- Payout requests, bank details and KYC upload trust the token role for up to 5 minutes (see section 3); the members table lives in
+  seller and identity, not in payments or media.
+- `GtinAlreadyUsed` (409 on create, add variant) and `CatalogMatchService` still name the ATIN of an existing page whatever its status; only
+  the GTIN check and prefill routes were scoped to live pages, the caller's own pages and staff.
+- carrier-gateway `ready` cannot check `orderRef`/`customerRef` itself (no orders access); it now accepts only SERVICE or STAFF callers with
+  `shipping:label`. A caller that serves sellers (orders or the BFF) must check the order first. No caller exists today.
+- Handover-code limiting for tax-returns pickups is in memory (per instance): with several replicas the budget multiplies. Prod runs one.
 - With FGA off, any staff member with `payments:read` or `payouts:approve` sees every org (no market scoping).
 - Inventory idempotency keys are not scoped by actor. Repository SQL is not owner-scoped by id in most services; checks run after the
   fetch in the service layer (defence-in-depth SQL scoping not added: not trivially safe per service).
-- seller `GET /v1/billing/reason-codes` has no guard (platform reference data only).
-- Pay links for an already paid order never expire; tax-returns pickup relies on the 6-digit handover code only.
+- Pay links for an already paid order never expire.
 - Docker ITs were not run in this pass.
 
 ## 6. Enabling OpenFGA later (shadow, then enforce)

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.AttributionService.Report;
 import com.afrotransact.deliveryruns.domain.UtmTags;
@@ -47,6 +48,7 @@ class AttributionController {
         attribution.visit(slug, body.runId(), UtmTags.clean(body.utmSource(), body.utmMedium(), body.utmCampaign()));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Attributed visits and sign-ups of a location, or of one of its runs (delivery-runs:read)",
             description = "Per UTM source, medium and campaign over the last days (default 90, at most 366), most "
                     + "visits first.")

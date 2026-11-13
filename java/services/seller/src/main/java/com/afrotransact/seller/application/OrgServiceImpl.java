@@ -51,7 +51,7 @@ class OrgServiceImpl implements OrgService {
     @Override
     @Transactional
     public OrgView rename(String orgId, String displayName) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+        access.liveOrgRole(orgId, AccessGuard.OWNER, null);
         String name = displayName == null ? "" : displayName.trim();
         if (name.length() < 2 || name.length() > 80) {
             throw new SellerRuleViolation("seller.invalid-input", "Store name must be 2 to 80 characters",

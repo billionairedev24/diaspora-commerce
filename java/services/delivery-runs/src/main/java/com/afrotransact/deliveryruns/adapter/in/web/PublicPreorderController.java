@@ -3,6 +3,7 @@ package com.afrotransact.deliveryruns.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.EligibilityResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.OpenWindowResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.ResolveResponse;
@@ -51,6 +52,7 @@ class PublicPreorderController {
         return preorders.open().stream().map(OpenWindowResponse::of).toList();
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "Pre-order eligibility of products at a place (delivery-runs:reserve, orders-service)",
             description = "atins: comma-separated or repeated (1–100). A product is pre-order where pre-order is on, "
                     + "its catalog category is in the window's categories and it is not flagged shipsNow (catalog "
@@ -66,6 +68,7 @@ class PublicPreorderController {
                 Math.max(0, Math.min(earlyAccessHours, 720))));
     }
 
+    @StaffOrServiceOnly
     @Operation(summary = "A pre-order window's audience on a channel (delivery-runs:audience.read, notifications)",
             description = "segment SUBSCRIBERS: subscribers of the delivery-runs locations in the window's targets "
                     + "with consent on the channel, plus past pre-order buyers there (subscriptionId buyer:<id>; "

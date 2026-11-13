@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.adapter.in.web.BrandAdminDtos.BrandListResponse;
 import com.afrotransact.catalog.adapter.in.web.BrandAdminDtos.BrandResponse;
 import com.afrotransact.catalog.adapter.in.web.BrandAdminDtos.BulkBody;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Brands (back office)", description = "Staff review the brands sellers typed in and keep the brand "
         + "registry: approve, reject, merge, edit name and scope, add and retire (catalog:taxonomy)")
+@StaffOrServiceOnly
 @RestController
 class BrandAdminController {
 

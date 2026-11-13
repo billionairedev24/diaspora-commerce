@@ -2,6 +2,7 @@ package com.afrotransact.catalog.adapter.in.web;
 
 import java.util.List;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.catalog.application.ImageQualityService;
 import com.afrotransact.catalog.application.ImageQualityService.HideResult;
 import com.afrotransact.catalog.application.ImageQualityService.Report;
@@ -44,6 +45,7 @@ class ImageQualityController {
         return new ImageTaskList(quality.myTasks());
     }
 
+    @StaffOrServiceOnly
     @Operation(operationId = "imageQualityReport", summary = "Image quality report (staff, catalog:moderate)",
             description = "Listings per state, how many are not scored yet, the reasons, the failing listings and how many "
                     + "the hide step would limit now (a dry run: read it on the seeded catalog before the hide flag is "
@@ -53,6 +55,7 @@ class ImageQualityController {
         return quality.report();
     }
 
+    @StaffOrServiceOnly
     @Operation(operationId = "rescoreImagesNow", summary = "Score the next batch of listings now (staff, catalog:moderate)",
             description = "The back-fill job runs by itself (a batch per interval, resumable); this runs one batch at once.")
     @PostMapping("/v1/image-quality/rescore")
@@ -60,6 +63,7 @@ class ImageQualityController {
         return new RescoreResult(quality.rescoreNow());
     }
 
+    @StaffOrServiceOnly
     @Operation(operationId = "hideFailingImages", summary = "The hide step (staff, catalog:moderate)",
             description = "With dryRun=true (the default) only counts the failing listings past the grace period. Without it "
                     + "the step runs only when at.catalog.images.hide-failing is on (a separate flag, off until the owner "

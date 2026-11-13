@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.RouteView;
 import com.afrotransact.fulfilment.application.DriverLocationService;
 import com.afrotransact.fulfilment.application.LocationPing;
@@ -111,6 +112,7 @@ class NearestDriverController {
                 body.accuracyM(), body.capturedAt()), credentials.current(request)));
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Dispatch")
     @Operation(operationId = "pickupDriverSuggestions", summary = "Nearest available drivers for a seller pickup",
             description = "Top 5: fresh position (KNN <-> on PostGIS), access active, an ASSIGNED or IN_PROGRESS "
@@ -121,6 +123,7 @@ class NearestDriverController {
         return new SuggestionsView(id, pickups.suggestions(id).stream().map(SuggestionView::of).toList());
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Dispatch")
     @Operation(operationId = "pickupAssign", summary = "Override: put a seller pickup on a route",
             description = "From the pool, or from another route while it is not collected yet and its drop-off "
@@ -131,6 +134,7 @@ class NearestDriverController {
         return RouteView.of(pickups.assign(id, body.routeId(), body.reason()));
     }
 
+    @StaffOrServiceOnly
     @Tag(name = "Dispatch")
     @Operation(operationId = "pickupAssignments", summary = "Assignments of a seller pickup (auto and overrides)")
     @GetMapping("/v1/dispatch/pickups/{id}/assignments")

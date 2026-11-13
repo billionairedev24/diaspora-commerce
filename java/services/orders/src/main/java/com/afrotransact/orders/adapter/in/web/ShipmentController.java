@@ -55,7 +55,8 @@ class ShipmentController {
     }
 
     @Operation(summary = "Driver-app event (AfroTransact Delivery)",
-            description = "DRIVER principal with delivery:operate. Delivered needs a photo and a handover method; "
+            description = "Fulfilment relay only (SERVICE principal with delivery:relay, naming the driver in driverId; "
+                    + "driver tokens are refused). Delivered needs a photo and a handover method; "
                     + "handing to the customer checks their 4-digit code when one is required; a safe place is "
                     + "refused for perishables and hand-delivery orders. Out-of-order events never move a shipment "
                     + "backwards; replays of the same eventId are ignored.")
@@ -64,7 +65,8 @@ class ShipmentController {
         return shipments.courierEvent(id, body.toCommand());
     }
 
-    @Operation(summary = "Stop details for the driver app (address, instructions, perishable, code needed)")
+    @Operation(summary = "Stop details for the driver app (address, instructions, perishable, code needed)",
+            description = "Dispatch (delivery:dispatch) or the fulfilment relay (delivery:relay); not driver tokens.")
     @GetMapping("/v1/shipments/{id}/delivery-brief")
     DeliveryBrief brief(@PathVariable String id) {
         return shipments.deliveryBrief(id);

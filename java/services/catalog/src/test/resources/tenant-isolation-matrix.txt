@@ -12,11 +12,11 @@ PUT /v1/products/{id} | ORG_OWNED | ProductServiceImpl.requireEditable: ensureOw
 PUT /v1/products/{id}/preorder-flags | ORG_OWNED | ProductServiceImpl.requireEditable | CatalogTenantIsolationTest
 POST /v1/products/{id}/pause | ORG_OWNED | ProductServiceImpl.requireEditable | CatalogTenantIsolationTest
 POST /v1/products/{id}/resume | ORG_OWNED | ProductServiceImpl.requireEditable | CatalogTenantIsolationTest
-POST /v1/products/{id}/approve | STAFF_ONLY | ProductServiceImpl.approve: catalog:moderate (staff roles only) | -
-POST /v1/products/{id}/reject | STAFF_ONLY | ProductServiceImpl.reject: catalog:moderate | -
-POST /v1/products/{id}/takedown | STAFF_ONLY | ListingModerationServiceImpl: catalog:moderate | -
-POST /v1/products/{id}/restore | STAFF_ONLY | ListingModerationServiceImpl: catalog:moderate | -
-POST /v1/products/{id}/flags | STAFF_ONLY | ListingModerationServiceImpl.flag: catalog:moderate | -
+POST /v1/products/{id}/approve | STAFF_ONLY | ProductServiceImpl.approve: catalog:moderate (staff roles only) [principal-guard] | -
+POST /v1/products/{id}/reject | STAFF_ONLY | ProductServiceImpl.reject: catalog:moderate [principal-guard] | -
+POST /v1/products/{id}/takedown | STAFF_ONLY | ListingModerationServiceImpl: catalog:moderate [principal-guard] | -
+POST /v1/products/{id}/restore | STAFF_ONLY | ListingModerationServiceImpl: catalog:moderate [principal-guard] | -
+POST /v1/products/{id}/flags | STAFF_ONLY | ListingModerationServiceImpl.flag: catalog:moderate [principal-guard] | -
 GET /v1/variants/{atin} | ORG_OWNED | ProductServiceImpl.variant: WRITE path ensureOwnerOrStaff, READ path requireOwned(RBAC owner org) | CatalogTenantIsolationTest
 @PublicProductController | PUBLIC | live, not-suppressed product pages only (PublicCatalogServiceImpl.onSale) | -
 @ListingReportController | PUBLIC | anyone may report a live listing; the flag is stored under the reporter subject | -
@@ -27,7 +27,7 @@ GET /v1/products/{id}/tax-readiness | ORG_OWNED | ProductTaxServiceImpl.readines
 GET /v1/variants/{atin}/tax-evidence | ORG_OWNED | ProductTaxServiceImpl.evidence: ensureOwnerOrStaff | CatalogTenantIsolationTest
 POST /v1/variants/{atin}/tax-evidence | ORG_OWNED | ProductTaxServiceImpl.uploadEvidence: ensureOwnerOrStaff + requireOwned | CatalogTenantIsolationTest
 GET /v1/tax-evidence/{id}/file | ORG_OWNED | ProductTaxServiceImpl.evidenceFile: variant's product owner vs token org | CatalogTenantIsolationTest
-@TaxGateAuditController | STAFF_ONLY | catalog tax:read / tax:classify:admin (staff roles only) | -
+@TaxGateAuditController | STAFF_ONLY | catalog tax:read / tax:classify:admin (staff roles only) [principal-guard] | -
 
 # ---- change requests and exemptions
 GET /v1/products/{atin}/change-requests | ORG_SCOPED_LIST | ChangeRequestServiceImpl.forPage: non-owner sellers only see requests filed by their org | CatalogTenantIsolationTest
@@ -35,29 +35,29 @@ POST /v1/products/{atin}/change-requests | ORG_OWNED | ChangeRequestServiceImpl.
 GET /v1/change-requests/mine | ORG_SCOPED_LIST | ChangeRequestServiceImpl.mine: query pinned to actor org | CatalogTenantIsolationTest
 GET /v1/change-requests/{id} | ORG_OWNED | ChangeRequestServiceImpl.get: requester org or page owner org, else 404 | CatalogTenantIsolationTest
 POST /v1/change-requests/{id}/withdraw | ORG_OWNED | ChangeRequestServiceImpl.withdraw: requester org only, else 404 | CatalogTenantIsolationTest
-GET /v1/change-requests | STAFF_ONLY | ChangeRequestServiceImpl.queue: catalog:moderate | -
-POST /v1/change-requests/{id}/decision | STAFF_ONLY | ChangeRequestServiceImpl.decide: catalog:moderate | -
-GET /v1/review-queue | STAFF_ONLY | catalog:moderate review queue | -
+GET /v1/change-requests | STAFF_ONLY | ChangeRequestServiceImpl.queue: catalog:moderate [principal-guard] | -
+POST /v1/change-requests/{id}/decision | STAFF_ONLY | ChangeRequestServiceImpl.decide: catalog:moderate [principal-guard] | -
+GET /v1/review-queue | STAFF_ONLY | catalog:moderate review queue [principal-guard] | -
 GET /v1/gtin-exemptions/mine | ORG_SCOPED_LIST | GtinExemptionServiceImpl.mine: findByOrg(actor org) | CatalogTenantIsolationTest
-GET /v1/gtin-exemptions | STAFF_ONLY | GtinExemptionServiceImpl.queue: catalog:moderate | -
-POST /v1/gtin-exemptions/{id}/decision | STAFF_ONLY | GtinExemptionServiceImpl.decide: catalog:moderate | -
+GET /v1/gtin-exemptions | STAFF_ONLY | GtinExemptionServiceImpl.queue: catalog:moderate [principal-guard] | -
+POST /v1/gtin-exemptions/{id}/decision | STAFF_ONLY | GtinExemptionServiceImpl.decide: catalog:moderate [principal-guard] | -
 
 # ---- categories, brands, taxonomy
 GET /v1/categories | PUBLIC | category tree filtered to the caller's department scope, no tenant rows | -
 GET /v1/product-types | PUBLIC | product type catalogue, no tenant rows | -
 GET /v1/product-types/{code} | PUBLIC | product type definition, no tenant rows | -
-GET /v1/category-requests | STAFF_ONLY | CategoryServiceImpl.requests: catalog:taxonomy | -
+GET /v1/category-requests | STAFF_ONLY | CategoryServiceImpl.requests: catalog:taxonomy [principal-guard] | -
 GET /v1/category-requests/mine | ORG_SCOPED_LIST | CategoryServiceImpl.myRequests: findByOrg(owners.ownerFor(actor)) | CatalogTenantIsolationTest
-GET /v1/category-requests/{id} | STAFF_ONLY | CategoryServiceImpl.requestDetail: catalog:taxonomy | -
+GET /v1/category-requests/{id} | STAFF_ONLY | CategoryServiceImpl.requestDetail: catalog:taxonomy [principal-guard] | -
 POST /v1/category-requests | ORG_OWNED | CategoryServiceImpl.request: org = owners.ownerFor(actor) | CatalogTenantIsolationTest
-POST /v1/category-requests/{id}/approval-preview | STAFF_ONLY | catalog:taxonomy | -
-POST /v1/category-requests/{id}/approve | STAFF_ONLY | catalog:taxonomy | -
-POST /v1/category-requests/{id}/reject | STAFF_ONLY | catalog:taxonomy | -
+POST /v1/category-requests/{id}/approval-preview | STAFF_ONLY | catalog:taxonomy [principal-guard] | -
+POST /v1/category-requests/{id}/approve | STAFF_ONLY | catalog:taxonomy [principal-guard] | -
+POST /v1/category-requests/{id}/reject | STAFF_ONLY | catalog:taxonomy [principal-guard] | -
 GET /v1/brands | ORG_SCOPED_LIST | BrandCatalogServiceImpl.options: own pending brands via owners.ownerFor(actor).orgId | CatalogTenantIsolationTest
 POST /v1/brands | ORG_OWNED | BrandCatalogServiceImpl.create: org = owners.ownerFor(actor) | CatalogTenantIsolationTest
-@BrandAdminController | STAFF_ONLY | BrandAdminServiceImpl: catalog:taxonomy | -
-@TaxonomyController | STAFF_ONLY | TaxonomyAdminServiceImpl: catalog:taxonomy | -
-@TaxonomyImportController | STAFF_ONLY | TaxonomyImportServiceImpl: catalog:taxonomy | -
+@BrandAdminController | STAFF_ONLY | BrandAdminServiceImpl: catalog:taxonomy [principal-guard] | -
+@TaxonomyController | STAFF_ONLY | TaxonomyAdminServiceImpl: catalog:taxonomy [principal-guard] | -
+@TaxonomyImportController | STAFF_ONLY | TaxonomyImportServiceImpl: catalog:taxonomy [principal-guard] | -
 
 # ---- drafts
 GET /v1/product-drafts | ORG_SCOPED_LIST | ProductDraftServiceImpl.search: owner() = owners.ownerFor(actor) | CatalogTenantIsolationTest
@@ -71,9 +71,9 @@ POST /v1/image-library/attach | ORG_OWNED | ImageLibraryServiceImpl.attach: prod
 GET /v1/image-library/sku-list | ORG_SCOPED_LIST | ImageLibraryServiceImpl.skuList: findByOwnerOrg(actor org) | CatalogTenantIsolationTest
 POST /v1/image-library/usage | ORG_SCOPED_LIST | ImageLibraryServiceImpl.usage: findByOwnerOrg(actor org) | CatalogTenantIsolationTest
 GET /v1/products/image-tasks | ORG_SCOPED_LIST | ImageQualityServiceImpl.myTasks: scores.tasks(owner org from actor) | CatalogTenantIsolationTest
-GET /v1/image-quality/report | STAFF_ONLY | ImageQualityServiceImpl.report: catalog:moderate | -
-POST /v1/image-quality/rescore | STAFF_ONLY | ImageQualityServiceImpl.rescoreNow: catalog:moderate | -
-POST /v1/image-quality/hide | STAFF_ONLY | ImageQualityServiceImpl: catalog:moderate | -
+GET /v1/image-quality/report | STAFF_ONLY | ImageQualityServiceImpl.report: catalog:moderate [principal-guard] | -
+POST /v1/image-quality/rescore | STAFF_ONLY | ImageQualityServiceImpl.rescoreNow: catalog:moderate [principal-guard] | -
+POST /v1/image-quality/hide | STAFF_ONLY | ImageQualityServiceImpl: catalog:moderate [principal-guard] | -
 POST /v1/labels | PUBLIC | renders a label from the request's own fields, reads no stored tenant data | -
 POST /v1/labels/batch | PUBLIC | renders labels from the request's own fields, reads no stored tenant data | -
 GET /v1/labels/units/{atin} | ORG_OWNED | LabelServiceImpl.stockOwner: sellers print for their own org only (other org 403, other's non-live page 404) | CatalogTenantIsolationTest
@@ -99,13 +99,13 @@ POST /v1/catalog/matches | ORG_OWNED | CatalogMatchServiceImpl.match: org = acto
 POST /v1/catalog/matches/candidates | ORG_OWNED | CandidateMatchServiceImpl.organisation: org = actor.orgId unless staff/service; shows live pages only | CatalogTenantIsolationTest
 POST /v1/catalog/matches/decisions | ORG_OWNED | CandidateMatchServiceImpl.organisation: decision stored for actor org | CatalogTenantIsolationTest
 POST /v1/catalog/offer-eligibility | ORG_OWNED | OfferEligibilityServiceImpl.eligibility: org = actor.orgId unless staff/service | CatalogTenantIsolationTest
-GET /v1/identifiers/gtin/{code} | PUBLIC | GTIN check digit and prefix validation, no stored data | -
-GET /v1/identifiers/gtin/{code}/prefill | UNVERIFIED | GtinPrefillServiceImpl.prefill returns the ATIN of any existing page with that GTIN whatever its status (can reveal that another seller has a non-live page); not changed, see report | -
+GET /v1/identifiers/gtin/{code} | ORG_OWNED | IdentifierServiceImpl.check: check digit and prefix validation; the matching ATIN is returned only when GtinPageVisibility allows it (live page, own org, staff/service) | GtinPageVisibilityTest
+GET /v1/identifiers/gtin/{code}/prefill | ORG_OWNED | GtinPrefillServiceImpl.prefill: an existing page ATIN is returned only when GtinPageVisibility allows it (live page, the caller's own org, or staff/service); another seller's non-live page is treated as no match | GtinPageVisibilityTest
 
 # ---- seller scope, listing rules, settings, reviews
 GET /v1/seller/catalog-scope | ORG_SCOPED_LIST | SellerCatalogScopeServiceImpl.mine: scope of the actor's own organisation | CatalogTenantIsolationTest
 GET /v1/listing-rules | PUBLIC | marketplace listing rules, no tenant data | -
-@CatalogSettingsController | STAFF_ONLY | CatalogSettingsServiceImpl: catalog:moderate | -
+@CatalogSettingsController | STAFF_ONLY | CatalogSettingsServiceImpl: catalog:moderate [principal-guard] | -
 @BakeryClaimController | SERVICE_ONLY | BakeryClaimServiceImpl: service-read permission | -
 GET /v1/public/products/{atin}/rating | PUBLIC | aggregate rating of a live product | -
 GET /v1/public/products/{atin}/reviews | PUBLIC | published reviews of a live product | -
@@ -116,4 +116,4 @@ DELETE /v1/products/{atin}/reviews/mine | CUSTOMER_SELF | ProductReviewServiceIm
 POST /v1/product-reviews/{reviewId}/reports | ORG_OWNED | ProductReviewServiceImpl.reporterKind: customer (not the author) or SELLER_MEMBER of the review's seller org | CatalogTenantIsolationTest
 GET /v1/seller/reviews | ORG_SCOPED_LIST | SellerReviewServiceImpl.list: org = actor.orgId for non-staff, staff must name one (never all) | CatalogTenantIsolationTest
 POST /v1/product-reviews/{reviewId}/reply | ORG_OWNED | SellerReviewServiceImpl.reply: review.sellerOrgId must equal actor org and SELLER_MEMBER | CatalogTenantIsolationTest
-@ReviewModerationController | STAFF_ONLY | ReviewModerationServiceImpl: catalog:moderate | -
+@ReviewModerationController | STAFF_ONLY | ReviewModerationServiceImpl: catalog:moderate [principal-guard] | -

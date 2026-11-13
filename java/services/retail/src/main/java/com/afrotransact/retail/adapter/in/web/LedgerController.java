@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.application.LedgerService;
 import com.afrotransact.retail.domain.JournalEntry;
 import com.afrotransact.retail.domain.JournalSource;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "GL journal", description = "Journal entries produced by departures, receipts, invoice matches and COGS "
         + "(also published as retail.gl.journal.posted)")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/gl")
 class LedgerController {

@@ -3,6 +3,7 @@ package com.afrotransact.retail.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.adapter.in.web.ReceiptDtos.ClaimResolutionRequest;
 import com.afrotransact.retail.adapter.in.web.ReceiptDtos.CountRequest;
 import com.afrotransact.retail.adapter.in.web.ReceiptDtos.OpenReceiptRequest;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Goods receipts", description = "Count, validate and complete receipts; lots are posted to inventory "
         + "with landed cost, discrepancies raise claims and the GL entry is produced (S072/S073)")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/receipts")
 class ReceiptController {

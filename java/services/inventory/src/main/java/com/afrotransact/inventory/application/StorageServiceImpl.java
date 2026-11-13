@@ -61,7 +61,8 @@ class StorageServiceImpl implements StorageService {
     @Override
     @Transactional(readOnly = true)
     public StoredDimensions dimensions(String sku) {
-        access.require(InventoryPermissions.READ);
+        // Keyed by SKU without an owner: staff and services only (no seller screen reads it).
+        access.staffRequire(InventoryPermissions.READ);
         return storage.findDimensions(normalise(sku)).orElseThrow(() -> new NotFoundException(
                 "inventory.dimensions-not-found", "No dimensions recorded for " + sku));
     }

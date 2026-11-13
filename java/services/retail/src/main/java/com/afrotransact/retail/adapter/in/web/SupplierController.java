@@ -2,6 +2,7 @@ package com.afrotransact.retail.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.retail.adapter.in.web.SupplierDtos.StatusRequest;
 import com.afrotransact.retail.adapter.in.web.SupplierDtos.SupplierRequest;
 import com.afrotransact.retail.adapter.in.web.SupplierDtos.SupplierResponse;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Suppliers", description = "Supplier records, lifecycle and receipt-driven scorecards (S069)")
+@StaffOrServiceOnly
 @RestController
 @RequestMapping("/v1/suppliers")
 class SupplierController {

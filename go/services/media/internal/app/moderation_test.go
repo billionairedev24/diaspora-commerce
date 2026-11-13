@@ -284,8 +284,12 @@ func TestDuplicatePhotosOfAnotherSellerAreHeld(t *testing.T) {
 	thief := auth.Actor{Subject: "u9", Type: "SELLER_MEMBER", OrgID: "org_other"}
 	copied, _ := f.upload(t, thief, photo)
 	if copied.Status != domain.StatusFlagged || copied.Moderation.Verdict != domain.VerdictHeld ||
-		copied.Moderation.DuplicateOf == "" || copied.URL != "" {
+		!copied.Moderation.DuplicateHeld || copied.URL != "" {
 		t.Fatalf("another seller's copy %+v %+v", copied, copied.Moderation)
+	}
+	// The record the uploader reads never carries the first seller's asset id.
+	if copied.Moderation.DuplicateOf != "" || strings.Contains(strings.Join(copied.Moderation.Reasons, " "), first.ID) {
+		t.Fatalf("another organisation's asset id leaked: %+v", copied.Moderation)
 	}
 	// A different photo is not a duplicate.
 	other, _ := f.upload(t, thief, productPhoto(t, 6))

@@ -2,6 +2,7 @@ package com.afrotransact.fulfilment.adapter.in.web;
 
 import java.util.List;
 
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import com.afrotransact.fulfilment.adapter.in.web.CentreDtos.AssignNodeRequest;
 import com.afrotransact.fulfilment.adapter.in.web.CentreDtos.CentreRequest;
 import com.afrotransact.fulfilment.adapter.in.web.CentreDtos.CentreView;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Fulfilment centres", description = "Centres / nodes and pick-pack tasks for FBA and Retail 1P shipments "
         + "(fulfilment:operate)")
+@StaffOrServiceOnly
 @RestController
 class CentreController {
 

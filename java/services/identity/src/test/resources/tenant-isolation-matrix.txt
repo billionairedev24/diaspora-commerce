@@ -86,5 +86,5 @@ PUT /v1/me/preferences | CUSTOMER_SELF | subject taken from the token (CurrentUs
 PUT /v1/me/tour-progress | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
 PUT /v1/me/tour-progress/{tourId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
 PUT /v1/me/work-profile | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
-PUT /v1/orgs/{orgId} | STAFF_ONLY | OrganizationServiceImpl.upsert orgs:manage (platform roles and service scopes only) | -
+PUT /v1/orgs/{orgId} | STAFF_ONLY | OrganizationServiceImpl.upsert orgs:manage (platform roles and service scopes only) [principal-guard] | -
 PUT /v1/orgs/{orgId}/members/{userId} | ORG_OWNED | OrgTeamAccess.resolve: caller must hold team:manage in the PATH org (store lookup); invitation/member must belong to that org | IdentityTenantIsolationTest
