@@ -20,7 +20,7 @@ import {
   type StaffCommunities,
   type StaffCommunity,
   StaffLocaleLabelsSchema} from '../../staff-home';
-import { defaultHomeSettings, fixtureCatalog, homeMock, previewHome, signalsOf, visibleCommunities } from '../home-dynamic';
+import { defaultHomeSettings, departmentsOf, fixtureCatalog, homeMock, previewHome, signalsOf, visibleCommunities } from '../home-dynamic';
 import { liveCatalog } from '../service';
 import { allows } from './model';
 import { type PreorderCtx, type PreorderHandlerDeps } from './preorders';
@@ -91,6 +91,11 @@ export function homeSettingsHandlers(W: string, deps: PreorderHandlerDeps) {
   };
 
   return [
+    // The department picker (also the storefront's navigation source): the empty departments only for staff.
+    http.get('*/v1/site/departments', ({ request }) => {
+      const includeEmpty = new URL(request.url).searchParams.get('includeEmpty') === 'true';
+      return Response.json({ departments: departmentsOf(fixtureCatalog(homeMock.catalogue ?? 100), homeMock.settings, includeEmpty), generatedAt: new Date().toISOString() });
+    }),
     http.get(
       `${W}/home/settings`,
       route((ctx): HomeSettings => {

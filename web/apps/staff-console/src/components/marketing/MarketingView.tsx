@@ -7,7 +7,10 @@ import { ModulePage } from '@/components/module/ModulePage';
 import { ResourceTable } from '@/components/resources/ResourceTable';
 import { useT } from '@/i18n/t';
 
-/** Growth → Marketing: announcements, placements & ads, the home page layout (order of the modules) and platform-funded checkout coupons. */
+import { HomePreviewView } from './home/HomePreviewView';
+import { HomeSettingsView } from './home/HomeSettingsView';
+
+/** Growth → Marketing: announcements, placements & ads, the home page layout (order of the modules), the dynamic home's settings and preview, and platform-funded checkout coupons. */
 export function MarketingView() {
   const t = useT();
   const router = useRouter();
@@ -24,6 +27,8 @@ export function MarketingView() {
           { value: 'announcements', label: t('st.marketing.tab.announcements'), content: <ResourceTable resource="announcements" urlPrefix="announcements" /> },
           { value: 'placements', label: t('st.marketing.tab.placements'), content: <ResourceTable resource="placements" urlPrefix="placements" /> },
           { value: 'layout', label: t('st.marketing.tab.layout'), content: <ResourceTable resource="home-layout" urlPrefix="home-layout" /> },
+          { value: 'home', label: t('st.marketing.tab.home'), content: <HomeSettingsView /> },
+          { value: 'preview', label: t('st.marketing.tab.preview'), content: <HomePreviewView /> },
           { value: 'coupons', label: t('st.marketing.tab.coupons'), content: <ResourceTable resource="coupons" urlPrefix="coupons" /> }
         ]}
       />

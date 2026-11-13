@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { type Requester } from './http';
 import { HomeBlockSchema, HomeModuleDecisionSchema } from './schemas/home';
+import { SiteDepartmentSchema } from './schemas/site-nav';
 
 /** Order bands: bands keep their order, modules inside a `discovery` band rotate by visit. */
 export const HOME_BANDS = ['hero', 'personal', 'discovery', 'promo', 'brand'] as const;
@@ -168,7 +169,7 @@ export function homeSettingsProblems(input: HomeSettingsInput, reason: string): 
   }
   for (const [key, l] of Object.entries(input.departmentLabels)) {
     const others = [l.fr, l.es, l.ar, l.yo].some((v) => !!v?.trim());
-    if (others && !l.en.trim()) out.push(`departmentLabels.${key}`);
+    if (others && !(l.en ?? '').trim()) out.push(`departmentLabels.${key}`);
   }
   return out;
 }
@@ -187,6 +188,9 @@ export function createStaffHomeApi(request: Requester) {
     versions: (signal?: AbortSignal): Promise<HomeSettingsVersion[]> => request('/v1/staff/home/settings/versions', z.array(HomeSettingsVersionSchema), { signal }),
     revert: (toVersion: number, reason: string): Promise<HomeSettings> =>
       request('/v1/staff/home/settings/revert', HomeSettingsSchema, { method: 'POST', body: { toVersion, reason: reason.trim() } }),
+    /** Every catalog department with its eligible count, the empty ones too (`count: 0`, not linked): the choices of the label editor. */
+    departments: (signal?: AbortSignal) =>
+      request('/v1/site/departments', z.object({ departments: z.array(SiteDepartmentSchema) }), { query: { includeEmpty: 'true' }, signal }).then((r) => r.departments),
     communities: (signal?: AbortSignal): Promise<StaffCommunities> => request('/v1/staff/home/communities', StaffCommunitiesSchema, { signal }),
     saveCommunity: (key: string, input: StaffCommunityWrite, reason: string): Promise<StaffCommunity> =>
       request(`/v1/staff/home/communities/${encodeURIComponent(key)}`, StaffCommunitySchema, { method: 'PUT', body: { ...input, reason: reason.trim() } }),
@@ -213,12 +217,14 @@ export const staffHomeKeys = {
   settings: () => [...staffHomeKeys.all, 'settings'] as const,
   versions: () => [...staffHomeKeys.all, 'versions'] as const,
   communities: () => [...staffHomeKeys.all, 'communities'] as const,
+  departments: () => [...staffHomeKeys.all, 'departments'] as const,
   preview: (q: HomePreviewQuery) => [...staffHomeKeys.all, 'preview', q] as const
 };
 
 export const staffHomeQueries = {
   settings: (api: StaffHomeApi) => queryOptions({ queryKey: staffHomeKeys.settings(), queryFn: ({ signal }) => api.settings(signal), staleTime: 15_000 }),
   versions: (api: StaffHomeApi) => queryOptions({ queryKey: staffHomeKeys.versions(), queryFn: ({ signal }) => api.versions(signal), staleTime: 15_000 }),
+  departments: (api: StaffHomeApi) => queryOptions({ queryKey: staffHomeKeys.departments(), queryFn: ({ signal }) => api.departments(signal), staleTime: 60_000 }),
   communities: (api: StaffHomeApi) => queryOptions({ queryKey: staffHomeKeys.communities(), queryFn: ({ signal }) => api.communities(signal), staleTime: 15_000 }),
   /** A preview is a read: no refetch on focus, so a reproduced view does not move under the reader. */
   preview: (api: StaffHomeApi, q: HomePreviewQuery) =>

@@ -39,7 +39,7 @@ const STAFF_CHAPTERS: [id: string, shown: number][] = [
   ['site-content', 3],
   ['notifications', 3],
   ['identity-access', 4],
-  ['marketing', 4],
+  ['marketing', 6],
   ['audit-log', 3]
 ];
 

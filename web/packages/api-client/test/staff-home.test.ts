@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
 
 import { ApiError, createStaffApiClient } from '../src';
 import { type components } from '../src/generated/gateway-bff-staff';
-import { resetHomeMock } from '../src/mocks';
+import { homeMock, resetHomeMock } from '../src/mocks';
 import { MOCK_STAFF_ROLE_COOKIE, resetStaffDb } from '../src/mocks/staff';
 import { resetHomeRegistry } from '../src/mocks/staff/home-settings';
 import { handleStaffMockRequest } from '../src/mocks/staff-runtime';
@@ -117,6 +117,14 @@ describe('home settings mock', () => {
     expect(list.unregistered.map((u) => u.value)).not.toContain('Nigerian');
     await api().deleteCommunity('nigerian', 'Remove it');
     expect((await api().communities()).registered).toEqual([]);
+  });
+
+  it('lists every department for the label editor: the empty ones are included with no link', async () => {
+    homeMock.catalogue = 10;
+    const all = await api().departments();
+    expect(all.find((d) => d.name === 'Groceries & Food')).toMatchObject({ count: 4, href: '/s?dept=Groceries%20%26%20Food' });
+    expect(all.find((d) => d.name === 'Electronics')).toMatchObject({ count: 0 });
+    expect(all.find((d) => d.name === 'Electronics')?.href).toBeUndefined();
   });
 
   it('client-side checks mirror the server: reason length and English required with another language', () => {

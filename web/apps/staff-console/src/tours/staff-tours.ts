@@ -353,6 +353,8 @@ export const STAFF_TOURS = [
       ['page', 'page-marketing'],
       ['announcements', 'table-staff.announcements', { placement: 'top' }],
       ['placements', 'table-staff.placements', { route: '/marketing?tab=placements', placement: 'top' }],
+      ['home', 'home-settings', { route: '/marketing?tab=home', placement: 'top' }],
+      ['preview', 'home-preview', { route: '/marketing?tab=preview', placement: 'top' }],
       ['coupons', 'table-staff.coupons', { route: '/marketing?tab=coupons', placement: 'top' }]
     ]
   }),

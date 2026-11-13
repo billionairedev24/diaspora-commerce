@@ -754,6 +754,17 @@ export function navigationOf(catalog: Catalog, settings: HomeSettings, now: Date
   };
 }
 
+/** GET /v1/site/departments: every catalog department with its eligible count; `includeEmpty` (the staff picker) adds the empty ones without a link. */
+export function departmentsOf(catalog: Catalog, settings: HomeSettings, includeEmpty: boolean): SiteDepartment[] {
+  const counted = new Map(signalsOf(catalog).departments.map((d) => [d.key, d]));
+  const all: SiteDepartment[] = DEPARTMENTS.map(([key, name]) => {
+    const u = counted.get(key);
+    const { label, labels } = departmentLabel(key, name, settings);
+    return { key, name, label, labels, labelKey: `dept.${key}`, count: u?.products.length ?? 0, sellers: u?.sellers ?? 0, ...(u ? { href: `/s?dept=${encodeURIComponent(name)}` } : {}), imageUrl: u?.products[0]?.imageUrl ?? null };
+  });
+  return all.filter((d) => includeEmpty || d.count > 0).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
 /** `/communities/{slug}`: the canonical community, or null when it is hidden or unknown (a 404, never a zero-result page). */
 export function resolveCommunity(catalog: Catalog, settings: HomeSettings, slugIn: string): { community: SiteCommunity; canonical: boolean } | null {
   const want = slugIn.trim().toLowerCase();
@@ -770,7 +781,7 @@ export function sitemapOf(catalog: Catalog, settings: HomeSettings, now: Date = 
 /** Staff preview: the same composition for a chosen catalogue, ZIP, sign-in state, locale and date. */
 export function previewHome(q: HomePreviewQuery, input: { catalog: Catalog; catalogName: string; settings: HomeSettings; loc: DeliveryLocation; now: Date }): HomePreview {
   const asOf = q.asOf ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(q.asOf) ? `${q.asOf}T00:00:00Z` : q.asOf) : input.now;
-  const seed = q.seed?.trim() || (q.deterministic ? DEFAULT_SEED : `preview-${hash(`${asOf.toISOString().slice(0, 10)}|${q.zip ?? ''}|${input.catalogName}`).toString(36)}`);
+  const seed = q.deterministic ? DEFAULT_SEED : q.seed?.trim() || `preview-${hash(`${asOf.toISOString().slice(0, 10)}|${q.zip ?? ''}|${input.catalogName}`).toString(36)}`;
   const out = composeDynamicHome({ catalog: input.catalog, settings: input.settings, seed, now: asOf, signedIn: q.signedIn ?? false, hasZip: !!q.zip?.trim(), loc: input.loc, variant: q.variant });
   const season = seasonAt(asOf);
   return {

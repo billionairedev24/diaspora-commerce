@@ -234,7 +234,7 @@ screens with no chapter, or things the brief named that the product does not hav
 | Site content and legal (Settings → Published pages, General) | site-content (platform) | 3/3 | covered |
 | Notification templates (Settings → Notifications) | notifications (platform) | 3/3 | covered |
 | Identity and access (Settings → Identity & access) | identity-access (platform) | 4/4 | covered |
-| Marketing `/marketing` | marketing (platform) | 4/4 | covered |
+| Marketing `/marketing` (announcements, placements, Home settings, Home preview, coupons) | marketing (platform) | 6/6 | covered |
 | Audit log `/audit` | audit-log (platform) | 3/3 | covered |
 | Tour hub `/help/tours` | (the hub itself) | n.a. | built |
 | Markets (Settings → Markets & locations) | settings (markets step) | n.a. | covered inside the settings chapter |
