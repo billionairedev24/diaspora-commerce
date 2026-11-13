@@ -112,28 +112,35 @@ export const SELLER_TOURS = [
     id: 'first-product',
     prefix: 'sc.tour.firstProduct',
     journey: 'catalogue',
+    // 2: Add a product opens on the barcode step (S382). A page that already exists is sold with a short offer form; the full product form
+    // (category, photos ...) comes after it, once the person carries on, so its steps are optional and appear only then.
+    version: 2,
     route: '/listings',
     audience: { permissions: ['listings:edit'] },
     autoStart: { routes: ['/listings'] },
     steps: [
       ['add', 'listings-add', { doIt: true, success: { target: 'listings-add', when: 'click' } }],
-      ['category', 'product-form-basics', { route: '/listings/new', placement: 'top' }],
-      ['photos', 'product-form-images', { placement: 'top' }],
-      ['nav', 'product-form-nav'],
+      ['barcode', 'barcode-input', { route: '/listings/new', placement: 'bottom' }],
+      ['offer-only'],
+      ['carry-on', 'barcode-step', { placement: 'top', success: { target: 'product-form-basics', when: 'appear' } }],
+      ['category', 'product-form-basics', { placement: 'top', optional: true }],
+      ['photos', 'product-form-images', { placement: 'top', optional: true }],
       ['missing', 'product-form-readiness', { placement: 'start', optional: true }],
-      ['submit', 'product-form-actions', { placement: 'top' }]
+      ['submit', 'product-form-actions', { placement: 'top', optional: true }]
     ]
   }),
   defineChapter({
     id: 'product-sections',
     prefix: 'sc.tour.productSections',
     journey: 'catalogue',
+    version: 2,
     route: '/listings/new',
     audience: { permissions: ['listings:edit'] },
     steps: [
-      ['intro'],
-      ['basics', 'product-form-basics', { placement: 'top' }],
-      ['nav', 'product-form-nav'],
+      // The barcode step comes first; the sections below belong to the full form, which opens once the person carries on.
+      ['carry-on', 'barcode-step', { placement: 'top', success: { target: 'product-form-basics', when: 'appear' } }],
+      ['basics', 'product-form-basics', { placement: 'top', optional: true }],
+      ['nav', 'product-form-nav', { optional: true }],
       ['offer', 'product-form-offer', { placement: 'top', optional: true }],
       ['facts', 'product-form-facts', { placement: 'top', optional: true }],
       ['variants', 'product-form-variants', { placement: 'top', optional: true }],

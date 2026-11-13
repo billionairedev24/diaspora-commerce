@@ -79,6 +79,12 @@ export interface RunOptions {
   axe?: { testInfo: TestInfo; page: string };
   /** Advance with ArrowRight (ArrowLeft in right-to-left languages) instead of the Next button. */
   keyboard?: boolean;
+  /**
+   * What the person does on a step, by step id, instead of pressing Next (the tour never does it for them): for a step that waits
+   * for a real click or for the page to change. After the act the run waits for the tour to move on by itself, or for Next if the
+   * act is `{ then: 'next' }`.
+   */
+  acts?: Record<string, { act: (page: Page) => Promise<void>; then?: 'next' }>;
 }
 
 /** Runs one tour to its end from the Help menu and returns how it ended. Fails when a step is stuck. */
@@ -94,6 +100,15 @@ export async function runTour(page: Page, tourId: string, options: RunOptions = 
     if (options.axe && !axeDone) {
       axeDone = true;
       await expectNoSeriousA11yViolations(page, options.axe.testInfo, { page: options.axe.page, include: '[data-tour-popover]' });
+    }
+    const stepId = [...(await eventsOf(page))].reverse().find((e): e is TourStep => e.type === 'step')?.stepId ?? '';
+    const own = options.acts?.[stepId];
+    if (own) {
+      await own.act(page);
+      if (own.then !== 'next') {
+        await page.waitForFunction((n) => (window.__atTour?.length ?? 0) > n, seen, { timeout: 20_000 });
+        continue;
+      }
     }
     if (options.keyboard) {
       const rtl = (await popover(page).getAttribute('dir')) === 'rtl';

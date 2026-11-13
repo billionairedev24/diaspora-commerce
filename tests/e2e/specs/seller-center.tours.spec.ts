@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 import { expectNoSeriousA11yViolations } from '../support/a11y';
 import { actAs, PROVIDER_ORG, SELLER_ORG, setActiveOrg } from '../support/seller';
@@ -23,8 +23,9 @@ const SELLER_CHAPTERS: [id: string, shown: number][] = [
   ['account-settings', 6],
   ['help-support', 4],
   ['listings-overview', 4],
-  ['first-product', 6],
-  ['product-sections', 3],
+  // Add a product opens on the barcode step (S382): the form steps of these two chapters appear once the person carries on (see below).
+  ['first-product', 4],
+  ['product-sections', 1],
   ['images', 4],
   ['bulk-upload', 5],
   ['approvals', 4],
@@ -183,7 +184,7 @@ test.describe('seller center · tour behaviour', () => {
     // the highlighted control is the real one: a click goes through and opens the form, and the tour moves on by itself
     await page.locator('[data-tour="listings-add"]').click();
     await expect(page).toHaveURL(/\/listings\/new$/);
-    await expect(popover(page)).toContainText('Pick the category first', { timeout: 15_000 });
+    await expect(popover(page)).toContainText('Start with the barcode', { timeout: 15_000 });
     await page.keyboard.press('Escape');
   });
 
@@ -192,8 +193,40 @@ test.describe('seller center · tour behaviour', () => {
     await openTourFromHelp(page, 'first-product');
     await expect(popover(page)).toContainText('Start with Add a product');
     await popover(page).getByRole('button', { name: 'Skip this step' }).click();
-    await expect(popover(page)).toContainText('Pick the category first');
+    await expect(popover(page)).toContainText('Start with the barcode');
     await page.keyboard.press('Escape');
+  });
+
+  // Add a product opens on the barcode step. The form's own steps (category, photos ...) are optional in the chapters and are found once
+  // the person has carried on to the full form, which only they can do: here the test does it with their clicks, the tour never does.
+  const carryOnToTheForm = async (page: Page) => {
+    await page.getByRole('button', { name: 'I don’t have a barcode' }).click();
+    await page.getByRole('button', { name: 'Continue without a barcode' }).click();
+    await expect(page.locator('[data-tour="product-form-basics"]')).toBeVisible({ timeout: 15_000 });
+  };
+
+  test('first-product: the barcode step, the offer-only branch in plain words, then the form steps once the person carries on', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    const result = await runTour(page, 'first-product', {
+      acts: {
+        add: { act: async (p) => { await p.locator('[data-tour="listings-add"]').click(); } },
+        barcode: { act: async (p) => { await expect(popover(p)).toContainText('Start with the barcode'); }, then: 'next' },
+        'offer-only': { act: async (p) => { await expect(popover(p)).toContainText('If the product already has a page'); await expect(popover(p)).toContainText('price, quantity and condition'); }, then: 'next' },
+        'carry-on': { act: async (p) => { await carryOnToTheForm(p); }, then: 'next' }
+      }
+    });
+    // add, barcode, offer-only, carry-on, then category, photos, what is missing and submit in the form: nothing missing.
+    expectNoDrift(result, 8);
+    expect(result.steps.map((s) => s.stepId)).toEqual(['add', 'barcode', 'offer-only', 'carry-on', 'category', 'photos', 'missing', 'submit']);
+  });
+
+  test('product-sections: opens on the barcode step and shows the form sections once the person carries on', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    const result = await runTour(page, 'product-sections', { acts: { 'carry-on': { act: async (p) => { await carryOnToTheForm(p); }, then: 'next' } } });
+    expectNoDrift(result, 3);
+    expect(result.steps.map((s) => s.stepId)).toEqual(['carry-on', 'basics', 'nav']);
   });
 
   test('progress is kept on the server: closing part way offers Resume, which starts at the last step', async ({ page, request, baseURL }) => {

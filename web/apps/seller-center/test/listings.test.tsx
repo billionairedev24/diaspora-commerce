@@ -104,7 +104,7 @@ describe('Listings table follows the row-action standard', () => {
     nav.search = new URLSearchParams('q=Shea');
     await renderScreen(<ListingsView />);
     const row = (await screen.findByText('Raw Shea Butter (8 oz)')).closest('tr') as HTMLElement;
-    expect(within(row).getByText('Your offer on another seller\'s page')).toBeInTheDocument();
+    expect(within(row).getByText('Selling on another seller\'s page')).toBeInTheDocument();
     expect(within(row).getAllByText('We are checking the tax details for this item.').length).toBeGreaterThan(0);
     // The name is not a link to the other seller's page, and the menu has no Edit, Pause or Resume of the page.
     expect(within(row).queryByRole('link', { name: 'Raw Shea Butter (8 oz)' })).not.toBeInTheDocument();

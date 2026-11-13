@@ -94,6 +94,13 @@ The owner asked that a tour does not show again on a new browser or device, so t
 5. **Drift guard.** Add the chapter to the list in the app's `*.tours.spec.ts` with the number of steps it shows today.
 6. Run `pnpm --filter <app> test`, `pnpm --filter @afrotransact/tour test` and the tour spec.
 
+### Steps that wait for a page the person opens
+
+A step may carry `success: { target, when: 'appear' }` without `doIt`: it shows a quiet "Done" mark when the target appears (the person opened the full
+product form from the barcode step) and the person presses Next. The steps after it are `optional`, so a person who does something else (sells an
+existing page with the offer form) simply ends the chapter without drift. The drift guard supplies the person's clicks through `runTour(..., { acts })`
+(`tests/e2e/support/tours.ts`); the tour still never clicks for anyone.
+
 ### "Do it" steps
 
 A step with `doIt: true` (and `success: { target, when: 'click' }`) waits for the person to click the real, highlighted control. Driver.js leaves
@@ -173,7 +180,7 @@ screens with no chapter, or things the brief named that the product does not hav
 | My account `/account`, `/account/security`, `/account/notifications`, `/account/preferences` | account-settings (setup) | 6/6 | covered |
 | Help, Lola assistant | help-support (setup) | 4/4 | covered |
 | Listings `/listings` (tabs Listings, Drafts) | listings-overview (catalogue) | 4/4 | covered |
-| New product `/listings/new`, edit `/listings/[id]/edit` | first-product, product-sections (catalogue) | 6/6, 8/3 | covered; sections that depend on the category are optional steps (see gaps) |
+| New product `/listings/new` (barcode step, offer-only form, full form), edit `/listings/[id]/edit` | first-product, product-sections (catalogue) | 8/4, 8/1 | covered. Add a product opens on the barcode step (S382): the chapters start there (`barcode-input`, `barcode-step`), describe the offer-only path in plain words (a page that exists is sold with price, quantity and condition only; no step points into that form, it appears only after a match) and carry on to the full form (category, photos, what is missing, submit; sections) with **optional** steps that are found once the person has opened the form. The drift guard runs both chapters twice: as they stand (4 and 1 steps) and with the person's own clicks past the barcode step (8 and 3 steps). Sections that depend on the category stay optional (see gaps) |
 | Selling approvals `/listings/approvals` | approvals (catalogue) | 4/4 | covered |
 | Image library `/listings/images` | images (catalogue) | 4/4 | covered |
 | Bulk upload `/listings/bulk`, history, `[importId]` | bulk-upload (catalogue) | 5/5 | covered (an individual report is described in the last step, not toured) |
@@ -193,7 +200,7 @@ screens with no chapter, or things the brief named that the product does not hav
 | Tour hub `/help/tours` | (the hub itself) | n.a. | built |
 | Accept invitation `/invitations/accept` | none | n.a. | gap: a public page outside the back office |
 | Size chart manager | described in product-sections (sizes) | n.a. | gap: opens inside the product form, not a route |
-| Barcode match and offer-only path | none | n.a. | gap: not in the UI yet (contracts only, S381 to S387); add when built |
+| Barcode match and offer-only path | first-product (barcode, offer-only, carry-on steps) | 3 steps | covered in words and on the barcode step; the offer-only form itself, the match card and the change-request list are not pointed at step by step |
 | Image-quality tasks | none | n.a. | gap: no screen exists |
 | Messages with customers | none | n.a. | gap: no screen exists (replies to reviews are in reviews) |
 
