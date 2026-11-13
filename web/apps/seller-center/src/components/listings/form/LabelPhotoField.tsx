@@ -1,19 +1,19 @@
 'use client';
 
-import { Button } from '@afrotransact/ui';
-import { UploadSimple } from '@phosphor-icons/react/ssr';
-import { useRef } from 'react';
+import { InfoTip, RequiredMark, useFormLabels } from '@afrotransact/ui';
+import { Trash } from '@phosphor-icons/react/ssr';
 
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 
 import { fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES } from '../form-model';
+import { AddPhotoTile } from './PhotoSlots';
 
 interface Props {
   image: FormImage | null;
   onChange: (image: FormImage | null) => void;
   error?: string | undefined;
-  /** Optional fields show "(optional)"; a "required or exemption" field is answered with a photo or a reason. */
+  /** An optional label photo says "(optional)"; a required one carries the red asterisk like every required field. */
   optional?: boolean;
 }
 
@@ -25,11 +25,14 @@ const dims = (file: File) =>
     img.src = URL.createObjectURL(file);
   });
 
-/** The label photo slot: one typed image (ingredients and nutrition panel, Supplement Facts, Drug Facts) that product pictures never stand in for. */
+/**
+ * The label photo slot: one typed image (ingredients and nutrition panel, Supplement Facts, Drug Facts) that product pictures never stand in for.
+ * It is also where a seller proves a tax fact (food, supplement or drug), so the slot stays for every category that asks for it, optional or not.
+ */
 export function LabelPhotoField({ image, onChange, error, optional }: Props) {
   const t = useT();
   const api = sellerApi();
-  const input = useRef<HTMLInputElement>(null);
+  const labels = useFormLabels();
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
@@ -53,23 +56,29 @@ export function LabelPhotoField({ image, onChange, error, optional }: Props) {
     }
   };
 
+  const hasImage = Boolean(image && image.status !== 'error' && image.previewUrl);
+  const name = optional ? t('sc.pf.field.labelPhotoOptional') : t('sc.pf.field.labelPhoto');
   return (
-    <div id={fieldId.labelPhoto} tabIndex={-1} className="flex flex-col gap-2 outline-none" data-testid="label-photo">
-      <span className="text-sm font-semibold">{optional ? t('sc.pf.optional', { label: t('sc.pf.field.labelPhoto') }) : t('sc.pf.field.labelPhoto')}</span>
-      <span className="text-xs text-muted">{t('sc.pf.labelPhoto.hint')}</span>
-      <div className="flex flex-wrap items-center gap-3">
-        {image && image.status !== 'error' && image.previewUrl ? (
-          <img src={image.previewUrl} alt={t('sc.pf.labelPhoto.alt')} className="size-20 rounded-sm border border-border object-cover" />
-        ) : null}
-        <input ref={input} type="file" accept={IMAGE_TYPES.join(',')} className="sr-only" tabIndex={-1} aria-label={t('sc.pf.field.labelPhoto')} data-testid="label-photo-input"
-          onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
-        <Button size="sm" variant="neutral" onClick={() => input.current?.click()}>
-          <UploadSimple size={14} aria-hidden /> {image?.url || image?.assetId ? t('sc.pf.labelPhoto.replace') : t('sc.pf.labelPhoto.add')}
-        </Button>
-        {image ? <Button size="sm" variant="neutral" onClick={() => onChange(null)}>{t('sc.pf.labelPhoto.remove')}</Button> : null}
-        {image?.status === 'held' ? <span role="status" className="text-xs text-muted" data-testid="label-photo-checking">{t('sc.pf.images.checkingPhoto')}</span> : null}
-        {image?.status === 'uploading' ? <span role="status" className="text-xs text-muted">{t('sc.pf.labelPhoto.uploading')}</span> : null}
+    <div id={fieldId.labelPhoto} tabIndex={-1} role="group" aria-labelledby="pf-label-photo-h" className="flex flex-col gap-2 outline-none" data-testid="label-photo">
+      <div className="flex items-center gap-1">
+        <span id="pf-label-photo-h" className="text-sm font-semibold">{name}{optional ? null : <RequiredMark text={labels.required} />}</span>
+        <InfoTip label={t('sc.pf.labelPhoto.info')}>{t('sc.pf.labelPhoto.hint')}</InfoTip>
       </div>
+      <ul className="m-0 flex list-none flex-wrap items-start gap-2 p-0">
+        {hasImage ? (
+          <li className="flex flex-col gap-1">
+            <span className="relative block size-16 rounded-sm border border-border bg-surface-muted">
+              <img src={image?.previewUrl} alt={t('sc.pf.labelPhoto.alt')} className="block size-16 rounded-sm object-cover" />
+              <button type="button" aria-label={t('sc.pf.labelPhoto.remove')} onClick={() => onChange(null)}
+                className="absolute end-1 top-1 grid size-6 place-items-center rounded-full border-0 bg-surface p-0 text-danger"><Trash size={12} aria-hidden /></button>
+            </span>
+          </li>
+        ) : (
+          <AddPhotoTile size="extra" testId="label-photo-input" label={t('sc.pf.labelPhoto.add')} invalid={Boolean(error)} onFiles={(files) => void pick(files[0])} />
+        )}
+        {image?.status === 'held' ? <li role="status" className="self-center text-xs text-muted" data-testid="label-photo-checking">{t('sc.pf.images.checkingPhoto')}</li> : null}
+        {image?.status === 'uploading' ? <li role="status" className="self-center text-xs text-muted">{t('sc.pf.labelPhoto.uploading')}</li> : null}
+      </ul>
       {error ? <span role="alert" className="text-xs text-danger">{error}</span> : null}
     </div>
   );

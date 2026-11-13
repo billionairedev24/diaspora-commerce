@@ -154,7 +154,7 @@ describe('Add a product starts with one search box, the barcode is an optional s
     await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
     expect(await screen.findByRole('heading', { level: 1, name: 'Sell this product' })).toBeInTheDocument();
     const form = within(screen.getByRole('form', { name: 'Sell this product' }));
-    for (const label of ['Price (USD)', 'Compare-at price (optional)', 'Condition', 'Quantity', 'Ships from', 'SKU']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
+    for (const label of ['Price (USD)', 'Compare-at price', 'Condition', 'Quantity', 'Ships from', 'SKU']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
     expect(form.getByText('Who ships it?')).toBeInTheDocument();
     expect(form.getByRole('radio', { name: 'I ship it' })).toBeChecked();
     for (const gone of ['Product title', 'Category', 'Description', 'Brand']) expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();

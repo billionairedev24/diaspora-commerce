@@ -39,8 +39,9 @@ export function Field({ label, error, help, required, tip, helpTone = 'muted', i
       <span className={styles.labelRow}>
         <label htmlFor={id} className={styles.label}>
           {label}
-          {required ? <RequiredMark text={labels.required} /> : null}
         </label>
+        {/* Beside the label, not inside it: the control's name stays the plain label; aria-required announces the state and the word is there for browse mode. */}
+        {required ? <RequiredMark text={labels.required} /> : null}
         {tip ? <InfoTip label={labels.info}>{tip}</InfoTip> : null}
       </span>
       {children({ id, 'aria-invalid': error ? true : undefined, 'aria-describedby': hasMsg ? msgId : undefined, 'aria-required': required ? true : undefined })}
@@ -55,7 +56,7 @@ export function Field({ label, error, help, required, tip, helpTone = 'muted', i
 export function RequiredMark({ text }: { text: string }) {
   return (
     <>
-      <span aria-hidden className={styles.star}> *</span>
+      <span aria-hidden className={styles.star}>&nbsp;*</span>
       <span className="at-visually-hidden"> {text}</span>
     </>
   );

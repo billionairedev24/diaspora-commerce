@@ -1,4 +1,4 @@
-.wrap { display: inline-flex; align-items: center; }
+.wrap { display: inline-flex; align-items: center; margin-inline-start: var(--at-space-1); }
 .button {
   display: inline-grid;
   place-items: center;

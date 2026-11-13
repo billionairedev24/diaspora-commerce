@@ -48,7 +48,7 @@ function suya(): FormState {
   return {
     ...withCategory(emptyForm(), { id: 'pt-spices', path: 'Groceries › Pantry › Spices & seasonings', productType: 'grocery' }),
     title: 'Suya Pepper Spice Blend from Kano',
-    attrs: { brand: 'Mama Kano', ingredients: 'Groundnut, chilli', allergens: 'Contains peanuts', shelf: '12', storage: 'Room temperature', origin: 'Nigeria' },
+    attrs: { brand: 'Mama Kano', ingredients: 'Groundnut, chilli', allergens: 'Contains peanuts', shelf: '12', storage: 'Room temperature' },
     units: { shelf: 'months' },
     images: [image],
     noGtin: true,
@@ -60,7 +60,7 @@ describe('one-step product form: sections follow the product type', () => {
   it('shows food details for food, permits for regulated items, shipping only when the seller ships, pre-order when eligible', () => {
     expect(sectionsFor(undefined)).toEqual(['basics', 'images']);
     // Page order: Basics, Photos, Price & stock, Details, Variants, Size guide (sized types), Shipping & fulfilment, Compliance.
-    expect(sectionsFor(grocery)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'fulfilment', 'compliance']);
+    expect(sectionsFor(grocery)).toEqual(['basics', 'images', 'offer', 'variants', 'fulfilment', 'compliance']);
     expect(sectionsFor(dress)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'sizeGuide', 'fulfilment']);
     expect(sectionsFor(perishable)).toContain('compliance');
     expect(sectionsFor(book)).not.toContain('compliance');

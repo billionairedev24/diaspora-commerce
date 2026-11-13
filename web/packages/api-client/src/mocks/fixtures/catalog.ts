@@ -123,7 +123,6 @@ function garment(): FixtureProduct[] {
         rating: 4.7,
         reviews: 218,
         unit: `${size}, ${colour}`,
-       
         bullets: ['Hand-dyed adire cotton, colour-fast after the first wash', 'Wrap front with a tie waist; midi length', 'Check the size guide: sizes are in centimetres or inches'],
         offers: [{ seller: 'Ile Adire Studio', city: 'Houston, TX', price: size === 'Free size' ? 92 : 85, ff: 'S', stock }],
         variantOf: first ? undefined : GARMENT_ID,

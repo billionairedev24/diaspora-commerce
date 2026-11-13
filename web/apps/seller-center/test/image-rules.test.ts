@@ -40,7 +40,7 @@ describe('image cards (S391): the verdict of each picture', () => {
     for (const [locale, file] of Object.entries(CATALOG_FILES)) {
       for (const code of codes) expect(typeof file[`sc.img.check.${code}`], `${locale}: ${code}`).toBe('string');
       for (const v of ['PASS', 'WARN', 'HOLD', 'REJECT']) expect(typeof file[`sc.img.verdict.${v}`], `${locale}: ${v}`).toBe('string');
-      for (const k of ['sc.pf.images.meter', 'sc.pf.images.tooSmall', 'sc.pf.err.imagesMainSmall']) expect(typeof file[k], `${locale}: ${k}`).toBe('string');
+      for (const k of ['sc.pf.images.tooSmall', 'sc.pf.err.imagesMainSmall']) expect(typeof file[k], `${locale}: ${k}`).toBe('string');
     }
     expect(translate('en', 'sc.img.check.MAIN_TOO_SMALL', { px: 1000, w: 640, h: 480 })).toBe(
       'This photo is too small. The main photo must be at least 1000 pixels on its longest side so shoppers can zoom. Yours is 640 by 480.');

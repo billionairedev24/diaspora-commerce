@@ -54,7 +54,7 @@ describe('floating buttons keep clear of the page', () => {
   it('puts Ask Lola above the form’s action bar, which publishes its height and sits flush at the end of the page', async () => {
     const { unmount } = render(
       <ActionBar problems={[]} tips={[]} sections={['basics']} titleOf={() => 'Basics'} percent={100} preview={null} saveState="" primaryLabel="Submit" onPrimary={() => undefined}
-        primaryDisabled={false} onSaveDraft={() => undefined} saveDraftDisabled busy={false} savingDraft={false} onGo={() => undefined} />
+        primaryDisabled={false} onSaveDraft={() => undefined} saveDraftDisabled busy={false} savingDraft={false} onGo={() => undefined} missing="Ready to submit" />
     );
     expect(screen.getByRole('region', { name: 'Listing actions' }).className).toContain('-mb-20');
     expect(root().getPropertyValue('--at-bottom-bar-h')).toBe('0px');

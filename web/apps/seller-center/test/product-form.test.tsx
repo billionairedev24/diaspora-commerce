@@ -114,7 +114,7 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     await screen.findByLabelText('Shelf life or expiry');
     // Dropdowns: the choice questions, the unit next to a number, ship-from and handling time. (Condition is not asked for food: the item is New.)
     expect(screen.queryByLabelText('Condition')).not.toBeInTheDocument();
-    for (const name of ['Storage (optional)', 'Unit of Shelf life or expiry', 'Ships from', 'Handling time (business days)']) {
+    for (const name of ['Storage', 'Unit of Shelf life or expiry', 'Ships from', 'Handling time (business days)']) {
       expect(screen.getByRole('combobox', { name }).tagName).toBe('SELECT');
     }
     expect(within(screen.getByLabelText('Handling time (business days)')).getAllByRole('option').length).toBeGreaterThan(5);
@@ -184,8 +184,9 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     await renderScreen(<ProductForm productId={listing.productId} />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Edit product' })).toBeInTheDocument();
     expect(screen.getByLabelText('Product title')).toHaveValue(title);
+    fireEvent.click(screen.getByRole('button', { name: /press to edit/ }));
     expect(screen.getByLabelText('Description of image 1')).toHaveValue('');
-    expect(within(screen.getByRole('list', { name: /Product images/ })).getByText('Main')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: /Product photos/ })).getByText('Main')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Description of image 1'), { target: { value: 'Jar of spice on a white table' } });
     fireEvent.change(screen.getByLabelText('Product title'), { target: { value: `${title}, Family Size` } });
     fireEvent.click(screen.getByTestId('pf-primary'));
@@ -218,8 +219,8 @@ describe('attributes come from the product type (owner feedback)', () => {
     expect(screen.getByLabelText('ISBN-13')).toBeInTheDocument();
     expect(screen.queryByLabelText(/Books need an ISBN-13/)).not.toBeInTheDocument();
     // Optional book fields are offered under More details.
-    expect(screen.getByLabelText('Publication year (optional)').closest('details')).not.toHaveAttribute('open');
-    expect(screen.getByLabelText('Edition (optional)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Publication year').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByLabelText('Edition')).toBeInTheDocument();
   });
 
   it('shows the Brand field for a type that defines a brand, and drops it when the category changes to a book', async () => {
@@ -256,9 +257,9 @@ describe('section navigator, listing quality and the sticky actions', () => {
     expect(stateOf(/Basics/)).toBe('complete');
     expect(within(sections()).getByRole('link', { name: /Basics/ })).toHaveTextContent('Complete');
     expect(stateOf(/Details/)).toBe('incomplete');
-    expect(within(sections()).getByRole('link', { name: /Details/ })).toHaveTextContent('5 to do');
+    expect(within(sections()).getByRole('link', { name: /Details/ })).toHaveTextContent('4 to do');
 
-    for (const [label, value] of [['Author', 'Ade Bello'], ['Publisher', 'Kachifo'], ['Pages', '240'], ['Country of origin', 'Nigeria']] as const) fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    for (const [label, value] of [['Author', 'Ade Bello'], ['Publisher', 'Kachifo'], ['Pages', '240']] as const) fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'English' } });
     expect(stateOf(/Details/)).toBe('complete');
     // The section card shows the same state.

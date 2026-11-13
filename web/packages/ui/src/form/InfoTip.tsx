@@ -25,6 +25,8 @@ export function InfoTip({ label, children, className }: InfoTipProps) {
   const [pos, setPos] = useState<CSSProperties>({});
   const wrap = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  /** Set while Escape hands focus back to the button, so that focus does not open the panel again. */
+  const returning = useRef(false);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -58,7 +60,9 @@ export function InfoTip({ label, children, className }: InfoTipProps) {
       e.preventDefault();
       e.stopPropagation();
       setOpen(false);
+      returning.current = true;
       button.current?.focus();
+      returning.current = false;
     }
   };
   const keyboardFocus = (el: HTMLElement) => {
@@ -70,13 +74,16 @@ export function InfoTip({ label, children, className }: InfoTipProps) {
   };
 
   return (
-    <span ref={wrap} className={className ? `${styles.wrap} ${className}` : styles.wrap} onKeyDown={onKeyDown}
-      onBlur={(e) => { if (!wrap.current?.contains(e.relatedTarget as Node | null)) setOpen(false); }}>
+    <span ref={wrap} className={className ? `${styles.wrap} ${className}` : styles.wrap}>
       <button ref={button} type="button" className={styles.button} aria-label={label} aria-expanded={open} aria-controls={id} aria-describedby={open ? id : undefined}
-        onClick={() => setOpen((o) => !o)} onFocus={(e) => { if (keyboardFocus(e.currentTarget)) setOpen(true); }}>
+        onClick={() => setOpen((o) => !o)} onKeyDown={onKeyDown} onBlur={() => setOpen(false)} onFocus={(e) => { if (!returning.current && keyboardFocus(e.currentTarget)) setOpen(true); }}>
         <Info size={16} weight="fill" aria-hidden />
       </button>
-      {open ? <span id={id} role="note" className={styles.panel} style={pos}>{children}</span> : null}
+      {open ? (
+        // Pressing inside the panel keeps focus on the button, so reading or selecting its text does not close it.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+        <div id={id} role="note" className={styles.panel} style={pos} onMouseDown={(e) => e.preventDefault()}>{children}</div>
+      ) : null}
     </span>
   );
 }

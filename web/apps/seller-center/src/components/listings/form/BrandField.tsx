@@ -64,12 +64,12 @@ export function BrandField({ id, def, categoryId, productType, keepId, value, er
     if (!brands.data.brands.some((b) => b.id === value.brand_id) && !created.some((c) => c.id === value.brand_id)) onChange(EMPTY);
   }, [brands.data, brands.isPlaceholderData, created, keepId, onChange, value.brand_id]);
 
-  const label = def.required ? def.label : t('sc.pf.optional', { label: def.label });
   const departmentName = brands.data?.departmentName;
   return (
     <Combobox
       id={id}
-      label={label}
+      label={def.label}
+      required={def.required}
       options={options}
       value={selected}
       popular={listed.map((b) => b.id)}

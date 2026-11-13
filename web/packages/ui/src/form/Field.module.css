@@ -1,6 +1,6 @@
 .field { display: flex; flex-direction: column; gap: var(--at-space-1); min-width: 0; }
 .label { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-text); }
-.labelRow { display: flex; align-items: center; gap: var(--at-space-1); min-width: 0; }
+.labelRow { display: flex; align-items: center; min-width: 0; }
 .star { color: var(--at-color-danger); font-weight: var(--at-weight-bold); }
 .message { margin: 0; font-size: var(--at-text-xs); min-height: 14px; color: var(--at-color-text-muted); }
 .error { color: var(--at-color-danger); }

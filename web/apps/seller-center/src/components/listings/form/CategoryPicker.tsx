@@ -99,6 +99,7 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
       <Combobox
         id={fieldId.category}
         label={t('sc.pf.field.category')}
+        required
         placeholder={t('sc.pf.category.searchPlaceholder')}
         listLabel={t('sc.pf.category.results')}
         options={options}

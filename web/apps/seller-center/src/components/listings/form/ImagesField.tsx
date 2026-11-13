@@ -1,15 +1,16 @@
 'use client';
 
-import { cx } from '@afrotransact/ui';
-import { UploadSimple } from '@phosphor-icons/react/ssr';
-import { type DragEvent, useState } from 'react';
+import { InfoTip, RequiredMark, useFormLabels } from '@afrotransact/ui';
+import { ArrowLeft, ArrowRight, Star, Trash } from '@phosphor-icons/react/ssr';
+import { useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 
-import { fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES, MIN_IMAGE_PX } from '../form-model';
-import { ImageCard } from './ImageCard';
-import { ExtraPhotoMeter, MainImageRules } from './ImageGuidance';
+import { EXTRA_PHOTOS_TARGET, fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES, MIN_IMAGE_PX } from '../form-model';
+import { extraPhotoCount, verdictOf } from './image-rules';
+import { MainPhotoRules } from './MainPhotoRules';
+import { AddPhotoTile, PhotoFindings, PhotoThumb } from './PhotoSlots';
 
 const dims = (file: File) =>
   new Promise<{ w: number; h: number }>((resolve) => {
@@ -40,13 +41,20 @@ const move = (list: FormImage[], from: number, to: number) => {
   return next;
 };
 
-/** Images: the main photo rules, then drop or browse (signed upload, judged by media's image rules), one card per image with its verdict in words,
-    drag or arrow buttons to reorder, star to make main, and the extra-photo meter (a recommendation). */
+const iconButton = 'grid size-9 place-items-center rounded-xs border-0 bg-surface-muted disabled:opacity-40 sm:size-8';
+
+/**
+ * Photos as one compact row of small slots: the main photo first, the extra photos after it, then an empty slot to add one (press it or
+ * drop files on it; no big drop zone). Each upload is signed and judged by media's image rules; the verdict is a dot on the thumbnail and,
+ * only when the photo is not fully accepted, one short reason under it. The main photo rules live in the info popover next to the label.
+ * Pressing a thumbnail opens its details: every finding in full, its description, and moving, making it the main photo or removing it.
+ */
 export function ImagesField({ images, update, error, context }: Props) {
   const t = useT();
+  const labels = useFormLabels();
   const api = sellerApi();
   const [note, setNote] = useState('');
-  const [over, setOver] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [target, setTarget] = useState<string | null>(null);
   const patch = (id: string, p: Partial<FormImage>) => update((list) => list.map((i) => (i.id === id ? { ...i, ...p } : i)));
@@ -91,78 +99,84 @@ export function ImagesField({ images, update, error, context }: Props) {
         // A photo we are checking has no public URL: the form keeps its asset id and submits that, and the listing waits for our answer.
         patch(id, { url: rejected || held ? null : asset.url || ticket.publicUrl || null, assetId: held ? ticket.assetId : null, width, height, bytes: asset.bytes ?? file.size,
           status: rejected ? 'rejected' : held ? 'held' : small ? 'low' : 'ready', slot, verdict, checks: asset.checks });
+        // A photo that is not fully accepted opens its details, so the whole finding is read out without a hunt for it.
+        if (rejected || held || small || verdict === 'WARN') setSelected(id);
       } catch {
         patch(id, { status: 'error' });
+        setSelected(id);
       }
     }
     setNote(message);
   };
 
-  const onDrop = (e: DragEvent<HTMLElement>) => {
-    e.preventDefault();
-    setOver(false);
-    if (dragging) return;
-    void add(e.dataTransfer.files);
-  };
-
   const empty = images.length === 0;
+  const chosen = images.find((i) => i.id === selected);
+  const at = chosen ? images.indexOf(chosen) : -1;
+  const extras = extraPhotoCount(images);
+  const describedBy = note || error ? 'pf-images-error' : undefined;
 
   return (
-    <div id={fieldId.images} tabIndex={-1} className="flex flex-col gap-4 outline-none">
-      <MainImageRules main={images[0]} />
-      <label
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={onDrop}
-        className={cx('flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed p-4 text-center text-sm focus-within:border-focus',
-          empty ? 'min-h-48 sm:min-h-60' : 'min-h-24',
-          over ? 'border-gold-500 bg-gold-50' : error ? 'border-danger bg-surface-sunken' : 'border-border-strong bg-surface-sunken')}
-      >
-        <UploadSimple size={empty ? 40 : 28} aria-hidden />
-        <span className={empty ? 'text-base' : undefined}><strong>{empty ? t('sc.pf.images.drop') : t('sc.pf.images.addMore')}</strong> {t('sc.pf.images.browse')}</span>
-        <span className="text-xs text-muted">{t('sc.pf.images.rules', { count: images.length, max: MAX_IMAGES })}</span>
-        <input type="file" data-testid="image-input" accept={IMAGE_TYPES.join(',')} multiple className="at-visually-hidden" aria-describedby={error ? 'pf-images-error' : undefined}
-          onChange={(e) => { void add(e.target.files); e.target.value = ''; }} />
-      </label>
+    <div id={fieldId.images} tabIndex={-1} role="group" aria-labelledby="pf-images-label" className="flex flex-col gap-2 outline-none" data-testid="photos">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span id="pf-images-label" className="text-sm font-semibold">{t('sc.pf.field.photos')}<RequiredMark text={labels.required} /></span>
+        <span className="text-xs text-muted">{t('sc.pf.images.mainFirst')}</span>
+        <InfoTip label={t('sc.pf.images.mainRules.info')}><MainPhotoRules main={images[0]} /></InfoTip>
+      </div>
+      <ul aria-label={t('sc.pf.images.list')} className="m-0 flex list-none flex-wrap items-start gap-2 p-0">
+        {images.map((im, i) => (
+          <PhotoThumb key={im.id} image={im} index={i} selected={selected === im.id} onSelect={() => setSelected(selected === im.id ? null : im.id)}
+            dragState={{ dragging: dragging === im.id, target: target === im.id && dragging !== im.id }}
+            itemProps={{
+              draggable: true,
+              'data-main': i === 0 ? 'true' : undefined,
+              onDragStart: () => setDragging(im.id),
+              onDragEnd: () => { setDragging(null); setTarget(null); },
+              onDragOver: (e) => { if (dragging) { e.preventDefault(); setTarget(im.id); } },
+              onDrop: (e) => {
+                if (!dragging) return;
+                e.preventDefault();
+                const from = images.findIndex((x) => x.id === dragging);
+                if (from >= 0 && from !== i) update((list) => move(list, from, i));
+                setDragging(null);
+                setTarget(null);
+              }
+            }} />
+        ))}
+        {images.length < MAX_IMAGES ? (
+          <AddPhotoTile size={empty ? 'main' : 'extra'} multiple testId="image-input" invalid={Boolean(error)} describedBy={describedBy}
+            label={empty ? t('sc.pf.photo.addMain') : t('sc.pf.photo.addMore')} onFiles={(files) => void add(files)} />
+        ) : null}
+      </ul>
+      {images.length ? <span className="text-xs text-muted">{t('sc.pf.images.count', { count: images.length, max: MAX_IMAGES, extras, target: EXTRA_PHOTOS_TARGET })}</span> : null}
       {note || error ? <span id="pf-images-error" role="alert" className="text-xs text-danger">{note || error}</span> : null}
-      {images.length ? (
-        <>
-          <p className="m-0 text-xs text-muted">{t('sc.pf.images.reorderHint')}</p>
-          <ul aria-label={t('sc.pf.images.list')} className="m-0 flex list-none flex-col p-0 border-t border-border">
-            {images.map((im, i) => (
-              <ImageCard
-                key={im.id}
-                image={im}
-                index={i}
-                count={images.length}
-                onAlt={(alt) => patch(im.id, { alt })}
-                onMakeMain={() => update((list) => move(list, i, 0))}
-                onMove={(to) => update((list) => move(list, i, to))}
-                onRemove={() => update((list) => list.filter((x) => x.id !== im.id))}
-                dragState={{ dragging: dragging === im.id, target: target === im.id && dragging !== im.id }}
-                itemProps={{
-                  draggable: true,
-                  'data-main': i === 0 ? 'true' : undefined,
-                  onDragStart: () => setDragging(im.id),
-                  onDragEnd: () => { setDragging(null); setTarget(null); },
-                  onDragOver: (e) => { e.preventDefault(); if (dragging) setTarget(im.id); },
-                  onDrop: (e) => {
-                    e.preventDefault();
-                    const from = images.findIndex((x) => x.id === dragging);
-                    if (from >= 0 && from !== i) update((list) => move(list, from, i));
-                    setDragging(null);
-                    setTarget(null);
-                  }
-                }}
-              />
-            ))}
-          </ul>
-        </>
+      {chosen ? (
+        <div className="flex min-w-0 flex-col gap-2 border-t border-border pt-2" data-testid="photo-details">
+          <PhotoFindings image={chosen} index={at} />
+          {verdictOf(chosen) === 'WARN' ? <p className="m-0 text-xs text-muted">{t('sc.pf.images.warnNotice')}</p> : null}
+          {verdictOf(chosen) === 'HOLD' && at === 0 ? <p className="m-0 text-xs text-muted">{t('sc.pf.images.holdNotice')}</p> : null}
+          {at === 0 && chosen.slot === 'OTHER' && verdictOf(chosen) !== 'REJECT' ? <p className="m-0 text-xs text-muted">{t('sc.pf.images.promoteNote')}</p> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="text" maxLength={200} value={chosen.alt} placeholder={t('sc.pf.images.altPlaceholder')} aria-label={t('sc.pf.images.altLabel', { n: at + 1 })}
+              onChange={(e) => patch(chosen.id, { alt: e.target.value })} className="h-9 min-w-0 max-w-md flex-1 basis-56 rounded-sm border border-border-strong bg-surface px-3 text-sm" />
+            <span className="flex items-center gap-1">
+              {at > 0 ? (
+                <button type="button" className={iconButton} aria-label={t('sc.pf.images.makeMain', { n: at + 1 })} title={t('sc.pf.images.setMain')} onClick={() => update((list) => move(list, at, 0))}>
+                  <Star size={14} aria-hidden />
+                </button>
+              ) : null}
+              <button type="button" disabled={at === 0} className={iconButton} aria-label={t('sc.pf.images.left', { n: at + 1 })} onClick={() => update((list) => move(list, at, at - 1))}>
+                <ArrowLeft size={14} className="rtl:-scale-x-100" aria-hidden />
+              </button>
+              <button type="button" disabled={at === images.length - 1} className={iconButton} aria-label={t('sc.pf.images.right', { n: at + 1 })} onClick={() => update((list) => move(list, at, at + 1))}>
+                <ArrowRight size={14} className="rtl:-scale-x-100" aria-hidden />
+              </button>
+              <button type="button" className={`${iconButton} text-danger`} aria-label={t('sc.pf.images.remove', { n: at + 1 })} onClick={() => { update((list) => list.filter((x) => x.id !== chosen.id)); setSelected(null); }}>
+                <Trash size={14} aria-hidden />
+              </button>
+            </span>
+          </div>
+        </div>
       ) : null}
-      <ExtraPhotoMeter images={images} />
     </div>
   );
 }

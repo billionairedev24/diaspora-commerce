@@ -17,17 +17,18 @@ interface Props {
     file is uploaded on the item's page once it is saved. Optional ones say so. */
 export function FactField({ def, id, value, error, onChange }: Props) {
   const t = useT();
-  const label = def.required ? def.label : t('sc.pf.optional', { label: def.label });
+  const label = def.label;
+  const required = def.required;
   const help = def.help ?? undefined;
   switch (def.kind) {
     case 'BOOLEAN':
       return (
-        <Select id={id} label={label} help={help} placeholder={t('sc.pf.choose')} value={value} error={error} onChange={(e) => onChange(e.target.value)}
+        <Select id={id} label={label} required={required} help={help} placeholder={t('sc.pf.choose')} value={value} error={error} onChange={(e) => onChange(e.target.value)}
           options={[{ value: 'yes', label: t('sc.pf.facts.yes') }, { value: 'no', label: t('sc.pf.facts.no') }]} />
       );
     case 'ENUM':
       return (
-        <Select id={id} label={label} help={help} placeholder={t('sc.pf.choose')} value={value} error={error} onChange={(e) => onChange(e.target.value)}
+        <Select id={id} label={label} required={required} help={help} placeholder={t('sc.pf.choose')} value={value} error={error} onChange={(e) => onChange(e.target.value)}
           options={def.options.map((o) => ({ value: o, label: def.optionLabels[o] ?? o }))} />
       );
     case 'DECIMAL':
@@ -35,7 +36,7 @@ export function FactField({ def, id, value, error, onChange }: Props) {
     case 'PERCENT': {
       const unit = def.kind === 'PERCENT' ? '%' : def.unit;
       return (
-        <Field id={id} label={label} help={help} error={error}>
+        <Field id={id} label={label} required={required} help={help} error={error}>
           {(a11y) => (
             <span className="flex items-stretch gap-2">
               <input {...a11y} inputMode={def.kind === 'INTEGER' ? 'numeric' : 'decimal'} className={fieldStyles.control} value={value} onChange={(e) => onChange(e.target.value)} />
@@ -48,6 +49,6 @@ export function FactField({ def, id, value, error, onChange }: Props) {
     case 'FILE':
       return <p id={id} tabIndex={-1} className="m-0 text-sm text-muted">{t('sc.pf.facts.file', { label: def.label })}</p>;
     default:
-      return <TextField id={id} label={label} help={help} value={value} error={error} onChange={(e) => onChange(e.target.value)} />;
+      return <TextField id={id} label={label} required={required} help={help} value={value} error={error} onChange={(e) => onChange(e.target.value)} />;
   }
 }

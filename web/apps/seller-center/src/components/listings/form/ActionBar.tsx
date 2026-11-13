@@ -27,11 +27,13 @@ interface Props {
   busy: boolean;
   savingDraft: boolean;
   onGo: (id: string) => void;
+  /** One plain line of what is still missing (or that nothing is), shown at every width. */
+  missing: string;
 }
 
 /** Sticky bottom bar: the draft-saved time, Save draft and the primary action. Below the wide layout it also opens the
     quality list and the preview upwards (the right-hand panel is not on screen there). */
-export function ActionBar({ problems, tips, sections, titleOf, percent, preview, saveState, primaryLabel, onPrimary, primaryDisabled, onSaveDraft, saveDraftDisabled, busy, savingDraft, onGo }: Props) {
+export function ActionBar({ problems, tips, sections, titleOf, percent, preview, saveState, primaryLabel, onPrimary, primaryDisabled, onSaveDraft, saveDraftDisabled, busy, savingDraft, onGo, missing }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   /** The "Ask Lola" button is fixed in the same corner: publish this bar's height so it sits above the bar and never covers Submit. */
@@ -56,21 +58,20 @@ export function ActionBar({ problems, tips, sections, titleOf, percent, preview,
     <div ref={bar} role="region" aria-label={t('sc.pf.bar.label')} data-tour="product-form-actions"
       className="sticky bottom-0 z-30 -mx-4 -mb-20 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-lg sm:-mx-8 sm:px-8">
       {open ? (
-        <div id="pf-quality-sheet" className="mb-2 flex max-h-[55vh] flex-col gap-3 overflow-y-auto xl:hidden">
+        <div id="pf-quality-sheet" className="mb-2 flex max-h-[55vh] flex-col gap-3 overflow-y-auto">
           <QualityBar percent={percent} />
           <QualityLists problems={problems} tips={tips} sections={sections} titleOf={titleOf} onGo={(id) => { setOpen(false); onGo(id); }} />
-          <div className="max-w-48">{preview}</div>
+          <div className="max-w-48 xl:hidden">{preview}</div>
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <button type="button" aria-expanded={open} aria-controls="pf-quality-sheet" onClick={() => setOpen(!open)}
-          className="flex min-h-11 min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 text-left text-sm font-semibold text-text xl:hidden">
+          className="flex min-h-11 min-w-0 flex-1 basis-60 items-center gap-1.5 border-0 bg-transparent p-0 text-start text-sm font-semibold text-text">
           {ready ? <CheckCircle size={20} weight="fill" aria-hidden className="flex-none text-success" /> : <WarningCircle size={20} weight="fill" aria-hidden className="flex-none text-warning" />}
-          <span className="truncate" data-testid="readiness-mobile">{heading}</span>
-          <span className="text-xs font-normal text-muted">{t('sc.pf.q.percent', { percent })}</span>
+          <span className="truncate" data-testid="readiness-mobile" title={heading}>{missing}</span>
           <CaretUp size={14} aria-hidden className={cx('flex-none transition-transform', !open && 'rotate-180')} />
         </button>
-        <p className="m-0 min-w-0 flex-1 text-xs text-muted" aria-live="polite" data-testid="save-state">{saveState}</p>
+        <p className="m-0 min-w-0 text-xs text-muted" aria-live="polite" data-testid="save-state">{saveState}</p>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="neutral" loading={savingDraft} disabled={saveDraftDisabled} onClick={onSaveDraft} aria-label={t('sc.pf.actions.saveDraft')}>
             <span className="hidden sm:inline">{t('sc.pf.actions.saveDraft')}</span><span className="sm:hidden">{t('sc.pf.actions.saveDraftShort')}</span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { type ApiError, type AttributeDef, checkFacts, evaluateFact, isApiError, type ListingRow, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries, taxQuestionsOf } from '@afrotransact/api-client';
-import { Alert, AlertAction, Button, Checkbox, ChipGroup, Select, TextField, useToast } from '@afrotransact/ui';
+import { Alert, AlertAction, Button, Checkbox, ChipGroup, FormLabelsProvider, RequiredMark, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -31,9 +31,8 @@ import { ImagesField } from './form/ImagesField';
 import { ImprovePrompt } from './form/ImprovePrompt';
 import { LabelPhotoField } from './form/LabelPhotoField';
 import { ListingPreview } from './form/ListingPreview';
-import { PackageInputs, PackageUnitsSelect } from './form/PackageFields';
+import { PackageInputs } from './form/PackageFields';
 import { goToField, labelOf, ReadinessPanel } from './form/ReadinessPanel';
-import { RequiredSummary } from './form/RequiredSummary';
 import { RuleAttributeField } from './form/RuleFields';
 import { SectionNav } from './form/SectionNav';
 import { SellingStatusChip } from './form/SellingStatusChip';
@@ -77,6 +76,7 @@ import {
   serverFieldId,
   soldSizes,
   splitMeasures,
+  statusOf,
   toDraftPayload,
   toProductDraft,
   validateForm,
@@ -170,7 +170,13 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
     setS(fn);
   }, []);
   const patch = (p: Partial<FormState>) => update((prev) => ({ ...prev, ...p }));
+  /** A field is touched when focus leaves it; a group of controls (the package row) is touched only when focus leaves the whole group, never between its boxes. */
   const onBlur = (e: FocusEvent<HTMLFormElement>) => {
+    const group = e.target.closest<HTMLElement>('[data-field-group]');
+    if (group) {
+      if (group.id && !group.contains(e.relatedTarget as Node | null) && !touched.has(group.id)) setTouched((prev) => new Set(prev).add(group.id));
+      return;
+    }
     const id = e.target.id;
     if (id && id.startsWith('pf-') && !touched.has(id)) setTouched((prev) => new Set(prev).add(id));
   };
@@ -328,6 +334,8 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
   );
   const items = qualityItems(s, type, problems, rules);
   const percent = qualityScore(items);
+  const names = ordered.map(([, p]) => labelOf(t, p.label));
+  const missingLine = names.length ? t('sc.pf.bar.missing', { items: names.length > 3 ? `${names.slice(0, 3).join(', ')} ${t('sc.pf.bar.more', { count: names.length - 3 })}` : names.join(', ') }) : t('sc.pf.bar.ready');
   const tips = items.filter((i) => !i.required && !i.done);
   const status = sectionStatus(sections, problems);
   const sectionTitle = (k: SectionKey): string => {
@@ -381,13 +389,15 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
   const showBarcode = idStatus !== 'hidden';
   const showQty = !isHidden(rules, 'quantity');
   const dangerousAsked = rules ? isShown(rules, 'dangerous_goods') : false;
+  const dangerousRequired = statusOf(rules, 'dangerous_goods') === 'required';
+  const descriptionRequired = statusOf(rules, 'description') === 'required' || statusOf(rules, 'description') === 'required_or_exemption';
   const labelStatus = rules?.fields.find((f) => f.id === 'label_photo')?.status;
   const aiState = ctx.data?.aiListingWriter.available ? 'available' : ctx.data?.aiListingWriter.reason === 'PLAN' ? 'plan' : 'none';
   const section = (key: SectionKey) => ({ id: key, title: sectionTitle(key), status: status[key] });
   const perVariant = Boolean(s.hasVariants && type?.themes.length);
 
   return (
-    <>
+    <FormLabelsProvider labels={{ required: t('sc.pf.required.word'), info: t('sc.pf.info'), remove: (name) => t('sc.pf.removeChip', { name }) }}>
       <PageHeader
         tour="page-product-form"
         title={editing ? t('sc.pf.titleEdit') : t('sc.pf.titleNew')}
@@ -407,13 +417,13 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
       <SectionNav items={navItems} />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex min-w-0 flex-col gap-6">
-        <RequiredSummary items={items} rules={rules} onGo={jump} labelOf={(i) => labelOf(t, i.label)} />
+        <p className="m-0 text-xs text-muted" data-testid="required-legend"><span aria-hidden className="font-bold text-danger">*</span> <span>{t('sc.pf.required.legend')}</span></p>
         <form className="flex min-w-0 flex-col gap-6" noValidate onBlur={onBlur} onSubmit={(e) => { e.preventDefault(); primary(); }} aria-label={t('sc.pf.formLabel')}>
           <FormSection {...section('basics')} hint={editing ? undefined : t('sc.pf.s.basicsHint')}>
             <CategoryPicker tree={tree.data} s={s} locked={live} error={err(fieldId.category)}
               onChoose={(leaf: CategoryLeaf | null, request) => update((prev) => withCategory(prev, leaf, request ?? null))} />
             {rules ? <SellingStatusChip status={selling.status} reason={selling.reason} /> : null}
-            <TextField id={fieldId.title} label={t('sc.pf.field.title')} help={t(brandDef ? 'sc.pf.titleHelp' : 'sc.pf.titleHelpPlain', { count: s.title.trim().length })} value={s.title} error={err(fieldId.title)} maxLength={200}
+            <TextField id={fieldId.title} label={t('sc.pf.field.title')} required help={t(brandDef ? 'sc.pf.titleHelp' : 'sc.pf.titleHelpPlain', { count: s.title.trim().length })} value={s.title} error={err(fieldId.title)} maxLength={200}
               onChange={(e) => patch({ title: e.target.value })} />
             {brandDef ? (
               <div className={GRID}>
@@ -422,7 +432,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
                   onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: v.brand, brand_id: v.brand_id, brand_reason: v.brand_reason } }))} />
               </div>
             ) : null}
-            <DescriptionEditor value={s.description} onChange={(v) => patch({ description: v })} error={err(fieldId.description)} ai={aiState} canWrite={s.title.trim().length >= 3}
+            <DescriptionEditor required={descriptionRequired} value={s.description} onChange={(v) => patch({ description: v })} error={err(fieldId.description)} ai={aiState} canWrite={s.title.trim().length >= 3}
               write={() => api.writeListing({ productType: s.productType ?? 'custom', title: s.title.trim(), attributes: Object.fromEntries(Object.entries(s.attrs).filter(([, v]) => v.trim())) })}
               onFailure={(e) => toast.show(problemMessage(e), 'error')} />
             <Disclosure title={t('sc.pf.moreBasics')} force={Boolean(s.keywords.trim() || err(fieldId.keywords))}>
@@ -452,14 +462,14 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
                 ) : null}
                 {perVariant ? null : (
                   <>
-                    <TextField id={fieldId.price} label={t('sc.pf.field.priceUsd')} inputMode="decimal" value={s.single.price} error={err(fieldId.price)} onChange={(e) => patch({ single: { ...s.single, price: e.target.value } })} />
+                    <TextField id={fieldId.price} label={t('sc.pf.field.priceUsd')} required inputMode="decimal" value={s.single.price} error={err(fieldId.price)} onChange={(e) => patch({ single: { ...s.single, price: e.target.value } })} />
                     <TextField id={fieldId.compareAt} label={t('sc.pf.field.compareAt')} help={t('sc.pf.compareAtHelp')} inputMode="decimal" value={s.single.compareAt} error={err(fieldId.compareAt)} onChange={(e) => patch({ single: { ...s.single, compareAt: e.target.value } })} />
                     {showQty ? (
-                      <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} help={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.qtyFba') : undefined} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
+                      <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} required inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} help={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.qtyFba') : undefined} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
                     ) : null}
                     <TextField id={fieldId.sku} label={t('sc.pf.field.sku')} placeholder={t('sc.pf.sku.placeholder')} help={detail.data?.variants[0]?.sellerSkuGenerated ? t('sc.pf.sku.generated') : undefined} value={s.single.sku} error={err(fieldId.sku)} readOnly={live} onChange={(e) => patch({ single: { ...s.single, sku: e.target.value } })} />
                     {s.noGtin && idStatus !== 'required' || !showBarcode ? null : (
-                      <TextField id={fieldId.gtin} label={idStatus === 'optional' ? t('sc.pf.optional', { label: idLabel }) : idLabel} inputMode="numeric" value={s.single.gtin} error={err(fieldId.gtin)} help={t('sc.pf.gtinHelp')} onChange={(e) => patch({ single: { ...s.single, gtin: e.target.value } })} />
+                      <TextField id={fieldId.gtin} label={idLabel} required={idStatus !== 'optional'} inputMode="numeric" value={s.single.gtin} error={err(fieldId.gtin)} help={t('sc.pf.gtinHelp')} onChange={(e) => patch({ single: { ...s.single, gtin: e.target.value } })} />
                     )}
                   </>
                 )}
@@ -563,7 +573,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
                       onChange={(e) => patch({ shipFromId: e.target.value })} />
                   ) : null}
                   {isShown(rules, 'handling_days') ? (
-                    <Select id={fieldId.handling} label={t('sc.pf.field.handling')} help={t('sc.pf.handlingHelp')} value={s.handlingDays} error={err(fieldId.handling)}
+                    <Select id={fieldId.handling} label={t('sc.pf.field.handling')} required help={t('sc.pf.handlingHelp')} value={s.handlingDays} error={err(fieldId.handling)}
                       options={[...new Set([...HANDLING_DAYS, Number(s.handlingDays) || 2])].sort((x, y) => x - y).map((n) => ({ value: String(n), label: t('sc.pf.handlingDays', { count: n }) }))}
                       onChange={(e) => patch({ handlingDays: e.target.value })} />
                   ) : null}
@@ -574,7 +584,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
               ) : null}
               {dangerousAsked ? (
                 <div id={fieldId.dangerous} tabIndex={-1} className="flex flex-col gap-1.5 outline-none" data-testid="dangerous-goods">
-                  <span className="text-sm font-semibold">{t('sc.pf.field.dangerous')}</span>
+                  <span className="text-sm font-semibold">{t('sc.pf.field.dangerous')}{dangerousRequired ? <RequiredMark text={t('sc.pf.required.word')} /> : null}</span>
                   <ChipGroup label={t('sc.pf.field.dangerous')} value={s.dangerousGoods} onChange={(v) => patch({ dangerousGoods: v === 'yes' ? 'yes' : v === 'no' ? 'no' : '' })}
                     options={[{ value: 'no', label: t('sc.pf.dangerous.no') }, { value: 'yes', label: t('sc.pf.dangerous.yes') }]} />
                   <span className="text-xs text-muted">{t('sc.pf.dangerous.hint')}</span>
@@ -583,13 +593,14 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
               ) : null}
               {asksPackage ? (
                 <div className="flex flex-col gap-2" data-testid="package">
-                  <span className="text-sm font-semibold">{t('sc.pf.field.package')}</span>
-                  <span className="text-xs text-muted">{t('sc.pf.pkg.hint')}{perVariant ? ` ${t('sc.pf.pkg.fromFirst')}` : ''}</span>
-                  <PackageUnitsSelect units={s.pkgUnits} onChange={(pkgUnits) => patch({ pkgUnits })} />
-                  {perVariant ? null : (
-                    <PackageInputs rowKey="" value={s.single.pkg ?? emptyPackage()} error={err(fieldId.rowPkg(''))} onChange={(pkg) => patch({ single: { ...s.single, pkg } })} />
+                  {perVariant ? (
+                    <>
+                      <span className="text-sm font-semibold">{t('sc.pf.field.package')}</span>
+                      <span className="text-xs text-muted">{t('sc.pf.pkg.perVariantNote')} {t('sc.pf.pkg.fromFirst')}</span>
+                    </>
+                  ) : (
+                    <PackageInputs rowKey="" value={s.single.pkg ?? emptyPackage()} units={s.pkgUnits} onUnits={(pkgUnits) => patch({ pkgUnits })} error={err(fieldId.rowPkg(''))} onChange={(pkg) => patch({ single: { ...s.single, pkg } })} />
                   )}
-                  {perVariant ? <span className="text-xs text-muted">{t('sc.pf.pkg.perVariantNote')}</span> : null}
                 </div>
               ) : null}
             </FormSection>
@@ -663,7 +674,8 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
         busy={submit.isPending}
         savingDraft={explicitSave.isPending}
         onGo={jump}
+        missing={missingLine}
       />
-    </>
+    </FormLabelsProvider>
   );
 }

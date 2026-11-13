@@ -19,6 +19,7 @@ interface Props {
   value: string;
   onChange: (value: string) => void;
   error?: string;
+  required?: boolean;
   /** The AI listing writer: available on the seller's plan, not on the plan (offer the upgrade), or absent. */
   ai: 'available' | 'plan' | 'none';
   /** The writer needs a title to work from. */
@@ -28,7 +29,7 @@ interface Props {
 }
 
 /** The description: a large editor with the AI writer inline above it; a suggestion is reviewed under the editor before it replaces anything. */
-export function DescriptionEditor({ value, onChange, error, ai, canWrite, write, onFailure }: Props) {
+export function DescriptionEditor({ value, onChange, error, required, ai, canWrite, write, onFailure }: Props) {
   const t = useT();
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const writer = useMutation({ mutationFn: write, onSuccess: setSuggestion, onError: onFailure });
@@ -44,7 +45,7 @@ export function DescriptionEditor({ value, onChange, error, ai, canWrite, write,
       ) : ai === 'plan' ? (
         <p className="m-0 text-xs text-muted"><Sparkle size={14} aria-hidden /> {t('sc.pf.ai.plan')} <Link href="/billing">{t('sc.pf.ai.upgrade')}</Link></p>
       ) : null}
-      <Field id={fieldId.description} label={t('sc.pf.field.description')} error={error} help={t('sc.pf.descriptionHelp', { count: value.length, max: MAX_DESCRIPTION })}>
+      <Field id={fieldId.description} label={t('sc.pf.field.description')} required={required} error={error} help={t('sc.pf.descriptionHelp', { count: value.length, max: MAX_DESCRIPTION })}>
         {(a11y) => <textarea {...a11y} rows={10} className={`${fieldStyles.control} min-h-56 py-2 sm:min-h-64`} value={value} onChange={(e) => onChange(e.target.value)} />}
       </Field>
       {suggestion ? (

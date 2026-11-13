@@ -207,7 +207,7 @@ export function VariantsSection({ s, type, set, problems, shown, locked, physica
                 {physical ? (
                   <div className="px-3 pb-2" data-testid="variant-package">
                     <span className="text-2xs font-semibold text-muted">{t('sc.pf.pkg.forVariant', { name: k })}</span>
-                    <PackageInputs rowKey={k} name={k} value={r.pkg} inherited={k === comboKey(list[0] ?? []) ? undefined : inherited} error={err(fieldId.rowPkg(k))}
+                    <PackageInputs rowKey={k} name={k} value={r.pkg} units={s.pkgUnits} onUnits={(pkgUnits) => set((prev) => ({ ...prev, pkgUnits }))} inherited={k === comboKey(list[0] ?? []) ? undefined : inherited} error={err(fieldId.rowPkg(k))}
                       onChange={(pkg) => setRow(k, { pkg })} />
                   </div>
                 ) : null}

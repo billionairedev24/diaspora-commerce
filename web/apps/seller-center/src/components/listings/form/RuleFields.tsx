@@ -1,7 +1,7 @@
 'use client';
 
 import { type AttributeDef, type ListingRuleField } from '@afrotransact/api-client';
-import { Checkbox, TextField } from '@afrotransact/ui';
+import { Checkbox, MultiCombobox, TextField } from '@afrotransact/ui';
 
 import { useT } from '@/i18n/t';
 
@@ -12,7 +12,7 @@ import { AttributeField } from './AttributeField';
 export function ruleDef(f: ListingRuleField): AttributeDef {
   const kind = f.control === 'long_text' ? 'MULTILINE' : f.control === 'choice' ? 'ENUM' : f.control === 'measure' ? 'NUMBER' : 'TEXT';
   return {
-    key: f.attributeKey ?? f.id, label: f.label, options: f.control === 'choice' ? f.options : [], required: f.status === 'required', multiline: f.control === 'long_text', kind,
+    key: f.attributeKey ?? f.id, label: f.label, options: f.control === 'choice' ? f.options : [], required: f.status === 'required' || f.status === 'required_or_exemption', multiline: f.control === 'long_text', kind,
     units: f.control === 'measure' ? f.units : [], section: 'DETAILS', help: f.note || null, taxFact: false, evidence: false, optionLabels: {}
   };
 }
@@ -29,28 +29,21 @@ interface Props {
   onReason: (reason: string | undefined) => void;
 }
 
-/** One question the listing rules own. Allergens are a tick list; a "required or exemption" field offers "I can't provide this" with a reason. */
+/** One question the listing rules own. Allergens are a dropdown multi-select (chips, "None" on its own, same stored text as before); a "required or exemption" field offers "I can't provide this" with a reason. */
 export function RuleAttributeField({ field, value, unit, error, reason, onChange, onUnit, onReason }: Props) {
   const t = useT();
   const id = fieldId.attr(field.attributeKey ?? field.id);
   const exempt = field.status === 'required_or_exemption';
   const claimed = exempt && reason !== undefined;
-  const ticked = value === 'None' ? [] : value.split(',').map((x) => x.trim()).filter(Boolean);
+  const required = field.status === 'required' || exempt;
+  const chosen = value === 'None' ? ['None'] : value.split(',').map((x) => x.trim()).filter(Boolean);
   return (
     <div className="flex flex-col gap-1.5" data-rule-field={field.id} data-status={field.status}>
       {field.control === 'multi_choice' ? (
-        <fieldset id={id} tabIndex={-1} className="m-0 flex flex-col gap-1.5 border-0 p-0 outline-none">
-          <legend className="p-0 text-sm font-semibold">{field.status === 'optional' ? t('sc.pf.optional', { label: field.label }) : field.label}</legend>
-          {field.note ? <span className="text-xs text-muted">{field.note}</span> : null}
-          <div className="grid grid-cols-1 gap-x-4 gap-y-1 @md:grid-cols-2 @3xl:grid-cols-3">
-            {field.options.map((o) => (
-              <Checkbox key={o} label={o} checked={ticked.includes(o)}
-                onChange={(e) => onChange((e.target.checked ? [...ticked, o] : ticked.filter((x) => x !== o)).join(', '))} />
-            ))}
-            <Checkbox label={t('sc.pf.allergens.none')} checked={value === 'None'} onChange={(e) => onChange(e.target.checked ? 'None' : '')} />
-          </div>
-          {error ? <span role="alert" className="text-xs text-danger">{error}</span> : null}
-        </fieldset>
+        <MultiCombobox id={id} label={field.label} required={required} tip={field.note || undefined} placeholder={t('sc.pf.allergens.placeholder')} error={error}
+          options={field.options.map((o) => ({ value: o, label: o }))} exclusive={{ value: 'None', label: t('sc.pf.allergens.none') }} values={chosen}
+          emptyLabel={t('sc.pf.brand.none')} resultsLabel={(count) => t('sc.pf.category.count', { count })}
+          onChange={(values) => onChange(values.join(', '))} />
       ) : (
         <AttributeField def={ruleDef(field)} value={value} unit={unit} error={error} onChange={onChange} onUnit={onUnit} />
       )}

@@ -22,19 +22,20 @@ const LONG_LIST = 8;
 /** One product-type attribute: a dropdown (searchable when long), a number with its unit select, a line or a paragraph. Optional ones say so. */
 export function AttributeField({ def, value, unit, error, onChange, onUnit }: Props) {
   const t = useT();
-  const label = def.required ? def.label : t('sc.pf.optional', { label: def.label });
+  const label = def.label;
+  const required = def.required;
   const help = def.help ?? undefined;
   const id = fieldId.attr(def.key);
   if (def.kind === 'ENUM' && def.options.length > LONG_LIST) {
-    return <Combobox id={id} label={label} help={help} placeholder={t('sc.pf.choose')} options={def.options.map((o) => ({ value: o, label: o }))} value={value} error={error}
+    return <Combobox id={id} label={label} required={required} help={help} placeholder={t('sc.pf.choose')} options={def.options.map((o) => ({ value: o, label: o }))} value={value} error={error}
       resultsLabel={(count) => t('sc.pf.category.count', { count })} emptyLabel={t('sc.pf.brand.none')} onChange={onChange} />;
   }
   if (def.kind === 'ENUM' && def.options.length) {
-    return <Select id={id} label={label} help={help} placeholder={t('sc.pf.choose')} options={def.options.map((o) => ({ value: o, label: o }))} value={value} error={error} onChange={(e) => onChange(e.target.value)} />;
+    return <Select id={id} label={label} required={required} help={help} placeholder={t('sc.pf.choose')} options={def.options.map((o) => ({ value: o, label: o }))} value={value} error={error} onChange={(e) => onChange(e.target.value)} />;
   }
   if (def.kind === 'NUMBER') {
     return (
-      <Field id={id} label={label} help={help} error={error}>
+      <Field id={id} label={label} required={required} help={help} error={error}>
         {(a11y) => (
           <span className="flex items-stretch gap-2">
             <input {...a11y} inputMode="decimal" className={fieldStyles.control} value={value} onChange={(e) => onChange(e.target.value)} />
@@ -50,10 +51,10 @@ export function AttributeField({ def, value, unit, error, onChange, onUnit }: Pr
   }
   if (def.kind === 'MULTILINE' || def.multiline) {
     return (
-      <Field id={id} label={label} help={help} error={error} className="col-span-full">
+      <Field id={id} label={label} required={required} help={help} error={error} className="col-span-full">
         {(a11y) => <textarea {...a11y} rows={3} className={`${fieldStyles.control} min-h-20 py-2`} value={value} onChange={(e) => onChange(e.target.value)} />}
       </Field>
     );
   }
-  return <TextField id={id} label={label} help={help} value={value} error={error} onChange={(e) => onChange(e.target.value)} />;
+  return <TextField id={id} label={label} required={required} help={help} value={value} error={error} onChange={(e) => onChange(e.target.value)} />;
 }

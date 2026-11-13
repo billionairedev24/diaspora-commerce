@@ -50,57 +50,86 @@ function Harness({ initial = [] }: { initial?: FormImage[] }) {
 
 const photo = (name: string) => new File(['x'], name, { type: 'image/jpeg' });
 const upload = (...names: string[]) => fireEvent.change(screen.getByTestId('image-input'), { target: { files: names.map(photo) } });
-const cards = () => within(screen.getByRole('list', { name: /Product images/ })).getAllByTestId('image-verdict');
+const thumbs = () => within(screen.getByRole('list', { name: /Product photos/ })).getAllByRole('button', { name: /press to edit/ });
+const openRules = () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Main photo rules' }));
+  return within(screen.getByTestId('main-image-rules'));
+};
+const stateOfRule = (rules: ReturnType<typeof openRules>, text: RegExp) => rules.getByText(text).closest('li')?.getAttribute('data-state');
 
-describe('image cards (S391)', () => {
-  it('shows the main photo rules and the extra-photo meter before anything is uploaded', async () => {
+describe('photo slots and the main photo rules (S391)', () => {
+  it('is a compact row with an empty main slot, no big drop zone and no always-visible rules', async () => {
     await renderScreen(<Harness />);
-    const rules = within(await screen.findByTestId('main-image-rules'));
+    const group = await screen.findByRole('group', { name: /Photos/ });
+    expect(within(group).getByText('First photo is the main one')).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Add main photo' })).toBeInTheDocument();
+    expect(screen.queryByText(/Drop images here/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Plain white background/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('image-input')).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp');
+  });
+
+  it('keeps the main photo rules in an info popover that opens by click and by keyboard focus and closes with Escape, each rule with its live state', async () => {
+    await renderScreen(<Harness />);
+    const info = await screen.findByRole('button', { name: 'Main photo rules' });
+    expect(info).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(info);
+    expect(info).toHaveAttribute('aria-expanded', 'true');
+    const rules = within(screen.getByTestId('main-image-rules'));
     expect(rules.getByText('Main photo rules')).toBeInTheDocument();
     expect(rules.getByText(/At least 1000 pixels on the longest side/)).toBeInTheDocument();
     expect(rules.getByText(/Plain white background/)).toBeInTheDocument();
     expect(rules.getByText(/The product fills at least 85% of the photo/)).toBeInTheDocument();
     expect(rules.getByText(/No text, logos, watermarks or borders/)).toBeInTheDocument();
     expect(rules.getAllByText('Not checked yet')).toHaveLength(4);
-    const meter = screen.getByRole('progressbar', { name: 'Extra photos' });
-    expect(meter).toHaveAttribute('aria-valuenow', '0');
-    expect(meter).toHaveAttribute('aria-valuemax', '7');
-    expect(screen.getByText('0 of 7 extra photos')).toBeInTheDocument();
-    expect(screen.getByText(/A recommendation, never a requirement/)).toBeInTheDocument();
+    expect(rules.getByText(/JPG, PNG, WEBP · up to 8 MB each/)).toBeInTheDocument();
+    fireEvent.keyDown(info, { key: 'Escape' });
+    expect(screen.queryByTestId('main-image-rules')).not.toBeInTheDocument();
+    expect(info).toHaveFocus();
+    fireEvent.keyDown(info, { key: 'Enter' });
+    fireEvent.click(info);
+    expect(screen.getByTestId('main-image-rules')).toBeInTheDocument();
   });
 
-  it('passes a good main photo: Ready, every rule passed, submit is not blocked', async () => {
+  it('passes a good main photo: a Ready dot, no reason under it, every rule passed, submit is not blocked', async () => {
     await renderScreen(<Harness />);
     upload('shea-front.jpg');
-    await waitFor(() => expect(cards()).toHaveLength(1));
+    await waitFor(() => expect(thumbs()).toHaveLength(1));
     await waitFor(() => expect(screen.getByTestId('image-verdict')).toHaveTextContent('Ready'), { timeout: 3000 });
-    expect(within(screen.getByTestId('main-image-rules')).getAllByText('Passed')).toHaveLength(4);
+    expect(screen.getByTestId('image-verdict').querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(screen.queryByTestId('photo-details')).not.toBeInTheDocument();
+    expect(openRules().getAllByText('Passed')).toHaveLength(4);
     expect(screen.getByTestId('submit-problem')).toHaveTextContent('none');
+    expect(screen.getByRole('button', { name: 'Add more photos' })).toBeInTheDocument();
   });
 
-  it('rejects a small main photo with the exact reason and how to fix it, announces it, and blocks submit', async () => {
+  it('rejects a small main photo: a short reason under the thumbnail, the full reason announced, Needs fixing in the rules, and submit is blocked', async () => {
     await renderScreen(<Harness />);
     upload('small-front.jpg');
     const findings = await screen.findByRole('alert', { name: 'What we found on image 1' }, { timeout: 3000 });
     expect(findings).toHaveTextContent('This photo is too small. The main photo must be at least 1000 pixels on its longest side so shoppers can zoom. Yours is 640 by 480.');
+    expect(screen.getByText('Under 1000 px')).toBeInTheDocument();
     expect(screen.getByTestId('image-verdict')).toHaveTextContent('Not accepted');
-    expect(within(screen.getByTestId('main-image-rules')).getByText(/At least 1000 pixels/).closest('li')).toHaveAttribute('data-state', 'fail');
+    const rules = openRules();
+    expect(stateOfRule(rules, /At least 1000 pixels/)).toBe('fail');
+    expect(rules.getAllByText('Needs fixing').length).toBeGreaterThan(0);
     expect(screen.getByTestId('submit-problem')).toHaveTextContent('sc.pf.err.imagesMainRejected');
     // Remove it: the way to fix is to upload another one.
     fireEvent.click(screen.getByRole('button', { name: 'Remove image 1' }));
     expect(screen.queryByTestId('image-verdict')).not.toBeInTheDocument();
   });
 
-  it('says what is wrong with the background and the fill in the seller’s words, and the rules list says which rule failed', async () => {
+  it('says what is wrong with the background and the fill in the seller’s words, and the rules say which rule failed', async () => {
     await renderScreen(<Harness />);
     upload('white-underfill-front.jpg');
     const findings = await screen.findByRole('alert', { name: 'What we found on image 1' }, { timeout: 3000 });
     expect(findings).toHaveTextContent('The main photo needs a plain white background (pure white, RGB 255, 255, 255). Retake it or edit the background and upload it again.');
     expect(findings).toHaveTextContent('The product is too small in the photo. It should fill at least 85% of the height or width. Crop closer and upload again.');
-    const rules = within(screen.getByTestId('main-image-rules'));
-    expect(rules.getByText(/Plain white background/).closest('li')).toHaveAttribute('data-state', 'fail');
-    expect(rules.getByText(/The product fills at least/).closest('li')).toHaveAttribute('data-state', 'fail');
-    expect(rules.getByText(/At least 1000 pixels/).closest('li')).toHaveAttribute('data-state', 'ok');
+    expect(screen.getByText('Background is not plain white')).toBeInTheDocument();
+    const rules = openRules();
+    expect(stateOfRule(rules, /Plain white background/)).toBe('fail');
+    expect(stateOfRule(rules, /The product fills at least/)).toBe('fail');
+    expect(stateOfRule(rules, /At least 1000 pixels/)).toBe('ok');
   });
 
   it('accepts a warning with a notice, and does not block submit', async () => {
@@ -111,7 +140,7 @@ describe('image cards (S391)', () => {
     expect(screen.getByTestId('image-verdict')).toHaveTextContent('Ready, and it can be better');
     expect(screen.getByText('This photo is accepted and you can submit. A better photo sells better.')).toBeInTheDocument();
     expect(screen.getByTestId('submit-problem')).toHaveTextContent('none');
-    expect(within(screen.getByTestId('main-image-rules')).getByText(/The product fills at least/).closest('li')).toHaveAttribute('data-state', 'warn');
+    expect(stateOfRule(openRules(), /The product fills at least/)).toBe('warn');
   });
 
   it('holds a photo for review: says so, lets the seller submit, and the listing waits', async () => {
@@ -120,9 +149,10 @@ describe('image cards (S391)', () => {
     const finding = await screen.findByText(/We are checking this photo for text, logos or watermarks/, undefined, { timeout: 3000 });
     expect(finding.textContent).toMatch(/We usually answer within 2 business days/);
     expect(screen.getByTestId('image-verdict')).toHaveTextContent('We are checking your photo');
+    expect(screen.getByText('We are checking this photo')).toBeInTheDocument();
     expect(screen.getByText('You can submit. The listing waits until we have checked this photo.')).toBeInTheDocument();
     expect(screen.getByTestId('submit-problem')).toHaveTextContent('none');
-    expect(within(screen.getByTestId('main-image-rules')).getByText(/No text, logos/).closest('li')).toHaveAttribute('data-state', 'pending');
+    expect(stateOfRule(openRules(), /No text, logos/)).toBe('pending');
   });
 
   it('judges the first picture as the main one and the next as extra photos, and counts the extra ones', async () => {
@@ -133,16 +163,25 @@ describe('image cards (S391)', () => {
     expect(await screen.findByText('This photo is too small. Use a photo that is at least 500 pixels wide and tall.')).toBeInTheDocument();
     // Rejected extra photos do not block submit and do not count: the main one passes, two extra ones are in.
     expect(screen.getByTestId('submit-problem')).toHaveTextContent('none');
-    expect(screen.getByText('2 of 7 extra photos')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Extra photos' })).toHaveAttribute('aria-valuenow', '2');
+    expect(screen.getByText('4 of 10 photos · 2 of 7 extra photos suggested')).toBeInTheDocument();
+    expect(thumbs()).toHaveLength(4);
   });
 
-  it('never leaves a verdict to colour alone: each one is written and its icon is hidden from screen readers', async () => {
+  it('lets a thumbnail be made the main photo and moved from its details', async () => {
+    await renderScreen(<Harness />);
+    upload('shea-front.jpg', 'shea-back.jpg');
+    await waitFor(() => expect(screen.getAllByTestId('image-verdict')).toHaveLength(2), { timeout: 4000 });
+    fireEvent.click(thumbs()[1] as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Make image 2 the main image' }));
+    expect(within(screen.getByRole('list', { name: /Product photos/ })).getByText('Main').closest('li')).toBe(screen.getAllByRole('listitem').find((li) => li.hasAttribute('data-main')));
+  });
+
+  it('never leaves a verdict to colour alone: each one is written and its dot is hidden from screen readers', async () => {
     await renderScreen(<Harness />);
     upload('held-front.jpg');
     const verdict = await screen.findByTestId('image-verdict', undefined, { timeout: 3000 });
     expect(verdict.textContent?.trim()).not.toBe('');
-    expect(verdict.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(verdict.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 });
 
