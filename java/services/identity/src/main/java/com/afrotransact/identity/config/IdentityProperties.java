@@ -47,7 +47,8 @@ public record IdentityProperties(
         Invitations invitations,
         DataProtection dataProtection,
         Pages pages,
-        Auth auth) {
+        Auth auth,
+        Provisioning provisioning) {
 
     public IdentityProperties {
         homeUrl = homeUrl == null ? "/" : homeUrl;
@@ -66,6 +67,31 @@ public record IdentityProperties(
         dataProtection = dataProtection == null ? new DataProtection(null, null, null, null, null) : dataProtection;
         pages = pages == null ? new Pages(null, null, null, null, null, null, null, null) : pages;
         auth = auth == null ? new Auth(null, null, null, null, null, null) : auth;
+        provisioning = provisioning == null ? new Provisioning(null, null, null) : provisioning;
+    }
+
+    /**
+     * How start-up treats clients that already exist (audit F15).
+     *
+     * @param reconcile                    {@code report} (default: log differences in scopes and redirect URIs, change
+     *                                     nothing), {@code additive} (add what the YAML lists and the stored client lacks)
+     *                                     or {@code sync} (make them equal, removing the rest). Env
+     *                                     {@code IDENTITY_CLIENT_RECONCILE}.
+     * @param rotateSecrets                explicitly re-hash a confidential client's stored secret from the configured one
+     *                                     when it no longer matches (never on by default). Env
+     *                                     {@code IDENTITY_CLIENT_ROTATE_SECRETS}.
+     * @param publicClientForbiddenScopes  scopes no public client may carry in prod and uat; a configuration that lists
+     *                                     one refuses to start (default {@code mcp:staff}: staff tools need a
+     *                                     confidential, first-party client, never a public one)
+     */
+    public record Provisioning(String reconcile, Boolean rotateSecrets, List<String> publicClientForbiddenScopes) {
+
+        public Provisioning {
+            reconcile = reconcile == null || reconcile.isBlank() ? "report" : reconcile.trim();
+            rotateSecrets = rotateSecrets != null && rotateSecrets;
+            publicClientForbiddenScopes = publicClientForbiddenScopes == null ? List.of("mcp:staff")
+                    : splitEntries(publicClientForbiddenScopes);
+        }
     }
 
     /**

@@ -201,3 +201,8 @@ at:
         require-consent: true
         redirect-uris: ["http://127.0.0.1:33418/callback", "https://claude.ai/api/mcp/auth_callback"]
         scopes: [openid, mcp:shopper, mcp:seller, mcp:staff]
+# F15: the local database password lives here, not in application.yml, so a missing DB_PASSWORD in uat or prod
+# fails the start instead of falling back to the service name.
+spring:
+  datasource:
+    password: ${DB_PASSWORD:identity}

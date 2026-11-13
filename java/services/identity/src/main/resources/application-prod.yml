@@ -187,7 +187,7 @@ at:
         grant-types: [authorization_code]
         require-consent: true
         redirect-uris: ["http://127.0.0.1:33418/callback", "https://claude.ai/api/mcp/auth_callback"]
-        scopes: [openid, mcp:shopper, mcp:seller, mcp:staff]
+        scopes: [openid, mcp:shopper, mcp:seller]   # no mcp:staff: public clients may not carry it on uat and prod (F15)
 springdoc:
   api-docs:
     enabled: false

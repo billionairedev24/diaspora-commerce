@@ -9,7 +9,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/identity}
     username: ${DB_USER:identity}
-    password: ${DB_PASSWORD:identity}
+    password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
   flyway:
@@ -144,6 +144,13 @@ at:
       facebook:
         client-id: ${FACEBOOK_CLIENT_ID:}
         client-secret: ${FACEBOOK_CLIENT_SECRET:}
+    # F15: what start-up does about clients that already exist. report = log differences in scopes / redirect URIs only
+    # (default: the staff console owns an existing client), additive = add what the YAML lists, sync = make equal.
+    # rotate-secrets re-hashes a confidential client's secret from its configured value: off unless asked for.
+    provisioning:
+      reconcile: ${IDENTITY_CLIENT_RECONCILE:report}
+      rotate-secrets: ${IDENTITY_CLIENT_ROTATE_SECRETS:false}
+      public-client-forbidden-scopes: [mcp:staff]
     bootstrap-admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:}
       password: ${BOOTSTRAP_ADMIN_PASSWORD:}

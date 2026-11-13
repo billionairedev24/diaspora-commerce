@@ -10,3 +10,10 @@ at:
 logging:
   level:
     com.afrotransact: DEBUG
+# F15: the local database password lives here, not in application.yml, so a missing DB_PASSWORD in uat or prod
+# fails the start instead of falling back to the service name.
+spring:
+  datasource:
+    password: ${DB_PASSWORD:offers}
+# F15: local-only default of the service client secret.
+at.offers.oauth.client-secret: ${OFFERS_CLIENT_SECRET:local-offers-service-secret}

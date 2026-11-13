@@ -1,12 +1,15 @@
 package com.afrotransact.identity.config;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
 import com.afrotransact.identity.adapter.out.crypto.Pem;
 import com.afrotransact.identity.application.BootstrapService;
 import com.afrotransact.identity.application.SigningKeyAdminService;
+import com.afrotransact.identity.domain.ClientReconcileMode;
 import com.afrotransact.identity.domain.LocalDevelopmentPolicy;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -26,8 +29,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * Seeds the configured signing key (when no key is stored yet), the OAuth clients configured for this environment
- * ({@code at.identity.clients}) and the bootstrap super administrator. Clients are only created when missing: once a
- * client exists the staff console owns it (S291), so an edit made there is never overwritten by a deploy.
+ * ({@code at.identity.clients}) and the bootstrap super administrator. Clients are created when missing. Once a client
+ * exists the staff console owns it (S291): by default start-up only reports differences in its scopes and redirect
+ * URIs ({@code at.identity.provisioning.reconcile}: report, additive, sync; see {@link ClientReconciler}), and never
+ * touches its secret unless {@code rotate-secrets} is on.
  */
 @Component
 class StartupProvisioning implements ApplicationRunner {
@@ -42,11 +47,13 @@ class StartupProvisioning implements ApplicationRunner {
     private final ConfiguredSigningKeys configuredKeys;
     private final LocalDevelopmentPolicy developmentPolicy;
     private final Environment environment;
+    private final ClientReconciler reconciler;
 
     StartupProvisioning(IdentityProperties props, JdbcRegisteredClientRepository clients, PasswordEncoder encoder,
                         BootstrapService bootstrap, SigningKeyAdminService signingKeys,
                         ConfiguredSigningKeys configuredKeys, LocalDevelopmentPolicy developmentPolicy,
-                        Environment environment) {
+                        Environment environment, ClientReconciler reconciler) {
+        this.reconciler = reconciler;
         this.developmentPolicy = developmentPolicy;
         this.environment = environment;
         this.props = props;
@@ -68,7 +75,12 @@ class StartupProvisioning implements ApplicationRunner {
             }
         }
         int created = 0;
+        int drifted = 0;
+        int updated = 0;
+        ClientReconcileMode mode = ClientReconcileMode.parse(props.provisioning().reconcile());
+        Set<String> profiles = LocalDevelopmentConfiguration.activeProfiles(environment);
         for (IdentityProperties.Client c : props.clients()) {
+            checkPublicClientScopes(profiles, c, props.provisioning().publicClientForbiddenScopes());
             if (!c.isPublic() && (c.secret() == null || c.secret().isBlank())) {
                 LOG.warn("Skipping confidential client {}: no secret configured", c.clientId());
                 continue;
@@ -76,10 +88,15 @@ class StartupProvisioning implements ApplicationRunner {
             if (clients.findByClientId(c.clientId()) == null) {
                 clients.save(toRegisteredClient(c));
                 created++;
+            } else {
+                ClientReconciler.Outcome outcome = reconciler.reconcile(c, mode, props.provisioning().rotateSecrets());
+                drifted += outcome.drift() ? 1 : 0;
+                updated += outcome.updated() ? 1 : 0;
             }
         }
-        LOG.info("Created {} of {} configured OAuth clients (existing clients are left as they are)", created,
-                props.clients().size());
+        LOG.info("Created {} of {} configured OAuth clients; existing clients: {} differ from the configuration, {} "
+                + "updated (reconcile mode {}; secrets are never touched unless rotate-secrets is on)", created,
+                props.clients().size(), drifted, updated, mode);
         IdentityProperties.BootstrapAdmin admin = props.bootstrapAdmin();
         if (admin.email() != null && !admin.email().isBlank() && admin.password() != null
                 && !admin.password().isBlank()) {
@@ -88,6 +105,23 @@ class StartupProvisioning implements ApplicationRunner {
             bootstrap.ensureSuperAdmin(admin.email(), admin.password(),
                     admin.firstName() == null ? "Platform" : admin.firstName(),
                     admin.lastName() == null ? "Administrator" : admin.lastName(), admin.phone());
+        }
+    }
+
+    /**
+     * A public client holds no secret, so anyone can start its authorization-code flow: on uat and prod it may not be
+     * configured with a scope that reaches staff tools (default {@code mcp:staff}). Start-up fails instead.
+     */
+    static void checkPublicClientScopes(Set<String> profiles, IdentityProperties.Client client, List<String> forbidden) {
+        if (!client.isPublic() || !(profiles.contains("prod") || profiles.contains("uat"))) {
+            return;
+        }
+        for (String scope : client.scopes()) {
+            if (forbidden.contains(scope)) {
+                throw new IllegalStateException("Public OAuth client " + client.clientId() + " is configured with scope "
+                        + scope + ", which public clients may not have on uat and prod (active profiles " + profiles
+                        + "); give it to a confidential client");
+            }
         }
     }
 

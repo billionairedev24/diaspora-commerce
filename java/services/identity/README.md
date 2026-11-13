@@ -606,7 +606,9 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 ## Configuration
 
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets come only from the environment
-(ExternalSecret `afrotransact/<env>/identity`):
+(ExternalSecret `afrotransact/<env>/identity`). Existing OAuth clients are reconciled with the YAML at start-up
+(`IDENTITY_CLIENT_RECONCILE` = `report` default, `additive`, `sync`; `IDENTITY_CLIENT_ROTATE_SECRETS` off by default) and public clients may not
+carry `mcp:staff` on uat and prod: [docs/runbooks/identity-clients.md](../../../docs/runbooks/identity-clients.md).
 
 | Env var | Purpose |
 |---|---|

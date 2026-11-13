@@ -12,3 +12,12 @@ logging:
   level:
     com.afrotransact: DEBUG
     io.temporal: INFO
+# F15: the local database password lives here, not in application.yml, so a missing DB_PASSWORD in uat or prod
+# fails the start instead of falling back to the service name.
+spring:
+  datasource:
+    password: ${DB_PASSWORD:orders}
+# F15: local-only defaults of the keys and the service client secret (uat and prod set their own and have no default).
+at.orders.handover.key: ${HANDOVER_CODE_KEY:local-only-handover-code-key-change-me}
+at.orders.pay-links.key: ${PAY_LINK_KEY:local-only-pay-link-key-change-me}
+at.orders.oauth.client-secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
