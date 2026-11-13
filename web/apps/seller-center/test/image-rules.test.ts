@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { checkVars, extraPhotoCount, mainRuleStates, verdictOf, visibleChecks } from '@/components/listings/form/image-rules';
-import { emptyForm, type FormImage, MIN_IMAGE_PX,validateForm } from '@/components/listings/form-model';
+import { emptyForm, type FormImage, fromDetail, fromDraftPayload, MIN_IMAGE_PX, toDraftPayload, toProductDraft, validateForm } from '@/components/listings/form-model';
 import { CATALOG_FILES } from '@/i18n/catalogs';
 import { EN_MESSAGES, translate } from '@/i18n/t';
 
@@ -95,13 +95,51 @@ describe('submitting with the main photo as it is', () => {
     expect(problem([image({ status: 'held', verdict: 'HOLD' })])).toBeUndefined();
   });
 
-  it('waits for a held main photo that cannot be attached yet', () => {
+  it('waits for a held main photo that has neither an address nor an asset id', () => {
     expect(problem([image({ status: 'held', verdict: 'HOLD', url: null })])?.key).toBe('sc.pf.err.imagesHeldNoUrl');
+  });
+
+  it('lets a held main photo go with its asset id: the listing is submitted and waits for our answer', () => {
+    expect(problem([image({ status: 'held', verdict: 'HOLD', url: null, assetId: 'ast_1' })])).toBeUndefined();
   });
 
   it('says a main photo under 1000 px is too small, for an image media did not judge', () => {
     const p = problem([image({ status: 'low', verdict: null, width: 800, height: 800 })]);
     expect(p?.key).toBe('sc.pf.err.imagesMainSmall');
     expect(p?.vars).toEqual({ px: MIN_IMAGE_PX });
+  });
+});
+
+describe('a photo we are checking is sent by its asset id', () => {
+  const held = image({ status: 'held', verdict: 'HOLD', url: null, assetId: 'ast_1', previewUrl: 'blob:b' });
+
+  it('submits the asset id instead of an address and keeps the other fields out', () => {
+    const draft = toProductDraft({ ...emptyForm(), images: [held, image({ id: '2', alt: ' a bowl ' })] }, undefined);
+    expect(draft.images[0]).toEqual({ url: '', assetId: 'ast_1', contentType: '' });
+    expect(draft.images[1]).toMatchObject({ url: 'https://img/a.webp', alt: 'a bowl' });
+    expect(draft.images[1]).not.toHaveProperty('assetId');
+  });
+
+  it('never sends a rejected photo and counts a held one as added', () => {
+    const rejected = image({ id: '3', status: 'rejected', verdict: 'REJECT', url: null });
+    expect(toProductDraft({ ...emptyForm(), images: [held, rejected] }, undefined).images).toHaveLength(1);
+  });
+
+  it('keeps it in a draft and reopens it as a photo we are checking', () => {
+    const back = fromDraftPayload(toDraftPayload({ ...emptyForm(), images: [held] }));
+    expect(back.images[0]).toMatchObject({ status: 'held', url: null, assetId: 'ast_1', verdict: 'HOLD' });
+  });
+
+  it('reopens a saved listing whose photo is held', () => {
+    const detail = { productId: 'p', atin: 'A', status: 'IN_REVIEW', statusLabel: '', moderationNote: null, categoryId: null, categoryRequestId: null, categoryPath: '', productType: 'T', title: 'x', attributes: {},
+      images: [{ url: '', assetId: 'ast_9', held: true, contentType: '' }], variationTheme: '', variants: [], preorderEligible: false, listing: { condition: 'NEW', keywords: [], fulfilment: 'SELLER', packaging: null, handlingDays: 2, shipFromId: null, sizeChartId: null, fitNote: null, sellerBehaviour: {} }, currency: 'USD', version: 1, updatedAt: '' };
+    expect(fromDetail(detail as never, undefined).images[0]).toMatchObject({ status: 'held', assetId: 'ast_9', url: null });
+  });
+
+  it('says it in words in five languages', () => {
+    for (const [locale, file] of Object.entries(CATALOG_FILES)) {
+      expect(typeof file['sc.pf.images.checkingPhoto'], locale).toBe('string');
+    }
+    expect(EN_MESSAGES['sc.img.verdict.HOLD']).toBe('We are checking your photo');
   });
 });

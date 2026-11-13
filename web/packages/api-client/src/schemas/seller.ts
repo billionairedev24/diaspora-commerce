@@ -1232,7 +1232,12 @@ export const PackageDimensionsSchema = z.object({
 });
 
 export const ProductImageInputSchema = z.object({
-  url: z.string().min(1),
+  /** The public URL; empty while the photo is held for review (then `assetId` names it). */
+  url: z.string(),
+  /** Media's asset id of a photo held for review: the listing refers to it by id until it is cleared. */
+  assetId: z.string().max(64).nullable().optional(),
+  /** Read only: true while the photo is held for review ("We are checking your photo"). */
+  held: z.boolean().optional(),
   width: z.number().int().min(0).optional(),
   height: z.number().int().min(0).optional(),
   bytes: z.number().int().min(0).optional(),

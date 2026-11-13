@@ -4914,12 +4914,18 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /** @description A picture, by public URL or, for a photo held for review (no public URL), by media asset id. Give url or assetId. */
         ProductImageInput: {
-            url: string;
+            /** @description Public URL; empty while the photo is held */
+            url?: string;
+            /** @description Media asset id of a photo uploaded by this seller. Send it for a photo held for review: the listing is saved and submitted but not live until the photo is cleared. Another seller's or a rejected asset is refused (422 images[i]). Not allowed in a variant's own images. */
+            assetId?: string;
+            /** @description Response only: true while the photo is held for review (We are checking your photo) */
+            readonly held?: boolean;
             width?: number;
             height?: number;
             bytes?: number;
-            contentType: string;
+            contentType?: string;
             /** @description Optional alternative text (what the picture shows), stored with the image */
             alt?: string | null;
             /**

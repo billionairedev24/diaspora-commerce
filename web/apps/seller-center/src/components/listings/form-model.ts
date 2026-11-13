@@ -37,6 +37,8 @@ export interface FormImage {
   /** What the form shows: a local object URL while uploading, then the stored URL. */
   previewUrl: string;
   url: string | null;
+  /** Media's asset id of a photo we are still checking: it has no public URL yet, so the listing refers to it by id (S390). */
+  assetId?: string | null;
   width: number;
   height: number;
   bytes: number;
@@ -511,14 +513,14 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   // The main image decides: a rejected one blocks Submit, one under 1000 px says so, one we are still checking and cannot attach yet waits.
   else if (main?.status === 'rejected') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainRejected');
   else if (main?.status === 'low') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainSmall', { px: MIN_IMAGE_PX });
-  else if (main?.status === 'held' && !main.url) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesHeldNoUrl');
+  else if (main?.status === 'held' && !main.url && !main.assetId) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesHeldNoUrl');
 
   // The label photo is its own typed slot: product pictures never stand in for it.
   const label = statusOf(rules, 'label_photo');
   if (label && label !== 'hidden') {
     if (s.labelImage?.status === 'uploading') add(fieldId.labelPhoto, 'images', 'sc.pf.field.labelPhoto', 'sc.pf.err.imagesUploading');
     else if (s.labelImage?.status === 'error') add(fieldId.labelPhoto, 'images', 'sc.pf.field.labelPhoto', 'sc.pf.err.imagesFailed');
-    else if (!s.labelImage?.url && (label === 'required' || (label === 'required_or_exemption' && !(s.exemptions.label_photo ?? '').trim()))) {
+    else if (!s.labelImage?.url && !s.labelImage?.assetId && (label === 'required' || (label === 'required_or_exemption' && !(s.exemptions.label_photo ?? '').trim()))) {
       add(fieldId.labelPhoto, 'images', 'sc.pf.field.labelPhoto', label === 'required' ? 'sc.pf.err.labelPhoto' : 'sc.pf.err.labelPhotoOrReason');
     }
   }
@@ -734,7 +736,7 @@ export function qualityItems(s: FormState, type: ProductTypeSchema | undefined, 
     if (s.fulfilment === 'SELLER' && !isHidden(rules, 'handling_days')) req(fieldId.handling, 'fulfilment', 'sc.pf.field.handling');
   }
   items.push({ id: fieldId.description, section: 'basics', label: 'sc.pf.field.description', required: false, done: s.description.trim().length >= 40, tip: 'sc.pf.tip.description' });
-  items.push({ id: fieldId.images, section: 'images', label: 'sc.pf.field.images', required: false, done: s.images.filter((i) => i.url).length >= 3, tip: 'sc.pf.tip.images' });
+  items.push({ id: fieldId.images, section: 'images', label: 'sc.pf.field.images', required: false, done: s.images.filter((i) => i.url || i.assetId).length >= 3, tip: 'sc.pf.tip.images' });
   if (type?.traits.sizing && isShown(rules, 'sizes') && !(rules ? statusOf(rules, 'sizes') === 'required' : type.traits.sizing.sizeChartRequired)) {
     items.push({ id: fieldId.sizeChart, section: 'sizeGuide', label: 'sc.pf.field.sizeChart', required: false, done: Boolean(s.sizeChartId), tip: 'sc.pf.tip.sizeChart' });
   }
@@ -795,10 +797,16 @@ function attrValue(a: AttributeDef | undefined, v: string, unit: string | undefi
   return text && a?.kind === 'NUMBER' && a.units.length ? `${text} ${unit || a.units[0]}` : text;
 }
 
+/** A picture the catalog can take: stored (public URL) or still being checked (asset id); never a rejected one. */
+const sendable = (i: FormImage): boolean => i.status !== 'rejected' && Boolean(i.url || i.assetId);
+
 /** The catalog submission (call when validateForm is empty). Answers to questions the category does not ask are not sent. */
 export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null, rules?: ListingRules): ProductDraft {
   const image = (id: string) => s.images.find((i) => i.id === id && i.url && i.status !== 'rejected');
-  const imageInput = (i: FormImage) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType, ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) });
+  /** A photo we are still checking has no public URL: it goes by its media asset id and the listing waits until it is cleared. */
+  const imageInput = (i: FormImage) => i.url
+    ? { url: i.url, width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType, ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) }
+    : { url: '', assetId: i.assetId ?? '', contentType: '', ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) };
   const defs = taxQuestionsOf(type?.attributes ?? []);
   const factsOf = (index: number): Record<string, FactValue> => checkFacts(defs.filter((d) => d.owner !== 'OFFER'), answersOf(s, index)).facts;
   const behaviourOf = (): Record<string, FactValue> => {
@@ -861,7 +869,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
         .filter(([k, v]) => v.trim() !== '' && keep(k))
         .map(([k, v]) => [k, attrValueOf(k, v)])
     ),
-    images: [...s.images.filter((i) => i.url).map(imageInput), ...(showLabel && s.labelImage?.url ? [{ ...imageInput(s.labelImage), role: 'LABEL' as const }] : [])],
+    images: [...s.images.filter(sendable).map(imageInput), ...(showLabel && s.labelImage && sendable(s.labelImage) ? [{ ...imageInput(s.labelImage), role: 'LABEL' as const }] : [])],
     variationTheme: s.hasVariants && theme ? theme.name : '',
     variants,
     ...(type?.traits.preorder ? { preorderEligible: s.preorder } : {}),
@@ -920,8 +928,11 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
       units[k] = m[2] ?? '';
     } else attrs[k] = v;
   });
-  const toImage = (im: SellerProductDetail['images'][number], i: number): FormImage => ({ id: `img-${i}`, previewUrl: im.url, url: im.url, width: im.width ?? 0, height: im.height ?? 0, bytes: im.bytes ?? 0,
-    contentType: im.contentType, status: 'ready', alt: im.alt ?? '' });
+  const toImage = (im: SellerProductDetail['images'][number], i: number): FormImage => im.held && im.assetId
+    // A photo we are still checking: no public URL yet, the listing keeps its asset id.
+    ? { id: `img-${i}`, previewUrl: '', url: null, assetId: im.assetId, width: 0, height: 0, bytes: 0, contentType: '', status: 'held', verdict: 'HOLD', alt: im.alt ?? '' }
+    : { id: `img-${i}`, previewUrl: im.url, url: im.url, width: im.width ?? 0, height: im.height ?? 0, bytes: im.bytes ?? 0,
+      contentType: im.contentType ?? '', status: 'ready', alt: im.alt ?? '' };
   const labelOf = d.images.find((im) => im.role === 'LABEL');
   const images: FormImage[] = d.images.filter((im) => im.role !== 'LABEL').map(toImage);
   const listingPkg = d.listing.packaging;
@@ -982,8 +993,10 @@ const answerText = (facts: Record<string, FactValue> | undefined): Record<string
 export function toDraftPayload(s: FormState): Record<string, unknown> {
   return {
     v: 1, ...s,
-    images: s.images.filter((i) => i.url).map((i) => ({ ...i, previewUrl: i.url ?? '', status: i.status === 'low' ? 'low' : 'ready' })),
-    labelImage: s.labelImage?.url ? { ...s.labelImage, previewUrl: s.labelImage.url, status: 'ready' } : null,
+    images: s.images.filter(sendable).map((i) => (i.url
+      ? { ...i, previewUrl: i.url, status: i.status === 'low' ? 'low' : 'ready' }
+      : { ...i, previewUrl: '', status: 'held' })),
+    labelImage: s.labelImage && sendable(s.labelImage) ? (s.labelImage.url ? { ...s.labelImage, previewUrl: s.labelImage.url, status: 'ready' } : { ...s.labelImage, previewUrl: '', status: 'held' }) : null,
     documents: Object.fromEntries(Object.entries(s.documents).filter(([, d]) => d.status === 'ready'))
   };
 }
@@ -997,16 +1010,18 @@ const rowFrom = (v: unknown): VariantRow => {
   return { sku: str(r.sku), gtin: str(r.gtin), price: str(r.price), compareAt: str(r.compareAt), qty: str(r.qty), image: str(r.image), pkg: { length: str(pkg.length), width: str(pkg.width), height: str(pkg.height), weight: str(pkg.weight) } };
 };
 
-const imageFrom = (i: Record<string, unknown>, n: number): FormImage => ({
-  id: str(i.id, `img-${n}`), previewUrl: str(i.url), url: str(i.url), width: Number(i.width) || 0, height: Number(i.height) || 0, bytes: Number(i.bytes) || 0,
-  contentType: str(i.contentType, 'image/jpeg'), status: i.status === 'low' ? 'low' : 'ready', alt: str(i.alt)
-});
+const imageFrom = (i: Record<string, unknown>, n: number): FormImage => str(i.url) === '' && str(i.assetId) !== ''
+  ? { id: str(i.id, `img-${n}`), previewUrl: '', url: null, assetId: str(i.assetId), width: 0, height: 0, bytes: 0, contentType: '', status: 'held', verdict: 'HOLD', alt: str(i.alt) }
+  : {
+    id: str(i.id, `img-${n}`), previewUrl: str(i.url), url: str(i.url), width: Number(i.width) || 0, height: Number(i.height) || 0, bytes: Number(i.bytes) || 0,
+    contentType: str(i.contentType, 'image/jpeg'), status: i.status === 'low' ? 'low' : 'ready', alt: str(i.alt)
+  };
 
 /** A saved draft back into the form (unknown or damaged fields fall back to empty). */
 export function fromDraftPayload(payload: Record<string, unknown>): FormState {
   const e = emptyForm();
   const p = payload;
-  const images = Array.isArray(p.images) ? p.images.filter(isRecord).filter((i) => typeof i.url === 'string').slice(0, MAX_IMAGES).map(imageFrom) : [];
+  const images = Array.isArray(p.images) ? p.images.filter(isRecord).filter((i) => typeof i.url === 'string' || typeof i.assetId === 'string').slice(0, MAX_IMAGES).map(imageFrom) : [];
   const req = isRecord(p.request) ? { id: str(p.request.id), path: str(p.request.path), reference: str(p.request.reference) } : null;
   // A draft saved before packages were per variant keeps its one package as the starting package of every variant.
   const legacyPkg = isRecord(p.pkg) ? { length: str(p.pkg.length), width: str(p.pkg.width), height: str(p.pkg.height), weight: str(p.pkg.weight) } : null;

@@ -45,7 +45,9 @@ export function LabelPhotoField({ image, onChange, error, optional }: Props) {
       const put = await fetch(ticket.url, { method: ticket.method, headers: ticket.headers, body: file });
       if (!put.ok) throw new Error('upload failed');
       const asset = await api.completeUpload(ticket.assetId);
-      onChange({ ...local, url: asset.url, status: 'ready' });
+      // A label photo we are still checking has no public URL yet: keep its asset id; the listing waits for our answer.
+      const held = asset.verdict === 'HOLD' || asset.status === 'FLAGGED';
+      onChange(held ? { ...local, url: null, assetId: ticket.assetId, status: 'held', verdict: 'HOLD' } : { ...local, url: asset.url, status: 'ready' });
     } catch {
       onChange({ ...local, status: 'error' });
     }
@@ -62,9 +64,10 @@ export function LabelPhotoField({ image, onChange, error, optional }: Props) {
         <input ref={input} type="file" accept={IMAGE_TYPES.join(',')} className="sr-only" tabIndex={-1} aria-label={t('sc.pf.field.labelPhoto')} data-testid="label-photo-input"
           onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
         <Button size="sm" variant="neutral" onClick={() => input.current?.click()}>
-          <UploadSimple size={14} aria-hidden /> {image?.url ? t('sc.pf.labelPhoto.replace') : t('sc.pf.labelPhoto.add')}
+          <UploadSimple size={14} aria-hidden /> {image?.url || image?.assetId ? t('sc.pf.labelPhoto.replace') : t('sc.pf.labelPhoto.add')}
         </Button>
         {image ? <Button size="sm" variant="neutral" onClick={() => onChange(null)}>{t('sc.pf.labelPhoto.remove')}</Button> : null}
+        {image?.status === 'held' ? <span role="status" className="text-xs text-muted" data-testid="label-photo-checking">{t('sc.pf.images.checkingPhoto')}</span> : null}
         {image?.status === 'uploading' ? <span role="status" className="text-xs text-muted">{t('sc.pf.labelPhoto.uploading')}</span> : null}
       </div>
       {error ? <span role="alert" className="text-xs text-danger">{error}</span> : null}

@@ -88,8 +88,9 @@ export function ImagesField({ images, update, error, context }: Props) {
         const held = !rejected && (verdict === 'HOLD' || asset.status === 'FLAGGED');
         // An answer without a verdict (an older media): the size rule is the one we can still read from the picture.
         const small = !verdict && slot === 'MAIN' && Math.max(width, height) < MIN_IMAGE_PX;
-        patch(id, { url: rejected ? null : asset.url || ticket.publicUrl || null, width, height, bytes: asset.bytes ?? file.size, status: rejected ? 'rejected' : held ? 'held' : small ? 'low' : 'ready',
-          slot, verdict, checks: asset.checks });
+        // A photo we are checking has no public URL: the form keeps its asset id and submits that, and the listing waits for our answer.
+        patch(id, { url: rejected || held ? null : asset.url || ticket.publicUrl || null, assetId: held ? ticket.assetId : null, width, height, bytes: asset.bytes ?? file.size,
+          status: rejected ? 'rejected' : held ? 'held' : small ? 'low' : 'ready', slot, verdict, checks: asset.checks });
       } catch {
         patch(id, { status: 'error' });
       }

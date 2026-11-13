@@ -119,7 +119,7 @@ describe('image cards (S391)', () => {
     upload('held-front.jpg');
     const finding = await screen.findByText(/We are checking this photo for text, logos or watermarks/, undefined, { timeout: 3000 });
     expect(finding.textContent).toMatch(/We usually answer within 2 business days/);
-    expect(screen.getByTestId('image-verdict')).toHaveTextContent('We are checking it');
+    expect(screen.getByTestId('image-verdict')).toHaveTextContent('We are checking your photo');
     expect(screen.getByText('You can submit. The listing waits until we have checked this photo.')).toBeInTheDocument();
     expect(screen.getByTestId('submit-problem')).toHaveTextContent('none');
     expect(within(screen.getByTestId('main-image-rules')).getByText(/No text, logos/).closest('li')).toHaveAttribute('data-state', 'pending');

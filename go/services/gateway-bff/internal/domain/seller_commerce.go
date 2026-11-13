@@ -507,6 +507,11 @@ type ProductImageInput struct {
 	// Role is LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); empty for a
 	// product picture.
 	Role string `json:"role,omitempty"`
+	// AssetID is media's asset id of a photo that is held for review (it has no public URL): the listing refers to it by id,
+	// catalog resolves it, and the listing is not live until the photo is cleared. Sent instead of URL.
+	AssetID string `json:"assetId,omitempty"`
+	// Held is set by catalog on a read: true while the photo is held for review.
+	Held bool `json:"held,omitempty"`
 }
 
 // VariantInput is one variant row (the variant matrix, or the single row of a product without variations).

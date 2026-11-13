@@ -48,7 +48,12 @@ export function ImageCard({ image: im, index: i, count, onAlt, onMakeMain, onMov
       className={cx('flex min-w-0 flex-col gap-3 border-b border-border py-4 sm:flex-row', dragState.dragging && 'opacity-50', dragState.target && 'bg-gold-50', itemProps.className)}
     >
       <div className="relative shrink-0 self-start">
-        <img src={im.previewUrl} alt={im.alt || t('sc.pf.images.alt', { n: i + 1 })} className={cx('size-24 cursor-grab rounded-sm bg-surface-muted object-cover sm:size-28', rejected && 'opacity-60')} />
+        {im.previewUrl ? (
+          <img src={im.previewUrl} alt={im.alt || t('sc.pf.images.alt', { n: i + 1 })} className={cx('size-24 cursor-grab rounded-sm bg-surface-muted object-cover sm:size-28', rejected && 'opacity-60')} />
+        ) : (
+          // A photo we are checking, reopened from the saved listing: it has no public address to show yet.
+          <div role="img" aria-label={t('sc.pf.images.alt', { n: i + 1 })} className="size-24 cursor-grab rounded-sm bg-surface-muted sm:size-28" />
+        )}
         {i === 0 ? <span className="absolute start-1.5 top-1.5 rounded-xs bg-gold-500 px-1.5 py-0.5 text-2xs font-bold">{t('sc.pf.images.main')}</span> : null}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
