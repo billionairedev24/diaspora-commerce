@@ -2,10 +2,10 @@
 
 import { EMPTY_NAVIGATION, type ProductSummary } from '@afrotransact/api-client';
 import { useFormatters, useLocale } from '@afrotransact/i18n/react';
-import { ImagePlaceholder, MagnifyingGlass } from '@afrotransact/ui';
+import { ImagePlaceholder, MagnifyingGlass, Stars } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useEffect, useId, useMemo, useState } from 'react';
+import { type FormEvent, Fragment, type KeyboardEvent, type ReactNode, useEffect, useId, useMemo, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
@@ -177,7 +177,13 @@ export function SearchBox() {
             if (o.kind !== 'product') return null;
             const i = phrases.length + j;
             const p = o.product;
-            const meta = !p.inStock ? t('search.unavailable') : p.fulfilment === 'AFROTRANSACT' ? t('search.fulfilled') : p.fulfilment === 'AFROTRANSACT_DELIVERY' ? t('ld.badge', { city: p.sellerCity }) : t('search.shipsFrom', { city: p.sellerCity });
+            const details: ReactNode[] = [];
+            if (p.brand) details.push(p.brand);
+            if (p.department) details.push(p.department);
+            if (p.reviewCount > 0) {
+              details.push(<Stars key="rating" rating={p.rating} reviewCount={p.reviewCount} size={11} reviewsLabel={(c) => t('pdp.ratings', { count: c })} ratingLabel={(r) => t('card.rating', { rating: r })} locale={fmt.tag} />);
+            }
+            if (!p.inStock) details.push(t('search.unavailable'));
             return (
               <li
                 key={p.atin}
@@ -196,9 +202,16 @@ export function SearchBox() {
                 </span>
                 <span>
                   <span className={styles.pname}>{p.title}</span>
-                  <span className={styles.pmeta}>
-                    {p.community} · {meta}
-                  </span>
+                  {details.length > 0 && (
+                    <span className={styles.pmeta}>
+                      {details.map((d, k) => (
+                        <Fragment key={k}>
+                          {k > 0 && ' · '}
+                          {d}
+                        </Fragment>
+                      ))}
+                    </span>
+                  )}
                 </span>
                 <strong className={styles.price}>{fmt.money(p.priceMinor, p.currency)}</strong>
               </li>
