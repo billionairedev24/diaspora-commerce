@@ -1,0 +1,11 @@
+# METHOD pattern | CLASS | enforcement | test
+# A cart belongs to the verified token subject (CUSTOMER principal) or to a guest id the service issued (uuid v4, bearer secret).
+GET /v1/cart | CUSTOMER_SELF | owner(): subject of a verified CUSTOMER token, else the guest id header (uuid v4 only) | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+POST /v1/cart/items | CUSTOMER_SELF | owner() | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+PUT /v1/cart/items/{atin} | CUSTOMER_SELF | owner() | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+DELETE /v1/cart/items/{atin} | CUSTOMER_SELF | owner() | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+POST /v1/cart/items/{atin}/save-for-later | CUSTOMER_SELF | owner() | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+POST /v1/cart/saved/{atin}/move-to-cart | CUSTOMER_SELF | owner() | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+PUT /v1/cart/preorder-fulfilment | CUSTOMER_SELF | owner() | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+POST /v1/cart/merge | CUSTOMER_SELF | verified CUSTOMER token required; moves only the named guest cart into the token's own cart | TestCrossTenantCartsAreKeyedByTheVerifiedSubject
+POST /v1/carts/{customerId}/ordered | SERVICE_ONLY | cart:service (service permission no person holds) | TestCrossTenantCartsAreKeyedByTheVerifiedSubject

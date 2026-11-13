@@ -19,7 +19,11 @@ import (
 // GuestHeader carries the guest cart id; the service issues one when it is missing.
 const GuestHeader = "X-Guest-Cart"
 
-var guestID = regexp.MustCompile(`^[0-9a-f-]{36}$`)
+var guestShape = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
+// guestID matches the ids this service issues (random version 4 UUIDs). The id is the only secret of a guest cart, so
+// an id a caller can pick (all zeros, repeated characters) is refused: it could be planted on, or guessed for, others.
+var guestID = guestShape
 
 // Handlers exposes the cart over HTTP.
 type Handlers interface {
