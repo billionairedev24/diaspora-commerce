@@ -1,4 +1,8 @@
 .hero { position: relative; min-height: 380px; padding-bottom: 150px; overflow: hidden; }
+.heroFlat { padding-bottom: var(--at-space-10); min-height: 340px; }
+.heroFlat .heroInner { padding-bottom: var(--at-space-2); }
+.heroFlat .arrow { top: 50%; transform: translateY(-50%); }
+.heroFlat .dots { bottom: var(--at-space-3); }
 .ink { background: var(--at-color-header-bg); color: var(--at-color-header-text); }
 .gold { background: var(--at-gold-500); color: var(--at-ink-1000); }
 .green { background: var(--at-green-600); color: var(--at-ink-0); }

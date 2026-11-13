@@ -117,6 +117,15 @@ export function mockCatalogueSize(): number | null {
   return env !== undefined && env !== '' && !Number.isNaN(Number(env)) ? Number(env) : null;
 }
 
+/** A browser test picks its own catalogue per context with this cookie (the mock BFF is one process for every parallel test). */
+export const MOCK_CATALOGUE_COOKIE = 'at_mock_catalogue';
+
+/** The catalogue a request sees: its own cookie, else the process-wide setting (a unit test or MOCK_HOME_CATALOGUE), else null (the classic mock home). */
+export function catalogueOf(headers: Headers): number | null {
+  const m = new RegExp(`(?:^|;\\s*)${MOCK_CATALOGUE_COOKIE}=(\\d+)`).exec(headers.get('cookie') ?? '');
+  return m ? Number(m[1]) : mockCatalogueSize();
+}
+
 export function resetHomeMock(): void {
   homeMock.settings = defaultHomeSettings();
   homeMock.catalogue = null;

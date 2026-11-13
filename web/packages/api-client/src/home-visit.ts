@@ -46,36 +46,49 @@ export function homeVisitHeaders(v: VisitHeaders): Record<string, string> {
   return h;
 }
 
-const BOT = /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link|pinterest|whatsapp|telegram|headlesschrome|lighthouse|pagespeed|gtmetrix/i;
+const BOT = /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link|pinterest|whatsapp|telegram|lighthouse|pagespeed|gtmetrix/i;
 
 /** Known crawlers and link-preview fetchers: they get the deterministic default. */
 export function isCrawlerAgent(userAgent: string | null | undefined): boolean {
   return !!userAgent && BOT.test(userAgent);
 }
 
-/**
- * The cookie `at_hs` after a load: the keys this page showed are put first, the older loads follow, and only the last
- * `SEEN_LOADS` loads (and at most `SEEN_MAX_KEYS` keys) are kept. Loads are separated by `.`; keys inside one by `,`.
+/*
+ * The guest novelty memory (cookie `at_hs`): `<window>~<keys of this visit>~<load>.<load>.<load>`, keys joined by `-`.
+ * The page of one visit must be the same on refresh, so what the CURRENT visit showed is kept apart and is never sent back
+ * to the gateway; only the loads of earlier visits (at most SEEN_LOADS) travel in `X-Home-Seen`. A new visit window moves the
+ * previous visit's keys into the earlier loads. All values are short base36 keys, safe in a cookie.
  */
-export function nextSeenCookie(current: string | null | undefined, shown: readonly string[]): string {
-  const loads = (current ?? '')
-    .split('.')
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const mine = [...new Set(shown)].join(',');
-  const all = [...(mine ? [mine] : []), ...loads].slice(0, SEEN_LOADS);
-  let out = all.join('.');
-  while (out.split(/[.,]/).length > SEEN_MAX_KEYS && all.length > 1) {
-    all.pop();
-    out = all.join('.');
-  }
-  return out;
+export interface SeenState {
+  window: string;
+  current: string[];
+  previous: string[][];
 }
 
-/** The keys inside an `at_hs` cookie, as the gateway wants them in `X-Home-Seen` (comma separated, no load separators). */
-export function seenKeysOf(cookie: string | null | undefined): string[] {
-  return (cookie ?? '')
-    .split(/[.,]/)
-    .map((k) => k.trim())
-    .filter(Boolean);
+const keysOf = (part: string | undefined): string[] => (part ?? '').split('-').map((k) => k.trim()).filter(Boolean);
+
+export function parseSeenCookie(raw: string | null | undefined): SeenState {
+  const [window = '', current = '', previous = ''] = (raw ?? '').split('~');
+  return { window, current: keysOf(current), previous: previous.split('.').map(keysOf).filter((l) => l.length > 0) };
+}
+
+export function serializeSeen(s: SeenState): string {
+  return `${s.window}~${s.current.join('-')}~${s.previous.map((l) => l.join('-')).join('.')}`;
+}
+
+/** The cookie value after this page showed `shown` in visit `window`. Idempotent for the same window (a refresh changes nothing). */
+export function recordLoad(raw: string | null | undefined, window: string, shown: readonly string[]): string {
+  const state = parseSeenCookie(raw);
+  // Keys are short alphanumerics (the contract's `visit.seen`); anything else would break the cookie's separators, so it is dropped.
+  const mine = [...new Set(shown)].filter((k) => /^[A-Za-z0-9]{1,8}$/.test(k));
+  let previous = state.previous;
+  if (state.window && state.window !== window && state.current.length > 0) previous = [state.current, ...previous];
+  previous = previous.slice(0, SEEN_LOADS);
+  while (previous.flat().length > SEEN_MAX_KEYS && previous.length > 1) previous = previous.slice(0, -1);
+  return serializeSeen({ window, current: mine, previous });
+}
+
+/** The keys of the visits BEFORE the current one, for the `X-Home-Seen` header. */
+export function seenKeysForRequest(raw: string | null | undefined): string[] {
+  return parseSeenCookie(raw).previous.flat().slice(0, SEEN_MAX_KEYS);
 }

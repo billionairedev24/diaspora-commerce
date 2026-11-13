@@ -1,17 +1,18 @@
 'use client';
 
 import { type HeroSlide } from '@afrotransact/api-client';
-import { CaretLeft, CaretRight, ImagePlaceholder, Pause, Play } from '@afrotransact/ui';
+import { CaretLeft, CaretRight, Pause, Play } from '@afrotransact/ui';
 import Link from 'next/link';
 import { type TouchEvent, useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 
 import styles from './Home.module.css';
+import { HomePhoto } from './modules/HomePhoto';
 
 /** Hero carousel from placements: auto-advances every 7 s, pauses on hover/focus, honours reduced motion; swipeable on
-    touch screens (the arrows hide on phones). */
-export function Hero({ slides }: { slides: HeroSlide[] }) {
+    touch screens (the arrows hide on phones). `flat` is the dynamic home: nothing overlaps the hero's foot. */
+export function Hero({ slides, flat = false }: { slides: HeroSlide[]; flat?: boolean }) {
   const t = useT();
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -45,7 +46,7 @@ export function Hero({ slides }: { slides: HeroSlide[] }) {
   if (!h) return null;
   return (
     <section
-      className={`${styles.hero} ${styles[h.theme]} full-bleed`}
+      className={`${styles.hero} ${flat ? styles.heroFlat : ''} ${styles[h.theme]} full-bleed`}
       aria-roledescription="carousel"
       aria-label={t('home.carousel')}
       onMouseEnter={() => setPaused(true)}
@@ -65,7 +66,8 @@ export function Hero({ slides }: { slides: HeroSlide[] }) {
           </Link>
           <span className={styles.heroLabel}>{h.label}</span>
         </div>
-        <ImagePlaceholder className={styles.heroImage} src={h.imageUrl} alt="" ratio="16 / 9" loading={idx === 0 ? 'eager' : 'lazy'} />
+        {/* A slide without a real photo is text only: never a striped box. The first slide's photo is the page's largest paint. */}
+        <HomePhoto className={styles.heroImage} src={h.imageUrl} ratio="16 / 9" priority={idx === 0} />
       </div>
       {n > 1 && (
         <>

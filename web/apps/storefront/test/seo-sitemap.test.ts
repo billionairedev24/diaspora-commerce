@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { byteLength, childName, chunkUrls, countUrls, escapeXml, indexOfSet, lastmodOf, MAX_BYTES_PER_SITEMAP, MAX_URLS_PER_SITEMAP, parseChildName, renderIndex, renderUrlset, type SitemapUrl } from '@/lib/seo/sitemap';
 import { createSitemapCache } from '@/lib/seo/sitemap-cache';
-import { buildSitemapSet, collectProducts, type SeoApi } from '@/lib/seo/sitemap-source';
+import { buildSitemapSet, collectCategories, collectProducts, type SeoApi } from '@/lib/seo/sitemap-source';
 
 const ORIGIN = 'https://afrotransact.com';
 
@@ -153,6 +153,30 @@ function fakeApi(over: Partial<SeoApi> = {}): SeoApi {
     }),
     getHelpArticles: vi.fn(async () => ({ items: [{ slug: 'shipping', topic: 'ORDERS_DELIVERY', topicTitle: '', title: 'Shipping', summary: '', updatedAt: '2026-10-05T00:00:00Z' }], topics: [], nextCursor: null })),
     getLegalIndex: vi.fn(async () => ({ documents: [{ key: 'privacy', title: 'Privacy', version: '1', effectiveDate: '2026-09-01', href: '/legal/privacy', draftBanner: false }] })),
+    // One snapshot for the home, the navigation and the sitemap: Groceries and Fashion have products, Empty has none, and only
+    // Yoruba and Igbo are above the community thresholds (a third, Akan, is not and is therefore absent everywhere).
+    getSitemapSources: vi.fn(async () => ({
+      departments: [
+        { href: '/s?dept=Groceries', count: 5, lastmod: '2026-11-10T08:00:00Z' },
+        { href: '/s?dept=Empty', count: 0 },
+        { href: '/s?dept=Fashion', count: 2 }
+      ],
+      communities: [
+        { href: '/communities/yoruba', count: 9, lastmod: '2026-11-11T08:00:00Z' },
+        { href: '/communities/igbo', count: 8 }
+      ]
+    })),
+    getNavigation: vi.fn(async () => ({
+      bar: [],
+      all: [],
+      communities: [
+        { key: 'yoruba', label: 'Yoruba', labels: { en: 'Yoruba' }, count: 9, sellers: 3, href: '/communities/yoruba' },
+        { key: 'igbo', label: 'Igbo', labels: { en: 'Igbo' }, count: 8, sellers: 2, href: '/communities/igbo' }
+      ],
+      services: { available: true, href: '/services' },
+      deals: { available: false },
+      brand: { available: false }
+    })),
     searchServices: vi.fn(async () => ({ services: [{ serviceId: 's1', orgId: 'o1', name: 'Tailoring', imageUrl: 'https://media.afrotransact.com/s1.jpg' }, { serviceId: 's2', orgId: 'o1', name: 'Hair', imageUrl: '' }] })),
     ...over
   } as unknown as SeoApi;
@@ -172,12 +196,29 @@ describe('sitemap source: live data through the gateway', () => {
     expect(failed).toEqual([]);
     const locs = (k: 'products' | 'categories' | 'services' | 'content') => (set.kinds[k] ?? []).flatMap((c) => c.urls.map((u) => u.loc));
     expect(locs('categories')).toEqual([`${ORIGIN}/s?dept=Groceries`, `${ORIGIN}/s?dept=Fashion`, `${ORIGIN}/s?community=Yoruba`, `${ORIGIN}/s?community=Igbo`]);
+    // the gateway's snapshot time is a real update time, so it is used; entries without one carry none
+    const cats = (set.kinds['categories'] ?? []).flatMap((c) => c.urls);
+    expect(cats.find((u) => u.loc.endsWith('dept=Groceries'))!.lastmod).toBe('2026-11-10T08:00:00.000Z');
+    expect(cats.find((u) => u.loc.endsWith('community=Igbo'))!.lastmod).toBeUndefined();
     expect(locs('services')).toEqual([`${ORIGIN}/services/s1`, `${ORIGIN}/services/s2`, `${ORIGIN}/services/providers/o1`]);
     expect(locs('content')).toEqual(expect.arrayContaining([ORIGIN, `${ORIGIN}/membership`, `${ORIGIN}/help`, `${ORIGIN}/help/shipping`, `${ORIGIN}/legal/privacy`]));
     expect(set.kinds['content']![0]!.urls.find((u) => u.loc.endsWith('/help/shipping'))!.lastmod).toBe('2026-10-05T00:00:00.000Z');
     expect(set.kinds['stores']).toBeUndefined();
     // every URL of every child passes the sitemap-protocol checks and none is a cart/checkout/account/search/filter/tracking URL
     for (const chunks of Object.values(set.kinds)) for (const c of chunks ?? []) expect(validateUrlset(c.xml, { origin: ORIGIN })).toEqual([]);
+  });
+
+  it('a community the navigation does not list (below the thresholds) never reaches the sitemap, and the page counts come from the same snapshot', async () => {
+    const api = fakeApi({
+      getSitemapSources: vi.fn(async () => ({ departments: [], communities: [{ href: '/communities/akan', count: 3 }, { href: '/communities/yoruba', count: 9 }] })) as SeoApi['getSitemapSources']
+    });
+    expect((await collectCategories(api, ORIGIN)).map((u) => u.loc)).toEqual([`${ORIGIN}/s?community=Yoruba`]);
+  });
+
+  it('when the gateway snapshot fails the categories kind fails (the previous version is kept) instead of falling back to thin facet pages', async () => {
+    const { set, failed } = await buildSitemapSet(fakeApi({ getSitemapSources: vi.fn(async () => Promise.reject(new Error('gateway down'))) as SeoApi['getSitemapSources'] }), ORIGIN);
+    expect(failed).toEqual(['categories']);
+    expect(set.kinds['categories']).toBeUndefined();
   });
 
   it('one failing source does not take the others down and is reported', async () => {

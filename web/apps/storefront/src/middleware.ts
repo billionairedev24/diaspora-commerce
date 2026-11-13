@@ -1,9 +1,12 @@
 /* Content-Security-Policy with a per-request nonce (docs/engineering/security-headers.md). CSP_MODE=report-only|enforce|off
    (default report-only). Edge runtime on purpose: the Cloudflare (OpenNext) deployment supports edge middleware, while a
    Node-runtime `proxy.ts` is experimental there. */
+import { VISIT_COOKIE, VISITOR_COOKIE } from '@afrotransact/api-client/home-visit';
 import { buildCspHeaders } from '@afrotransact/ui/csp';
 import { type NextRequest,NextResponse } from 'next/server';
 
+import { CONSENT_COOKIE } from '@/lib/consent/consent';
+import { planVisit } from '@/lib/home/visit';
 import { indexingPolicy, robotsHeaderFor, seoEnvFromProcess, wwwRedirectTarget } from '@/lib/seo/policy';
 
 /** Crawler directives on EVERY response this middleware sees (pages, 404s, route handlers, the BFF proxy): a non-prod host,
@@ -18,10 +21,26 @@ export function middleware(request: NextRequest): NextResponse {
   // One canonical host: www.<canonical> (not in the host map; a stray DNS record) 301s to the canonical origin.
   const www = wwwRedirectTarget(seoEnvFromProcess(), request.nextUrl);
   if (www) return NextResponse.redirect(www, 301);
-  return withRobots(request, withCsp(request));
+  const visit = planVisit({
+    visitor: request.cookies.get(VISITOR_COOKIE)?.value,
+    window: request.cookies.get(VISIT_COOKIE)?.value,
+    consentRaw: request.cookies.get(CONSENT_COOKIE)?.value,
+    userAgent: request.headers.get('user-agent'),
+    document: request.method === 'GET' && (request.headers.get('accept') ?? '').includes('text/html') && !request.nextUrl.pathname.startsWith('/api/'),
+    newId: () => crypto.randomUUID().replace(/-/g, '')
+  });
+  // This request's own server components must see a new visit's cookies too.
+  for (const [name, value] of Object.entries(visit.values)) request.cookies.set(name, value);
+  const response = withRobots(request, withCsp(request, visit.crawler));
+  const secure = request.nextUrl.protocol === 'https:';
+  for (const c of visit.set) response.cookies.set(c.name, c.value, { path: '/', sameSite: 'lax', httpOnly: true, secure, ...(c.maxAge ? { maxAge: c.maxAge } : {}) });
+  for (const name of visit.clear) if (request.cookies.has(name)) response.cookies.set(name, '', { path: '/', maxAge: 0 });
+  // The home page is composed per visit: its HTML is never cached by a browser, the edge or a proxy.
+  if (request.nextUrl.pathname === '/') response.headers.set('Cache-Control', 'private, no-store');
+  return response;
 }
 
-function withCsp(request: NextRequest): NextResponse {
+function withCsp(request: NextRequest, crawler: boolean): NextResponse {
   // NEXT_PUBLIC_* are inlined at build time, so each variable is named literally here.
   const csp = buildCspHeaders('storefront', {
     NODE_ENV: process.env.NODE_ENV,
@@ -32,9 +51,12 @@ function withCsp(request: NextRequest): NextResponse {
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT: process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT
   });
-  if (!csp) return NextResponse.next();
-  // Next.js finds the nonce in the request's CSP header and stamps it on its own scripts; x-nonce is for our components.
   const requestHeaders = new Headers(request.headers);
+  // Known crawlers get the deterministic default home (no randomness): the server relays this to the gateway as X-Crawler.
+  requestHeaders.delete('x-crawler');
+  if (crawler) requestHeaders.set('x-crawler', '1');
+  if (!csp) return NextResponse.next({ request: { headers: requestHeaders } });
+  // Next.js finds the nonce in the request's CSP header and stamps it on its own scripts; x-nonce is for our components.
   requestHeaders.set('x-nonce', csp.nonce);
   requestHeaders.set(csp.name, csp.value);
   const response = NextResponse.next({ request: { headers: requestHeaders } });

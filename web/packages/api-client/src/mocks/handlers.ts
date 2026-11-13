@@ -21,7 +21,7 @@ import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
 import { helpRequestHandlers } from './help-requests';
-import { composeDynamicHome, fixtureCatalog, homeMock, mockCatalogueSize, navigationOf, resolveCommunity, seedOfVisit, sitemapOf, visitOfHeaders } from './home-dynamic';
+import { catalogueOf, composeDynamicHome, fixtureCatalog, homeMock, navigationOf, resolveCommunity, seedOfVisit, sitemapOf, visitOfHeaders } from './home-dynamic';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
 import { membershipHandlers } from './membership';
@@ -107,7 +107,7 @@ export const handlers = [
   /* Site & content */
   http.get('*/v1/site-config', route(() => json(SITE_CONFIG))),
   http.get('*/v1/home', route((ctx) => {
-    const size = mockCatalogueSize();
+    const size = catalogueOf(ctx.request.headers);
     if (size === null) return json(home(sessionLocation(ctx.session), ctx.now, ctx.session.userId ?? null));
     // The dynamic home: the visit arrives as headers (the storefront relays its first-party cookies); no visitor id or a crawler means the default page.
     const loc = sessionLocation(ctx.session);
@@ -127,13 +127,13 @@ export const handlers = [
   })),
   /* Departments, communities and Services availability: the same eligible-only counts the home uses. */
   http.get('*/v1/site/navigation', route((ctx) => {
-    const size = mockCatalogueSize();
+    const size = catalogueOf(ctx.request.headers);
     const loc = sessionLocation(ctx.session);
     const nav = navigationOf(size === null ? liveCatalog(loc, ctx.now) : fixtureCatalog(size), homeMock.settings, ctx.now);
     return json(size === null ? { ...nav, services: { available: true, providers: 6, href: '/services' } } : nav);
   })),
   http.get('*/v1/site/communities/:slug', route((ctx) => {
-    const size = mockCatalogueSize();
+    const size = catalogueOf(ctx.request.headers);
     const catalog = size === null ? liveCatalog(sessionLocation(ctx.session), ctx.now) : fixtureCatalog(size);
     const slug = decodeURIComponent(new URL(ctx.request.url).pathname.split('/').pop() ?? '');
     const found = resolveCommunity(catalog, homeMock.settings, slug);
@@ -141,7 +141,7 @@ export const handlers = [
     return json(found);
   })),
   http.get('*/v1/site/sitemap', route((ctx) => {
-    const size = mockCatalogueSize();
+    const size = catalogueOf(ctx.request.headers);
     return json(sitemapOf(size === null ? liveCatalog(sessionLocation(ctx.session), ctx.now) : fixtureCatalog(size), homeMock.settings, ctx.now));
   })),
   http.post('*/v1/home/events', route(async (ctx) => {

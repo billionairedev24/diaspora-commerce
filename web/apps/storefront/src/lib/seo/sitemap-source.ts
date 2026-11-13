@@ -10,7 +10,7 @@ import { chunkUrls, lastmodOf, type SitemapKind, type SitemapSet, type SitemapUr
    sitemap stays empty), and an index query is capped by the search engine's maximum window (partitioned by department and
    community below). */
 
-export type SeoApi = Pick<ApiClient, 'searchOrganic' | 'getHelpArticles' | 'getLegalIndex' | 'searchServices'>;
+export type SeoApi = Pick<ApiClient, 'searchOrganic' | 'getHelpArticles' | 'getLegalIndex' | 'searchServices' | 'getSitemapSources' | 'getNavigation'>;
 
 const PAGE_SIZE = 60;
 /** Pages read per partition: 60 x 50 = 3,000 products; beyond the search window a partition is split by community. */
@@ -65,12 +65,32 @@ export async function collectProducts(api: SeoApi, origin: string): Promise<Coll
   return { urls, truncated };
 }
 
-/** One category landing page per department and per community that has live products. */
+/**
+ * One category landing page per department and per community the gateway lists. The gateway reads ONE snapshot for the home, the
+ * navigation and this sitemap (`GET /v1/site/sitemap`, eligible-only counts), so a department with nothing a shopper can buy and a
+ * community below the staff thresholds (default 3 communities with 8 products and 2 sellers each) are absent here exactly as they
+ * are absent from the nav, the footer and the home. A community entry is the route `/communities/<key>`; the indexable page behind
+ * it is the community category `/s?community=<English name>`, found through the navigation's community with that route. `lastmod`
+ * is the gateway's (newest eligible product change in the entry), a real update time. No facet fallback: when the endpoint fails the
+ * kind fails and the previous version is kept (`sitemap.kind_failed`), rather than listing thin pages.
+ */
 export async function collectCategories(api: SeoApi, origin: string): Promise<SitemapUrl[]> {
-  const first = await api.searchOrganic(query({ size: 1 }));
+  const [sources, nav] = await Promise.all([api.getSitemapSources(), api.getNavigation()]);
   const urls: SitemapUrl[] = [];
-  for (const b of first.facets.department) if (b.count > 0) urls.push({ loc: `${origin}${categoryPath('dept', b.value)}` });
-  for (const b of first.facets.community) if (b.count > 0) urls.push({ loc: `${origin}${categoryPath('community', b.value)}` });
+  const add = (path: string, lastmodIso: string | undefined) => {
+    const lastmod = lastmodOf(lastmodIso);
+    urls.push({ loc: `${origin}${path}`, ...(lastmod ? { lastmod } : {}) });
+  };
+  for (const d of sources.departments) {
+    if (d.count <= 0) continue;
+    const name = new URLSearchParams(d.href.split('?')[1] ?? '').get('dept');
+    if (name) add(categoryPath('dept', name), d.lastmod);
+  }
+  for (const c of sources.communities) {
+    if (c.count <= 0) continue;
+    const community = nav.communities.find((n) => n.href === c.href);
+    if (community) add(categoryPath('community', community.labels.en || community.label), c.lastmod);
+  }
   return urls;
 }
 

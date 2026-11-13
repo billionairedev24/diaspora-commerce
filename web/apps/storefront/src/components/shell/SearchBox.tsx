@@ -1,7 +1,7 @@
 'use client';
 
-import { type ProductSummary } from '@afrotransact/api-client';
-import { useFormatters } from '@afrotransact/i18n/react';
+import { EMPTY_NAVIGATION, type ProductSummary } from '@afrotransact/api-client';
+import { useFormatters, useLocale } from '@afrotransact/i18n/react';
 import { ImagePlaceholder, MagnifyingGlass } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -9,8 +9,9 @@ import { type FormEvent, type KeyboardEvent, useEffect, useId, useMemo, useState
 
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
-import { DEPARTMENTS_LIST, searchHref, searchQueries } from '@/lib/api/queries';
+import { searchHref, searchQueries, siteQueries } from '@/lib/api/queries';
 import { productHref } from '@/lib/links';
+import { departmentLabel } from '@/lib/nav/labels';
 
 import styles from './SearchBox.module.css';
 
@@ -29,6 +30,9 @@ function useDebounced<T>(value: T, ms: number): T {
 export function SearchBox() {
   const fmt = useFormatters();
   const t = useT();
+  const locale = useLocale();
+  const { data: navData } = useQuery(siteQueries.navigation(browserApi()));
+  const departments = (navData ?? EMPTY_NAVIGATION).all;
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -102,9 +106,9 @@ export function SearchBox() {
       <form role="search" className={styles.form} onSubmit={submit}>
         <select className={styles.dept} value={dept} onChange={(e) => setDept(e.target.value)} aria-label={t('header.department')}>
           <option value="">{t('header.all')}</option>
-          {DEPARTMENTS_LIST.map((d) => (
-            <option key={d} value={d}>
-              {d}
+          {departments.map((d) => (
+            <option key={d.key} value={d.name}>
+              {departmentLabel(d, locale, t)}
             </option>
           ))}
         </select>

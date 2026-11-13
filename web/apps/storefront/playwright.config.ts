@@ -18,6 +18,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: 'retain-on-failure',
+    // E2E_CHROME_PATH runs the specs in an installed Chrome (e.g. /usr/bin/google-chrome) when the Playwright browsers are not downloaded.
+    launchOptions: { executablePath: process.env.E2E_CHROME_PATH || undefined },
     storageState: { cookies: [{ name: 'at_consent', value: CONSENT, domain: 'localhost', path: '/', expires: -1, httpOnly: false, secure: false, sameSite: 'Lax' }], origins: [] }
   },
   projects: [

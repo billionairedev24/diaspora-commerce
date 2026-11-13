@@ -2,7 +2,7 @@
    the community threshold, and visit-seed variety (different seeds differ, one seed is stable, no seed is the crawler default). */
 import { describe, expect, it } from 'vitest';
 
-import { homeVisitHeaders, isCrawlerAgent, nextSeenCookie, seenKeysOf } from '../src/home-visit';
+import { homeVisitHeaders, isCrawlerAgent, recordLoad, seenKeysForRequest } from '../src/home-visit';
 import { composeDynamicHome, DEFAULT_SEED, defaultHomeSettings, fixtureCatalog, navigationOf, resolveCommunity, seedOfVisit, seenKey, sitemapOf, visitOfHeaders } from '../src/mocks/home-dynamic';
 import { type Home, HomeSchema } from '../src/schemas/home';
 import { SiteNavigationSchema } from '../src/schemas/site-nav';
@@ -212,13 +212,18 @@ describe('visit headers', () => {
     expect(homeVisitHeaders({ crawler: true, visitor: 'v1' })).toEqual({ 'X-Crawler': '1' });
   });
 
-  it('the guest seen cookie keeps the last 3 loads and at most 120 keys', () => {
-    let c = '';
-    for (const load of ['a,b', 'c', 'd', 'e']) c = nextSeenCookie(c, load.split(','));
-    expect(c).toBe('e.d.c');
-    expect(seenKeysOf(c)).toEqual(['e', 'd', 'c']);
+  it('the guest seen cookie keeps this visit apart (a refresh never reshuffles) and the last 3 earlier loads', () => {
+    let c = recordLoad('', 'w1', ['a', 'b']);
+    expect(c).toBe('w1~a-b~');
+    expect(seenKeysForRequest(c)).toEqual([]);
+    expect(recordLoad(c, 'w1', ['a', 'b'])).toBe(c);
+    for (const [w, k] of [['w2', 'c'], ['w3', 'd'], ['w4', 'e'], ['w5', 'f']] as const) c = recordLoad(c, w, [k]);
+    expect(c).toBe('w5~f~e.d.c');
+    expect(seenKeysForRequest(c)).toEqual(['e', 'd', 'c']);
     const big = Array.from({ length: 100 }, (_, i) => `k${i}`);
-    expect(seenKeysOf(nextSeenCookie(nextSeenCookie('', big), big.map((k) => `${k}x`))).length).toBeLessThanOrEqual(120);
+    let d = '';
+    for (const w of ['a', 'b', 'c', 'd']) d = recordLoad(d, w, big);
+    expect(seenKeysForRequest(d).length).toBeLessThanOrEqual(120);
   });
 
   it('known crawlers are recognised', () => {

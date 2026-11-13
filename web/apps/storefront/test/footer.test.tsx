@@ -1,4 +1,6 @@
+import { EMPTY_NAVIGATION } from '@afrotransact/api-client';
 import { SITE_CONFIG } from '@afrotransact/api-client/mocks';
+import { LANGUAGE_SWITCH_ENABLED } from '@afrotransact/i18n/react';
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -20,9 +22,33 @@ describe('footer renders from site config', () => {
     const legal = screen.getByRole('navigation', { name: 'Legal' });
     expect(within(legal).getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
     expect(within(screen.getByRole('list', { name: 'Payment methods we accept' })).getAllByRole('listitem')).toHaveLength(7);
-    expect(screen.getByRole('option', { name: 'العربية' })).toBeInTheDocument();
+    // The language switch is off until the catalogues are reviewed (LANGUAGE_SWITCH_ENABLED); with it on, every locale is offered.
+    if (LANGUAGE_SWITCH_ENABLED) expect(screen.getByRole('option', { name: 'العربية' })).toBeInTheDocument();
+    else expect(screen.queryByRole('option', { name: 'العربية' })).not.toBeInTheDocument();
     expect(screen.getByText('© 2026 AfroTransact, Inc. All rights reserved.')).toBeInTheDocument();
-    for (const col of ['Get to know us', 'Make money with us', 'Let us help you', 'Shop by community']) expect(screen.getByRole('heading', { name: col })).toBeInTheDocument();
+    for (const col of ['Get to know us', 'Make money with us', 'Let us help you']) expect(screen.getByRole('heading', { name: col })).toBeInTheDocument();
+  });
+
+  it('lists communities only when the gateway says they exist; with none the column is absent and no literal list remains', () => {
+    renderWithProviders(<FooterView config={SITE_CONFIG} year={2026} />);
+    expect(screen.queryByRole('heading', { name: 'Shop by community' })).not.toBeInTheDocument();
+    for (const name of ['Nigerian', 'Ghanaian', 'Ethiopian', 'Jamaican']) expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'AfroTransact Brand' })).not.toBeInTheDocument();
+  });
+
+  it('with communities: each link goes to its own community route, labelled from the same entry', () => {
+    const community = (key: string, label: string) => ({ key, label, labels: { en: label }, count: 12, sellers: 3, href: `/communities/${key}` });
+    renderWithProviders(
+      <FooterView
+        config={SITE_CONFIG}
+        year={2026}
+        navigation={{ ...EMPTY_NAVIGATION, brand: { available: true }, communities: [community('nigerian', 'Nigerian'), community('ghanaian', 'Ghanaian'), community('kenyan', 'Kenyan')] }}
+      />
+    );
+    const nav = screen.getByRole('navigation', { name: 'Shop by community' });
+    expect(within(nav).getByRole('link', { name: 'Ghanaian' })).toHaveAttribute('href', '/communities/ghanaian');
+    expect(within(nav).getAllByRole('link')).toHaveLength(4);
+    expect(screen.getByRole('link', { name: 'AfroTransact Brand' })).toBeInTheDocument();
   });
 
   it('changes socials without a deploy: whatever the config returns is rendered', () => {

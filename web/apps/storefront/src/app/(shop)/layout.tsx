@@ -18,6 +18,7 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
   await Promise.allSettled([
     qc.prefetchQuery(siteQueries.config(api)),
     qc.prefetchQuery(siteQueries.home(api)),
+    qc.prefetchQuery(siteQueries.navigation(api)),
     qc.prefetchQuery(siteQueries.deliveryLocation(api)),
     qc.prefetchQuery(accountQueries.me(api)),
     qc.prefetchQuery(cartQueries.current(api)),

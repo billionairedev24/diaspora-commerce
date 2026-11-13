@@ -23,6 +23,7 @@
     "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts",
     "./generated/tax-returns": "./src/generated/tax-returns.ts",
     "./staff-home": "./src/staff-home.ts",
+    "./home-visit": "./src/home-visit.ts",
     "./staff-preorders": "./src/staff-preorders.ts",
     "./staff-delivery-fees": "./src/staff-delivery-fees.ts",
     "./staff-markets": "./src/staff-markets.ts",

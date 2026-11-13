@@ -54,7 +54,7 @@ export function PromoBand({ block }: { block: HomeBlock }) {
     <section className={`${blocks.promo} ${tone}`} aria-label={block.title} data-testid={`promo-${block.id}`}>
       <div className={blocks.promoText}>
         <h2 className={blocks.promoTitle}>{block.title}</h2>
-        {block.sub ? <p className={blocks.promoSub}>{block.sub}</p> : null}
+        {block.sub ?? block.body ? <p className={blocks.promoSub}>{block.sub ?? block.body}</p> : null}
       </div>
       <Link href={block.href} className={buttonClassName({ size: 'sm' })}>
         {block.cta ?? block.title}

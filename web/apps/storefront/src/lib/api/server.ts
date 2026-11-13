@@ -1,9 +1,10 @@
 import 'server-only';
 
-import { type ApiClient, createApiClient, EDGE_GEO_HEADERS } from '@afrotransact/api-client';
+import { type ApiClient, createApiClient, EDGE_GEO_HEADERS, homeVisitHeaders } from '@afrotransact/api-client';
 import { cookies, headers } from 'next/headers';
 
 import { bffOrigin, mocksEnabled } from '../config';
+import { visitFromCookies } from '../home/visit';
 
 /**
  * Server-side API client for React Server Components. Forwards the shopper's cookies (BFF session)
@@ -21,6 +22,8 @@ export async function serverApi(): Promise<ApiClient> {
     const v = h.get(name);
     if (v) forwarded[name] = v;
   }
+  // The visit behind the varied home: visitor, visit window, earlier loads, variant, or the crawler flag (deterministic page).
+  Object.assign(forwarded, homeVisitHeaders(visitFromCookies((n) => jar.get(n)?.value, { userAgent: h.get('user-agent'), crawlerFlag: h.get('x-crawler') })));
   if (mocksEnabled()) {
     const { handleMockRequest } = await import('@afrotransact/api-client/mocks/runtime');
     return createApiClient({ baseUrl: 'http://storefront.internal/api/bff', headers: forwarded, fetch: (req) => handleMockRequest(req) });

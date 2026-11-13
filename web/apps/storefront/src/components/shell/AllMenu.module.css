@@ -1,0 +1,10 @@
+/* The All menu panel is fixed under the sticky header so the scrolling department bar cannot clip it. Flat, white, hairline. */
+.panel { position: fixed; z-index: 40; inset-inline-start: var(--at-page-gutter); top: var(--at-sticky-header-h, 96px); width: min(calc(100vw - 2 * var(--at-page-gutter)), 640px); max-height: calc(100dvh - var(--at-sticky-header-h, 96px) - var(--at-space-4)); overflow: auto; padding: var(--at-space-4) var(--at-space-5); background: var(--at-color-surface); color: var(--at-color-text); border: 1px solid var(--at-color-border); white-space: normal; font-size: var(--at-text-md); }
+.panel[hidden] { display: none; }
+.title { margin: 0 0 var(--at-space-2); font-size: var(--at-text-md); font-weight: var(--at-weight-bold); }
+.title:not(:first-child) { margin-top: var(--at-space-4); }
+.list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 0 var(--at-space-4); }
+.link { display: flex; align-items: center; min-height: 36px; color: var(--at-color-text); text-decoration: none; }
+.strong { font-weight: var(--at-weight-semibold); }
+@media (hover: hover) { .link:hover { color: var(--at-color-link); text-decoration: underline; } }
+@media (pointer: coarse) { .link { min-height: var(--at-size-touch); } }

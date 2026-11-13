@@ -1,6 +1,8 @@
 'use client';
 
-import { CalendarCheck, List, LogoMark, MapPin, SealCheck, ShoppingCart, Sparkle, Storefront, Tag, wordmarkClassName } from '@afrotransact/ui';
+import { EMPTY_NAVIGATION } from '@afrotransact/api-client';
+import { useLocale } from '@afrotransact/i18n/react';
+import { CalendarCheck, LogoMark, MapPin, SealCheck, ShoppingCart, Sparkle, Storefront, Tag, wordmarkClassName } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -10,11 +12,13 @@ import { AttributionCapture } from '@/components/preorder/AttributionCapture';
 import { PREORDER_PATH, PreorderBanners } from '@/components/preorder/PreorderBanners';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
-import { accountQueries, cartQueries, DEPARTMENTS_LIST, membershipQueries, searchHref, siteQueries } from '@/lib/api/queries';
+import { accountQueries, cartQueries, membershipQueries, searchHref, siteQueries } from '@/lib/api/queries';
+import { departmentLabel } from '@/lib/nav/labels';
 import { setAttribution } from '@/lib/preorder/attribution';
 import { useOpenPreorders, usePreorderResolution } from '@/lib/preorder/usePreorder';
 
 import { AccountMenu } from './AccountMenu';
+import { AllMenu } from './AllMenu';
 import { AnnouncementBar } from './AnnouncementBar';
 import styles from './Header.module.css';
 import { LocationPicker } from './LocationPicker';
@@ -87,7 +91,11 @@ export function Header() {
   const t = useT();
   const { ref: headerRef, compact } = useStickyHeader();
   const api = browserApi();
+  const locale = useLocale();
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
+  // What exists right now: the department bar, the All menu and the Services, Deals and Brand entries all follow the gateway's live counts.
+  const { data: navData } = useQuery(siteQueries.navigation(api));
+  const nav = navData ?? EMPTY_NAVIGATION;
   const { data: cart } = useQuery(cartQueries.current(api));
   const { data: me } = useQuery(accountQueries.me(api));
   // The member badge (S323): the tier's name, only for a signed-in shopper who has the benefits now.
@@ -142,12 +150,7 @@ export function Header() {
         </div>
         <nav className={styles.nav} aria-label={t('nav.primary')}>
           <ul className={styles.navList}>
-            <li>
-              <Link href="/s" className={`${styles.navItem} ${styles.navBold}`}>
-                <List aria-hidden />
-                {t('nav.all')}
-              </Link>
-            </li>
+            <AllMenu navigation={nav} locale={locale} />
             {showPreorderNav && (
               <li>
                 <Link
@@ -167,31 +170,37 @@ export function Header() {
                 {t('nav.lola')}
               </button>
             </li>
-            <li>
-              <Link href={searchHref({ sort: 'price_asc' })} className={styles.navItem}>
-                <Tag aria-hidden />
-                {t('nav.deals')}
-              </Link>
-            </li>
-            <li>
-              <Link href={searchHref({ sellerKind: 'PLATFORM' })} className={styles.navItem}>
-                <SealCheck className={styles.gold} aria-hidden />
-                {t('nav.brand')}
-              </Link>
-            </li>
-            {DEPARTMENTS_LIST.map((d) => (
-              <li key={d}>
-                <Link href={searchHref({ department: d })} className={styles.navItem} aria-current={activeDept === d ? 'page' : undefined}>
-                  {d}
+            {nav.deals.available && (
+              <li>
+                <Link href={searchHref({ sort: 'price_asc' })} className={styles.navItem}>
+                  <Tag aria-hidden />
+                  {t('nav.deals')}
+                </Link>
+              </li>
+            )}
+            {nav.brand.available && (
+              <li>
+                <Link href={searchHref({ sellerKind: 'PLATFORM' })} className={styles.navItem}>
+                  <SealCheck className={styles.gold} aria-hidden />
+                  {t('nav.brand')}
+                </Link>
+              </li>
+            )}
+            {nav.bar.map((d) => (
+              <li key={d.key}>
+                <Link href={d.href ?? searchHref({ department: d.name })} className={styles.navItem} aria-current={activeDept === d.name ? 'page' : undefined}>
+                  {departmentLabel(d, locale, t)}
                 </Link>
               </li>
             ))}
-            <li>
-              <Link href="/services" className={styles.navItem}>
-                <CalendarCheck aria-hidden />
-                {t('nav.services')}
-              </Link>
-            </li>
+            {nav.services.available && (
+              <li>
+                <Link href={nav.services.href} className={styles.navItem}>
+                  <CalendarCheck aria-hidden />
+                  {t('nav.services')}
+                </Link>
+              </li>
+            )}
             <li>
               <a href="/sell" className={styles.navItem}>
                 <Storefront aria-hidden />

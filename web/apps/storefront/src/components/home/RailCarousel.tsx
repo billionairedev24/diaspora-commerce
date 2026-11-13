@@ -54,13 +54,13 @@ export function RailCarousel({ label, children, className }: { label: string; ch
   };
 
   return (
-    <div className={`${styles.carousel} ${className ?? ''}`} data-overflow={edges.overflow ? 'true' : 'false'}>
+    <div className={`${styles.carousel} ${className ?? ''}`} data-overflow={edges.overflow ? 'true' : 'false'} role="group" aria-roledescription="carousel" aria-label={label}>
       <button type="button" className={`${styles.arrow} ${styles.arrowPrev}`} aria-label={t('home.railPrev', { title: label })} disabled={edges.atStart} onClick={() => scroll(-1)} hidden={!edges.overflow}>
         <CaretLeft aria-hidden />
       </button>
       {/* A scrollable region must be keyboard reachable (WCAG 2.1.1); Left/Right scroll it while it has focus. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */}
-      <ul ref={list} className={styles.track} role="group" aria-roledescription="carousel" aria-label={label} tabIndex={0} onKeyDown={onKeyDown}>
+      <ul ref={list} className={styles.track} aria-label={label} tabIndex={0} onKeyDown={onKeyDown}>
         {children}
       </ul>
       <button type="button" className={`${styles.arrow} ${styles.arrowNext}`} aria-label={t('home.railNext', { title: label })} disabled={edges.atEnd} onClick={() => scroll(1)} hidden={!edges.overflow}>

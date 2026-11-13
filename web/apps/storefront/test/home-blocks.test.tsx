@@ -177,8 +177,9 @@ describe('rails are carousels', () => {
     vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(() => dims.scrollWidth);
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => dims.clientWidth);
     renderWithProviders(<RailCarousel label="Pantry staples">{items}</RailCarousel>);
-    const track = screen.getByRole('group', { name: 'Pantry staples' });
-    expect(track).toHaveAttribute('aria-roledescription', 'carousel');
+    // The carousel is a labelled group around a real list: the cards stay list items (no list item outside a list, axe `listitem`).
+    expect(screen.getByRole('group', { name: 'Pantry staples' })).toHaveAttribute('aria-roledescription', 'carousel');
+    const track = screen.getByRole('list', { name: 'Pantry staples' });
     expect(track).toHaveAttribute('tabindex', '0');
     const next = await screen.findByRole('button', { name: 'Scroll forward through Pantry staples' });
     expect(screen.getByRole('button', { name: 'Scroll back through Pantry staples' })).toBeDisabled(); // at the start

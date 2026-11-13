@@ -87,3 +87,8 @@ export function ConsentGate({ category, children }: { category: ConsentCategory;
   const { allows: ok } = useConsent();
   return ok(category) ? children : null;
 }
+
+/** Like {@link useConsent} but without a provider (component tests, error boundaries): null, which counts as "no consent". */
+export function useConsentOptional(): ConsentContextValue | null {
+  return useContext(ConsentContext);
+}

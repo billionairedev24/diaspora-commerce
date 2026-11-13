@@ -1,6 +1,6 @@
 'use client';
 
-import { type LegalDocumentKey, legalDocumentKeyOf, legalHref, NewsletterRequestSchema, type SiteConfig } from '@afrotransact/api-client';
+import { EMPTY_NAVIGATION, type LegalDocumentKey, legalDocumentKeyOf, legalHref, NewsletterRequestSchema, type SiteConfig, type SiteNavigation } from '@afrotransact/api-client';
 import { isLocale, localeCookie, LOCALES } from '@afrotransact/i18n';
 import { LANGUAGE_SWITCH_ENABLED, useLocale } from '@afrotransact/i18n/react';
 import { AppleGlyph, CaretDown, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink } from '@afrotransact/ui';
@@ -19,46 +19,51 @@ import { InstallApp } from './InstallApp';
 
 type FooterLink = { label: MessageKey | string; href: string; external?: boolean };
 
-export const FOOTER_COLUMNS: Array<{ title: MessageKey; links: FooterLink[] }> = [
-  {
-    title: 'footer.getToKnow',
-    links: [
-      { label: 'footer.about', href: '/about' },
-      { label: 'footer.careers', href: '/careers' },
-      { label: 'footer.press', href: '/help/press' },
-      { label: 'footer.brand', href: searchHref({ sellerKind: 'PLATFORM' }) }
-    ]
-  },
-  {
-    title: 'footer.makeMoney',
-    links: [
-      { label: 'footer.sell', href: '/sell', external: true },
-      { label: 'footer.provide', href: '/provide', external: true },
-      { label: 'footer.fba', href: '/help/fulfilled-by-afrotransact' },
-      { label: 'footer.advertise', href: '/help/advertise' },
-      { label: 'footer.drive', href: '/careers?team=Delivery' }
-    ]
-  },
-  {
-    title: 'footer.help',
-    links: [
-      { label: 'footer.account', href: '/account' },
-      { label: 'footer.orders', href: '/orders' },
-      { label: 'footer.giftCards', href: '/account/credit' },
-      { label: 'footer.shipping', href: '/help/shipping' },
-      { label: 'footer.orderHelp', href: '/account/help' },
-      { label: 'footer.helpCenter', href: '/help' },
-      { label: 'footer.accessibility', href: '/legal/accessibility' }
-    ]
-  },
-  {
-    title: 'footer.byCommunity',
-    links: [
-      ...['Nigerian', 'Ghanaian', 'Ethiopian', 'Indian', 'Jamaican'].map((c) => ({ label: c, href: searchHref({ community: c }) })),
-      { label: 'footer.allCommunities', href: '/s' }
-    ]
+/** The footer's link columns. "Shop by community" is generated from the communities that exist (above the staff thresholds):
+    with none, the column is absent. The Brand link shows only when AfroTransact Retail has something to sell. */
+export function footerColumns(nav: SiteNavigation, locale: string): Array<{ title: MessageKey; links: FooterLink[] }> {
+  const columns: Array<{ title: MessageKey; links: FooterLink[] }> = [
+    {
+      title: 'footer.getToKnow',
+      links: [
+        { label: 'footer.about', href: '/about' },
+        { label: 'footer.careers', href: '/careers' },
+        { label: 'footer.press', href: '/help/press' },
+        ...(nav.brand.available ? [{ label: 'footer.brand', href: searchHref({ sellerKind: 'PLATFORM' }) }] : [])
+      ]
+    },
+    {
+      title: 'footer.makeMoney',
+      links: [
+        { label: 'footer.sell', href: '/sell', external: true },
+        { label: 'footer.provide', href: '/provide', external: true },
+        { label: 'footer.fba', href: '/help/fulfilled-by-afrotransact' },
+        { label: 'footer.advertise', href: '/help/advertise' },
+        { label: 'footer.drive', href: '/careers?team=Delivery' }
+      ]
+    },
+    {
+      title: 'footer.help',
+      links: [
+        { label: 'footer.account', href: '/account' },
+        { label: 'footer.orders', href: '/orders' },
+        { label: 'footer.giftCards', href: '/account/credit' },
+        { label: 'footer.shipping', href: '/help/shipping' },
+        { label: 'footer.orderHelp', href: '/account/help' },
+        { label: 'footer.helpCenter', href: '/help' },
+        { label: 'footer.accessibility', href: '/legal/accessibility' }
+      ]
+    }
+  ];
+  if (nav.communities.length > 0) {
+    columns.push({
+      title: 'footer.byCommunity',
+      // Label and link come from the same community: the key is in the href the gateway sent.
+      links: [...nav.communities.map((c) => ({ label: c.labels[locale as keyof typeof c.labels] || c.label, href: c.href })), { label: 'footer.allCommunities', href: '/s' }]
+    });
   }
-];
+  return columns;
+}
 
 const label = (t: Translator<MessageKey>, l: string) => (l.includes('.') ? t(l as MessageKey) : l);
 
@@ -155,12 +160,14 @@ function FooterColumn({ title, collapsible, children }: { title: string; collaps
 
 export interface FooterViewProps {
   config: SiteConfig | undefined;
+  /** What exists right now (communities, Brand): nothing is linked until the gateway says it exists. */
+  navigation?: SiteNavigation;
   locale?: string;
   year?: number;
 }
 
 /** Footer per design; social links, phone, legal links, locales and payment chips come from site config. */
-export function FooterView({ config, locale, year = new Date().getFullYear() }: FooterViewProps) {
+export function FooterView({ config, navigation = EMPTY_NAVIGATION, locale, year = new Date().getFullYear() }: FooterViewProps) {
   const active = useLocale();
   const t = useT();
   const router = useRouter();
@@ -209,7 +216,7 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
             </ul>
           )}
         </div>
-        {FOOTER_COLUMNS.map((col) => (
+        {footerColumns(navigation, locale ?? active).map((col) => (
           <FooterColumn key={col.title} title={t(col.title)} collapsible={narrow}>
             {col.links.map((l) => (
               <li key={l.href + l.label}>
@@ -293,5 +300,6 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
 
 export function Footer() {
   const { data } = useQuery(siteQueries.config(browserApi()));
-  return <FooterView config={data} />;
+  const { data: navigation } = useQuery(siteQueries.navigation(browserApi()));
+  return <FooterView config={data} navigation={navigation} />;
 }
