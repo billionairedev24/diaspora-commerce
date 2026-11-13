@@ -33,10 +33,11 @@ func (f fakeCarts) Get(context.Context, *domain.Caller) (domain.Cart, error) { r
 type fakeAddresses struct {
 	port.IdentityClient
 	addrs []port.IdentityAddress
+	err   error
 }
 
 func (f fakeAddresses) Addresses(context.Context, string) ([]port.IdentityAddress, error) {
-	return f.addrs, nil
+	return f.addrs, f.err
 }
 
 type fakeOrders struct {
@@ -343,27 +344,43 @@ func TestTheCartEstimateForAZipUsesTheSameQuote(t *testing.T) {
 	}
 }
 
-func TestTheCartEstimateWithoutAZipUsesTheSavedDefaultAddressOnlyWhenItCanBeTaxed(t *testing.T) {
+func TestTheCartEstimateWithoutAZipUsesTheSavedAddressAndSaysWhyWhenItCannot(t *testing.T) {
 	cart := domain.Cart{Currency: "USD", Packages: []domain.CartPackage{basketPkg().CartPackage}}
 	cart.Packages[0].Lines[0].Selected, cart.Packages[0].Lines[0].MaxQuantity = true, 10
 	mk := func(addrs ...port.IdentityAddress) *checkoutPaymentServiceImpl {
 		return &checkoutPaymentServiceImpl{d: ShopperDeps{Returns: &fakeReturns{answer: taxable}, Carts: fakeCarts{cart: cart}, Identity: fakeAddresses{addrs: addrs}}}
 	}
-	got, err := mk(port.IdentityAddress{ID: "a", State: "TX", PostalCode: "77002", City: "Houston", IsDefault: true}).TaxEstimate(context.Background(), shopper, "", nil)
-	if err != nil || got.TaxEstimateStatus != domain.TaxEstimated || got.TaxZip != "77002" || got.TaxJurisdictionLabel != "Houston, TX" {
+	houston := port.IdentityAddress{ID: "a", State: "TX", PostalCode: "77002", City: "Houston"}
+	def := houston
+	def.IsDefault = true
+	got, err := mk(def).TaxEstimate(context.Background(), shopper, "", nil)
+	if err != nil || got.TaxEstimateStatus != domain.TaxEstimated || got.TaxZip != "77002" || got.TaxJurisdictionLabel != "Houston, TX" || got.TaxPlaceSource != domain.TaxPlaceSavedAddress {
 		t.Fatalf("%+v %v", got, err)
 	}
+	// no address is marked default: the first one that can be taxed is used, the shopper is not asked for a ZIP code
+	if got, err := mk(port.IdentityAddress{ID: "b", City: "Nowhere"}, houston).TaxEstimate(context.Background(), shopper, "", nil); err != nil || got.TaxEstimateStatus != domain.TaxEstimated || got.TaxZip != "77002" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	// an address that cannot be taxed is said to be incomplete (never the ZIP prompt)
 	for name, s := range map[string]*checkoutPaymentServiceImpl{
-		"no default":   mk(port.IdentityAddress{ID: "a", State: "TX", PostalCode: "77002"}),
-		"no state":     mk(port.IdentityAddress{ID: "a", PostalCode: "77002", IsDefault: true}),
-		"no addresses": mk(),
+		"default without a state": mk(port.IdentityAddress{ID: "a", PostalCode: "77002", IsDefault: true}, houston),
+		"only an incomplete one":  mk(port.IdentityAddress{ID: "a", State: "TX"}),
 	} {
-		if none, err := s.TaxEstimate(context.Background(), shopper, "", nil); err != nil || none.TaxEstimateStatus != domain.TaxNeedsAddress || none.TaxMinor != 0 {
+		none, err := s.TaxEstimate(context.Background(), shopper, "", nil)
+		if err != nil || none.TaxEstimateStatus != domain.TaxUnavailable || none.TaxUnavailableReason != domain.TaxReasonAddressIncomplete || none.TaxMinor != 0 {
 			t.Fatalf("%s: %+v %v", name, none, err)
 		}
 	}
-	// a guest has no address book
-	if none, _ := mk(port.IdentityAddress{ID: "a", State: "TX", PostalCode: "77002", IsDefault: true}).TaxEstimate(context.Background(), &domain.Caller{}, "", nil); none.TaxEstimateStatus != domain.TaxNeedsAddress {
+	// the address book could not be read: Retry, never the ZIP prompt
+	broken := &checkoutPaymentServiceImpl{d: ShopperDeps{Returns: &fakeReturns{answer: taxable}, Carts: fakeCarts{cart: cart}, Identity: fakeAddresses{err: errors.New("identity down")}}}
+	if none, err := broken.TaxEstimate(context.Background(), shopper, "", nil); err != nil || none.TaxEstimateStatus != domain.TaxUnavailable || none.TaxUnavailableReason != domain.TaxReasonServiceUnavailable || none.TaxMinor != 0 {
+		t.Fatalf("%+v %v", none, err)
+	}
+	// a new shopper with no address, and a guest, are asked for a ZIP code
+	if none, err := mk().TaxEstimate(context.Background(), shopper, "", nil); err != nil || none.TaxEstimateStatus != domain.TaxNeedsAddress || none.TaxUnavailableReason != domain.TaxReasonNeedsZip || none.TaxMinor != 0 {
+		t.Fatalf("%+v %v", none, err)
+	}
+	if none, _ := mk(def).TaxEstimate(context.Background(), &domain.Caller{}, "", nil); none.TaxEstimateStatus != domain.TaxNeedsAddress {
 		t.Fatalf("%+v", none)
 	}
 }

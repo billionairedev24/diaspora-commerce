@@ -650,6 +650,8 @@
   "co.taxAddress.incomplete": "Fi ìpínlẹ̀ àti kóòdù ZIP kún àdírẹ́sì yìí láti rí owó-orí rẹ.",
   "co.taxAddress.edit": "Ṣàtúnṣe àdírẹ́sì",
   "co.taxBlocked": "Yọ àwọn ohun tí a kò tíì lè tà kúrò láti rí owó-orí rẹ.",
+  "co.taxBlockedNamed": "A kò tíì lè tà {names}. Yọ {n, plural, other {wọn}} kúrò láti rí owó-orí rẹ.",
+  "co.taxZip.otherPlace": "Ṣírò fún ZIP code mìíràn",
   "co.taxNoItems": "Yan àwọn ohun láti rí owó-orí rẹ.",
   "co.taxRetry.message": "A kò lè ṣírò owó-orí rẹ báyìí. Gbìyànjú lẹ́ẹ̀kan sí i.",
   "co.taxRetry.button": "Tún gbìyànjú",

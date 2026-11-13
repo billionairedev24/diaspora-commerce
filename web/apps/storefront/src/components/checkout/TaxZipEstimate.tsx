@@ -1,9 +1,11 @@
 'use client';
 
-import { type CartTaxEstimate, isApiError } from '@afrotransact/api-client';
+import { accountQueries, type CartTaxEstimate, type CheckoutBlockedLine, isApiError, shopperQueries, siteQueries } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button } from '@afrotransact/ui';
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { Button, buttonClassName } from '@afrotransact/ui';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
@@ -15,81 +17,200 @@ const ZIP = /^\d{5}(-\d{4})?$/;
 type Props = {
   /** Read the estimate again when this changes (the cart's contents); the shown amount follows the cart. */
   refreshKey?: string | number;
-  /** On mount, ask for the estimate with no ZIP code: a signed-in shopper's saved default address is used when it has one. */
+  /**
+   * Work the place out without asking: the signed-in shopper's saved address (default first), else the delivery place they
+   * chose in the header when it has a ZIP code. The ZIP code input is then only for a guest or a shopper with no usable place.
+   */
   useSavedAddress?: boolean;
+  /** Takes a blocked line out of the cart (the cart page). Without it the blocked items are only named. */
+  onRemoveLine?: (line: CheckoutBlockedLine) => void;
 };
 
 /**
- * "Enter your ZIP code to see tax": the estimate before an address exists (cart page, a new shopper). It asks the BFF for the
- * same tax-returns quote the checkout uses, for the selected cart items in the place the ZIP code is in (or, signed in, in the
- * saved default address). Never an amount without a place, never $0.00 for "don't know yet". The checkout shows the locked
- * estimate once an address is chosen.
+ * What the tax row shows, from the BFF's own `taxEstimateStatus` / `taxUnavailableReason` and never from a guess:
+ *  - `estimate`: the amount with the place it is for (a saved address, the chosen delivery place or a typed ZIP code);
+ *  - `blocked`: items we can't sell yet are named, with Remove (the cart page);
+ *  - `incomplete`: the saved address lacks a state or ZIP code, with Edit address;
+ *  - `retry`: the estimate could not be worked out right now, with Retry;
+ *  - `zip`: nothing to work from (a guest, a new shopper): the one place the ZIP input is shown.
  */
-export function TaxZipEstimate({ refreshKey, useSavedAddress = false }: Props) {
+type View =
+  | { kind: 'loading' }
+  | { kind: 'estimate'; est: CartTaxEstimate; auto: boolean }
+  | { kind: 'blocked'; lines: CheckoutBlockedLine[] }
+  | { kind: 'incomplete' }
+  | { kind: 'retry' }
+  | { kind: 'zip' };
+
+/**
+ * The cart page's estimated tax (and the checkout's input while no address is chosen). It asks the BFF for the same
+ * tax-returns quote the checkout uses, for the selected cart items. Never an amount without a place, never $0.00 for
+ * "don't know yet", never "calculated at checkout". The checkout shows the locked estimate once an address is chosen.
+ */
+export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLine }: Props) {
   const t = useT();
   const fmt = useFormatters();
   const api = browserApi();
+  const qc = useQueryClient();
   const [zip, setZip] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<CartTaxEstimate | null>(null);
-  /** The ZIP code the shown estimate is for ('' = the saved address): read again when the cart changes. */
-  const [asked, setAsked] = useState<string | null>(useSavedAddress ? '' : null);
+  const [view, setView] = useState<View>(useSavedAddress ? { kind: 'loading' } : { kind: 'zip' });
+  /** A ZIP code the shopper typed (an estimate for another place); null = work the place out automatically. */
+  const typed = useRef<string | null>(null);
+  const latest = useRef(0);
 
-  const run = useCallback(
-    async (value: string) => {
-      setBusy(true);
-      setError(null);
-      try {
-        const est = await api.getTaxEstimate(value);
-        if (est.taxEstimateStatus === 'ESTIMATED') {
-          setResult(est);
-          setAsked(value);
-        } else if (value) {
-          setError(est.taxUnavailableReason === 'BLOCKED_ITEMS' ? t('co.taxBlocked') : t('co.taxRetry.message'));
-        } else {
-          setResult(null); // no saved address to use: the input stays
-        }
-      } catch (err) {
-        if (value) setError(isApiError(err) && err.status === 422 ? t('co.taxZip.invalid') : t('co.taxRetry.message'));
-      } finally {
-        setBusy(false);
+  // The place changes when the shopper signs in or edits their address book somewhere else: read again then.
+  const me = useQuery({ ...accountQueries.me(api), enabled: useSavedAddress });
+  const signedIn = me.data?.authenticated === true;
+  const book = useQuery({ ...shopperQueries.addresses(api), enabled: useSavedAddress && signedIn });
+  const placeKey = `${signedIn}:${(book.data ?? []).map((a) => `${a.id}/${a.isDefault}/${a.state ?? ''}/${a.zip}`).join(',')}`;
+
+  const show = useCallback(
+    (est: CartTaxEstimate, auto: boolean): View => {
+      if (est.taxEstimateStatus === 'ESTIMATED') {
+        // Never an amount without a place.
+        return est.taxJurisdictionLabel || est.taxZip ? { kind: 'estimate', est, auto } : { kind: 'retry' };
+      }
+      switch (est.taxUnavailableReason) {
+        case 'BLOCKED_ITEMS':
+          return { kind: 'blocked', lines: est.blockedLines };
+        case 'ADDRESS_INCOMPLETE':
+          return { kind: 'incomplete' };
+        case 'NEEDS_ZIP':
+        case 'NO_ITEMS':
+          return { kind: 'zip' };
+        default:
+          return est.taxEstimateStatus === 'NEEDS_ADDRESS' ? { kind: 'zip' } : { kind: 'retry' };
       }
     },
-    [api, t]
+    []
   );
 
+  const run = useCallback(async () => {
+    const ticket = ++latest.current;
+    const current = () => ticket === latest.current;
+    setBusy(true);
+    setError(null);
+    try {
+      if (typed.current) {
+        const est = await api.getTaxEstimate(typed.current);
+        if (current()) setView(show(est, false));
+        return;
+      }
+      // 1. the saved address (the BFF reads it); 2. the delivery place chosen in the header, when it has a ZIP code.
+      let est = await api.getTaxEstimate('');
+      let auto = true;
+      if (est.taxEstimateStatus === 'NEEDS_ADDRESS') {
+        const place = await qc.fetchQuery(siteQueries.deliveryLocation(api)).catch(() => null);
+        if (place?.source === 'chosen' && ZIP.test(place.zip)) {
+          try {
+            est = await api.getTaxEstimate(place.zip);
+          } catch (err) {
+            // A place the estimate cannot use is not an error to show: the shopper can type a ZIP code.
+            if (!(isApiError(err) && err.status === 422)) throw err;
+            auto = false;
+          }
+        } else auto = false;
+      }
+      if (current()) setView(show(est, auto));
+    } catch (err) {
+      if (!current()) return;
+      if (typed.current && isApiError(err) && err.status === 422) {
+        typed.current = null;
+        setView({ kind: 'zip' });
+        setError(t('co.taxZip.invalid'));
+      } else setView({ kind: 'retry' });
+    } finally {
+      if (current()) setBusy(false);
+    }
+  }, [api, qc, show, t]);
+
   useEffect(() => {
-    if (asked !== null) void run(asked);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- read again only when the cart changes
-  }, [refreshKey]);
+    if (useSavedAddress || typed.current) void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read again only when the cart or the place changes
+  }, [refreshKey, placeKey]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const value = zip.trim();
     if (!ZIP.test(value)) return setError(t('co.taxZip.invalid'));
-    await run(value);
+    typed.current = value;
+    await run();
   };
 
-  if (result) {
+  if (view.kind === 'loading') {
+    return (
+      <div className={styles.taxState} aria-busy="true" data-testid="tax-zip-loading">
+        <span className={styles.muted}>…</span>
+      </div>
+    );
+  }
+
+  if (view.kind === 'estimate') {
+    const { est } = view;
     return (
       <div className={styles.taxState} data-testid="tax-zip-result">
         <span>
-          <strong data-testid="tax-zip-amount">{fmt.money(result.taxMinor)}</strong> · {t('co.taxFor', { place: result.taxJurisdictionLabel || result.taxZip || '' })}
+          <strong data-testid="tax-zip-amount">{fmt.money(est.taxMinor)}</strong> · {t('co.taxFor', { place: est.taxJurisdictionLabel || est.taxZip || '' })}
         </span>
         <button
           type="button"
           className="link-button"
+          style={{ alignSelf: 'flex-start', fontSize: 'var(--at-text-xs)' }}
           onClick={() => {
-            setResult(null);
-            setAsked(null);
+            typed.current = null;
+            setZip('');
+            setView({ kind: 'zip' });
           }}
         >
-          {t('co.taxZip.change')}
+          {view.auto ? t('co.taxZip.otherPlace') : t('co.taxZip.change')}
         </button>
       </div>
     );
   }
+
+  if (view.kind === 'blocked') {
+    const titles = view.lines.map((l) => l.title);
+    return (
+      <div className={styles.taxState} data-testid="tax-zip-blocked">
+        <p className={styles.taxStateText} role="alert">
+          {titles.length ? t('co.taxBlockedNamed', { names: fmt.list(titles), n: titles.length }) : t('co.taxBlocked')}
+        </p>
+        {onRemoveLine &&
+          view.lines.map((l) => (
+            <Button key={l.lineId} size="sm" variant="secondary" onClick={() => onRemoveLine(l)} aria-label={t('co.blocked.removeAria', { title: l.title })} data-testid="tax-zip-blocked-remove">
+              {t('co.blocked.remove')}
+            </Button>
+          ))}
+      </div>
+    );
+  }
+
+  if (view.kind === 'incomplete') {
+    return (
+      <div className={styles.taxState} data-testid="tax-zip-incomplete">
+        <p className={styles.taxStateText}>{t('co.taxAddress.incomplete')}</p>
+        <Link href="/account/addresses" className={buttonClassName({ size: 'sm', variant: 'secondary' })}>
+          {t('co.taxAddress.edit')}
+        </Link>
+      </div>
+    );
+  }
+
+  if (view.kind === 'retry') {
+    return (
+      <div className={styles.taxState} data-testid="tax-zip-retry">
+        <p className={styles.taxStateText} role="alert">
+          {t('co.taxRetry.message')}
+        </p>
+        <Button size="sm" variant="secondary" loading={busy} onClick={() => void run()}>
+          {t('co.taxRetry.button')}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <form className={styles.taxState} onSubmit={(e) => void submit(e)} data-testid="tax-zip-form">
       <label className={styles.couponLabel} htmlFor="tax-zip">

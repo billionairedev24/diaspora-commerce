@@ -366,6 +366,8 @@ export const CartTaxEstimateSchema = z.object({
   taxZip: z.string().optional(),
   taxLines: z.array(CheckoutTaxLineSchema).default([]),
   blockedLines: z.array(CheckoutBlockedLineSchema).default([]),
+  /** Where the place came from: the shopper's saved address or the ZIP code sent; absent when there is no place yet. */
+  taxPlaceSource: z.enum(['SAVED_ADDRESS', 'ZIP']).optional(),
   subtotalMinor: MinorSchema,
   shippingMinor: MinorSchema,
   /** Items + delivery + estimated tax, without a coupon or membership (not known yet). */

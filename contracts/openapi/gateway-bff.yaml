@@ -2413,7 +2413,8 @@ paths:
       description: |
         The same tax-returns quote as the checkout summary, for the selected cart lines at each package's first
         delivery option, in the place the ZIP code is in. No coupon, membership or delivery choice is known yet, so the
-        final tax can differ; the checkout shows the estimate that is locked (`taxQuoteId`). With no `zip` the answer is
+        final tax can differ; the checkout shows the estimate that is locked (`taxQuoteId`). With no `zip` a signed-in
+        shopper's saved address is used (see `taxPlaceSource`); only a guest or a shopper with no saved address gets
         `NEEDS_ADDRESS` (the client shows a ZIP code input; never $0.00).
       security: [{sessionCookie: []}, {bearer: []}, {}]
       parameters:
@@ -4347,7 +4348,12 @@ components:
           items: {$ref: '#/components/schemas/CheckoutTaxLine'}
         blockedLines:
           type: array
+          description: 'With BLOCKED_ITEMS: the cart lines that cannot be sold yet (name them and offer Remove; never ids).'
           items: {$ref: '#/components/schemas/CheckoutBlockedLine'}
+        taxPlaceSource:
+          type: string
+          enum: [SAVED_ADDRESS, ZIP]
+          description: 'Where the estimate''s place came from: the signed-in shopper''s saved address (default first, else the first that can be taxed) or the ZIP code sent. Absent when there is no place yet. With no zip, a signed-in shopper whose saved address cannot be taxed gets UNAVAILABLE / ADDRESS_INCOMPLETE, and one whose address book could not be read gets UNAVAILABLE / SERVICE_UNAVAILABLE (Retry); NEEDS_ADDRESS / NEEDS_ZIP (the ZIP input) is only for guests and shoppers with no saved address. Additive: older clients ignore it.'
         subtotalMinor: {type: integer}
         shippingMinor: {type: integer}
         totalMinor: {type: integer, description: 'Items + delivery + estimated tax, without a coupon or membership (not yet known)'}

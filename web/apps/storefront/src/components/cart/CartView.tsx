@@ -285,7 +285,11 @@ export function CartView() {
           {cart.selectedCount > 0 && (
             <div className={styles.taxEstimate} data-testid="cart-tax-estimate">
               <strong>{t('co.tax')}</strong>
-              <TaxZipEstimate useSavedAddress refreshKey={`${cart.selectedCount}:${cart.subtotalMinor}`} />
+              <TaxZipEstimate
+                useSavedAddress
+                refreshKey={`${cart.selectedCount}:${cart.subtotalMinor}`}
+                onRemoveLine={(l) => m.mutate({ kind: 'remove', lineId: l.lineId, title: l.title })}
+              />
             </div>
           )}
           {cart.selectedCount > 0 && <CartMembershipUpsell subtotalMinor={cart.subtotalMinor} selectedCount={cart.selectedCount} />}

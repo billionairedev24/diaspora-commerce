@@ -158,7 +158,7 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     await user.click(within(points[points.length - 1] as HTMLElement).getByRole('radio'));
     const summary = screen.getByTestId('order-summary');
     expect(summary).toHaveTextContent(/ShippingFREE/);
-    expect(summary).toHaveTextContent(/1 pickup\(s\): no shipping charge/);
+    expect(summary).toHaveTextContent(/1 pickup: no shipping charge/);
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalled(), { timeout: 5000 });

@@ -128,12 +128,34 @@ The estimate needs a destination (state and ZIP code). The checkout puts the **a
 
 | `taxEstimateStatus` / `taxUnavailableReason` | When | The row says |
 |---|---|---|
-| `NEEDS_ADDRESS` / `NEEDS_ZIP` | no address chosen (a new shopper, a guest on the cart page) | an input: **"Enter your ZIP code to see tax"** with a "See tax" button (`GET /v1/checkout/tax-estimate?zip=`). A signed-in shopper's saved default address is used on the cart page without typing. Never an amount, never $0.00. |
+| `NEEDS_ADDRESS` / `NEEDS_ZIP` | no usable place: a guest or a shopper with no saved address and no chosen delivery place (see [below](#the-cart-page-never-asks-for-what-it-already-knows)) | an input: **"Enter your ZIP code to see tax"** with a "See tax" button (`GET /v1/checkout/tax-estimate?zip=`). A saved address or a chosen delivery place is used on the cart page without typing. Never an amount, never $0.00. |
 | `UNAVAILABLE` / `ADDRESS_INCOMPLETE` | the chosen address has no state or ZIP code (identity does not require a state) | "Add your state and ZIP code to this address to see your tax." with **Edit address**. Place order to such an address is refused by the gateway (`errors.addressId`) before orders is called. |
 | `UNAVAILABLE` / `BLOCKED_ITEMS` | an item has no definite tax decision (`blockedLines`) | "Remove the items we can't sell yet to see your tax." (the blocked-items panel above offers Remove) |
 | `UNAVAILABLE` / `SERVICE_UNAVAILABLE`, `FACTS_UNAVAILABLE` | tax-returns (or catalog's facts for an item) did not answer: the **only** exceptional state | "We couldn't work out your tax right now. Try again." with **Retry**; Pay is disabled; `tax_estimate_unavailable_total` counts it and an alert pages |
 
 `GET /v1/checkout/tax-estimate` (cart page, new shopper): the same quote for the selected lines at each package's first delivery option, in the place the ZIP code is in (city and state from geo). No coupon, membership or delivery choice is known yet, so it can differ from the checkout's locked estimate; it is labelled "Estimated for Houston, TX".
+
+### The cart page never asks for what it already knows
+
+The cart's tax row (`TaxZipEstimate`, `useSavedAddress`) works the place out in this order, and **asks for a ZIP code only when there is no usable place**:
+
+1. **The saved address** (called with no `zip`; the BFF reads the address book with the shopper's token): the default address, or, when none is marked default, the first saved address with a state and ZIP. The response says `taxPlaceSource: SAVED_ADDRESS`.
+2. **The delivery place chosen in the header** ("Deliver to"), when its `source` is `chosen` and it has a ZIP (also for a guest). A place only *detected* from edge headers is an approximation and is not used for tax.
+3. **The ZIP prompt**: a guest, or a signed-in shopper with no saved address and no chosen place (`NEEDS_ADDRESS` / `NEEDS_ZIP`).
+
+What the row then shows comes from `taxEstimateStatus` / `taxUnavailableReason` and is **never replaced by the ZIP prompt** because something failed:
+
+| Answer | Cart row |
+|---|---|
+| `ESTIMATED` with a place | the amount and "Estimated for Houston, TX"; "Estimate for another ZIP code" is a small secondary link (for a typed ZIP it reads "Change ZIP code"). An estimate with no place is treated as a failure, never shown |
+| `UNAVAILABLE` / `BLOCKED_ITEMS` | "We can't sell {names} yet. Remove it to see your tax." (the item names from `blockedLines`, never ids; plural-aware) with one **Remove** button per item (removes the line from the cart; same keys as the checkout's blocked-items panel) |
+| `UNAVAILABLE` / `ADDRESS_INCOMPLETE` | the saved address has no state or ZIP: "Add your state and ZIP code to this address to see your tax." with **Edit address** (`/account/addresses`) |
+| `UNAVAILABLE` / `SERVICE_UNAVAILABLE`, `FACTS_UNAVAILABLE`, or the request itself failing | "We couldn't work out your tax right now. Try again." with **Retry** |
+| `NEEDS_ADDRESS` / `NEEDS_ZIP`, `NO_ITEMS` | the ZIP prompt |
+
+The BFF no longer hides failures behind `NEEDS_ZIP`: a saved address that cannot be taxed answers `ADDRESS_INCOMPLETE`, and an address book that could not be read answers `SERVICE_UNAVAILABLE` (both counted in `tax_estimate_unavailable_total`). The row reads again when the cart changes and when the signed-in state or the address book changes. Nothing here weakens a gate: the cart's Proceed to checkout is unchanged, and Pay stays blocked in the checkout while there is no estimate.
+
+Singular and plural counts ("1 item", "From 1 seller", "1 pickup") use the ICU plural messages of the i18n package in all five locales (the non-English ones are machine drafts, `needsReview`).
 
 ### Pickup
 

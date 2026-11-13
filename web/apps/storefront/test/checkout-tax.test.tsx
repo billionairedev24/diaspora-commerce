@@ -53,6 +53,18 @@ describe('checkout tax', () => {
     expect(within(summary).getByTestId('checkout-tax-exempt-reason')).toHaveTextContent(/no sales tax applies/);
   });
 
+  it('one item from one seller reads "1 item" and "From 1 seller", never "1 items" or "seller(s)"', async () => {
+    const api = await signInDemo();
+    const jollof = await api.getProduct('AT000000P2');
+    await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    renderWithProviders(<CheckoutView />);
+    await screen.findByTestId('checkout-package');
+    await screen.findByTestId('order-summary');
+    expect(document.body.textContent).toMatch(/1 item(?!s)/);
+    expect(document.body.textContent).toMatch(/From 1 seller(?!s)/);
+    expect(document.body.textContent).not.toMatch(/1 items|seller\(s\)/);
+  });
+
   describe('guard: no $0.00, 0% or "no tax" unless the decision is resolved (owner principle: never wrong tax information)', () => {
     let okSummary: CheckoutSummary;
     const overridden = async (patch: (s: CheckoutSummary) => Partial<CheckoutSummary>) => {

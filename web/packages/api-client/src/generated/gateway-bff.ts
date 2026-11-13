@@ -1960,7 +1960,8 @@ export interface paths {
          * Estimated tax for a ZIP code, before an address exists (cart page, a new shopper)
          * @description The same tax-returns quote as the checkout summary, for the selected cart lines at each package's first
          *     delivery option, in the place the ZIP code is in. No coupon, membership or delivery choice is known yet, so the
-         *     final tax can differ; the checkout shows the estimate that is locked (`taxQuoteId`). With no `zip` the answer is
+         *     final tax can differ; the checkout shows the estimate that is locked (`taxQuoteId`). With no `zip` a signed-in
+         *     shopper's saved address is used (see `taxPlaceSource`); only a guest or a shopper with no saved address gets
          *     `NEEDS_ADDRESS` (the client shows a ZIP code input; never $0.00).
          */
         get: operations["getCheckoutTaxEstimate"];
@@ -3441,7 +3442,13 @@ export interface components {
             taxJurisdictionLabel: string;
             taxZip?: string;
             taxLines: components["schemas"]["CheckoutTaxLine"][];
+            /** @description With BLOCKED_ITEMS: the cart lines that cannot be sold yet (name them and offer Remove; never ids). */
             blockedLines?: components["schemas"]["CheckoutBlockedLine"][];
+            /**
+             * @description Where the estimate's place came from: the signed-in shopper's saved address (default first, else the first that can be taxed) or the ZIP code sent. Absent when there is no place yet. With no zip, a signed-in shopper whose saved address cannot be taxed gets UNAVAILABLE / ADDRESS_INCOMPLETE, and one whose address book could not be read gets UNAVAILABLE / SERVICE_UNAVAILABLE (Retry); NEEDS_ADDRESS / NEEDS_ZIP (the ZIP input) is only for guests and shoppers with no saved address. Additive: older clients ignore it.
+             * @enum {string}
+             */
+            taxPlaceSource?: "SAVED_ADDRESS" | "ZIP";
             subtotalMinor: number;
             shippingMinor: number;
             /** @description Items + delivery + estimated tax, without a coupon or membership (not yet known) */
@@ -4363,7 +4370,7 @@ export interface components {
         HomeVisit: {
             /** @description The visit window the page was composed for (echo of X-Visit-Window */
             window: string;
-            /** @description Short keys of the items this page shows. Guests append them to the `at_hs` cookie (keep the last 3 loads, about 120 keys) and send it back as X-Home-Seen. Not the product ids. */
+            /** @description Short keys of the items this page shows. A refresh inside one visit must REPLACE the cookie entry of the same `visit.window` instead of appending, or the page would reshuffle on refresh. Guests append them to the `at_hs` cookie (keep the last 3 loads, about 120 keys) and send it back as X-Home-Seen. Not the product ids. */
             seen: string[];
             /** @description True when the order is the default one (crawler */
             deterministic?: boolean;
@@ -6757,6 +6764,8 @@ export interface operations {
                 "X-Visit-Window"?: string;
                 /** @description Guests: comma separated item keys (`Home.visit.seen`) of the last few home loads, kept in a first-party cookie. Signed-in shoppers: ignored, the server remembers. */
                 "X-Home-Seen"?: string;
+                /** @description Additive (S425): comma separated ATINs the visitor already has in Recently viewed and in the cart. Discovery modules leave them out. Read from the request only, never stored or logged: guest history stays in the browser. */
+                "X-Home-Exclude"?: string;
                 /** @description Experiment variant assigned by the Worker cookie; part of the shared cache key. */
                 "X-Home-Variant"?: string;
                 /** @description Set by the Worker for known crawlers and for noindex variants: deterministic page, no randomness. */

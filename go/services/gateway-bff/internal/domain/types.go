@@ -774,11 +774,19 @@ type CartTaxEstimate struct {
 	TaxZip               string                `json:"taxZip,omitempty"`
 	TaxLines             []CheckoutTaxLine     `json:"taxLines"`
 	BlockedLines         []CheckoutBlockedLine `json:"blockedLines,omitempty"`
-	SubtotalMinor        int64                 `json:"subtotalMinor"`
-	ShippingMinor        int64                 `json:"shippingMinor"`
-	TotalMinor           int64                 `json:"totalMinor"`
-	Currency             string                `json:"currency"`
+	// TaxPlaceSource says where the estimate's place came from (SAVED_ADDRESS or ZIP); absent when there is no place yet.
+	TaxPlaceSource string `json:"taxPlaceSource,omitempty"`
+	SubtotalMinor  int64  `json:"subtotalMinor"`
+	ShippingMinor  int64  `json:"shippingMinor"`
+	TotalMinor     int64  `json:"totalMinor"`
+	Currency       string `json:"currency"`
 }
+
+// Places a CartTaxEstimate can be worked out for (CartTaxEstimate.TaxPlaceSource).
+const (
+	TaxPlaceSavedAddress = "SAVED_ADDRESS"
+	TaxPlaceZip          = "ZIP"
+)
 
 // PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).
 type PlaceOrderRequest struct {

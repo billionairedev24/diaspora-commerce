@@ -178,22 +178,40 @@ func strOf(v any) string {
 
 var zipOnly = regexp.MustCompile(`^\d{5}(-\d{4})?$`)
 
-// savedDefaultAddress is the signed-in shopper's default address when it can be taxed (it has a state and a ZIP code).
-func (s *checkoutPaymentServiceImpl) savedDefaultAddress(ctx context.Context, c *domain.Caller) *port.IdentityAddress {
+// savedAddressForEstimate is the signed-in shopper's saved address the cart estimate is worked out for: the default
+// address, or, when none is marked default, the first saved one that can be taxed. It says why there is none, so the cart
+// never falls back to asking for a ZIP code it does not need: a saved address that lacks a state or ZIP code is
+// ADDRESS_INCOMPLETE (the shopper completes it), an address book that could not be read is SERVICE_UNAVAILABLE (Retry).
+// No address at all, or a guest, gives ("", nil): the client asks for a ZIP code.
+func (s *checkoutPaymentServiceImpl) savedAddressForEstimate(ctx context.Context, c *domain.Caller) (*port.IdentityAddress, string) {
 	if c == nil || c.BearerToken == "" || s.d.Identity == nil {
-		return nil
+		return nil, ""
 	}
 	addrs, err := s.d.Identity.Addresses(ctx, c.BearerToken)
 	if err != nil {
 		s.d.log().WarnContext(ctx, "address book unavailable for the cart tax estimate", "error", err)
-		return nil
+		return nil, domain.TaxReasonServiceUnavailable
+	}
+	taxable := func(a *port.IdentityAddress) bool {
+		return strings.TrimSpace(a.State) != "" && strings.TrimSpace(a.PostalCode) != ""
 	}
 	for i := range addrs {
-		if a := &addrs[i]; a.IsDefault && strings.TrimSpace(a.State) != "" && strings.TrimSpace(a.PostalCode) != "" {
-			return a
+		if a := &addrs[i]; a.IsDefault {
+			if taxable(a) {
+				return a, ""
+			}
+			return nil, domain.TaxReasonAddressIncomplete
 		}
 	}
-	return nil
+	for i := range addrs {
+		if a := &addrs[i]; taxable(a) {
+			return a, ""
+		}
+	}
+	if len(addrs) > 0 {
+		return nil, domain.TaxReasonAddressIncomplete
+	}
+	return nil, ""
 }
 
 // TaxEstimate is the cart page's estimate before an address is chosen: the same tax-returns quote as the checkout, for the
@@ -208,9 +226,19 @@ func (s *checkoutPaymentServiceImpl) TaxEstimate(ctx context.Context, c *domain.
 	var dest *port.IdentityAddress
 	switch {
 	case zip == "":
-		if dest = s.savedDefaultAddress(ctx, c); dest == nil {
+		var why string
+		if dest, why = s.savedAddressForEstimate(ctx, c); dest == nil {
+			switch why {
+			case domain.TaxReasonAddressIncomplete:
+				out.TaxEstimateStatus, out.TaxUnavailableReason, out.TaxRateLabel = domain.TaxUnavailable, why, taxLabelAddressIncomplete
+				s.d.taxMetrics().EstimateUnavailable(reasonAddressIncomplete)
+			case domain.TaxReasonServiceUnavailable:
+				out.TaxEstimateStatus, out.TaxUnavailableReason, out.TaxRateLabel = domain.TaxUnavailable, why, taxLabelTryAgain
+				s.d.taxMetrics().EstimateUnavailable(reasonServerError)
+			}
 			return out, nil
 		}
+		out.TaxPlaceSource = domain.TaxPlaceSavedAddress
 	case !zipOnly.MatchString(zip):
 		return out, domain.ValidationProblem(map[string]string{"zip": "Enter a 5-digit ZIP code"})
 	case s.d.ZipLookup == nil:
@@ -234,6 +262,7 @@ func (s *checkoutPaymentServiceImpl) TaxEstimate(ctx context.Context, c *domain.
 			return out, domain.NewProblem(http.StatusServiceUnavailable, domain.CodeUpstreamError, "Try again", "We couldn't look up that ZIP code right now. Try again.")
 		}
 		dest = &port.IdentityAddress{Country: "US", State: strings.ToUpper(strings.TrimSpace(state)), PostalCode: zip, City: city}
+		out.TaxPlaceSource = domain.TaxPlaceZip
 	}
 	sum := domain.CheckoutSummary{Packages: pkgs, Currency: cart.Currency, CanPlaceOrder: true, BlockedLines: []domain.CheckoutBlockedLine{}, TaxLines: []domain.CheckoutTaxLine{}}
 	for _, p := range pkgs {
@@ -245,5 +274,5 @@ func (s *checkoutPaymentServiceImpl) TaxEstimate(ctx context.Context, c *domain.
 	recalcCheckoutTotal(&sum)
 	return domain.CartTaxEstimate{TaxEstimateStatus: sum.TaxEstimateStatus, TaxUnavailableReason: sum.TaxUnavailableReason, TaxMinor: sum.TaxMinor,
 		TaxRateLabel: sum.TaxRateLabel, TaxJurisdictionLabel: sum.TaxJurisdictionLabel, TaxZip: sum.TaxZip, TaxLines: sum.TaxLines,
-		BlockedLines: sum.BlockedLines, SubtotalMinor: sum.SubtotalMinor, ShippingMinor: sum.ShippingMinor, TotalMinor: sum.TotalMinor, Currency: firstNonEmpty(sum.Currency, domain.Currency)}, nil
+		BlockedLines: sum.BlockedLines, TaxPlaceSource: out.TaxPlaceSource, SubtotalMinor: sum.SubtotalMinor, ShippingMinor: sum.ShippingMinor, TotalMinor: sum.TotalMinor, Currency: firstNonEmpty(sum.Currency, domain.Currency)}, nil
 }

@@ -604,22 +604,29 @@ export const shopperHandlers = [
     const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
     const shipping = packageDeliveryFees(packages, q.get('packageDelivery'));
     const empty = { taxMinor: 0, taxJurisdictionLabel: '', taxLines: [], blockedLines: [], subtotalMinor: subtotal, shippingMinor: shipping, totalMinor: subtotal + shipping, currency: 'USD' };
-    // No ZIP code typed: a signed-in shopper's saved default address is used when it can be taxed (a state and a ZIP code).
+    // No ZIP code typed: a signed-in shopper's saved address is used (the default, else the first that can be taxed). One that
+    // cannot be taxed is ADDRESS_INCOMPLETE; only a guest or a shopper with no saved address is asked for a ZIP code.
     let saved: { zip: string; state: string; city: string } | undefined;
     if (!zip) {
+      let book: { isDefault?: boolean; state?: string; zip: string; city: string }[] = [];
       try {
-        const a = me(ctx).addresses.find((x) => x.isDefault && x.state?.trim() && x.zip.trim());
-        if (a) saved = { zip: a.zip, state: a.state ?? '', city: a.city };
+        book = me(ctx).addresses;
       } catch {
         // a guest has no address book
       }
-      if (!saved) return json({ ...empty, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxRateLabel: TAX_LABELS.NEEDS_ZIP });
+      const taxable = (x: { state?: string; zip: string }) => !!x.state?.trim() && !!x.zip.trim();
+      const def = book.find((x) => x.isDefault);
+      const a = def ? (taxable(def) ? def : undefined) : book.find(taxable);
+      if (a) saved = { zip: a.zip, state: a.state ?? '', city: a.city };
+      else if (book.length > 0)
+        return json({ ...empty, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'ADDRESS_INCOMPLETE', taxRateLabel: TAX_LABELS.ADDRESS_INCOMPLETE });
+      else return json({ ...empty, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxRateLabel: TAX_LABELS.NEEDS_ZIP });
     }
     const place = saved ?? locationForZip(zip.slice(0, 5));
     if (!saved && (!/^\d{5}(-\d{4})?$/.test(zip) || !place)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'We don’t recognise that ZIP code.', { errors: { zip: 'Enter a 5-digit ZIP code' } });
     const shippingByPackage = Object.fromEntries(packages.map((p) => [p.packageId, packageDeliveryFees([p], q.get('packageDelivery'))]));
     const tax = mockCheckoutTax({ packages, state: place?.state, city: place?.city, zip: saved?.zip ?? zip, shippingByPackage, discountMinor: 0, hasAddress: true });
-    return json({ ...empty, ...tax, taxMinor: tax.taxMinor, totalMinor: subtotal + shipping + tax.taxMinor });
+    return json({ ...empty, ...tax, taxPlaceSource: saved ? 'SAVED_ADDRESS' : 'ZIP', taxMinor: tax.taxMinor, totalMinor: subtotal + shipping + tax.taxMinor });
   })),
 
   /* Checkout */

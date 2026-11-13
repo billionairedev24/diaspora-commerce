@@ -1764,3 +1764,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Country of origin removed from form, catalog rules, gateway-bff, contracts, storefront and mocks; stored values kept
 - Label photo optional for groceries, still required for health, beauty, baby feeding and pet food; tax gate unchanged
 - Five locales; tests and a real-browser axe run","E03","","High","8","seller-center catalog","catalog","In Progress"
+"S438","Story","Cart tax row uses the saved address, never asks for a ZIP it already knows, and says the real reason","The storefront cart showed the ZIP prompt to a signed-in shopper with a saved Houston address because any failure of the saved-address estimate (blocked items, tax unavailable) fell back to the input. The cart now uses the saved address (default first), then the chosen delivery place, and shows the true state from taxEstimateStatus/taxUnavailableReason. Also fixes 1 items / seller(s) plurals on cart and checkout.","- Signed-in shopper with a saved address or a chosen delivery place with a ZIP never sees the ZIP box
+- Blocked items are named with Remove, an incomplete address offers Edit address, a failure offers Retry; only guests with no place get the ZIP prompt
+- BFF answers ADDRESS_INCOMPLETE / SERVICE_UNAVAILABLE instead of NEEDS_ZIP and adds taxPlaceSource (contract-first, additive)
+- 1 item / From 1 seller plurals via ICU plural messages in all five locales
+- vitest for each state, Go gateway tests, tsc and eslint clean","E06","","High","3","web tax cart","checkout","Done"
