@@ -355,6 +355,12 @@ func (s *sellerShellImpl) SetActiveOrg(ctx context.Context, c *domain.Caller, or
 		m2 = m
 	}
 	m2.OrgID = orgID
+	// Identity stamps the org claim when it issues a token, so the tokens the session holds still name the previous
+	// organisation: rotate them now, or the owning services keep acting for the old org (and re-check owners against
+	// it) while this shell already shows the new one. App bearers refresh their own tokens.
+	if s.r.d.Sessions != nil {
+		s.r.d.Sessions.RefreshNow(ctx, c)
+	}
 	out, _, err := s.session(ctx, c, m2)
 	return out, err
 }

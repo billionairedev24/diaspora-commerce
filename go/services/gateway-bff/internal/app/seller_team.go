@@ -235,7 +235,9 @@ func (s *sellerTeamImpl) AcceptInvitation(ctx context.Context, c *domain.Caller,
 	}
 	// Best effort: open the organisation just joined; the person can still switch from the org menu.
 	if a.OrgID != "" {
-		_, _ = s.r.d.Orgs.SelectOrg(ctx, c.BearerToken, a.OrgID)
+		if _, err := s.r.d.Orgs.SelectOrg(ctx, c.BearerToken, a.OrgID); err == nil && s.r.d.Sessions != nil {
+			s.r.d.Sessions.RefreshNow(ctx, c) // the org claim is stamped at issuance; see SetActiveOrg
+		}
 	}
 	return domain.AcceptedInvitation{OrgID: a.OrgID, OrgName: a.OrgName, OrgKind: a.OrgKind, RoleKey: a.RoleKey, RoleLabel: domain.RoleLabel(a.RoleKey),
 		AlreadyMember: a.AlreadyMember}, nil

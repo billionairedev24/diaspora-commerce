@@ -89,7 +89,7 @@ func (s *sellerSizeChartsImpl) relay(ctx context.Context, c *domain.Caller, leve
 	if err != nil {
 		return nil, err
 	}
-	out, err := cl.Call(ctx, c.BearerToken, method, sub, q, body)
+	out, err := cl.Call(ctx, c.BearerToken, method, sub, q, rawWithoutIdentityKeys(body))
 	if err != nil {
 		return nil, mapErr("catalog", err)
 	}

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -83,13 +82,7 @@ func (s *sellerFbaImpl) prepare(ctx context.Context, c *domain.Caller, r OpsRequ
 	}
 	call := port.StaffCall{Method: r.Method, Path: target, Query: q, IfMatch: r.IfMatch, IdempotencyKey: r.Idem}
 	if r.Method != http.MethodGet {
-		body := map[string]any{}
-		for k, v := range r.Body {
-			if !strings.EqualFold(k, "ownerOrg") {
-				body[k] = v
-			}
-		}
-		call.Body = body
+		call.Body = withoutIdentityKeys(map[string]any(r.Body))
 	}
 	return rt, call, nil
 }
