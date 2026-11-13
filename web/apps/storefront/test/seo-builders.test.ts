@@ -36,7 +36,6 @@ const detail = (over: Partial<ProductDetail> = {}, product: Partial<ProductDetai
     community: 'Yoruba',
     department: 'Groceries',
     unit: '2 kg',
-    origin: 'Nigeria',
     bullets: ['Unpolished local rice', 'Stone-free'],
     rating: 4.6,
     reviewCount: 23,
