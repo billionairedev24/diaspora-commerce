@@ -737,6 +737,7 @@ const OfferTermsBody = z.object({
   quantity: z.number().int().min(0).max(100_000).optional(),
   version: z.number().int().optional()
 });
+const OfferStatusBody = z.object({ version: z.number().int().min(0).optional() });
 const OfferFulfilmentBody = z.object({ fulfilment: FulfilmentKindSchema, shipFromLocationId: z.string().max(64).nullable().optional() });
 
 const TokenBody = z.object({ token: z.string().trim().min(1, 'This invitation link is incomplete. Open it again from the email.').max(200) });
@@ -2930,6 +2931,30 @@ export const sellerHandlers = [
       }
       return o;
     })
+  ),
+  /* Pause or resume one of the organisation's own offers (an offer on another seller's page): the offer, never the page. */
+  ...(['pause', 'resume'] as const).map((action) =>
+    http.post(
+      `${W}/offers/:offerId/${action}`,
+      route(async (ctx, p) => {
+        const b = await body(ctx.request, OfferStatusBody);
+        require(ctx, 'listings', 'EDIT', 'SELLER');
+        const o = ctx.db.offers.find((x) => x.offerId === p.offerId && x.status !== 'WITHDRAWN');
+        if (!o) throw notFound('No such offer.');
+        if (o.status !== (action === 'pause' ? 'ACTIVE' : 'PAUSED'))
+          throw conflict(action === 'pause' ? 'Only an item that is on sale can be paused.' : 'Only a paused item can be put back on sale.');
+        if (b.version !== undefined && b.version !== o.version) throw conflict('This item changed. Reload and try again.');
+        o.status = action === 'pause' ? 'PAUSED' : 'ACTIVE';
+        o.version += 1;
+        const row = ctx.db.listings.find((l) => l.offerId === o.offerId);
+        if (row) {
+          row.status = o.status === 'PAUSED' ? 'PAUSED' : 'LIVE';
+          row.statusLabel = row.status === 'PAUSED' ? 'Paused' : 'Live';
+          row.offerVersion = o.version;
+        }
+        return o;
+      })
+    )
   ),
   http.put(
     `${W}/offers/:offerId/fulfilment`,

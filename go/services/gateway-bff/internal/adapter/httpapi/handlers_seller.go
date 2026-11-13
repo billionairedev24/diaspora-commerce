@@ -67,6 +67,8 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
 		route("PATCH /v1/seller/offers/{offerId}", h.offerTerms)
+		route("POST /v1/seller/offers/{offerId}/pause", h.offerPause)
+		route("POST /v1/seller/offers/{offerId}/resume", h.offerResume)
 	}
 	if h.s.SellerCases != nil {
 		route("GET /v1/seller/returns", h.sellerReturns)
@@ -900,6 +902,26 @@ func (h *handlersImpl) offerTerms(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.s.SellerOffers.SetTerms(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) offerPause(w http.ResponseWriter, r *http.Request) {
+	var b domain.OfferStatusRequest
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerOffers.Pause(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) offerResume(w http.ResponseWriter, r *http.Request) {
+	var b domain.OfferStatusRequest
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerOffers.Resume(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

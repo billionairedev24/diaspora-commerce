@@ -201,6 +201,16 @@ func (o *offersImpl) Update(ctx context.Context, bearer, id string, body map[str
 	return out, err
 }
 
+func (o *offersImpl) SetStatus(ctx context.Context, bearer, id, action string, version int64) (port.SellerOfferUp, error) {
+	var out port.SellerOfferUp
+	var header http.Header
+	if version > 0 {
+		header = http.Header{"If-Match": {`"` + strconv.FormatInt(version, 10) + `"`}}
+	}
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/offers/" + url.PathEscape(id) + "/" + action, Bearer: bearer, Header: header}, &out)
+	return out, err
+}
+
 func (o *offersImpl) ListCoupons(ctx context.Context, bearer string) ([]port.SellerCouponUp, error) {
 	var out []port.SellerCouponUp
 	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/coupons", Bearer: bearer, Query: url.Values{"funding": {"SELLER"}}}, &out)

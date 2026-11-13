@@ -1440,6 +1440,12 @@ type OfferTermsRequest struct {
 	Version    *int64 `json:"version"`
 }
 
+// OfferStatusRequest is POST /v1/seller/offers/{id}/pause and /resume. Version is the offer's version the seller saw (a newer
+// stored version answers 409); it may be left out.
+type OfferStatusRequest struct {
+	Version *int64 `json:"version"`
+}
+
 // SellerLocalDelivery is AfroTransact Delivery from the seller's store on a shipment (S255).
 type SellerLocalDelivery struct {
 	PickupLocationID    *string  `json:"pickupLocationId"`

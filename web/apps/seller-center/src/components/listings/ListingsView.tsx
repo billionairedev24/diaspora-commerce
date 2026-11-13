@@ -122,6 +122,18 @@ function ListingsTable() {
     },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
+  /** Pause or resume an offer on another seller's page: the offer, never the page. */
+  const toggleOffer = useMutation({
+    mutationFn: (r: ListingRow) => {
+      const body = typeof r.offerVersion === 'number' ? { version: r.offerVersion } : {};
+      return r.status === 'LIVE' ? api.pauseOffer(r.offerId ?? '', body) : api.resumeOffer(r.offerId ?? '', body);
+    },
+    onSuccess: (o) => {
+      refresh();
+      toast.show(t(o.status === 'PAUSED' ? 'sc.listings.toast.offerPaused' : o.status === 'ACTIVE' ? 'sc.listings.toast.offerResumed' : 'sc.listings.toast.offerChecking'));
+    },
+    onError: (e) => toast.show(problemMessage(e), 'error')
+  });
   const saveStock = async (row: ListingRow, quantity: number) => {
     const a = await api.adjustStock({ sku: row.sku, quantity, reason: 'STOCK_TAKE' }, idempotencyKey());
     toast.show(t('sc.stock.saved', { sku: a.sku, quantity: a.quantity }));
@@ -245,6 +257,11 @@ function ListingsTable() {
             label: t(r.status === 'LIVE' ? 'sc.listings.a.pause' : 'sc.listings.a.resume'),
             icon: r.status === 'LIVE' ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />,
             onSelect: () => toggle.mutate(r)
+          },
+          editable && isOffer(r) && (r.status === 'LIVE' || r.status === 'PAUSED') && {
+            label: t(r.status === 'LIVE' ? 'sc.listings.a.pauseSelling' : 'sc.listings.a.resumeSelling'),
+            icon: r.status === 'LIVE' ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />,
+            onSelect: () => toggleOffer.mutate(r)
           },
           editable && !isOffer(r) && !!r.atin && r.variantCount > 1 && r.fulfilment === 'SELLER' && { label: t('sc.listings.a.stock'), icon: <Stack size={16} aria-hidden />, onSelect: () => setStockOf(r) },
           editable && !!r.atin && { label: t('sc.listings.a.fulfilment'), icon: <Truck size={16} aria-hidden />, onSelect: () => setFulfilment(r) }

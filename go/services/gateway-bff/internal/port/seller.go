@@ -857,6 +857,8 @@ type OffersClient interface {
 	Create(ctx context.Context, bearer, key string, body map[string]any) (SellerOfferUp, error)
 	// Update is PATCH /v1/offers/{id} (only the fields present change).
 	Update(ctx context.Context, bearer, id string, body map[string]any) (SellerOfferUp, error)
+	// SetStatus is POST /v1/offers/{id}/pause or /resume (action "pause" or "resume"); version, when above zero, is sent as If-Match.
+	SetStatus(ctx context.Context, bearer, id, action string, version int64) (SellerOfferUp, error)
 	// ListCoupons is GET /v1/coupons (seller-funded for the token's organisation).
 	ListCoupons(ctx context.Context, bearer string) ([]SellerCouponUp, error)
 	CreateCoupon(ctx context.Context, bearer string, body map[string]any) (SellerCouponUp, error)

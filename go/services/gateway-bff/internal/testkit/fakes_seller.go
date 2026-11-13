@@ -1363,6 +1363,28 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 		}
 		problem(w, 404, "offers.offer-not-found", "not found", nil)
 	})
+	setStatus := func(action, from, to string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			u.mu.Lock()
+			defer u.mu.Unlock()
+			for _, o := range offers {
+				if o["id"] != r.PathValue("id") {
+					continue
+				}
+				if o["status"] != from {
+					problem(w, 409, "offers.invalid-transition", "Only a "+from+" offer can be "+action+"d", nil)
+					return
+				}
+				o["status"] = to
+				o["version"] = o["version"].(int) + 1
+				writeJSON(w, 200, o)
+				return
+			}
+			problem(w, 404, "offers.offer-not-found", "not found", nil)
+		}
+	}
+	mux.HandleFunc("POST /v1/offers/{id}/pause", setStatus("pause", "ACTIVE", "PAUSED"))
+	mux.HandleFunc("POST /v1/offers/{id}/resume", setStatus("resume", "PAUSED", "ACTIVE"))
 	mux.HandleFunc("GET /v1/seller/analytics", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"currency": "USD", "toShip": 9,
 			"days":         []map[string]any{{"date": "2026-10-09", "salesMinor": 190000, "units": 64, "orders": 20}, {"date": "2026-10-10", "salesMinor": 210000, "units": 70, "orders": 22}},

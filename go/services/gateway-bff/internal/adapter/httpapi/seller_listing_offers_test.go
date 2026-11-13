@@ -2,11 +2,13 @@ package httpapi_test
 
 import (
 	"testing"
+
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/testkit"
 )
 
 // exerciseListingOffers drives the Listings table with offers on other sellers' pages and the edit of an offer's price and
 // quantity through the real handlers; the caller validates every answer against gateway-bff-seller.yaml (S382).
-func exerciseListingOffers(t *testing.T, b *browser) {
+func exerciseListingOffers(t *testing.T, bff *testkit.BFF, b *browser) {
 	t.Helper()
 	rows := func(path string) map[string]map[string]any {
 		r := b.do("GET", path, nil)
@@ -69,4 +71,27 @@ func exerciseListingOffers(t *testing.T, b *browser) {
 	mustStatus(t, b.do("PATCH", "/v1/seller/offers/of-3", map[string]any{"priceMinor": 0}), 422)
 	mustStatus(t, b.do("PATCH", "/v1/seller/offers/of-3", map[string]any{"quantity": -1}), 422)
 	mustStatus(t, b.do("PATCH", "/v1/seller/offers/not-mine", map[string]any{"priceMinor": 100}), 404)
+
+	// Pause and resume the offer-only row (offer of-2 is on a page this organisation does not own): the row follows, and the
+	// page is never written (the fake upstream has no page-pause route to answer).
+	mustStatus(t, b.do("POST", "/v1/seller/offers/of-3/pause", nil), 409) // held for tax: not on sale, so not pausable
+	p := b.do("POST", "/v1/seller/offers/of-2/pause", map[string]any{"version": 1})
+	if p.status != 200 || p.json(t)["status"] != "PAUSED" || p.json(t)["version"] != float64(2) {
+		t.Fatalf("pause = %d %s", p.status, p.body)
+	}
+	if after := rows("/v1/seller/listings?page=0&size=100")["of-2"]; after == nil || after["status"] != "PAUSED" || after["kind"] != "OFFER" {
+		t.Fatalf("row after the pause = %v", after)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/offers/of-2/pause", nil), 409)
+	r2 := b.do("POST", "/v1/seller/offers/of-2/resume", nil)
+	if r2.status != 200 || r2.json(t)["status"] != "ACTIVE" {
+		t.Fatalf("resume = %d %s", r2.status, r2.body)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/offers/of-2/resume", nil), 409)
+	// Another organisation's offer (an id this organisation's offers do not list) is a 404, never a call to offers.
+	mustStatus(t, b.do("POST", "/v1/seller/offers/not-mine/pause", nil), 404)
+	mustStatus(t, b.do("POST", "/v1/seller/offers/not-mine/resume", nil), 404)
+	if n := bff.Upstreams.CallCount("POST /v1/offers/not-mine/pause") + bff.Upstreams.CallCount("POST /v1/offers/not-mine/resume"); n != 0 {
+		t.Fatalf("offers was called for an offer that is not the organisation's: %d", n)
+	}
 }

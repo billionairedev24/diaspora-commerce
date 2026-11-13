@@ -822,6 +822,10 @@ export interface OfferTermsRequest {
   /** The offer's version that was read: a newer stored version answers 409. */
   version?: number;
 }
+/** POST /v1/seller/offers/{offerId}/pause and /resume: the offer's version the seller saw (optional; a newer stored version answers 409). */
+export interface OfferStatusRequest {
+  version?: number;
+}
 export interface OfferFulfilmentRequest {
   fulfilment: FulfilmentKind;
   shipFromLocationId?: string | null;

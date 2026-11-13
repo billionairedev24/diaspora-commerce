@@ -930,6 +930,52 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/offers/{offerId}/pause:
+    post:
+      tags: [Listings]
+      operationId: pauseSellerOffer
+      security: [{sessionCookie: []}]
+      summary: Take an item the organisation sells on another seller's page off sale
+      description: |
+        offers `POST /v1/offers/{id}/pause` (Listings: EDIT). For the rows of kind OFFER in the Listings table (the
+        organisation sells an item whose page another seller owns). Only the organisation's own offer: any other id,
+        another organisation's included, is a 404 (checked here, and again in offers). Only an item that is on sale can be
+        paused (409 `CONFLICT` otherwise). `version` is optional (relayed as If-Match; a newer stored version is a 409). The
+        page and its owner are never changed.
+      parameters:
+        - {name: offerId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/OfferStatusRequest'}}}
+      responses:
+        '200': {description: Paused, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOffer'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/offers/{offerId}/resume:
+    post:
+      tags: [Listings]
+      operationId: resumeSellerOffer
+      security: [{sessionCookie: []}]
+      summary: Put a paused item the organisation sells on another seller's page back on sale
+      description: |
+        offers `POST /v1/offers/{id}/resume` (Listings: EDIT). Same ownership rules as pause. Only a paused item can be put
+        back on sale (409 `CONFLICT` otherwise). An item whose tax details are not confirmed yet comes back as
+        `IN_REVIEW` (offers holds it for tax review) rather than live.
+      parameters:
+        - {name: offerId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/OfferStatusRequest'}}}
+      responses:
+        '200': {description: Resumed, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOffer'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/offers/{offerId}/fulfilment:
     put:
       tags: [Listings]
@@ -4493,6 +4539,11 @@ components:
         shipsFrom: {type: [string, 'null'], examples: ['Houston, TX']}
         status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN, TAX_HELD]}
         version: {type: integer, format: int64}
+    OfferStatusRequest:
+      type: object
+      description: Optional body of pause and resume. `version` is the offer's version the seller saw.
+      properties:
+        version: {type: integer, format: int64, minimum: 0}
     OfferTermsRequest:
       type: object
       description: 'Only the fields present change; send at least one'

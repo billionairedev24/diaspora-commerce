@@ -127,6 +127,29 @@ describe('Listings table follows the row-action standard', () => {
     expect(getSellerDb().listings.find((l) => l.productId === 'p-shea')?.title).toBe('Raw Shea Butter (8 oz)');
   });
 
+  it('pauses and resumes an item sold on another seller\'s page: the offer changes, the page row never gets the page actions', async () => {
+    const user = userEvent.setup();
+    const db = getSellerDb();
+    db.listings.push({ productId: 'p-shea', atin: 'ATSHEA0001', title: 'Raw Shea Butter (8 oz)', sku: 'SHEA-8OZ', variantCount: 1, priceMinor: 1100, currency: 'USD', stock: 7, fulfilment: 'SELLER',
+      status: 'LIVE', statusLabel: 'Live', moderationNote: null, imageUrl: null, updatedAt: '2026-10-09T10:00:00Z',
+      kind: 'OFFER', offerId: 'of-shea', offerVersion: 1, quantity: 7, variants: [{ sku: 'SHEA-8OZ', quantity: 7 }] });
+    db.offers.push({ offerId: 'of-shea', atin: 'ATSHEAV001', productId: 'p-shea', sellerSku: 'SHEA-8OZ', condition: 'NEW', priceMinor: 1100, currency: 'USD', fulfilment: 'SELLER', quantity: 7, availableQty: 7,
+      shipFromLocationId: null, shipsFrom: 'Houston, TX', status: 'ACTIVE', version: 1 });
+    nav.search = new URLSearchParams('q=Shea');
+    await renderScreen(<ListingsView />);
+    const rowOf = async () => (await screen.findByText('Raw Shea Butter (8 oz)')).closest('tr') as HTMLElement;
+    await user.click(within(await rowOf()).getByRole('button', { name: 'Actions for Raw Shea Butter (8 oz)' }));
+    expect(screen.queryByRole('menuitem', { name: 'Pause listing' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('menuitem', { name: 'Pause selling' }));
+    await waitFor(() => expect(getSellerDb().offers.find((o) => o.offerId === 'of-shea')?.status).toBe('PAUSED'), { timeout: 4000 });
+    expect(await screen.findByText('Paused. It stays off sale until you resume it.')).toBeInTheDocument();
+    await user.click(within(await rowOf()).getByRole('button', { name: 'Actions for Raw Shea Butter (8 oz)' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Resume selling' }));
+    await waitFor(() => expect(getSellerDb().offers.find((o) => o.offerId === 'of-shea')?.status).toBe('ACTIVE'), { timeout: 4000 });
+    // The page row of the other seller was never paused or resumed as a page.
+    expect(getSellerDb().listings.find((l) => l.productId === 'p-shea')?.title).toBe('Raw Shea Butter (8 oz)');
+  });
+
   it('has Update stock by variant for a multi-variant listing and a plain number in the cell', async () => {
     const user = userEvent.setup();
     await renderScreen(<ListingsView />);

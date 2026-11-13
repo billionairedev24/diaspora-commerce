@@ -94,6 +94,7 @@ import {
   ListingWriterDraftSchema,
   type ListingWriterRequest,
   type OfferFulfilmentRequest,
+  type OfferStatusRequest,
   type OfferTermsRequest,
   type OnboardingBusinessInput,
   type OnboardingComplianceInput,
@@ -392,6 +393,11 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** The price and/or quantity of one of the organisation's own offers (the Listings table edits offers on other sellers' pages this way). */
     setOfferTerms: (offerId: string, body: OfferTermsRequest): Promise<SellerOffer> =>
       request(`/v1/seller/offers/${enc(offerId)}`, SellerOfferSchema, { method: 'PATCH', body }),
+    /** Takes an item the organisation sells on another seller's page off sale: the offer only, never the page. */
+    pauseOffer: (offerId: string, body: OfferStatusRequest = {}): Promise<SellerOffer> =>
+      request(`/v1/seller/offers/${enc(offerId)}/pause`, SellerOfferSchema, { method: 'POST', body }),
+    resumeOffer: (offerId: string, body: OfferStatusRequest = {}): Promise<SellerOffer> =>
+      request(`/v1/seller/offers/${enc(offerId)}/resume`, SellerOfferSchema, { method: 'POST', body }),
     listReturns: async (status?: string, signal?: AbortSignal): Promise<SellerReturn[]> =>
       (await request(`/v1/seller/returns${status ? `?status=${enc(status)}` : ''}`, SellerReturnListSchema, { signal })).items,
     listDisputes: async (status?: string, signal?: AbortSignal): Promise<SellerDispute[]> =>

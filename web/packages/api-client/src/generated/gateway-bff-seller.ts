@@ -812,6 +812,52 @@ export interface paths {
         patch: operations["setOfferTerms"];
         trace?: never;
     };
+    "/v1/seller/offers/{offerId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take an item the organisation sells on another seller's page off sale
+         * @description offers `POST /v1/offers/{id}/pause` (Listings: EDIT). For the rows of kind OFFER in the Listings table (the
+         *     organisation sells an item whose page another seller owns). Only the organisation's own offer: any other id,
+         *     another organisation's included, is a 404 (checked here, and again in offers). Only an item that is on sale can be
+         *     paused (409 `CONFLICT` otherwise). `version` is optional (relayed as If-Match; a newer stored version is a 409). The
+         *     page and its owner are never changed.
+         */
+        post: operations["pauseSellerOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/offers/{offerId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put a paused item the organisation sells on another seller's page back on sale
+         * @description offers `POST /v1/offers/{id}/resume` (Listings: EDIT). Same ownership rules as pause. Only a paused item can be put
+         *     back on sale (409 `CONFLICT` otherwise). An item whose tax details are not confirmed yet comes back as
+         *     `IN_REVIEW` (offers holds it for tax review) rather than live.
+         */
+        post: operations["resumeSellerOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/offers/{offerId}/fulfilment": {
         parameters: {
             query?: never;
@@ -4177,6 +4223,11 @@ export interface components {
             status: "ACTIVE" | "PAUSED" | "WITHDRAWN" | "TAX_HELD";
             /** Format: int64 */
             version: number;
+        };
+        /** @description Optional body of pause and resume. `version` is the offer's version the seller saw. */
+        OfferStatusRequest: {
+            /** Format: int64 */
+            version?: number;
         };
         /** @description Only the fields present change; send at least one */
         OfferTermsRequest: {
@@ -8439,6 +8490,68 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    pauseSellerOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OfferStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Paused */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOffer"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resumeSellerOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OfferStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOffer"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

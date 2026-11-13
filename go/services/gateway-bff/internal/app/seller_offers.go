@@ -19,6 +19,10 @@ type SellerOffersService interface {
 	// SetTerms changes the price and/or quantity of one of the organisation's own offers (the Listings table edits offers
 	// on other sellers' pages this way). Another organisation's offer is a 404.
 	SetTerms(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferTermsRequest) (domain.SellerOffer, error)
+	// Pause takes one of the organisation's own offers off sale (an offer on another seller's page); the page is never touched.
+	Pause(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferStatusRequest) (domain.SellerOffer, error)
+	// Resume puts a paused offer back on sale (it waits for tax review first when its tax basis is not verified yet).
+	Resume(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferStatusRequest) (domain.SellerOffer, error)
 }
 
 type sellerOffersImpl struct {
@@ -153,23 +157,8 @@ func (s *sellerOffersImpl) SetTerms(ctx context.Context, c *domain.Caller, offer
 		return domain.SellerOffer{}, err
 	}
 	// The offer must be one of this organisation's own: offers answers the token's organisation only, and the BFF checks it too.
-	mine := false
-	for page := range offerListMaxPages {
-		p, err := s.r.d.Offers.List(ctx, c.BearerToken, page, offerListPageSize)
-		if err != nil {
-			return domain.SellerOffer{}, mapErr("offers", err)
-		}
-		for _, o := range p.Items {
-			if o.ID == offerID {
-				mine = true
-			}
-		}
-		if mine || len(p.Items) == 0 || int64((page+1)*offerListPageSize) >= p.Total {
-			break
-		}
-	}
-	if !mine {
-		return domain.SellerOffer{}, notFound
+	if _, err := s.ownOffer(ctx, c, offerID); err != nil {
+		return domain.SellerOffer{}, err
 	}
 	body := map[string]any{}
 	if in.PriceMinor != nil {
@@ -184,6 +173,63 @@ func (s *sellerOffersImpl) SetTerms(ctx context.Context, c *domain.Caller, offer
 	o, err := s.r.d.Offers.Update(ctx, c.BearerToken, offerID, body)
 	if err != nil {
 		return domain.SellerOffer{}, offerErr(err)
+	}
+	if s.cache != nil {
+		s.cache.drop("listings")
+	}
+	return sellerOfferOf(o), nil
+}
+
+// ownOffer is the organisation's own offer with this id; any other id (another organisation's included) is a 404.
+func (s *sellerOffersImpl) ownOffer(ctx context.Context, c *domain.Caller, offerID string) (port.SellerOfferUp, error) {
+	for page := range offerListMaxPages {
+		p, err := s.r.d.Offers.List(ctx, c.BearerToken, page, offerListPageSize)
+		if err != nil {
+			return port.SellerOfferUp{}, mapErr("offers", err)
+		}
+		for _, o := range p.Items {
+			if o.ID == offerID && !strings.EqualFold(o.Status, "WITHDRAWN") {
+				return o, nil
+			}
+		}
+		if len(p.Items) == 0 || int64((page+1)*offerListPageSize) >= p.Total {
+			break
+		}
+	}
+	return port.SellerOfferUp{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such offer.")
+}
+
+func (s *sellerOffersImpl) Pause(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferStatusRequest) (domain.SellerOffer, error) {
+	return s.setStatus(ctx, c, offerID, "pause", "ACTIVE", "Only an item that is on sale can be paused.", in)
+}
+
+func (s *sellerOffersImpl) Resume(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferStatusRequest) (domain.SellerOffer, error) {
+	return s.setStatus(ctx, c, offerID, "resume", "PAUSED", "Only a paused item can be put back on sale.", in)
+}
+
+// setStatus pauses or resumes one of the organisation's own offers (Listings: EDIT). Only offers' own offer endpoint is called:
+// the page the offer sits on, and its owner, are never written to.
+func (s *sellerOffersImpl) setStatus(ctx context.Context, c *domain.Caller, offerID, action, from, wrongState string, in domain.OfferStatusRequest) (domain.SellerOffer, error) {
+	if offerID = strings.TrimSpace(offerID); offerID == "" || len(offerID) > 64 {
+		return domain.SellerOffer{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such offer.")
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+		return domain.SellerOffer{}, err
+	}
+	own, err := s.ownOffer(ctx, c, offerID)
+	if err != nil {
+		return domain.SellerOffer{}, err
+	}
+	if !strings.EqualFold(own.Status, from) {
+		return domain.SellerOffer{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Conflict", wrongState)
+	}
+	var version int64
+	if in.Version != nil {
+		version = *in.Version
+	}
+	o, err := s.r.d.Offers.SetStatus(ctx, c.BearerToken, offerID, action, version)
+	if err != nil {
+		return domain.SellerOffer{}, mapErr("offers", err)
 	}
 	if s.cache != nil {
 		s.cache.drop("listings")
