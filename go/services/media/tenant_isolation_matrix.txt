@@ -1,0 +1,19 @@
+# METHOD pattern | CLASS | enforcement | test
+# Isolation rests on the verified JWT org claim (auth.Middleware, required) + owner checks in app/media.go (OpenFGA is not deployed).
+# Storage keys are <purpose>/<sanitized owner>/yyyy/mm/<uuid><ext>; owner is the verified org (or user:<sub>), never a client value.
+POST /v1/uploads | ORG_OWNED | mayUse(purpose); asset owner = ownerOf(verified actor); key org-prefixed and sanitized; upload URL 10 min | TestObjectKeysAreOrgPrefixedAndHaveNoPathTraversal
+POST /v1/assets/{id}/complete | ORG_OWNED | owned(): uploader or staff allowed for the purpose | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+POST /v1/assets/import | SERVICE_ONLY | importer client (catalog-service) with media:import | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+POST /v1/assets/{id}/review | STAFF_ONLY | STAFF principal with media:moderate or catalog:moderate | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+GET /v1/assets/held | STAFF_ONLY | STAFF principal with media:moderate or catalog:moderate | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+POST /v1/assets/verify | SERVICE_ONLY | importer client (catalog-service) with media:import | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+POST /v1/assets/rescore | SERVICE_ONLY | importer client (catalog-service) with media:import | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+GET /v1/image-rules | STAFF_ONLY | STAFF principal with media:moderate or catalog:moderate | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+PUT /v1/image-rules | STAFF_ONLY | STAFF principal with media:moderate or catalog:moderate | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+GET /v1/assets/{id} | ORG_OWNED | published public images are public; everything else mayRead(): uploader, owner org, purpose-allowed staff/service; signed URL capped by link policy | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+GET /v1/assets | ORG_SCOPED_LIST | ListByOrg(ownerOf(verified actor)); no client org parameter | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+GET /v1/library | ORG_SCOPED_LIST | ListLibrary(verified actor.OrgID); organisation members only | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+POST /v1/library/lookup | SERVICE_ONLY | importer client with media:import; ownerOrg is the service's input | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+PATCH /v1/library/{id} | ORG_OWNED | owner org or uploader; never a service | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+DELETE /v1/library/{id} | ORG_OWNED | owner org or uploader; never a service | TestCrossTenantMediaAssetsKycDocumentsAndLibrary
+GET /v1/l/{token} | TOKEN_LINK | HMAC-signed token naming asset id + expiry; LongLinks purposes only; redirect URL re-signed for 5 min | n/a

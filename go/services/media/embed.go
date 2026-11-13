@@ -5,5 +5,5 @@ import "embed"
 
 // Files holds config/*.yaml, migrations/*.sql and api/openapi.yaml.
 //
-//go:embed config/*.yaml migrations/*.sql api/openapi.yaml
+//go:embed config/*.yaml migrations/*.sql api/openapi.yaml tenant_isolation_matrix.txt
 var Files embed.FS
