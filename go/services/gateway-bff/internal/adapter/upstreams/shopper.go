@@ -148,6 +148,10 @@ func NewReturns(c httpclient.Client, tokens port.ServiceTokens) port.ReturnsClie
 
 func (r *returnsImpl) TaxQuote(ctx context.Context, req port.UpTaxQuoteRequest) (port.UpTaxQuote, error) {
 	var out port.UpTaxQuote
+	// The quote is the gateway's own call with its service token, never the shopper's: a storefront request must not add
+	// X-Acting-As: CUSTOMER to it (with security off, tax-returns resolves the local super admin and that header would
+	// narrow it to a shopper without tax:quote).
+	ctx = port.WithoutShopper(ctx)
 	bearer := ""
 	if r.tokens != nil {
 		t, err := r.tokens.Token(ctx, "tax:quote")
