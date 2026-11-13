@@ -39,7 +39,7 @@ func TestPrivateAddressesAndPlainHTTPAreRefused(t *testing.T) {
 		!strings.Contains(err.Error(), "https") {
 		t.Fatalf("http is refused: %v", err)
 	}
-	f = urlfetch.New(urlfetch.Options{AllowHTTP: true})
+	f = urlfetch.New(urlfetch.Options{AllowHTTP: true, AnyPort: true})
 	if _, err := f.Fetch(context.Background(), s.URL+"/a.jpg", 1024); !errors.Is(err, domain.ErrRejected) ||
 		!strings.Contains(err.Error(), "private or reserved") {
 		t.Fatalf("loopback is refused by the SSRF guard: %v", err)
@@ -59,7 +59,7 @@ func TestPrivateAddressesAndPlainHTTPAreRefused(t *testing.T) {
 
 func TestFetchesWithinLimits(t *testing.T) {
 	s := server(t)
-	f := urlfetch.New(urlfetch.Options{AllowHTTP: true, AllowAddress: func(netip.Addr) bool { return true }})
+	f := urlfetch.New(urlfetch.Options{AllowHTTP: true, AnyPort: true, AllowAddress: func(netip.Addr) bool { return true }})
 	got, err := f.Fetch(context.Background(), s.URL+"/a.jpg", 1024)
 	if err != nil || len(got.Data) != 7 || got.ContentType != "image/jpeg" || got.FileName != "a.jpg" {
 		t.Fatalf("fetch = %+v %v", got, err)
