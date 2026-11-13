@@ -98,7 +98,11 @@ metadata:
 spec:
   podSelector:
     matchLabels: {{- include "at-service.selector" . | nindent 6 }}
+  {{- if (default dict (default dict .Values.networkPolicy).egress).enabled }}
+  policyTypes: [Ingress, Egress]
+  {{- else }}
   policyTypes: [Ingress]
+  {{- end }}
   ingress:
     - from:
         - namespaceSelector:
@@ -115,6 +119,9 @@ spec:
             matchLabels: {kubernetes.io/metadata.name: observability}
       ports:
         - {port: {{ include "at-service.managementPort" . }}}
+  {{- if (default dict (default dict .Values.networkPolicy).egress).enabled }}
+  {{- include "at-service.netpol.egress" . | nindent 0 }}
+  {{- end }}
 {{- end -}}
 
 {{- define "at-service.externalSecret" -}}

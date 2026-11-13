@@ -240,10 +240,11 @@ specifics, a restore drill.
 - [ ] **blocker** `ENGINEERING · Open` **Restore drill**: restore a production-shaped backup into a scratch database, start the services against it, and read an order and a payment
   back. Record the date, the minutes it took and who did it. Repeat monthly in launch quarter.
 - [ ] `ENGINEERING · Open` Valkey and the search index are rebuilt, not backed up (search can be rebuilt from the databases, `kafka-replay.md`).
-- [ ] **blocker** `ENGINEERING · Open` **Nightly copy of the two R2 buckets (media and kyc-evidence) to Backblaze B2: NOT BUILT.** What exists today is the Postgres dump to B2
-  (`infra/k8s/platform/lean/backup`); nothing copies the R2 objects, so a deleted or overwritten R2 object (including a KYC document) is **not recoverable**.
-  Backlog story **S380 "Nightly copy of the two R2 buckets to Backblaze B2"** (an `rclone` CronJob, bucket-scoped read keys on R2 and a write key on B2, age-encrypting the private bucket). Until it ships the
-  restore drill proves the databases only; enable R2 versioning or object lock on the private bucket if the owner wants a stopgap, and write that decision here.
+- [ ] **blocker** `ENGINEERING · Open` **Nightly copy of the two R2 buckets (media and kyc-evidence) to Backblaze B2: BUILT, NOT YET RUN LIVE.** CronJob `r2-backup`
+  (`infra/k8s/platform/lean/backup/r2-cronjob.yaml`, 02:30 UTC): media copied with checksums and overwritten versions kept, KYC age-encrypted with names hashed, nothing deleted at the
+  destination; alerts `R2BackupStale` (26 hours) and `R2BackupFailed`; restore and drill in [backup-restore-r2.md](backup-restore-r2.md) (the drill passes against a local MinIO pair:
+  `bash tools/ops/test/r2-backup.test.sh`). Open: create the two read-only R2 tokens and the B2 key, apply the Secret `ops/r2-backup`, run the job once, **run the live restore drill and record the
+  minutes** (story S380 stays In Progress until then), enable R2 versioning ([r2-buckets.md](r2-buckets.md) section 7) and B2 Object Lock.
 - [ ] `ENGINEERING · Open` Kafka retention covers the events consumers need to rebuild state.
 - [ ] `ENGINEERING · Open` Rollback is rehearsed: previous image tags are kept, Flyway migrations are backward compatible for one release.
 - [ ] `OWNER · Open` The v1 database dump and the Stripe inventory are kept encrypted for 30 days, then destroyed (keep the `ledger.*` finance archive).

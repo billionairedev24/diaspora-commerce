@@ -35,6 +35,12 @@ secrets:
 # service that needs its own least-privilege identity sets it here with care (or the key is left unset here and each
 # service sets workloadIdentity in its values-dev.yaml).
 
+# F13 default-deny egress: off in dev until uat has soaked (docs/runbooks/network-policies.md).
+networkPolicy:
+  egress:
+    enabled: false
+    postgres: {cidrs: [], inCluster: true}
+
 argocd:
   env: dev
   destinationServer: https://kubernetes.default.svc

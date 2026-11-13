@@ -16,7 +16,7 @@ What the trial is, in one table (the details, the order of work and the teardown
 | Web apps | Cloudflare Workers `storefront-trial`, `seller-center-trial`, `staff-console-trial` (workflow `trial`) |
 | Edge | Cloudflare Tunnel, no load balancer; mcp private; no public Grafana |
 | Money | Stripe **test** mode only; AI capped at USD 2 per UTC day in code |
-| Backups | Backblaze B2 `afrotransact-trial-backups` (databases only: the R2 buckets are not copied, story S380) |
+| Backups | Backblaze B2 `afrotransact-trial-backups` (databases under `postgres/`; the R2 buckets are copied under `r2/` by the CronJob `r2-backup` once its Secret exists, story S380) |
 | Observability | Grafana Cloud `afrotransact.grafana.net`, label `env=trial` |
 | Secrets | SOPS + age: `infra/ovh-vps/secrets.sh` with `infra/ovh-vps/*.trial.env.example`, `infra/ops/secrets` |
 

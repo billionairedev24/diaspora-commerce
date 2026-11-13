@@ -97,6 +97,16 @@ platform() {
       "B2_BUCKET=${BACKUP_B2_BUCKET:-afrotransact-prod-backups}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
       "RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}" "RETENTION_MODE=${BACKUP_RETENTION_MODE:-sweep}" "BACKUP_ENV=${GRAFANA_ENV:-prod}" \
       "PUSHGATEWAY_URL=${BACKUP_PUSHGATEWAY_URL:-}" "HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-}"
+    # Nightly R2 -> B2 copy (infra/k8s/platform/lean/backup/r2-cronjob.yaml, S380): two READ-ONLY R2 tokens (one per bucket, not the ones media
+    # writes with), the B2 key (R2COPY_B2_* or, by default, the database backup's) and the same public age key. docs/runbooks/backup-restore-r2.md.
+    secret ops r2-backup "R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-}" "R2_MEDIA_BUCKET=${R2_PUBLIC_BUCKET:-afrotransact-prod-media}" \
+      "R2_KYC_BUCKET=${R2_PRIVATE_BUCKET:-afrotransact-prod-kyc-evidence}" \
+      "R2_MEDIA_KEY_ID=${R2COPY_R2_MEDIA_KEY_ID:-}" "R2_MEDIA_SECRET=${R2COPY_R2_MEDIA_SECRET:-}" \
+      "R2_KYC_KEY_ID=${R2COPY_R2_KYC_KEY_ID:-}" "R2_KYC_SECRET=${R2COPY_R2_KYC_SECRET:-}" \
+      "AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}" "B2_KEY_ID=${R2COPY_B2_KEY_ID:-${BACKUP_B2_KEY_ID:-}}" \
+      "B2_APPLICATION_KEY=${R2COPY_B2_APPLICATION_KEY:-${BACKUP_B2_APPLICATION_KEY:-}}" \
+      "B2_BUCKET=${R2COPY_B2_BUCKET:-${BACKUP_B2_BUCKET:-afrotransact-prod-backups}}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
+      "BACKUP_ENV=${GRAFANA_ENV:-prod}" "PUSHGATEWAY_URL=${BACKUP_PUSHGATEWAY_URL:-}" "HEALTHCHECK_URL=${R2COPY_HEALTHCHECK_URL:-}"
     return 0
   fi
   ofga_pw="$(db_password openfga)"

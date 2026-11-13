@@ -31,6 +31,15 @@
 # secrets.plain: true   the pod still reads envFrom Secret <service>-secrets, but no ExternalSecret is rendered: the Secret is
 #                       created by hand (single-node k3s without External Secrets: infra/ovh-vps/secrets.sh). Default false.
 #
+# networkPolicy (F13; per environment in platform-values.yaml, per service in its values, templates/_netpol.tpl):
+#   egress.enabled          true = the NetworkPolicy also denies all egress except the allowances below. Default false.
+#   egress.services         "*" (default: pods of the release namespace on the service port) or a list of service names
+#   egress.datastores       replaces the built-in matrix (pg, valkey, meili, temporal, fga, clamav) for this service
+#   egress.postgres         {cidrs: [Layerbase addresses], inCluster: bool}; empty cidrs = port 5432 to any public IP
+#   egress.https            true (default): 443 to public IPs (third parties, public OIDC issuer)
+#   egress.extra            raw egress rules appended as they are
+#   DNS, OTLP and Kafka are always allowed; the metadata IP 169.254.169.254 never is. Test: tools/ci/netpol_check.py
+#
 # postgresCA: {enabled: true, secretName: pg-ca, mountPath: /etc/pg-ca}   (F11, set per environment in platform-values.yaml)
 #                       mounts the Secret <secretName> (key ca.crt: the managed Postgres provider's CA bundle) read-only at
 #                       <mountPath> in every service, so DB_URL may carry sslmode=verify-full&sslrootcert=<mountPath>/ca.crt.

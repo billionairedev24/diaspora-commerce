@@ -35,6 +35,13 @@ secrets:
 # service that needs its own least-privilege identity sets it here with care (or the key is left unset here and each
 # service sets workloadIdentity in its values-uat.yaml).
 
+# F13 default-deny egress (docs/runbooks/network-policies.md). uat is the first environment to enforce it; dev, trial and prod
+# follow after a clean uat soak. postgres.cidrs: the managed database's addresses (empty = port 5432 to any public IP).
+networkPolicy:
+  egress:
+    enabled: true
+    postgres: {cidrs: [], inCluster: true}
+
 argocd:
   env: uat
   destinationServer: https://kubernetes.default.svc

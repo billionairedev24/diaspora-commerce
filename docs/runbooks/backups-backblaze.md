@@ -6,8 +6,10 @@ used for backups**: the backups must survive a problem with the Cloudflare accou
 The files are age-encrypted before they leave the cluster, so Backblaze only ever holds ciphertext (the private age key is offline:
 `restore-drill.md`).
 
-> **What is and is not backed up.** Only the **Postgres dumps** (and their globals) reach B2. The **two Cloudflare R2 buckets (media and kyc-evidence) are NOT copied**: the nightly R2 to B2 copy is not built
-> (backlog story S380), so a deleted or overwritten R2 object, KYC documents included, is not recoverable today. Valkey and the search index are rebuilt, not backed up.
+> **What is and is not backed up.** The **Postgres dumps** (and their globals) under `postgres/`, and, since story S380, the **two Cloudflare R2 buckets** under `r2/` (CronJob `r2-backup`, 02:30 UTC; media copied
+> as is, KYC objects age-encrypted with hashed names; nothing is deleted at the destination). Procedure, B2 Object Lock and retention: [backup-restore-r2.md](backup-restore-r2.md). **The bucket lifecycle rule and the
+> retention sweep of this page must stay scoped to the `postgres/` prefix**: a rule that deletes hidden versions or old objects bucket-wide would destroy the R2 copy (`r2/media/changed/` keeps overwritten files, `r2/kyc` is KYC evidence
+> kept 7 years). Not yet run on live infrastructure (UNVERIFIED). Valkey and the search index are rebuilt, not backed up.
 
 > **UNVERIFIED.** Everything below that describes Backblaze (screen names, limits, lifecycle behaviour, what an S3 delete does, what a key
 > can do) is written from memory and has not been checked against Backblaze's current documentation or a live account. The repository's

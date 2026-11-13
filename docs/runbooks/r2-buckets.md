@@ -40,8 +40,9 @@ Same steps, different names and hosts. The trial is the prod profile on its own 
 | Secrets | `media-secrets` in the trial cluster (SOPS, `infra/ovh-vps/secrets.sh`) | the same path in the prod cluster, new tokens |
 | Afterwards | empty and delete both buckets, revoke both tokens | keep; never reuse the trial tokens |
 
-Use real test data only. Do not upload real KYC documents to the trial. **The nightly copy of these two buckets to Backblaze B2 is not built** (backlog story S380): a deleted
-object is not recoverable, in the trial or in production, until it is.
+Use real test data only. Do not upload real KYC documents to the trial. **The nightly copy of these two buckets to Backblaze B2 is built** (backlog story S380, CronJob `r2-backup`,
+[backup-restore-r2.md](backup-restore-r2.md)) but has not run on live infrastructure; until its first run and the live restore drill, treat a deleted object as
+unrecoverable. Turn on R2 object versioning too (section 7).
 
 ## 1. Create the two buckets
 
@@ -195,6 +196,19 @@ curl -sS -X POST https://api.afrotransact.com/media/v1/assets/$ID/complete -H "A
    - Request a `kyc-document` upload, complete it and confirm the returned link is a short-lived signed URL (about 5
      minutes) and that it lands in the private bucket only.
 6. Token scoping: with the public token's keys, a read of the private bucket must fail (AccessDenied), and vice versa.
+
+## 7. Versioning and retention on the buckets (second line of defence, audit F12)
+
+The nightly copy to B2 ([backup-restore-r2.md](backup-restore-r2.md)) is the recovery path; protection inside R2 narrows what is lost between two nights.
+
+1. **Versioning.** In the dashboard open each bucket > **Settings** and look for **Object versioning** / **Bucket locks**. UNVERIFIED: to my knowledge R2 has **not** implemented the S3
+   versioning API, so a delete or overwrite there is final; R2 offers **Bucket Locks** (retention rules by prefix) instead. If **Object versioning** is shown, enable it on **both** buckets and set a
+   lifecycle rule that removes non-current versions after 30 days on the media bucket and **never** on the KYC bucket (KYC evidence is kept 7 years).
+2. **Bucket Locks on the KYC bucket** (if available): a retention rule on the whole bucket for the legal minimum you set (7 years for KYC evidence unless the
+   compliance owner says otherwise), so neither media's token nor a stolen one can delete a KYC object early. Before enabling it check that media's own
+   deletes (a rejected upload, a user's account closure) do not need to remove KYC objects sooner: a lock makes those deletes fail, so decide the policy first.
+3. Neither feature replaces the B2 copy: they live in the same Cloudflare account.
+4. Record in this page what the dashboard actually offered and what you enabled (date, who).
 
 ## Rotating or revoking a token
 

@@ -1,0 +1,39 @@
+# Off-vendor copy of the R2 buckets to Backblaze B2 (CronJob r2-backup, infra/k8s/platform/lean/backup; backlog S380, audit F12).
+# Runbook: docs/runbooks/backup-restore-r2.md.
+#   kube_cronjob_* / kube_job_*   kube-state-metrics
+#   afrotransact_r2_backup_*      pushed by the job to a Pushgateway when PUSHGATEWAY_URL is set (the same numbers are always logged
+#                                 as one `r2_backup_metrics` line)
+groups:
+  - name: afrotransact-r2-backup
+    rules:
+      # No successful R2 copy for 26 hours (the job runs daily at 02:30 UTC). Three ways to know, any one fires it: the CronJob's last
+      # success, a CronJob that never succeeded since it was created, and the pushed last-success timestamp.
+      - alert: R2BackupStale
+        expr: |
+          (time() - kube_cronjob_status_last_successful_time{namespace="ops",cronjob="r2-backup"} > 93600)
+          or
+          (time() - kube_cronjob_created{namespace="ops",cronjob="r2-backup"} > 93600
+            unless on (namespace, cronjob) kube_cronjob_status_last_successful_time{namespace="ops",cronjob="r2-backup"})
+          or
+          (time() - afrotransact_r2_backup_last_success_timestamp_seconds > 93600)
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "No successful R2 to B2 copy for more than 26 hours"
+          description: "The r2-backup CronJob has not completed successfully since the last 02:30 UTC run plus a margin. A deleted or overwritten media or KYC object would not be recoverable from B2."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backup-restore-r2.md#alerts
+
+      # The last run ended with failures (a check mismatch, a missing encrypted object in B2, a failed download or upload).
+      - alert: R2BackupFailed
+        expr: |
+          (kube_job_status_failed{namespace="ops",job_name=~"r2-backup-.*"} > 0)
+          or
+          (max by (env) (afrotransact_r2_backup_last_run_failed) == 1)
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "The last R2 to B2 copy finished with failures"
+          description: "Read the job log (kubectl -n ops logs job/<r2-backup job>): lines starting FAILED or MISSING name the cause. Objects that failed are retried the next night."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backup-restore-r2.md#alerts

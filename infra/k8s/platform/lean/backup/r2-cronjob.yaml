@@ -1,0 +1,60 @@
+# Nightly copy of the two Cloudflare R2 buckets (media, kyc-evidence) to this environment's Backblaze B2 backup bucket (backlog S380,
+# audit F12): rclone over the S3 API, the private (KYC) copy age-encrypted with the PUBLIC key only, nothing ever deleted at the
+# destination. Script: r2-backup.sh (same directory). Restore and drill: docs/runbooks/backup-restore-r2.md,
+# infra/ops/backup/r2-restore.sh. Runs at 02:30 UTC, before pg-backup (03:15), so the two never overlap.
+#
+# Secret r2-backup (namespace ops; infra/ovh-vps/secrets.sh, applied with infra/ops/secrets/apply.sh) keys:
+#   R2_ACCOUNT_ID R2_MEDIA_BUCKET R2_KYC_BUCKET
+#   R2_MEDIA_KEY_ID R2_MEDIA_SECRET     a READ-ONLY R2 token scoped to the media bucket (Object Read only)
+#   R2_KYC_KEY_ID R2_KYC_SECRET         a READ-ONLY R2 token scoped to the kyc bucket (not the token media uses to write)
+#   B2_KEY_ID B2_APPLICATION_KEY B2_BUCKET B2_ENDPOINT [B2_REGION B2_PREFIX]   the B2 backup bucket's write key (that bucket only)
+#   AGE_RECIPIENT                       public key; the private key is offline
+#   [BACKUP_ENV PUSHGATEWAY_URL HEALTHCHECK_URL]
+# A failed or missed run pages: infra/observability/rules/r2-backup.yaml (R2BackupStale after 26 hours, R2BackupFailed).
+# Memory: rclone with 4 transfers and one KYC object at a time is small (request 128 Mi, limit 512 Mi, as pg-backup); it runs for
+# minutes at night and is not counted in the node budget (docs/engineering/cloud-cost.md).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: r2-backup
+  namespace: ops
+  labels: {app.kubernetes.io/name: r2-backup, app.kubernetes.io/part-of: afrotransact-platform}
+spec:
+  schedule: "30 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels: {app.kubernetes.io/name: r2-backup}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          containers:
+            - name: backup
+              image: alpine:3.22
+              command: ["/bin/sh", "/scripts/r2-backup.sh"]
+              envFrom:
+                - secretRef: {name: r2-backup}
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {memory: 512Mi}
+              securityContext:
+                # Root with the default capabilities ONLY because `apk add` (rclone, age, curl) needs chown, as in pg-backup; a pre-built
+                # tools image would allow runAsNonRoot and drop ALL (follow-up).
+                allowPrivilegeEscalation: false
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+                - {name: work, mountPath: /work}
+          volumes:
+            - name: scripts
+              configMap: {name: r2-backup-script, defaultMode: 0555}
+            - name: work
+              emptyDir: {sizeLimit: 2Gi}

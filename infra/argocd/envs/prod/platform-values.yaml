@@ -46,6 +46,13 @@ postgresCA:
   secretName: pg-ca
   mountPath: /etc/pg-ca
 
+# F13 default-deny egress: OFF until uat has run with it (docs/runbooks/network-policies.md, rollout plan). Then set enabled: true and
+# fill postgres.cidrs with the Layerbase addresses (empty = port 5432 to any public IP, still never private ranges or metadata).
+networkPolicy:
+  egress:
+    enabled: false
+    postgres: {cidrs: [], inCluster: false}
+
 # GHCR packages are private: read-only token (read:packages), created by infra/ops/secrets/apply.sh as the pull Secret "ghcr".
 imagePullSecrets:
   - name: ghcr
