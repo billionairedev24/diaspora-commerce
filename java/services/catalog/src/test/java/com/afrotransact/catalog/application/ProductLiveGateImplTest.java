@@ -34,6 +34,7 @@ import com.afrotransact.catalog.port.ProductTaxHoldRepository;
 import com.afrotransact.catalog.port.SellingApprovals;
 import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxGateMetrics;
+import com.afrotransact.catalog.testsupport.ImageGates;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -59,7 +60,7 @@ class ProductLiveGateImplTest {
     @BeforeEach
     void setUp() {
         gate = new ProductLiveGateImpl(products, holds, categories, events, selling, metrics,
-                new TaxAuthorityCheck(taxReturns, metrics), Clock.fixed(NOW, ZoneOffset.UTC));
+                new TaxAuthorityCheck(taxReturns, metrics), ImageGates.passthrough(), Clock.fixed(NOW, ZoneOffset.UTC));
         when(products.update(any())).thenAnswer(i -> i.getArgument(0));
     }
 

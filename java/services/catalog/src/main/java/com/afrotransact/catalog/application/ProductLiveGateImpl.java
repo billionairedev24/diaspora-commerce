@@ -9,6 +9,8 @@ import java.util.UUID;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
+import com.afrotransact.catalog.domain.ProductImage;
+import com.afrotransact.catalog.domain.tax.ImageHeld;
 import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 import com.afrotransact.catalog.domain.tax.TaxNotReady;
 import com.afrotransact.catalog.domain.tax.TaxReadiness;
@@ -33,11 +35,12 @@ class ProductLiveGateImpl implements ProductLiveGate {
     private final SellingPublishGate sellingGate;
     private final TaxGateMetrics metrics;
     private final TaxAuthorityCheck authority;
+    private final ImageGate imageGate;
     private final Clock clock;
 
     ProductLiveGateImpl(ProductRepository products, ProductTaxHoldRepository holds, CategoryRepository categories,
                         ProductEvents events, SellingPublishGate sellingGate, TaxGateMetrics metrics,
-                        TaxAuthorityCheck authority, Clock clock) {
+                        TaxAuthorityCheck authority, ImageGate imageGate, Clock clock) {
         this.products = products;
         this.holds = holds;
         this.categories = categories;
@@ -45,6 +48,7 @@ class ProductLiveGateImpl implements ProductLiveGate {
         this.sellingGate = sellingGate;
         this.metrics = metrics;
         this.authority = authority;
+        this.imageGate = imageGate;
         this.clock = clock;
     }
 
@@ -52,7 +56,8 @@ class ProductLiveGateImpl implements ProductLiveGate {
     public Product approve(Product product, Instant now) {
         requireReady(product);
         requireAuthority(product);
-        Product live = product.approve(now);
+        Product cleared = requirePhotosCleared(product, now);
+        Product live = cleared.approve(now);
         holds.release(product.id(), now);
         return live;
     }
@@ -61,7 +66,7 @@ class ProductLiveGateImpl implements ProductLiveGate {
     public Product resume(Product product, Instant now) {
         requireReady(product);
         requireAuthority(product);
-        return product.resume(now);
+        return requirePhotosCleared(product, now).resume(now);
     }
 
     @Override
@@ -97,7 +102,8 @@ class ProductLiveGateImpl implements ProductLiveGate {
 
     /** Takes a live listing off sale with the plain note, the hold and the announcement (search, offers and carts drop it). */
     private Product hold(Product product, String reason, Instant now, boolean disagreement) {
-        Product held = product.holdForTax(now);
+        boolean photo = "IMAGE_HELD".equals(reason);
+        Product held = photo ? product.holdForImage(now) : product.holdForTax(now);
         holds.hold(product.id(), reason, now);
         events.publishWithReason(CatalogEvents.PRODUCT_PAUSED, held, reason);
         holds.markAnnounced(product.id(), now);
@@ -105,8 +111,9 @@ class ProductLiveGateImpl implements ProductLiveGate {
         if (disagreement) {
             metrics.disagreement(reason);
         }
-        LOG.warn("Listing {} closed for tax ({}): a variant has no resolved tax decision{}", product.atin().value(),
-                reason, disagreement ? " in tax-returns, the authority checkout reads" : "");
+        LOG.warn("Listing {} closed ({}): {}{}", product.atin().value(), reason,
+                photo ? "a photo is held for review" : "a variant has no resolved tax decision",
+                disagreement ? " in tax-returns, the authority checkout reads" : "");
         return held;
     }
 
@@ -117,6 +124,7 @@ class ProductLiveGateImpl implements ProductLiveGate {
             return null;
         }
         Instant now = Instant.now(clock);
+        p = clearedPhotosOrSame(p, now);
         if (p.status() == ProductStatus.LIVE && !LiveRequiresTax.holds(p)) {
             return products.update(closeIfNotReady(p, now));
         }
@@ -126,8 +134,8 @@ class ProductLiveGateImpl implements ProductLiveGate {
                 return products.update(hold(p, verdict.reasonCode(), now, true));
             }
         }
-        if (p.status() == ProductStatus.IN_REVIEW && TaxReadiness.of(p, null, null).ready() && holds.isHeld(p.id())
-                && authorityAllows(p) && mayStillSell(p)) {
+        if (p.status() == ProductStatus.IN_REVIEW && TaxReadiness.of(p, null, null).ready() && !p.hasHeldImage()
+                && holds.isHeld(p.id()) && authorityAllows(p) && mayStillSell(p)) {
             Product live = products.update(p.restoreAfterTaxHold(now));
             holds.release(p.id(), now);
             events.publish(CatalogEvents.PRODUCT_RESUMED, live);
@@ -197,6 +205,39 @@ class ProductLiveGateImpl implements ProductLiveGate {
         if (!v.resolved()) {
             throw new TaxNotReady("This product cannot go live yet: its tax details are not approved by tax review",
                     v.blockers(), local);
+        }
+    }
+
+    /**
+     * A listing with a photo held for review cannot go live (S390): media is asked again, a cleared photo is published into
+     * the listing, and a photo still held (or refused) keeps it off sale with a plain word to the seller. A product with no
+     * held photo is returned as it is and media is not asked.
+     */
+    private Product requirePhotosCleared(Product product, Instant now) {
+        if (!product.hasHeldImage()) {
+            return product;
+        }
+        ImageGate.Resolved resolved = imageGate.resolveHeld(product.images(), product.owner().orgId());
+        if (resolved.stillHeld() || resolved.rejected()) {
+            throw new ImageHeld(resolved.rejected()
+                    ? "This product cannot go live: one of its photos was not accepted"
+                    : "This product cannot go live yet: we are checking your photo");
+        }
+        return product.withImages(resolved.images(), product.variants(), now);
+    }
+
+    /** Publishes the held photos media has cleared since the last look; unchanged when media cannot be asked. */
+    private Product clearedPhotosOrSame(Product p, Instant now) {
+        if (!p.hasHeldImage()) {
+            return p;
+        }
+        try {
+            ImageGate.Resolved resolved = imageGate.resolveHeld(p.images(), p.owner().orgId());
+            List<ProductImage> now0 = resolved.images();
+            return now0.equals(p.images()) ? p : products.update(p.withImages(now0, p.variants(), now));
+        } catch (RuntimeException ex) {
+            LOG.warn("Listing {}: held photos could not be looked up now: {}", p.atin().value(), ex.getMessage());
+            return p;
         }
     }
 

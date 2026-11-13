@@ -11,14 +11,34 @@ import java.util.List;
  * @param verdict     {@code PASS}, {@code WARN}, {@code HOLD} or {@code REJECT}
  * @param checks      the findings (warnings and above, and recommendations)
  * @param measured    false for images stored before the checks existed: judged on their size only
+ * @param assetId     the asset id when the image was asked for by id (a held photo has no URL); else null
+ * @param status      with an asset id: {@code READY} (then {@code url} is its public URL), {@code HELD},
+ *                    {@code REJECTED} or {@code UNKNOWN}; else null
  */
 public record ImageCheckResult(String url, boolean found, String verdict, List<ImageFinding> checks, int width,
-                               int height, long bytes, String contentType, boolean measured) {
+                               int height, long bytes, String contentType, boolean measured, String assetId,
+                               String status) {
+
+    public ImageCheckResult(String url, boolean found, String verdict, List<ImageFinding> checks, int width,
+                            int height, long bytes, String contentType, boolean measured) {
+        this(url, found, verdict, checks, width, height, bytes, contentType, measured, null, null);
+    }
 
     public ImageCheckResult {
         verdict = verdict == null ? "REJECT" : verdict;
         checks = checks == null ? List.of() : List.copyOf(checks);
         contentType = contentType == null ? "" : contentType;
+        url = url == null ? "" : url;
+    }
+
+    /** True when media holds the image (asked for by asset id) for staff review: not an error, the listing waits. */
+    public boolean held() {
+        return "HELD".equals(status);
+    }
+
+    /** True when the image was asked for by asset id and media published it: {@code url} is its public URL. */
+    public boolean ready() {
+        return "READY".equals(status) && !url.isBlank();
     }
 
     /** True when the image may not be used: rejected, held for staff, or not known to media. */

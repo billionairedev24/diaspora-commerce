@@ -65,6 +65,33 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
         details = details == null ? ListingDetails.DEFAULT : details;
     }
 
+    /** What the seller reads while a listing waits for a held photo to be cleared. */
+    public static final String IMAGE_HOLD_NOTE = "We are checking your photo.";
+
+    /** True when a picture of the listing (or of a variant) is held for review and has no public URL yet. */
+    public boolean hasHeldImage() {
+        return images.stream().anyMatch(ProductImage::isHeld)
+                || variants.stream().anyMatch(v -> v.images().stream().anyMatch(ProductImage::isHeld));
+    }
+
+    /**
+     * Takes a live listing off sale because one of its pictures is held for review. Back to review with the plain note
+     * (the seller did nothing wrong); only the live gate may bring it back, once media cleared the picture.
+     */
+    public Product holdForImage(Instant now) {
+        if (status != ProductStatus.LIVE) {
+            throw new IllegalStateException("Only live listings can be held for a photo (was " + status + ")");
+        }
+        return withStatus(ProductStatus.IN_REVIEW, IMAGE_HOLD_NOTE, now);
+    }
+
+    /** The same listing with media's answer for its held pictures; the status is not touched. */
+    public Product withImages(List<ProductImage> newImages, List<Variant> newVariants, Instant now) {
+        return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
+                newImages, variationTheme, newVariants, status, moderationNote, createdAt, now, version,
+                preorderEligible, shipsNow, details);
+    }
+
     /** What the seller reads while a listing is closed because its tax details are not complete. */
     public static final String TAX_HOLD_NOTE = "We are checking the tax details for this item.";
 

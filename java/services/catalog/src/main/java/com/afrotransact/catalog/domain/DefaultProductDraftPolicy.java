@@ -77,6 +77,9 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
         for (int i = 0; i < images.size(); i++) {
             ProductImage img = images.get(i);
+            if (img.isHeld()) {
+                continue;
+            }
             if (!img.allowedType()) {
                 errors.put("images[" + i + "]", "Use JPG, PNG or WebP");
             } else if (img.bytes() > ProductImage.MAX_BYTES) {

@@ -50,7 +50,7 @@ class HttpImageVerifier implements ImageVerifier {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ResultJson(String url, Boolean found, String verdict, List<CheckJson> checks, Integer width, Integer height,
-                      Long bytes, String contentType, Boolean measured) {
+                      Long bytes, String contentType, Boolean measured, String assetId, String status) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -80,7 +80,14 @@ class HttpImageVerifier implements ImageVerifier {
         List<Map<String, String>> images = new ArrayList<>();
         for (Item i : items) {
             Map<String, String> one = new LinkedHashMap<>();
-            one.put("url", i.url());
+            if (i.assetId() != null) {
+                one.put("assetId", i.assetId());
+                if (i.ownerOrg() != null) {
+                    one.put("ownerOrg", i.ownerOrg());
+                }
+            } else {
+                one.put("url", i.url());
+            }
             one.put("slot", i.slot());
             if (i.productTypeCode() != null && !i.productTypeCode().isBlank()) {
                 one.put("productTypeCode", i.productTypeCode());
@@ -116,8 +123,13 @@ class HttpImageVerifier implements ImageVerifier {
         List<ImageFinding> checks = r.checks() == null ? List.of()
                 : r.checks().stream().filter(c -> c.code() != null)
                         .map(c -> new ImageFinding(c.code(), c.level(), c.message())).toList();
-        return new ImageCheckResult(asked.url(), Boolean.TRUE.equals(r.found()), r.verdict(), checks,
+        boolean byId = asked.assetId() != null;
+        String url = byId ? r.url() == null ? "" : r.url() : asked.url();
+        // An image asked for by id is known when media answers READY or HELD (it has the asset), whatever the URL.
+        boolean found = byId ? "READY".equals(r.status()) || "HELD".equals(r.status()) : Boolean.TRUE.equals(r.found());
+        return new ImageCheckResult(url, found, r.verdict(), checks,
                 r.width() == null ? 0 : r.width(), r.height() == null ? 0 : r.height(), r.bytes() == null ? 0 : r.bytes(),
-                r.contentType(), Boolean.TRUE.equals(r.measured()));
+                r.contentType(), Boolean.TRUE.equals(r.measured()), byId ? asked.assetId() : null,
+                byId ? r.status() : null);
     }
 }

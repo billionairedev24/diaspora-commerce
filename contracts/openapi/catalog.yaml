@@ -3817,7 +3817,7 @@ components:
       properties:
         url:
           type: string
-          minLength: 1
+          description: Public URL. Empty while the photo is held for review (then assetId is set); send assetId instead of url for such a photo
         width:
           type: integer
           format: int32
@@ -3832,7 +3832,6 @@ components:
           minimum: 0
         contentType:
           type: string
-          minLength: 1
         alt:
           type: string
           maxLength: 200
@@ -3841,9 +3840,20 @@ components:
           type: string
           maxLength: 20
           description: LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); absent for a product picture
-      required:
-      - contentType
-      - url
+        assetId:
+          type: string
+          maxLength: 64
+          description: >-
+            Media asset id of a photo uploaded to media-service (S390). Send it instead of url for a photo that is held
+            for review (it has no public URL): catalog asks media (the asset must belong to the seller), publishes the
+            photo into the listing when it is cleared and keeps the listing off sale while it is held. A photo that media
+            already published may also be given by id: catalog replaces it with its public URL. Rejected, unknown or
+            another seller's assets are refused (422, images[i]). Not allowed in a variant's own images.
+        held:
+          type: boolean
+          readOnly: true
+          description: Response only. True while the photo is held for review ("We are checking your photo"); the listing is saved and can be submitted but is not live until the photo is cleared
+      description: A picture of the listing, by public URL or, for a photo held for review, by media asset id. Give url or assetId.
     ShipFrom:
       type: object
       description: The seller's ship-from location (snapshot)

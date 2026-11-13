@@ -21,10 +21,16 @@ public interface ImageVerifier {
     /**
      * An image to judge.
      *
-     * @param url             public URL of the image
+     * @param url             public URL of the image (empty when the image is asked for by asset id)
      * @param slot            {@code MAIN}, {@code OTHER}, {@code SWATCH} or {@code LABEL}
      * @param productTypeCode product type (apparel may show a model when the rules allow it); may be null
+     * @param assetId         media asset id of a photo that is held for review (it has no public URL); may be null
+     * @param ownerOrg        with an asset id: the organisation that must own it
      */
-    record Item(String url, String slot, String productTypeCode) {
+    record Item(String url, String slot, String productTypeCode, String assetId, String ownerOrg) {
+
+        public Item(String url, String slot, String productTypeCode) {
+            this(url, slot, productTypeCode, null, null);
+        }
     }
 }

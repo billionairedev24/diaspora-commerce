@@ -117,7 +117,7 @@ class ProductWriterImpl implements ProductWriter {
         ListingDetails details = ruled.details().withSellerBehaviour(tax.behaviour());
         // The pictures are judged by media (S390): sizes sent by the client are replaced by media's own.
         ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted),
-                placement.type().code(), Set.of());
+                placement.type().code(), Set.of(), owner.orgId());
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(),
                 cmd.variationTheme(), submitted, details);
         validate(draft, rules, owner.orgId(), null, withPictureErrors(tax.errors(), pictures));
@@ -201,7 +201,7 @@ class ProductWriterImpl implements ProductWriter {
         ListingDetails details = ruled.details().withSellerBehaviour(tax.behaviour());
         // Only pictures the listing does not have yet are judged: a grandfathered main image stays until it is replaced.
         ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted), typeCode,
-                pictureUrls(current));
+                pictureUrls(current), current.owner().orgId());
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(), cmd.variationTheme(),
                 submitted, details);
         validate(draft, rules, current.owner().orgId(), current.details().sizeChartId(),
@@ -277,7 +277,7 @@ class ProductWriterImpl implements ProductWriter {
     /** The URLs of every picture the product already has: judged once, when they were added. */
     private static Set<String> pictureUrls(Product product) {
         Set<String> urls = new HashSet<>();
-        product.images().forEach(i -> urls.add(i.url()));
+        product.images().stream().filter(i -> !i.isHeld()).forEach(i -> urls.add(i.url()));
         product.variants().forEach(v -> v.images().forEach(i -> urls.add(i.url())));
         return urls;
     }

@@ -24,8 +24,10 @@ import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.tax.MissingTaxFact;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.sizing.FitNote;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -185,22 +187,43 @@ final class ProductDtos {
     record PreorderFlagsRequest(@NotNull Boolean preorderEligible, @NotNull Boolean shipsNow) {
     }
 
-    @Schema(name = "ProductImage")
-    record ImageDto(@NotBlank String url, @PositiveOrZero int width, @PositiveOrZero int height,
-                    @PositiveOrZero long bytes, @NotBlank String contentType,
+    @Schema(name = "ProductImage", description = "A picture of the listing: by its public URL, or by media asset id for a "
+            + "photo that is held for review (it has no public URL yet)")
+    record ImageDto(@Schema(description = "Public URL. Empty while the photo is held for review (then assetId is set)")
+                    String url, @PositiveOrZero int width, @PositiveOrZero int height,
+                    @PositiveOrZero long bytes, String contentType,
                     @Schema(description = "Optional alternative text (what the picture shows), stored with the image")
                     @Size(max = 200) String alt,
                     @Schema(description = "LABEL for the label photo (ingredients and nutrition panel, Supplement "
                             + "Facts, Drug Facts); absent for a product picture")
-                    @Size(max = 20) String role) {
+                    @Size(max = 20) String role,
+                    @Schema(description = "Media asset id of a photo uploaded to media-service. Send it instead of url for a "
+                            + "photo that is held for review: catalog asks media (the asset must belong to the seller), "
+                            + "publishes it into the listing when it is cleared, and keeps the listing off sale while it "
+                            + "is held. Never present once the photo is published.")
+                    @Size(max = 64) String assetId,
+                    @Schema(description = "Response only: true while the photo is held for review (We are checking your "
+                            + "photo); the listing is saved but not live until it is cleared", accessMode = Schema.AccessMode.READ_ONLY)
+                    Boolean held) {
+
+        @JsonIgnore
+        @Schema(hidden = true)
+        @AssertTrue(message = "Give the picture's url or its asset id")
+        boolean isReferenced() {
+            return url != null && !url.isBlank() || assetId != null && !assetId.isBlank();
+        }
 
         ProductImage toDomain() {
-            return new ProductImage(url, width, height, bytes, contentType, alt == null || alt.isBlank() ? null : alt.trim(),
-                    role);
+            String alternative = alt == null || alt.isBlank() ? null : alt.trim();
+            if (url == null || url.isBlank()) {
+                return ProductImage.held(assetId, alternative, role);
+            }
+            return new ProductImage(url, width, height, bytes, contentType == null ? "" : contentType, alternative, role);
         }
 
         static ImageDto of(ProductImage i) {
-            return new ImageDto(i.url(), i.width(), i.height(), i.bytes(), i.contentType(), i.alt(), i.role());
+            return new ImageDto(i.url(), i.width(), i.height(), i.bytes(), i.contentType(), i.alt(), i.role(), i.assetId(),
+                    i.isHeld() ? Boolean.TRUE : null);
         }
     }
 

@@ -63,6 +63,12 @@ public record Variant(UUID id, Atin atin, String sellerSku, String gtin, boolean
                 compareAtMinor, images, sellerSkuGenerated, tax, packaging);
     }
 
+    /** The same variant with other pictures (media published a held one). */
+    public Variant withImages(List<ProductImage> next) {
+        return new Variant(id, atin, sellerSku, gtin, gtinExempt, options, priceMinor, currency, quantity,
+                compareAtMinor, next, sellerSkuGenerated, tax, packaging);
+    }
+
     /** The same variant with its own package. */
     public Variant withPackaging(PackageDimensions next) {
         return new Variant(id, atin, sellerSku, gtin, gtinExempt, options, priceMinor, currency, quantity,

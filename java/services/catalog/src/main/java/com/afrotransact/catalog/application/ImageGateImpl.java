@@ -34,65 +34,98 @@ class ImageGateImpl implements ImageGate {
 
     @Override
     public Outcome check(List<ProductImage> images, List<List<ProductImage>> variantImages, String productTypeCode,
-                         Set<String> alreadyAccepted) {
-        if (!settings.checking()) {
-            return new Outcome(Map.of(), images);
+                         Set<String> alreadyAccepted, String ownerOrgId) {
+        Map<String, String> refErrors = new LinkedHashMap<>();
+        for (int v = 0; v < variantImages.size(); v++) {
+            if (variantImages.get(v).stream().anyMatch(ProductImage::isHeld)) {
+                refErrors.put("variants[" + v + "].images",
+                        "Use a photo that is already published for a variant picture, or put this one in the main pictures.");
+            }
         }
-        // Each new URL is judged once, for the strictest slot it is used in.
-        Map<String, String> slotByUrl = new LinkedHashMap<>();
+        boolean refs = images.stream().anyMatch(ProductImage::isHeld);
+        if (!settings.checking() && !refs) {
+            return new Outcome(refErrors, images);
+        }
+        // Each new URL (or held photo id) is judged once, for the strictest slot it is used in.
+        Map<String, String> slotByRef = new LinkedHashMap<>();
         boolean mainSeen = false;
         for (ProductImage image : images) {
             if (image.isLabel()) {
-                slotByUrl.putIfAbsent(image.url(), LABEL);
+                slotByRef.putIfAbsent(ref(image), LABEL);
             } else if (!mainSeen) {
                 mainSeen = true;
-                slotByUrl.put(image.url(), MAIN);
+                slotByRef.put(ref(image), MAIN);
             } else {
-                slotByUrl.putIfAbsent(image.url(), OTHER);
+                slotByRef.putIfAbsent(ref(image), OTHER);
             }
         }
         for (List<ProductImage> variant : variantImages) {
-            variant.forEach(image -> slotByUrl.putIfAbsent(image.url(), OTHER));
+            variant.stream().filter(image -> !image.isHeld()).forEach(image -> slotByRef.putIfAbsent(ref(image), OTHER));
         }
-        slotByUrl.keySet().removeAll(alreadyAccepted);
-        if (slotByUrl.isEmpty()) {
-            return new Outcome(Map.of(), images);
+        slotByRef.keySet().removeAll(alreadyAccepted);
+        if (!settings.checking()) {
+            // Not checking the rules: only the held photos are resolved, because they cannot be stored without it.
+            Set<String> heldRefs = new LinkedHashSet<>();
+            images.stream().filter(ProductImage::isHeld).forEach(i -> heldRefs.add(ref(i)));
+            slotByRef.keySet().retainAll(heldRefs);
         }
+        if (slotByRef.isEmpty()) {
+            return new Outcome(refErrors, images);
+        }
+        Map<String, ProductImage> byRef = new LinkedHashMap<>();
+        images.forEach(i -> byRef.putIfAbsent(ref(i), i));
         List<ImageVerifier.Item> items = new ArrayList<>();
-        slotByUrl.forEach((url, slot) -> items.add(new ImageVerifier.Item(url, slot, productTypeCode)));
+        slotByRef.forEach((key, slot) -> {
+            ProductImage held = byRef.get(key);
+            items.add(held != null && held.isHeld()
+                    ? new ImageVerifier.Item("", slot, productTypeCode, held.assetId(), ownerOrgId)
+                    : new ImageVerifier.Item(key, slot, productTypeCode));
+        });
 
         Map<String, ImageCheckResult> results = new LinkedHashMap<>();
         try {
             List<ImageCheckResult> answers = verifier.verify(items);
             for (int i = 0; i < items.size(); i++) {
-                results.put(items.get(i).url(), answers.get(i));
+                results.put(refOf(items.get(i)), answers.get(i));
             }
         } catch (ImageServiceUnavailable ex) {
-            if (settings.enforcing()) {
+            if (settings.enforcing() || refs) {
                 throw ex;
             }
             LOG.warn("Image rules (shadow): media could not be asked: {}", ex.getMessage());
-            return new Outcome(Map.of(), images);
+            return new Outcome(refErrors, images);
         }
 
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, String> hard = new LinkedHashMap<>(refErrors);
+        boolean held = false;
         int index = 0;
         for (ProductImage image : images) {
-            ImageCheckResult r = results.get(image.url());
-            if (image.isLabel()) {
+            ImageCheckResult r = results.get(ref(image));
+            if (image.isHeld()) {
+                String field = image.isLabel() ? "labelPhoto" : "images[" + index + "]";
+                if (r != null && r.held()) {
+                    held = true;
+                } else if (r == null || !r.ready()) {
+                    // Rejected, missing or someone else's: it can never be stored, whatever the mode.
+                    hard.putIfAbsent(field, r == null ? ImageCheckResult.unknown(image.url()).message() : r.message());
+                } else if (r.blocked()) {
+                    errors.putIfAbsent(field, r.message());
+                }
+            } else if (image.isLabel()) {
                 if (r != null && r.blocked()) {
                     errors.put("labelPhoto", r.message());
                 }
-                continue;
-            }
-            if (r != null && r.blocked()) {
+            } else if (r != null && r.blocked()) {
                 errors.putIfAbsent("images[" + index + "]", r.message());
             }
-            index++;
+            if (!image.isLabel()) {
+                index++;
+            }
         }
         for (int v = 0; v < variantImages.size(); v++) {
             for (ProductImage image : variantImages.get(v)) {
-                ImageCheckResult r = results.get(image.url());
+                ImageCheckResult r = results.get(ref(image));
                 if (r != null && r.blocked()) {
                     errors.putIfAbsent("variants[" + v + "].images", r.message());
                 }
@@ -105,15 +138,65 @@ class ImageGateImpl implements ImageGate {
             }
             errors = new LinkedHashMap<>();
         }
-        return new Outcome(errors, trusted(images, results));
+        errors.putAll(hard);
+        return new Outcome(errors, trusted(images, results), held);
+    }
+
+    @Override
+    public Resolved resolveHeld(List<ProductImage> images, String ownerOrgId) {
+        List<ImageVerifier.Item> items = new ArrayList<>();
+        for (ProductImage image : images) {
+            if (image.isHeld()) {
+                items.add(new ImageVerifier.Item("", image.isLabel() ? LABEL : OTHER, null, image.assetId(), ownerOrgId));
+            }
+        }
+        if (items.isEmpty()) {
+            return new Resolved(images, false, false);
+        }
+        List<ImageCheckResult> answers = verifier.verify(items);
+        Map<String, ImageCheckResult> byId = new LinkedHashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            byId.put(items.get(i).assetId(), answers.get(i));
+        }
+        boolean stillHeld = false;
+        boolean rejected = false;
+        List<ProductImage> out = new ArrayList<>();
+        for (ProductImage image : images) {
+            ImageCheckResult r = image.isHeld() ? byId.get(image.assetId()) : null;
+            if (r == null) {
+                out.add(image);
+            } else if (r.held()) {
+                stillHeld = true;
+                out.add(image);
+            } else if (r.ready()) {
+                out.add(image.published(r.url(), r.width(), r.height(), r.bytes(), r.contentType()));
+            } else {
+                rejected = true;
+                out.add(image);
+            }
+        }
+        return new Resolved(out, stillHeld, rejected);
+    }
+
+    /** What a picture is asked about: its asset id while held (no URL yet), else its public URL. */
+    private static String ref(ProductImage image) {
+        return image.isHeld() ? "asset:" + image.assetId() : image.url();
+    }
+
+    private static String refOf(ImageVerifier.Item item) {
+        return item.assetId() != null ? "asset:" + item.assetId() : item.url();
     }
 
     /** The pictures with media's own size, bytes and type where media knew them: a client's numbers are never kept. */
     private static List<ProductImage> trusted(List<ProductImage> images, Map<String, ImageCheckResult> results) {
         List<ProductImage> out = new ArrayList<>();
         for (ProductImage image : images) {
-            ImageCheckResult r = results.get(image.url());
-            if (r == null || !r.found() || r.width() <= 0) {
+            ImageCheckResult r = results.get(ref(image));
+            if (image.isHeld()) {
+                // Cleared by media: it is an ordinary picture now. Still held (or refused): it stays a reference.
+                out.add(r != null && r.ready()
+                        ? image.published(r.url(), r.width(), r.height(), r.bytes(), r.contentType()) : image);
+            } else if (r == null || !r.found() || r.width() <= 0) {
                 out.add(image);
             } else {
                 out.add(new ProductImage(image.url(), r.width(), r.height(), r.bytes(),

@@ -81,7 +81,7 @@ class ImageQualityServiceImpl implements ImageQualityService {
         if (batch.isEmpty()) {
             return 0;
         }
-        List<Candidate> withImage = batch.stream().filter(c -> c.mainImageUrl() != null).toList();
+        List<Candidate> withImage = batch.stream().filter(c -> c.mainImageUrl() != null && !c.mainImageUrl().isBlank()).toList();
         List<ImageCheckResult> results = List.of();
         if (!withImage.isEmpty()) {
             try {
@@ -95,7 +95,7 @@ class ImageQualityServiceImpl implements ImageQualityService {
         int scored = 0;
         int next = 0;
         for (Candidate c : batch) {
-            ImageCheckResult result = c.mainImageUrl() == null ? null : results.get(next++);
+            ImageCheckResult result = c.mainImageUrl() == null || c.mainImageUrl().isBlank() ? null : results.get(next++);
             tx.executeWithoutResult(s -> score(c, result, now));
             scored++;
         }

@@ -45,6 +45,7 @@ import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
+import com.afrotransact.catalog.testsupport.ImageGates;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -73,7 +74,7 @@ class TaxGatePathsTest {
     void setUp() {
         liveGate = new ProductLiveGateImpl(products, taxHolds, categories, events, sellingGate,
                 mock(TaxGateMetrics.class), new TaxAuthorityCheck(mock(TaxDecisionAuthority.class),
-                mock(TaxGateMetrics.class)), CLOCK);
+                mock(TaxGateMetrics.class)), ImageGates.passthrough(), CLOCK);
         when(products.update(any())).thenAnswer(i -> i.getArgument(0));
         Actor staff = mock(Actor.class);
         when(staff.type()).thenReturn(PrincipalType.STAFF);

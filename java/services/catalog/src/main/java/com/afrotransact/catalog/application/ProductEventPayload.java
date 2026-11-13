@@ -74,7 +74,7 @@ public record ProductEventPayload(UUID productId, String atin, String ownerKind,
                                 PackagePayload.of(v.packaging() != null ? v.packaging() : p.details().packaging())))
                         .toList(),
                 p.moderationNote(), sellerHidden, reasonCode, p.preorderEligible(), p.shipsNow(),
-                p.images() == null || p.images().isEmpty() ? null : p.images().getFirst().url(),
+                p.images() == null || p.images().isEmpty() ? null : blankToNull(p.images().getFirst().url()),
                 blankToNull(attribute(p.attributes(), "brand")), communities(p.attributes()),
                 p.details().condition().name(), p.details().fulfilment().name(), p.details().handlingDays(),
                 p.details().shipFrom(), p.details().description(), p.details().keywords(),
