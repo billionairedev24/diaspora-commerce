@@ -1748,3 +1748,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - No early errors while typing
 - Provide services is a flat row in the same column
 - axe clean on the four tabs; vitest for rows, selects, toggle, dirty and save","E02","","High","3","web account design","identity","Done"
+"S436","Story","Seller Center: search-first Add a product (name and category, no barcode or part number)","Spec: docs/engineering/product-matching-without-barcode.md. One search box What are you selling?; live matching pages with photo, brand, size and seller count; category as an editable chip; This is my product with one-tap size confirmation; Not here, add it as new with the name pre-filled; the barcode is an optional exact shortcut; no part number anywhere a seller reads; bulk offer rows by name, category, brand and size with ambiguous rows held with candidates; None of these recorded for staff.","- Catalog candidate search ranks name, brand, size and category and returns only live pages with a real photo, six at most, with nothing about another seller
+- Size or pack is confirmed with one tap and a fuzzy match is never silent (server refuses an unconfirmed size or a page not shown)
+- No part number or MPN in the seller form, templates, preview messages, copy or tour (existing page MPN is only a hidden ranking signal)
+- Bulk offer rows without barcodes auto-link only on the exact normalised name, brand and size, and ambiguous rows are held with 2 or 3 candidates
+- None of these is recorded and a likely duplicate is queued for staff review
+- Rate limits on candidate searches and None of these answers
+- Matching creates no live page without a RESOLVED tax decision (TaxGateArchitectureTest green)
+- Java unit tests on JDK 25, Go gateway tests, vitest and tsc/eslint clean; five locales with machine drafts flagged needsReview","E24","","High","8","seller-center matching catalog i18n","seller-center","In Review"
