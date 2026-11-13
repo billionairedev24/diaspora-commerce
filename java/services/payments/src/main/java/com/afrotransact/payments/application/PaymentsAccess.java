@@ -220,9 +220,9 @@ class PaymentsAccess {
         if (!actor.orgId().map(orgId::equals).orElse(false)) {
             throw new ForbiddenActionException("auth.wrong-org", "Actor does not belong to organisation " + orgId);
         }
-        if (relationships.relationshipsEnabled()) {
-            relationships.requireForOrg(PaymentsPermissions.PAYOUTS_READ, PaymentsRelations.ORG_VIEW_PAYOUTS, orgId);
-        }
+        // payouts:read is required with or without OpenFGA (RBAC-only mode checks the permission and the org claim);
+        // without it any member of the organisation, whatever their role, could read its balance and statements.
+        relationships.requireForOrg(PaymentsPermissions.PAYOUTS_READ, PaymentsRelations.ORG_VIEW_PAYOUTS, orgId);
         return actor;
     }
 
