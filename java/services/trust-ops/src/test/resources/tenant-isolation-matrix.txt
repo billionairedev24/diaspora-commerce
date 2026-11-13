@@ -1,0 +1,16 @@
+# Tenant isolation matrix for trust-ops. Format: METHOD /path | CLASS | enforcement | testClass
+@AuditController | STAFF_ONLY | audit:read (platform roles only; no seller or provider role holds it) | -
+@ModerationController | STAFF_ONLY | catalog:moderate / bookings:reviews:moderate (platform roles only) | -
+@SellerController | STAFF_ONLY | orgs:read / sellers:enforce (platform roles and service scopes only); no seller-facing route | -
+@SupportCaseController | STAFF_ONLY | SupportCaseServiceImpl.staffOnly: support:respond is also held by seller/provider roles, so a STAFF principal is required (fixed) | -
+GET /v1/claims | STAFF_ONLY | ClaimServiceImpl.queue: disputes:manage plus staff principal | -
+POST /v1/claims/{id}/decision | STAFF_ONLY | ClaimServiceImpl.decide: disputes:manage plus staff principal | -
+POST /v1/claims/{id}/escalate | STAFF_ONLY | ClaimServiceImpl.escalate: disputes:manage plus staff principal | -
+POST /v1/claims | CUSTOMER_SELF | claimant is the token subject; order ownership and seller verified against orders-service | TrustOpsTenantIsolationTest
+GET /v1/claims/mine | CUSTOMER_SELF | ClaimQuery filtered by token subject | TrustOpsTenantIsolationTest
+POST /v1/claims/{id}/withdraw | CUSTOMER_SELF | claim.customerId must equal token subject | TrustOpsTenantIsolationTest
+GET /v1/claims/seller/{orgId} | ORG_SCOPED_LIST | permissions.requireForOrg(support:respond, orgId): token org must equal path org | TrustOpsTenantIsolationTest
+GET /v1/claims/{id} | ORG_OWNED | ClaimServiceImpl.party: customer == subject, or token org == claim.sellerOrgId, or staff | TrustOpsTenantIsolationTest
+GET /v1/claims/{id}/history | ORG_OWNED | ClaimServiceImpl.party | TrustOpsTenantIsolationTest
+POST /v1/claims/{id}/evidence | ORG_OWNED | ClaimServiceImpl.party | TrustOpsTenantIsolationTest
+POST /v1/claims/{id}/seller-response | ORG_OWNED | permissions.requireForOrg(support:respond, claim.sellerOrgId) | TrustOpsTenantIsolationTest

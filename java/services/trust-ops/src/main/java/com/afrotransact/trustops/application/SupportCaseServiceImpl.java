@@ -11,6 +11,8 @@ import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.events.InboxDeduplicator;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
+import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.trustops.domain.SlaPolicy;
 import com.afrotransact.trustops.domain.SupportCase;
@@ -66,7 +68,7 @@ class SupportCaseServiceImpl implements SupportCaseService {
     @Override
     @Transactional(readOnly = true)
     public Page<SupportCaseView> queue(SupportCaseStatus status, int page, int size) {
-        permissions.require(TrustOpsPermissions.SUPPORT);
+        staffOnly(permissions.require(TrustOpsPermissions.SUPPORT));
         Instant now = Instant.now(clock);
         return cases.search(status, page, size).map(c -> SupportCaseView.of(c, now));
     }
@@ -74,14 +76,14 @@ class SupportCaseServiceImpl implements SupportCaseService {
     @Override
     @Transactional(readOnly = true)
     public SupportCaseView get(UUID id) {
-        permissions.require(TrustOpsPermissions.SUPPORT);
+        staffOnly(permissions.require(TrustOpsPermissions.SUPPORT));
         return SupportCaseView.of(find(id), Instant.now(clock));
     }
 
     @Override
     @Transactional
     public SupportCaseView assign(UUID id, String assignee) {
-        Actor actor = permissions.require(TrustOpsPermissions.SUPPORT);
+        Actor actor = staffOnly(permissions.require(TrustOpsPermissions.SUPPORT));
         SupportCase saved = cases.update(find(id).assign(assignee == null || assignee.isBlank() ? actor.subject()
                 : assignee));
         return SupportCaseView.of(saved, Instant.now(clock));
@@ -90,10 +92,21 @@ class SupportCaseServiceImpl implements SupportCaseService {
     @Override
     @Transactional
     public SupportCaseView resolve(UUID id, String resolution) {
-        Actor actor = permissions.require(TrustOpsPermissions.SUPPORT);
+        Actor actor = staffOnly(permissions.require(TrustOpsPermissions.SUPPORT));
         Instant now = Instant.now(clock);
         SupportCase saved = cases.update(find(id).resolve(actor.subject(), resolution, now));
         return SupportCaseView.of(saved, now);
+    }
+
+    /**
+     * support:respond is also held by seller and provider roles (to answer claims against their own organisation), so
+     * the platform support queue, which holds customers' chat hand-offs, additionally needs a staff principal.
+     */
+    private static Actor staffOnly(Actor actor) {
+        if (actor.type() != PrincipalType.STAFF && !actor.permissions().contains("*")) {
+            throw new ForbiddenActionException("trustops.staff-only", "Only staff work the support queue");
+        }
+        return actor;
     }
 
     private SupportCase find(UUID id) {
