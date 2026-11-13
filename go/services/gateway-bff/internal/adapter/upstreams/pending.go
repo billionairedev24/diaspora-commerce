@@ -241,18 +241,18 @@ func NewPayments(c httpclient.Client) port.PaymentsClient { return &paymentsImpl
 
 func (p *paymentsImpl) PaymentMethods(ctx context.Context, bearer string) (port.Wallet, error) {
 	var out port.Wallet
-	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, &out)
+	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (p *paymentsImpl) SetupIntent(ctx context.Context, bearer string) (domain.SetupIntent, error) {
 	var out domain.SetupIntent
-	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/setup-intents", Bearer: bearer}, &out)
+	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/setup-intents", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (p *paymentsImpl) DeletePaymentMethod(ctx context.Context, bearer, id string) error {
-	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/customers/me/payment-methods/" + url.PathEscape(id), Bearer: bearer}, nil)
+	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/customers/me/payment-methods/" + url.PathEscape(id), Bearer: bearer, UserBearer: true}, nil)
 	return err
 }
 
@@ -310,7 +310,7 @@ func (o *ordersImpl) List(ctx context.Context, bearer, cursor string, limit int)
 	if cursor != "" {
 		q.Set("cursor", cursor)
 	}
-	res, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders", Query: q, Bearer: bearer}, nil)
+	res, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders", Query: q, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return domain.Page[domain.OrderSummary]{}, err
 	}
@@ -334,7 +334,7 @@ func (o *ordersImpl) Place(ctx context.Context, bearer, key string, req domain.P
 		body["attribution"] = a
 	}
 	var out domain.OrderConfirmation
-	res, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/orders", Bearer: bearer, JSON: body,
+	res, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/orders", Bearer: bearer, UserBearer: true, JSON: body,
 		Header: http.Header{"Idempotency-Key": {key}}, RetryUnsafe: true}, &out)
 	if err != nil {
 		return port.PlaceOrderResult{}, err
@@ -344,7 +344,7 @@ func (o *ordersImpl) Place(ctx context.Context, bearer, key string, req domain.P
 
 func (o *ordersImpl) CancelShipment(ctx context.Context, bearer, order, shipment string) (domain.OrderSummary, error) {
 	var out domain.OrderSummary
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Bearer: bearer, UserBearer: true,
 		Path: "/v1/orders/" + url.PathEscape(order) + "/shipments/" + url.PathEscape(shipment) + "/cancel"}, &out)
 	return out, err
 }
@@ -361,7 +361,7 @@ func NewNotifications(c httpclient.Client) port.NotificationsClient { return &no
 
 func (n *notificationsImpl) SubscribeStockAlert(ctx context.Context, bearer string, in port.StockAlertInput) error {
 	// 201 armed, 200 already active: both succeed.
-	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/stock-alerts", Bearer: bearer, JSON: in}, nil)
+	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/stock-alerts", Bearer: bearer, UserBearer: true, JSON: in}, nil)
 	return err
 }
 
@@ -371,7 +371,7 @@ func (n *notificationsImpl) SubscribeGuestStockAlert(ctx context.Context, servic
 }
 
 func (n *notificationsImpl) StockAlerts(ctx context.Context, bearer string) ([]port.StockAlert, error) {
-	res, err := call(ctx, n.c, httpclient.Request{Path: "/v1/stock-alerts", Bearer: bearer}, nil)
+	res, err := call(ctx, n.c, httpclient.Request{Path: "/v1/stock-alerts", Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +380,7 @@ func (n *notificationsImpl) StockAlerts(ctx context.Context, bearer string) ([]p
 }
 
 func (n *notificationsImpl) RemoveStockAlert(ctx context.Context, bearer, atin string) error {
-	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/stock-alerts/" + url.PathEscape(atin), Bearer: bearer}, nil)
+	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/stock-alerts/" + url.PathEscape(atin), Bearer: bearer, UserBearer: true}, nil)
 	return err
 }
 
@@ -470,6 +470,6 @@ func (k *contentImpl) RecordConsent(ctx context.Context, in port.ContentConsent)
 
 func (k *contentImpl) SubmitPrivacyRequest(ctx context.Context, bearer string, in domain.PrivacyRequest) (domain.PrivacyRequestReceipt, error) {
 	var out domain.PrivacyRequestReceipt
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/privacy/requests", JSON: in, Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/privacy/requests", JSON: in, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }

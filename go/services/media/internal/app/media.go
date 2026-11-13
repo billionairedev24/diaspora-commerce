@@ -1030,6 +1030,10 @@ func mayUse(actor auth.Actor, p domain.Purpose) bool {
 	}
 	if actor.Type == principalService {
 		if rules.Restricted() {
+			if p == domain.PurposeCareerResume && actor.Subject == domain.ClientGatewayBFF {
+				// The BFF's guest path carries only this minimal scope (security audit F14).
+				return actor.Can(domain.PermissionCareerResume)
+			}
 			return rules.AllowsServiceClient(actor.Subject)
 		}
 		return !slices.Contains(domain.ServiceClients(), actor.Subject)

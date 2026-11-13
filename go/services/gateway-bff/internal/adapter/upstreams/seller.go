@@ -24,14 +24,14 @@ func NewOrgAccess(c httpclient.Client) port.OrgAccessClient { return &orgAccessI
 
 func (o *orgAccessImpl) Member(ctx context.Context, bearer string) (port.Member, error) {
 	var m port.Member
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/me", Bearer: bearer}, &m)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/me", Bearer: bearer, UserBearer: true}, &m)
 	return m, err
 }
 
 func (o *orgAccessImpl) SyncOrg(ctx context.Context, bearer, orgID string) (port.OrgSync, error) {
 	var out port.OrgSync
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/sync",
-		Bearer: bearer, RetryUnsafe: true}, &out)
+		Bearer: bearer, UserBearer: true, RetryUnsafe: true}, &out)
 	return out, err
 }
 
@@ -40,13 +40,13 @@ func (o *orgAccessImpl) BecomeApplicant(ctx context.Context, bearer, kind string
 	if kind == "PROVIDER" {
 		path = "/v1/me/roles/provider-applicant"
 	}
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: path, Bearer: bearer, RetryUnsafe: true}, nil)
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: path, Bearer: bearer, UserBearer: true, RetryUnsafe: true}, nil)
 	return err
 }
 
 func (o *orgAccessImpl) SelectOrg(ctx context.Context, bearer, orgID string) (port.Member, error) {
 	var m port.Member
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/me/active-org", Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/me/active-org", Bearer: bearer, UserBearer: true,
 		JSON: map[string]string{"orgId": orgID}}, &m)
 	return m, err
 }
@@ -58,7 +58,7 @@ func (o *orgAccessImpl) ModuleMatrix(ctx context.Context, bearer, portal string)
 			Levels map[string]string `json:"levels"`
 		} `json:"modules"`
 	}
-	if _, err := call(ctx, o.c, httpclient.Request{Path: "/v1/admin/module-access", Query: url.Values{"portal": {portal}}, Bearer: bearer}, &out); err != nil {
+	if _, err := call(ctx, o.c, httpclient.Request{Path: "/v1/admin/module-access", Query: url.Values{"portal": {portal}}, Bearer: bearer, UserBearer: true}, &out); err != nil {
 		return nil, err
 	}
 	m := domain.ModuleMatrix{}
@@ -72,14 +72,14 @@ func (o *orgAccessImpl) ModuleMatrix(ctx context.Context, bearer, portal string)
 }
 
 func (o *orgAccessImpl) SetMemberRole(ctx context.Context, bearer, orgID, userID, roleKey string) error {
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Bearer: bearer, UserBearer: true,
 		Path: "/v1/orgs/" + url.PathEscape(orgID) + "/members/" + url.PathEscape(userID), JSON: map[string]string{"roleKey": roleKey}}, nil)
 	return err
 }
 
 func (o *orgAccessImpl) Invite(ctx context.Context, bearer, orgID, email, roleKey string) (port.Invitation, error) {
 	var inv port.Invitation
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Bearer: bearer, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/invitations",
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Bearer: bearer, UserBearer: true, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/invitations",
 		JSON: map[string]string{"email": email, "roleKey": roleKey}}, &inv)
 	return inv, err
 }
@@ -88,7 +88,7 @@ func (o *orgAccessImpl) Members(ctx context.Context, bearer, orgID string) ([]po
 	var out struct {
 		Items []port.OrgMember `json:"items"`
 	}
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/members", Bearer: bearer}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/members", Bearer: bearer, UserBearer: true}, &out)
 	return out.Items, err
 }
 
@@ -96,18 +96,18 @@ func (o *orgAccessImpl) Invitations(ctx context.Context, bearer, orgID string) (
 	var out struct {
 		Items []port.Invitation `json:"items"`
 	}
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/invitations", Bearer: bearer}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/invitations", Bearer: bearer, UserBearer: true}, &out)
 	return out.Items, err
 }
 
 func (o *orgAccessImpl) RevokeInvitation(ctx context.Context, bearer, orgID, invitationID string) error {
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodDelete, Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodDelete, Bearer: bearer, UserBearer: true,
 		Path: "/v1/orgs/" + url.PathEscape(orgID) + "/invitations/" + url.PathEscape(invitationID)}, nil)
 	return err
 }
 
 func (o *orgAccessImpl) RemoveMember(ctx context.Context, bearer, orgID, userID string) error {
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodDelete, Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodDelete, Bearer: bearer, UserBearer: true,
 		Path: "/v1/orgs/" + url.PathEscape(orgID) + "/members/" + url.PathEscape(userID)}, nil)
 	return err
 }
@@ -121,7 +121,7 @@ func (o *orgAccessImpl) LookupInvitation(ctx context.Context, token string) (por
 
 func (o *orgAccessImpl) AcceptInvitation(ctx context.Context, bearer, token string) (port.AcceptedInvitation, error) {
 	var out port.AcceptedInvitation
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/invitations/accept", Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/invitations/accept", Bearer: bearer, UserBearer: true,
 		JSON: map[string]string{"token": token}}, &out)
 	return out, err
 }
@@ -139,19 +139,19 @@ func orgPath(orgID, rest string) string { return "/v1/orgs/" + url.PathEscape(or
 
 func (s *sellerServiceImpl) Org(ctx context.Context, bearer, orgID string) (port.SellerOrg, error) {
 	var o port.SellerOrg
-	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, ""), Bearer: bearer}, &o)
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, ""), Bearer: bearer, UserBearer: true}, &o)
 	return o, err
 }
 
 func (s *sellerServiceImpl) Application(ctx context.Context, bearer string) (port.SellerApplication, error) {
 	var a port.SellerApplication
-	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/applications/me", Bearer: bearer}, &a)
+	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/applications/me", Bearer: bearer, UserBearer: true}, &a)
 	return a, err
 }
 
 func (s *sellerServiceImpl) StartApplication(ctx context.Context, bearer, kind string, prefill port.ApplicationPrefill) (port.SellerApplication, bool, error) {
 	var a port.SellerApplication
-	res, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me", Bearer: bearer,
+	res, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"kind": kind, "prefill": prefill}}, &a)
 	if err != nil {
 		return a, false, err
@@ -162,48 +162,48 @@ func (s *sellerServiceImpl) StartApplication(ctx context.Context, bearer, kind s
 func (s *sellerServiceImpl) SaveApplicationStep(ctx context.Context, bearer, step string, body any) (port.SellerApplication, error) {
 	var a port.SellerApplication
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/applications/me/steps/" + url.PathEscape(step),
-		Bearer: bearer, JSON: body}, &a)
+		Bearer: bearer, UserBearer: true, JSON: body}, &a)
 	return a, err
 }
 
 func (s *sellerServiceImpl) ApplicationStripeSession(ctx context.Context, bearer string) (port.SellerAccountSession, error) {
 	var out port.SellerAccountSession
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/account-session", Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/account-session", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) OrgStripeSession(ctx context.Context, bearer, orgID string) (port.SellerAccountSession, error) {
 	var out port.SellerAccountSession
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/stripe/account-session"), Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/stripe/account-session"), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) RefreshApplicationStripe(ctx context.Context, bearer string) (port.SellerApplication, error) {
 	var a port.SellerApplication
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/refresh", Bearer: bearer}, &a)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/refresh", Bearer: bearer, UserBearer: true}, &a)
 	return a, err
 }
 
 func (s *sellerServiceImpl) SubmitApplication(ctx context.Context, bearer string) (port.SellerApplication, error) {
 	var a port.SellerApplication
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/submit", Bearer: bearer}, &a)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/submit", Bearer: bearer, UserBearer: true}, &a)
 	return a, err
 }
 
 func (s *sellerServiceImpl) AccountHealth(ctx context.Context, bearer, orgID string) (port.AccountHealth, error) {
 	var h port.AccountHealth
-	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/account-health"), Bearer: bearer}, &h)
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/account-health"), Bearer: bearer, UserBearer: true}, &h)
 	return h, err
 }
 
 func (s *sellerServiceImpl) Billing(ctx context.Context, bearer, orgID string) (port.SellerBilling, error) {
 	var b port.SellerBilling
-	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing"), Bearer: bearer}, &b)
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing"), Bearer: bearer, UserBearer: true}, &b)
 	return b, err
 }
 
 func (s *sellerServiceImpl) Invoices(ctx context.Context, bearer, orgID string) ([]port.SellerInvoice, error) {
-	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/invoices"), Bearer: bearer}, nil)
+	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/invoices"), Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -225,13 +225,13 @@ func (s *sellerServiceImpl) ChangePlan(ctx context.Context, bearer, orgID, planC
 		Applied string             `json:"applied"`
 		Billing port.SellerBilling `json:"billing"`
 	}
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/plan"), Bearer: bearer,
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/plan"), Bearer: bearer, UserBearer: true,
 		JSON: map[string]string{"planCode": planCode, "cadence": cadence}}, &out)
 	return out.Applied, out.Billing, err
 }
 
 func (s *sellerServiceImpl) paymentMethods(ctx context.Context, method, bearer, path string) ([]port.SellerPaymentMethod, error) {
-	res, err := call(ctx, s.c, httpclient.Request{Method: method, Path: path, Bearer: bearer}, nil)
+	res, err := call(ctx, s.c, httpclient.Request{Method: method, Path: path, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -260,38 +260,38 @@ func shipFromPath(orgID, rest string) string {
 
 func (s *sellerServiceImpl) ShipFrom(ctx context.Context, bearer, orgID string) ([]port.ShipFromAddress, error) {
 	var out []port.ShipFromAddress
-	_, err := call(ctx, s.c, httpclient.Request{Path: shipFromPath(orgID, ""), Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Path: shipFromPath(orgID, ""), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) CreateShipFrom(ctx context.Context, bearer, orgID string, in port.ShipFromInput) (port.ShipFromAddress, error) {
 	var out port.ShipFromAddress
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: shipFromPath(orgID, ""), Bearer: bearer, JSON: in}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: shipFromPath(orgID, ""), Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) UpdateShipFrom(ctx context.Context, bearer, orgID, id string, in port.ShipFromInput) (port.ShipFromAddress, error) {
 	var out port.ShipFromAddress
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: shipFromPath(orgID, "/"+url.PathEscape(id)), Bearer: bearer, JSON: in}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: shipFromPath(orgID, "/"+url.PathEscape(id)), Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) DefaultShipFrom(ctx context.Context, bearer, orgID, id string) ([]port.ShipFromAddress, error) {
 	var out []port.ShipFromAddress
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: shipFromPath(orgID, "/"+url.PathEscape(id)+"/default"), Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: shipFromPath(orgID, "/"+url.PathEscape(id)+"/default"), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) DeleteShipFrom(ctx context.Context, bearer, orgID, id string) ([]port.ShipFromAddress, error) {
 	var out []port.ShipFromAddress
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodDelete, Path: shipFromPath(orgID, "/"+url.PathEscape(id)), Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodDelete, Path: shipFromPath(orgID, "/"+url.PathEscape(id)), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) SetPickup(ctx context.Context, bearer, orgID, id string, in port.PickupRequest) (port.ShipFromAddress, error) {
 	var out port.ShipFromAddress
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: shipFromPath(orgID, "/"+url.PathEscape(id)+"/afrotransact-pickup"),
-		Bearer: bearer, JSON: in}, &out)
+		Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }
 
@@ -299,12 +299,12 @@ func (s *sellerServiceImpl) SetPickup(ctx context.Context, bearer, orgID, id str
 
 func (s *sellerServiceImpl) BusinessPageSettings(ctx context.Context, bearer, orgID string) (port.UpBusinessPageSettings, error) {
 	var out port.UpBusinessPageSettings
-	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) UpdateBusinessPageSettings(ctx context.Context, bearer, orgID string, in port.BusinessPageSettingsInput) (port.UpBusinessPageSettings, error) {
 	var out port.UpBusinessPageSettings
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer, JSON: in}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }

@@ -16,10 +16,10 @@
       "name": "seller-center-dev",
       "vars": { "CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-dev.afrotransact.com", "API_MOCKS": "1", "BFF_ORIGIN": "", "PUBLIC_WEB_URL": "https://dev.afrotransact.com" }
     },
-    "uat": { "name": "seller-center-uat", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-uat.afrotransact.com", "BFF_ORIGIN": "https://api-uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://uat.afrotransact.com"} },
-    "prod": { "name": "seller-center-prod", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media.afrotransact.com", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://afrotransact.com"} },
+    "uat": { "name": "seller-center-uat", "vars": {"CSP_MODE": "enforce", "MEDIA_PUBLIC_URL": "https://media-uat.afrotransact.com", "BFF_ORIGIN": "https://api-uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://uat.afrotransact.com"} },
+    "prod": { "name": "seller-center-prod", "vars": {"CSP_MODE": "enforce", "MEDIA_PUBLIC_URL": "https://media.afrotransact.com", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://afrotransact.com"} },
     // trial: the 8-day OVH run (prod profile, flat single-label hosts under the zone, docs/runbooks/ovh-production.md "Trial").
     // The hosts below are the default zone; the trial workflow writes the same shape for the zone you give it. Routes: infra/cloudflare.
-    "trial": { "name": "seller-center-trial", "vars": {"CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-test.afrotransact.com", "BFF_ORIGIN": "https://api-test.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://test.afrotransact.com"} }
+    "trial": { "name": "seller-center-trial", "vars": {"CSP_MODE": "enforce", "MEDIA_PUBLIC_URL": "https://media-test.afrotransact.com", "BFF_ORIGIN": "https://api-test.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://test.afrotransact.com"} }
   }
 }

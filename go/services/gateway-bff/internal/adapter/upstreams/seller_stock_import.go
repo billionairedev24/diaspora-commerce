@@ -54,7 +54,7 @@ func (k *sellerStockImportImpl) Upload(ctx context.Context, bearer, ownerOrg str
 		q.Set("ownerOrg", ownerOrg)
 	}
 	var out domain.StockImport
-	_, err = call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/stock/imports", Query: q, Bearer: bearer,
+	_, err = call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/stock/imports", Query: q, Bearer: bearer, UserBearer: true,
 		Body: buf.Bytes(), ContentType: w.FormDataContentType(), Slow: true}, &out)
 	return out, err
 }
@@ -65,13 +65,13 @@ func (k *sellerStockImportImpl) List(ctx context.Context, bearer, ownerOrg strin
 		q.Set("ownerOrg", ownerOrg)
 	}
 	var out domain.StockImportPage
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/stock/imports", Query: q, Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/stock/imports", Query: q, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (k *sellerStockImportImpl) Get(ctx context.Context, bearer, id string) (domain.StockImport, error) {
 	var out domain.StockImport
-	_, err := call(ctx, k.c, httpclient.Request{Path: stockImportPath(id), Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Path: stockImportPath(id), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
@@ -84,7 +84,7 @@ func (k *sellerStockImportImpl) Rows(ctx context.Context, bearer, id, status, ou
 		q.Set("outcome", outcome)
 	}
 	var out domain.StockImportRowPage
-	_, err := call(ctx, k.c, httpclient.Request{Path: stockImportPath(id) + "/rows", Query: q, Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Path: stockImportPath(id) + "/rows", Query: q, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
@@ -94,7 +94,7 @@ func (k *sellerStockImportImpl) Report(ctx context.Context, bearer, id string) (
 
 func (k *sellerStockImportImpl) Start(ctx context.Context, bearer, id string, validOnly bool) (domain.StockImport, error) {
 	var out domain.StockImport
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: stockImportPath(id) + "/start", Bearer: bearer,
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: stockImportPath(id) + "/start", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"validOnly": validOnly}, RetryUnsafe: true}, &out)
 	return out, err
 }

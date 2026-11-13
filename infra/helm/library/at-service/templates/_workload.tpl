@@ -46,7 +46,7 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: {{ include "at-service.metricsPath" . }}
-        prometheus.io/port: {{ .Values.service.port | quote }}
+        prometheus.io/port: {{ include "at-service.managementPort" . | quote }}
     spec:
       serviceAccountName: {{ include "at-service.name" . }}
       automountServiceAccountToken: false
@@ -77,6 +77,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - {name: http, containerPort: {{ .Values.service.port }}}
+            - {name: management, containerPort: {{ include "at-service.managementPort" . }}}
           env: {{- include "at-service.envVars" . | nindent 12 }}
           {{- if .Values.secrets.enabled }}
           envFrom:
@@ -89,14 +90,14 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           startupProbe:
-            httpGet: {path: {{ include "at-service.livenessPath" . }}, port: http}
+            httpGet: {path: {{ include "at-service.livenessPath" . }}, port: {{ include "at-service.probePort" . }}}
             periodSeconds: 5
             failureThreshold: {{ if eq .Values.service.runtime "java" }}36{{ else }}12{{ end }}
           livenessProbe:
-            httpGet: {path: {{ include "at-service.livenessPath" . }}, port: http}
+            httpGet: {path: {{ include "at-service.livenessPath" . }}, port: {{ include "at-service.probePort" . }}}
             periodSeconds: 10
           readinessProbe:
-            httpGet: {path: {{ include "at-service.readinessPath" . }}, port: http}
+            httpGet: {path: {{ include "at-service.readinessPath" . }}, port: {{ include "at-service.probePort" . }}}
             periodSeconds: 5
           lifecycle:
             preStop:

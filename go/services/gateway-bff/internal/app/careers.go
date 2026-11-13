@@ -22,6 +22,9 @@ type CareersService interface {
 // client-credentials token (guests) and signed-in applicants' own tokens for it.
 const ResumePurpose = "career-resume"
 
+// GuestCareerResumeScope is the one scope of the gateway-bff token a signed-out visitor uses to upload a resume (media).
+const GuestCareerResumeScope = "media:career-resume"
+
 type careersServiceImpl struct {
 	media  port.MediaClient
 	tokens port.ServiceTokens
@@ -34,15 +37,17 @@ func NewCareersService(media port.MediaClient, tokens port.ServiceTokens) Career
 	return &careersServiceImpl{media: media, tokens: tokens}
 }
 
-func (s *careersServiceImpl) bearer(ctx context.Context, c *domain.Caller) (string, error) {
+// bearer is the person's own token, or for a signed-out visitor the BFF's minimal-scope service token; the returned ctx is
+// marked so the upstream client never sends X-Acting-As with that service token.
+func (s *careersServiceImpl) bearer(ctx context.Context, c *domain.Caller) (context.Context, string, error) {
 	if c.Authenticated() {
-		return c.BearerToken, nil
+		return ctx, c.BearerToken, nil
 	}
-	t, err := s.tokens.Token(ctx, "")
+	t, err := s.tokens.Token(ctx, GuestCareerResumeScope)
 	if err != nil {
-		return "", mapErr("identity", err)
+		return ctx, "", mapErr("identity", err)
 	}
-	return t, nil
+	return port.WithServiceBearer(ctx), t, nil
 }
 
 func (s *careersServiceImpl) ResumeUpload(ctx context.Context, c *domain.Caller, fileName, contentType string, size int64) (domain.ResumeUpload, error) {
@@ -60,7 +65,7 @@ func (s *careersServiceImpl) ResumeUpload(ctx context.Context, c *domain.Caller,
 	if len(errs) > 0 {
 		return domain.ResumeUpload{}, domain.ValidationProblem(errs)
 	}
-	bearer, err := s.bearer(ctx, c)
+	ctx, bearer, err := s.bearer(ctx, c)
 	if err != nil {
 		return domain.ResumeUpload{}, err
 	}
@@ -77,7 +82,7 @@ func (s *careersServiceImpl) ResumeUpload(ctx context.Context, c *domain.Caller,
 }
 
 func (s *careersServiceImpl) CompleteResume(ctx context.Context, c *domain.Caller, assetID string) (domain.ResumeAsset, error) {
-	bearer, err := s.bearer(ctx, c)
+	ctx, bearer, err := s.bearer(ctx, c)
 	if err != nil {
 		return domain.ResumeAsset{}, err
 	}

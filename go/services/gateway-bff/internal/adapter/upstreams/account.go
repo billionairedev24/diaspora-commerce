@@ -23,7 +23,7 @@ func NewAccountSettings(c httpclient.Client) port.AccountSettingsClient {
 }
 
 func (a *accountSettingsImpl) do(ctx context.Context, bearer, method, path string, body, out any) error {
-	_, err := call(ctx, a.c, httpclient.Request{Method: method, Path: path, Bearer: bearer, JSON: body}, out)
+	_, err := call(ctx, a.c, httpclient.Request{Method: method, Path: path, Bearer: bearer, UserBearer: true, JSON: body}, out)
 	return err
 }
 
@@ -97,7 +97,7 @@ func NewAlertPreferences(c httpclient.Client) port.AlertPreferencesClient {
 
 func (n *alertPreferencesImpl) Alerts(ctx context.Context, bearer, userID, audience string) (port.UpAlertPreferences, error) {
 	var out port.UpAlertPreferences
-	_, err := call(ctx, n.c, httpclient.Request{Path: "/v1/preferences/" + esc(userID) + "/alerts", Bearer: bearer,
+	_, err := call(ctx, n.c, httpclient.Request{Path: "/v1/preferences/" + esc(userID) + "/alerts", Bearer: bearer, UserBearer: true,
 		Query: url.Values{"audience": {audience}}}, &out)
 	return out, err
 }
@@ -105,6 +105,6 @@ func (n *alertPreferencesImpl) Alerts(ctx context.Context, bearer, userID, audie
 func (n *alertPreferencesImpl) SaveAlerts(ctx context.Context, bearer, userID string, in port.UpAlertPreferences) (port.UpAlertPreferences, error) {
 	var out port.UpAlertPreferences
 	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/preferences/" + esc(userID) + "/alerts",
-		Bearer: bearer, JSON: in}, &out)
+		Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }

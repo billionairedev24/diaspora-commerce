@@ -30,13 +30,13 @@ func productPath(id string) string { return "/v1/products/" + url.PathEscape(id)
 
 func (k *sellerListingImpl) Product(ctx context.Context, bearer, productID string) (port.CatalogOwnProduct, error) {
 	var p port.CatalogOwnProduct
-	_, err := call(ctx, k.c, httpclient.Request{Path: productPath(productID), Bearer: bearer}, &p)
+	_, err := call(ctx, k.c, httpclient.Request{Path: productPath(productID), Bearer: bearer, UserBearer: true}, &p)
 	return p, err
 }
 
 func (k *sellerListingImpl) ProductByATIN(ctx context.Context, bearer, atin string) (port.CatalogOwnProduct, error) {
 	var p port.CatalogOwnProduct
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/products/atin/" + url.PathEscape(atin), Bearer: bearer}, &p)
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/products/atin/" + url.PathEscape(atin), Bearer: bearer, UserBearer: true}, &p)
 	return p, err
 }
 
@@ -117,7 +117,7 @@ func (k *sellerListingImpl) CreateFull(ctx context.Context, bearer string, d dom
 		body["categoryRequestId"] = d.CategoryRequestID
 	}
 	var p port.CatalogOwnProduct
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/products", Bearer: bearer, JSON: body}, &p)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/products", Bearer: bearer, UserBearer: true, JSON: body}, &p)
 	return p, err
 }
 
@@ -130,7 +130,7 @@ func (k *sellerListingImpl) Update(ctx context.Context, bearer, productID string
 		body["version"] = *d.Version
 	}
 	var p port.CatalogOwnProduct
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: productPath(productID), Bearer: bearer, JSON: body}, &p)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: productPath(productID), Bearer: bearer, UserBearer: true, JSON: body}, &p)
 	return p, err
 }
 
@@ -145,7 +145,7 @@ func (k *sellerListingImpl) Drafts(ctx context.Context, bearer string, q port.Dr
 	if q.Sort != "" {
 		query.Set("sort", q.Sort)
 	}
-	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/product-drafts", Query: query, Bearer: bearer}, nil)
+	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/product-drafts", Query: query, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -164,7 +164,7 @@ func draftPath(id string) string { return "/v1/product-drafts/" + url.PathEscape
 
 func (k *sellerListingImpl) Draft(ctx context.Context, bearer, id string) (port.CatalogDraft, error) {
 	var d port.CatalogDraft
-	_, err := call(ctx, k.c, httpclient.Request{Path: draftPath(id), Bearer: bearer}, &d)
+	_, err := call(ctx, k.c, httpclient.Request{Path: draftPath(id), Bearer: bearer, UserBearer: true}, &d)
 	return d, err
 }
 
@@ -177,7 +177,7 @@ func (k *sellerListingImpl) CreateDraft(ctx context.Context, bearer string, in d
 		body["categoryPath"] = in.CategoryPath
 	}
 	var d port.CatalogDraft
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/product-drafts", Bearer: bearer, JSON: body}, &d)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/product-drafts", Bearer: bearer, UserBearer: true, JSON: body}, &d)
 	return d, err
 }
 
@@ -190,12 +190,12 @@ func (k *sellerListingImpl) SaveDraft(ctx context.Context, bearer, id string, in
 		body["categoryPath"] = in.CategoryPath
 	}
 	var d port.CatalogDraft
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: draftPath(id), Bearer: bearer, JSON: body}, &d)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: draftPath(id), Bearer: bearer, UserBearer: true, JSON: body}, &d)
 	return d, err
 }
 
 func (k *sellerListingImpl) DeleteDraft(ctx context.Context, bearer, id string) error {
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodDelete, Path: draftPath(id), Bearer: bearer}, nil)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodDelete, Path: draftPath(id), Bearer: bearer, UserBearer: true}, nil)
 	return err
 }
 
@@ -206,7 +206,7 @@ func (k *sellerListingImpl) download(ctx context.Context, bearer, path string, q
 
 // downloadFile is the generated file an upstream answers with, named by its Content-Disposition.
 func downloadFile(ctx context.Context, c httpclient.Client, bearer, path string, q url.Values, fallback string) (domain.FileDownload, error) {
-	res, err := call(ctx, c, httpclient.Request{Path: path, Query: q, Bearer: bearer,
+	res, err := call(ctx, c, httpclient.Request{Path: path, Query: q, Bearer: bearer, UserBearer: true,
 		Header: http.Header{"Accept": {"*/*"}}}, nil)
 	if err != nil {
 		return domain.FileDownload{}, err
@@ -269,7 +269,7 @@ func (k *sellerListingImpl) Upload(ctx context.Context, bearer string, f port.Up
 		q.Set("uploadedByName", uploadedByName)
 	}
 	var out port.CatalogImport
-	_, err = call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/imports", Query: q, Bearer: bearer,
+	_, err = call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/imports", Query: q, Bearer: bearer, UserBearer: true,
 		Body: buf.Bytes(), ContentType: w.FormDataContentType(), Slow: true}, &out)
 	return out, err
 }
@@ -278,14 +278,14 @@ func importPath(id string) string { return "/v1/imports/" + url.PathEscape(id) }
 
 func (k *sellerListingImpl) Imports(ctx context.Context, bearer string, page, size int) (port.CatalogImportPage, error) {
 	var out port.CatalogImportPage
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/imports", Bearer: bearer,
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/imports", Bearer: bearer, UserBearer: true,
 		Query: url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}}, &out)
 	return out, err
 }
 
 func (k *sellerListingImpl) Import(ctx context.Context, bearer, id string) (port.CatalogImport, error) {
 	var out port.CatalogImport
-	_, err := call(ctx, k.c, httpclient.Request{Path: importPath(id), Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Path: importPath(id), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
@@ -298,20 +298,20 @@ func (k *sellerListingImpl) ImportRows(ctx context.Context, bearer, id, status, 
 		q.Set("outcome", outcome)
 	}
 	var out port.CatalogImportRowPage
-	_, err := call(ctx, k.c, httpclient.Request{Path: importPath(id) + "/rows", Query: q, Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Path: importPath(id) + "/rows", Query: q, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (k *sellerListingImpl) ImageUsage(ctx context.Context, bearer string, urls, skus []string) (port.CatalogImageUsage, error) {
 	var out port.CatalogImageUsage
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/image-library/usage", Bearer: bearer,
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/image-library/usage", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"urls": urls, "skus": skus}}, &out)
 	return out, err
 }
 
 func (k *sellerListingImpl) AttachLibraryImages(ctx context.Context, bearer string, skus []string) (domain.AttachLibraryImagesResult, error) {
 	var out domain.AttachLibraryImagesResult
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/image-library/attach", Bearer: bearer,
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/image-library/attach", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"skus": skus}}, &out)
 	if out.Skipped == nil {
 		out.Skipped = []domain.AttachLibrarySkipped{}
@@ -328,7 +328,7 @@ func (k *sellerListingImpl) CreateBrand(ctx context.Context, bearer, name string
 		body["category"] = q.Category
 	}
 	var out domain.CreatedBrand
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/brands", Bearer: bearer, JSON: body}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/brands", Bearer: bearer, UserBearer: true, JSON: body}, &out)
 	return out, err
 }
 
@@ -340,7 +340,7 @@ func (k *sellerListingImpl) Brands(ctx context.Context, bearer string, q domain.
 		}
 	}
 	var out domain.BrandList
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/brands", Query: v, Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/brands", Query: v, Bearer: bearer, UserBearer: true}, &out)
 	if out.Brands == nil {
 		out.Brands = []domain.Brand{}
 	}
@@ -353,7 +353,7 @@ func (k *sellerListingImpl) ImportReport(ctx context.Context, bearer, id, format
 
 func (k *sellerListingImpl) StartImport(ctx context.Context, bearer, id string, validOnly bool) (port.CatalogImport, error) {
 	var out port.CatalogImport
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: importPath(id) + "/start", Bearer: bearer,
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: importPath(id) + "/start", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"validOnly": validOnly}, RetryUnsafe: true}, &out)
 	return out, err
 }
@@ -375,7 +375,7 @@ func (l *listingWriterImpl) Write(ctx context.Context, bearer string, in domain.
 	}
 	body := map[string]any{"productType": in.ProductType, "title": in.Title, "attributes": in.Attributes, "language": "en",
 		"tone": in.Tone}
-	if _, err := call(ctx, l.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/ai/listing-writer", Bearer: bearer,
+	if _, err := call(ctx, l.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/ai/listing-writer", Bearer: bearer, UserBearer: true,
 		JSON: body, Slow: true}, &out); err != nil {
 		return domain.ListingWriterDraft{}, err
 	}

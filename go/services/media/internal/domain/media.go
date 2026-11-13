@@ -45,6 +45,9 @@ const (
 // PermissionMediaRead is the scope a reader client's token must carry.
 const PermissionMediaRead = "media:read"
 
+// PermissionCareerResume is the scope of the gateway-bff's guest token for career resumes (upload and complete).
+const PermissionCareerResume = "media:career-resume"
+
 // PermissionMediaImport is the scope an importer client's token must carry (POST /v1/assets/import).
 const PermissionMediaImport = "media:import"
 

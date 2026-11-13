@@ -47,7 +47,7 @@ type mediaUpload struct {
 func (m *mediaExportsImpl) Put(ctx context.Context, bearer string, f port.ExportFile) (string, error) {
 	var up mediaUpload
 	body := map[string]any{"purpose": "export", "fileName": f.FileName, "contentType": f.ContentType, "size": f.Size}
-	if _, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", JSON: body, Bearer: bearer}, &up); err != nil {
+	if _, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", JSON: body, Bearer: bearer, UserBearer: true}, &up); err != nil {
 		if p, ok := port.AsUpstreamProblem(err); ok && p.Status == http.StatusUnprocessableEntity {
 			// media refused the export (purpose or content type).
 			return "", fmt.Errorf("media exports: %w", domain.ErrUpstreamUnavailable)
@@ -78,7 +78,7 @@ func (m *mediaExportsImpl) Put(ctx context.Context, bearer string, f port.Export
 	if res.StatusCode >= 300 {
 		return "", fmt.Errorf("media exports: upload status %d: %w", res.StatusCode, domain.ErrUpstreamUnavailable)
 	}
-	if _, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(up.Asset.ID) + "/complete", Bearer: bearer}, nil); err != nil {
+	if _, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(up.Asset.ID) + "/complete", Bearer: bearer, UserBearer: true}, nil); err != nil {
 		return "", err
 	}
 	return up.Asset.ID, nil
@@ -88,7 +88,7 @@ func (m *mediaExportsImpl) SignedURL(ctx context.Context, bearer, ref, _ string,
 	var asset struct {
 		URL string `json:"url"`
 	}
-	if _, err := call(ctx, m.c, httpclient.Request{Path: "/v1/assets/" + url.PathEscape(ref), Bearer: bearer}, &asset); err != nil {
+	if _, err := call(ctx, m.c, httpclient.Request{Path: "/v1/assets/" + url.PathEscape(ref), Bearer: bearer, UserBearer: true}, &asset); err != nil {
 		return "", err
 	}
 	if asset.URL == "" {

@@ -7,10 +7,10 @@ name: env-urls
 on:
   push:
     branches: [main]
-    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py, tools/ci/env_hosts.py,
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py, tools/ci/check_security_off.py, tools/ci/env_hosts.py,
             .github/workflows/env-urls.yml]
   pull_request:
-    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py, tools/ci/env_hosts.py,
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py, tools/ci/check_security_off.py, tools/ci/env_hosts.py,
             .github/workflows/env-urls.yml]
 
 permissions:
@@ -38,3 +38,5 @@ jobs:
       - run: pip install --quiet pyyaml==6.0.3
       - name: Profiles, docs pages, trace sampling, sizing per environment
         run: python3 tools/ci/check_env_config.py --format github
+      - name: No deployable file turns authentication off (AT_SECURITY_ENABLED / AUTH_ENABLED = false)
+        run: python3 tools/ci/check_security_off.py --format github

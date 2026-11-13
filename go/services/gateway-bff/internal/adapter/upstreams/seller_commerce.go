@@ -50,7 +50,7 @@ func (k *sellerCatalogImpl) Products(ctx context.Context, bearer string, q port.
 		v.Set("q", q.Q)
 	}
 	var p port.CatalogProductPage
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/products", Query: v, Bearer: bearer}, &p)
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/products", Query: v, Bearer: bearer, UserBearer: true}, &p)
 	return p, err
 }
 
@@ -63,7 +63,7 @@ func (k *sellerCatalogImpl) Create(ctx context.Context, bearer string, d domain.
 		body["categoryRequestId"] = d.CategoryRequestID
 	}
 	var p port.CatalogOwnProduct
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/products", Bearer: bearer, JSON: body}, &p)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/products", Bearer: bearer, UserBearer: true, JSON: body}, &p)
 	return p, err
 }
 
@@ -73,7 +73,7 @@ func (k *sellerCatalogImpl) SetActive(ctx context.Context, bearer, productID str
 		action = "/resume"
 	}
 	var p port.CatalogOwnProduct
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/products/" + url.PathEscape(productID) + action, Bearer: bearer}, &p)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/products/" + url.PathEscape(productID) + action, Bearer: bearer, UserBearer: true}, &p)
 	return p, err
 }
 
@@ -112,13 +112,13 @@ func (k *sellerCatalogImpl) ListingRules(ctx context.Context, categoryCode strin
 
 func (k *sellerCatalogImpl) CheckGTIN(ctx context.Context, bearer, code string, isbn bool) (port.CatalogGtinCheck, error) {
 	var g port.CatalogGtinCheck
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/identifiers/gtin/" + url.PathEscape(code), Bearer: bearer,
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/identifiers/gtin/" + url.PathEscape(code), Bearer: bearer, UserBearer: true,
 		Query: url.Values{"isbn": {strconv.FormatBool(isbn)}}}, &g)
 	return g, err
 }
 
 func (k *sellerCatalogImpl) CategoryRequests(ctx context.Context, bearer string) ([]port.CatalogCategoryRequest, error) {
-	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/category-requests/mine", Bearer: bearer}, nil)
+	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/category-requests/mine", Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (k *sellerCatalogImpl) CategoryRequests(ctx context.Context, bearer string)
 
 func (k *sellerCatalogImpl) RequestCategory(ctx context.Context, bearer string, in domain.CategoryRequestInput) (port.CatalogCategoryRequest, error) {
 	var r port.CatalogCategoryRequest
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/category-requests", Bearer: bearer, JSON: in}, &r)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/category-requests", Bearer: bearer, UserBearer: true, JSON: in}, &r)
 	return r, err
 }
 
@@ -156,7 +156,7 @@ func (s *stockImpl) Positions(ctx context.Context, bearer, ownerOrg string, lowS
 	if lowStock {
 		q.Set("lowStock", "true")
 	}
-	if _, err := call(ctx, s.c, httpclient.Request{Path: "/v1/positions", Query: q, Bearer: bearer}, &page); err != nil {
+	if _, err := call(ctx, s.c, httpclient.Request{Path: "/v1/positions", Query: q, Bearer: bearer, UserBearer: true}, &page); err != nil {
 		return nil, err
 	}
 	out := make([]domain.StockPosition, 0, len(page.Items))
@@ -177,27 +177,27 @@ func NewOffers(c httpclient.Client) port.OffersClient { return &offersImpl{c: c}
 
 func (o *offersImpl) SetStock(ctx context.Context, bearer, key, sku string, quantity int, reason string) (domain.StockAdjustment, error) {
 	var out domain.StockAdjustment
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/offers/stock/" + url.PathEscape(sku), Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/offers/stock/" + url.PathEscape(sku), Bearer: bearer, UserBearer: true,
 		Header: idem(key), RetryUnsafe: key != "", JSON: map[string]any{"quantity": quantity, "reason": reason}}, &out)
 	return out, err
 }
 
 func (o *offersImpl) List(ctx context.Context, bearer string, page, size int) (port.OfferPage, error) {
 	var out port.OfferPage
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/offers", Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/offers", Bearer: bearer, UserBearer: true,
 		Query: url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}}, &out)
 	return out, err
 }
 
 func (o *offersImpl) Create(ctx context.Context, bearer, key string, body map[string]any) (port.SellerOfferUp, error) {
 	var out port.SellerOfferUp
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/offers", Bearer: bearer, Header: idem(key), RetryUnsafe: key != "", JSON: body}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/offers", Bearer: bearer, UserBearer: true, Header: idem(key), RetryUnsafe: key != "", JSON: body}, &out)
 	return out, err
 }
 
 func (o *offersImpl) Update(ctx context.Context, bearer, id string, body map[string]any) (port.SellerOfferUp, error) {
 	var out port.SellerOfferUp
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/offers/" + url.PathEscape(id), Bearer: bearer, JSON: body}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/offers/" + url.PathEscape(id), Bearer: bearer, UserBearer: true, JSON: body}, &out)
 	return out, err
 }
 
@@ -213,19 +213,19 @@ func (o *offersImpl) SetStatus(ctx context.Context, bearer, id, action string, v
 
 func (o *offersImpl) ListCoupons(ctx context.Context, bearer string) ([]port.SellerCouponUp, error) {
 	var out []port.SellerCouponUp
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/coupons", Bearer: bearer, Query: url.Values{"funding": {"SELLER"}}}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/coupons", Bearer: bearer, UserBearer: true, Query: url.Values{"funding": {"SELLER"}}}, &out)
 	return out, err
 }
 
 func (o *offersImpl) CreateCoupon(ctx context.Context, bearer string, body map[string]any) (port.SellerCouponUp, error) {
 	var out port.SellerCouponUp
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons", Bearer: bearer, JSON: body}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons", Bearer: bearer, UserBearer: true, JSON: body}, &out)
 	return out, err
 }
 
 func (o *offersImpl) SetCouponStatus(ctx context.Context, bearer, id, status string) (port.SellerCouponUp, error) {
 	var out port.SellerCouponUp
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons/" + url.PathEscape(id) + "/status", Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons/" + url.PathEscape(id) + "/status", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"status": status}}, &out)
 	return out, err
 }
@@ -241,14 +241,14 @@ func NewMedia(c httpclient.Client) port.MediaClient { return &mediaImpl{c: c} }
 
 func (m *mediaImpl) RequestUpload(ctx context.Context, bearer, purpose, fileName, contentType string, size int64) (port.MediaUpload, error) {
 	var out port.MediaUpload
-	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer,
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer, UserBearer: !port.IsServiceBearer(ctx),
 		JSON: map[string]any{"purpose": purpose, "fileName": fileName, "contentType": contentType, "size": size}}, &out)
 	return out, err
 }
 
 func (m *mediaImpl) RequestLibraryUpload(ctx context.Context, bearer, fileName, contentType string, size int64) (port.MediaUpload, error) {
 	var out port.MediaUpload
-	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer,
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"purpose": "product-image", "fileName": fileName, "contentType": contentType, "size": size, "library": true}}, &out)
 	return out, err
 }
@@ -264,7 +264,7 @@ func (m *mediaImpl) RequestImageUpload(ctx context.Context, bearer string, in po
 		}
 	}
 	var out port.MediaUpload
-	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer, JSON: body}, &out)
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer, UserBearer: true, JSON: body}, &out)
 	return out, err
 }
 
@@ -280,31 +280,31 @@ func (m *mediaImpl) Library(ctx context.Context, bearer, q, status, matched stri
 		v.Set("matched", matched)
 	}
 	var out port.MediaLibraryPage
-	_, err := call(ctx, m.c, httpclient.Request{Path: "/v1/library", Query: v, Bearer: bearer}, &out)
+	_, err := call(ctx, m.c, httpclient.Request{Path: "/v1/library", Query: v, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (m *mediaImpl) RemoveFromLibrary(ctx context.Context, bearer, assetID string) error {
-	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer}, nil)
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer, UserBearer: true}, nil)
 	return err
 }
 
 func (m *mediaImpl) RenameLibraryImage(ctx context.Context, bearer, assetID, fileName string) (port.MediaLibraryImage, error) {
 	var out port.MediaLibraryImage
-	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer,
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"fileName": fileName}}, &out)
 	return out, err
 }
 
 func (m *mediaImpl) Asset(ctx context.Context, bearer, assetID string) (port.MediaAsset, error) {
 	var a port.MediaAsset
-	_, err := call(ctx, m.c, httpclient.Request{Path: "/v1/assets/" + url.PathEscape(assetID), Bearer: bearer}, &a)
+	_, err := call(ctx, m.c, httpclient.Request{Path: "/v1/assets/" + url.PathEscape(assetID), Bearer: bearer, UserBearer: true}, &a)
 	return a, err
 }
 
 func (m *mediaImpl) Complete(ctx context.Context, bearer, assetID string) (port.MediaAsset, error) {
 	var a port.MediaAsset
-	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(assetID) + "/complete", Bearer: bearer}, &a)
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(assetID) + "/complete", Bearer: bearer, UserBearer: !port.IsServiceBearer(ctx)}, &a)
 	return a, err
 }
 
@@ -327,13 +327,13 @@ func (o *sellerOrdersImpl) Queue(ctx context.Context, bearer, status, cursor str
 		q.Set("cursor", cursor)
 	}
 	var out port.ShipmentQueue
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/seller/shipments", Query: q, Bearer: bearer}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/seller/shipments", Query: q, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (o *sellerOrdersImpl) Order(ctx context.Context, bearer, number string) (port.OrderView, error) {
 	var out port.OrderView
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + url.PathEscape(number), Bearer: bearer}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + url.PathEscape(number), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
@@ -346,27 +346,27 @@ func (o *sellerOrdersImpl) Transition(ctx context.Context, bearer, key, shipment
 		body["handoverCode"] = handoverCode
 	}
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/shipments/" + url.PathEscape(shipmentID) + "/transitions",
-		Bearer: bearer, Header: idem(key), RetryUnsafe: key != "", JSON: body}, &out)
+		Bearer: bearer, UserBearer: true, Header: idem(key), RetryUnsafe: key != "", JSON: body}, &out)
 	return out.Order, err
 }
 
 func (o *sellerOrdersImpl) AttachTracking(ctx context.Context, bearer, shipmentID, carrier, tracking string) (port.OrderView, error) {
 	var out port.OrderView
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/shipments/" + url.PathEscape(shipmentID) + "/tracking",
-		Bearer: bearer, JSON: map[string]string{"carrier": carrier, "trackingNumber": tracking}}, &out)
+		Bearer: bearer, UserBearer: true, JSON: map[string]string{"carrier": carrier, "trackingNumber": tracking}}, &out)
 	return out, err
 }
 
 func (o *sellerOrdersImpl) Analytics(ctx context.Context, bearer string, from, to time.Time) (port.SalesAnalytics, error) {
 	var out port.SalesAnalytics
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/seller/analytics", Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/seller/analytics", Bearer: bearer, UserBearer: true,
 		Query: url.Values{"from": {from.Format(time.DateOnly)}, "to": {to.Format(time.DateOnly)}}}, &out)
 	return out, err
 }
 
 func (o *sellerOrdersImpl) Split(ctx context.Context, bearer, number string) (port.OrderSplit, error) {
 	var out port.OrderSplit
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + url.PathEscape(number) + "/payment-split", Bearer: bearer}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + url.PathEscape(number) + "/payment-split", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
@@ -385,20 +385,20 @@ func (k *carrierImpl) Rates(ctx context.Context, bearer string, s port.CarrierSh
 	if carrier != "" {
 		payload["carriers"] = []string{carrier}
 	}
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/rates", Bearer: bearer, JSON: payload}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/rates", Bearer: bearer, UserBearer: true, JSON: payload}, &out)
 	return out, err
 }
 
 func (k *carrierImpl) BuyLabel(ctx context.Context, bearer, key, carrier, service string, s port.CarrierShipment) (port.CarrierLabel, error) {
 	var out port.CarrierLabel
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/labels", Bearer: bearer, Header: idem(key), RetryUnsafe: true,
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/labels", Bearer: bearer, UserBearer: true, Header: idem(key), RetryUnsafe: true,
 		JSON: map[string]any{"carrier": carrier, "service": service, "shipment": s}}, &out)
 	return out, err
 }
 
 func (k *carrierImpl) LabelDocument(ctx context.Context, bearer, carrier, trackingNumber string) (domain.FileDownload, error) {
 	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/labels/by-tracking/" + url.PathEscape(carrier) + "/" + url.PathEscape(trackingNumber) + "/document",
-		Bearer: bearer, Header: http.Header{"Accept": {"*/*"}}}, nil)
+		Bearer: bearer, UserBearer: true, Header: http.Header{"Accept": {"*/*"}}}, nil)
 	if err != nil {
 		return domain.FileDownload{}, err
 	}
@@ -417,26 +417,26 @@ func (k *carrierImpl) ManagedPickupLocations(ctx context.Context, bearer, ownerO
 	var out struct {
 		Items []port.PickupLocation `json:"items"`
 	}
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/pickup-locations", Bearer: bearer,
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/pickup-locations", Bearer: bearer, UserBearer: true,
 		Query: url.Values{"includeInactive": {"true"}, "ownerOrg": {ownerOrg}}}, &out)
 	return out.Items, err
 }
 
 func (k *carrierImpl) SavePickupLocation(ctx context.Context, bearer string, l port.PickupLocation) (port.PickupLocation, error) {
 	var out port.PickupLocation
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/pickup-locations/" + esc(l.ID), Bearer: bearer, RetryUnsafe: true, JSON: l}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/pickup-locations/" + esc(l.ID), Bearer: bearer, UserBearer: true, RetryUnsafe: true, JSON: l}, &out)
 	return out, err
 }
 
 func (k *carrierImpl) PickupPrompt(ctx context.Context, bearer string) (port.PickupPromptState, error) {
 	var out port.PickupPromptState
-	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/pickup-prompt", Bearer: bearer}, &out)
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/pickup-prompt", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (k *carrierImpl) AnswerPickupPrompt(ctx context.Context, bearer, action string) (port.PickupPromptState, error) {
 	var out port.PickupPromptState
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/pickup-prompt", Bearer: bearer, RetryUnsafe: true,
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/pickup-prompt", Bearer: bearer, UserBearer: true, RetryUnsafe: true,
 		JSON: map[string]string{"action": action}}, &out)
 	return out, err
 }
@@ -452,12 +452,12 @@ func NewPayouts(c httpclient.Client) port.PayoutsClient { return &payoutsImpl{c:
 
 func (p *payoutsImpl) Balance(ctx context.Context, bearer, orgID string) (port.PayoutBalanceResponse, error) {
 	var b port.PayoutBalanceResponse
-	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payouts/balance", Query: url.Values{"orgId": {orgID}}, Bearer: bearer}, &b)
+	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payouts/balance", Query: url.Values{"orgId": {orgID}}, Bearer: bearer, UserBearer: true}, &b)
 	return b, err
 }
 
 func (p *payoutsImpl) ProviderFees(ctx context.Context, bearer, orgID string) ([]port.ProviderFeeResponse, error) {
-	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payouts/provider-fees", Query: url.Values{"orgId": {orgID}}, Bearer: bearer}, nil)
+	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payouts/provider-fees", Query: url.Values{"orgId": {orgID}}, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +466,7 @@ func (p *payoutsImpl) ProviderFees(ctx context.Context, bearer, orgID string) ([
 }
 
 func (p *payoutsImpl) Requests(ctx context.Context, bearer, orgID string) ([]port.PayoutResponse, error) {
-	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payouts/requests", Query: url.Values{"orgId": {orgID}, "limit": {"50"}}, Bearer: bearer}, nil)
+	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payouts/requests", Query: url.Values{"orgId": {orgID}, "limit": {"50"}}, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -482,14 +482,14 @@ func (p *payoutsImpl) RequestPayout(ctx context.Context, bearer, key string, amo
 		body["amountMinor"] = amountMinor
 	}
 	var out port.PayoutResponse
-	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/payouts/requests", Bearer: bearer, Header: idem(key),
+	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/payouts/requests", Bearer: bearer, UserBearer: true, Header: idem(key),
 		RetryUnsafe: key != "", JSON: body}, &out)
 	return out, err
 }
 
 func (p *payoutsImpl) PlanFeeWithholdings(ctx context.Context, bearer, orgID string) ([]port.PlanFeeWithholding, error) {
 	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/orgs/" + esc(orgID) + "/plan-fee-withholdings", Query: url.Values{"limit": {"50"}},
-		Bearer: bearer}, nil)
+		Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -19,6 +19,6 @@ func NewCheckoutCoupons(c httpclient.Client) port.CheckoutCouponsClient {
 
 func (o *checkoutCouponsImpl) Validate(ctx context.Context, bearer string, req port.CouponValidateRequest) (port.CouponQuote, error) {
 	var out port.CouponQuote
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons/validate", Bearer: bearer, JSON: req}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons/validate", Bearer: bearer, UserBearer: true, JSON: req}, &out)
 	return out, err
 }

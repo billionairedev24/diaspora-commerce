@@ -30,20 +30,20 @@
     "uat": {
       "name": "storefront-uat",
       "routes": [{ "pattern": "uat.afrotransact.com/*", "zone_name": "afrotransact.com" }],
-      "vars": { "APP_ENV": "uat", "CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-uat.afrotransact.com", "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://uat.afrotransact.com", "BFF_ORIGIN": "https://api-uat.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller-uat.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin-uat.afrotransact.com" }
+      "vars": { "APP_ENV": "uat", "CSP_MODE": "enforce", "MEDIA_PUBLIC_URL": "https://media-uat.afrotransact.com", "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://uat.afrotransact.com", "BFF_ORIGIN": "https://api-uat.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller-uat.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin-uat.afrotransact.com" }
     },
     "prod": {
       "name": "storefront-prod",
       // Prod: afrotransact.com, the one canonical host (no www in the host map). The only environment that may be indexed.
       "routes": [{ "pattern": "afrotransact.com/*", "zone_name": "afrotransact.com" }],
-      "vars": { "APP_ENV": "prod", "CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media.afrotransact.com", "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://afrotransact.com", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.afrotransact.com" }
+      "vars": { "APP_ENV": "prod", "CSP_MODE": "enforce", "MEDIA_PUBLIC_URL": "https://media.afrotransact.com", "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://afrotransact.com", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.afrotransact.com" }
     },
     // trial: the 8-day OVH run (prod profile, flat single-label hosts under the zone, docs/runbooks/ovh-production.md "Trial").
     // The hosts below are the default zone; the trial workflow writes the same shape for the zone you give it. Routes: infra/cloudflare.
     "trial": {
       "name": "storefront-trial",
       "routes": [{ "pattern": "test.afrotransact.com/*", "zone_name": "afrotransact.com" }],
-      "vars": { "APP_ENV": "trial", "CSP_MODE": "report-only", "MEDIA_PUBLIC_URL": "https://media-test.afrotransact.com", "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://test.afrotransact.com", "BFF_ORIGIN": "https://api-test.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller-test.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin-test.afrotransact.com" }
+      "vars": { "APP_ENV": "trial", "CSP_MODE": "enforce", "MEDIA_PUBLIC_URL": "https://media-test.afrotransact.com", "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://test.afrotransact.com", "BFF_ORIGIN": "https://api-test.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller-test.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin-test.afrotransact.com" }
     }
   }
 }

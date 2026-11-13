@@ -27,7 +27,7 @@ func NewWallet(c httpclient.Client) port.WalletClient { return &walletImpl{c: c}
 
 func (w *walletImpl) List(ctx context.Context, bearer string) (port.Wallet, error) {
 	var raw json.RawMessage
-	_, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, &raw)
+	_, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer, UserBearer: true}, &raw)
 	if err != nil {
 		return port.Wallet{}, err
 	}
@@ -44,25 +44,25 @@ func (w *walletImpl) List(ctx context.Context, bearer string) (port.Wallet, erro
 
 func (w *walletImpl) SetupIntent(ctx context.Context, bearer string, types []string) (port.WalletSetupIntent, error) {
 	var out port.WalletSetupIntent
-	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/setup-intents", Bearer: bearer,
+	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/setup-intents", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"types": types}}, &out)
 	return out, err
 }
 
 func (w *walletImpl) MakeDefault(ctx context.Context, bearer, id string) (port.WalletMethod, error) {
 	var out port.WalletMethod
-	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/payment-methods/" + esc(id) + "/default", Bearer: bearer}, &out)
+	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/payment-methods/" + esc(id) + "/default", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (w *walletImpl) Remove(ctx context.Context, bearer, id string) error {
-	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/customers/me/payment-methods/" + esc(id), Bearer: bearer}, nil)
+	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/customers/me/payment-methods/" + esc(id), Bearer: bearer, UserBearer: true}, nil)
 	return err
 }
 
 func (w *walletImpl) EphemeralKey(ctx context.Context, bearer string) (port.WalletEphemeralKey, error) {
 	var out port.WalletEphemeralKey
-	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/ephemeral-keys", Bearer: bearer,
+	_, err := call(ctx, w.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/ephemeral-keys", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{}}, &out)
 	return out, err
 }
@@ -83,7 +83,7 @@ func (o *customerOrdersImpl) List(ctx context.Context, bearer, cursor string, li
 	if cursor != "" {
 		q.Set("cursor", cursor)
 	}
-	res, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders", Query: q, Bearer: bearer}, nil)
+	res, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders", Query: q, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -96,13 +96,13 @@ func (o *customerOrdersImpl) List(ctx context.Context, bearer, cursor string, li
 
 func (o *customerOrdersImpl) Get(ctx context.Context, bearer, number string) (port.UpOrder, error) {
 	var out port.UpOrder
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + esc(number), Bearer: bearer}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + esc(number), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (o *customerOrdersImpl) Cancel(ctx context.Context, bearer, number, shipmentID, reason string) (port.UpOrder, error) {
 	var out port.UpOrder
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Bearer: bearer, JSON: map[string]string{"reason": reason},
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Bearer: bearer, UserBearer: true, JSON: map[string]string{"reason": reason},
 		Path: "/v1/orders/" + esc(number) + "/shipments/" + esc(shipmentID) + "/cancel"}, &out)
 	return out, err
 }
@@ -110,7 +110,7 @@ func (o *customerOrdersImpl) Cancel(ctx context.Context, bearer, number, shipmen
 func (o *customerOrdersImpl) Checkout(ctx context.Context, bearer, key string, req port.UpCheckoutRequest) (port.UpCheckout, int, error) {
 	var out port.UpCheckout
 	// Slow: orders answers once the saga reached awaiting payment, waiting up to its checkout-response-timeout.
-	res, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/checkout", Bearer: bearer, JSON: req,
+	res, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/checkout", Bearer: bearer, UserBearer: true, JSON: req,
 		Header: idem(key), RetryUnsafe: true, Slow: true}, &out)
 	if err != nil {
 		return out, 0, err
@@ -120,13 +120,13 @@ func (o *customerOrdersImpl) Checkout(ctx context.Context, bearer, key string, r
 
 func (o *customerOrdersImpl) CheckoutStatus(ctx context.Context, bearer, number string) (port.UpCheckout, error) {
 	var out port.UpCheckout
-	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/checkout/" + esc(number), Bearer: bearer}, &out)
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/checkout/" + esc(number), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (o *customerOrdersImpl) ConfirmPayment(ctx context.Context, bearer, number string) (port.UpCheckout, error) {
 	var out port.UpCheckout
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/checkout/" + esc(number) + "/confirm", Bearer: bearer,
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/checkout/" + esc(number) + "/confirm", Bearer: bearer, UserBearer: true,
 		RetryUnsafe: true, Slow: true}, &out)
 	return out, err
 }
@@ -148,10 +148,8 @@ func NewReturns(c httpclient.Client, tokens port.ServiceTokens) port.ReturnsClie
 
 func (r *returnsImpl) TaxQuote(ctx context.Context, req port.UpTaxQuoteRequest) (port.UpTaxQuote, error) {
 	var out port.UpTaxQuote
-	// The quote is the gateway's own call with its service token, never the shopper's: a storefront request must not add
-	// X-Acting-As: CUSTOMER to it (with security off, tax-returns resolves the local super admin and that header would
-	// narrow it to a shopper without tax:quote).
-	ctx = port.WithoutShopper(ctx)
+	// The quote is the gateway's own call with its service token: Request.UserBearer stays false, so the client never adds
+	// X-Acting-As: CUSTOMER to it (httpclient/client.go).
 	bearer := ""
 	if r.tokens != nil {
 		t, err := r.tokens.Token(ctx, "tax:quote")
@@ -174,12 +172,12 @@ var _ port.SecurityClient = (*securityImpl)(nil)
 func NewSecurity(c httpclient.Client) port.SecurityClient { return &securityImpl{c: c} }
 
 func (s *securityImpl) get(ctx context.Context, bearer, path string, out any) error {
-	_, err := call(ctx, s.c, httpclient.Request{Path: path, Bearer: bearer}, out)
+	_, err := call(ctx, s.c, httpclient.Request{Path: path, Bearer: bearer, UserBearer: true}, out)
 	return err
 }
 
 func (s *securityImpl) send(ctx context.Context, bearer, method, path string, body, out any) error {
-	_, err := call(ctx, s.c, httpclient.Request{Method: method, Path: path, Bearer: bearer, JSON: body}, out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: method, Path: path, Bearer: bearer, UserBearer: true, JSON: body}, out)
 	return err
 }
 
@@ -297,7 +295,7 @@ func (s *securityImpl) ForgetTrustedBrowsers(ctx context.Context, bearer string)
 
 func (s *securityImpl) SignInActivity(ctx context.Context, bearer string, limit int) ([]port.UpSignInActivity, error) {
 	var out []port.UpSignInActivity
-	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/me/sign-in-activity", Bearer: bearer,
+	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/me/sign-in-activity", Bearer: bearer, UserBearer: true,
 		Query: url.Values{"limit": {strconv.Itoa(limit)}}}, &out)
 	return out, err
 }
@@ -441,13 +439,13 @@ func (b *customerBookingsImpl) Create(ctx context.Context, bearer, key string, r
 	var out struct {
 		Booking port.UpBkBooking `json:"booking"`
 	}
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings", Bearer: bearer, JSON: req,
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings", Bearer: bearer, UserBearer: true, JSON: req,
 		Header: idem(key), RetryUnsafe: true}, &out)
 	return out.Booking, err
 }
 
 func (b *customerBookingsImpl) Mine(ctx context.Context, bearer string) ([]port.UpBkBooking, error) {
-	res, err := call(ctx, b.c, httpclient.Request{Path: "/v1/bookings/mine", Bearer: bearer}, nil)
+	res, err := call(ctx, b.c, httpclient.Request{Path: "/v1/bookings/mine", Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -457,13 +455,13 @@ func (b *customerBookingsImpl) Mine(ctx context.Context, bearer string) ([]port.
 
 func (b *customerBookingsImpl) Get(ctx context.Context, bearer, id string) (port.UpBkBooking, error) {
 	var out port.UpBkBooking
-	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/bookings/" + esc(id), Bearer: bearer}, &out)
+	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/bookings/" + esc(id), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (b *customerBookingsImpl) Quote(ctx context.Context, bearer, id string) (port.UpBkQuote, error) {
 	var out port.UpBkQuote
-	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/bookings/" + esc(id) + "/cancellation-quote", Bearer: bearer}, &out)
+	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/bookings/" + esc(id) + "/cancellation-quote", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
@@ -472,14 +470,14 @@ func (b *customerBookingsImpl) Cancel(ctx context.Context, bearer, key, id, reas
 		Booking port.UpBkBooking `json:"booking"`
 		Applied port.UpBkQuote   `json:"applied"`
 	}
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/cancel", Bearer: bearer,
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/cancel", Bearer: bearer, UserBearer: true,
 		JSON: map[string]string{"reason": reason}, Header: idem(key), RetryUnsafe: true}, &out)
 	return out.Booking, out.Applied, err
 }
 
 func (b *customerBookingsImpl) Reschedule(ctx context.Context, bearer, key, id, startAt string) (port.UpBkBooking, error) {
 	var out port.UpBkBooking
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/reschedule", Bearer: bearer,
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/reschedule", Bearer: bearer, UserBearer: true,
 		JSON: map[string]string{"startAt": startAt}, Header: idem(key), RetryUnsafe: true}, &out)
 	return out, err
 }
@@ -490,21 +488,21 @@ func (b *customerBookingsImpl) NewTime(ctx context.Context, bearer, key, id stri
 		action = "accept"
 	}
 	var out port.UpBkBooking
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/new-time/" + action, Bearer: bearer,
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/new-time/" + action, Bearer: bearer, UserBearer: true,
 		Header: idem(key), RetryUnsafe: true}, &out)
 	return out, err
 }
 
 func (b *customerBookingsImpl) Review(ctx context.Context, bearer, id string, rating int, text string) (domain.BookingReview, error) {
 	var out domain.BookingReview
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/review", Bearer: bearer,
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/review", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"rating": rating, "text": text}}, &out)
 	return out, err
 }
 
 func (b *customerBookingsImpl) SyncPayment(ctx context.Context, bearer, id string) (port.UpBkBooking, error) {
 	var out port.UpBkBooking
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/payment/sync", Bearer: bearer}, &out)
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/payment/sync", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
@@ -592,18 +590,18 @@ func NewCustomerQuotes(c httpclient.Client) port.CustomerQuotesClient {
 func (q *customerQuotesImpl) Request(ctx context.Context, bearer string, req port.UpQuoteRequest) (domain.QuoteRequest, error) {
 	var out domain.QuoteRequest
 	// A repeat of the same cart and address returns the same request, so a retry is safe.
-	_, err := call(ctx, q.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/delivery-quotes", Bearer: bearer, JSON: req, RetryUnsafe: true}, &out)
+	_, err := call(ctx, q.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/delivery-quotes", Bearer: bearer, UserBearer: true, JSON: req, RetryUnsafe: true}, &out)
 	return out, err
 }
 
 func (q *customerQuotesImpl) List(ctx context.Context, bearer string) ([]domain.QuoteRequest, error) {
 	var out []domain.QuoteRequest
-	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes", Bearer: bearer}, &out)
+	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (q *customerQuotesImpl) Get(ctx context.Context, bearer, id string) (domain.QuoteRequest, error) {
 	var out domain.QuoteRequest
-	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes/" + esc(id), Bearer: bearer}, &out)
+	_, err := call(ctx, q.c, httpclient.Request{Path: "/v1/delivery-quotes/" + esc(id), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }

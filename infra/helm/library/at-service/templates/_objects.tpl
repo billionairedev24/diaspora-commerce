@@ -19,6 +19,8 @@ spec:
   selector: {{- include "at-service.selector" . | nindent 4 }}
   ports:
     - {name: http, port: 80, targetPort: http}
+    # Scrape target only. Gateway routes use port 80 and the NetworkPolicy admits only observability on this port.
+    - {name: management, port: {{ include "at-service.managementPort" . }}, targetPort: management}
 {{- if .Values.rollout.enabled }}
 ---
 apiVersion: v1
@@ -81,7 +83,7 @@ spec:
   selector:
     matchLabels: {{- include "at-service.selector" . | nindent 6 }}
   endpoints:
-    - port: http
+    - port: management
       path: {{ include "at-service.metricsPath" . }}
       interval: 30s
 {{- end }}
@@ -107,6 +109,12 @@ spec:
             matchLabels: {kubernetes.io/metadata.name: observability}
       ports:
         - {port: {{ .Values.service.port }}}
+    # Management port (probes from the kubelet are node-local; scrapes come from observability only).
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
+      ports:
+        - {port: {{ include "at-service.managementPort" . }}}
 {{- end -}}
 
 {{- define "at-service.externalSecret" -}}

@@ -17,12 +17,12 @@ func NewTaxStatements(c httpclient.Client) port.TaxStatementClient { return &tax
 
 func (t *taxStatementsImpl) Statement(ctx context.Context, bearer, orgID, month string) (port.TaxStatementResponse, error) {
 	var out port.TaxStatementResponse
-	_, err := call(ctx, t.c, httpclient.Request{Path: "/v1/tax/sellers/" + url.PathEscape(orgID) + "/statement", Query: url.Values{"month": {month}}, Bearer: bearer}, &out)
+	_, err := call(ctx, t.c, httpclient.Request{Path: "/v1/tax/sellers/" + url.PathEscape(orgID) + "/statement", Query: url.Values{"month": {month}}, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (t *taxStatementsImpl) StatementCSV(ctx context.Context, bearer, orgID, month string) ([]byte, error) {
-	res, err := call(ctx, t.c, httpclient.Request{Path: "/v1/tax/sellers/" + url.PathEscape(orgID) + "/statement/export", Query: url.Values{"month": {month}}, Bearer: bearer}, nil)
+	res, err := call(ctx, t.c, httpclient.Request{Path: "/v1/tax/sellers/" + url.PathEscape(orgID) + "/statement/export", Query: url.Values{"month": {month}}, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}

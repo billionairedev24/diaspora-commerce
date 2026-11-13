@@ -44,6 +44,10 @@ type Request struct {
 	ContentType string
 	// Bearer is relayed as Authorization: Bearer (never logged).
 	Bearer string
+	// UserBearer is true only when Bearer is the person's own relayed token. Only then does a storefront request (port.WithShopper)
+	// add X-Acting-As: CUSTOMER. The default (false) is for the gateway's own client-credentials tokens: a service token must
+	// never be narrowed to a shopper (security audit F16).
+	UserBearer bool
 	// BasicUser/BasicPassword authenticate a confidential OAuth client.
 	BasicUser, BasicPassword string
 	// RetryUnsafe allows retries for a non-GET that is idempotent by design (e.g. carries an Idempotency-Key).
@@ -374,7 +378,7 @@ func (c *clientImpl) build(ctx context.Context, method string, req Request) (*ht
 	}
 	if req.Bearer != "" {
 		hreq.Header.Set("Authorization", "Bearer "+req.Bearer)
-		if port.IsShopper(ctx) {
+		if req.UserBearer && port.IsShopper(ctx) {
 			// Storefront and customer app: the person shops as themselves, whatever organisations they belong to.
 			hreq.Header.Set(auth.ActingAsHeader, auth.ActingAsCustomer)
 		}

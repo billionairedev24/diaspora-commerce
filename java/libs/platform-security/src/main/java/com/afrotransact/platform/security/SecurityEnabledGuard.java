@@ -9,11 +9,11 @@ import org.springframework.core.env.Environment;
 
 /**
  * Fail-closed guard: {@code at.security.enabled=false} turns every caller into a staff super admin, so it is allowed only
- * in the local and test profiles. Any other active profile or APP_ENV (uat, prod, dev, ...) refuses to start.
+ * in the local, test and it profiles. Any other active profile or APP_ENV (uat, prod, dev, ...) refuses to start.
  */
 final class SecurityEnabledGuard implements InitializingBean {
 
-    private static final Set<String> SECURITY_OFF_ALLOWED = Set.of("local", "test");
+    private static final Set<String> SECURITY_OFF_ALLOWED = Set.of("local", "test", "it");
 
     private final boolean enabled;
     private final String[] profiles;
@@ -41,7 +41,7 @@ final class SecurityEnabledGuard implements InitializingBean {
                 .orElse(null);
         if (offending != null) {
             throw new IllegalStateException("Refusing to start: at.security.enabled=false (AT_SECURITY_ENABLED=false) is allowed only"
-                    + " in the local and test profiles, but the active profile or APP_ENV is '" + offending
+                    + " in the local, test and it profiles, but the active profile or APP_ENV is '" + offending
                     + "'. Security off makes every caller a staff super admin. Remove AT_SECURITY_ENABLED from this environment.");
         }
     }

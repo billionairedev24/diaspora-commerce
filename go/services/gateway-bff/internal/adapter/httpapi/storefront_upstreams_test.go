@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/testkit"
 )
 
@@ -66,7 +67,7 @@ func TestCareersResumeUpload(t *testing.T) {
 	if up["assetId"] == "" || up["upload"].(map[string]any)["method"] != "PUT" || num(up, "maxBytes") != 5<<20 {
 		t.Fatalf("upload = %v", up)
 	}
-	if got := bff.Upstreams.ServiceTokenRequests; len(got) == 0 || got[len(got)-1] != "" {
+	if got := bff.Upstreams.ServiceTokenRequests; len(got) == 0 || got[len(got)-1] != app.GuestCareerResumeScope {
 		t.Fatalf("guest uploads must use the BFF's client-credentials token: %v", got)
 	}
 	if bff.Upstreams.LastUploadPurpose != "career-resume" {

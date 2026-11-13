@@ -154,6 +154,7 @@ env-check: ## Environment guards: no hard-coded hosts, profiles + docs pages + t
 	python3 tools/ci/check_env_urls.py
 	python3 tools/ci/env_hosts.py check
 	python3 tools/ci/check_env_config.py
+	python3 tools/ci/check_security_off.py
 	python3 tools/ci/check_webhook_routes.py
 
 render: ## Render one service as Argo CD would for an env: make render SERVICE=cart ENV=uat

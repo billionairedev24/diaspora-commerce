@@ -18,10 +18,12 @@ import (
 var (
 	retailService = auth.Actor{Subject: "retail-service", Type: "SERVICE", Permissions: []string{"media:write"}}
 	bffService    = auth.Actor{Subject: "gateway-bff", Type: "SERVICE"}
-	otherService  = auth.Actor{Subject: "catalog-service", Type: "SERVICE"}
-	staff         = auth.Actor{Subject: "staff-1", Type: "STAFF"}
-	sellerMember  = auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_lagos"}
-	customer      = auth.Actor{Subject: "c1", Type: "CUSTOMER"}
+	// The BFF's guest token carries only this scope (security audit F14); resumes need it.
+	bffGuest     = auth.Actor{Subject: "gateway-bff", Type: "SERVICE", Permissions: []string{domain.PermissionCareerResume}}
+	otherService = auth.Actor{Subject: "catalog-service", Type: "SERVICE"}
+	staff        = auth.Actor{Subject: "staff-1", Type: "STAFF"}
+	sellerMember = auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_lagos"}
+	customer     = auth.Actor{Subject: "c1", Type: "CUSTOMER"}
 )
 
 func pdf() []byte { return append([]byte("%PDF-1.7\n"), make([]byte, 2000)...) }
@@ -166,7 +168,7 @@ func TestDocumentPurposesAcceptOnlyTheNamedServiceClients(t *testing.T) {
 	}{
 		{retailService, domain.PurposeShippingDocument, "bol.pdf", domain.ContentTypePDF},
 		{bffService, domain.PurposeExport, "orders.csv", domain.ContentTypeCSV},
-		{bffService, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF},
+		{bffGuest, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF},
 		{customer, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF},
 		{staff, domain.PurposePurchaseOrder, "po.pdf", domain.ContentTypePDF},
 	} {
@@ -184,6 +186,7 @@ func TestDocumentPurposesAcceptOnlyTheNamedServiceClients(t *testing.T) {
 		{retailService, domain.PurposeKYCDocument},     // named clients stay on the purposes that name them
 		{bffService, domain.PurposeProductImage},       // …
 		{otherService, domain.PurposeCareerResume},     // not a named client
+		{bffService, domain.PurposeCareerResume},       // the BFF without the career-resume scope
 		{sellerMember, domain.PurposeShippingDocument}, // staff-only purpose
 	} {
 		rules, _ := domain.RulesFor(c.purpose)

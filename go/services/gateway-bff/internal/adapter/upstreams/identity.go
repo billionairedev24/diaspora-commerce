@@ -85,19 +85,19 @@ func (i *identityImpl) Revoke(ctx context.Context, token, hint string) error {
 
 func (i *identityImpl) Me(ctx context.Context, bearer string) (port.IdentityMe, error) {
 	var me port.IdentityMe
-	_, err := call(ctx, i.c, httpclient.Request{Path: "/v1/me", Bearer: bearer}, &me)
+	_, err := call(ctx, i.c, httpclient.Request{Path: "/v1/me", Bearer: bearer, UserBearer: true}, &me)
 	return me, err
 }
 
 func (i *identityImpl) StartPhoneVerification(ctx context.Context, bearer string) (port.PhoneCodeSent, error) {
 	var out port.PhoneCodeSent
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification", Bearer: bearer}, &out)
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (i *identityImpl) ConfirmPhoneVerification(ctx context.Context, bearer, code string) (port.PhoneVerification, error) {
 	var out port.PhoneVerification
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification/confirm", Bearer: bearer,
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification/confirm", Bearer: bearer, UserBearer: true,
 		JSON: map[string]string{"code": code}}, &out)
 	return out, err
 }
@@ -114,7 +114,7 @@ func (i *identityImpl) Providers(ctx context.Context) ([]port.IdentityProvider, 
 }
 
 func (i *identityImpl) Addresses(ctx context.Context, bearer string) ([]port.IdentityAddress, error) {
-	res, err := call(ctx, i.c, httpclient.Request{Path: "/v1/me/addresses", Bearer: bearer}, nil)
+	res, err := call(ctx, i.c, httpclient.Request{Path: "/v1/me/addresses", Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -124,24 +124,24 @@ func (i *identityImpl) Addresses(ctx context.Context, bearer string) ([]port.Ide
 
 func (i *identityImpl) CreateAddress(ctx context.Context, bearer string, a port.IdentityAddress) (port.IdentityAddress, error) {
 	var out port.IdentityAddress
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/addresses", Bearer: bearer, JSON: a}, &out)
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/addresses", Bearer: bearer, UserBearer: true, JSON: a}, &out)
 	return out, err
 }
 
 func (i *identityImpl) UpdateAddress(ctx context.Context, bearer, id string, a port.IdentityAddress) (port.IdentityAddress, error) {
 	var out port.IdentityAddress
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/me/addresses/" + url.PathEscape(id), Bearer: bearer, JSON: a}, &out)
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/me/addresses/" + url.PathEscape(id), Bearer: bearer, UserBearer: true, JSON: a}, &out)
 	return out, err
 }
 
 func (i *identityImpl) DeleteAddress(ctx context.Context, bearer, id string) error {
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/me/addresses/" + url.PathEscape(id), Bearer: bearer}, nil)
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/me/addresses/" + url.PathEscape(id), Bearer: bearer, UserBearer: true}, nil)
 	return err
 }
 
 func (i *identityImpl) DefaultAddress(ctx context.Context, bearer, id string) (port.IdentityAddress, error) {
 	var out port.IdentityAddress
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/addresses/" + url.PathEscape(id) + "/default", Bearer: bearer}, &out)
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/addresses/" + url.PathEscape(id) + "/default", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 

@@ -17,6 +17,6 @@ func NewOrderPayments(c httpclient.Client) port.OrderPaymentsClient { return &or
 
 func (p *orderPaymentsImpl) ByOrder(ctx context.Context, bearer, orderID string) (port.UpOrderPayment, error) {
 	var out port.UpOrderPayment
-	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payments", Query: url.Values{"orderId": {orderID}}, Bearer: bearer}, &out)
+	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/payments", Query: url.Values{"orderId": {orderID}}, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }

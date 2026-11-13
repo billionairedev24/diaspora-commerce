@@ -144,7 +144,7 @@ func (b *bookingsImpl) Calendar(ctx context.Context, bearer string, p port.Provi
 		Bookings []bkBooking `json:"bookings"`
 	}
 	q := url.Values{"from": {from.Format(time.DateOnly)}, "to": {to.Format(time.DateOnly)}}
-	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/calendar"), Query: q, Bearer: bearer}, &cal); err != nil {
+	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/calendar"), Query: q, Bearer: bearer, UserBearer: true}, &cal); err != nil {
 		return port.BookingsCalendar{}, err
 	}
 	// Open hours per weekday: the first day of the range that falls on it (members' hours are merged by bookings).
@@ -174,7 +174,7 @@ func (b *bookingsImpl) bookings(ctx context.Context, bearer string, p port.Provi
 		q.Set("status", status)
 	}
 	var list []bkBooking
-	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/bookings"), Query: q, Bearer: bearer}, &list); err != nil {
+	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/bookings"), Query: q, Bearer: bearer, UserBearer: true}, &list); err != nil {
 		return nil, err
 	}
 	return list, nil
@@ -222,12 +222,12 @@ func (b *bookingsImpl) Act(ctx context.Context, bearer, key, id, action, reason 
 		var out struct {
 			Booking bkBooking `json:"booking"`
 		}
-		_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: path, Bearer: bearer, Header: idem(key),
+		_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: path, Bearer: bearer, UserBearer: true, Header: idem(key),
 			RetryUnsafe: true, JSON: body}, &out)
 		return out.Booking.card(), err
 	}
 	var out bkBooking
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: path, Bearer: bearer, Header: idem(key),
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: path, Bearer: bearer, UserBearer: true, Header: idem(key),
 		RetryUnsafe: true, JSON: body}, &out)
 	return out.card(), err
 }
@@ -283,14 +283,14 @@ type bkOverride struct {
 
 func (b *bookingsImpl) settings(ctx context.Context, bearer string, p port.ProviderRef) (bkProvider, error) {
 	var out bkProvider
-	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/settings"), Bearer: bearer}, &out)
+	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/settings"), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 // member is the signed-in member's team row, else the owner's, else the first active one.
 func (b *bookingsImpl) member(ctx context.Context, bearer string, p port.ProviderRef) (bkMember, error) {
 	var team []bkMember
-	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/team"), Bearer: bearer}, &team); err != nil {
+	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/team"), Bearer: bearer, UserBearer: true}, &team); err != nil {
 		return bkMember{}, err
 	}
 	pick := func(ok func(bkMember) bool) (bkMember, bool) {
@@ -335,7 +335,7 @@ func (b *bookingsImpl) Availability(ctx context.Context, bearer string, p port.P
 	var overrides []bkOverride
 	q := url.Values{"from": {today.Format(time.DateOnly)}, "to": {today.AddDate(0, 0, horizon).Format(time.DateOnly)}}
 	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/team/"+url.PathEscape(m.ID)+"/overrides"), Query: q,
-		Bearer: bearer}, &overrides); err != nil {
+		Bearer: bearer, UserBearer: true}, &overrides); err != nil {
 		return domain.Availability{}, err
 	}
 	for _, o := range overrides {
@@ -363,7 +363,7 @@ func (b *bookingsImpl) SaveAvailability(ctx context.Context, bearer string, p po
 	if set.Location != "" {
 		settings["location"] = set.Location
 	}
-	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: providerPath(p, "/settings"), Bearer: bearer,
+	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: providerPath(p, "/settings"), Bearer: bearer, UserBearer: true,
 		JSON: settings}, nil); err != nil {
 		return domain.Availability{}, err
 	}
@@ -379,7 +379,7 @@ func (b *bookingsImpl) SaveAvailability(ctx context.Context, bearer string, p po
 		days[longDays[strings.ToUpper(d.Day)]] = rs
 	}
 	memberPath := providerPath(p, "/team/"+url.PathEscape(m.ID))
-	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: memberPath + "/hours", Bearer: bearer,
+	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: memberPath + "/hours", Bearer: bearer, UserBearer: true,
 		JSON: map[string]any{"days": days}}, nil); err != nil {
 		return domain.Availability{}, err
 	}
@@ -395,7 +395,7 @@ func (b *bookingsImpl) SaveAvailability(ctx context.Context, bearer string, p po
 	for _, d := range current.BlockedDates {
 		if _, keep := want[d.Date]; !keep {
 			if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodDelete, Path: memberPath + "/overrides/" + url.PathEscape(d.Date),
-				Bearer: bearer}, nil); err != nil {
+				Bearer: bearer, UserBearer: true}, nil); err != nil {
 				return domain.Availability{}, err
 			}
 		}
@@ -406,7 +406,7 @@ func (b *bookingsImpl) SaveAvailability(ctx context.Context, bearer string, p po
 	}
 	for _, d := range a.BlockedDates {
 		if !have[d.Date] {
-			if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: memberPath + "/overrides", Bearer: bearer,
+			if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: memberPath + "/overrides", Bearer: bearer, UserBearer: true,
 				JSON: bkOverride{Date: d.Date, Closed: true, Ranges: []bkTimeRange{}, Note: d.Note}}, nil); err != nil {
 				return domain.Availability{}, err
 			}
@@ -517,19 +517,19 @@ func serviceRequest(in domain.ServiceInput, current *bkService) map[string]any {
 
 func (b *bookingsImpl) ServiceArea(ctx context.Context, bearer string, p port.ProviderRef) (domain.ServiceAreaView, error) {
 	var out domain.ServiceAreaView
-	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/service-area"), Bearer: bearer}, &out)
+	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/service-area"), Bearer: bearer, UserBearer: true}, &out)
 	return normaliseArea(out), err
 }
 
 func (b *bookingsImpl) SaveServiceArea(ctx context.Context, bearer string, p port.ProviderRef, in domain.ServiceAreaInput) (domain.ServiceAreaView, error) {
 	var out domain.ServiceAreaView
-	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: providerPath(p, "/service-area"), Bearer: bearer, JSON: in}, &out)
+	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: providerPath(p, "/service-area"), Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return normaliseArea(out), err
 }
 
 func (b *bookingsImpl) PreviewServiceArea(ctx context.Context, bearer string, p port.ProviderRef, zip string, radiusMiles int) (domain.ServiceAreaPreview, error) {
 	var out domain.ServiceAreaPreview
-	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/service-area/preview"), Bearer: bearer,
+	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/service-area/preview"), Bearer: bearer, UserBearer: true,
 		Query: url.Values{"zip": {zip}, "radiusMiles": {strconv.Itoa(radiusMiles)}}}, &out)
 	if out.Cities == nil {
 		out.Cities = []domain.ServiceAreaCity{}
@@ -557,7 +557,7 @@ func normaliseArea(v domain.ServiceAreaView) domain.ServiceAreaView {
 
 func (b *bookingsImpl) Services(ctx context.Context, bearer string, p port.ProviderRef) ([]domain.ServiceOffer, error) {
 	var list []bkService
-	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/services"), Bearer: bearer}, &list); err != nil {
+	if _, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/services"), Bearer: bearer, UserBearer: true}, &list); err != nil {
 		return nil, err
 	}
 	out := make([]domain.ServiceOffer, 0, len(list))
@@ -578,13 +578,13 @@ func (b *bookingsImpl) setActive(ctx context.Context, bearer string, p port.Prov
 	}
 	var out bkService
 	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: providerPath(p, "/services/"+url.PathEscape(s.ID)+seg),
-		Bearer: bearer}, &out)
+		Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (b *bookingsImpl) CreateService(ctx context.Context, bearer string, p port.ProviderRef, in domain.ServiceInput) (domain.ServiceOffer, error) {
 	var created bkService
-	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: providerPath(p, "/services"), Bearer: bearer,
+	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: providerPath(p, "/services"), Bearer: bearer, UserBearer: true,
 		JSON: serviceRequest(in, nil)}, &created); err != nil {
 		return domain.ServiceOffer{}, err
 	}
@@ -595,11 +595,11 @@ func (b *bookingsImpl) CreateService(ctx context.Context, bearer string, p port.
 func (b *bookingsImpl) UpdateService(ctx context.Context, bearer string, p port.ProviderRef, id string, in domain.ServiceInput) (domain.ServiceOffer, error) {
 	path := providerPath(p, "/services/"+url.PathEscape(id))
 	var current bkService
-	if _, err := call(ctx, b.c, httpclient.Request{Path: path, Bearer: bearer}, &current); err != nil {
+	if _, err := call(ctx, b.c, httpclient.Request{Path: path, Bearer: bearer, UserBearer: true}, &current); err != nil {
 		return domain.ServiceOffer{}, err
 	}
 	var updated bkService
-	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: path, Bearer: bearer,
+	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: path, Bearer: bearer, UserBearer: true,
 		JSON: serviceRequest(in, &current)}, &updated); err != nil {
 		return domain.ServiceOffer{}, err
 	}
@@ -636,7 +636,7 @@ func (b *bookingsImpl) SavePolicy(ctx context.Context, bearer string, p port.Pro
 			"rescheduleHours": in.RescheduleHours, "maxReschedules": in.MaxReschedules}
 	}
 	if _, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPut, Path: providerPath(p, "/cancellation-policy"),
-		Bearer: bearer, JSON: body}, nil); err != nil {
+		Bearer: bearer, UserBearer: true, JSON: body}, nil); err != nil {
 		return domain.PolicyInput{}, err
 	}
 	return b.Policy(ctx, bearer, p)
@@ -668,7 +668,7 @@ type bkEarnings struct {
 func (b *bookingsImpl) earnings(ctx context.Context, bearer string, p port.ProviderRef, from, to time.Time) (bkEarnings, error) {
 	var e bkEarnings
 	q := url.Values{"from": {from.UTC().Format(time.RFC3339)}, "to": {to.UTC().Format(time.RFC3339)}}
-	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/earnings"), Query: q, Bearer: bearer}, &e)
+	_, err := call(ctx, b.c, httpclient.Request{Path: providerPath(p, "/earnings"), Query: q, Bearer: bearer, UserBearer: true}, &e)
 	return e, err
 }
 

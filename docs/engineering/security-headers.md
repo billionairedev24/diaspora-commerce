@@ -47,8 +47,13 @@ enforced from day one and the page set is small and tested.
 ## Web apps (nonce CSP, Report-Only first)
 
 `CSP_MODE` per app (Worker var in `wrangler.jsonc`, env var elsewhere): `report-only` (default, also for an unknown value),
-`enforce`, `off`. Header names: `Content-Security-Policy-Report-Only` vs `Content-Security-Policy`. Every environment is
-`report-only` today, including prod; switching an environment to `enforce` is the promotion step below.
+`enforce`, `off`. Header names: `Content-Security-Policy-Report-Only` vs `Content-Security-Policy`. `uat`, `trial` and `prod` are `enforce` (security audit F4); dev and preview stay `report-only`, and the report endpoint
+(`/api/csp-report`) stays on in every mode, so violations still surface as `csp.violation` log lines. Rollback switch: set
+`CSP_MODE=report-only` for the app and redeploy (below, and `docs/runbooks/csp-violations-spike.md`).
+Policy review done for the switch: fonts are self-hosted (`@fontsource`, `font-src 'self'`), images come from `MEDIA_PUBLIC_URL`
+(R2), Stripe hosts are allowed on storefront and seller-center only, telemetry origins come from the Sentry DSN / OTLP vars, and
+the only inline script is JSON-LD (`type=application/ld+json`, not executed, not covered by script-src). Every app's root layout
+reads cookies/headers, so pages are dynamic and carry the nonce. Not run here: Playwright against a deployed enforce build.
 
 | Directive | Value | Why (from the code) |
 |---|---|---|

@@ -22,7 +22,7 @@ func (s *sellerCasesImpl) Returns(ctx context.Context, bearer, status string) ([
 	if status != "" {
 		q.Set("status", status)
 	}
-	res, err := call(ctx, s.returns, httpclient.Request{Path: "/v1/returns", Query: q, Bearer: bearer}, nil)
+	res, err := call(ctx, s.returns, httpclient.Request{Path: "/v1/returns", Query: q, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func (s *sellerCasesImpl) Claims(ctx context.Context, bearer, orgID, status stri
 	if status != "" {
 		q.Set("status", status)
 	}
-	res, err := call(ctx, s.claims, httpclient.Request{Path: "/v1/claims/seller/" + url.PathEscape(orgID), Query: q, Bearer: bearer}, nil)
+	res, err := call(ctx, s.claims, httpclient.Request{Path: "/v1/claims/seller/" + url.PathEscape(orgID), Query: q, Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}

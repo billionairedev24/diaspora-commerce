@@ -19,6 +19,11 @@ import com.afrotransact.payments.application.MembershipGrants;
 import com.afrotransact.payments.application.MembershipService;
 import com.afrotransact.payments.application.MembershipService.JoinCommand;
 import com.afrotransact.payments.application.MembershipTierService;
+import com.afrotransact.payments.application.PaymentsPermissions;
+import com.afrotransact.platform.security.Actor;
+import com.afrotransact.platform.security.ActorResolver;
+import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -46,9 +51,11 @@ class MembershipController {
     private final MembershipService memberships;
     private final MembershipBenefitsService benefits;
     private final MembershipGrants grants;
+    private final ActorResolver actors;
 
     MembershipController(MembershipTierService tiers, MembershipService memberships,
-                         MembershipBenefitsService benefits, MembershipGrants grants) {
+                         MembershipBenefitsService benefits, MembershipGrants grants, ActorResolver actors) {
+        this.actors = actors;
         this.tiers = tiers;
         this.memberships = memberships;
         this.benefits = benefits;
@@ -61,6 +68,12 @@ class MembershipController {
             description = "Published tiers only, with their prices, trial and benefits.")
     @GetMapping("/v1/memberships/tiers")
     List<TierDto> publishedTiers() {
+        // A service client (the gateway-bff for a signed-out visitor) needs its own minimal scope; people are unchanged.
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && !actor.can(PaymentsPermissions.MEMBERSHIP_OFFER_READ)) {
+            throw new ForbiddenActionException("payments.membership-offer-scope",
+                    "This service client needs the payments:membership-offer.read scope");
+        }
         return tiers.published().stream().map(TierDto::of).toList();
     }
 

@@ -89,7 +89,7 @@ func (s *staffJSONImpl) Stream(ctx context.Context, bearer string, sc port.Staff
 	if accept == "" {
 		accept = "text/csv"
 	}
-	res, err := s.c.Stream(ctx, httpclient.Request{Method: method, Path: sc.Path, Query: sc.Query, Bearer: bearer}, accept, staffStreamTimeout)
+	res, err := s.c.Stream(ctx, httpclient.Request{Method: method, Path: sc.Path, Query: sc.Query, Bearer: bearer, UserBearer: true}, accept, staffStreamTimeout)
 	if err != nil {
 		return port.StaffStream{}, fmt.Errorf("%s %s: %w", method, sc.Path, err)
 	}

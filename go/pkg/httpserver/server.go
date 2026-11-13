@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -43,6 +45,11 @@ type Options struct {
 	Checks   []ReadinessCheck
 	Logger   *slog.Logger
 	Registry *prometheus.Registry
+	// ManagementAddr (default: env MANAGEMENT_ADDR, set by the Helm chart to ":9090") serves /metrics, /healthz and
+	// /readyz on a second listener that no Gateway route or Service port 80 reaches. When set, /metrics is NOT served on
+	// the public Addr. With it unset, /metrics stays on Addr in local/dev, and in uat/prod (APP_ENV) it is not served at
+	// all: metrics are never public without a management listener (security audit F3).
+	ManagementAddr string
 	// WriteTimeout bounds every response that is not a stream (default DefaultWriteTimeout).
 	WriteTimeout time.Duration
 	// StreamRoutes are mux patterns exactly as registered (e.g. "POST /v1/lola/chat") whose responses are
@@ -55,8 +62,9 @@ type Options struct {
 }
 
 type serverImpl struct {
-	opts Options
-	mux  *http.ServeMux
+	opts    Options
+	mux     *http.ServeMux
+	metrics http.Handler
 }
 
 var _ Server = (*serverImpl)(nil)
@@ -73,10 +81,20 @@ func New(opts Options) Server {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
-	s := &serverImpl{opts: opts, mux: http.NewServeMux()}
+	if opts.ManagementAddr == "" {
+		opts.ManagementAddr = strings.TrimSpace(os.Getenv("MANAGEMENT_ADDR"))
+	}
+	s := &serverImpl{opts: opts, mux: http.NewServeMux(), metrics: promhttp.HandlerFor(opts.Registry, promhttp.HandlerOpts{})}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	s.mux.HandleFunc("GET /readyz", s.ready)
-	s.mux.Handle("GET /metrics", promhttp.HandlerFor(opts.Registry, promhttp.HandlerOpts{}))
+	switch {
+	case opts.ManagementAddr != "":
+		// /metrics lives on the management listener only.
+	case metricsMustStayOffPublicListener(os.Getenv("APP_ENV")):
+		opts.Logger.Warn("metrics not served: MANAGEMENT_ADDR is unset in " + os.Getenv("APP_ENV") + " and /metrics is never public")
+	default:
+		s.mux.Handle("GET /metrics", s.metrics)
+	}
 	if len(opts.OpenAPI) > 0 {
 		s.mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/yaml")
@@ -89,6 +107,25 @@ func New(opts Options) Server {
 		}
 	}
 	return s
+}
+
+// metricsMustStayOffPublicListener is true for the shared environments, where the public listener is reachable from the internet.
+func metricsMustStayOffPublicListener(appEnv string) bool {
+	switch strings.ToLower(strings.TrimSpace(appEnv)) {
+	case "uat", "prod", "production":
+		return true
+	default:
+		return false
+	}
+}
+
+// managementHandler is the private listener's router: probes and metrics, nothing else.
+func (s *serverImpl) managementHandler() http.Handler {
+	m := http.NewServeMux()
+	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	m.HandleFunc("GET /readyz", s.ready)
+	m.Handle("GET /metrics", s.metrics)
+	return m
 }
 
 func (s *serverImpl) Mux() *http.ServeMux { return s.mux }
@@ -139,7 +176,16 @@ func (s *serverImpl) httpServer(h http.Handler) *http.Server {
 
 func (s *serverImpl) Run(ctx context.Context) error {
 	srv := s.httpServer(s.handler())
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
+	var mgmt *http.Server
+	if s.opts.ManagementAddr != "" {
+		mgmt = &http.Server{Addr: s.opts.ManagementAddr, Handler: s.managementHandler(), ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		go func() {
+			s.opts.Logger.Info("management listening", "addr", s.opts.ManagementAddr)
+			errCh <- mgmt.ListenAndServe()
+		}()
+	}
 	go func() {
 		s.opts.Logger.Info("listening", "addr", s.opts.Addr)
 		errCh <- srv.ListenAndServe()
@@ -153,6 +199,9 @@ func (s *serverImpl) Run(ctx context.Context) error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
 		defer cancel()
+		if mgmt != nil {
+			_ = mgmt.Shutdown(shutdownCtx)
+		}
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("shutdown: %w", err)
 		}

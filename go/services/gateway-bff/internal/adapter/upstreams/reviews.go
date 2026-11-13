@@ -37,25 +37,25 @@ func (r *reviewsImpl) PublicPage(ctx context.Context, atin string, stars int, so
 
 func (r *reviewsImpl) Mine(ctx context.Context, bearer, atin string) (port.UpMyReview, error) {
 	var out port.UpMyReview
-	_, err := call(ctx, r.c, httpclient.Request{Path: reviewsPath(atin) + "/mine", Bearer: bearer}, &out)
+	_, err := call(ctx, r.c, httpclient.Request{Path: reviewsPath(atin) + "/mine", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (r *reviewsImpl) Write(ctx context.Context, bearer, atin string, in port.UpReviewDraft) (port.UpOwnReview, error) {
 	var out port.UpOwnReview
 	// not retried: a lost answer must not become a second review (catalog would answer 409 anyway)
-	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: reviewsPath(atin), Bearer: bearer, JSON: in}, &out)
+	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: reviewsPath(atin), Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }
 
 func (r *reviewsImpl) Edit(ctx context.Context, bearer, atin string, in port.UpReviewDraft) (port.UpOwnReview, error) {
 	var out port.UpOwnReview
-	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPut, Path: reviewsPath(atin) + "/mine", Bearer: bearer, JSON: in}, &out)
+	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPut, Path: reviewsPath(atin) + "/mine", Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }
 
 func (r *reviewsImpl) Delete(ctx context.Context, bearer, atin string) error {
-	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodDelete, Path: reviewsPath(atin) + "/mine", Bearer: bearer}, nil)
+	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodDelete, Path: reviewsPath(atin) + "/mine", Bearer: bearer, UserBearer: true}, nil)
 	return err
 }
 
@@ -66,7 +66,7 @@ func (r *reviewsImpl) Report(ctx context.Context, bearer, reviewID, reasonCode, 
 		body["details"] = details
 	}
 	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/product-reviews/" + url.PathEscape(reviewID) + "/reports",
-		Bearer: bearer, JSON: body}, &out)
+		Bearer: bearer, UserBearer: true, JSON: body}, &out)
 	return out, err
 }
 
@@ -76,13 +76,13 @@ func (r *reviewsImpl) SellerList(ctx context.Context, bearer string, unanswered 
 		q.Set("unanswered", "true")
 	}
 	var out port.UpSellerReviewPage
-	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/seller/reviews", Query: q, Bearer: bearer}, &out)
+	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/seller/reviews", Query: q, Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (r *reviewsImpl) Reply(ctx context.Context, bearer, reviewID, text string) (port.UpSellerReview, error) {
 	var out port.UpSellerReview
 	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/product-reviews/" + url.PathEscape(reviewID) + "/reply",
-		Bearer: bearer, JSON: map[string]any{"text": text}}, &out)
+		Bearer: bearer, UserBearer: true, JSON: map[string]any{"text": text}}, &out)
 	return out, err
 }

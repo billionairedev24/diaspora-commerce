@@ -36,6 +36,9 @@ type MembershipService interface {
 	CartSavings(ctx context.Context, c *domain.Caller) (domain.MembershipSavings, error)
 }
 
+// GuestMembershipOfferScope is the one scope of the gateway-bff token a signed-out visitor uses to read the membership tiers (payments).
+const GuestMembershipOfferScope = "payments:membership-offer.read"
+
 type membershipServiceImpl struct {
 	client port.MembershipClient
 	tokens port.ServiceTokens
@@ -88,11 +91,12 @@ func (s *membershipServiceImpl) Offer(ctx context.Context, c *domain.Caller) (do
 	if c != nil && c.Authenticated() {
 		bearer = c.BearerToken
 	} else if s.tokens != nil {
-		t, err := s.tokens.Token(ctx, "")
+		t, err := s.tokens.Token(ctx, GuestMembershipOfferScope)
 		if err != nil {
 			return domain.MembershipOffer{}, mapErr("identity", err)
 		}
 		bearer = t
+		ctx = port.WithServiceBearer(ctx) // the BFF's own token: never acts as the shopper
 	}
 	tiers, err := s.client.Tiers(ctx, bearer)
 	if err != nil {

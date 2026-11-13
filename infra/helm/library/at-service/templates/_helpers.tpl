@@ -50,6 +50,11 @@ and/or image.digest (sha256:…; rendered as repo[:tag]@digest). A missing tag a
 {{- end -}}
 
 {{/* Health and metrics paths differ between Spring Boot and Go services. */}}
+{{- /* Management port: actuator (Java) and /metrics (Go) listen here, not on the public port; no Gateway route or Service port 80 reaches it (security audit F3). */}}
+{{- define "at-service.managementPort" -}}{{ .Values.service.managementPort | default 9090 }}{{- end -}}
+{{- /* Java moves ALL of actuator to the management port, so its probes go there; Go keeps /healthz and /readyz on the main port. */}}
+{{- define "at-service.probePort" -}}{{ if eq .Values.service.runtime "java" }}management{{ else }}http{{ end }}{{- end -}}
+
 {{- define "at-service.livenessPath" -}}{{ if eq .Values.service.runtime "java" }}/actuator/health/liveness{{ else }}/healthz{{ end }}{{- end -}}
 {{- define "at-service.readinessPath" -}}{{ if eq .Values.service.runtime "java" }}/actuator/health/readiness{{ else }}/readyz{{ end }}{{- end -}}
 {{- define "at-service.metricsPath" -}}{{ if eq .Values.service.runtime "java" }}/actuator/prometheus{{ else }}/metrics{{ end }}{{- end -}}
@@ -93,6 +98,17 @@ azure.workload.identity/client-id: {{ required "workloadIdentity.azure.clientId 
 {{- end }}
 - name: PORT
   value: {{ .Values.service.port | quote }}
+{{- if eq .Values.service.runtime "java" }}
+{{- if not (hasKey (.Values.extraEnv | default dict) "MANAGEMENT_SERVER_PORT") }}
+- name: MANAGEMENT_SERVER_PORT
+  value: {{ include "at-service.managementPort" . | quote }}
+{{- end }}
+{{- else }}
+{{- if not (hasKey (.Values.extraEnv | default dict) "MANAGEMENT_ADDR") }}
+- name: MANAGEMENT_ADDR
+  value: {{ printf ":%v" (include "at-service.managementPort" .) | quote }}
+{{- end }}
+{{- end }}
 - name: TRACE_SAMPLING
   value: {{ .Values.telemetry.sampling | quote }}
 {{- include "at-service.platformEnvVars" . }}

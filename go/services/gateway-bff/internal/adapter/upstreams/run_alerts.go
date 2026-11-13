@@ -66,7 +66,7 @@ func (r *runAlertsImpl) Unsubscribe(ctx context.Context, token string, channels 
 }
 
 func (r *runAlertsImpl) Mine(ctx context.Context, bearer string) (json.RawMessage, error) {
-	return r.send(ctx, httpclient.Request{Path: "/v1/me/run-subscriptions", Bearer: bearer})
+	return r.send(ctx, httpclient.Request{Path: "/v1/me/run-subscriptions", Bearer: bearer, UserBearer: true})
 }
 
 func (r *runAlertsImpl) SubscribeMine(ctx context.Context, bearer, locationID string, channels []string, source string, utm map[string]string) (json.RawMessage, error) {
@@ -74,7 +74,7 @@ func (r *runAlertsImpl) SubscribeMine(ctx context.Context, bearer, locationID st
 	for k, v := range utm {
 		body[k] = v
 	}
-	return r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/run-subscriptions", Bearer: bearer, JSON: body})
+	return r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/run-subscriptions", Bearer: bearer, UserBearer: true, JSON: body})
 }
 
 func (r *runAlertsImpl) UnsubscribeMine(ctx context.Context, bearer, locationID string, channels []string) (json.RawMessage, error) {
@@ -83,7 +83,7 @@ func (r *runAlertsImpl) UnsubscribeMine(ctx context.Context, bearer, locationID 
 		q.Add("channel", ch)
 	}
 	return r.send(ctx, httpclient.Request{Method: http.MethodDelete, Path: "/v1/me/run-subscriptions/" + url.PathEscape(locationID),
-		Query: q, Bearer: bearer})
+		Query: q, Bearer: bearer, UserBearer: true})
 }
 
 func (r *runAlertsImpl) Advertorials(ctx context.Context, q url.Values) (json.RawMessage, error) {

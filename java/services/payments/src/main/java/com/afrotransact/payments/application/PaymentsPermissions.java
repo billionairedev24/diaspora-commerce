@@ -10,6 +10,8 @@ public final class PaymentsPermissions {
     /** Machine-to-machine (orders, bookings, fulfilment services; SERVICE principals): intents, captures, refunds,
      *  delivery notices. */
     public static final String SERVICE = "payments:service";
+    /** Read the published membership tiers as a service client (gateway-bff, visitor not signed in); grants nothing else. */
+    public static final String MEMBERSHIP_OFFER_READ = "payments:membership-offer.read";
     /** Read-only fee schedules for service clients that show fees to users (gateway-bff); grants nothing else. */
     public static final String FEES_READ = "payments:fees.read";
     /**

@@ -19,13 +19,13 @@ func NewReferral(c httpclient.Client) port.ReferralClient { return &referralImpl
 func (p *referralImpl) Overview(ctx context.Context, bearer string) (port.UpReferralOverview, error) {
 	var out port.UpReferralOverview
 	// the first call creates the code: it is safe to repeat
-	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/referrals/me", Bearer: bearer}, &out)
+	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/referrals/me", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (p *referralImpl) Friends(ctx context.Context, bearer string, limit int) ([]port.UpMyReferral, error) {
 	var out []port.UpMyReferral
 	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/referrals/me/friends", Query: url.Values{"limit": {strconv.Itoa(limit)}},
-		Bearer: bearer}, &out)
+		Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }

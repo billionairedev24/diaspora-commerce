@@ -25,7 +25,7 @@ var _ port.SellerTaxClient = (*sellerTaxImpl)(nil)
 func NewSellerTax(c httpclient.Client) port.SellerTaxClient { return &sellerTaxImpl{c: c} }
 
 func (k *sellerTaxImpl) Readiness(ctx context.Context, bearer, productID string) (json.RawMessage, error) {
-	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/products/" + url.PathEscape(productID) + "/tax-readiness", Bearer: bearer}, nil)
+	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/products/" + url.PathEscape(productID) + "/tax-readiness", Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (k *sellerTaxImpl) UploadEvidence(ctx context.Context, bearer, atin, factID
 		return nil, fmt.Errorf("tax evidence upload: %w", err)
 	}
 	res, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/variants/" + url.PathEscape(atin) + "/tax-evidence",
-		Bearer: bearer, Body: buf.Bytes(), ContentType: w.FormDataContentType(), Slow: true}, nil)
+		Bearer: bearer, UserBearer: true, Body: buf.Bytes(), ContentType: w.FormDataContentType(), Slow: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (k *sellerTaxImpl) UploadEvidence(ctx context.Context, bearer, atin, factID
 }
 
 func (k *sellerTaxImpl) ListEvidence(ctx context.Context, bearer, atin string) (json.RawMessage, error) {
-	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/variants/" + url.PathEscape(atin) + "/tax-evidence", Bearer: bearer}, nil)
+	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/variants/" + url.PathEscape(atin) + "/tax-evidence", Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}

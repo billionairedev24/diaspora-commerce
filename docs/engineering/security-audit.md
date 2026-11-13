@@ -127,6 +127,13 @@ Not run: OWASP Dependency-Check / Java dependency scan (NVD key, network), Trivy
 
 Pinning: Maven/Go/pnpm versions pinned; Java and Go runtime images: distroless runtime pinned by digest (Go build stage `golang:1.27.2` too); the Java build stage `eclipse-temurin:25-jdk` is **not** digest-pinned (noted in the Dockerfile; build stage only). Dependabot is configured for Maven, Go, npm, Docker, Actions, Terraform. CI scanners are described in `.github/workflows/security.yml` and per-service workflows; gates are CRITICAL/HIGH as detailed in F7.
 
+## 9a. Fix status (F2, F3, F4, F5, F14, F16)
+
+Fixed in the repo; live behaviour UNVERIFIED until `docs/runbooks/edge-hardening-verification.md` passes on the trial. F2: one trusted header per tier
+(web proxies `cf-connecting-ip` only, BFF `clientIpHeader`, identity `at.client-ip.header`), Cloudflare rules use `contains`. F3: Cloudflare + Envoy
+deny rules, a management port for Java actuator and Go `/metrics`. F4: `enforce` for uat, trial, prod. F5: Java and Go startup guards plus
+`tools/ci/check_security_off.py`. F14: scopes `media:career-resume` and `payments:membership-offer.read`, empty scope refused. F16: `Request.UserBearer`.
+
 ## 10. Owner decisions
 
 1. Approve moving the Go toolchain pin from go1.27.2 to go1.27.4 (or newer) everywhere CLAUDE.md lists, and bumping excelize (F1). Block launch on it?

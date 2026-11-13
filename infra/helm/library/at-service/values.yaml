@@ -37,4 +37,8 @@
 #                       Default off (sslmode=require). infra/ovh-vps/secrets.sh creates the Secret and the URLs from
 #                       EXTERNAL_PG_SSLMODE / EXTERNAL_PG_SSLROOTCERT / EXTERNAL_PG_CA_FILE (docs/runbooks/postgres-tls.md).
 #
+# service.managementPort (default 9090): the private management listener. Java (MANAGEMENT_SERVER_PORT): all of actuator, so probes and
+#                       /actuator/prometheus; Go (MANAGEMENT_ADDR): /metrics. Not behind Service port 80 or any Gateway route; Prometheus/Alloy
+#                       scrape it (pod annotation, Service port `management`, NetworkPolicy from `observability`). Security audit F3.
+
 # imagePullSecrets: [{name: ghcr}]   private registry credentials (kubectl create secret docker-registry); default none.

@@ -120,6 +120,6 @@ func (l *lolaImpl) Chat(ctx context.Context, bearer string, req domain.LolaChatR
 
 func (l *lolaImpl) History(ctx context.Context, bearer, sessionID string) ([]domain.LolaTurn, error) {
 	var out []domain.LolaTurn
-	_, err := call(ctx, l.c, httpclient.Request{Path: "/v1/lola/sessions/" + esc(sessionID) + "/messages", Bearer: bearer}, &out)
+	_, err := call(ctx, l.c, httpclient.Request{Path: "/v1/lola/sessions/" + esc(sessionID) + "/messages", Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }

@@ -28,7 +28,7 @@ func NewSizeCharts(c httpclient.Client) port.SizeChartClient { return &sizeChart
 const sizeChartsPath = "/v1/size-charts"
 
 func (k *sizeChartsImpl) Call(ctx context.Context, bearer, method, subpath string, query url.Values, body json.RawMessage) (json.RawMessage, error) {
-	req := httpclient.Request{Method: method, Path: sizeChartsPath + subpath, Query: query, Bearer: bearer}
+	req := httpclient.Request{Method: method, Path: sizeChartsPath + subpath, Query: query, Bearer: bearer, UserBearer: true}
 	if len(body) > 0 {
 		req.JSON = body
 	}
@@ -73,7 +73,7 @@ func (k *sizeChartsImpl) Import(ctx context.Context, bearer string, f port.Uploa
 	if productTypeID != "" {
 		q.Set("productTypeId", productTypeID)
 	}
-	res, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: sizeChartsPath + "/import", Query: q, Bearer: bearer,
+	res, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: sizeChartsPath + "/import", Query: q, Bearer: bearer, UserBearer: true,
 		Body: buf.Bytes(), ContentType: w.FormDataContentType(), Slow: true}, nil)
 	if err != nil {
 		return nil, err

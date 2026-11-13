@@ -31,6 +31,6 @@ func (a *assistantModelImpl) Complete(ctx context.Context, bearer string, messag
 		body["maxTokens"] = maxTokens
 	}
 	var out port.AssistantCompletion
-	_, err := call(ctx, a.c, httpclient.Request{Method: http.MethodPost, Path: a.path, Bearer: bearer, JSON: body}, &out)
+	_, err := call(ctx, a.c, httpclient.Request{Method: http.MethodPost, Path: a.path, Bearer: bearer, UserBearer: true, JSON: body}, &out)
 	return out, err
 }

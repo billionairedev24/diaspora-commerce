@@ -20,7 +20,7 @@ func NewHelpRequests(c httpclient.Client) port.HelpRequestsClient { return &help
 func (h *helpRequestsImpl) Open(ctx context.Context, bearer string, req port.UpOpenClaim) (port.UpHelpClaim, error) {
 	var out port.UpHelpClaim
 	// Not retried: trust-ops would open a second claim.
-	_, err := call(ctx, h.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/claims", Bearer: bearer, JSON: req}, &out)
+	_, err := call(ctx, h.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/claims", Bearer: bearer, UserBearer: true, JSON: req}, &out)
 	return out, err
 }
 
@@ -33,7 +33,7 @@ func (h *helpRequestsImpl) Mine(ctx context.Context, bearer string, page, size i
 		TotalElements int64              `json:"totalElements"`
 	}
 	q := url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
-	if _, err := call(ctx, h.c, httpclient.Request{Path: "/v1/claims/mine", Query: q, Bearer: bearer}, &out); err != nil {
+	if _, err := call(ctx, h.c, httpclient.Request{Path: "/v1/claims/mine", Query: q, Bearer: bearer, UserBearer: true}, &out); err != nil {
 		return nil, false, err
 	}
 	total := max(out.Total, out.TotalElements)
@@ -42,6 +42,6 @@ func (h *helpRequestsImpl) Mine(ctx context.Context, bearer string, page, size i
 
 func (h *helpRequestsImpl) Get(ctx context.Context, bearer, id string) (port.UpHelpClaim, error) {
 	var out port.UpHelpClaim
-	_, err := call(ctx, h.c, httpclient.Request{Path: "/v1/claims/" + esc(id), Bearer: bearer}, &out)
+	_, err := call(ctx, h.c, httpclient.Request{Path: "/v1/claims/" + esc(id), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }

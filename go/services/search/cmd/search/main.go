@@ -58,6 +58,9 @@ func run() error {
 	if err := loader.Load(&cfg); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	if err := pkgconfig.RequireAuthOutsideLocal(loader.Env(), cfg.Auth.Enabled); err != nil {
+		return err
+	}
 	cfg.Resolve(loader.Env())
 	log := logging.New(serviceName, loader.Env())
 	slog.SetDefault(log)

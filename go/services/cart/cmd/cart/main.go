@@ -54,6 +54,9 @@ func run() error {
 	if err := loader.Load(&cfg); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	if err := pkgconfig.RequireAuthOutsideLocal(loader.Env(), cfg.Auth.Enabled); err != nil {
+		return err
+	}
 	log := logging.New(serviceName, loader.Env())
 	slog.SetDefault(log)
 	shutdownTracing, err := telemetry.Setup(ctx, serviceName, loader.Env(), cfg.Telemetry.OTLPEndpoint, cfg.Telemetry.SampleRatio)

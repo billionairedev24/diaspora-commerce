@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,16 +38,19 @@ func NewServiceTokens(c httpclient.Client, o IdentityOptions) port.ServiceTokens
 	}{}}
 }
 
+// ErrEmptyScope is returned for a token request without a scope: identity would issue the client every scope it holds.
+var ErrEmptyScope = errors.New("service token: a scope is required (an empty scope would carry every scope of the client)")
+
 func (s *serviceTokensImpl) Token(ctx context.Context, scope string) (string, error) {
+	if strings.TrimSpace(scope) == "" {
+		return "", ErrEmptyScope
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if t, ok := s.by[scope]; ok && s.o.Now().Before(t.exp) {
 		return t.token, nil
 	}
-	form := url.Values{"grant_type": {"client_credentials"}}
-	if scope != "" {
-		form.Set("scope", scope)
-	}
+	form := url.Values{"grant_type": {"client_credentials"}, "scope": {scope}}
 	var tr tokenResponse
 	if _, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/oauth2/token", Form: form,
 		BasicUser: s.o.ClientID, BasicPassword: s.o.ClientSecret}, &tr); err != nil {

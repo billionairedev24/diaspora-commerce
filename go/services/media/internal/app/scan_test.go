@@ -48,7 +48,7 @@ func pdfWith(extra string) []byte { return append(pdf(), []byte(extra)...) }
 
 func TestCleanDocumentIsReleased(t *testing.T) {
 	f := scanFixture(&fakeScanner{}, app.ScanPolicy{})
-	a := f.upload(t, bffService, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF, pdf())
+	a := f.upload(t, bffGuest, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF, pdf())
 	if a.Status != domain.StatusReady || a.Notice != "" {
 		t.Fatalf("want READY without notice, got %s %q", a.Status, a.Notice)
 	}
@@ -56,7 +56,7 @@ func TestCleanDocumentIsReleased(t *testing.T) {
 
 func TestInfectedDocumentIsRejectedAndDeleted(t *testing.T) {
 	f := scanFixture(&fakeScanner{}, app.ScanPolicy{})
-	a := f.upload(t, bffService, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF, pdfWith(eicarString))
+	a := f.upload(t, bffGuest, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF, pdfWith(eicarString))
 	if a.Status != domain.StatusRejected || len(a.Flags) != 1 || a.Flags[0] != domain.FlagMalware {
 		t.Fatalf("want REJECTED malware, got %s %v", a.Status, a.Flags)
 	}
@@ -99,7 +99,7 @@ func TestExportsAreNotScanned(t *testing.T) {
 
 func TestBestEffortReleasesWhenScannerIsDown(t *testing.T) {
 	f := scanFixture(&fakeScanner{down: true}, app.ScanPolicy{Documents: app.ScanBestEffort})
-	a := f.upload(t, bffService, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF, pdf())
+	a := f.upload(t, bffGuest, domain.PurposeCareerResume, "cv.pdf", domain.ContentTypePDF, pdf())
 	if a.Status != domain.StatusReady {
 		t.Fatalf("best-effort must release, got %s", a.Status)
 	}

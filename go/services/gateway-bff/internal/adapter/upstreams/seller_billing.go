@@ -12,7 +12,7 @@ import (
 var _ port.SellerBillingClient = (*sellerServiceImpl)(nil)
 
 func (s *sellerServiceImpl) OrgPlans(ctx context.Context, bearer, orgID string) ([]port.SellerPlan, error) {
-	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plans"), Bearer: bearer}, nil)
+	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plans"), Bearer: bearer, UserBearer: true}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -22,13 +22,13 @@ func (s *sellerServiceImpl) OrgPlans(ctx context.Context, bearer, orgID string) 
 
 func (s *sellerServiceImpl) Rewards(ctx context.Context, bearer, orgID string) (port.SellerRewards, error) {
 	var out port.SellerRewards
-	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/rewards"), Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/rewards"), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) PreviewPlanChange(ctx context.Context, bearer, orgID, planCode, cadence string) (port.SellerPlanChangePreview, error) {
 	var out port.SellerPlanChangePreview
-	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plan/preview"), Bearer: bearer,
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plan/preview"), Bearer: bearer, UserBearer: true,
 		Query: url.Values{"planCode": {planCode}, "cadence": {cadence}}}, &out)
 	return out, err
 }
@@ -36,39 +36,39 @@ func (s *sellerServiceImpl) PreviewPlanChange(ctx context.Context, bearer, orgID
 func (s *sellerServiceImpl) CreateSetupIntent(ctx context.Context, bearer, orgID string) (port.SellerSetupIntent, error) {
 	var out port.SellerSetupIntent
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/setup-intents"),
-		Bearer: bearer}, &out)
+		Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) PlanFeeCollection(ctx context.Context, bearer, orgID string) (port.SellerPlanFeeCollection, error) {
 	var out port.SellerPlanFeeCollection
-	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plan-fee-collection"), Bearer: bearer}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plan-fee-collection"), Bearer: bearer, UserBearer: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) SetPlanFeeCollection(ctx context.Context, bearer, orgID, mode string) (port.SellerPlanFeeCollection, error) {
 	var out port.SellerPlanFeeCollection
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: orgPath(orgID, "/billing/plan-fee-collection"),
-		Bearer: bearer, RetryUnsafe: true, JSON: map[string]string{"mode": mode}}, &out)
+		Bearer: bearer, UserBearer: true, RetryUnsafe: true, JSON: map[string]string{"mode": mode}}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) AddPaymentMethod(ctx context.Context, bearer, orgID string, in port.SellerPaymentMethodInput) (port.SellerPaymentMethod, error) {
 	var out port.SellerPaymentMethod
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/payment-methods"),
-		Bearer: bearer, JSON: in}, &out)
+		Bearer: bearer, UserBearer: true, JSON: in}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) RetryInvoice(ctx context.Context, bearer, orgID, invoiceID string) (port.SellerInvoice, error) {
 	var out port.SellerInvoice
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/retry"),
-		Bearer: bearer, RetryUnsafe: true}, &out)
+		Bearer: bearer, UserBearer: true, RetryUnsafe: true}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) InvoiceDocument(ctx context.Context, bearer, orgID, invoiceID string) ([]byte, error) {
-	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/document"), Bearer: bearer,
+	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/document"), Bearer: bearer, UserBearer: true,
 		Header: http.Header{"Accept": {"text/html"}}}, nil)
 	if err != nil {
 		return nil, err
