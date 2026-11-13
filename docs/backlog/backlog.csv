@@ -1735,3 +1735,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Gateway drops products that are not live, out of stock, photo-less or without a READY tax decision, silently
 - Rail hidden below the module minimum (1)
 - Unit and fixture tests (four ids of one product give one card) and a storefront test for no delivery or fulfilled badge","E20","","High","2","home storefront gateway","content","Done"
+"S434","Story","Staff Products: status-aware bulk and row actions","Owner bug: the Products bulk bar offered Approve on already Live rows. Bulk and row actions now follow the catalog state machine (allowedActions per product), approve on a non-review product is a plain 409, and Held for tax is a visible status and filter.","- Approve shows only for approvable rows; mixed selections show 'Approve N of M' and skip the rest with a reason
+- None eligible disables the button with a plain reason
+- Catalog returns allowedActions and heldForTax per product (OpenAPI updated)
+- Approving a LIVE product is a 409 that changes nothing; approve still goes through the selling and tax gates
+- Bulk result lists done, skipped and failed rows by name
+- Held for tax shows in the Products table and status filter
+- Five locales for new strings
+- Unit and UI tests for eligibility and mixed selections","E20","","High","3","staff catalog","content","Done"
