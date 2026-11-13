@@ -114,13 +114,13 @@ class DriverEventApplierImpl implements DriverEventApplier {
     public EventResult apply(DriverContext driver, String deviceId, DriverEvent e, String driverBearer) {
         Optional<DriverEventLog.Entry> prior = log.find(e.eventId());
         if (prior.isPresent()) {
-            return replay(prior.get());
+            return replayFor(driver, e, prior.get());
         }
         Instant now = Instant.now(clock);
         long last = log.lockDevice(deviceId, driver.driverId(), now);
         prior = log.find(e.eventId());
         if (prior.isPresent()) {
-            return replay(prior.get());
+            return replayFor(driver, e, prior.get());
         }
         SyncDecision decision = sequences.decide(last, e.sequence(), false);
         if (decision == SyncDecision.SEQUENCE_CONFLICT) {
@@ -415,6 +415,15 @@ class DriverEventApplierImpl implements DriverEventApplier {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** A stored outcome is replayed only to the driver who sent the event; another driver's id is just refused. */
+    private static EventResult replayFor(DriverContext driver, DriverEvent e, DriverEventLog.Entry prior) {
+        if (!driver.driverId().equals(prior.driverId())) {
+            return new EventResult(e.eventId(), e.sequence(), EventResult.REJECTED, "fulfilment.event-id-reused",
+                    "This event id is not yours", false, false);
+        }
+        return replay(prior);
+    }
 
     private static EventResult replay(DriverEventLog.Entry prior) {
         return new EventResult(prior.eventId(), prior.sequence(), prior.outcome(), prior.code(), prior.message(),

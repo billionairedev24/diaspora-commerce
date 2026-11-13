@@ -3,7 +3,6 @@ package com.afrotransact.fulfilment.application;
 import java.util.List;
 
 import com.afrotransact.fulfilment.domain.DeliveryRoute;
-import com.afrotransact.fulfilment.domain.FulfilmentConflict;
 import com.afrotransact.fulfilment.port.RouteRepository;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -33,7 +32,8 @@ class DriverQueryServiceImpl implements DriverQueryService {
         DeliveryRoute route = routes.find(routeId).orElseThrow(() -> new NotFoundException(
                 "fulfilment.route-not-found", "Route " + routeId + " not found"));
         if (!driver.driverId().equals(route.driverId())) {
-            throw new FulfilmentConflict("fulfilment.not-your-route", "Route " + routeId + " is not assigned to you");
+            // Same answer as an unknown id: a driver must not learn that another driver's route exists.
+            throw new NotFoundException("fulfilment.route-not-found", "Route " + routeId + " not found");
         }
         return route;
     }
