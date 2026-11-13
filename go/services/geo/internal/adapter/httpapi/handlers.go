@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -297,6 +298,11 @@ func (h *handlersImpl) listZones(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, r, err)
 		return
+	}
+	// Any signed-in person may list zones, but a zone that is not switched on (a draft service area, a planned
+	// catchment) is data of its owner and staff: only callers who may write zones see it.
+	if a, _ := auth.FromContext(r.Context()); !a.Can(ZonesWrite) {
+		zs = slices.DeleteFunc(slices.Clone(zs), func(z domain.Zone) bool { return !z.Active })
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"zones": zs})
 }

@@ -1,0 +1,18 @@
+# METHOD pattern | CLASS | enforcement | test
+# geo serves reference data (addresses, ZIPs, places, distances, active zones) and holds no tenant-owned records except zones.
+GET /v1/addresses/autocomplete | PUBLIC | reference data; no tenant data | n/a
+GET /v1/addresses/resolve/{id} | PUBLIC | provider place id, no tenant data | n/a
+POST /v1/addresses/validate | PUBLIC | stateless validation of the caller's own input | n/a
+GET /v1/zip/{zip} | PUBLIC | reference data | n/a
+GET /v1/reverse | PUBLIC | reference data | n/a
+GET /v1/zones/covering | PUBLIC | active zones containing a point (shown at checkout) | n/a
+POST /v1/distance | PUBLIC | stateless calculation on the caller's own points | n/a
+POST /v1/distance/batch | PUBLIC | stateless calculation, capped at 100 destinations | n/a
+POST /v1/geocode | PUBLIC | stateless calculation | n/a
+GET /v1/zones | ORG_SCOPED_LIST | signed-in only; callers without geo:zones:write see active zones only (drafts are staff data) | TestZoneListHidesDraftZonesFromEveryoneWithoutZoneWrite
+POST /v1/zones | STAFF_ONLY | geo:zones:write (staff roles only) | TestZoneListHidesDraftZonesFromEveryoneWithoutZoneWrite
+GET /v1/zips/nearby | PUBLIC | reference data | n/a
+GET /v1/places/countries | PUBLIC | reference data | n/a
+GET /v1/places/countries/{country}/regions | PUBLIC | reference data | n/a
+GET /v1/places/countries/{country}/regions/{region}/cities | PUBLIC | reference data | n/a
+GET /v1/places/search | PUBLIC | reference data | n/a
