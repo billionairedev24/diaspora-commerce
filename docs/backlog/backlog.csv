@@ -1453,13 +1453,13 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - POST /v1/catalog/matches returns MATCH, NO_MATCH, INVALID or RESTRICTED with canOffer and blockers; contracts/openapi/catalog.yaml updated with a conformance test
 - GET /v1/identifiers/gtin/{code} keeps working and adds gtin14
 - Brand plus MPN match works when both are present","E03","","High","5","catalog matching atin","catalog","To Do"
-"S382","Story","Seller Center: barcode first, offer-only flow when the page exists","Spec: docs/engineering/bulk-upload-and-images.md. Section 3.3. The product form never calls the GTIN check today. Add a barcode step, a match card and an offer-only form with no image, title or attribute fields.","- Add a product starts with a barcode step (barcode, no barcode, brand and part number)
+"S382","Story","Seller Center: barcode first, offer-only flow when the page exists","Spec: docs/engineering/bulk-upload-and-images.md. Section 3.3. The product form never calls the GTIN check today. Add a barcode step, a match card and an offer-only form with no image, title or attribute fields. Follow-up (13 Nov): the guided tours (first-product, product-sections) start on the barcode step and describe the offer-only path; the seller Listings table shows offers on other sellers' pages (names, price, quantity, 'We are checking the tax details for this item', edit price and quantity via PATCH /v1/seller/offers/{offerId}). Still to verify: the Playwright mock spec (seller A creates a page, seller B sells it by UPC).","- Add a product starts with a barcode step (barcode, no barcode, brand and part number)
 - After 12 to 14 digits the match runs; a MATCH shows photo, title, brand, options and seller count
 - Yes, sell this opens only offer fields (price, list price, quantity, condition and note, fulfilment, handling days, ship-from, SKU); no image field is shown
 - NO_MATCH continues into the full form with the barcode prefilled and images required
 - INVALID and RESTRICTED show the plain message and a suggested fix
 - Seller A creates a page and seller B sells it by UPC without uploading an image (Playwright mock spec)
-- All new sc.match.* keys exist in en fr es ar yo (machine drafts flagged for native review)","E24","","High","5","seller-center matching i18n","seller-center","To Do"
+- All new sc.match.* keys exist in en fr es ar yo (machine drafts flagged for native review)","E24","","High","5","seller-center matching i18n","seller-center","In Progress"
 "S383","Story","Matched offer guards: page content locked, allowed offer fields, selling approval","Spec: docs/engineering/bulk-upload-and-images.md. Sections 3.4 and 3.6. An offer on an ATIN may change only offer terms. Offers must also apply the selling-approval gate the product writer uses.","- POST /v1/offers on an ATIN rejects title, image, attribute, brand and category fields with 422 and a plain message
 - A seller who is not the page owner gets 403 on product edit endpoints (test)
 - Offer create on a gated brand or category without selling approval is refused with offers.selling-approval-required
@@ -1519,13 +1519,13 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Non-main images may be smaller and only warn
 - listing-rules.md D15 and tools/listing-rules/rules.json updated; S361 closed as superseded
 - Flag media.image.enforce allows shadow mode (verdict recorded, nothing refused)","E03","","High","5","catalog images enforcement","catalog","To Do"
-"S391","Story","Seller Center image cards: rule hints, per-code messages, quality meter, five locales","Spec: docs/engineering/bulk-upload-and-images.md. Sections 6.5 and 6.6. Show the rules before upload and the exact message after.","- Image field shows the rule text (white background, 1000 px, 85 percent) and the extra-photo meter (n of 7)
+"S391","Story","Seller Center image cards: rule hints, per-code messages, quality meter, five locales","Spec: docs/engineering/bulk-upload-and-images.md. Sections 6.5 and 6.6. Show the rules before upload and the exact message after. Follow-up (13 Nov): a photo held for review is submitted by media asset id (catalog resolves it through media, keeps the listing off sale until cleared, docs/engineering/tax-gate-paths.md row 31) and the card says 'We are checking your photo'. Not yet verified end to end against media and catalog together (needs Docker).","- Image field shows the rule text (white background, 1000 px, 85 percent) and the extra-photo meter (n of 7)
 - Each image card shows pass, warning, held or rejected with the message for its code
 - Submit is blocked while the main image is rejected; held images allow submit and the listing waits in review
 - Image library status column and bulk preview use the same messages
 - Keys sc.img.check.<CODE>, sc.img.verdict.*, sc.pf.images.meter and the restored sc.pf.images.tooSmall and sc.pf.err.imagesMainSmall exist in en fr es ar yo
 - Machine drafts are marked for native review
-- Accessibility: messages are announced and not colour only","E24","","High","5","seller-center images i18n","seller-center","To Do"
+- Accessibility: messages are announced and not colour only","E24","","High","5","seller-center images i18n","seller-center","In Progress"
 "S392","Story","Existing and migrated listings: rescore main images and Improve your image task","Spec: docs/engineering/bulk-upload-and-images.md. Section 6.7. Grandfather live listings, show a task, then limit failing ones after the grace period.","- Batch rescore job (rate limited, resumable) stores image_quality OK, IMPROVE or FAIL per product
 - Seller Center shows an Improve your image task on the listing row and on Home with the reason in plain words
 - Editing images on a listing must pass the rules
