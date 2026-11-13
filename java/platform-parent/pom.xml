@@ -32,7 +32,7 @@
         <spring-ai.version>2.0.2</spring-ai.version>
         <springdoc.version>3.1.1</springdoc.version>
         <archunit.version>1.5.1</archunit.version>
-        <stripe.version>34.0.0</stripe.version>
+        <stripe.version>34.1.0</stripe.version>
         <temporal.version>1.40.0</temporal.version>
         <logstash-encoder.version>9.0</logstash-encoder.version>
         <resend.version>4.29.0</resend.version>
