@@ -198,3 +198,14 @@ Owner approved fixing these. The findings above are left as written.
 **F9 (action pinning).** All 48 third-party `uses:` (wrangler, trivy, zaproxy, cosign, docker/*, aws/azure/google auth and login, helm, opentofu, tflint, pnpm, golangci-lint, expo, anchore) are pinned to full commit SHAs with the tag in a trailing comment; SHAs resolved with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (all were lightweight or dereferenced to commits). GitHub-owned `actions/*` and `github/*` stay on version tags (the check allows them). `tools/ci/check_action_pins.py` fails on any unpinned third-party action (job `supply-chain`). osv-scanner download is verified against a SHA-256 stored in `osv-gate.sh` (it matches the release's `osv-scanner_SHA256SUMS`). Dependabot `github-actions` is unchanged. Not pinned: container images run with `docker run` in workflows (`ghcr.io/gitleaks/gitleaks:v8.30.1`) and the actionlint download script, which are tag/version based.
 
 **Needs the owner (repository settings, not visible or settable from here):** add the `NVD_API_KEY` repository secret (the weekly Dependency-Check job now fails until it exists); branch protection on `main` requiring the `supply-chain`, `govulncheck`, `osv-scanner` and `Trivy (repo)` checks; required reviewers on the `prod` environment; rebuild and re-promote the 7 launch-set Go images and the Java services (new digests get pinned at promote).
+=======
+### 2026-11-13 F6 (OpenFGA off in prod): tenant isolation pass
+
+Owner decision: OpenFGA stays off at launch (ADR 0010). Result: every Java and Go HTTP route now has a declared isolation class in a
+per-service matrix with a route drift guard, and cross-tenant tests (kit: `java/libs/platform-test/.../tenant`, `go/pkg/tenanttest`,
+gateway-bff testkit). Second layer added: the RBAC fallback of `ResourceAccessChecker.require` verifies the owner org for non-staff
+callers and fails closed. Real bugs found and fixed: carrier-gateway label IDOR and origin-node abuse (High), inventory lot,
+cycle-count and platform-wide operations open to sellers (High), trust-ops support queue open to seller and provider members (High),
+orders payment-split leak, payments balance check only under FGA (Medium), plus several low items. Open items, the 5-minute org-claim
+window and sensitive-action membership re-checks are listed in `docs/engineering/tenant-isolation.md` sections 3 and 5. Docker ITs
+were not run. F6 stays Medium until the open items are decided.
