@@ -1,0 +1,90 @@
+# Tenant isolation matrix for identity. Format: METHOD /path | CLASS | enforcement | testClass
+# Spring Authorization Server endpoints (/oauth2/*, /connect/*, /userinfo, jwks, logout) are filter-chain
+# endpoints, not @Controller routes, and are not scanned here; see the report.
+@AccessAdminController | STAFF_ONLY | access:admin / access:read via PermissionChecker; permissions seeded on platform roles only | -
+@IdentityAdminController | STAFF_ONLY | identity:admin via PermissionChecker; platform roles only | -
+@DataProtectionController | STAFF_ONLY | access:admin; envelope-key admin | -
+@InternalLookupController | SERVICE_ONLY | requireServiceLookup: SERVICE principal with users:read | -
+@FirstPartySignInController | SERVICE_ONLY | SERVICE principal with auth:first-party (gateway-bff client credentials) | -
+@AccountController | PUBLIC | anonymous sign-up and verification; acts on the submitted code only | -
+@PasswordResetController | PUBLIC | anonymous reset by emailed code; no tenant data | -
+@LoginPageController | PUBLIC | hosted login page | -
+@MfaPageController | PUBLIC | hosted pre-auth page bound to the server-side login session; no id in request | -
+@MfaSetupPageController | PUBLIC | hosted pre-auth page bound to the server-side login session; no id in request | -
+@PasswordResetPageController | PUBLIC | hosted forgot-password pages; emailed code | -
+@SignUpPageController | PUBLIC | hosted sign-up pages; no tenant data | -
+@Pages | PUBLIC | test-only stub controller in SecurityHeadersTest (docs, error, login stubs) | -
+DELETE /v1/me/addresses/{id} | CUSTOMER_SELF | address looked up by (token subject, id) in SQL | IdentityTenantIsolationTest
+DELETE /v1/me/devices | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/devices/{deviceId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/linked-accounts/{provider} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/mfa/email | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/mfa/sms | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/mfa/totp | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/passkeys/{credentialId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/sessions/{sessionId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/tour-progress | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/tour-progress/{tourId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/trusted-browsers | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/me/trusted-browsers/{browserId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+DELETE /v1/orgs/{orgId}/invitations/{invitationId} | ORG_OWNED | OrgTeamAccess.resolve: caller must hold team:manage in the PATH org (store lookup); invitation/member must belong to that org | IdentityTenantIsolationTest
+DELETE /v1/orgs/{orgId}/members/{userId} | ORG_OWNED | OrgTeamAccess.resolve: caller must hold team:manage in the PATH org (store lookup); invitation/member must belong to that org | IdentityTenantIsolationTest
+GET /v1/admin/identity-providers | STAFF_ONLY | access:read/access:admin | -
+GET /v1/admin/identity/session-policy | STAFF_ONLY | identity:admin | -
+GET /v1/admin/users/{userId}/addresses | STAFF_ONLY | AddressBookServiceImpl.listOf needs users:read/access:*; seeded on platform roles and service scopes | -
+GET /v1/identity-providers | PUBLIC | enabled provider list, no tenant data | -
+GET /v1/internal/session-policy | SERVICE_ONLY | sessions:policy.read service scope or identity:admin | -
+GET /v1/me | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/addresses | CUSTOMER_SELF | address looked up by (token subject, id) in SQL | IdentityTenantIsolationTest
+GET /v1/me/devices | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/linked-accounts | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/mfa | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/notification-preferences | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/passkeys | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/preferences | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/sessions | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/sign-in-activity | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/tour-progress | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/trusted-browsers | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/me/work-profile | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+GET /v1/orgs/{orgId}/invitations | ORG_SCOPED_LIST | OrgTeamAccess.resolve re-reads membership of the PATH org from the store; token org claim not used | IdentityTenantIsolationTest
+GET /v1/orgs/{orgId}/members | ORG_SCOPED_LIST | OrgTeamAccess.resolve re-reads membership of the PATH org from the store; token org claim not used | IdentityTenantIsolationTest
+GET /v1/orgs/{orgId}/roles | ORG_SCOPED_LIST | OrgTeamAccess.resolve re-reads membership of the PATH org from the store; token org claim not used | IdentityTenantIsolationTest
+PATCH /v1/me | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+PATCH /v1/me/addresses/{id} | CUSTOMER_SELF | address looked up by (token subject, id) in SQL | IdentityTenantIsolationTest
+PATCH /v1/me/passkeys/{credentialId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/internal/orgs/reconcile | SERVICE_ONLY | orgs:manage service or staff | -
+POST /v1/invitations/accept | TOKEN_LINK | single-use invitation token; accept also requires the token's email to equal the signed-in account | -
+POST /v1/invitations/lookup | TOKEN_LINK | single-use invitation token; accept also requires the token's email to equal the signed-in account | -
+POST /v1/me/addresses | CUSTOMER_SELF | address looked up by (token subject, id) in SQL | IdentityTenantIsolationTest
+POST /v1/me/addresses/{id}/default | CUSTOMER_SELF | address looked up by (token subject, id) in SQL | IdentityTenantIsolationTest
+POST /v1/me/devices | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/email | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/email/confirm | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/prompt/dismiss | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/recovery-codes | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/sms | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/sms/confirm | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/totp | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/mfa/totp/confirm | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/orgs/{orgId}/leave | CUSTOMER_SELF | OrgTeamServiceImpl.leave removes only the caller's own membership; non-member 404 | IdentityTenantIsolationTest
+POST /v1/me/passkeys | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/passkeys/registrations | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/phone/verification | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/phone/verification/confirm | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/roles/provider-applicant | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/roles/seller-applicant | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/me/sessions/revoke-others | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+POST /v1/orgs/{orgId}/invitations | ORG_OWNED | OrgTeamAccess.resolve: caller must hold team:manage in the PATH org (store lookup); invitation/member must belong to that org | IdentityTenantIsolationTest
+POST /v1/orgs/{orgId}/sync | ORG_OWNED | OrgReconcileServiceImpl.sync: owner/applicant at the seller service or orgs:manage, else 404 | IdentityTenantIsolationTest
+PUT /v1/admin/identity-providers/{providerId} | STAFF_ONLY | access:read/access:admin | -
+PUT /v1/admin/identity/session-policy/{audience} | STAFF_ONLY | identity:admin | -
+PUT /v1/me/active-org | CUSTOMER_SELF | ProfileServiceImpl.selectOrg verifies membership server-side, else 404 | IdentityTenantIsolationTest
+PUT /v1/me/notification-preferences | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+PUT /v1/me/password | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+PUT /v1/me/preferences | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+PUT /v1/me/tour-progress | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+PUT /v1/me/tour-progress/{tourId} | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+PUT /v1/me/work-profile | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
+PUT /v1/orgs/{orgId} | STAFF_ONLY | OrganizationServiceImpl.upsert orgs:manage (platform roles and service scopes only) | -
+PUT /v1/orgs/{orgId}/members/{userId} | ORG_OWNED | OrgTeamAccess.resolve: caller must hold team:manage in the PATH org (store lookup); invitation/member must belong to that org | IdentityTenantIsolationTest

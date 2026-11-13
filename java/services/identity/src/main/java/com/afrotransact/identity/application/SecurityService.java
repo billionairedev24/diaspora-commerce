@@ -9,8 +9,12 @@ import com.afrotransact.identity.domain.UserSession;
 /** Login & security page: password, sessions, linked social accounts. */
 public interface SecurityService {
 
-    /** Requires the current password when the account has one; new password follows the password policy. */
-    void changePassword(String currentPassword, String newPassword, String confirmPassword);
+    /**
+     * Requires the current password when the account has one; new password follows the password policy. Every other
+     * sign-in (refresh tokens, hosted-login browser sessions) ends; the one behind {@code currentAccessToken} stays.
+     */
+    void changePassword(String currentPassword, String newPassword, String confirmPassword,
+                        Optional<String> currentAccessToken);
 
     /** @param currentAccessToken the caller's bearer token, used to flag "this device" */
     List<UserSession> sessions(Optional<String> currentAccessToken);

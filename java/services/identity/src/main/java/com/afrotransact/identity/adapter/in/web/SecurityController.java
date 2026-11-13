@@ -40,11 +40,12 @@ class SecurityController {
         this.passkeys = passkeys;
     }
 
-    @Operation(summary = "Change password (requires the current password)")
+    @Operation(summary = "Change password (requires the current password); other devices are signed out")
     @PutMapping("/v1/me/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void changePassword(@Valid @RequestBody ChangePasswordRequest body) {
-        security.changePassword(body.currentPassword(), body.newPassword(), body.confirmPassword());
+    void changePassword(@Valid @RequestBody ChangePasswordRequest body,
+                        @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
+        security.changePassword(body.currentPassword(), body.newPassword(), body.confirmPassword(), token(jwt));
     }
 
     @Operation(summary = "Active sessions (one per signed-in app or device); current marks this device")

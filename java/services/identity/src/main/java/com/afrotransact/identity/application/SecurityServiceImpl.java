@@ -57,7 +57,8 @@ class SecurityServiceImpl implements SecurityService {
 
     @Override
     @Transactional
-    public void changePassword(String currentPassword, String newPassword, String confirmPassword) {
+    public void changePassword(String currentPassword, String newPassword, String confirmPassword,
+                               Optional<String> currentAccessToken) {
         UserAccount u = user();
         Map<String, String> errors = new LinkedHashMap<>();
         if (u.hasPassword() && (currentPassword == null || !hasher.matches(currentPassword, u.passwordHash()))) {
@@ -76,6 +77,8 @@ class SecurityServiceImpl implements SecurityService {
                     errors);
         }
         users.update(u.withPassword(hasher.hash(newPassword), Instant.now(clock)));
+        sessions.revokeAll(u.id(), currentAccessToken);
+        sessions.endBrowserSessions(u.id());
         changeLog.append(u.id().toString(), "password.changed", u.id(), null, "password", null);
     }
 
