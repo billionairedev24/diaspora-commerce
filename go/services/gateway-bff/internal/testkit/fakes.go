@@ -183,6 +183,8 @@ type Upstreams struct {
 	LastUploadPurpose    string
 	// LastImageUpload is the whole body of media's last POST /v1/uploads (slot, title, brand, productTypeCode reach it, S388).
 	LastImageUpload map[string]any
+	// LastCandidateQuery is the body of catalog's last POST /v1/catalog/matches/candidates (query and categoryId only).
+	LastCandidateQuery map[string]string
 	// LastOfferBody is the body of offers' last POST /v1/offers (S382).
 	LastOfferBody map[string]any
 

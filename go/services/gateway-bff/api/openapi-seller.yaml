@@ -1877,13 +1877,14 @@ paths:
       tags: [Matching]
       operationId: matchCatalog
       security: [{sessionCookie: []}]
-      summary: Does a product page already exist for this barcode, or brand and part number?
+      summary: Does a product page already exist for this barcode? (the optional shortcut)
       description: |
-        catalog `POST /v1/catalog/matches` for the active organisation (Listings: EDIT), the first step of "Add a product".
-        Send a barcode (UPC, EAN, GTIN, ISBN; spaces and dashes allowed) or a brand with its part number. A barcode that
-        is too short is answered `INVALID` with a plain message, not an error. `sellerCount` is read from offers (null
-        when it cannot be read). `canOffer` is false with `blockers` when the seller may not sell the item (page not
-        live, department or brand approval); `canCreate` is false when a new page with this barcode must not be made.
+        catalog `POST /v1/catalog/matches` for the active organisation (Listings: EDIT). The optional "I have a barcode"
+        shortcut of "Add a product": an exact match on the barcode (UPC, EAN, GTIN, ISBN; spaces and dashes allowed). A
+        barcode that is too short is answered `INVALID` with a plain message, not an error. `sellerCount` is read from
+        offers (null when it cannot be read). `canOffer` is false with `blockers` when the seller may not sell the item
+        (page not live, brand approval); `canCreate` is false when a new page with this barcode must not be made. A seller
+        without a barcode uses `/v1/seller/catalog/candidates`.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/MatchRequest'}}}
@@ -1892,6 +1893,53 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/candidates:
+    post:
+      tags: [Matching]
+      operationId: matchCandidates
+      security: [{sessionCookie: []}]
+      summary: Is your product already on AfroTransact? (one search box, no barcode)
+      description: |
+        catalog `POST /v1/catalog/matches/candidates` for the active organisation (Listings: EDIT). `query` is what the
+        seller types ("basmati rice 5kg"); name, brand and size are read from it and the category is the optional chip
+        (`categoryId`). Up to six live pages with a real photo, best first, each with its photo, brand, size and the number of
+        sellers (`sellerCount`, null when offers cannot be read). `kind` is `SAME_NAME` or `SIMILAR`; both always need the
+        seller's click. Nothing about any seller is returned. `searchUnavailable` means no suggestions, never a guess.
+        429 `RATE_LIMITED` when the organisation searched too often.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CandidateRequest'}}}
+      responses:
+        '200': {description: The pages that look like it (possibly none), content: {application/json: {schema: {$ref: '#/components/schemas/CandidateList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/candidates/decisions:
+    post:
+      tags: [Matching]
+      operationId: matchDecision
+      security: [{sessionCookie: []}]
+      summary: '"This is my product" or "Not here, add it as new"'
+      description: |
+        catalog `POST /v1/catalog/matches/decisions` (Listings: EDIT). `SELL_EXISTING` names a page that was in the list and
+        carries the one-tap size answer (`sizeConfirmed`, 422 `SIZE_UNCONFIRMED` when the page states a size and it is not
+        true; 422 `CHOICE_NOT_SHOWN` for a page that was not in the list); the answer says whether the seller may sell it
+        and the next step is the price, quantity and condition form. `NONE_OF_THESE` is recorded so staff can review likely
+        duplicates and never blocks adding the product.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DecisionRequest'}}}
+      responses:
+        '200': {description: Recorded, content: {application/json: {schema: {$ref: '#/components/schemas/MatchDecision'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/products/{atin}/change-requests:
@@ -5979,11 +6027,10 @@ components:
         message: {type: string, description: Plain English for API readers}
     MatchRequest:
       type: object
-      description: A barcode, or a brand with its manufacturer part number
+      description: A barcode (the optional exact shortcut)
+      required: [gtin]
       properties:
         gtin: {type: string, maxLength: 20, description: 'UPC, EAN, GTIN or ISBN; spaces and dashes are allowed', example: '012345678905'}
-        brand: {type: string, maxLength: 120}
-        mpn: {type: string, maxLength: 80, description: Manufacturer part number}
     MatchResultKind: {type: string, enum: [MATCH, NO_MATCH, INVALID, RESTRICTED]}
     Blocker:
       type: object
@@ -6004,12 +6051,72 @@ components:
       properties:
         atin: {type: string}
         options: {type: object, additionalProperties: {type: string}}
+    CandidateRequest:
+      type: object
+      description: What the seller is selling, as typed in the one search box. The category is the optional chip.
+      required: [query]
+      additionalProperties: false
+      properties:
+        query: {type: string, minLength: 1, maxLength: 200, example: basmati rice 5kg}
+        categoryId: {type: string, format: uuid}
+    MatchCategory:
+      type: object
+      required: [id, path]
+      properties:
+        id: {type: string, format: uuid}
+        path: {type: string}
+    MatchCandidate:
+      type: object
+      description: One existing product page the seller may be selling. Nothing about any seller except how many sell it.
+      required: [parentAtin, title, variants, kind, likely, canOffer, blockers]
+      properties:
+        parentAtin: {type: string}
+        atin: {type: [string, 'null'], description: 'The variant to sell when the page has exactly one (never shown)'}
+        title: {type: string}
+        brand: {type: [string, 'null']}
+        image: {oneOf: [{$ref: '#/components/schemas/MatchImage'}, {type: 'null'}]}
+        category: {type: [string, 'null'], description: Category path}
+        sizeLabel: {type: [string, 'null'], description: 'The page size in words, for "Same size, 5 kg?"; null when it states none'}
+        variants: {type: array, items: {$ref: '#/components/schemas/MatchVariant'}}
+        kind: {type: string, enum: [SAME_NAME, SIMILAR]}
+        likely: {type: boolean}
+        sellerCount: {type: [integer, 'null'], description: How many sellers list the page (null when not known)}
+        canOffer: {type: boolean}
+        blockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
+    CandidateList:
+      type: object
+      required: [candidates, tooShort, searchUnavailable]
+      properties:
+        candidates: {type: array, maxItems: 6, items: {$ref: '#/components/schemas/MatchCandidate'}}
+        suggestedCategory: {oneOf: [{$ref: '#/components/schemas/MatchCategory'}, {type: 'null'}]}
+        category: {oneOf: [{$ref: '#/components/schemas/MatchCategory'}, {type: 'null'}]}
+        tooShort: {type: boolean, description: The name is too short to search yet}
+        searchUnavailable: {type: boolean, description: The search did not answer; the seller may still add the product as new}
+    DecisionRequest:
+      type: object
+      required: [choice, query]
+      additionalProperties: false
+      properties:
+        choice: {type: string, enum: [SELL_EXISTING, NONE_OF_THESE]}
+        query: {type: string, minLength: 1, maxLength: 200}
+        categoryId: {type: string, format: uuid}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$', description: 'SELL_EXISTING: the variant of a page that was shown'}
+        sizeConfirmed: {type: boolean, description: 'SELL_EXISTING: the one tap "Same size"'}
+    MatchDecision:
+      type: object
+      required: [choice, canOffer, blockers, possibleDuplicateQueued]
+      properties:
+        decisionId: {type: [string, 'null'], format: uuid}
+        choice: {type: string, enum: [SELL_EXISTING, NONE_OF_THESE]}
+        atin: {type: [string, 'null']}
+        canOffer: {type: boolean}
+        blockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
+        possibleDuplicateQueued: {type: boolean}
     CatalogMatch:
       type: object
       required: [result, canOffer, blockers, canCreate, createBlockers, variants]
       properties:
         result: {$ref: '#/components/schemas/MatchResultKind'}
-        matchedOn: {type: [string, 'null'], enum: [GTIN, BRAND_MPN, null]}
         digits: {type: [string, 'null'], description: The cleaned barcode digits}
         atin: {type: [string, 'null'], description: 'The matched variant; offers attach to it (never shown to the seller)'}
         parentAtin: {type: [string, 'null']}

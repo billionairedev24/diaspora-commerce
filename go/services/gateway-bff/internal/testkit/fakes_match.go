@@ -36,7 +36,7 @@ func matchBody(result string, extra map[string]any) map[string]any {
 }
 
 func matchPage(atin, parent, title string, can bool, blockers []map[string]any) map[string]any {
-	return matchBody("MATCH", map[string]any{"matchedOn": "GTIN", "atin": atin, "parentAtin": parent, "productStatus": "LIVE", "title": title,
+	return matchBody("MATCH", map[string]any{"atin": atin, "parentAtin": parent, "productStatus": "LIVE", "title": title,
 		"brand": "Kente Naturals", "image": map[string]any{"url": "https://img.example/shea.webp", "width": 1600, "height": 1600},
 		"category": "Beauty > Skin care > Body butter", "variantOptions": map[string]string{"Size": "8 oz"},
 		"variants": []map[string]any{{"atin": atin, "options": map[string]string{"Size": "8 oz"}}}, "canOffer": can, "blockers": blockers,
@@ -46,25 +46,13 @@ func matchPage(atin, parent, title string, can bool, blockers []map[string]any) 
 // matchRoutes is catalog's /v1/catalog/matches, change requests and image tasks, and offers' POST /v1/offers.
 func (u *Upstreams) matchRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/catalog/matches", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ GTIN, Brand, MPN string }
 		var raw map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&raw)
-		in.GTIN, in.Brand, in.MPN = raw["gtin"], raw["brand"], raw["mpn"]
-		if in.GTIN == "" && (in.Brand == "" || in.MPN == "") {
-			problem(w, 422, "catalog.match-invalid", "Give a barcode, or a brand with its part number", nil)
+		if raw["gtin"] == "" {
+			problem(w, 422, "catalog.match-invalid", "Give a barcode", nil)
 			return
 		}
-		if in.GTIN == "" {
-			if strings.EqualFold(in.Brand, "Kente Naturals") && strings.EqualFold(in.MPN, "SB-8") {
-				body := matchPage("ATSHEAV001", "ATSHEA0001", "Raw Shea Butter, 8 oz", true, []map[string]any{})
-				body["matchedOn"] = "BRAND_MPN"
-				writeJSON(w, 200, body)
-				return
-			}
-			writeJSON(w, 200, matchBody("NO_MATCH", nil))
-			return
-		}
-		digits := digitsOnly.ReplaceAllString(in.GTIN, "")
+		digits := digitsOnly.ReplaceAllString(raw["gtin"], "")
 		switch digits {
 		case MatchGTINLive:
 			writeJSON(w, 200, matchPage("ATSHEAV001", "ATSHEA0001", "Raw Shea Butter, 8 oz", true, []map[string]any{}))
@@ -80,6 +68,52 @@ func (u *Upstreams) matchRoutes(mux *http.ServeMux) {
 			writeJSON(w, 200, matchBody("RESTRICTED", map[string]any{"digits": digits, "message": "This number is for store use or coupons, not a product barcode."}))
 		default:
 			writeJSON(w, 200, matchBody("NO_MATCH", map[string]any{"digits": digits, "gtin14": strings.Repeat("0", 14-len(digits)) + digits}))
+		}
+	})
+
+	// The search box: "shea" finds the Shea butter page (same name, states a size), "ghost" finds nothing, "limit" is rate limited,
+	// "offline" has no search index. Nothing about any seller is in an answer.
+	mux.HandleFunc("POST /v1/catalog/matches/candidates", func(w http.ResponseWriter, r *http.Request) {
+		var in map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		q := strings.ToLower(in["query"])
+		u.mu.Lock()
+		u.LastCandidateQuery = in
+		u.mu.Unlock()
+		cat := map[string]any{"id": "0c0c0c0c-0000-4000-8000-000000000001", "path": "Beauty > Skin care > Body butter"}
+		switch {
+		case strings.Contains(q, "limit"):
+			problem(w, 422, "catalog.match-rate-limited", "You searched a lot in the last hour. Try again later.", nil)
+		case strings.Contains(q, "offline"):
+			writeJSON(w, 200, map[string]any{"candidates": []any{}, "tooShort": false, "searchUnavailable": true})
+		case strings.Contains(q, "shea"):
+			writeJSON(w, 200, map[string]any{"candidates": []map[string]any{{"parentAtin": "ATSHEA0001", "atin": "ATSHEAV001", "title": "Raw Shea Butter, 8 oz",
+				"brand": "Kente Naturals", "image": map[string]any{"url": "https://img.example/shea.webp", "width": 1600, "height": 1600},
+				"category": "Beauty > Skin care > Body butter", "sizeLabel": "8 oz", "variants": []map[string]any{{"atin": "ATSHEAV001", "options": map[string]string{"Size": "8 oz"}}},
+				"kind": "SAME_NAME", "likely": true, "canOffer": true, "blockers": []any{}}},
+				"suggestedCategory": cat, "tooShort": false, "searchUnavailable": false})
+		default:
+			writeJSON(w, 200, map[string]any{"candidates": []any{}, "tooShort": len(q) < 3, "searchUnavailable": false})
+		}
+	})
+	mux.HandleFunc("POST /v1/catalog/matches/decisions", func(w http.ResponseWriter, r *http.Request) {
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		switch in["choice"] {
+		case "NONE_OF_THESE":
+			writeJSON(w, 200, map[string]any{"decisionId": "0d0d0d0d-0000-4000-8000-000000000001", "choice": "NONE_OF_THESE", "canOffer": false, "blockers": []any{}, "possibleDuplicateQueued": true})
+		case "SELL_EXISTING":
+			if in["sizeConfirmed"] != true {
+				problem(w, 422, "catalog.match-size-unconfirmed", "Confirm the size first.", nil)
+				return
+			}
+			if in["atin"] != "ATSHEAV001" {
+				problem(w, 422, "catalog.match-choice-not-shown", "That page was not in the list.", nil)
+				return
+			}
+			writeJSON(w, 200, map[string]any{"decisionId": "0d0d0d0d-0000-4000-8000-000000000002", "choice": "SELL_EXISTING", "atin": "ATSHEAV001", "canOffer": true, "blockers": []any{}, "possibleDuplicateQueued": false})
+		default:
+			problem(w, 422, "catalog.match-choice-missing", "Choose an answer.", nil)
 		}
 	})
 

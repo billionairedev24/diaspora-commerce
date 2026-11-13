@@ -19,12 +19,10 @@ func exerciseSellerMatch(t *testing.T, bff *testkit.BFF, b *browser) {
 	if m.status != 200 || mj["result"] != "MATCH" || mj["canOffer"] != true || mj["title"] != "Raw Shea Butter, 8 oz" || mj["atin"] != "ATSHEAV001" {
 		t.Fatalf("match = %d %s", m.status, m.body)
 	}
-	// Brand plus part number finds the same page; neither a barcode nor a pair is a 422.
-	if r := post("/v1/seller/catalog/matches", map[string]any{"brand": "Kente Naturals", "mpn": "SB-8"}); r.status != 200 || r.json(t)["matchedOn"] != "BRAND_MPN" {
-		t.Fatalf("brand+mpn = %d %s", r.status, r.body)
-	}
-	mustStatus(t, post("/v1/seller/catalog/matches", map[string]any{"brand": "Kente Naturals"}), 422)
+	// A barcode alone is the shortcut: no barcode is a 422, and a part number is no longer a key.
 	mustStatus(t, post("/v1/seller/catalog/matches", map[string]any{}), 422)
+	mustStatus(t, post("/v1/seller/catalog/matches", map[string]any{"brand": "Kente Naturals", "mpn": "SB-8"}), 422)
+	exerciseSellerCandidates(t, bff, post)
 	// Not a page yet: images and the full form follow. A blocked page says why in plain words.
 	if r := post("/v1/seller/catalog/matches", map[string]any{"gtin": "9780306406157"}); r.status != 200 || r.json(t)["result"] != "NO_MATCH" || r.json(t)["canCreate"] != true {
 		t.Fatalf("no match = %d %s", r.status, r.body)
@@ -188,6 +186,8 @@ func TestSellerMatchNeedsTheListingsModule(t *testing.T) {
 	bff.Upstreams.MemberOrgs = []testkit.MemberOrg{{ID: testkit.SellerOrgID, Kind: "SELLER", Name: "Ade's Kitchen", Status: "APPROVED", Role: "seller.fulfilment"}}
 	mustStatus(t, signIn(t, bff, b, "/"), 302)
 	mustStatus(t, b.do("POST", "/v1/seller/catalog/matches", map[string]any{"gtin": testkit.MatchGTINLive}), 403)
+	mustStatus(t, b.do("POST", "/v1/seller/catalog/candidates", map[string]any{"query": "shea butter"}), 403)
+	mustStatus(t, b.do("POST", "/v1/seller/catalog/candidates/decisions", map[string]any{"choice": "NONE_OF_THESE", "query": "shea butter"}), 403)
 	mustStatus(t, b.do("POST", "/v1/seller/offers", map[string]any{"atin": "ATSHEAV001", "priceMinor": 900, "quantity": 1, "fulfilment": "SELLER"}), 403)
 	mustStatus(t, b.do("POST", "/v1/seller/products/ATSHEA0001/change-requests", map[string]any{"type": "DUPLICATE_PAGE", "payload": map[string]any{"duplicateOfAtin": "ATSHEA0002"}}), 403)
 	mustStatus(t, b.do("POST", "/v1/seller/change-requests/c0c0c0c0-0000-4000-8000-000000000001/withdraw", nil), 403)
@@ -213,5 +213,66 @@ func TestSellerMatchCountsSellers(t *testing.T) {
 	}
 	if r := b.do("POST", "/v1/seller/catalog/matches", map[string]any{"gtin": "9780306406157"}); r.json(t)["sellerCount"] != nil {
 		t.Fatalf("no match has no seller count: %s", r.body)
+	}
+	// The search box shows the same count on each card.
+	c := b.do("POST", "/v1/seller/catalog/candidates", map[string]any{"query": "shea butter"})
+	if c.status != 200 || num(c.json(t)["candidates"].([]any)[0].(map[string]any), "sellerCount") != 2 {
+		t.Fatalf("candidates = %d %s", c.status, c.body)
+	}
+}
+
+// exerciseSellerCandidates drives the one search box: a name finds the page with a seller count and a category chip, nothing is
+// matched silently, "Not here" is recorded, and a seller without Listings access never reaches catalog.
+func exerciseSellerCandidates(t *testing.T, bff *testkit.BFF, post func(string, any) resp) {
+	t.Helper()
+	r := post("/v1/seller/catalog/candidates", map[string]any{"query": "  shea   butter 8oz "})
+	j := r.json(t)
+	cands, _ := j["candidates"].([]any)
+	if r.status != 200 || len(cands) != 1 || j["suggestedCategory"] == nil || j["tooShort"] != false || j["searchUnavailable"] != false {
+		t.Fatalf("candidates = %d %s", r.status, r.body)
+	}
+	c := cands[0].(map[string]any)
+	if c["title"] != "Raw Shea Butter, 8 oz" || c["brand"] != "Kente Naturals" || c["sizeLabel"] != "8 oz" || c["kind"] != "SAME_NAME" || c["image"] == nil {
+		t.Fatalf("candidate card = %v", c)
+	}
+	if q := bff.Upstreams.LastCandidateQuery; q["query"] != "shea butter 8oz" || q["sellerOrgId"] != "" {
+		t.Fatalf("catalog saw %v", q)
+	}
+	if r := post("/v1/seller/catalog/candidates", map[string]any{"query": "ghost"}); r.status != 200 || len(r.json(t)["candidates"].([]any)) != 0 {
+		t.Fatalf("no candidates = %d %s", r.status, r.body)
+	}
+	if r := post("/v1/seller/catalog/candidates", map[string]any{"query": "offline"}); r.status != 200 || r.json(t)["searchUnavailable"] != true {
+		t.Fatalf("offline = %d %s", r.status, r.body)
+	}
+	if r := post("/v1/seller/catalog/candidates", map[string]any{"query": "limit"}); r.status != 429 || r.json(t)["code"] != "RATE_LIMITED" {
+		t.Fatalf("rate limit = %d %s", r.status, r.body)
+	}
+	mustStatus(t, post("/v1/seller/catalog/candidates", map[string]any{"query": " "}), 422)
+	mustStatus(t, post("/v1/seller/catalog/candidates", map[string]any{"query": strings.Repeat("x", 201)}), 422)
+	mustStatus(t, post("/v1/seller/catalog/candidates", map[string]any{"query": "shea", "categoryId": "not-a-uuid"}), 422)
+	// The organisation is the session's, never the body's.
+	mustStatus(t, post("/v1/seller/catalog/candidates", map[string]any{"query": "shea", "sellerOrgId": "other"}), 200)
+	if _, sent := bff.Upstreams.LastCandidateQuery["sellerOrgId"]; sent {
+		t.Fatal("a sellerOrgId in the body must never reach catalog")
+	}
+
+	// This is my product: the one-tap size answer is required, and only a page that was shown can be chosen.
+	sell := map[string]any{"choice": "SELL_EXISTING", "query": "shea butter 8oz", "atin": "ATSHEAV001"}
+	if r := post("/v1/seller/catalog/candidates/decisions", sell); r.status != 422 || r.json(t)["code"] != "SIZE_UNCONFIRMED" {
+		t.Fatalf("unconfirmed size = %d %s", r.status, r.body)
+	}
+	sell["sizeConfirmed"] = true
+	if r := post("/v1/seller/catalog/candidates/decisions", sell); r.status != 200 || r.json(t)["canOffer"] != true || r.json(t)["choice"] != "SELL_EXISTING" {
+		t.Fatalf("sell existing = %d %s", r.status, r.body)
+	}
+	sell["atin"] = "ATOTHER001"
+	if r := post("/v1/seller/catalog/candidates/decisions", sell); r.status != 422 || r.json(t)["code"] != "CHOICE_NOT_SHOWN" {
+		t.Fatalf("not shown = %d %s", r.status, r.body)
+	}
+	mustStatus(t, post("/v1/seller/catalog/candidates/decisions", map[string]any{"choice": "SELL_EXISTING", "query": "shea", "sizeConfirmed": true}), 422)
+	mustStatus(t, post("/v1/seller/catalog/candidates/decisions", map[string]any{"choice": "MAYBE", "query": "shea"}), 422)
+	if r := post("/v1/seller/catalog/candidates/decisions", map[string]any{"choice": "NONE_OF_THESE", "query": "shea butter 8oz"}); r.status != 200 ||
+		r.json(t)["possibleDuplicateQueued"] != true || r.json(t)["canOffer"] != false {
+		t.Fatalf("none of these = %d %s", r.status, r.body)
 	}
 }
