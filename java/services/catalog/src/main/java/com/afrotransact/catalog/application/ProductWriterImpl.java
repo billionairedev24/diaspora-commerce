@@ -118,6 +118,7 @@ class ProductWriterImpl implements ProductWriter {
         // The pictures are judged by media (S390): sizes sent by the client are replaced by media's own.
         ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted),
                 placement.type().code(), Set.of(), owner.orgId());
+        submitted = withVariantPictures(submitted, pictures);
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(),
                 cmd.variationTheme(), submitted, details);
         validate(draft, rules, owner.orgId(), null, withPictureErrors(tax.errors(), pictures));
@@ -202,6 +203,7 @@ class ProductWriterImpl implements ProductWriter {
         // Only pictures the listing does not have yet are judged: a grandfathered main image stays until it is replaced.
         ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted), typeCode,
                 pictureUrls(current), current.owner().orgId());
+        submitted = withVariantPictures(submitted, pictures);
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(), cmd.variationTheme(),
                 submitted, details);
         validate(draft, rules, current.owner().orgId(), current.details().sizeChartId(),
@@ -270,6 +272,18 @@ class ProductWriterImpl implements ProductWriter {
         return saved;
     }
 
+    /** The variants with the pictures the gate settled (a cleared held photo is published, a held one stays by id). */
+    private static List<VariantDraft> withVariantPictures(List<VariantDraft> variants, ImageGate.Outcome pictures) {
+        if (pictures.variantImages().size() != variants.size()) {
+            return variants;
+        }
+        List<VariantDraft> out = new ArrayList<>();
+        for (int i = 0; i < variants.size(); i++) {
+            out.add(variants.get(i).withImages(pictures.variantImages().get(i)));
+        }
+        return out;
+    }
+
     private static List<List<ProductImage>> variantPictures(List<VariantDraft> variants) {
         return variants.stream().map(VariantDraft::images).toList();
     }
@@ -278,7 +292,7 @@ class ProductWriterImpl implements ProductWriter {
     private static Set<String> pictureUrls(Product product) {
         Set<String> urls = new HashSet<>();
         product.images().stream().filter(i -> !i.isHeld()).forEach(i -> urls.add(i.url()));
-        product.variants().forEach(v -> v.images().forEach(i -> urls.add(i.url())));
+        product.variants().forEach(v -> v.images().stream().filter(i -> !i.isHeld()).forEach(i -> urls.add(i.url())));
         return urls;
     }
 

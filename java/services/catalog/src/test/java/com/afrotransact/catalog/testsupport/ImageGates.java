@@ -23,8 +23,9 @@ public final class ImageGates {
             }
 
             @Override
-            public Resolved resolveHeld(List<ProductImage> images, String ownerOrgId) {
-                return new Resolved(images, false, false);
+            public Resolved resolveHeld(List<ProductImage> images, List<List<ProductImage>> variantImages,
+                                        String ownerOrgId) {
+                return new Resolved(images, variantImages, false, false);
             }
         };
     }

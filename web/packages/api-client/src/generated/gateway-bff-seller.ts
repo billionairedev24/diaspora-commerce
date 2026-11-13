@@ -5048,7 +5048,7 @@ export interface components {
         ProductImageInput: {
             /** @description Public URL; empty while the photo is held */
             url?: string;
-            /** @description Media asset id of a photo uploaded by this seller. Send it for a photo held for review: the listing is saved and submitted but not live until the photo is cleared. Another seller's or a rejected asset is refused (422 images[i]). Not allowed in a variant's own images. */
+            /** @description Media asset id of a photo uploaded by this seller. Send it for a photo held for review: the listing is saved and submitted but not live until the photo is cleared. Another seller's or a rejected asset is refused (422 images[i], or variants[i].images). A variant's own pictures can be given by id too and are held the same way. */
             assetId?: string;
             /** @description Response only: true while the photo is held for review (We are checking your photo) */
             readonly held?: boolean;

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -43,6 +45,7 @@ import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxGateMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * A photo held for review has no public URL: the listing refers to it by media asset id, can be saved and submitted,
@@ -158,12 +161,65 @@ class HeldPhotoTest {
     }
 
     @Test
-    void aVariantPictureCannotBeGivenAsAHeldReference() {
-        ImageGate.Outcome outcome = gate(new FakeMedia(), Mode.ENFORCE).check(
-                List.of(new ProductImage("https://cdn/a.jpg", 1, 1, 1, "image/jpeg")), List.of(List.of(ref("ast_1"))), "T",
-                Set.of(), "org_1");
+    void aHeldVariantPhotoIsKeptAsAReferenceAndHoldsTheListing() {
+        FakeMedia media = new FakeMedia().held("ast_1");
 
-        assertThat(outcome.errors()).containsKey("variants[0].images");
+        ImageGate.Outcome outcome = gate(media, Mode.ENFORCE).check(List.of(), List.of(List.of(ref("ast_1"))), "T", Set.of(),
+                "org_1");
+
+        assertThat(outcome.errors()).isEmpty();
+        assertThat(outcome.held()).isTrue();
+        assertThat(outcome.variantImages()).hasSize(1);
+        assertThat(outcome.variantImages().getFirst()).singleElement().satisfies(i -> assertThat(i.assetId()).isEqualTo("ast_1"));
+        assertThat(media.asked).contains(new ImageVerifier.Item("", "OTHER", "T", "ast_1", "org_1"));
+    }
+
+    @Test
+    void aClearedVariantPhotoIsPublishedWithMediasUrl() {
+        FakeMedia media = new FakeMedia().ready("ast_1", "https://cdn/ast_1.jpg");
+
+        ImageGate.Outcome outcome = gate(media, Mode.ENFORCE).check(List.of(), List.of(List.of(ref("ast_1"))), "T", Set.of(),
+                "org_1");
+
+        assertThat(outcome.errors()).isEmpty();
+        assertThat(outcome.held()).isFalse();
+        assertThat(outcome.variantImages().getFirst()).singleElement().satisfies(i -> {
+            assertThat(i.isHeld()).isFalse();
+            assertThat(i.url()).isEqualTo("https://cdn/ast_1.jpg");
+        });
+    }
+
+    @Test
+    void aMissingOrForeignVariantPhotoIsRefusedOnThatVariantInEveryMode() {
+        FakeMedia media = new FakeMedia().unknown("ast_x");
+
+        for (Mode mode : Mode.values()) {
+            ImageGate.Outcome outcome = gate(media, mode).check(List.of(), List.of(List.of(), List.of(ref("ast_x"))), "T",
+                    Set.of(), "org_1");
+            assertThat(outcome.errors()).as(mode.name()).containsOnlyKeys("variants[1].images");
+        }
+    }
+
+    @Test
+    void aVariantPhotoIsResolvedEvenWhenTheRulesAreOff() {
+        FakeMedia media = new FakeMedia().held("ast_1");
+
+        ImageGate.Outcome outcome = gate(media, Mode.OFF).check(List.of(), List.of(List.of(ref("ast_1"))), "T", Set.of(), "org_1");
+
+        assertThat(outcome.held()).isTrue();
+        assertThat(media.asked).extracting(ImageVerifier.Item::assetId).containsExactly("ast_1");
+    }
+
+    @Test
+    void aHeldVariantPhotoOfAStoredListingIsPublishedOnceMediaClearsIt() {
+        FakeMedia media = new FakeMedia().ready("ast_1", "https://cdn/ast_1.jpg").held("ast_2");
+
+        ImageGate.Resolved resolved = gate(media, Mode.ENFORCE).resolveHeld(List.of(),
+                List.of(List.of(ref("ast_1")), List.of(ref("ast_2"))), "org_1");
+
+        assertThat(resolved.stillHeld()).isTrue();
+        assertThat(resolved.variantImages().get(0).getFirst().url()).isEqualTo("https://cdn/ast_1.jpg");
+        assertThat(resolved.variantImages().get(1).getFirst().isHeld()).isTrue();
     }
 
     @Test
@@ -213,22 +269,61 @@ class HeldPhotoTest {
     @Test
     void approveRefusesWhileThePhotoIsHeldAndWorksOnceItIsCleared() {
         Product p = product(ProductStatus.IN_REVIEW, ref("ast_1"));
-        when(images.resolveHeld(any(), eq("org_1"))).thenReturn(new ImageGate.Resolved(p.images(), true, false));
+        when(images.resolveHeld(any(), any(), eq("org_1"))).thenReturn(new ImageGate.Resolved(p.images(), true, false));
         assertThatThrownBy(() -> liveGate.approve(p, NOW)).isInstanceOf(ImageHeld.class)
                 .hasMessageContaining("checking your photo");
 
         ProductImage published = new ProductImage("https://cdn/ast_1.jpg", 1600, 1600, 100_000, "image/jpeg");
-        when(images.resolveHeld(any(), eq("org_1"))).thenReturn(new ImageGate.Resolved(List.of(published), false, false));
+        when(images.resolveHeld(any(), any(), eq("org_1"))).thenReturn(new ImageGate.Resolved(List.of(published), false, false));
         Product live = liveGate.approve(p, NOW);
         assertThat(live.status()).isEqualTo(ProductStatus.LIVE);
         assertThat(live.images()).containsExactly(published);
+    }
+
+    private static Product productWithVariantPhoto(ProductStatus status, ProductImage variantPicture) {
+        Variant v = new Variant(UUID.randomUUID(), new Atin("AT00000011"), "SKU-1", null, true, Map.of(), 100, "USD", 1, null,
+                List.of(variantPicture), false, new VariantTax(Map.of(), TaxStatus.READY, List.of(), DECISION));
+        return new Product(UUID.randomUUID(), new Atin("AT00000001"), OWNER, null, null, "packaged-snacks", "Plantain chips",
+                Map.of(), List.of(new ProductImage("https://cdn/main.jpg", 1, 1, 1, "image/jpeg")), "", List.of(v), status,
+                null, NOW, NOW, 0);
+    }
+
+    @Test
+    void approveRefusesWhileAVariantPhotoIsHeldAndPublishesItOnceCleared() {
+        Product p = productWithVariantPhoto(ProductStatus.IN_REVIEW, ref("ast_1"));
+        when(images.resolveHeld(any(), any(), eq("org_1")))
+                .thenReturn(new ImageGate.Resolved(p.images(), List.of(List.of(ref("ast_1"))), true, false));
+        assertThatThrownBy(() -> liveGate.approve(p, NOW)).isInstanceOf(ImageHeld.class)
+                .hasMessageContaining("checking your photo");
+
+        ProductImage published = new ProductImage("https://cdn/ast_1.jpg", 1600, 1600, 100_000, "image/jpeg");
+        when(images.resolveHeld(any(), any(), eq("org_1")))
+                .thenReturn(new ImageGate.Resolved(p.images(), List.of(List.of(published)), false, false));
+        Product live = liveGate.approve(p, NOW);
+        assertThat(live.status()).isEqualTo(ProductStatus.LIVE);
+        assertThat(live.variants().getFirst().images()).containsExactly(published);
+    }
+
+    @Test
+    void reconcilePublishesAClearedVariantPhotoOnTheStoredListing() {
+        Product p = productWithVariantPhoto(ProductStatus.IN_REVIEW, ref("ast_1"));
+        when(products.findById(p.id())).thenReturn(Optional.of(p));
+        ProductImage published = new ProductImage("https://cdn/ast_1.jpg", 1600, 1600, 100_000, "image/jpeg");
+        when(images.resolveHeld(any(), any(), eq("org_1")))
+                .thenReturn(new ImageGate.Resolved(p.images(), List.of(List.of(published)), false, false));
+
+        liveGate.reconcile(p.id());
+
+        ArgumentCaptor<Product> saved = ArgumentCaptor.forClass(Product.class);
+        verify(products, atLeastOnce()).update(saved.capture());
+        assertThat(saved.getAllValues().getFirst().variants().getFirst().images()).containsExactly(published);
     }
 
     @Test
     void approveDoesNotAskMediaWhenThereIsNoHeldPhoto() {
         Product p = product(ProductStatus.IN_REVIEW, new ProductImage("https://cdn/a.jpg", 1, 1, 1, "image/jpeg"));
         assertThat(liveGate.approve(p, NOW).status()).isEqualTo(ProductStatus.LIVE);
-        verify(images, never()).resolveHeld(any(), any());
+        verify(images, never()).resolveHeld(any(), any(), any());
     }
 
     @Test

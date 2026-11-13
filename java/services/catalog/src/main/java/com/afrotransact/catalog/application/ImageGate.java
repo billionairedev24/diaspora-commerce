@@ -22,7 +22,7 @@ import com.afrotransact.catalog.domain.ProductImage;
  * public URL, so the listing refers to it by id. The gate resolves each such reference server-side through media: a
  * cleared photo becomes an ordinary picture with its public URL, a held one is kept as a reference (the listing can be
  * saved, but {@link Outcome#held()} tells the writer it must not go live), a rejected, missing or foreign one is
- * refused. Only the listing's own pictures (and the label photo) can be given by id; a variant's pictures cannot. This resolution is not a rule that can run in shadow mode: it always applies.
+ * refused. The listing's own pictures, its label photo and a variant's own pictures can all be given by id, and are held the same way. This resolution is not a rule that can run in shadow mode: it always applies.
  */
 public interface ImageGate {
 
@@ -56,7 +56,12 @@ public interface ImageGate {
      * @return the pictures as they are now: cleared photos carry their public URL, still-held ones are unchanged;
      *         an empty result when the listing holds no photo
      */
-    Resolved resolveHeld(List<ProductImage> images, String ownerOrgId);
+    default Resolved resolveHeld(List<ProductImage> images, String ownerOrgId) {
+        return resolveHeld(images, List.of(), ownerOrgId);
+    }
+
+    /** The same for the listing's main list and the own pictures of each variant. */
+    Resolved resolveHeld(List<ProductImage> images, List<List<ProductImage>> variantImages, String ownerOrgId);
 
     /**
      * What media answered for the held photos of a stored listing.
@@ -65,7 +70,12 @@ public interface ImageGate {
      * @param stillHeld true when at least one photo is still held for review
      * @param rejected  true when media rejected a held photo (it will never be cleared)
      */
-    record Resolved(List<ProductImage> images, boolean stillHeld, boolean rejected) {
+    record Resolved(List<ProductImage> images, List<List<ProductImage>> variantImages, boolean stillHeld,
+                    boolean rejected) {
+
+        public Resolved(List<ProductImage> images, boolean stillHeld, boolean rejected) {
+            this(images, List.of(), stillHeld, rejected);
+        }
     }
 
     /**
@@ -74,14 +84,22 @@ public interface ImageGate {
      * @param errors problems by field, empty when the pictures may be used
      * @param images the listing's pictures with media's measurements where media knew them (a held photo stays a
      *               reference by asset id)
+     * @param variantImages the variants' own pictures in the order given, cleared held photos published; empty when the
+     *               gate did not look at them
      * @param held   true when a picture is held for review: the listing may be saved and submitted but must not go
      *               live until the photo is cleared
      */
-    record Outcome(Map<String, String> errors, List<ProductImage> images, boolean held) {
+    record Outcome(Map<String, String> errors, List<ProductImage> images, boolean held,
+                   List<List<ProductImage>> variantImages) {
 
         public Outcome {
             errors = Map.copyOf(errors);
             images = List.copyOf(images);
+            variantImages = List.copyOf(variantImages);
+        }
+
+        public Outcome(Map<String, String> errors, List<ProductImage> images, boolean held) {
+            this(errors, images, held, List.of());
         }
 
         public Outcome(Map<String, String> errors, List<ProductImage> images) {

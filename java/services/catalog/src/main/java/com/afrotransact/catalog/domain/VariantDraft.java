@@ -38,6 +38,12 @@ public record VariantDraft(Map<String, String> options, String sellerSku, String
                 atin, taxFacts, next);
     }
 
+    /** The same row with other pictures (a held photo media has since cleared is published). */
+    public VariantDraft withImages(List<ProductImage> next) {
+        return new VariantDraft(options, sellerSku, gtin, gtinExempt, priceMinor, quantity, compareAtMinor, next, atin,
+                taxFacts, packaging);
+    }
+
     /** The same row without barcode: exempt (the product id is not asked for this kind of product). */
     public VariantDraft withoutBarcode() {
         return new VariantDraft(options, sellerSku, null, true, priceMinor, quantity, compareAtMinor, images, atin,

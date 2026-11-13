@@ -2,14 +2,16 @@ package com.afrotransact.catalog.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.Product;
-import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.ProductImage;
+import com.afrotransact.catalog.domain.ProductStatus;
+import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.tax.ImageHeld;
 import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 import com.afrotransact.catalog.domain.tax.TaxNotReady;
@@ -217,13 +219,14 @@ class ProductLiveGateImpl implements ProductLiveGate {
         if (!product.hasHeldImage()) {
             return product;
         }
-        ImageGate.Resolved resolved = imageGate.resolveHeld(product.images(), product.owner().orgId());
+        ImageGate.Resolved resolved = imageGate.resolveHeld(product.images(), variantPictures(product),
+                product.owner().orgId());
         if (resolved.stillHeld() || resolved.rejected()) {
             throw new ImageHeld(resolved.rejected()
                     ? "This product cannot go live: one of its photos was not accepted"
                     : "This product cannot go live yet: we are checking your photo");
         }
-        return product.withImages(resolved.images(), product.variants(), now);
+        return product.withImages(resolved.images(), withPictures(product, resolved), now);
     }
 
     /** Publishes the held photos media has cleared since the last look; unchanged when media cannot be asked. */
@@ -232,13 +235,31 @@ class ProductLiveGateImpl implements ProductLiveGate {
             return p;
         }
         try {
-            ImageGate.Resolved resolved = imageGate.resolveHeld(p.images(), p.owner().orgId());
-            List<ProductImage> now0 = resolved.images();
-            return now0.equals(p.images()) ? p : products.update(p.withImages(now0, p.variants(), now));
+            ImageGate.Resolved resolved = imageGate.resolveHeld(p.images(), variantPictures(p), p.owner().orgId());
+            List<Variant> variants = withPictures(p, resolved);
+            return resolved.images().equals(p.images()) && variants.equals(p.variants()) ? p
+                    : products.update(p.withImages(resolved.images(), variants, now));
         } catch (RuntimeException ex) {
             LOG.warn("Listing {}: held photos could not be looked up now: {}", p.atin().value(), ex.getMessage());
             return p;
         }
+    }
+
+    private static List<List<ProductImage>> variantPictures(Product product) {
+        return product.variants().stream().map(Variant::images).toList();
+    }
+
+    /** The variants with their own pictures as media settled them (cleared held photos published). */
+    private static List<Variant> withPictures(Product product, ImageGate.Resolved resolved) {
+        if (resolved.variantImages().size() != product.variants().size()) {
+            return product.variants();
+        }
+        List<Variant> out = new ArrayList<>();
+        for (int i = 0; i < product.variants().size(); i++) {
+            Variant v = product.variants().get(i);
+            out.add(v.images().equals(resolved.variantImages().get(i)) ? v : v.withImages(resolved.variantImages().get(i)));
+        }
+        return out;
     }
 
     private void requireReady(Product product) {

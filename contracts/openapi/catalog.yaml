@@ -3848,7 +3848,9 @@ components:
             for review (it has no public URL): catalog asks media (the asset must belong to the seller), publishes the
             photo into the listing when it is cleared and keeps the listing off sale while it is held. A photo that media
             already published may also be given by id: catalog replaces it with its public URL. Rejected, unknown or
-            another seller's assets are refused (422, images[i]). Not allowed in a variant's own images.
+            another seller's assets are refused (422, images[i], or variants[i].images in a variant's own pictures). A
+            variant's own pictures can be given by id too: they are held the same way, and the listing stays off sale while any
+            of them is held (422 ImageHeld on approve or resume).
         held:
           type: boolean
           readOnly: true
