@@ -70,11 +70,11 @@ class ListingNormaliserTest {
                 "model", "X", "brand", "Mama", "origin", "Nigeria", "inci", "water"), List.of(IMAGE), List.of(variant()),
                 details(ItemCondition.NEW));
 
-        assertThat(r.attributes()).containsOnlyKeys("brand", "origin");
+        assertThat(r.attributes()).containsOnlyKeys("brand");
     }
 
     @Test
-    void foodServiceHasNoBrandOriginOrBarcode() {
+    void foodServiceHasNoBrandOrBarcode() {
         ListingNormaliser.Result r = apply("prepared-meals", Map.of("brand", "Mama", "brand_id", "x", "origin", "Nigeria",
                 "ingredients", "Rice"), List.of(IMAGE), List.of(variant()), details(ItemCondition.NEW));
 

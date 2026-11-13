@@ -13,7 +13,7 @@ import com.afrotransact.catalog.domain.PackageDimensions;
 /**
  * Judges a listing by the rules of its category. The one place that turns the matrix statuses into messages: the
  * product draft policy (form and API) and the bulk upload both call it, so they never disagree. Messages are plain
- * words; keys are the field paths of the API ({@code attributes.origin}, {@code variants[0].packaging}).
+ * words; keys are the field paths of the API ({@code attributes.material}, {@code variants[0].packaging}).
  *
  * <p>Document slots are collected and marked for the approval engine; they never block a listing here.
  */
@@ -96,7 +96,7 @@ public final class ListingRuleChecker {
         return switch (f) {
             case SERVINGS -> value.matches("\\d{1,6}") && Integer.parseInt(value) > 0 ? null : "Enter a whole number above zero";
             case ALLERGENS -> allergenProblem(value);
-            case COUNTRY_OF_ORIGIN, MATERIAL, MODEL_NUMBER, AGE_GRADE ->
+            case MATERIAL, MODEL_NUMBER, AGE_GRADE ->
                     value.length() > 120 ? "At most 120 characters" : null;
             default -> null;
         };

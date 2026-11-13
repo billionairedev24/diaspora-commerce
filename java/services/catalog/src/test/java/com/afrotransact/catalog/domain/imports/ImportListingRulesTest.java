@@ -48,21 +48,21 @@ class ImportListingRulesTest {
         List<ImportColumn> cols = columns(PLAIN, "beans-pantry-sauces");
 
         assertThat(keys(cols)).contains("label_photo_url", "attr:net_weight", "attr:net_weight:unit", "attr:servings",
-                "attr:shelf", "attr:origin", "attr:storage", "attr:allergens", "brand")
+                "attr:shelf", "attr:storage", "attr:allergens", "brand")
                 .doesNotContain("attr:ingredients", "condition", "dangerous_goods", "attr:material");
-        assertThat(column(cols, "label_photo_url").required()).isTrue();
+        assertThat(column(cols, "label_photo_url").required()).isFalse();
         assertThat(column(cols, "attr:net_weight").required()).isTrue();
         assertThat(column(cols, "attr:storage").required()).isFalse();
         assertThat(column(cols, "attr:allergens").description()).contains("Contains milk").contains("None");
-        assertThat(column(cols, "label_photo_url").header()).endsWith("*");
+        assertThat(column(cols, "label_photo_url").header()).doesNotEndWith("*");
     }
 
     @Test
-    void foodServiceHasTypedIngredientsAndAllergensButNoBrandOriginOrBarcode() {
+    void foodServiceHasTypedIngredientsAndAllergensButNoBrandOrBarcode() {
         List<ImportColumn> cols = columns(PLAIN, "prepared-meals");
 
         assertThat(keys(cols)).contains("attr:ingredients", "attr:allergens", "attr:storage")
-                .doesNotContain("brand", "attr:origin", "gtin", "gtin_exempt", "dangerous_goods");
+                .doesNotContain("brand", "gtin", "gtin_exempt", "dangerous_goods");
         assertThat(column(cols, "attr:ingredients").required()).isTrue();
         assertThat(column(cols, "attr:allergens").required()).isTrue();
         assertThat(column(cols, "label_photo_url").required()).isFalse();
@@ -84,7 +84,7 @@ class ImportListingRulesTest {
         List<ImportColumn> cols = columns(PLAIN, "downloadable-ebooks");
 
         assertThat(keys(cols)).doesNotContain("package_length_in", "package_weight_lb", "quantity", "gtin", "handling_days",
-                "attr:origin", "condition");
+                "condition");
         assertThat(keys(cols)).contains("brand", "description", "price");
     }
 
@@ -104,7 +104,7 @@ class ImportListingRulesTest {
         List<ImportColumn> cols = ImportColumns.forCategories(PLAIN, List.of(category("beans-pantry-sauces"),
                 category("prepared-meals")));
 
-        assertThat(keys(cols)).contains("attr:ingredients", "attr:origin", "brand");
+        assertThat(keys(cols)).contains("attr:ingredients", "brand");
         assertThat(column(cols, "attr:ingredients").required()).isFalse();
         assertThat(column(cols, "attr:net_weight").required()).isTrue();
         assertThat(column(cols, "label_photo_url").required()).isFalse();
@@ -165,7 +165,6 @@ class ImportListingRulesTest {
             case "attr:servings" -> "4";
             case "attr:shelf" -> "12";
             case "attr:shelf:unit" -> "months";
-            case "attr:origin" -> "Nigeria";
             case "package_length_in" -> row == 0 ? "10" : "";
             case "package_width_in" -> row == 0 ? "8" : "";
             case "package_height_in" -> row == 0 ? "4" : "";
@@ -198,10 +197,12 @@ class ImportListingRulesTest {
     }
 
     @Test
-    void aMissingLabelPhotoIsAPlainErrorOnItsColumn() {
-        ValidationResult r = run(PLAIN, "packaged-snacks", k -> k.equals("label_photo_url") ? "" : null, 1);
+    void aMissingLabelPhotoIsAPlainErrorOnItsColumnOnlyWhereTheCategoryRequiresIt() {
+        ValidationResult groceries = run(PLAIN, "packaged-snacks", k -> k.equals("label_photo_url") ? "" : null, 1);
+        assertThat(errors(groceries, 0)).isEmpty();
 
-        assertThat(errors(r, 0)).containsExactly("label_photo_url: Add a photo of the label: the ingredients and nutrition panel");
+        ValidationResult supplements = run(PLAIN, "dietary-supplements", k -> k.equals("label_photo_url") ? "" : null, 1);
+        assertThat(errors(supplements, 0)).contains("label_photo_url: Add a photo of the label: the Drug Facts or Supplement Facts panel");
     }
 
     @Test
@@ -256,7 +257,7 @@ class ImportListingRulesTest {
 
     @Test
     void aCellOfAHiddenQuestionIsIgnoredWithANoteAndNeverBlocks() {
-        ValidationResult r = run(PLAIN, "prepared-meals", k -> k.equals("attr:origin") ? "Nigeria" : null, 1);
+        ValidationResult r = run(PLAIN, "prepared-meals", k -> k.equals("attr:material") ? "Tin" : null, 1);
 
         assertThat(errors(r, 0)).isEmpty();
     }
@@ -267,7 +268,6 @@ class ImportListingRulesTest {
             case "gtin" -> "";
             case "dangerous_goods" -> "No";
             case "attr:model" -> "X1";
-            case "attr:origin" -> "China";
             default -> null;
         }, 1);
 
@@ -308,7 +308,7 @@ class ImportListingRulesTest {
         }, 1);
         assertThat(errors(noReason, 0)).contains("why_not_provided: Say why Material does not apply");
 
-        ValidationResult notAllowed = run(PLAIN, "bedding-linens", k -> k.equals("why_not_provided") ? "Country of origin: unknown" : null, 1);
+        ValidationResult notAllowed = run(PLAIN, "bedding-linens", k -> k.equals("why_not_provided") ? "Brand: unknown" : null, 1);
         assertThat(warnings(notAllowed, 0)).anyMatch(w -> w.contains("cannot be left out"));
     }
 
@@ -317,7 +317,6 @@ class ImportListingRulesTest {
         ValidationResult r = run(BOOKS, "printed-books", k -> switch (k) {
             case "gtin" -> "123";
             case "description" -> "";
-            case "attr:origin" -> "Nigeria";
             default -> null;
         }, 1);
 

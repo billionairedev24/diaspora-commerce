@@ -9,7 +9,7 @@ import com.afrotransact.catalog.domain.AttributeKind;
 import com.afrotransact.catalog.domain.AttributeSection;
 
 /**
- * The 31 fields of the listing rules matrix. The id is the stable key in rules.json; the control and the storage tell
+ * The 30 fields of the listing rules matrix. The id is the stable key in rules.json; the control and the storage tell
  * the form, the API and the upload template how to ask for and keep the answer, so the three never disagree.
  */
 public enum RuleField {
@@ -27,7 +27,6 @@ public enum RuleField {
     SHIP_FROM("ship_from", FieldControl.SHIP_FROM, null),
     PACKAGE_SIZE("package_size", FieldControl.PACKAGE, null),
     PACKAGE_WEIGHT("package_weight", FieldControl.PACKAGE, null),
-    COUNTRY_OF_ORIGIN("country_of_origin", FieldControl.TEXT, "origin"),
     DANGEROUS_GOODS("dangerous_goods", FieldControl.YES_NO, null),
     NET_WEIGHT("net_weight", FieldControl.MEASURE, "net_weight"),
     SERVINGS("servings", FieldControl.WHOLE_NUMBER, "servings"),
@@ -55,10 +54,10 @@ public enum RuleField {
             "Contains shellfish", "Contains tree nuts", "Contains peanuts", "Contains wheat", "Contains soy",
             "Contains sesame");
     /**
-     * Detail keys that older product types asked on their own (INCI, temperature, permit text ...). The rules now own
-     * those questions, so these keys are no longer asked and no longer required.
+     * Detail keys that older product types asked on their own (INCI, temperature, permit text ...) and the country of origin
+     * (no longer asked anywhere; stored values stay but are never shown). These keys are no longer asked and no longer required.
      */
-    public static final List<String> SUPERSEDED_KEYS = List.of("inci", "temp", "permit", "safety", "age");
+    public static final List<String> SUPERSEDED_KEYS = List.of("inci", "temp", "permit", "safety", "age", "origin");
 
     private final String id;
     private final FieldControl control;

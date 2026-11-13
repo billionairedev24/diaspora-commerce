@@ -35,10 +35,10 @@ class ClasspathRulesRegistryTest {
     private static final RuleBook BOOK = new ClasspathRulesRegistry().book();
 
     @Test
-    void theMatrixHasSixteenKindsThirtyOneFieldsAndSeventyThreeApprovedCategories() throws IOException {
+    void theMatrixHasSixteenKindsThirtyFieldsAndSeventyThreeApprovedCategories() throws IOException {
         assertThat(BOOK.kinds()).hasSize(16).containsKeys("PKG", "PER", "SFD", "BBY", "BEA", "HLT", "FSH", "JWL", "ELC",
                 "HOM", "KID", "PET", "BOK", "DIG", "GFT", "SRV");
-        assertThat(RuleField.values()).hasSize(31);
+        assertThat(RuleField.values()).hasSize(30);
         assertThat(BOOK.approvedCodes()).hasSize(73);
         assertThat(BOOK.categories()).hasSize(74);
     }

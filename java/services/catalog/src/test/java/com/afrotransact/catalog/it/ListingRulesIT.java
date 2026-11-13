@@ -113,7 +113,7 @@ class ListingRulesIT {
     }
 
     private static Map<String, String> riceAttributes() {
-        return Map.of("brand", "Mama Kano", "origin", "Nigeria", "net_weight", "1 lb", "servings", "8",
+        return Map.of("brand", "Mama Kano", "net_weight", "1 lb", "servings", "8",
                 "shelf", "12 months");
     }
 
@@ -207,7 +207,7 @@ class ListingRulesIT {
                 List.of(new VariantDraft(Map.of(), "RICE-1", null, false, 899, 10)), "USD");
 
         assertThatThrownBy(() -> products.create(empty)).isInstanceOfSatisfying(CatalogRuleViolation.class,
-                ex -> assertThat(ex.fieldErrors()).containsKeys("description", "labelPhoto", "attributes.origin",
+                ex -> assertThat(ex.fieldErrors()).containsKeys("description",
                         "attributes.net_weight", "attributes.servings", "attributes.shelf", "variants[0].gtin",
                         "variants[0].packaging", "attributes.brand"));
     }
@@ -234,7 +234,7 @@ class ListingRulesIT {
         ListingDetails yes = new ListingDetails("Eau de parfum.", ItemCondition.NEW, List.of(), null, null, 2, null)
                 .withRuleAnswers(true, List.of(), Map.of("shelf_life", "No expiry printed"));
         CreateProductCommand cmd = new CreateProductCommand(leafOf("perfumes-fragrances").id(), null,
-                "Oud Eau de Parfum, 50 ml", Map.of("brand", "Ajmal", "origin", "UAE", "net_weight", "50 ml",
+                "Oud Eau de Parfum, 50 ml", Map.of("brand", "Ajmal", "net_weight", "50 ml",
                         "ingredients", "Alcohol, parfum"), List.of(PHOTO, LABEL), "",
                 List.of(new VariantDraft(Map.of(), "OUD-50", gtin(), false, 4500, 4).withPackaging(SMALL)),
                 "USD", null, null, yes, null);
@@ -249,17 +249,17 @@ class ListingRulesIT {
     void theBulkTemplateOfACategoryAndTheUploadFollowTheSameRules() {
         CategoryNode leaf = leafOf("rice-grains");
         String template = new String(imports.template(null, leaf.id(), SpreadsheetFormat.CSV).content(), StandardCharsets.UTF_8);
-        assertThat(template).contains("Label photo URL *").contains("Package length (in) *").doesNotContain("Ingredients");
+        assertThat(template).contains("Label photo URL").doesNotContain("Label photo URL *").contains("Package length (in) *").doesNotContain("Ingredients");
 
         String header = "category,parent_sku,sku,title,brand,description,image_urls,label_photo_url,price,quantity,gtin,"
-                + "variation_theme,option:Net weight,attr:origin,attr:net_weight,attr:net_weight:unit,attr:servings,"
+                + "variation_theme,option:Net weight,attr:net_weight,attr:net_weight:unit,attr:servings,"
                 + "attr:shelf,attr:shelf:unit,package_length_in,package_width_in,package_height_in,package_weight_lb";
         String g1 = gtin();
         String g2 = gtin();
         String first = leaf.path() + ",RICE,RICE-8,\"Ofada Rice, Destoned, Long Grain\",Mama Kano,Long grain rice,"
                 + "https://cdn.example.com/rice.jpg,https://cdn.example.com/label.jpg,8.99,10," + g1 + ","
-                + "Net weight,8 oz,Nigeria,8,oz,4,12,months,8,6,2,0.6";
-        String second = leaf.path() + ",RICE,RICE-16,,,,,,10.99,10," + g2 + ",,1 lb,,,,,,,14,10,6,1.4";
+                + "Net weight,8 oz,8,oz,4,12,months,8,6,2,0.6";
+        String second = leaf.path() + ",RICE,RICE-16,,,,,,10.99,10," + g2 + ",,1 lb,,,,,,14,10,6,1.4";
         byte[] file = (header + "\r\n" + first + "\r\n" + second + "\r\n").getBytes(StandardCharsets.UTF_8);
 
         ProductImport upload = imports.upload("rice.csv", file, ImportMode.CREATE, leaf.productTypeCode(), "Ade Okafor");
@@ -276,18 +276,17 @@ class ListingRulesIT {
     }
 
     @Test
-    void aBulkRowMissingTheLabelPhotoAndPackageGetsPlainErrorsPerColumn() {
-        String header = "sku,title,brand,description,image_urls,price,quantity,gtin,attr:origin,attr:net_weight,"
+    void aBulkRowMissingThePackageGetsAPlainErrorPerColumn() {
+        String header = "sku,title,brand,description,image_urls,price,quantity,gtin,attr:net_weight,"
                 + "attr:net_weight:unit,attr:servings,attr:shelf,attr:shelf:unit,category,label_photo_url,package_length_in";
         String row = "RICE-1,\"Ofada Rice, Destoned, Long Grain\",Mama Kano,Long grain rice,https://cdn.example.com/rice.jpg,"
-                + "8.99,10," + gtin() + ",Nigeria,8,oz,4,12,months," + leafOf("rice-grains").path() + ",,";
+                + "8.99,10," + gtin() + ",8,oz,4,12,months," + leafOf("rice-grains").path() + ",,";
         ProductImport upload = imports.upload("rice.csv", (header + "\r\n" + row + "\r\n").getBytes(StandardCharsets.UTF_8),
                 ImportMode.CREATE, leafOf("rice-grains").productTypeCode(), "Ade Okafor");
 
         assertThat(upload.errorRows()).isEqualTo(1);
         StoredRow bad = imports.rows(upload.id(), null, null, 0, 10).items().getFirst();
         assertThat(bad.messages()).extracting(m -> m.column() + ": " + m.message()).contains(
-                "label_photo_url: Add a photo of the label: the ingredients and nutrition panel",
                 "package_length_in: Add the package length, width, height and weight of the box as shipped");
     }
 

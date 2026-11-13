@@ -43,40 +43,40 @@ class PerKindValidationTest {
     /** kind, a category of that kind, the keys an otherwise valid but empty listing is refused for. */
     static List<Arguments> kinds() {
         return List.of(
-                Arguments.of("PKG", "beans-pantry-sauces", Set.of("description", "labelPhoto", "attributes.brand",
-                        "attributes.origin", "attributes.net_weight", "attributes.servings", "attributes.shelf",
+                Arguments.of("PKG", "beans-pantry-sauces", Set.of("description", "attributes.brand",
+                        "attributes.net_weight", "attributes.servings", "attributes.shelf",
                         "variants[0].gtin", "variants[0].packaging")),
-                Arguments.of("PER", "dairy-eggs", Set.of("description", "labelPhoto", "attributes.brand",
-                        "attributes.origin", "attributes.net_weight", "attributes.shelf", "attributes.storage",
+                Arguments.of("PER", "dairy-eggs", Set.of("description", "attributes.brand",
+                        "attributes.net_weight", "attributes.shelf", "attributes.storage",
                         "variants[0].packaging")),
                 Arguments.of("SFD", "prepared-meals", Set.of("description", "attributes.net_weight",
                         "attributes.servings", "attributes.shelf", "attributes.storage", "attributes.ingredients",
                         "attributes.allergens", "variants[0].packaging")),
                 Arguments.of("BBY", "baby-bottles", Set.of("description", "labelPhoto", "attributes.brand",
-                        "attributes.origin", "attributes.net_weight", "attributes.servings", "attributes.shelf",
+                        "attributes.net_weight", "attributes.servings", "attributes.shelf",
                         "attributes.age_grade", "variants[0].gtin", "variants[0].packaging")),
                 Arguments.of("BEA", "skincare-cosmetics", Set.of("description", "labelPhoto", "dangerousGoods",
-                        "attributes.brand", "attributes.origin", "attributes.net_weight", "attributes.ingredients",
+                        "attributes.brand", "attributes.net_weight", "attributes.ingredients",
                         "attributes.shelf", "variants[0].gtin", "variants[0].packaging")),
                 Arguments.of("HLT", "dietary-supplements", Set.of("description", "labelPhoto", "dangerousGoods",
-                        "attributes.brand", "attributes.origin", "attributes.net_weight", "attributes.servings",
+                        "attributes.brand", "attributes.net_weight", "attributes.servings",
                         "attributes.shelf", "variants[0].gtin", "variants[0].packaging")),
                 Arguments.of("FSH", "adult-clothing-footwear", Set.of("description", "attributes.brand",
-                        "attributes.origin", "attributes.material", "attributes.age_grade", "variants[0].gtin",
+                        "attributes.material", "attributes.age_grade", "variants[0].gtin",
                         "variants[0].packaging")),
                 Arguments.of("JWL", "jewelry-accessories", Set.of("description", "attributes.brand",
-                        "attributes.origin", "attributes.material", "variants[0].gtin", "variants[0].packaging")),
+                        "attributes.material", "variants[0].gtin", "variants[0].packaging")),
                 Arguments.of("ELC", "phones", Set.of("description", "dangerousGoods", "attributes.brand",
-                        "attributes.origin", "attributes.model", "variants[0].gtin", "variants[0].packaging")),
+                        "attributes.model", "variants[0].gtin", "variants[0].packaging")),
                 Arguments.of("HOM", "bedding-linens", Set.of("description", "dangerousGoods", "attributes.brand",
-                        "attributes.origin", "attributes.material", "attributes.model", "variants[0].gtin",
+                        "attributes.material", "attributes.model", "variants[0].gtin",
                         "variants[0].packaging")),
                 Arguments.of("KID", "toys-games", Set.of("description", "dangerousGoods", "attributes.brand",
-                        "attributes.origin", "attributes.age_grade", "variants[0].gtin", "variants[0].packaging")),
+                        "attributes.age_grade", "variants[0].gtin", "variants[0].packaging")),
                 Arguments.of("PET", "pet-food", Set.of("description", "labelPhoto", "attributes.brand",
-                        "attributes.origin", "attributes.net_weight", "attributes.shelf", "variants[0].gtin",
+                        "attributes.net_weight", "attributes.shelf", "variants[0].gtin",
                         "variants[0].packaging")),
-                Arguments.of("BOK", "printed-books", Set.of("description", "attributes.origin", "variants[0].gtin",
+                Arguments.of("BOK", "printed-books", Set.of("description", "variants[0].gtin",
                         "variants[0].packaging")),
                 Arguments.of("DIG", "downloadable-ebooks", Set.of("description", "attributes.brand")),
                 Arguments.of("GFT", "gift-cards", Set.of("description", "attributes.brand")),
@@ -181,8 +181,22 @@ class PerKindValidationTest {
     }
 
     @Test
+    void groceriesDoNotRequireALabelPhotoButHealthBeautyBabyFeedingAndPetFoodStill() {
+        for (String groceries : List.of("packaged-snacks", "dairy-eggs", "beans-pantry-sauces")) {
+            CategoryRules rules = RulesFixtures.book().forCategory(groceries).orElseThrow();
+            assertThat(rules.status(RuleField.LABEL_PHOTO)).as(groceries).isEqualTo(FieldStatus.OPTIONAL);
+            ProductDraft noLabel = complete(rules);
+            assertThat(errors(rules, noLabel)).as(groceries).isEmpty();
+        }
+        for (String regulated : List.of("dietary-supplements", "skincare-cosmetics", "baby-bottles", "pet-food")) {
+            CategoryRules rules = RulesFixtures.book().forCategory(regulated).orElseThrow();
+            assertThat(rules.status(RuleField.LABEL_PHOTO).expectsAnswer()).as(regulated).isTrue();
+        }
+    }
+
+    @Test
     void theLabelPhotoIsATypedSlotThatTheProductPicturesDoNotFill() {
-        CategoryRules rules = RulesFixtures.book().forCategory("packaged-snacks").orElseThrow();
+        CategoryRules rules = RulesFixtures.book().forCategory("dietary-supplements").orElseThrow();
         ProductDraft draft = complete(rules);
         ProductDraft onlyPictures = new ProductDraft(draft.productType(), draft.title(), draft.attributes(),
                 List.of(IMAGE, IMAGE), draft.variationTheme(), draft.variants(), draft.details());
@@ -192,7 +206,7 @@ class PerKindValidationTest {
 
     @Test
     void aLabelPhotoAloneIsNotAProductPicture() {
-        CategoryRules rules = RulesFixtures.book().forCategory("packaged-snacks").orElseThrow();
+        CategoryRules rules = RulesFixtures.book().forCategory("dietary-supplements").orElseThrow();
         ProductDraft draft = complete(rules);
         ProductDraft onlyLabel = new ProductDraft(draft.productType(), draft.title(), draft.attributes(),
                 List.of(LABEL), draft.variationTheme(), draft.variants(), draft.details());
@@ -259,7 +273,6 @@ class PerKindValidationTest {
             case SERVINGS -> "4";
             case STORAGE -> "Room temperature";
             case ALLERGENS -> "None";
-            case COUNTRY_OF_ORIGIN -> "Nigeria";
             default -> "Sample";
         };
     }

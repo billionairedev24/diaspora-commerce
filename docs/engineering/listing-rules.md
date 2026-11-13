@@ -62,7 +62,7 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
 
 ### D10. What replaces typed ingredients and allergens for groceries?
 
-- **Decision:** Packaged groceries: no typed ingredients. A required photo of the ingredients and nutrition panel, plus an optional "contains" tick list. Food service: typed ingredients and allergens required. Beauty: typed ingredient list required. Supplements: Supplement Facts photo.
+- **Decision:** Packaged groceries: no typed ingredients. An optional photo of the ingredients and nutrition panel (required for baby feeding, beauty, health and pet food), plus an optional "contains" tick list. Food service: typed ingredients and allergens required. Beauty: typed ingredient list required. Supplements: Supplement Facts photo.
 - **Amazon standard:** Amazon expects the label to show ingredients and allergens on the product images for food. Public guides also list ingredients as an attribute.
 - **Why:** Matches your instruction that typing ingredients for every grocery is excessive, while keeping the label in front of shoppers. Counsel to confirm the labelling wording.
 
@@ -74,9 +74,8 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
 
 ### D12. Is country of origin required?
 
-- **Decision:** Required for every physical product, hidden for food service.
-- **Amazon standard:** Public guides list it among attributes, and an incomplete entry can stop a listing publishing.
-- **Why:** Customs labels and shopper trust. Cheap to answer.
+- **Decision (changed by the owner, 2026-11):** Country of origin is not asked on products at all. It is not used for anything on the product, so the field, its rule and the product page "Origin" row are removed. Values already stored on old listings stay in the database but are never read, shown or asked (`origin` is a superseded detail key). Customs data for international parcels is a separate concern in carrier-gateway and is not touched here.
+- **Why:** An answer nothing reads is effort for sellers with no benefit.
 
 ### D13. Do we ask the dangerous goods question?
 
@@ -96,7 +95,7 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
   longest side as Amazon does (the old rule asked for both edges): at least **1000 px on the longest side** (2000 px recommended) and
   500 px on the shortest, a **pure white background**, and the product filling at least **75%** of the frame (a warning from 75% to
   85%). Other images warn under 1000 px and are rejected under 500 px. At least one image is required; the "7 extra photos" are a
-  recommendation shown as a quality meter, never required. A label photo is added for food, supplements and pet food. WebP and the
+  recommendation shown as a quality meter, never required. A label photo is optional for groceries and food service, and required for baby feeding, beauty, health and pet food. WebP and the
   8 MB cap stay. Apparel main images on a model are not allowed by default (a setting). Every threshold is media-service
   configuration (`images.*`), staff can change the main ones at run time, and a "warn only" switch turns the appearance rejects
   (not white, fill, border) into warnings per environment.
@@ -190,7 +189,7 @@ Kinds: `PKG` Packaged food and drink, `PER` Perishable food, `SFD` Food service 
 | Description | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R |
 | Search keywords | o | o | o | o | o | o | o | o | o | o | o | o | o | o | o | o |
 | At least one image | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R |
-| Label photo | R | R* | o | R | R | R | - | - | - | - | - | R | - | - | - | - |
+| Label photo | o | o | o | R | R | R | - | - | - | - | - | R | - | - | - | - |
 | **Offer** | | | | | | | | | | | | | | | | |
 | Condition | - | - | - | - | - | - | - | - | o | o | R* | - | o | - | - | - |
 | Price | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R |
@@ -200,7 +199,6 @@ Kinds: `PKG` Packaged food and drink, `PER` Perishable food, `SFD` Food service 
 | **Shipping and compliance basics** | | | | | | | | | | | | | | | | |
 | Package length, width, height | R | R | R | R | R | R | R | R | R | R | R | R | R | - | - | - |
 | Package weight | R | R | R | R | R | R | R | R | R | R | R | R | R | - | - | - |
-| Country of origin | R | R | - | R | R | R | R | R | R | R | R | R | R | - | - | - |
 | Dangerous goods question | - | - | - | - | R | R | - | - | R | R | R | - | - | - | - | - |
 | **Product facts** | | | | | | | | | | | | | | | | |
 | Net weight or volume | R | R | R | R | R | R | - | - | - | - | - | R | - | - | - | - |
@@ -342,7 +340,7 @@ Clarifications this implementation made:
   first variant's package for readers that only know the listing. The event payload carries `packaging` per variant (falling back
   to the listing package for listings not edited yet) and `dangerousGoods`.
 - Existing listings are not changed by the migration. They are checked against the rules when they are next edited, so an old
-  listing without a label photo or country of origin must get them before it can be saved again. System updates that go through
+  listing in a category that requires a label photo must get one before it can be saved again. System updates that go through
   the same writer (attaching library images) report such a listing as skipped with the reason.
 - The label photo is an image with `role: LABEL`, kept last in `images` so the first picture stays the main image.
 - Description is required for every kind (it was optional before).

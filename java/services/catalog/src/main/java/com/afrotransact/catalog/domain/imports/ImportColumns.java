@@ -439,8 +439,9 @@ public final class ImportColumns {
                 + "charts.", false, ColumnKind.TEXT, List.of(), "", true));
         cols.add(new ImportColumn(FIT_NOTE, "Size fit", "How the sizes fit: Runs small, True to size or Runs large.", false,
                 ColumnKind.ENUM, FIT_LABELS, "", true));
-        cols.add(new ImportColumn(LABEL_PHOTO, "Label photo URL", "Food, health, beauty and pet food: a photo of the "
-                + "label (ingredients and nutrition panel, Supplement Facts, Drug Facts). Required in those categories.",
+        cols.add(new ImportColumn(LABEL_PHOTO, "Label photo URL", "A photo of the label (ingredients and nutrition "
+                + "panel, Supplement Facts, Drug Facts). Optional for groceries; required for health, beauty, baby feeding "
+                + "and pet food.",
                 false, ColumnKind.TEXT, List.of(), "", true));
         cols.add(new ImportColumn(DANGEROUS, "Dangerous goods", "Beauty, health, electronics, candles, cleaners and "
                 + "toys with batteries: Yes for an aerosol, flammable, battery, candle or cleaner. Required there.", false,

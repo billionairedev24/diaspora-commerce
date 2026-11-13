@@ -84,17 +84,6 @@
      "units": [],
      "section": "FOOD",
      "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
-     "units": [],
-     "section": "DETAILS",
-     "applies": true
     }
    ],
    "themes": [
@@ -332,17 +321,6 @@
      "kind": "ENUM",
      "units": [],
      "section": "FOOD",
-     "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
-     "units": [],
-     "section": "DETAILS",
      "applies": true
     }
    ],
@@ -589,17 +567,6 @@
     {
      "key": "care",
      "label": "Care",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
-     "units": [],
-     "section": "DETAILS",
-     "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
      "options": [],
      "required": false,
      "multiline": false,
@@ -1399,17 +1366,6 @@
      "units": [],
      "section": "DETAILS",
      "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
-     "units": [],
-     "section": "DETAILS",
-     "applies": true
     }
    ],
    "themes": [
@@ -1541,17 +1497,6 @@
     {
      "key": "care",
      "label": "Care",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
-     "units": [],
-     "section": "DETAILS",
-     "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
      "options": [],
      "required": false,
      "multiline": false,
@@ -1712,17 +1657,6 @@
      "units": [],
      "section": "DETAILS",
      "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
-     "units": [],
-     "section": "DETAILS",
-     "applies": true
     }
    ],
    "themes": [
@@ -1821,17 +1755,6 @@
     {
      "key": "material",
      "label": "Upper material",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
-     "units": [],
-     "section": "DETAILS",
-     "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
      "options": [],
      "required": false,
      "multiline": false,
@@ -2094,17 +2017,6 @@
      "required": false,
      "multiline": false,
      "kind": "ENUM",
-     "units": [],
-     "section": "DETAILS",
-     "applies": true
-    },
-    {
-     "key": "origin",
-     "label": "Made in",
-     "options": [],
-     "required": false,
-     "multiline": false,
-     "kind": "TEXT",
      "units": [],
      "section": "DETAILS",
      "applies": true

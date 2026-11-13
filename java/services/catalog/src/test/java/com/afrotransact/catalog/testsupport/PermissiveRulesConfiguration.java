@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Primary;
 
 /**
  * Integration tests that are not about the listing rules run with every question optional, so their fixtures need not
- * carry a label photo, a package and a country of origin. {@code ListingRulesIT} runs with the real matrix.
+ * carry a label photo and a package. {@code ListingRulesIT} runs with the real matrix.
  */
 @TestConfiguration
 public class PermissiveRulesConfiguration {
