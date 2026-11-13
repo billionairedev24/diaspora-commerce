@@ -1656,7 +1656,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Choosing ZIP, signed-in, locale and date changes the result and is read-only
 - A simulate catalogue switch replays the 0, 10, 100 and 10000 fixtures
 - The endpoint is documented in contracts/openapi/gateway-bff.yaml and refuses non-staff callers
-- The screen passes axe checks","E25","","High","8","home staff-console spike","staff-console","To Do"
+- The screen passes axe checks","E25","","High","8","home staff-console spike","staff-console","Done"
 "S419","Story","Departments from the live taxonomy: nav, tiles, footer, tile-rule picker","Replace DEPARTMENTS_LIST, the Footer community list and tileDepartments with GET /v1/site/departments (catalog top-level departments with eligible counts and localised labels). The bar shows the largest by count plus an All departments menu; departments with nothing eligible are not linked; Services appears whenever any provider exists in the market.","- No literal department list remains in the storefront or gateway (grep test)
 - Every linked department returns at least one eligible product in an e2e with a thin catalogue
 - Electronics, Baby and Kids and Pets appear when they have products and disappear when they have none
@@ -1693,22 +1693,22 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S426","Story","Localise home module copy by keys and parameters","Gateway sends titleKey and params for module copy instead of English strings; storefront resolves in en, fr, es, ar and yo; staff-authored copy is a locale map with English fallback; department and community labels by key.","- No hard-coded English in home response fields (test over every module type)
 - All module keys exist in the five locale catalogs, drafts marked needsReview
 - Arabic home renders right-to-left with logical properties in a visual test
-- A missing translation falls back to English, never to a raw key","E31","","High","5","home i18n spike","legal","In Progress"
+- A missing translation falls back to English, never to a raw key","E31","","High","5","home i18n spike","legal","Done"
 "S427","Story","Home module analytics, conversion and eligibility metrics","Events home_module_impression, home_module_click, add to cart and module-level order attribution (hm=<module>:<position>, 24 h last click), consent-gated aggregate counters, plus gateway eligibility and compose metrics and an alert when fewer than 3 modules are shown.","- Impression fires once per view at 50 percent visible for 500 ms in a browser test
 - Clicks carry module key, position and variant and no shopper identity
 - An order after a module click is attributed to that module within 24 hours in an integration test
 - Prometheus exposes home_module_eligibility and home_compose_seconds and the alert rule exists
-- Nothing is sent without analytics consent","E28","","High","5","home analytics spike","observability","To Do"
+- Nothing is sent without analytics consent","E28","","High","5","home analytics spike","observability","In Progress"
 "S428","Story","Home caching split, performance budget and A/B variants","Cache the shared composition as data (60 s fresh, 300 s stale) keyed by market, region, locale and variant; HTML stays uncached; visitor islands separate; enforce LCP and JS budgets in CI; assign variants at the Worker.","- Two visitors in different ZIPs of one state get the same shared entry and no personal field (contract test)
 - Home route JS is at most 90 KB gzip beyond the shell and CI fails above it
 - Lab LCP at most 2.5 s and CLS at most 0.05 on the 100 and 10000 fixtures
 - The variant cookie is part of the cache key and an experiment can change one module's weight
-- Invalidation on catalog and content events shows a new module within 60 s","E23","","High","8","home performance cache spike","storefront-web","To Do"
+- Invalidation on catalog and content events shows a new module within 60 s","E23","","High","8","home performance cache spike","storefront-web","In Progress"
 "S429","Story","Home fixture e2e: 0, 10, 100, 10000 products","Playwright and contract tests that seed catalogues of 0, 10, 100 and 10000 eligible products and assert the page has no blank module, no broken image, no dead link and the documented modules.","- 0 products renders hero or brand hero, sell and Plus bands and no tile or rail
 - 10 products renders department tiles and no deals, communities or top sellers
 - Every link on the home returns 200 with at least one product or a valid services page, for each fixture
 - No image on the page is a striped placeholder, icon or emoji
-- axe reports no serious violations on the four fixtures","E33","","High","5","home e2e spike","quality","To Do"
+- axe reports no serious violations on the four fixtures","E33","","High","5","home e2e spike","quality","In Progress"
 "S430","Story","Schedule and preview as-of date for every home module","Extend the hero schedule to all staff-curated modules (starts, ends) and let Home preview evaluate at a future date and ZIP, layering staff pins over automatic modules.","- Any module placement accepts starts and ends and is evaluated per request
 - Preview as-of date shows exactly what goes live at that time
 - Pinned placements win ties over automatic modules and the preview says so

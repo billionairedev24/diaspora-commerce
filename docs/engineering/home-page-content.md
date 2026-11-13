@@ -3,6 +3,9 @@
 The storefront home page is assembled by the gateway-bff (`GET /v1/home`, `SiteService.Home`). Staff set the content in
 the staff console (Marketing > Placements & ads); the gateway turns it into products. Clients hold no home content.
 
+With `home.dynamic` on, the page is built from what exists (module eligibility, variety per visit, live departments and communities):
+see [dynamic-home.md](dynamic-home.md). This page describes the content placements those modules start from.
+
 | Section | Source | Product rules |
 |---|---|---|
 | Announcement bar | content placements (`announcement_bar`) | none (fixed copy) |

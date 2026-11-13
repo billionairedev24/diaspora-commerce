@@ -1,6 +1,6 @@
 # Dynamic home: what shoppers see, and how it is decided
 
-Status: backend built (S415 to S426, S430; see section 9 for what is done and what is not). Design background:
+Status: backend built (S415 to S426, S430; see section 9 for what is done and what is not); storefront and staff console built (Part 3). Design background:
 [dynamic-home-spike.md](dynamic-home-spike.md). Related: [home-page-content.md](home-page-content.md), [seo.md](seo.md),
 [search-providers.md](search-providers.md).
 
@@ -212,3 +212,142 @@ module), S425 (server-side memory, guest local only, wishlist hook), S426 (keys 
 Not built or not verified here: S415 on real Meilisearch and Elasticsearch (the integration test needs a running instance),
 "Book again", a freshness age (search hits carry no listing date, so `maxAgeDays` is inactive), per-variant weights, and
 everything in the browser (S427 analytics, S428 budgets, S429 e2e).
+
+## Part 3. Frontend and staff console
+
+Built on the contract commit `331ddfb06` (storefront, staff console, `@afrotransact/api-client`). The storefront draws the page from
+the module list the gateway returns; it never decides which modules exist.
+
+### 1. Pieces
+
+| Piece | Where |
+|---|---|
+| Module registry (block type to renderer), localisation of every block, impression and click wrapper | `web/apps/storefront/src/components/home/HomeBlocks.tsx`, `src/lib/home/copy.ts`, `components/home/modules/ModuleFrame.tsx` |
+| New modules: text-only brand hero, department and community tiles, service cards, sell band | `components/home/modules/DynamicModules.tsx`, `HomePhoto.tsx`, `DynamicHome.module.css` |
+| Home page, flat hero, visit memory | `app/(shop)/page.tsx`, `components/home/Hero.tsx`, `HomeVisitMemory.tsx` |
+| Visit cookies and headers | `src/middleware.ts`, `src/lib/home/visit.ts`, `src/lib/api/server.ts`, `@afrotransact/api-client/home-visit` |
+| Department bar, All menu, search departments, footer communities | `components/shell/Header.tsx`, `AllMenu.tsx`, `SearchBox.tsx`, `Footer.tsx`, `lib/nav/labels.ts` |
+| Community routes | `app/(shop)/communities/[[...slug]]/page.tsx` |
+| Sitemap categories | `src/lib/seo/sitemap-source.ts` (`collectCategories`) |
+| Module analytics | `lib/home/moduleEvents.ts` |
+| Staff Home settings, history, community registry, Home preview | `web/apps/staff-console/src/components/marketing/home/*` (two tabs of Marketing) |
+| Contract schemas, client, mock engine | `web/packages/api-client/src/{schemas/home.ts,schemas/site-nav.ts,staff-home.ts,home-visit.ts,mocks/home-dynamic.ts,mocks/staff/home-settings.ts}` |
+
+### 2. How the storefront draws the page
+
+- `GET /v1/home` is read on the server. `version: 2` means the gateway composed it: the storefront then ignores `tiles`, does not
+  add its own pre-order band and draws `hero` (the campaign carousel, if any slide has a real photo) followed by `blocks` in the
+  order sent (DOM order is visual order, nothing is reordered with CSS). `version: 1` (home.dynamic off, an older gateway) keeps the
+  classic composition, so the kill switch needs no deploy.
+- Each `blocks[].type` maps to a renderer in `MODULE_REGISTRY`; an unknown type is ignored, a module with nothing to show renders
+  nothing (no heading, no empty state). Paid modules are labelled and counted by placement exactly as before.
+- Copy: `titleKey`/`subKey`/`ctaKey`/`bodyKey` + `titleParams` are resolved from the storefront catalogues; the five locales hold
+  every key of `contracts/i18n/home-copy.json` verbatim (a test fails on drift). An unknown key falls back to the `title` the gateway
+  also sent, never to the raw key. Department labels: the gateway's label for the locale, else the catalogue `dept.<key>`
+  translation, else the English label.
+- Photos: `isRealPhoto` is the same rule as the gateway (`http(s)` or site-relative, not svg, ico, data: or a placeholder path).
+  A tile, card, hero slide or banner without one is text only, never a striped box, icon or emoji (`HomePhoto`). A photo that fails
+  to load keeps its flat, aspect-ratio box (no layout shift).
+- LCP: exactly one eager, `fetchpriority=high` image: the first hero slide's photo, else the first department tile's photo (the
+  brand hero is text). Every other image is lazy. Image boxes carry an aspect ratio, the brand hero a minimum height, and hidden
+  modules are decided before the first byte, so nothing pops in.
+- Flat design on a white canvas: new modules have no cards, shadows or rounded boxes and use tokens only (a test fails on raw hex,
+  `box-shadow`, `border-radius` or physical left/right properties in the new CSS). The Arabic page is right to left through logical
+  properties.
+- A11y: each module is a `section` named by its `h2`, one `h1` (hero slide or brand hero), tiles are links with text labels and
+  decorative photos, the All menu is a disclosure button (Escape closes and returns focus). The product rail carousel is now a
+  labelled `group` around a real `ul` (axe: no `listitem` outside a list).
+
+### 3. The visit (variety) in the browser
+
+| Cookie | Set by | Life | Holds |
+|---|---|---|---|
+| `at_vid` | middleware (HttpOnly) | browser session | random visitor id |
+| `at_visit` | middleware (HttpOnly) | 30 minutes, slides on every page load | random id of this visit |
+| `at_hs` | the page (`HomeVisitMemory`) | session | `window~keys of this visit~earlier visits` (short keys only) |
+| `at_hm` | the page, on a module click, analytics consent only | 24 hours | `module:position` of the last click |
+| `at_variant` | the Worker (not built here) | | experiment variant |
+
+- The server relays them as `X-Visitor-Id`, `X-Visit-Window`, `X-Home-Seen` (earlier visits only), `X-Home-Variant`. A crawler
+  (known user agent, or the `X-Crawler` request header the middleware sets itself and a client cannot fake) gets no visit at all and
+  therefore the gateway's deterministic page. Page responses for `/` are `Cache-Control: private, no-store`.
+- Refresh and back keep the page: the keys of the CURRENT visit are stored apart (`recordLoad` is idempotent for one window) and are
+  never sent back; only the earlier visits' keys travel in `X-Home-Seen`. A new window moves the previous visit into the earlier
+  ones (3 visits, 120 keys). This is the "replace, not append, within a window" rule of section 4.
+- Privacy: these ids are random, first-party, session-scoped and identify nobody. They are on until a shopper explicitly refuses
+  Functional cookies (no choice yet counts as on); a refusal clears them and gives the default page. `at_hm` and every module event
+  need the Analytics choice.
+- Not built: `X-Home-Exclude` (Recently viewed and cart ATINs). Recently viewed lives in the browser's local storage, so the server
+  render cannot send it; excluding it would need those ATINs in a first-party cookie (an owner decision, below).
+
+### 4. Navigation, footer, routes, sitemap
+
+- The department bar, the All menu, the search box department list and the Services, Deals and Brand entries read
+  `GET /v1/site/navigation` (prefetched in the shop layout, so the first HTML has them). `DEPARTMENTS_LIST` and the footer's
+  community list are gone (a test greps for them); with no data nothing is linked. A department with nothing eligible is not
+  linked; Services shows whenever `services.available`.
+- The footer's "Shop by community" column exists only when `communities` is non-empty.
+- `/communities/<key>` asks `GET /v1/site/communities/<key>`: 404 (the storefront 404 page, never a zero-result page) when hidden
+  or unknown, a permanent redirect to the canonical key for a case variant or alias, else the community's products
+  (`/s?community=<English name>`). `/communities` goes home.
+- Sitemap: `collectCategories` reads `GET /v1/site/sitemap` (the same snapshot as the home and the navigation) and maps each
+  community route to its indexable category page `/s?community=<English name>` through the navigation list; `lastmod` is the
+  gateway's. If the endpoint fails, the `categories` kind fails and the previous version is kept (no fallback to facet pages).
+
+### 5. Analytics (S427)
+
+`ModuleFrame` wraps each organic module: one `impression` per page view when half of the module (or half of the screen for a tall
+one) has been visible for 500 ms, and a `click` per link with `target` (product, department, community, service, other). The body
+is `{event, module, position, variant[, target]}` to `POST /v1/home/events`: no shopper identity. Nothing is sent without the
+Analytics choice. Paid modules keep their per-placement counters.
+
+### 6. Staff console (S418)
+
+Marketing gets two tabs.
+
+- **Home settings.** Mode (environment default, off, shadow, on); every module by its name with its rule in a sentence built from the
+  values on screen, enable switch, order band, weight, items shown and only the thresholds that module understands; page limits
+  (maximum and minimum modules, sponsored cap, seller share, variety pool, remembered loads, penalty, visit window, hysteresis,
+  deal percent, bar size); department names in five languages (English required once another is set, an empty language keeps the
+  built-in translation); the community registry (names in five languages, spellings, editorial photo, shown or hidden now with
+  counts); the version history with "go back to this version". Every save lists what changed in words and needs a reason of 10
+  characters or more (the server accepts 3); a stale save is a plain "saved by someone else" and the screen reloads.
+- **Home preview.** ZIP, signed in or guest, language, "as of" date, live or simulated catalogue (0, 10, 100, 10,000), variety seed
+  ("another visit", replay by pasting a seed, or the default order crawlers get). Left: the page as a numbered list of modules by name
+  with what each shows (product, department, community and service names, never ids). Right: every module with Shown or Hidden,
+  its place, the reason, the sentence, "now N of M needed", the qualifying names, "a staff placement won this slot", and a link to
+  its rule. A season active on the date is named. It only reads.
+- Permissions: viewing needs Marketing at VIEW; the fields are disabled and Save absent below EDIT.
+- Scheduling and seasons are placements in the existing Placements and ads tab (start and end checked on every request, S424,
+  S430): the Home settings page points there, and the preview's date shows what goes live.
+- Tour: the Marketing chapter has two more steps (6 steps); the drift guard count in `tests/e2e/specs/staff-console.tours.spec.ts`
+  is 6.
+
+### 7. Mock BFF and fixtures
+
+`api-client/src/mocks/home-dynamic.ts` is a TypeScript model of the gateway engine with the same contract shapes, used by the
+Playwright mock BFF, vitest and `pnpm dev:mocks`. Pick a catalogue with `MOCK_HOME_CATALOGUE=0|10|100|10000` (dev server) or the
+`at_mock_catalogue` cookie (per browser context, what the e2e specs use); unset keeps the classic mock home (`version: 1`). It is
+not the gateway: the real thresholds, pools and shuffle are in Go (Part 2).
+
+### 8. Tests and how to run them
+
+- `cd web/packages/api-client && pnpm test` (engine fixtures, variety, headers, staff routes, contract alignment).
+- `cd web/apps/storefront && pnpm test` (`home-dynamic.test.tsx` renders the home for 0 / 10 / 100 / 10,000 in five languages,
+  `home-modules.test.tsx`, `home-visit.test.ts`, `community-route.test.tsx`, `home-contract.test.tsx`, `seo-sitemap.test.ts`).
+- `cd web/apps/staff-console && pnpm test` (`home-settings.test.tsx`, `tours.test.ts`).
+- Browser: `cd web/apps/storefront && E2E_SKIP_BUILD=1 pnpm exec playwright test e2e/home-dynamic.spec.ts` after a mocks build
+  (`NEXT_PUBLIC_API_MOCKS=1 next build`). `E2E_CHROME_PATH=/usr/bin/google-chrome` runs it in an installed Chrome when the
+  Playwright browsers are not downloaded. It checks the fixtures, every link, visits (stable on refresh, different across
+  visits, crawler default, no cookie after a refusal), LCP at most 2.5 s, CLS at most 0.05, home-only JavaScript at most 90 KB
+  gzip beyond a content page, axe on the main region, Arabic, and the analytics events in a real browser.
+
+### 9. Frontend status and gaps
+
+- Built and tested here (against the mock engine; the Go engine has its own tests): S418, S419 (storefront literals), S420
+  (routes, footer, nav, sitemap, registry screen), S421 (cards and nav entry), S422 and S426 (rendering and copy), S423 (photo
+  rules on the home), S427 (events), S428 (budgets in the browser test), S429 (fixtures).
+- Not verified: anything against the real gateway and real search (the mock search is not tied to the fixture catalogues, so
+  "every linked department returns a product" is checked as "every link answers and the navigation counts are above zero");
+  the `at_hm` order attribution (the storefront stores it, the gateway does not read it yet); the Worker's `at_variant` cookie
+  and per-variant weights (S428); "Book again" (S421); the CI wiring of the e2e budgets; native review of the machine translations.
