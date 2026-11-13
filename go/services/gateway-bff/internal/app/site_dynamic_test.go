@@ -926,6 +926,38 @@ func TestAsOfPreviewReadsPlacementsAtThatInstant(t *testing.T) {
 	}
 }
 
+func hasBlockOfType(h domain.Home, typ string) bool {
+	for _, b := range h.Blocks {
+		if b.Type == typ {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPlusBandAppearsOnlyWhenStaffPlaceAMembershipPromo(t *testing.T) {
+	for _, n := range []int{0, 10, 100, 10000} {
+		r := newHomeRig(t, n, max(1, n/10), "dev")
+		h := r.compose(t, guest("v", "w"))
+		if hasBlockOfType(h, domain.BlockMembership) || hasModule(h, domain.ModPlus) {
+			t.Errorf("%d products, no staff placement: the Plus band must not appear: %v", n, homeBlockTypes(h))
+		}
+	}
+	promo := func(payload string) []domain.BodyPlacement {
+		return []domain.BodyPlacement{{ID: "plc_plus", Slot: "home_block", Priority: 10, Payload: []byte(payload)}}
+	}
+	r := newHomeRig(t, 100, 10, "dev")
+	r.svc.d.Content = homeContent{pl: domain.Placements{Body: promo(`{"type":"membership-promo","title":"Join AfroTransact Plus","href":"/plus"}`)}}
+	if h := r.compose(t, guest("v", "w")); !hasBlockOfType(h, domain.BlockMembership) {
+		t.Errorf("a staff membership placement shows the band: %v", homeBlockTypes(h))
+	}
+	r = newHomeRig(t, 100, 10, "dev")
+	r.svc.d.Content = homeContent{pl: domain.Placements{Body: promo(`{"type":"membership-promo","title":"","href":""}`)}}
+	if h := r.compose(t, guest("v", "w")); hasBlockOfType(h, domain.BlockMembership) {
+		t.Errorf("an empty placement is not a band: %v", homeBlockTypes(h))
+	}
+}
+
 type asOfContent struct {
 	*fakeHome
 	onAt func(time.Time)

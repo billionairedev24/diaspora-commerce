@@ -377,6 +377,12 @@ not the gateway: the real thresholds, pools and shuffle are in Go (Part 2).
   Playwright browsers are not downloaded. It checks the fixtures, every link, visits (stable on refresh, different across
   visits, crawler default, no cookie after a refusal), LCP at most 2.5 s, CLS at most 0.05, home-only JavaScript at most 90 KB
   gzip beyond a content page, axe on the main region, Arabic, and the analytics events in a real browser.
+- The budgets (LCP, CLS, home JavaScript) are advisory. They live only in that Playwright spec, run on demand; no GitHub Actions
+  workflow runs it (and vitest's `test/**` include does not pick it up), so they cannot block a merge or a deploy. If a CI job is
+  added later it must be `continue-on-error: true` (owner decision: performance budgets never gate CI).
+- The Plus band (AfroTransact Plus) is not an automatic module in practice: it is shown only when staff place a membership
+  promo (a `membership-promo` placement with a title and a link). With no placement it never appears, at 0, 10, 100 or 10,000
+  products (`TestPlusBandAppearsOnlyWhenStaffPlaceAMembershipPromo`).
 
 ### 9. Frontend status and gaps
 
