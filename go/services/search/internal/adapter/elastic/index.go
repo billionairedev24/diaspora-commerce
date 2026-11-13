@@ -79,6 +79,7 @@ type response struct {
 	} `json:"hits"`
 	Aggregations map[string]struct {
 		Buckets []bucket `json:"buckets"`
+		Value   *float64 `json:"value"`
 	} `json:"aggregations"`
 }
 
@@ -103,6 +104,7 @@ func (i *indexImpl) Search(ctx context.Context, q domain.Query, vec []float32) (
 		page.Hits = append(page.Hits, hit)
 	}
 	page.Facets = facetsOf(res)
+	page.DistinctSellers = distinctSellers(res)
 	return page, nil
 }
 
@@ -117,7 +119,7 @@ func (i *indexImpl) hybrid(ctx context.Context, q domain.Query, vec []float32) (
 	if len(lex.Error) > 0 {
 		return domain.Page{}, fmt.Errorf("elasticsearch lexical search: %s", lex.Error)
 	}
-	page := domain.Page{Page: q.Page, Size: q.Size, TookMs: took, Facets: facetsOf(lex), Hits: []domain.Hit{}}
+	page := domain.Page{Page: q.Page, Size: q.Size, TookMs: took, Facets: facetsOf(lex), DistinctSellers: distinctSellers(lex), Hits: []domain.Hit{}}
 	if len(sem.Error) > 0 {
 		// The kNN side failed (for example an index without embeddings yet): serve the lexical ranking.
 		page.Retrieval, page.SemanticSkipped, page.Total = domain.RetrievalLexical, domain.SkipUnavailable, lex.Hits.Total.Value
@@ -193,9 +195,20 @@ func (i *indexImpl) msearch(ctx context.Context, index string, bodies ...object)
 	return out.Responses, out.Took, nil
 }
 
+// distinctSellers is the cardinality of seller_id when the query asked for it (eligibleOnly).
+func distinctSellers(res response) int64 {
+	if a, ok := res.Aggregations["distinct_sellers"]; ok && a.Value != nil {
+		return int64(*a.Value + 0.5)
+	}
+	return 0
+}
+
 func facetsOf(res response) map[string][]domain.FacetBucket {
 	facets := map[string][]domain.FacetBucket{}
 	for name, agg := range res.Aggregations {
+		if name == "distinct_sellers" {
+			continue // a cardinality, not a facet: see distinctSellers
+		}
 		buckets := make([]domain.FacetBucket, 0, len(agg.Buckets))
 		for _, b := range agg.Buckets {
 			if b.DocCount > 0 {

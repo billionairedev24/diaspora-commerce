@@ -50,27 +50,29 @@ const (
 
 // ProductDocument is one product page with its buy-box offer (lowest-landed-price eligible offer).
 type ProductDocument struct {
-	ATIN         string         `json:"atin"`
-	Title        string         `json:"title"`
-	Brand        string         `json:"brand,omitempty"`
-	Description  string         `json:"description,omitempty"`
-	Keywords     []string       `json:"keywords,omitempty"`
-	Department   string         `json:"department"`
-	CategoryPath string         `json:"category_path"`
-	Communities  []string       `json:"communities,omitempty"`
-	SellerID     string         `json:"seller_id"`
-	SellerName   string         `json:"seller_name"`
-	SellerKind   string         `json:"seller_kind"`
-	Fulfilment   string         `json:"fulfilment"`
-	PriceMinor   int64          `json:"price_minor"`
-	Currency     string         `json:"currency"`
-	Rating       float64        `json:"rating"`
-	ReviewCount  int            `json:"review_count"`
-	AvailableQty int            `json:"available_qty"`
-	InStock      bool           `json:"in_stock"`
-	DeliveryDays int            `json:"delivery_days"`
-	ShipsFrom    *GeoPoint      `json:"ships_from,omitempty"`
-	ImageURL     string         `json:"image_url,omitempty"`
+	ATIN         string    `json:"atin"`
+	Title        string    `json:"title"`
+	Brand        string    `json:"brand,omitempty"`
+	Description  string    `json:"description,omitempty"`
+	Keywords     []string  `json:"keywords,omitempty"`
+	Department   string    `json:"department"`
+	CategoryPath string    `json:"category_path"`
+	Communities  []string  `json:"communities,omitempty"`
+	SellerID     string    `json:"seller_id"`
+	SellerName   string    `json:"seller_name"`
+	SellerKind   string    `json:"seller_kind"`
+	Fulfilment   string    `json:"fulfilment"`
+	PriceMinor   int64     `json:"price_minor"`
+	Currency     string    `json:"currency"`
+	Rating       float64   `json:"rating"`
+	ReviewCount  int       `json:"review_count"`
+	AvailableQty int       `json:"available_qty"`
+	InStock      bool      `json:"in_stock"`
+	DeliveryDays int       `json:"delivery_days"`
+	ShipsFrom    *GeoPoint `json:"ships_from,omitempty"`
+	ImageURL     string    `json:"image_url,omitempty"`
+	// PhotoOK is PhotoOK(ImageURL): the product has a real photograph (S415). Counts for the home, nav, footer and sitemap use it.
+	PhotoOK      bool           `json:"photo_ok"`
 	OfferCount   int            `json:"offer_count"`
 	VariantATINs []string       `json:"variant_atins,omitempty"`
 	VariantQty   map[string]int `json:"variant_qty,omitempty"`
@@ -88,4 +90,4 @@ type GeoPoint struct {
 
 // LateMappings are the fields added to the mapping after the first release (strict mapping rejects unknown fields), put
 // onto an existing index so it accepts them without a reindex. Documents indexed earlier simply lack them.
-const LateMappings = `{"properties":{"keywords":{"type":"text","analyzer":"product_index","search_analyzer":"product_search"},"rating_version":{"type":"long"}}}`
+const LateMappings = `{"properties":{"keywords":{"type":"text","analyzer":"product_index","search_analyzer":"product_search"},"rating_version":{"type":"long"},"photo_ok":{"type":"boolean"}}}`

@@ -151,6 +151,7 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 		Keywords:     pe.Keywords,
 		Communities:  pe.Communities,
 		ImageURL:     pe.ImageURL,
+		PhotoOK:      searchindex.PhotoOK(pe.ImageURL),
 		Department:   cat.Department,
 		CategoryPath: cat.Path,
 		SellerID:     pe.OwnerOrgID,

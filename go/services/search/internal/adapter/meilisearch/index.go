@@ -110,8 +110,11 @@ func buildFilter(q domain.Query) string {
 	if q.MaxDays > 0 {
 		f = append(f, "delivery_days <= "+strconv.Itoa(q.MaxDays))
 	}
-	if q.InStockOnly {
+	if q.InStockOnly || q.EligibleOnly {
 		f = append(f, "in_stock = true")
+	}
+	if q.EligibleOnly {
+		f = append(f, "photo_ok = true")
 	}
 	if q.WithinMiles > 0 {
 		f = append(f, fmt.Sprintf("_geoRadius(%s, %s, %d)", strconv.FormatFloat(q.NearLat, 'f', -1, 64),
@@ -151,11 +154,24 @@ var termFacets = []struct{ name, attr string }{
 	{"department", "department"}, {"communities", "communities"}, {"fulfilment", "fulfilment"}, {"seller_kind", "seller_kind"},
 }
 
+// facetNames are the facet attributes one query asks for; eligible-only counts add seller_id so the distinct sellers
+// can be counted (Meilisearch has no cardinality aggregation; up to maxValuesPerFacet sellers are counted exactly).
+func facetNames(q domain.Query) []string {
+	names := []string{"department", "communities", "fulfilment", "seller_kind"}
+	if q.EligibleOnly {
+		names = append(names, "seller_id")
+	}
+	return names
+}
+
+// distinctSellers counts the seller_id facet values (only requested with eligibleOnly).
+func distinctSellers(r searchResult) int64 { return int64(len(r.FacetDistribution["seller_id"])) }
+
 // lexical is the text query for one page (1-based) of per results; page/hitsPerPage make Meilisearch count exactly.
 func (i *indexImpl) lexical(q domain.Query, page, per int) object {
 	body := object{"indexUid": searchindex.MeiliIndexUID(q.Market), "q": q.Text, "filter": buildFilter(q), "page": page, "hitsPerPage": per,
 		"matchingStrategy": "all", "showRankingScore": true, "attributesToRetrieve": retrieve,
-		"facets": []string{"department", "communities", "fulfilment", "seller_kind"}}
+		"facets": facetNames(q)}
 	if s := sortOf(q.Sort); s != nil {
 		body["sort"] = s
 	}
@@ -256,7 +272,7 @@ func (i *indexImpl) plain(ctx context.Context, q domain.Query) (domain.Page, err
 	}
 	lex := res[0]
 	page := domain.Page{Total: lex.total(), Page: q.Page, Size: q.Size, TookMs: lex.ProcessingTimeMs,
-		Hits: make([]domain.Hit, 0, len(lex.Hits)), Retrieval: domain.RetrievalLexical, Facets: facetsOf(lex, res[1:])}
+		Hits: make([]domain.Hit, 0, len(lex.Hits)), Retrieval: domain.RetrievalLexical, Facets: facetsOf(lex, res[1:]), DistinctSellers: distinctSellers(lex)}
 	for _, h := range lex.Hits {
 		page.Hits = append(page.Hits, h.toHit())
 	}
@@ -289,7 +305,7 @@ func (i *indexImpl) hybrid(ctx context.Context, q domain.Query, vec []float32) (
 			semanticOnly++
 		}
 	}
-	page := domain.Page{Page: q.Page, Size: q.Size, TookMs: lex.ProcessingTimeMs, Facets: facetsOf(lex, res[2:]), Hits: []domain.Hit{},
+	page := domain.Page{Page: q.Page, Size: q.Size, TookMs: lex.ProcessingTimeMs, Facets: facetsOf(lex, res[2:]), DistinctSellers: distinctSellers(lex), Hits: []domain.Hit{},
 		Retrieval: domain.RetrievalHybrid, Total: lex.total() + int64(semanticOnly)}
 	from := min(q.Page*q.Size, len(fused))
 	for _, f := range fused[from:min(from+q.Size, len(fused))] {

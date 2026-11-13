@@ -32,12 +32,15 @@ type Query struct {
 	MaxPrice    int64
 	MaxDays     int // delivery speed filter, e.g. 1 = tomorrow
 	InStockOnly bool
-	NearLat     float64
-	NearLon     float64
-	WithinMiles int
-	Sort        Sort
-	Page        int
-	Size        int
+	// EligibleOnly restricts hits and facet counts to what a shopper may be shown: live, in stock and with a real photo
+	// (photo_ok). It also asks for DistinctSellers. Used by the home, nav, footer and sitemap counts (S415).
+	EligibleOnly bool
+	NearLat      float64
+	NearLon      float64
+	WithinMiles  int
+	Sort         Sort
+	Page         int
+	Size         int
 	// Ads asks for sponsored products at the configured slots (results pages only; rails and Lola leave it off).
 	Ads bool
 	// Track records the search in analytics (search.query.performed); rails and Lola send track=false.
@@ -132,12 +135,14 @@ type FacetBucket struct {
 
 // Page is a page of results with facets for the filter sidebar.
 type Page struct {
-	Hits     []Hit                    `json:"hits"`
-	Total    int64                    `json:"total"`
-	Page     int                      `json:"page"`
-	Size     int                      `json:"size"`
-	Facets   map[string][]FacetBucket `json:"facets"`
-	Semantic bool                     `json:"semantic"`
+	Hits   []Hit                    `json:"hits"`
+	Total  int64                    `json:"total"`
+	Page   int                      `json:"page"`
+	Size   int                      `json:"size"`
+	Facets map[string][]FacetBucket `json:"facets"`
+	// DistinctSellers is the number of distinct sellers among the matching products (only with EligibleOnly).
+	DistinctSellers int64 `json:"distinctSellers,omitempty"`
+	Semantic        bool  `json:"semantic"`
 	// Retrieval is HYBRID (BM25 + kNN fused by reciprocal rank) or LEXICAL; SemanticSkipped says why semantic
 	// retrieval was not used (SHORT_QUERY, SORTED, NOT_CONFIGURED, DEEP_PAGE, EMBEDDER_UNAVAILABLE, EMBEDDER_TIMEOUT).
 	Retrieval       Retrieval `json:"retrieval"`

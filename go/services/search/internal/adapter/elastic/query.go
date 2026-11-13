@@ -115,7 +115,7 @@ func (r Ranking) buildSearch(q domain.Query) object {
 		"size":             q.Size,
 		"track_total_hits": true,
 		"track_scores":     true,
-		"aggs":             facets(),
+		"aggs":             facets(q),
 		"_source":          sourceFields,
 	}
 	if s := sortClause(q.Sort); s != nil {
@@ -200,8 +200,11 @@ func buildFilters(q domain.Query) []any {
 	if q.MaxDays > 0 {
 		f = append(f, object{"range": object{"delivery_days": object{"lte": q.MaxDays}}})
 	}
-	if q.InStockOnly {
+	if q.InStockOnly || q.EligibleOnly {
 		f = append(f, object{"term": object{"in_stock": true}})
+	}
+	if q.EligibleOnly {
+		f = append(f, object{"term": object{"photo_ok": true}})
 	}
 	if q.WithinMiles > 0 {
 		f = append(f, object{"geo_distance": object{
@@ -226,8 +229,8 @@ func sortClause(s domain.Sort) []any {
 	}
 }
 
-func facets() object {
-	return object{
+func facets(q domain.Query) object {
+	aggs := object{
 		"department":  object{"terms": object{"field": "department", "size": 20}},
 		"communities": object{"terms": object{"field": "communities", "size": 20}},
 		"fulfilment":  object{"terms": object{"field": "fulfilment", "size": 2}},
@@ -243,6 +246,10 @@ func facets() object {
 			object{"key": "tomorrow", "to": 2}, object{"key": "2-days", "to": 3},
 		}}},
 	}
+	if q.EligibleOnly {
+		aggs["distinct_sellers"] = object{"cardinality": object{"field": "seller_id", "precision_threshold": 1000}}
+	}
+	return aggs
 }
 
 func buildSuggest(prefix string, limit int) object {

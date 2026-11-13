@@ -55,17 +55,18 @@ func (h *handlersImpl) Register(mux *http.ServeMux, wrap func(http.Handler) http
 func (h *handlersImpl) search(w http.ResponseWriter, r *http.Request) {
 	v := r.URL.Query()
 	q := domain.Query{
-		Market:      v.Get("market"),
-		Text:        v.Get("q"),
-		Department:  v.Get("department"),
-		Fulfilment:  strings.ToUpper(v.Get("fulfilment")),
-		SellerKind:  strings.ToUpper(v.Get("sellerKind")),
-		SellerID:    strings.TrimSpace(v.Get("sellerId")),
-		InStockOnly: v.Get("inStock") == "true",
-		Sort:        domain.Sort(v.Get("sort")),
-		Ads:         v.Get("ads") == "true",
-		Track:       v.Get("track") != "false",
-		CustomerID:  customerID(r),
+		Market:       v.Get("market"),
+		Text:         v.Get("q"),
+		Department:   v.Get("department"),
+		Fulfilment:   strings.ToUpper(v.Get("fulfilment")),
+		SellerKind:   strings.ToUpper(v.Get("sellerKind")),
+		SellerID:     strings.TrimSpace(v.Get("sellerId")),
+		InStockOnly:  v.Get("inStock") == "true",
+		EligibleOnly: v.Get("eligibleOnly") == "true",
+		Sort:         domain.Sort(v.Get("sort")),
+		Ads:          v.Get("ads") == "true",
+		Track:        v.Get("track") != "false",
+		CustomerID:   customerID(r),
 	}
 	if c := v.Get("community"); c != "" {
 		q.Communities = strings.Split(c, ",")

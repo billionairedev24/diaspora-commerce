@@ -287,3 +287,48 @@ func contains(s []string, v string) bool {
 	}
 	return false
 }
+
+// S415: eligible-only counts drop out-of-stock, photo-less and non-live products; with 3 photo-less products the
+// eligible count differs from the unfiltered facet by exactly 3 (plus the out-of-stock one here), and distinct sellers
+// count only eligible products.
+func TestEligibleOnlyFacetsExcludePhotolessOutOfStockAndNotLive(t *testing.T) {
+	e := setup(t)
+	var docs []searchindex.ProductDocument
+	for i := range 4 {
+		p := prod(fmt.Sprintf("E%d", i), "Rice "+fmt.Sprint(i))
+		p.ImageURL = "https://cdn.example.com/p/" + fmt.Sprint(i) + ".jpg"
+		p.SellerID = fmt.Sprintf("s%d", i%2)
+		docs = append(docs, p)
+	}
+	for i := range 3 { // photo-less: no image, an svg and a placeholder
+		p := prod(fmt.Sprintf("N%d", i), "Rice none "+fmt.Sprint(i))
+		p.SellerID = "s9"
+		p.ImageURL = []string{"", "https://cdn.example.com/x.svg", "https://cdn.example.com/placeholder.png"}[i]
+		docs = append(docs, p)
+	}
+	oos := prod("O1", "Rice sold out")
+	oos.ImageURL, oos.InStock, oos.AvailableQty = "https://cdn.example.com/o.jpg", false, 0
+	pending := prod("P1", "Rice pending")
+	pending.ImageURL, pending.Status = "https://cdn.example.com/p.jpg", searchindex.StatusPending
+	e.put(t, append(docs, oos, pending)...)
+
+	all := e.search(t, domain.Query{Text: "rice"}, nil)
+	eligible := e.search(t, domain.Query{Text: "rice", EligibleOnly: true}, nil)
+	groceries := func(p domain.Page) int64 {
+		for _, b := range p.Facets["department"] {
+			if b.Value == "Groceries" {
+				return b.Count
+			}
+		}
+		return 0
+	}
+	if groceries(all)-groceries(eligible) != 4 { // 3 photo-less + 1 out of stock; the pending one is never live
+		t.Fatalf("unfiltered %d, eligible %d", groceries(all), groceries(eligible))
+	}
+	if groceries(eligible) != 4 || eligible.Total != 4 {
+		t.Fatalf("eligible department count %d total %d, want 4", groceries(eligible), eligible.Total)
+	}
+	if eligible.DistinctSellers != 2 {
+		t.Fatalf("distinct sellers %d, want 2 (s9 only has photo-less products)", eligible.DistinctSellers)
+	}
+}

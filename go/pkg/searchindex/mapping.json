@@ -87,6 +87,7 @@
       "delivery_days": { "type": "integer" },
       "ships_from":    { "type": "geo_point" },
       "image_url":     { "type": "keyword", "index": false },
+      "photo_ok":      { "type": "boolean" },
       "offer_count":   { "type": "integer" },
       "variant_atins": { "type": "keyword" },
       "variant_qty":   { "type": "flattened" },
