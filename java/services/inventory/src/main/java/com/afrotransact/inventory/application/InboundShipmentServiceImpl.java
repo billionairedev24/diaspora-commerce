@@ -324,7 +324,7 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
     @Override
     @Transactional
     public ReceiptOutcome receive(UUID id, InboundCommands.ReceivePlan c, String idempotencyKey) {
-        access.require(InventoryPermissions.RECEIVE);
+        access.staffRequire(InventoryPermissions.RECEIVE);
         InboundShipment s = inbounds.findById(id).orElseThrow(() -> notFound(id));
         if (c.lines().isEmpty() && c.boxesReceived().isEmpty()) {
             throw new InventoryRuleViolation("inventory.invalid-request", "Count at least one SKU or box",
@@ -370,7 +370,7 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
     @Override
     @Transactional
     public InboundShipment close(UUID id) {
-        Actor actor = access.require(InventoryPermissions.RECEIVE);
+        Actor actor = access.staffRequire(InventoryPermissions.RECEIVE);
         InboundShipment s = inbounds.lockById(id).orElseThrow(() -> notFound(id));
         InboundShipment closed = settleInbound(s, s.close(Instant.now(clock)), actor.subject(), "Inbound closed: "
                 + "units not received");

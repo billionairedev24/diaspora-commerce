@@ -73,7 +73,7 @@ class ReconciliationServiceImpl implements ReconciliationService {
     @Override
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public ReconciliationReport runNow() {
-        access.require(InventoryPermissions.ADJUST);
+        access.staffRequire(InventoryPermissions.ADJUST);
         return reconcile();
     }
 

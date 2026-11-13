@@ -49,6 +49,10 @@ class StorageServiceImpl implements StorageService {
             throw new ForbiddenActionException("auth.missing-permission",
                     "Missing permission " + InventoryPermissions.ADJUST);
         }
+        // Dimensions are stored per SKU, not per owner, and feed every owner's storage metering: staff only.
+        if (!InventoryAccess.isStaff(actor)) {
+            throw new ForbiddenActionException("inventory.staff-only", "SKU dimensions are set by staff");
+        }
         SkuDimensions d = new SkuDimensions(normalise(sku), lengthIn, widthIn, heightIn);
         storage.saveDimensions(d, actor.subject(), Instant.now(clock));
         return storage.findDimensions(d.sku()).orElseThrow();
@@ -65,7 +69,7 @@ class StorageServiceImpl implements StorageService {
     @Override
     @Transactional
     public SnapshotResult snapshotToday() {
-        access.require(InventoryPermissions.ADJUST);
+        access.staffRequire(InventoryPermissions.ADJUST);
         return snapshotTodayAsJob();
     }
 

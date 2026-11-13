@@ -1,0 +1,61 @@
+# Tenant isolation matrix for inventory-service (prod runs without OpenFGA: RBAC permission + signed org claim).
+# Sellers hold inventory:read/adjust/inbound, so a permission alone never proves ownership here.
+# Format: METHOD /path | CLASS | enforcement | testClass
+
+GET /v1/availability | PUBLIC | summed sellable counts per SKU for storefront, no owner data | -
+GET /v1/currencies | PUBLIC | list of accepted cost currencies, no tenant data | -
+GET /v1/nodes | PUBLIC | fulfilment centre list (platform data), inventory:read | -
+GET /v1/nodes/{id}/address | PUBLIC | fulfilment centre ship-to address sellers need to send stock | -
+POST /v1/nodes | STAFF_ONLY | NodeServiceImpl.create: InventoryAccess.staffRequire(adjust) | InventoryTenantIsolationTest
+PUT /v1/nodes/{id}/address | STAFF_ONLY | NodeServiceImpl.updateAddress: staffRequire(adjust) | InventoryTenantIsolationTest
+GET /v1/exchange-rates | STAFF_ONLY | ExchangeRateServiceImpl.list: staffReader | InventoryTenantIsolationTest
+GET /v1/exchange-rates/current | STAFF_ONLY | ExchangeRateServiceImpl.current: staffReader | InventoryTenantIsolationTest
+GET /v1/exchange-rates/history | STAFF_ONLY | ExchangeRateServiceImpl.history: staffReader | InventoryTenantIsolationTest
+PUT /v1/exchange-rates/{currency}/{date} | STAFF_ONLY | ExchangeRateServiceImpl.set: staffRequire(adjust) | InventoryTenantIsolationTest
+GET /v1/lots | ORG_SCOPED_LIST | LotServiceImpl.search: ownerFilter(readScope) overrides the ownerOrg param | InventoryTenantIsolationTest
+GET /v1/lots/markdown | ORG_SCOPED_LIST | LotServiceImpl.markdown: ownerFilter(null) = caller org for sellers | InventoryTenantIsolationTest
+GET /v1/lots/{id} | ORG_OWNED | LotServiceImpl.get: findById then ensureVisible(readScope, lot.ownerOrg) = 404 | InventoryTenantIsolationTest
+GET /v1/lots/{id}/trace | ORG_OWNED | InventoryInsightsServiceImpl.lotTrace: ensureVisible(readScope, lot.ownerOrg) | InventoryTenantIsolationTest
+POST /v1/lots/{id}/quarantine | ORG_OWNED | LotServiceImpl.change: adjust + mayActFor(lot.ownerOrg) else 404 | InventoryTenantIsolationTest
+POST /v1/lots/{id}/release | ORG_OWNED | LotServiceImpl.change: adjust + mayActFor(lot.ownerOrg) else 404 | InventoryTenantIsolationTest
+POST /v1/lots/{id}/write-off | ORG_OWNED | LotServiceImpl.change: adjust + mayActFor(lot.ownerOrg) else 404 | InventoryTenantIsolationTest
+POST /v1/lots/{id}/adjust | ORG_OWNED | LotServiceImpl.change: adjust + mayActFor(lot.ownerOrg) else 404 | InventoryTenantIsolationTest
+POST /v1/lots/{id}/transfer | ORG_OWNED | LotServiceImpl.transfer: adjust + mayActFor(source lot owner) before idempotency claim | InventoryTenantIsolationTest
+POST /v1/lots/expiry-runs | STAFF_ONLY | LotLifecycleServiceImpl.expireNow: staffRequire(adjust) | InventoryTenantIsolationTest
+POST /v1/lots/markdown-runs | STAFF_ONLY | LotLifecycleServiceImpl.markdownNow: staffRequire(adjust) | InventoryTenantIsolationTest
+GET /v1/cycle-counts | ORG_SCOPED_LIST | CycleCountServiceImpl.list: ownerFilter pins sellers to own org | InventoryTenantIsolationTest
+GET /v1/cycle-counts/{id} | ORG_OWNED | CycleCountServiceImpl.get: readScope vs count.ownerOrg = 404 | InventoryTenantIsolationTest
+POST /v1/cycle-counts | ORG_OWNED | CycleCountServiceImpl.start: non-staff owner forced to actor org (body ownerOrg ignored, null never means all) | InventoryTenantIsolationTest
+PUT /v1/cycle-counts/{id}/counts | ORG_OWNED | CycleCountServiceImpl.lock: mayActFor(count.ownerOrg) else 404 | InventoryTenantIsolationTest
+POST /v1/cycle-counts/{id}/post | ORG_OWNED | CycleCountServiceImpl.lock: mayActFor(count.ownerOrg) else 404 | InventoryTenantIsolationTest
+POST /v1/cycle-counts/{id}/cancel | ORG_OWNED | CycleCountServiceImpl.lock: mayActFor(count.ownerOrg) else 404 | InventoryTenantIsolationTest
+GET /v1/positions | ORG_SCOPED_LIST | StockQueryServiceImpl.positions: ownerFilter overrides ownerOrg param; no org = 403 | InventoryTenantIsolationTest
+GET /v1/movements | ORG_SCOPED_LIST | StockQueryServiceImpl.movements: ownerFilter overrides ownerOrg param | InventoryTenantIsolationTest
+GET /v1/fba/inventory | ORG_SCOPED_LIST | InventoryInsightsServiceImpl.fbaInventory: ownerFilter; staff must name an org | InventoryTenantIsolationTest
+GET /v1/overview | ORG_SCOPED_LIST | InventoryInsightsServiceImpl.overview: ownerFilter | InventoryTenantIsolationTest
+GET /v1/inbound/shipments | ORG_SCOPED_LIST | InboundShipmentServiceImpl.list: inboundReadScope overrides ownerOrg param | InventoryTenantIsolationTest
+POST /v1/inbound/shipments | ORG_OWNED | InboundShipmentServiceImpl.create: inboundWriter forces non-staff owner = actor org | InventoryTenantIsolationTest
+GET /v1/inbound/shipments/{id} | ORG_OWNED | InboundShipmentServiceImpl.get: visible(scope, owner) = 404 | InventoryTenantIsolationTest
+PUT /v1/inbound/shipments/{id} | ORG_OWNED | InboundShipmentServiceImpl.writable: owner must equal actor org else 404 | InventoryTenantIsolationTest
+GET /v1/inbound/shipments/{id}/labels | ORG_OWNED | InboundShipmentServiceImpl.labels: visible(scope, owner) = 404 | InventoryTenantIsolationTest
+PUT /v1/inbound/shipments/{id}/tracking | ORG_OWNED | InboundShipmentServiceImpl.track: writable owner check | InventoryTenantIsolationTest
+POST /v1/inbound/shipments/{id}/carrier-label | ORG_OWNED | InboundShipmentServiceImpl.buyLabel: writable owner check | InventoryTenantIsolationTest
+POST /v1/inbound/shipments/{id}/ship | ORG_OWNED | InboundShipmentServiceImpl.ship: writable owner check | InventoryTenantIsolationTest
+POST /v1/inbound/shipments/{id}/receipts | STAFF_ONLY | InboundShipmentServiceImpl.receive: staffRequire(receive) | InventoryTenantIsolationTest
+POST /v1/inbound/shipments/{id}/close | STAFF_ONLY | InboundShipmentServiceImpl.close: staffRequire(receive) | InventoryTenantIsolationTest
+POST /v1/inbound/shipments/{id}/cancel | ORG_OWNED | InboundShipmentServiceImpl.cancel: actorForCancel + mayActFor(owner) | InventoryTenantIsolationTest
+@ReceiptController | STAFF_ONLY | ReceivingServiceImpl: staffRequire(receive) | InventoryTenantIsolationTest
+@ReservationController | SERVICE_ONLY | InventoryAccess.reserver / reservationReader: SERVICE principal (orders-service) or staff, never org members | InventoryTenantIsolationTest
+@ReconciliationController | STAFF_ONLY | runNow staffRequire(adjust); latest refuses any org-scoped actor | InventoryTenantIsolationTest
+@ReturnController | SERVICE_ONLY | InventoryAccess.returner: SERVICE with inventory:returns or staffRequire(adjust) | InventoryTenantIsolationTest
+GET /v1/stock/imports | ORG_SCOPED_LIST | StockImportServiceImpl.list: org(requested) = actor org for sellers | InventoryTenantIsolationTest
+GET /v1/stock/imports/template | PUBLIC | static CSV template, inventory:inbound required, no tenant data | -
+POST /v1/stock/imports | ORG_OWNED | StockImportServiceImpl.upload: inboundWriter forces actor org; retail org refused | InventoryTenantIsolationTest
+GET /v1/stock/imports/{id} | ORG_OWNED | StockImportServiceImpl.owned: owner org vs actor org = 404 | InventoryTenantIsolationTest
+GET /v1/stock/imports/{id}/rows | ORG_OWNED | StockImportServiceImpl.owned | InventoryTenantIsolationTest
+GET /v1/stock/imports/{id}/report | ORG_OWNED | StockImportServiceImpl.owned | InventoryTenantIsolationTest
+POST /v1/stock/imports/{id}/start | ORG_OWNED | StockImportServiceImpl.start: lock filtered by owner for non-staff | InventoryTenantIsolationTest
+GET /v1/storage/usage | ORG_SCOPED_LIST | StorageServiceImpl.scope: ownerFilter for sellers; SERVICE storage.read may name an org | InventoryTenantIsolationTest
+POST /v1/storage/snapshots | STAFF_ONLY | StorageServiceImpl.snapshotToday: staffRequire(adjust) | InventoryTenantIsolationTest
+PUT /v1/skus/{sku}/dimensions | STAFF_ONLY | StorageServiceImpl.setDimensions: staff principal (table is keyed by SKU only, feeds all owners' metering) | InventoryTenantIsolationTest
+GET /v1/skus/{sku}/dimensions | UNVERIFIED | dimensions are keyed by SKU without owner and readable by any inventory:read holder; low sensitivity physical size only, needs an owner column to scope | -

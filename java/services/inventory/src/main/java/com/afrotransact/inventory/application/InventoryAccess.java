@@ -27,6 +27,18 @@ class InventoryAccess {
     }
 
     /**
+     * Platform-wide operations (nodes, exchange rates, receiving, reconciliation, sweeps). Sellers hold
+     * {@code inventory:adjust}, so the permission alone is not enough: the caller must be staff or a service.
+     */
+    Actor staffRequire(String permission) {
+        Actor actor = permissions.require(permission);
+        if (!isStaff(actor)) {
+            throw new ForbiddenActionException("inventory.staff-only", "This operation is for staff only");
+        }
+        return actor;
+    }
+
+    /**
      * Reserve / commit / release are machine-to-machine calls from the orders service: the caller must be a SERVICE
      * principal with {@code inventory:reserve}. Super admins ({@code *}) may call them for the flash-sale drill.
      */
@@ -48,7 +60,7 @@ class InventoryAccess {
         if (actor.type() == PrincipalType.SERVICE && actor.can(InventoryPermissions.RETURNS)) {
             return actor;
         }
-        return permissions.require(InventoryPermissions.ADJUST);
+        return staffRequire(InventoryPermissions.ADJUST);
     }
 
     /** Readers of reservations: the orders service, or staff with {@code inventory:read}. */

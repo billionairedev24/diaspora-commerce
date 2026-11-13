@@ -22,6 +22,7 @@ import com.afrotransact.inventory.port.NodeRepository;
 import com.afrotransact.inventory.port.Page;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.ConflictException;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +63,11 @@ class CycleCountServiceImpl implements CycleCountService {
         String bin = c.binPrefix() == null || c.binPrefix().isBlank() ? null : c.binPrefix().trim()
                 .toUpperCase(Locale.ROOT);
         String owner = c.ownerOrg() == null || c.ownerOrg().isBlank() ? null : c.ownerOrg().trim();
+        if (!InventoryAccess.isStaff(actor)) {
+            // A seller counts its own stock only, whatever the request names (null would mean every organisation).
+            owner = actor.orgId().orElseThrow(() -> new ForbiddenActionException("inventory.no-org",
+                    "Only staff or seller organisations can count stock"));
+        }
         List<Lot> found = lots.findForCount(node.id(), sku, bin, owner, MAX_LINES + 1);
         if (found.isEmpty()) {
             throw new InventoryRuleViolation("inventory.cycle-count-empty", "No stock to count at " + node.id()
@@ -112,7 +118,7 @@ class CycleCountServiceImpl implements CycleCountService {
             throw new InventoryRuleViolation("inventory.invalid-request", "Count at least one line",
                     Map.of("lines", "Required"));
         }
-        CycleCount current = lock(id, expectedVersion);
+        CycleCount current = lock(actor, id, expectedVersion);
         Map<Integer, CycleCount.Entry> entries = new LinkedHashMap<>();
         for (CountedLine l : lines) {
             String note = l.note() == null || l.note().isBlank() ? null : l.note().trim();
@@ -125,7 +131,7 @@ class CycleCountServiceImpl implements CycleCountService {
     @Transactional
     public CycleCount post(UUID id, Long expectedVersion) {
         Actor actor = access.require(InventoryPermissions.ADJUST);
-        CycleCount current = lock(id, expectedVersion);
+        CycleCount current = lock(actor, id, expectedVersion);
         current.requirePostable();
         List<CycleCountLine> posted = new ArrayList<>();
         for (CycleCountLine l : current.lines()) {
@@ -153,12 +159,15 @@ class CycleCountServiceImpl implements CycleCountService {
     @Override
     @Transactional
     public CycleCount cancel(UUID id, Long expectedVersion) {
-        access.require(InventoryPermissions.ADJUST);
-        return counts.update(lock(id, expectedVersion).cancelled(Instant.now(clock)));
+        Actor actor = access.require(InventoryPermissions.ADJUST);
+        return counts.update(lock(actor, id, expectedVersion).cancelled(Instant.now(clock)));
     }
 
-    private CycleCount lock(UUID id, Long expectedVersion) {
+    private CycleCount lock(Actor actor, UUID id, Long expectedVersion) {
         CycleCount c = counts.lockById(id).orElseThrow(() -> notFound(id));
+        if (!access.mayActFor(actor, c.ownerOrg())) {
+            throw notFound(id);
+        }
         if (expectedVersion != null && expectedVersion != c.version()) {
             throw new ConflictException("inventory.version-mismatch", "Cycle count " + c.number()
                     + " changed meanwhile (version " + c.version() + "); reload and retry");

@@ -153,6 +153,7 @@ class LotServiceImpl implements LotService {
     public TransferResult transfer(UUID id, TransferCommand cmd, String idempotencyKey) {
         Actor actor = access.require(InventoryPermissions.ADJUST);
         String why = reason(cmd.reason());
+        requireOwnedLot(actor, lots.findById(id).orElseThrow(() -> notFound(id)));
         Optional<TransferResult> prior = idempotency.claim("transfer", idempotencyKey,
                 Fingerprint.of(List.of(id, cmd)), TransferResult.class);
         if (prior.isPresent()) {
@@ -223,6 +224,7 @@ class LotServiceImpl implements LotService {
                        String eventType) {
         Actor actor = access.require(InventoryPermissions.ADJUST);
         Lot unlocked = lots.findById(id).orElseThrow(() -> notFound(id));
+        requireOwnedLot(actor, unlocked);
         StockChanges changes = writer.begin(actor.subject());
         positions.lockBySkus(List.of(unlocked.sku())).forEach(changes::track);
         Lot lot = lots.lockById(id).orElseThrow(() -> notFound(id));
@@ -235,6 +237,13 @@ class LotServiceImpl implements LotService {
             writer.publishLot(eventType, stored, Math.abs(result.qty()));
         }
         return stored;
+    }
+
+    /** Sellers hold inventory:adjust: they may change only their own organisation's lots (404 otherwise). */
+    private void requireOwnedLot(Actor actor, Lot lot) {
+        if (!access.mayActFor(actor, lot.ownerOrg())) {
+            throw notFound(lot.id());
+        }
     }
 
     private LocalDate today(String nodeId) {

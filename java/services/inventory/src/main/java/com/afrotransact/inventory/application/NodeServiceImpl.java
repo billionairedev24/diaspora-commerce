@@ -34,7 +34,7 @@ class NodeServiceImpl implements NodeService {
     @Override
     @Transactional
     public Node create(Node node) {
-        access.require(InventoryPermissions.ADJUST);
+        access.staffRequire(InventoryPermissions.ADJUST);
         if (nodes.findById(node.id()).isPresent()) {
             throw new ConflictException("inventory.node-exists", "Node " + node.id() + " already exists");
         }
@@ -51,7 +51,7 @@ class NodeServiceImpl implements NodeService {
     @Override
     @Transactional
     public PostalAddress updateAddress(String nodeId, PostalAddress a) {
-        access.require(InventoryPermissions.ADJUST);
+        access.staffRequire(InventoryPermissions.ADJUST);
         String id = code(nodeId);
         Node node = nodes.findById(id).orElseThrow(() -> notFound(nodeId));
         if (a == null || a.line1() == null || a.line1().isBlank() || a.city() == null || a.city().isBlank()) {

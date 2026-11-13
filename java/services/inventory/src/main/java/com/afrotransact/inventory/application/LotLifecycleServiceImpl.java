@@ -82,13 +82,13 @@ class LotLifecycleServiceImpl implements LotLifecycleService {
 
     @Override
     public ExpiryRun expireNow() {
-        access.require(InventoryPermissions.ADJUST);
+        access.staffRequire(InventoryPermissions.ADJUST);
         return expireDueLots();
     }
 
     @Override
     public int markdownNow() {
-        access.require(InventoryPermissions.ADJUST);
+        access.staffRequire(InventoryPermissions.ADJUST);
         return refreshMarkdownFlags();
     }
 

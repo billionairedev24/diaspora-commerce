@@ -80,7 +80,7 @@ class ReceivingServiceImpl implements ReceivingService {
     @Override
     @Transactional
     public ReceiptResult receive(ReceiveCommand raw, String idempotencyKey) {
-        Actor actor = access.require(InventoryPermissions.RECEIVE);
+        Actor actor = access.staffRequire(InventoryPermissions.RECEIVE);
         ReceiveCommand cmd = normalise(raw);
         Optional<ReceiptResult> prior = idempotency.claim(SCOPE, idempotencyKey, Fingerprint.of(cmd),
                 ReceiptResult.class);
@@ -198,7 +198,7 @@ class ReceivingServiceImpl implements ReceivingService {
     @Override
     @Transactional
     public StockPosition expectInbound(InboundCommand raw) {
-        Actor actor = access.require(InventoryPermissions.RECEIVE);
+        Actor actor = access.staffRequire(InventoryPermissions.RECEIVE);
         if (raw.qty() == 0 || raw.sku() == null || raw.sku().isBlank()) {
             throw new InventoryRuleViolation("inventory.invalid-request", "sku and a non-zero qty are required");
         }

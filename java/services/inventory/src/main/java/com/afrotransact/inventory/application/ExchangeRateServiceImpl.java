@@ -68,7 +68,7 @@ class ExchangeRateServiceImpl implements ExchangeRateService {
     @Override
     @Transactional
     public ExchangeRate set(String currency, LocalDate rateDate, BigDecimal rateToUsd, String note, String reason) {
-        Actor actor = access.require(InventoryPermissions.ADJUST);
+        Actor actor = access.staffRequire(InventoryPermissions.ADJUST);
         String code = acceptedCurrency(currency);
         LocalDate day = requireDay(rateDate);
         ExchangeRate.requireUsable(rateToUsd);
