@@ -234,7 +234,7 @@ func decide(d ModuleDecision, key string, r ModuleRule, sig HomeSignals) ModuleD
 		if sig.RecentlyViewed < r.MinProducts {
 			return hide(ReasonNoSignal, "The visitor has not viewed an eligible product yet.")
 		}
-		return show(fmt.Sprintf("%d remembered products.", sig.RecentlyViewed))
+		return show("A slot for the browser's own history: it hides itself when the visitor has none.")
 	case ModServices:
 		d.Have, d.Need = max(sig.ServiceProviders, sig.ServiceProvidersAll), r.MinProducts
 		if sig.ServiceProviders >= r.MinProducts && sig.ServiceProviders > 0 {
@@ -281,7 +281,16 @@ func units(d ModuleDecision, r ModuleRule, all []UnitSignal, reason, noun string
 	d.Have, d.Need = len(ok), r.MinUnits
 	if len(ok) < r.MinUnits {
 		d.Reason = reason
-		d.Detail = fmt.Sprintf("%s needs %d %s with %d eligible products and %d sellers each; %d qualify.", d.Label, r.MinUnits, noun, r.UnitMinProduct, r.UnitMinSellers, len(ok))
+		need := fmt.Sprintf("with %d eligible products", r.UnitMinProduct)
+		if r.UnitMinProduct == 1 {
+			need = "with an eligible product"
+		}
+		if r.UnitMinSellers > 0 {
+			need += fmt.Sprintf(" and %d sellers each", r.UnitMinSellers)
+		} else if r.UnitMinProduct > 1 {
+			need += " each"
+		}
+		d.Detail = fmt.Sprintf("%s needs %d %s %s; %d qualify.", d.Label, r.MinUnits, noun, need, len(ok))
 		return d
 	}
 	d.Shown, d.Reason = true, ReasonShown

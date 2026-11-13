@@ -26,7 +26,9 @@ const homeMemoryMax = 20000
 
 // NewHomeMemory returns an in-process home memory (tests and single-replica local runs; production uses Valkey so every
 // replica sees the same history).
-func NewHomeMemory() port.HomeMemory { return &homeMemoryImpl{m: map[string]homeMemEntry{}, now: time.Now} }
+func NewHomeMemory() port.HomeMemory {
+	return &homeMemoryImpl{m: map[string]homeMemEntry{}, now: time.Now}
+}
 
 func (h *homeMemoryImpl) Load(_ context.Context, key string) (port.HomeVisitState, bool, error) {
 	h.mu.Lock()

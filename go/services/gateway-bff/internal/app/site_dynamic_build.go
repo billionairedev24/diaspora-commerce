@@ -293,6 +293,9 @@ func (c *composer) assemble(ctx context.Context, ordered []domain.OrderedModule,
 		decisions[i].Order = 0
 	}
 	for _, b := range pinned {
+		if b.Module != "" { // the personal rails are registry modules and already have a decision
+			continue
+		}
 		decisions = append(decisions, domain.ModuleDecision{Module: "placement:" + b.ID, Label: "Staff placement: " + firstNonEmpty(b.Title, b.Type), Shown: true,
 			Reason: domain.ReasonShown, Detail: "Placed by staff; it keeps its priority and wins ties over automatic modules.", Pinned: true})
 	}

@@ -266,15 +266,15 @@ func (f *fixtureSource) pool(_ context.Context, spec poolSpec) ([]domain.Product
 		}
 	}
 	n := min(limit, total)
-	tag := "ALL"
+	tag := "AL"
 	if spec.Department != "" {
-		tag = strings.ToUpper(strings.ReplaceAll(domain.DepartmentKey(spec.Department), "-", ""))[:4]
+		tag = strings.ToUpper(strings.ReplaceAll(domain.DepartmentKey(spec.Department), "-", ""))[:2]
 	}
 	out := make([]domain.ProductSummary, 0, n)
 	for i := range n {
 		seller := fmt.Sprintf("seller%d", i%max(1, f.sellers))
 		list := int64(1000)
-		p := domain.ProductSummary{ATIN: fmt.Sprintf("ATFX%s%05d", tag, i), Title: fmt.Sprintf("Sample product %d", i),
+		p := domain.ProductSummary{ATIN: fmt.Sprintf("AT%s%06d", tag, i), Title: fmt.Sprintf("Sample product %d", i),
 			Department: spec.Department, ImageURL: fixturePhoto(i), InStock: true, AvailableQty: 5 + i*3, PriceMinor: 900, Currency: "USD",
 			SellerName: seller, SellerID: seller, SellerKind: domain.SellerKindSeller, Fulfilment: "SELLER", Rating: 3.5 + float64(i%4)*0.4, ReviewCount: 2 + i%9}
 		if i%3 == 0 {

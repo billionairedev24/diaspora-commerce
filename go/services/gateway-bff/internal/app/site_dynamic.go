@@ -342,6 +342,15 @@ func (s *siteServiceImpl) composeV2(ctx context.Context, req HomeRequest, st dom
 	}
 	// Staff placements and the personal rails (continue shopping, recently viewed) come first and claim their products.
 	pinned := decoratePinned(s.composeBodyAs(ctx, personalCaller(req), signedIn, loc, pl, sharedScope, now, c.used))
+	if snap.Total == 0 { // nothing to have viewed: no empty "Recently viewed" slot on a catalogue-less page
+		kept := pinned[:0]
+		for _, b := range pinned {
+			if b.Type != domain.BlockRecentlyViewed {
+				kept = append(kept, b)
+			}
+		}
+		pinned = kept
+	}
 
 	// Signals, and the first eligibility pass (counts only).
 	sig := c.signals(pl, pinned, signedIn)

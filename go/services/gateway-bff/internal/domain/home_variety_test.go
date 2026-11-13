@@ -249,3 +249,48 @@ func TestSeedLabelRoundTrip(t *testing.T) {
 		t.Fatal("garbage rejected")
 	}
 }
+
+// ---- eligibility additions (S416, S421, S422)
+
+func decisionOf(ds []ModuleDecision, key string) ModuleDecision {
+	for _, d := range ds {
+		if d.Module == key {
+			return d
+		}
+	}
+	return ModuleDecision{}
+}
+
+func TestHysteresisKeepsAShownModuleUntilTwoBelowItsMinimum(t *testing.T) {
+	eng := NewHomeEligibility()
+	rules := DefaultHomeRules() // groceries needs 6
+	sig := catalogOf(100)
+	for have, wantShown := range map[int]bool{6: true, 5: true, 4: true, 3: false} {
+		sig.GroceryProducts = have
+		prev := map[string]bool{ModGroceries: true}
+		got := decisionOf(eng.EvaluateWith(sig, rules, prev, 2), ModGroceries)
+		if got.Shown != wantShown {
+			t.Errorf("shown before, %d products: shown=%v want %v", have, got.Shown, wantShown)
+		}
+	}
+	sig.GroceryProducts = 5
+	if decisionOf(eng.EvaluateWith(sig, rules, nil, 2), ModGroceries).Shown {
+		t.Error("a module that was hidden needs its full minimum to appear")
+	}
+}
+
+func TestServicesShowWhenAnyProviderExistsAndBrandHeroOnlyWithoutACampaign(t *testing.T) {
+	eng := NewHomeEligibility()
+	sig := HomeSignals{ServiceProvidersAll: 3, HeroSlides: 0}
+	ds := eng.Evaluate(sig, DefaultHomeRules())
+	if !decisionOf(ds, ModServices).Shown || !decisionOf(ds, ModBrandHero).Shown || !decisionOf(ds, ModSellBand).Shown {
+		t.Errorf("0 products with providers: services, brand hero and sell band: %+v", shownKeys(ds))
+	}
+	sig.HeroSlides = 2
+	if decisionOf(eng.Evaluate(sig, DefaultHomeRules()), ModBrandHero).Shown {
+		t.Error("a scheduled campaign replaces the plain brand hero")
+	}
+	if decisionOf(eng.Evaluate(HomeSignals{}, DefaultHomeRules()), ModServices).Shown {
+		t.Error("no provider anywhere: no Services module")
+	}
+}

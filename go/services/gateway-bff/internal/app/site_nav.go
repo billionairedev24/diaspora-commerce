@@ -83,7 +83,7 @@ func (s *siteServiceImpl) Navigation(ctx context.Context, locale string) (domain
 	}
 	locale = normaliseLocale(locale, nil)
 	all := s.siteDepartments(snap, st, locale, false)
-	bar := append([]domain.SiteDepartment(nil), all...)
+	bar := append([]domain.SiteDepartment{}, all...)
 	if n := max(st.Caps.NavBarSize, 1); len(bar) > n {
 		bar = bar[:n]
 	}
