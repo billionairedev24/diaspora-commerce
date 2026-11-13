@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -111,7 +112,7 @@ func sendFile(w http.ResponseWriter, f domain.FileDownload) {
 
 func (h *handlersImpl) importTemplate(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f, err := h.s.SellerImports.Template(r.Context(), callerFrom(r.Context()), q.Get("productType"), q.Get("categoryId"), q.Get("format"))
+	f, err := h.s.SellerImports.Template(r.Context(), callerFrom(r.Context()), q.Get("mode"), q.Get("productType"), q.Get("categoryId"), q.Get("format"))
 	if err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
@@ -129,9 +130,9 @@ func (h *handlersImpl) importReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) uploadImport(w http.ResponseWriter, r *http.Request) {
-	tooLarge := domain.NewProblem(http.StatusRequestEntityTooLarge, domain.CodePayloadTooLarge, "File too large",
-		"Upload files of at most 10 MB; split larger catalogs into several files.")
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		tooLarge := domain.NewProblem(http.StatusRequestEntityTooLarge, domain.CodePayloadTooLarge, "File too large",
+			"Upload files of at most 10 MB; split larger catalogs into several files.")
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
 			h.reply(w, r, 0, nil, tooLarge)
@@ -147,13 +148,16 @@ func (h *handlersImpl) uploadImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(io.LimitReader(file, domain.BulkUploadLimits.MaxFileBytes+1))
+	// A price and quantity feed may be 25 MB, every other mode 10 MB (an unknown mode is refused by the service).
+	limit := domain.MaxFileBytesFor(strings.ToUpper(strings.TrimSpace(r.FormValue("mode"))))
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
 		h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"file": "The file could not be read"}))
 		return
 	}
-	if int64(len(data)) > domain.BulkUploadLimits.MaxFileBytes {
-		h.reply(w, r, 0, nil, tooLarge)
+	if int64(len(data)) > limit {
+		h.reply(w, r, 0, nil, domain.NewProblem(http.StatusRequestEntityTooLarge, domain.CodePayloadTooLarge, "File too large",
+			fmt.Sprintf("Upload files of at most %d MB; split larger files into several files.", limit>>20)))
 		return
 	}
 	v, err := h.s.SellerImports.Upload(r.Context(), callerFrom(r.Context()), port.UploadFile{Name: header.Filename, Data: data},

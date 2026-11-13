@@ -294,6 +294,7 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "", "quantity": -1, "reason": "?"}), 422)
 	exerciseSellerFba(t, b)
 	exerciseSellerListing(t, bff, b)
+	exerciseSellerBulkModes(t, bff, b)
 	exerciseSellerSizeCharts(t, bff, b)
 	exerciseSellerProductTax(t, b)
 	exerciseSellerScope(t, b)

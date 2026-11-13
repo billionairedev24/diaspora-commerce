@@ -132,7 +132,7 @@ func run() error {
 		Cache:    cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
 
 		// S307/S308: product edits, form drafts and bulk uploads at catalog; the AI listing writer at ai-gateway.
-		Listing: upstreams.NewSellerListing(catalogClient), SizeCharts: upstreams.NewSizeCharts(catalogClient), ProductTax: upstreams.NewSellerTax(catalogClient),
+		Listing: upstreams.NewSellerListing(catalogClient), StockImports: upstreams.NewSellerStockImport(inventoryClient), SizeCharts: upstreams.NewSizeCharts(catalogClient), ProductTax: upstreams.NewSellerTax(catalogClient),
 		ScopeCatalog: upstreams.NewStaffUpstream(catalogClient), ScopeSeller: upstreams.NewStaffUpstream(client("seller", up.Seller)), Writer: upstreams.NewListingWriter(client("ai-gateway", up.AIGateway)),
 		ListingCache: app.NewListingCache(time.Now),
 	}
@@ -250,6 +250,7 @@ func run() error {
 	services.SellerExports = app.NewSellerExportsService(sellerDeps, exportDeps)
 	// Bulk product uploads (S308): catalog parses and imports; the BFF links reports under the same app path.
 	services.SellerImports = app.NewSellerImportService(sellerDeps, exportDeps.BasePath)
+	services.SellerStockImports = app.NewSellerStockImportService(sellerDeps, exportDeps.BasePath)
 
 	openapi, err := gatewaybff.Files.ReadFile("api/openapi.yaml")
 	if err != nil {

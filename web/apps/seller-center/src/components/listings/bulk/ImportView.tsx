@@ -19,7 +19,7 @@ import { download } from '@/lib/export/table';
 import { dateTime } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-import { cellProblems, importable, phaseOf, previewColumns, progress } from './bulk-model';
+import { cellProblems, heldWhyKey, imageCheckText, importable, modeLabelKey, phaseOf, previewColumns, progress } from './bulk-model';
 
 const PAGE = 200;
 const POLL_MS = 1500;
@@ -41,8 +41,9 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'go
   );
 }
 
-/** One upload (S308): validation summary, the preview table with per-cell errors (errors-only filter), the error report,
-    then the background import with progress; completed imports show what was created, updated or skipped. */
+/** One upload (S308, S393, S394): validation summary, the preview table with per-cell errors (errors-only filter), the error
+    report, then the background import with progress; completed imports show what was created, updated, added as offers, held
+    or skipped. A held row is valid but not for sale yet: it says why in plain words and is never live. */
 export function ImportView({ importId }: { importId: string }) {
   const api = sellerApi();
   const t = useT();
@@ -55,6 +56,8 @@ export function ImportView({ importId }: { importId: string }) {
   const job = useQuery(sellerQueries.importJob(api, orgId, importId, pollWhile(POLL_MS, (d) => d?.status === 'QUEUED' || d?.status === 'RUNNING')));
   const imp = job.data;
   const phase = imp ? phaseOf(imp) : 'review';
+  // The same file sent before: show when, and offer that result (the import below is "run it again").
+  const earlier = useQuery({ ...sellerQueries.importJob(api, orgId, imp?.sameFileAs ?? ''), enabled: Boolean(imp?.sameFileAs) });
   const rowsQuery = useQuery({
     queryKey: [...sellerKeys.importJob(orgId, importId), 'all-rows', errorsOnly ? 'ERROR' : 'ALL', imp?.status ?? '', imp?.processedRows ?? 0],
     queryFn: ({ signal }) => allRows((page) => api.listImportRows(importId, { ...(errorsOnly ? { status: 'ERROR' as const } : {}), page, size: PAGE }, signal)),
@@ -72,7 +75,7 @@ export function ImportView({ importId }: { importId: string }) {
       wasRunning.current = false;
       void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
       void qc.invalidateQueries({ queryKey: sellerKeys.imports(orgId) });
-      toast.show(t('sc.bulk.toast.done', { created: imp.createdProducts, updated: imp.updatedProducts }));
+      toast.show(doneTitle(t, imp));
     }
   }, [imp, phase, qc, orgId, toast, t]);
 
@@ -93,10 +96,14 @@ export function ImportView({ importId }: { importId: string }) {
   const header = useMemo(() => imp?.header ?? [], [imp?.header]);
   const columns = useMemo<ColumnDef<ProductImportRow>[]>(() => {
     const statusLabel = (r: ProductImportRow) => (phase === 'review' || r.outcome === 'PENDING' ? t(`sc.bulk.row.${r.status}`) : t(`sc.bulk.outcome.${r.outcome}`));
-    const tone = (r: ProductImportRow) => (r.outcome === 'CREATED' || r.outcome === 'UPDATED' || (r.outcome === 'PENDING' && r.status === 'VALID') ? 'good' : r.status === 'ERROR' || r.outcome === 'FAILED' ? 'bad' : r.status === 'WARNING' ? 'warn' : 'info');
+    const tone = (r: ProductImportRow) => (r.outcome === 'CREATED' || r.outcome === 'UPDATED' || r.outcome === 'OFFER_CREATED' || (r.outcome === 'PENDING' && r.status === 'VALID') ? 'good' : r.outcome === 'HELD' ? 'warn' : r.status === 'ERROR' || r.outcome === 'FAILED' ? 'bad' : r.status === 'WARNING' ? 'warn' : 'info');
     const fixed: ColumnDef<ProductImportRow>[] = [
       { id: 'rowNumber', accessorFn: (r) => r.rowNumber, header: t('sc.bulk.col.row'), size: 84, meta: { kind: 'number', label: t('sc.bulk.col.row') } },
       { id: 'status', accessorFn: statusLabel, header: t('sc.bulk.col.status'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={tone(row.original)}>{statusLabel(row.original)}</StatusPill> },
+      ...(imp?.mode === 'OFFER' || imp?.mode === 'PRICE_QTY' ? [{
+        id: 'atin', accessorFn: (r: ProductImportRow) => r.atin ?? '', header: t('sc.bulk.col.atin'), size: 130, meta: { kind: 'mono' as const },
+        cell: ({ row }: { row: { original: ProductImportRow } }) => (row.original.atin ? <span className="font-mono text-xs" data-testid="row-atin">{row.original.atin}</span> : <span className="text-xs text-muted">—</span>)
+      } satisfies ColumnDef<ProductImportRow>] : []),
       {
         id: 'images', accessorFn: (r) => r.images.length, header: t('sc.bulk.col.images'), size: 170, enableSorting: false, meta: { label: t('sc.bulk.col.images') },
         cell: ({ row }) => <RowImages images={row.original.images} t={t} />
@@ -110,7 +117,9 @@ export function ImportView({ importId }: { importId: string }) {
                 {m.column ? <strong>{m.column.replace(/\s*\*$/, '')}: </strong> : null}{m.message}
               </li>
             ))}
-            {row.original.outcomeNote ? <li className="text-muted">{row.original.outcomeNote}</li> : null}
+            {row.original.outcome === 'HELD'
+              ? <li className="text-warning" data-testid="held-why">{t(heldWhyKey(row.original.outcomeNote))}</li>
+              : row.original.outcomeNote ? <li className="text-muted">{row.original.outcomeNote}</li> : null}
           </ul>
         ) : <span className="text-xs text-muted">—</span>
       }
@@ -131,7 +140,7 @@ export function ImportView({ importId }: { importId: string }) {
       }
     }));
     return [...fixed, ...cells];
-  }, [header, phase, t]);
+  }, [header, phase, t, imp?.mode]);
 
   if (job.isError) return <ErrorState error={job.error} onRetry={() => void job.refetch()} />;
   if (!imp) return <Spinner label={t('sc.bulk.loading')} />;
@@ -146,7 +155,7 @@ export function ImportView({ importId }: { importId: string }) {
 
   return (
     <>
-      <PageHeader title={imp.fileName} description={t('sc.bulk.importMeta', { reference: imp.reference, mode: imp.mode === 'UPDATE' ? t('sc.bulk.mode.UPDATE') : t('sc.bulk.mode.CREATE'), when: dateTime(imp.createdAt), who: imp.uploadedByName ?? '—' })}
+      <PageHeader title={imp.fileName} description={t('sc.bulk.importMeta', { reference: imp.reference, mode: t(modeLabelKey(imp.mode)), when: dateTime(imp.createdAt), who: imp.uploadedByName ?? '—' })}
         actions={<>
           <Link href="/listings/bulk/history" className="text-sm">{t('sc.bulk.historyLink')}</Link>
           {reportMenu}
@@ -156,7 +165,14 @@ export function ImportView({ importId }: { importId: string }) {
         <Stat label={t('sc.bulk.stat.valid')} value={imp.validRows} tone="good" />
         <Stat label={t('sc.bulk.stat.warnings')} value={imp.warningRows} tone={imp.warningRows ? 'warn' : undefined} />
         <Stat label={t('sc.bulk.stat.errors')} value={imp.errorRows} tone={imp.errorRows ? 'bad' : undefined} />
+        {imp.heldRows ? <Stat label={t('sc.bulk.stat.held')} value={imp.heldRows} tone="warn" /> : null}
       </div>
+      {phase === 'review' && earlier.data ? (
+        <Notice tone="info" title={t('sc.bulk.sameFile.title', { date: dateTime(earlier.data.createdAt) })}
+          action={<Link href={`/listings/bulk/${encodeURIComponent(earlier.data.id)}`} className="text-sm" data-testid="same-file-link">{t('sc.bulk.sameFile.show')}</Link>}>
+          {t('sc.bulk.sameFile.body')}
+        </Notice>
+      ) : null}
       {imp.fileWarnings.map((w) => <Notice key={w} tone="warning" title={t('sc.bulk.fileWarning')}>{w}</Notice>)}
 
       {phase === 'review' ? (
@@ -175,7 +191,7 @@ export function ImportView({ importId }: { importId: string }) {
         ) : (
           <Notice tone="success" title={t('sc.bulk.allValid', { products: imp.productCount })}
             action={editable ? <Button size="sm" loading={start.isPending} onClick={() => start.mutate(false)} data-testid="import-all">{t('sc.bulk.importAll', { count: okRows })}</Button> : undefined}>
-            {imp.mode === 'UPDATE' ? t('sc.bulk.allValidUpdate') : t('sc.bulk.allValidCreate')}
+            {allValidBody(t, imp)}
           </Notice>
         )
       ) : null}
@@ -191,11 +207,18 @@ export function ImportView({ importId }: { importId: string }) {
       ) : null}
 
       {phase === 'done' || phase === 'failed' ? (
-        <Notice tone={phase === 'failed' || imp.failedRows ? 'warning' : 'success'} title={phase === 'failed' ? t('sc.bulk.failed') : t('sc.bulk.done', { created: imp.createdProducts, updated: imp.updatedProducts })}
+        <Notice tone={phase === 'failed' || imp.failedRows || imp.heldRows ? 'warning' : 'success'} title={phase === 'failed' ? t('sc.bulk.failed') : doneTitle(t, imp)}
           action={<Link href="/listings" className="text-sm">{t('sc.bulk.toListings')}</Link>}>
           <span className="inline-flex flex-wrap gap-x-3">
-            <span><CheckCircle size={14} aria-hidden className="text-success" /> {t('sc.bulk.doneCreated', { count: imp.createdProducts })}</span>
-            {imp.updatedProducts ? <span><CheckCircle size={14} aria-hidden className="text-success" /> {t('sc.bulk.doneUpdated', { count: imp.updatedProducts })}</span> : null}
+            {imp.mode === 'OFFER' ? (
+              <span data-testid="done-offers"><CheckCircle size={14} aria-hidden className="text-success" /> {t('sc.bulk.doneOffers', { count: imp.offersCreated ?? 0 })}</span>
+            ) : imp.mode === 'PRICE_QTY' ? (
+              <span><CheckCircle size={14} aria-hidden className="text-success" /> {t('sc.bulk.doneOffersChanged', { count: imp.updatedProducts })}</span>
+            ) : (
+              <span><CheckCircle size={14} aria-hidden className="text-success" /> {t('sc.bulk.doneCreated', { count: imp.createdProducts })}</span>
+            )}
+            {imp.heldRows ? <span data-testid="done-held"><WarningCircle size={14} aria-hidden className="text-warning" /> {t('sc.bulk.doneHeld', { count: imp.heldRows })}</span> : null}
+            {imp.mode !== 'OFFER' && imp.mode !== 'PRICE_QTY' && imp.updatedProducts ? <span><CheckCircle size={14} aria-hidden className="text-success" /> {t('sc.bulk.doneUpdated', { count: imp.updatedProducts })}</span> : null}
             {imp.failedRows ? <span><XCircle size={14} aria-hidden className="text-danger" /> {t('sc.bulk.doneFailed', { count: imp.failedRows })}</span> : null}
             {imp.errorRows ? <span><WarningCircle size={14} aria-hidden className="text-warning" /> {t('sc.bulk.doneSkipped', { count: imp.errorRows })}</span> : null}
           </span>
@@ -233,11 +256,13 @@ function RowImages({ images, t }: { images: readonly ImportRowImage[]; t: Return
   if (!images.length) return <span className="text-xs text-muted">{t('sc.bulk.img.none')}</span>;
   const shown = images.slice(0, 4);
   const problem = images.find((i) => i.state === 'MISSING' || i.state === 'BAD_LINK' || i.state === 'HELD');
+  // The same plain words as the product form's image cards (sc.img.check.<code>, S391), never wording of its own.
+  const finding = problem?.check ? imageCheckText(t, problem.check) : null;
   return (
     <span className="flex flex-col gap-1">
       <span className="flex items-center gap-1">
         {shown.map((i) => (
-          <span key={`${i.slot}-${i.ref}`} title={`${i.slot} · ${i.ref} · ${t(`sc.bulk.img.${i.state}`)}${i.message ? ` · ${i.message}` : ''}`}
+          <span key={`${i.slot}-${i.ref}`} title={`${i.slot} · ${i.ref} · ${t(`sc.bulk.img.${i.state}`)}${i.check ? ` · ${imageCheckText(t, i.check)}` : i.message ? ` · ${i.message}` : ''}`}
             className={cx('flex h-9 w-9 items-center justify-center overflow-hidden rounded-xs border-2 bg-surface-sunken text-muted', IMAGE_TONE[i.state])}>
             {i.url
               ? <img src={i.url} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -246,7 +271,25 @@ function RowImages({ images, t }: { images: readonly ImportRowImage[]; t: Return
         ))}
         {images.length > shown.length ? <span className="text-xs text-muted">+{images.length - shown.length}</span> : null}
       </span>
-      {problem ? <span className="text-2xs text-danger">{t(`sc.bulk.img.${problem.state}`)}: {problem.ref}</span> : null}
+      {problem ? (
+        <span className={cx('text-2xs', problem.check?.level === 'HOLD' ? 'text-warning' : 'text-danger')} data-testid="row-image-problem" data-check={problem.check?.code}>
+          {finding ?? `${t(`sc.bulk.img.${problem.state}`)}: ${problem.ref}`}
+        </span>
+      ) : null}
     </span>
   );
+}
+
+/** The finished import's headline, by mode: products created and updated, offers added and held, or offers updated. */
+function doneTitle(t: ReturnType<typeof useT>, imp: ProductImport): string {
+  if (imp.mode === 'OFFER') return t('sc.bulk.doneOffer', { added: imp.offersCreated ?? 0, held: imp.heldRows ?? 0 });
+  if (imp.mode === 'PRICE_QTY') return t('sc.bulk.donePriceQty', { updated: imp.updatedProducts });
+  return t('sc.bulk.done', { created: imp.createdProducts, updated: imp.updatedProducts });
+}
+
+/** What starting the import does, by mode. */
+function allValidBody(t: ReturnType<typeof useT>, imp: ProductImport): string {
+  if (imp.mode === 'OFFER') return t('sc.bulk.allValidOffer');
+  if (imp.mode === 'PRICE_QTY') return t('sc.bulk.allValidPriceQty');
+  return imp.mode === 'UPDATE' ? t('sc.bulk.allValidUpdate') : t('sc.bulk.allValidCreate');
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"path"
@@ -15,8 +16,12 @@ import (
 // SellerImportService is the bulk product upload (S308): templates, upload and validation, preview rows, the error
 // report, starting the background import and the upload history. catalog-service owns parsing, validation and the
 // import job (Apache POI); the BFF relays with the member's token and shapes the answers.
+//
+// Modes: CREATE and UPDATE (S308), OFFER (sell products already on AfroTransact, S393) and PRICE_QTY (a price and
+// quantity feed, S394). The seller organisation is never taken from the request: catalog and offers read it from the
+// member's token, so a file can only ever touch the signed-in organisation's own listings and offers.
 type SellerImportService interface {
-	Template(ctx context.Context, c *domain.Caller, productType, categoryID, format string) (domain.FileDownload, error)
+	Template(ctx context.Context, c *domain.Caller, mode, productType, categoryID, format string) (domain.FileDownload, error)
 	Upload(ctx context.Context, c *domain.Caller, f port.UploadFile, mode, productType string) (domain.ProductImport, error)
 	List(ctx context.Context, c *domain.Caller, page, size int) (domain.ProductImportPage, error)
 	Get(ctx context.Context, c *domain.Caller, id string) (domain.ProductImport, error)
@@ -66,7 +71,8 @@ func (s *sellerImportImpl) importOf(i port.CatalogImport) domain.ProductImport {
 		ValidOnly: i.ValidOnly, TotalRows: i.TotalRows, ValidRows: i.ValidRows, WarningRows: i.WarningRows, ErrorRows: i.ErrorRows,
 		ProductCount: i.ProductCount, ProcessedRows: i.ProcessedRows, CreatedProducts: i.CreatedProducts, UpdatedProducts: i.UpdatedProducts,
 		FailedRows: i.FailedRows, Header: header, FileWarnings: warnings, UploadedByName: strPtr(i.UploadedByName), CreatedAt: i.CreatedAt,
-		StartedAt: i.StartedAt, FinishedAt: i.FinishedAt,
+		StartedAt: i.StartedAt, FinishedAt: i.FinishedAt, FileSHA256: strPtr(i.FileSHA256), SameFileAs: strPtr(i.SameFileAs),
+		OffersCreated: i.OffersCreated, HeldRows: i.HeldRows,
 		ReportURL: s.basePath + "/v1/seller/imports/" + url.PathEscape(i.ID) + "/report?format=xlsx"}
 }
 
@@ -81,10 +87,14 @@ func checkFormat(format string) (string, error) {
 	return f, nil
 }
 
-func (s *sellerImportImpl) Template(ctx context.Context, c *domain.Caller, productType, categoryID, format string) (domain.FileDownload, error) {
+func (s *sellerImportImpl) Template(ctx context.Context, c *domain.Caller, mode, productType, categoryID, format string) (domain.FileDownload, error) {
 	f, err := checkFormat(format)
 	if err != nil {
 		return domain.FileDownload{}, err
+	}
+	mode = strings.ToUpper(firstNonEmpty(strings.TrimSpace(mode), domain.ImportModeCreate))
+	if !slices.Contains(domain.ImportModes, mode) {
+		return domain.FileDownload{}, domain.ValidationProblem(map[string]string{"mode": importModesHint})
 	}
 	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapBulkUpload); err != nil {
 		return domain.FileDownload{}, err
@@ -93,12 +103,14 @@ func (s *sellerImportImpl) Template(ctx context.Context, c *domain.Caller, produ
 	if err != nil {
 		return domain.FileDownload{}, err
 	}
-	file, err := cl.ImportTemplate(ctx, c.BearerToken, strings.TrimSpace(productType), strings.TrimSpace(categoryID), f)
+	file, err := cl.ImportTemplate(ctx, c.BearerToken, mode, strings.TrimSpace(productType), strings.TrimSpace(categoryID), f)
 	if err != nil {
 		return domain.FileDownload{}, mapErr("catalog", err)
 	}
 	return file, nil
 }
+
+const importModesHint = "CREATE, UPDATE, OFFER or PRICE_QTY"
 
 // uploadTypes are the content types browsers send for spreadsheets (the file name decides the format).
 var uploadTypes = map[string]string{
@@ -110,7 +122,7 @@ func (s *sellerImportImpl) Upload(ctx context.Context, c *domain.Caller, f port.
 	errs := map[string]string{}
 	mode = strings.ToUpper(firstNonEmpty(mode, "CREATE"))
 	if !slices.Contains(domain.ImportModes, mode) {
-		errs["mode"] = "CREATE or UPDATE"
+		errs["mode"] = importModesHint
 	}
 	ext := strings.ToLower(path.Ext(f.Name))
 	ct, ok := uploadTypes[ext]
@@ -119,8 +131,8 @@ func (s *sellerImportImpl) Upload(ctx context.Context, c *domain.Caller, f port.
 		errs["file"] = "Choose an Excel (.xlsx) or CSV (.csv) file"
 	case !ok:
 		errs["file"] = "Upload an Excel (.xlsx) or CSV (.csv) file; save .xls workbooks as .xlsx"
-	case int64(len(f.Data)) > domain.BulkUploadLimits.MaxFileBytes:
-		errs["file"] = "The file is larger than 10 MB; split it into several files"
+	case int64(len(f.Data)) > domain.MaxFileBytesFor(mode):
+		errs["file"] = fmt.Sprintf("The file is larger than %d MB; split it into several files", domain.MaxFileBytesFor(mode)>>20)
 	}
 	if len(productType) > 40 {
 		errs["productType"] = "Unknown product type"
@@ -130,6 +142,9 @@ func (s *sellerImportImpl) Upload(ctx context.Context, c *domain.Caller, f port.
 	}
 	sc, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapBulkUpload)
 	if err != nil {
+		return domain.ProductImport{}, err
+	}
+	if err := s.requireMode(sc, mode); err != nil {
 		return domain.ProductImport{}, err
 	}
 	cl, err := s.client()
@@ -148,6 +163,15 @@ func (s *sellerImportImpl) Upload(ctx context.Context, c *domain.Caller, f port.
 		return domain.ProductImport{}, mapErr("catalog", err)
 	}
 	return s.importOf(i), nil
+}
+
+// requireMode adds the permission a mode needs on top of editing listings: a price and quantity feed also changes stock,
+// so it needs the same access as adjusting stock by hand (edit on inventory).
+func (s *sellerImportImpl) requireMode(sc sellerCtx, mode string) error {
+	if mode == domain.ImportModePriceQty && !sc.access.Allows("inventory", domain.LevelEdit) {
+		return domain.AccessDenied(sc.org.Role, domain.LevelEdit)
+	}
+	return nil
 }
 
 func (s *sellerImportImpl) List(ctx context.Context, c *domain.Caller, page, size int) (domain.ProductImportPage, error) {
@@ -225,6 +249,7 @@ func (s *sellerImportImpl) Rows(ctx context.Context, c *domain.Caller, id, statu
 	for _, r := range p.Items {
 		row := domain.ProductImportRow{RowNumber: r.RowNumber, GroupKey: r.GroupKey, SKU: r.SKU, Status: strings.ToUpper(r.Status),
 			Outcome: firstNonEmpty(strings.ToUpper(r.Outcome), "PENDING"), OutcomeNote: strPtr(r.OutcomeNote), ProductID: strPtr(r.ProductID),
+			ATIN: strPtr(r.ATIN), OfferID: strPtr(r.OfferID),
 			Messages: make([]domain.ImportRowMessage, 0, len(r.Messages)), Cells: r.Cells}
 		if row.Cells == nil {
 			row.Cells = []string{}
@@ -235,8 +260,14 @@ func (s *sellerImportImpl) Rows(ctx context.Context, c *domain.Caller, id, statu
 		}
 		row.Images = make([]domain.ImportRowImage, 0, len(r.Images))
 		for _, i := range r.Images {
-			row.Images = append(row.Images, domain.ImportRowImage{Slot: i.Slot, Source: i.Source, Ref: i.Ref, State: i.State,
-				URL: i.URL, Message: i.Message})
+			img := domain.ImportRowImage{Slot: i.Slot, Source: i.Source, Ref: i.Ref, State: i.State, URL: i.URL, Message: i.Message}
+			if i.Check != nil && i.Check.Code != "" {
+				img.Check = &domain.ImageCheck{Code: i.Check.Code, Level: strings.ToUpper(i.Check.Level), Params: orEmptyParams(i.Check.Params),
+					Message: derefString(i.Message)}
+			} else {
+				img.Check = importImageCheck(img)
+			}
+			row.Images = append(row.Images, img)
 		}
 		out.Items = append(out.Items, row)
 	}
@@ -263,11 +294,21 @@ func (s *sellerImportImpl) Report(ctx context.Context, c *domain.Caller, id, for
 }
 
 func (s *sellerImportImpl) Start(ctx context.Context, c *domain.Caller, id string, validOnly bool) (domain.ProductImport, error) {
-	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapBulkUpload); err != nil {
+	sc, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapBulkUpload)
+	if err != nil {
 		return domain.ProductImport{}, err
 	}
 	cl, err := s.client()
 	if err != nil {
+		return domain.ProductImport{}, err
+	}
+	// The upload's mode decides the access (a feed changes stock): read it from catalog, which only answers for the
+	// signed-in organisation's own uploads.
+	cur, err := cl.Import(ctx, c.BearerToken, id)
+	if err != nil {
+		return domain.ProductImport{}, mapErr("catalog", err)
+	}
+	if err := s.requireMode(sc, strings.ToUpper(cur.Mode)); err != nil {
 		return domain.ProductImport{}, err
 	}
 	i, err := cl.StartImport(ctx, c.BearerToken, id, validOnly)

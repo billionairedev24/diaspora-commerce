@@ -175,7 +175,8 @@ var largeBodies = []struct {
 	method, path string
 	limit        int64
 }{
-	{http.MethodPost, "/v1/seller/imports", 11 << 20},
+	{http.MethodPost, "/v1/seller/imports", 26 << 20}, // a price and quantity feed may be 25 MB (the handler applies the mode's own limit)
+	{http.MethodPost, "/v1/seller/stock/imports", 26 << 20},
 	{http.MethodPost, "/v1/seller/product-drafts", 320 << 10},
 	{http.MethodPut, "/v1/seller/product-drafts/", 320 << 10},
 }

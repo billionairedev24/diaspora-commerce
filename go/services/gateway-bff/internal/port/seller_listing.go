@@ -53,6 +53,10 @@ type CatalogImport struct {
 	CreatedAt       time.Time  `json:"createdAt"`
 	StartedAt       *time.Time `json:"startedAt"`
 	FinishedAt      *time.Time `json:"finishedAt"`
+	FileSHA256      string     `json:"fileSha256"`
+	SameFileAs      string     `json:"sameFileAs"`
+	OffersCreated   int        `json:"offersCreated"`
+	HeldRows        int        `json:"heldRows"`
 }
 
 // CatalogImportPage is catalog's ProductImportPage.
@@ -72,6 +76,8 @@ type CatalogImportRow struct {
 	Outcome     string `json:"outcome"`
 	OutcomeNote string `json:"outcomeNote"`
 	ProductID   string `json:"productId"`
+	ATIN        string `json:"atin"`
+	OfferID     string `json:"offerId"`
 	Messages    []struct {
 		Column      *string `json:"column"`
 		ColumnIndex int     `json:"columnIndex"`
@@ -86,6 +92,13 @@ type CatalogImportRow struct {
 		State   string  `json:"state"`
 		URL     *string `json:"url"`
 		Message *string `json:"message"`
+		// Check is a finding catalog already put in the form's code, level and params (optional; the BFF derives one
+		// from State when absent).
+		Check *struct {
+			Code   string         `json:"code"`
+			Level  string         `json:"level"`
+			Params map[string]any `json:"params"`
+		} `json:"check"`
 	} `json:"images"`
 }
 
@@ -119,7 +132,7 @@ type SellerListingClient interface {
 	CreateDraft(ctx context.Context, bearer string, in domain.SaveProductDraftRequest) (CatalogDraft, error)
 	SaveDraft(ctx context.Context, bearer, id string, in domain.SaveProductDraftRequest) (CatalogDraft, error)
 	DeleteDraft(ctx context.Context, bearer, id string) error
-	ImportTemplate(ctx context.Context, bearer, productType, categoryID, format string) (domain.FileDownload, error)
+	ImportTemplate(ctx context.Context, bearer, mode, productType, categoryID, format string) (domain.FileDownload, error)
 	Upload(ctx context.Context, bearer string, f UploadFile, mode, productType, uploadedByName string) (CatalogImport, error)
 	Imports(ctx context.Context, bearer string, page, size int) (CatalogImportPage, error)
 	Import(ctx context.Context, bearer, id string) (CatalogImport, error)

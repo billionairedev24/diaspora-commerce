@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { BACKGROUND } from '../http';
-import { type BrandScope, type Cadence, type ImageLibraryQuery, type ProductImport, type SellingFacts } from '../schemas/seller';
+import { type BrandScope, type Cadence, type ImageLibraryQuery, type ProductImport, type SellingFacts, type StockImport, type StockImportRowsQuery } from '../schemas/seller';
 import { type ImportRowsQuery, type ListingsQuery, type ProductDraftsQuery, type SellerApiClient, type SellerOrdersQuery, type SizeChartsQuery } from '../seller-client';
 import { pollingOf,type PollRule } from './polling';
 
@@ -52,6 +52,10 @@ export const sellerKeys = {
   importPage: (orgId: string, page: number, size: number) => [...sellerKeys.imports(orgId), 'page', page, size] as const,
   importJob: (orgId: string, id: string) => [...sellerKeys.imports(orgId), 'detail', id] as const,
   importRows: (orgId: string, id: string, q: ImportRowsQuery) => [...sellerKeys.importJob(orgId, id), 'rows', q] as const,
+  stockImports: (orgId: string) => [...sellerKeys.org(orgId), 'stock-imports'] as const,
+  stockImportPage: (orgId: string, page: number, size: number) => [...sellerKeys.stockImports(orgId), 'page', page, size] as const,
+  stockImportJob: (orgId: string, id: string) => [...sellerKeys.stockImports(orgId), 'detail', id] as const,
+  stockImportRows: (orgId: string, id: string, q: StockImportRowsQuery) => [...sellerKeys.stockImportJob(orgId, id), 'rows', q] as const,
   sizeCharts: (orgId: string) => [...sellerKeys.org(orgId), 'size-charts'] as const,
   sizeChartPage: (orgId: string, q: SizeChartsQuery) => [...sellerKeys.sizeCharts(orgId), 'page', q] as const,
   sizeChart: (orgId: string, id: string) => [...sellerKeys.sizeCharts(orgId), 'detail', id] as const,
@@ -167,6 +171,12 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.importJob(orgId, id), queryFn: ({ signal }) => api.getImport(id, signal, poll ? BACKGROUND : undefined), staleTime: 0, ...pollingOf(poll) }),
   importRows: (api: SellerApiClient, orgId: string, id: string, q: ImportRowsQuery) =>
     queryOptions({ queryKey: sellerKeys.importRows(orgId, id, q), queryFn: ({ signal }) => api.listImportRows(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  stockImports: (api: SellerApiClient, orgId: string, page: number, size: number) =>
+    queryOptions({ queryKey: sellerKeys.stockImportPage(orgId, page, size), queryFn: ({ signal }) => api.listStockImports(page, size, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  stockImportJob: (api: SellerApiClient, orgId: string, id: string, poll?: PollRule<StockImport>) =>
+    queryOptions({ queryKey: sellerKeys.stockImportJob(orgId, id), queryFn: ({ signal }) => api.getStockImport(id, signal, poll ? BACKGROUND : undefined), staleTime: 0, ...pollingOf(poll) }),
+  stockImportRows: (api: SellerApiClient, orgId: string, id: string, q: StockImportRowsQuery) =>
+    queryOptions({ queryKey: sellerKeys.stockImportRows(orgId, id, q), queryFn: ({ signal }) => api.listStockImportRows(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   sizeCharts: (api: SellerApiClient, orgId: string, q: SizeChartsQuery) =>
     queryOptions({ queryKey: sellerKeys.sizeChartPage(orgId, q), queryFn: ({ signal }) => api.listSizeCharts(q, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),
   sizeChart: (api: SellerApiClient, orgId: string, id: string) =>

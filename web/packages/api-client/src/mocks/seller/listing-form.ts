@@ -37,7 +37,7 @@ export interface MockDraft extends Omit<SavedProductDraft, 'todo'> {
 }
 
 /** Bulk upload limits (catalog ImportLimits). */
-export const IMPORT_LIMITS = { maxFileBytes: 10 * 1024 * 1024, maxRows: 5000, maxImagesPerProduct: 10, maxVariantsPerProduct: 200 };
+export const IMPORT_LIMITS = { maxFileBytes: 10 * 1024 * 1024, maxRows: 5000, maxImagesPerProduct: 10, maxVariantsPerProduct: 200, maxFeedFileBytes: 25 * 1024 * 1024, maxFeedRows: 50_000 };
 
 interface Leaf {
   id: string;

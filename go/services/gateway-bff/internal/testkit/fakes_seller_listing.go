@@ -14,6 +14,9 @@ import (
 const (
 	ImportWithErrors = "imp-errors"
 	ImportClean      = "imp-clean"
+	// ImportOffers is an OFFER upload with an offer row, a held row and a row with a bad image link; ImportFeed a PRICE_QTY feed.
+	ImportOffers = "imp-offers"
+	ImportFeed   = "imp-feed"
 )
 
 func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
@@ -153,13 +156,27 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 	// ---- bulk upload
 	header := []string{"Parent SKU", "SKU *", "Title *", "Price (USD) *", "Quantity *", "Barcode (GTIN/UPC/EAN)"}
 	upload := func(id, status string, errors int) map[string]any {
-		return map[string]any{"id": id, "reference": "BU-000042", "fileName": "pantry.xlsx", "format": "XLSX", "mode": "CREATE",
+		mode := map[string]string{ImportOffers: "OFFER", ImportFeed: "PRICE_QTY"}[id]
+		if mode == "" {
+			mode = "CREATE"
+		}
+		return map[string]any{"id": id, "reference": "BU-000042", "fileName": "pantry.xlsx", "format": "XLSX", "mode": mode,
+			"fileSha256": "ab12", "offersCreated": 0, "heldRows": 0,
 			"productType": "grocery", "status": status, "validOnly": status != "VALIDATED" && errors > 0, "totalRows": 5, "validRows": 3 - min(errors, 1),
 			"warningRows": min(errors, 1), "errorRows": errors, "productCount": 4, "processedRows": 0, "createdProducts": 0,
 			"updatedProducts": 0, "failedRows": 0, "header": header, "fileWarnings": []string{"Ignored column not in the template: Supplier"},
 			"uploadedBy": "user-seller", "uploadedByName": "Ade Okafor", "notifySeller": false, "createdAt": "2026-10-10T10:00:00Z"}
 	}
 	mux.HandleFunc("GET /v1/imports/template", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		u.LastImportQuery = r.URL.RawQuery
+		u.mu.Unlock()
+		if m := r.URL.Query().Get("mode"); m == "OFFER" || m == "PRICE_QTY" {
+			w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+			w.Header().Set("Content-Disposition", `attachment; filename="afrotransact-`+strings.ToLower(strings.ReplaceAll(m, "_", "-"))+`.csv"`)
+			_, _ = io.WriteString(w, "# "+m+"\r\n")
+			return
+		}
 		if pt := r.URL.Query().Get("productType"); pt != "" && pt != "grocery" {
 			problem(w, 404, "catalog.product-type-not-found", "Unknown product type", nil)
 			return
@@ -186,14 +203,21 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 		}
 		data, _ := io.ReadAll(f)
 		u.mu.Lock()
-		u.LastUpload = map[string]string{"name": h.Filename, "contentType": h.Header.Get("Content-Type"), "mode": r.URL.Query().Get("mode"),
+		u.LastUpload = map[string]string{"rawQuery": r.URL.RawQuery, "authorization": r.Header.Get("Authorization"), "name": h.Filename, "contentType": h.Header.Get("Content-Type"), "mode": r.URL.Query().Get("mode"),
 			"productType": r.URL.Query().Get("productType"), "uploadedByName": r.URL.Query().Get("uploadedByName"), "body": string(data)}
 		u.mu.Unlock()
 		if strings.Contains(string(data), "NO-HEADER") {
 			problem(w, 422, "catalog.upload-rejected", "Missing required column: SKU *", map[string]any{"fieldErrors": map[string]string{"file": "Missing required column: SKU *"}})
 			return
 		}
-		writeJSON(w, 201, upload(ImportWithErrors, "VALIDATED", 2))
+		switch r.URL.Query().Get("mode") {
+		case "OFFER":
+			writeJSON(w, 201, upload(ImportOffers, "VALIDATED", 1))
+		case "PRICE_QTY":
+			writeJSON(w, 201, upload(ImportFeed, "VALIDATED", 0))
+		default:
+			writeJSON(w, 201, upload(ImportWithErrors, "VALIDATED", 2))
+		}
 	})
 	mux.HandleFunc("GET /v1/imports", func(w http.ResponseWriter, _ *http.Request) {
 		done := upload(ImportClean, "COMPLETED", 0)
@@ -206,11 +230,36 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 			writeJSON(w, 200, upload(ImportWithErrors, "VALIDATED", 2))
 		case ImportClean:
 			writeJSON(w, 200, upload(ImportClean, "VALIDATED", 0))
+		case ImportOffers:
+			i := upload(ImportOffers, "VALIDATED", 1)
+			i["sameFileAs"], i["heldRows"], i["offersCreated"] = "imp-earlier", 1, 1
+			writeJSON(w, 200, i)
+		case ImportFeed:
+			writeJSON(w, 200, upload(ImportFeed, "VALIDATED", 0))
 		default:
 			problem(w, 404, "catalog.import-not-found", "Upload not found", nil)
 		}
 	})
 	mux.HandleFunc("GET /v1/imports/{id}/rows", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") == ImportOffers {
+			// An offer row, a row held for tax, and a row whose photo links failed: the BFF adds the form's image check codes.
+			writeJSON(w, 200, map[string]any{"total": 3, "page": 0, "size": 50, "items": []map[string]any{
+				{"rowNumber": 2, "groupKey": "", "sku": "OFADA-5LB", "status": "VALID", "outcome": "OFFER_CREATED", "atin": "ATADEV0001", "offerId": "off-1",
+					"messages": []any{}, "cells": []string{"4006381333931", "24.99", "10"}, "images": []any{}},
+				{"rowNumber": 3, "groupKey": "", "sku": "OFADA-10LB", "status": "WARNING", "outcome": "HELD", "atin": "ATADEV0002",
+					"outcomeNote": "We are checking the tax details for this item.", "messages": []any{}, "cells": []string{"4006381333948", "41.00", "4"}, "images": []any{}},
+				{"rowNumber": 4, "groupKey": "NEW-1", "sku": "NEW-1", "status": "ERROR", "outcome": "PENDING", "messages": []any{}, "cells": []string{"", "9.00", "1"},
+					"images": []map[string]any{
+						{"slot": "MAIN", "source": "LINK", "ref": "https://cdn.example/a.jpg", "state": "BAD_LINK", "url": nil, "message": "That link points to a private address"},
+						{"slot": "PT01", "source": "LINK", "ref": "https://cdn.example/b.jpg", "state": "BAD_LINK", "url": nil, "message": nil},
+						{"slot": "PT02", "source": "FILE", "ref": "b.jpg", "state": "HELD", "url": nil, "message": nil},
+						{"slot": "PT03", "source": "SKU", "ref": "NEW-1.PT03.jpg", "state": "MISSING", "url": nil, "message": nil},
+						{"slot": "MAIN", "source": "SKU", "ref": "NEW-1.MAIN.jpg", "state": "MISSING", "url": nil, "message": nil},
+						{"slot": "PT04", "source": "LINK", "ref": "https://cdn.example/c.jpg", "state": "LINK", "url": nil, "message": nil},
+						{"slot": "PT05", "source": "LINK", "ref": "https://cdn.example/d.jpg", "state": "BAD_LINK", "url": nil, "message": "x",
+							"check": map[string]any{"code": "BLUR", "level": "WARN", "params": map[string]any{}}}}}}})
+			return
+		}
 		if r.PathValue("id") != ImportWithErrors {
 			problem(w, 404, "catalog.import-not-found", "Upload not found", nil)
 			return

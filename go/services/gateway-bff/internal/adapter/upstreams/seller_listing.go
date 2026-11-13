@@ -222,15 +222,27 @@ func downloadFile(ctx context.Context, c httpclient.Client, bearer, path string,
 	return domain.FileDownload{FileName: name, ContentType: ct, Content: res.Body}, nil
 }
 
-func (k *sellerListingImpl) ImportTemplate(ctx context.Context, bearer, productType, categoryID, format string) (domain.FileDownload, error) {
+func (k *sellerListingImpl) ImportTemplate(ctx context.Context, bearer, mode, productType, categoryID, format string) (domain.FileDownload, error) {
 	q := url.Values{"format": {format}}
+	if mode != "" && mode != domain.ImportModeCreate {
+		q.Set("mode", mode) // OFFER, PRICE_QTY (and UPDATE) templates; CREATE is catalog's default
+	}
 	if productType != "" {
 		q.Set("productType", productType)
 	}
 	if categoryID != "" {
 		q.Set("categoryId", categoryID)
 	}
-	return k.download(ctx, bearer, "/v1/imports/template", q, "afrotransact-products."+format)
+	return k.download(ctx, bearer, "/v1/imports/template", q, templateFileName(mode, format))
+}
+
+// templateFileName names a template when catalog sent no Content-Disposition: products, offer, price-qty.
+func templateFileName(mode, format string) string {
+	name := "products"
+	if mode != "" && mode != domain.ImportModeCreate {
+		name = strings.ToLower(strings.ReplaceAll(mode, "_", "-"))
+	}
+	return "afrotransact-" + name + "." + format
 }
 
 func (k *sellerListingImpl) Upload(ctx context.Context, bearer string, f port.UploadFile, mode, productType, uploadedByName string) (port.CatalogImport, error) {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { BookingTakeHomeSchema, SellerNegotiatedRateSchema, SellerRateCardSchema } from '../fee-rates';
+import { ImageCheckSchema } from '../seller-matching';
 import { DeliveryProofSchema } from './shopper';
 import { ServiceDeliverySchema } from './shopper';
 
@@ -1587,7 +1588,10 @@ export const ListingContextSchema = z.object({
     maxFileBytes: z.number().int(),
     maxRows: z.number().int(),
     maxImagesPerProduct: z.number().int(),
-    maxVariantsPerProduct: z.number().int()
+    maxVariantsPerProduct: z.number().int(),
+    /** A price and quantity feed or a stock file: 25 MB and 50,000 rows (S394, S395). */
+    maxFeedFileBytes: z.number().int().default(25 * 1024 * 1024),
+    maxFeedRows: z.number().int().default(50_000)
   })
 });
 export type ListingContext = z.infer<typeof ListingContextSchema>;
@@ -1604,13 +1608,15 @@ export type ListingWriterDraft = z.infer<typeof ListingWriterDraftSchema>;
 
 export const SpreadsheetFormatSchema = z.enum(['xlsx', 'csv']);
 export type SpreadsheetFormat = z.infer<typeof SpreadsheetFormatSchema>;
-export const ImportModeSchema = z.enum(['CREATE', 'UPDATE']);
+/** CREATE and UPDATE are products; OFFER sells pages that already exist (S393); PRICE_QTY is the price and quantity feed (S394). */
+export const ImportModeSchema = z.enum(['CREATE', 'UPDATE', 'OFFER', 'PRICE_QTY']);
 export type ImportMode = z.infer<typeof ImportModeSchema>;
 export const ImportStatusSchema = z.enum(['VALIDATED', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED']);
 export type ImportStatus = z.infer<typeof ImportStatusSchema>;
 export const ImportRowStatusSchema = z.enum(['VALID', 'WARNING', 'ERROR']);
 export type ImportRowStatus = z.infer<typeof ImportRowStatusSchema>;
-export const ImportRowOutcomeSchema = z.enum(['PENDING', 'CREATED', 'UPDATED', 'FAILED', 'SKIPPED']);
+/** OFFER_CREATED: an offer on an existing page. HELD: valid but not for sale yet (tax decision, selling approval or a photo in review); never live. */
+export const ImportRowOutcomeSchema = z.enum(['PENDING', 'CREATED', 'UPDATED', 'OFFER_CREATED', 'HELD', 'FAILED', 'SKIPPED']);
 export type ImportRowOutcome = z.infer<typeof ImportRowOutcomeSchema>;
 export const ProductImportSchema = z.object({
   id: z.string(),
@@ -1636,7 +1642,12 @@ export const ProductImportSchema = z.object({
   createdAt: z.string(),
   startedAt: nullableString,
   finishedAt: nullableString,
-  reportUrl: z.string()
+  reportUrl: z.string(),
+  /** The organisation uploaded this file before: `sameFileAs` is that upload (S393). */
+  fileSha256: nullableString.optional(),
+  sameFileAs: nullableString.optional(),
+  offersCreated: z.number().int().optional(),
+  heldRows: z.number().int().optional()
 });
 export type ProductImport = z.infer<typeof ProductImportSchema>;
 export const ProductImportPageSchema = z.object({
@@ -1662,7 +1673,9 @@ export const ImportRowImageSchema = z.object({
   ref: z.string(),
   state: z.enum(['FOUND', 'LINK', 'HELD', 'MISSING', 'BAD_LINK']),
   url: nullableString,
-  message: nullableString
+  message: nullableString,
+  /** The finding as the product form's image cards give it (translate sc.img.check.<code>); null for an image that is fine. */
+  check: ImageCheckSchema.nullish()
 });
 export type ImportRowImage = z.infer<typeof ImportRowImageSchema>;
 /** One image of the organisation's image library with the SKUs of the listings that use it (S310). */
@@ -1737,6 +1750,9 @@ export const ProductImportRowSchema = z.object({
   outcome: ImportRowOutcomeSchema,
   outcomeNote: nullableString,
   productId: nullableString,
+  /** The page the row matched or ended on, and the offer it created or changed (offer rows). */
+  atin: nullableString.optional(),
+  offerId: nullableString.optional(),
   messages: z.array(ImportRowMessageSchema),
   cells: z.array(z.string()),
   images: z.array(ImportRowImageSchema).default([])
@@ -1749,6 +1765,65 @@ export const ProductImportRowPageSchema = z.object({
   size: z.number().int()
 });
 export type ProductImportRowPage = z.infer<typeof ProductImportRowPageSchema>;
+
+/* ── Stock CSV import (S395) ─────────────────────────────── */
+
+/** ABSOLUTE sets on hand to the counted number; DELTA adds a change to it (a DELTA file is never applied twice). */
+export const StockImportModeSchema = z.enum(['ABSOLUTE', 'DELTA']);
+export type StockImportMode = z.infer<typeof StockImportModeSchema>;
+export const StockImportRowOutcomeSchema = z.enum(['PENDING', 'APPLIED', 'UNCHANGED', 'FAILED', 'SKIPPED']);
+export type StockImportRowOutcome = z.infer<typeof StockImportRowOutcomeSchema>;
+export const StockImportSchema = z.object({
+  id: z.string(),
+  reference: z.string(),
+  fileName: z.string(),
+  fileSha256: nullableString,
+  sameFileAs: nullableString,
+  mode: StockImportModeSchema,
+  status: ImportStatusSchema,
+  totalRows: z.number().int(),
+  validRows: z.number().int(),
+  warningRows: z.number().int(),
+  errorRows: z.number().int(),
+  processedRows: z.number().int(),
+  appliedRows: z.number().int(),
+  unchangedRows: z.number().int(),
+  failedRows: z.number().int(),
+  header: z.array(z.string()),
+  createdAt: z.string(),
+  startedAt: nullableString,
+  finishedAt: nullableString,
+  reportUrl: z.string()
+});
+export type StockImport = z.infer<typeof StockImportSchema>;
+export const StockImportPageSchema = z.object({ items: z.array(StockImportSchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
+export type StockImportPage = z.infer<typeof StockImportPageSchema>;
+export const StockImportMessageSchema = z.object({ column: nullableString, severity: z.enum(['ERROR', 'WARNING']), message: z.string() });
+export type StockImportMessage = z.infer<typeof StockImportMessageSchema>;
+export const StockImportRowSchema = z.object({
+  rowNumber: z.number().int(),
+  sku: z.string(),
+  location: z.string(),
+  lot: nullableString,
+  quantity: z.number().int().nullable(),
+  expiry: nullableString,
+  status: ImportRowStatusSchema,
+  outcome: StockImportRowOutcomeSchema,
+  outcomeNote: nullableString,
+  before: z.number().int().nullable(),
+  after: z.number().int().nullable(),
+  messages: z.array(StockImportMessageSchema),
+  cells: z.array(z.string())
+});
+export type StockImportRow = z.infer<typeof StockImportRowSchema>;
+export const StockImportRowPageSchema = z.object({ items: z.array(StockImportRowSchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
+export type StockImportRowPage = z.infer<typeof StockImportRowPageSchema>;
+export interface StockImportRowsQuery {
+  status?: ImportRowStatus;
+  outcome?: StockImportRowOutcome;
+  page: number;
+  size: number;
+}
 
 export const UploadRequestSchema = z.object({
   purpose: z.enum(['product-image', 'storefront']),

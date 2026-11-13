@@ -169,6 +169,7 @@ export const SELLER_TOURS = [
     audience: { permissions: ['listings:edit'], flags: ['cap-bulkUpload'] },
     steps: [
       ['page', 'page-bulk'],
+      ['types', 'bulk-upload-types'],
       ['template'],
       ['links', 'page-bulk-actions'],
       ['history', 'page-bulk-history', { route: '/listings/bulk/history' }],

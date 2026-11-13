@@ -52,6 +52,8 @@ type Services struct {
 	// SellerListing is the one-step product form (S307) and SellerImports the bulk upload (S308); registered when set.
 	SellerListing app.SellerListingService
 	SellerImports app.SellerImportService
+	// SellerStockImports is the stock CSV import (S395); its routes are registered when set.
+	SellerStockImports app.SellerStockImportService
 	// SellerSizeCharts is the seller's size charts for sized categories (fashion); its routes are registered when set.
 	SellerSizeCharts app.SellerSizeChartService
 	// SellerProductTax is the product tax readiness and evidence upload; its routes are registered when set.

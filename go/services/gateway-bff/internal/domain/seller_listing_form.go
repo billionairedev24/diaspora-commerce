@@ -144,10 +144,30 @@ type ImportLimits struct {
 	MaxRows               int   `json:"maxRows"`
 	MaxImagesPerProduct   int   `json:"maxImagesPerProduct"`
 	MaxVariantsPerProduct int   `json:"maxVariantsPerProduct"`
+	// MaxFeedFileBytes and MaxFeedRows are the limits of the price and quantity feed (S394) and the stock file (S395).
+	MaxFeedFileBytes int64 `json:"maxFeedFileBytes"`
+	MaxFeedRows      int   `json:"maxFeedRows"`
 }
 
 // BulkUploadLimits mirror catalog's ImportLimits.
-var BulkUploadLimits = ImportLimits{MaxFileBytes: 10 << 20, MaxRows: 5000, MaxImagesPerProduct: 10, MaxVariantsPerProduct: 200}
+var BulkUploadLimits = ImportLimits{MaxFileBytes: 10 << 20, MaxRows: 5000, MaxImagesPerProduct: 10, MaxVariantsPerProduct: 200,
+	MaxFeedFileBytes: 25 << 20, MaxFeedRows: 50000}
+
+// Bulk upload modes (catalog mode names).
+const (
+	ImportModeCreate   = "CREATE"
+	ImportModeUpdate   = "UPDATE"
+	ImportModeOffer    = "OFFER"
+	ImportModePriceQty = "PRICE_QTY"
+)
+
+// MaxFileBytesFor is the largest file of a mode: the feed (price and quantity) takes 25 MB, the others 10 MB (S394).
+func MaxFileBytesFor(mode string) int64 {
+	if mode == ImportModePriceQty {
+		return BulkUploadLimits.MaxFeedFileBytes
+	}
+	return BulkUploadLimits.MaxFileBytes
+}
 
 // ListingContext is GET /v1/seller/catalog/listing-context.
 type ListingContext struct {
@@ -197,9 +217,9 @@ type ListingWriterDraft struct {
 
 // Bulk upload statuses, row statuses and outcomes.
 var (
-	ImportModes        = []string{"CREATE", "UPDATE"}
+	ImportModes        = []string{ImportModeCreate, ImportModeUpdate, ImportModeOffer, ImportModePriceQty}
 	ImportRowStatuses  = []string{"VALID", "WARNING", "ERROR"}
-	ImportRowOutcomes  = []string{"PENDING", "CREATED", "UPDATED", "FAILED", "SKIPPED"}
+	ImportRowOutcomes  = []string{"PENDING", "CREATED", "UPDATED", "OFFER_CREATED", "HELD", "FAILED", "SKIPPED"}
 	SpreadsheetFormats = []string{"xlsx", "csv"}
 )
 
@@ -229,6 +249,12 @@ type ProductImport struct {
 	StartedAt       *time.Time `json:"startedAt"`
 	FinishedAt      *time.Time `json:"finishedAt"`
 	ReportURL       string     `json:"reportUrl"`
+	// FileSHA256 and SameFileAs: the organisation uploaded this file before (SameFileAs is that upload's id; S393).
+	FileSHA256 *string `json:"fileSha256"`
+	SameFileAs *string `json:"sameFileAs"`
+	// OffersCreated are rows that put an offer on an existing page; HeldRows are valid rows that are not for sale yet.
+	OffersCreated int `json:"offersCreated"`
+	HeldRows      int `json:"heldRows"`
 }
 
 // ProductImportPage is the upload history.
@@ -249,16 +275,19 @@ type ImportRowMessage struct {
 
 // ProductImportRow is one row of the preview.
 type ProductImportRow struct {
-	RowNumber   int                `json:"rowNumber"`
-	GroupKey    string             `json:"groupKey"`
-	SKU         string             `json:"sku"`
-	Status      string             `json:"status"`
-	Outcome     string             `json:"outcome"`
-	OutcomeNote *string            `json:"outcomeNote"`
-	ProductID   *string            `json:"productId"`
-	Messages    []ImportRowMessage `json:"messages"`
-	Cells       []string           `json:"cells"`
-	Images      []ImportRowImage   `json:"images"`
+	RowNumber   int     `json:"rowNumber"`
+	GroupKey    string  `json:"groupKey"`
+	SKU         string  `json:"sku"`
+	Status      string  `json:"status"`
+	Outcome     string  `json:"outcome"`
+	OutcomeNote *string `json:"outcomeNote"`
+	ProductID   *string `json:"productId"`
+	// ATIN is the page the row matched or ended on, OfferID the offer it created or changed (offer rows, S393).
+	ATIN     *string            `json:"atin"`
+	OfferID  *string            `json:"offerId"`
+	Messages []ImportRowMessage `json:"messages"`
+	Cells    []string           `json:"cells"`
+	Images   []ImportRowImage   `json:"images"`
 }
 
 // ImportRowImage is one image of a preview row (S310): a library image FOUND (thumbnail), a LINK copied at import,
@@ -270,6 +299,9 @@ type ImportRowImage struct {
 	State   string  `json:"state"`
 	URL     *string `json:"url"`
 	Message *string `json:"message"`
+	// Check is the finding in the same code, level and params as the product form's image cards (S391), so the preview
+	// shows the same plain message; nil for an image that is fine.
+	Check *ImageCheck `json:"check"`
 }
 
 // ImageLibraryItem is one image of the organisation's image library with the SKUs that use it.

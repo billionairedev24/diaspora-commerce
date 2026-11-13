@@ -1,22 +1,63 @@
-import { type ImportRowMessage, type ListingContext, type ProductImport, type ProductImportRow } from '@afrotransact/api-client';
+import { type ImageCheck, type ImportMode, type ImportRowMessage, type ListingContext, type ProductImport, type ProductImportRow } from '@afrotransact/api-client';
 
-import { type MessageKey } from '@/i18n/t';
+import { type MessageKey, type Translator } from '@/i18n/t';
+
+import { checkVars } from '../form/image-rules';
 
 /* Pure rules of the bulk upload screens (S308): file checks before uploading, per-cell problems of a preview row,
    which header columns the preview shows first, and what the import can do next. catalog-service is the authority:
    these checks only spare a round trip. */
 
-export const DEFAULT_LIMITS: ListingContext['importLimits'] = { maxFileBytes: 10 * 1024 * 1024, maxRows: 5000, maxImagesPerProduct: 10, maxVariantsPerProduct: 200 };
+export const DEFAULT_LIMITS: ListingContext['importLimits'] = { maxFileBytes: 10 * 1024 * 1024, maxRows: 5000, maxImagesPerProduct: 10, maxVariantsPerProduct: 200, maxFeedFileBytes: 25 * 1024 * 1024, maxFeedRows: 50_000 };
 
-/** Problem with a chosen file before it is uploaded (null = fine). */
-export function fileProblem(file: { name: string; size: number }, limits = DEFAULT_LIMITS): { key: MessageKey; vars?: Record<string, string | number> } | null {
+/** What a seller can upload: product files (CREATE, UPDATE), offers on existing pages (OFFER), the price and quantity feed (PRICE_QTY) and stock counts (STOCK, inventory). */
+export type UploadKind = ImportMode | 'STOCK';
+
+/** The upload types in the order they are offered, with the access each needs: listings (and inventory for what changes stock). */
+export const UPLOAD_KINDS: { kind: UploadKind; modules: ('listings' | 'inventory')[] }[] = [
+  { kind: 'CREATE', modules: ['listings'] },
+  { kind: 'OFFER', modules: ['listings'] },
+  { kind: 'PRICE_QTY', modules: ['listings', 'inventory'] },
+  { kind: 'STOCK', modules: ['inventory'] },
+  { kind: 'UPDATE', modules: ['listings'] }
+];
+
+/** The largest file and the most rows of an upload type: 10 MB and 5,000 rows, but 25 MB and 50,000 for the price and quantity feed and the stock file. */
+export function limitsFor(kind: UploadKind, limits = DEFAULT_LIMITS): { maxFileBytes: number; maxRows: number } {
+  return kind === 'PRICE_QTY' || kind === 'STOCK'
+    ? { maxFileBytes: limits.maxFeedFileBytes, maxRows: limits.maxFeedRows }
+    : { maxFileBytes: limits.maxFileBytes, maxRows: limits.maxRows };
+}
+
+/** Problem with a chosen file before it is uploaded (null = fine). A stock file is CSV only. */
+export function fileProblem(file: { name: string; size: number }, limits = DEFAULT_LIMITS, kind: UploadKind = 'CREATE'): { key: MessageKey; vars?: Record<string, string | number> } | null {
   const ext = file.name.toLowerCase().split('.').pop() ?? '';
   if (ext === 'xls') return { key: 'sc.bulk.err.xls' };
-  if (ext !== 'xlsx' && ext !== 'csv') return { key: 'sc.bulk.err.type' };
+  if (kind === 'STOCK' ? ext !== 'csv' : ext !== 'xlsx' && ext !== 'csv') return { key: kind === 'STOCK' ? 'sc.bulk.err.csvOnly' : 'sc.bulk.err.type' };
   if (file.size === 0) return { key: 'sc.bulk.err.empty' };
-  if (file.size > limits.maxFileBytes) return { key: 'sc.bulk.err.size', vars: { mb: Math.round(limits.maxFileBytes / 1024 / 1024) } };
+  const max = limitsFor(kind, limits).maxFileBytes;
+  if (file.size > max) return { key: 'sc.bulk.err.size', vars: { mb: Math.round(max / 1024 / 1024) } };
   return null;
 }
+
+/** The message of a preview image finding: the same words as the product form's image cards (sc.img.check.<CODE>); the English message only for a code the catalogue does not have. */
+export function imageCheckText(t: Translator<MessageKey>, check: ImageCheck): string {
+  const key = `sc.img.check.${check.code}` as MessageKey;
+  const text = t(key, checkVars(check));
+  return text === key || !text ? check.message : text;
+}
+
+/** Why a held row waits, in plain words: the tax details, the seller's selling approval, or a photo in review. */
+export function heldWhyKey(note: string | null | undefined): MessageKey {
+  const n = (note ?? '').toLowerCase();
+  if (n.includes('tax')) return 'sc.bulk.heldWhy.tax';
+  if (n.includes('approval') || n.includes('approve')) return 'sc.bulk.heldWhy.approval';
+  if (n.includes('photo') || n.includes('image')) return 'sc.bulk.heldWhy.photo';
+  return 'sc.bulk.heldWhy.generic';
+}
+
+/** The label key of an upload's mode (the history and the preview header). */
+export const modeLabelKey = (mode: UploadKind): MessageKey => `sc.bulk.mode.${mode}` as MessageKey;
 
 /** "Price (USD) *" → "Price (USD)". */
 export const headerLabel = (h: string) => h.replace(/\s*\*\s*$/, '').trim();
@@ -32,7 +73,7 @@ export function cellProblems(row: ProductImportRow): Map<number, ImportRowMessag
   return out;
 }
 
-const FIRST = ['sku', 'title', 'price (usd)', 'quantity', 'category'];
+const FIRST = ['barcode (upc, ean, isbn)', 'seller sku', 'sku', 'title', 'price (usd)', 'price', 'quantity', 'category'];
 
 /** Header columns in preview order: SKU, title, price, quantity and category first, then the rest as uploaded. */
 export function previewColumns(header: string[]): { index: number; label: string }[] {
@@ -46,7 +87,7 @@ export function previewColumns(header: string[]): { index: number; label: string
 
 export type Phase = 'review' | 'running' | 'done' | 'failed';
 
-export function phaseOf(i: ProductImport): Phase {
+export function phaseOf(i: Pick<ProductImport, 'status'>): Phase {
   if (i.status === 'VALIDATED') return 'review';
   if (i.status === 'QUEUED' || i.status === 'RUNNING') return 'running';
   if (i.status === 'FAILED') return 'failed';

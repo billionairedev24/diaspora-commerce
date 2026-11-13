@@ -212,6 +212,14 @@ import {
   type StockAdjustment,
   type StockAdjustmentRequest,
   StockAdjustmentSchema,
+  type StockImport,
+  type StockImportMode,
+  type StockImportPage,
+  StockImportPageSchema,
+  type StockImportRowPage,
+  StockImportRowPageSchema,
+  type StockImportRowsQuery,
+  StockImportSchema,
   type TeamMember,
   TeamMemberSchema,
   type TeamView,
@@ -446,9 +454,10 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/catalog/listing-writer', ListingWriterDraftSchema, { method: 'POST', body }),
 
     /* Bulk upload (S308) */
-    downloadImportTemplate: (opts: { productType?: string; categoryId?: string; format: SpreadsheetFormat }): Promise<DownloadedFile> =>
-      download('/v1/seller/imports/template', { productType: opts.productType, categoryId: opts.categoryId, format: opts.format },
-        `afrotransact-products.${opts.format}`),
+    /** `mode` OFFER and PRICE_QTY give the server-made templates of S393 and S394 (no category needed). */
+    downloadImportTemplate: (opts: { productType?: string; categoryId?: string; format: SpreadsheetFormat; mode?: ImportMode }): Promise<DownloadedFile> =>
+      download('/v1/seller/imports/template', { mode: opts.mode, productType: opts.productType, categoryId: opts.categoryId, format: opts.format },
+        `afrotransact-${opts.mode && opts.mode !== 'CREATE' ? opts.mode.toLowerCase().replace('_', '-') : 'products'}.${opts.format}`),
     uploadImport: (file: File, mode: ImportMode, productType?: string): Promise<ProductImport> => {
       const body = new FormData();
       body.set('file', file, file.name);
@@ -471,6 +480,28 @@ export function createSellerApiClient(options: ApiClientOptions) {
       download(`/v1/seller/imports/${enc(id)}/report`, { format }, `upload-report.${format}`),
     startImport: (id: string, validOnly: boolean): Promise<ProductImport> =>
       request(`/v1/seller/imports/${enc(id)}/start`, ProductImportSchema, { method: 'POST', body: { validOnly } }),
+
+    /* Stock CSV import (S395): counts for the organisation's own stock; the organisation is the signed-in one, never sent. */
+    downloadStockImportTemplate: (mode: StockImportMode): Promise<DownloadedFile> =>
+      download('/v1/seller/stock/imports/template', { mode }, `afrotransact-stock-${mode.toLowerCase()}.csv`),
+    uploadStockImport: (file: File, mode: StockImportMode): Promise<StockImport> => {
+      const body = new FormData();
+      body.set('file', file, file.name);
+      body.set('mode', mode);
+      return request('/v1/seller/stock/imports', StockImportSchema, { method: 'POST', body });
+    },
+    listStockImports: (page: number, size: number, signal?: AbortSignal): Promise<StockImportPage> =>
+      request('/v1/seller/stock/imports', StockImportPageSchema, { query: { page: String(page), size: String(size) }, signal }),
+    getStockImport: (id: string, signal?: AbortSignal, background?: boolean): Promise<StockImport> =>
+      request(`/v1/seller/stock/imports/${enc(id)}`, StockImportSchema, { signal, background }),
+    listStockImportRows: (id: string, q: StockImportRowsQuery, signal?: AbortSignal): Promise<StockImportRowPage> =>
+      request(`/v1/seller/stock/imports/${enc(id)}/rows`, StockImportRowPageSchema, {
+        query: { status: q.status, outcome: q.outcome, page: String(q.page), size: String(q.size) },
+        signal
+      }),
+    downloadStockImportReport: (id: string): Promise<DownloadedFile> => download(`/v1/seller/stock/imports/${enc(id)}/report`, {}, 'stock-report.csv'),
+    startStockImport: (id: string, validOnly: boolean): Promise<StockImport> =>
+      request(`/v1/seller/stock/imports/${enc(id)}/start`, StockImportSchema, { method: 'POST', body: { validOnly } }),
     listImageLibrary: (q: ImageLibraryQuery, signal?: AbortSignal): Promise<ImageLibraryPage> =>
       request('/v1/seller/image-library', ImageLibraryPageSchema, {
         query: {

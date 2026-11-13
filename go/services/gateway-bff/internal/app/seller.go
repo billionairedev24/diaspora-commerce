@@ -40,6 +40,8 @@ type SellerDeps struct {
 
 	// Listing edits products, keeps form drafts and runs bulk uploads at catalog (S307/S308); nil answers 503.
 	Listing port.SellerListingClient
+	// StockImports is inventory's stock CSV import (S395); nil answers 503.
+	StockImports port.SellerStockImportClient
 	// SizeCharts is catalog's size chart API: the organisation's charts and the size chart upload; nil answers 503.
 	SizeCharts port.SizeChartClient
 	// Tax is catalog's tax publish gate and evidence API (the product's tax readiness, proof files); nil answers 503.

@@ -221,7 +221,7 @@ func exerciseSellerListing(t *testing.T, bff *testkit.BFF, b *browser) {
 		r.json(t)["status"] != "QUEUED" {
 		t.Fatalf("start valid rows = %d %s", r.status, r.body)
 	}
-	mustStatus(t, b.do("POST", "/v1/seller/imports/nope/start", map[string]any{"validOnly": true}), 202)
+	mustStatus(t, b.do("POST", "/v1/seller/imports/nope/start", map[string]any{"validOnly": true}), 404)
 	if r := b.do("GET", "/v1/seller/imports?page=0&size=10", nil); r.status != 200 || num(r.json(t), "total") != 2 {
 		t.Fatalf("history = %d %s", r.status, r.body)
 	}

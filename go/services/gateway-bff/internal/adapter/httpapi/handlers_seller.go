@@ -120,6 +120,15 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/catalog/brands", h.brands)
 		route("POST /v1/seller/catalog/brands", h.createBrand)
 	}
+	if h.s.SellerStockImports != nil {
+		route("GET /v1/seller/stock/imports/template", h.stockImportTemplate)
+		route("GET /v1/seller/stock/imports", h.stockImports)
+		route("POST /v1/seller/stock/imports", h.uploadStockImport)
+		route("GET /v1/seller/stock/imports/{importId}", h.stockImportDetail)
+		route("GET /v1/seller/stock/imports/{importId}/rows", h.stockImportRows)
+		route("GET /v1/seller/stock/imports/{importId}/report", h.stockImportReport)
+		route("POST /v1/seller/stock/imports/{importId}/start", h.startStockImport)
+	}
 	if h.s.SellerScope != nil {
 		h.registerSellerScope(route)
 	}

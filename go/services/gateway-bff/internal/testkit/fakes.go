@@ -190,6 +190,9 @@ type Upstreams struct {
 	// (name, contentType, mode, productType, uploadedByName, body) — S307/S308.
 	LastProductBody map[string]any
 	LastUpload      map[string]string
+	// LastImportQuery is the raw query of the last bulk template request; LastStockUpload the last stock file upload.
+	LastImportQuery string
+	LastStockUpload map[string]string
 	// PhoneVerified is identity's phoneVerified for every account; LastSignUp is the last POST /v1/accounts body.
 	PhoneVerified bool
 	LastSignUp    map[string]any

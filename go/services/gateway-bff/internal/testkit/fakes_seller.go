@@ -89,6 +89,7 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 	u.productTaxRoutes(mux)
 	u.scopeRoutes(mux)
 	u.matchRoutes(mux)
+	u.stockImportRoutes(mux)
 	u.sellingRoutes(mux)
 	u.moneyRoutes(mux)
 	u.libraryRoutes(mux)

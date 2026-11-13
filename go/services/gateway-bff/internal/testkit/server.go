@@ -120,7 +120,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	sellerCases := upstreams.NewSellerCases(client("tax-returns", base), client("trust-ops", base))
 	sellerDeps := app.SellerDeps{Cases: sellerCases, Content: content, Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
-		Listing: upstreams.NewSellerListing(client("catalog", base)), SizeCharts: upstreams.NewSizeCharts(client("catalog", base)), ProductTax: upstreams.NewSellerTax(client("catalog", base)),
+		Listing: upstreams.NewSellerListing(client("catalog", base)), StockImports: upstreams.NewSellerStockImport(client("inventory", base)), SizeCharts: upstreams.NewSizeCharts(client("catalog", base)), ProductTax: upstreams.NewSellerTax(client("catalog", base)),
 		ScopeCatalog: upstreams.NewStaffUpstream(client("catalog", base)), ScopeSeller: upstreams.NewStaffUpstream(client("seller", base)), Writer: upstreams.NewListingWriter(client("ai-gateway", base)),
 		Offers: upstreams.NewOffers(offersClient), OfferListings: storefrontOffers, Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
@@ -178,6 +178,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerMatch:        app.NewSellerMatchService(sellerDeps),
 		SellerSelling:      app.NewSellerSellingService(sellerDeps),
 		SellerImports:      app.NewSellerImportService(sellerDeps, "/api/bff"),
+		SellerStockImports: app.NewSellerStockImportService(sellerDeps, "/api/bff"),
 		SellerMoney:        app.NewSellerMoneyService(sellerDeps),
 		SellerFees:         app.NewSellerFeesService(sellerDeps),
 		SellerTeam:         app.NewSellerTeamService(sellerDeps),

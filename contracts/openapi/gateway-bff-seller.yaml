@@ -53,8 +53,16 @@ tags:
   - name: Bulk upload
     description: |
       Product templates (Excel and CSV, per product type or generic), .xlsx/.csv uploads validated row by row, preview,
-      error report and the background import (S308). Limits: 10 MB and 5,000 rows per file, 10 images and 200
-      variants per product. Mirrors catalog-service `/v1/imports` with the member's token.
+      error report and the background import (S308). Four modes: `CREATE` and `UPDATE` (products), `OFFER` (sell pages
+      that already exist: barcode, ATIN or brand and part number, no photo or title columns, S393) and `PRICE_QTY` (a
+      price and quantity feed by seller SKU or ATIN, S394). Limits: 10 MB and 5,000 rows per file (CREATE, UPDATE,
+      OFFER), 25 MB and 50,000 rows for PRICE_QTY, 10 images and 200 variants per product. Mirrors catalog-service
+      `/v1/imports` with the member's token: the seller organisation always comes from the token, never from the request.
+  - name: Stock import
+    description: |
+      Stock CSV import (S395): counts for the organisation's own stock per SKU and location, validated row by row,
+      applied in the background as ledger entries with the reason BULK_COUNT. Up to 25 MB and 50,000 rows. Mirrors
+      inventory-service `/v1/stock/imports` with the member's token; needs edit access to inventory and a plan with bulk upload.
   - name: Size charts
     description: |
       Size charts the seller writes and reuses on sized products (fashion): measurement columns and one row per size,
@@ -1330,6 +1338,7 @@ paths:
         `Attributes` and `Options` as "name: value" pairs) when both are omitted. xlsx: Products sheet (header notes,
         dropdowns, number checks), Instructions, Example and a hidden Lists sheet. csv: `#` comment lines and the header.
       parameters:
+        - {name: mode, in: query, schema: {$ref: '#/components/schemas/ImportMode'}, description: 'OFFER and PRICE_QTY templates are generated server-side and do not depend on a category (productType and categoryId are ignored): OFFER has barcode, ATIN or brand and part number, price, quantity, condition, shipping and handling and no photo, title or attribute columns; PRICE_QTY has seller SKU or ATIN, price, list price and quantity (blank = unchanged)'}
         - {name: productType, in: query, schema: {type: string, maxLength: 40}}
         - {name: categoryId, in: query, schema: {type: string, maxLength: 64}}
         - {name: format, in: query, schema: {$ref: '#/components/schemas/SpreadsheetFormat'}}
@@ -1370,8 +1379,13 @@ paths:
         catalog `POST /v1/imports` (multipart). Rows are checked for required fields, allowed values, numbers and
         units, GTIN check digits, duplicate SKUs in the file and against the organisation's listings, and image URL
         format; images are fetched when the import runs. Nothing is imported yet: review the preview, then start it.
-        422 `VALIDATION_FAILED` (`errors.file`) when the file can't be read: wrong type, over 10 MB or 5,000 rows,
-        missing required columns. `mode` CREATE adds products; UPDATE changes listings by SKU (blank cells unchanged).
+        422 `VALIDATION_FAILED` (`errors.file`) when the file can't be read: wrong type, over 10 MB (25 MB for PRICE_QTY)
+        or 5,000 rows (50,000 for PRICE_QTY), missing required columns. `mode` CREATE adds products; UPDATE changes
+        listings by SKU (blank cells unchanged); OFFER puts the seller's offers on existing pages (a barcode that
+        matches turns a CREATE row into an offer row too); PRICE_QTY changes price and stock of the seller's own offers
+        by SKU or ATIN (blank = unchanged). Rows the seller may not sell yet, or that have no stored tax decision, end
+        `HELD` and are never live. 409 when an upload of this mode is already running or the daily limit is reached.
+        403 for a member without edit access to listings; PRICE_QTY also needs edit access to inventory.
       requestBody:
         required: true
         content:
@@ -1380,7 +1394,7 @@ paths:
               type: object
               required: [file]
               properties:
-                file: {type: string, format: binary, description: '.xlsx or .csv, at most 10 MB'}
+                file: {type: string, format: binary, description: '.xlsx or .csv, at most 10 MB (25 MB for PRICE_QTY)'}
                 mode: {$ref: '#/components/schemas/ImportMode'}
                 productType: {type: string, maxLength: 40, description: The template's product type; omit for the generic template}
       responses:
@@ -1468,6 +1482,150 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/StartImportRequest'}}}
       responses:
         '202': {description: Started, content: {application/json: {schema: {$ref: '#/components/schemas/ProductImport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/stock/imports/template:
+    get:
+      tags: [Stock import]
+      operationId: downloadStockImportTemplate
+      security: [{sessionCookie: []}]
+      summary: Download the stock file template (CSV)
+      description: |
+        inventory `GET /v1/stock/imports/template`. Columns: Seller SKU, Location, On hand (`ABSOLUTE`: what you counted)
+        or Change (`DELTA`: added to what is on hand; a DELTA file is never applied twice), Lot and Expiry (perishables).
+      parameters:
+        - {name: mode, in: query, schema: {$ref: '#/components/schemas/StockImportMode'}}
+      responses:
+        '200':
+          description: Template file (Content-Disposition attachment)
+          content:
+            text/csv: {schema: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/stock/imports:
+    get:
+      tags: [Stock import]
+      operationId: listStockImports
+      security: [{sessionCookie: []}]
+      summary: Stock file history of the active organisation (newest first)
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: Stock files, content: {application/json: {schema: {$ref: '#/components/schemas/StockImportPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Stock import]
+      operationId: uploadStockImport
+      security: [{sessionCookie: []}]
+      summary: Upload a stock CSV and validate every row
+      description: |
+        inventory `POST /v1/stock/imports` (multipart). Every row is checked: the SKU is one the organisation holds at
+        that location (a SKU of another organisation looks unknown), the location, a whole number never below zero
+        and at most 99,999, lot and expiry. Nothing is applied yet: review the preview, then start it. The organisation is
+        the signed-in member's active organisation; a request cannot name another. 422 `VALIDATION_FAILED`
+        (`errors.file`) when the file can't be read (not .csv, over 25 MB or 50,000 rows, missing columns). 403 for
+        AfroTransact Retail's own stock. 409 when a stock file is already running.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary, description: '.csv, at most 25 MB'}
+                mode: {$ref: '#/components/schemas/StockImportMode'}
+      responses:
+        '201': {description: Validated upload, content: {application/json: {schema: {$ref: '#/components/schemas/StockImport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '413': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/stock/imports/{importId}:
+    get:
+      tags: [Stock import]
+      operationId: getStockImport
+      security: [{sessionCookie: []}]
+      summary: A stock file with its validation counts and progress (poll while QUEUED or RUNNING)
+      parameters: [{$ref: '#/components/parameters/ImportId'}]
+      responses:
+        '200': {description: Stock file, content: {application/json: {schema: {$ref: '#/components/schemas/StockImport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/stock/imports/{importId}/rows:
+    get:
+      tags: [Stock import]
+      operationId: listStockImportRows
+      security: [{sessionCookie: []}]
+      summary: Rows of a stock file for the preview (status ERROR = errors only)
+      parameters:
+        - {$ref: '#/components/parameters/ImportId'}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ImportRowStatus'}}
+        - {name: outcome, in: query, schema: {$ref: '#/components/schemas/StockImportRowOutcome'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Rows, content: {application/json: {schema: {$ref: '#/components/schemas/StockImportRowPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/stock/imports/{importId}/report:
+    get:
+      tags: [Stock import]
+      operationId: downloadStockImportReport
+      security: [{sessionCookie: []}]
+      summary: Download the row report (CSV)
+      description: |
+        The uploaded columns first, then Row, Result, Severity, Column, Message, Before and After. Cells that start with
+        = + - @ are prefixed with ' so spreadsheet apps never run them as formulas.
+      parameters: [{$ref: '#/components/parameters/ImportId'}]
+      responses:
+        '200':
+          description: Report file (Content-Disposition attachment)
+          content:
+            text/csv: {schema: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/stock/imports/{importId}/start:
+    post:
+      tags: [Stock import]
+      operationId: startStockImport
+      security: [{sessionCookie: []}]
+      summary: Start the stock import (background; each row is applied once)
+      description: |
+        inventory `POST /v1/stock/imports/{id}/start`. Each row locks the position, refuses a count below the units
+        already reserved for orders (row error) and writes an adjustment with the reason BULK_COUNT and the import id.
+        With rows in error send `validOnly: true` to import the others; otherwise 409. 409 for a DELTA file that was
+        already applied.
+      parameters: [{$ref: '#/components/parameters/ImportId'}]
+      requestBody:
+        content: {application/json: {schema: {$ref: '#/components/schemas/StartImportRequest'}}}
+      responses:
+        '202': {description: Started, content: {application/json: {schema: {$ref: '#/components/schemas/StockImport'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
@@ -5485,12 +5643,14 @@ components:
         moderated: {type: boolean, description: New listings go to review before they are live ("Submit for review")}
         importLimits:
           type: object
-          required: [maxFileBytes, maxRows, maxImagesPerProduct, maxVariantsPerProduct]
+          required: [maxFileBytes, maxRows, maxImagesPerProduct, maxVariantsPerProduct, maxFeedFileBytes, maxFeedRows]
           properties:
             maxFileBytes: {type: integer}
             maxRows: {type: integer}
             maxImagesPerProduct: {type: integer}
             maxVariantsPerProduct: {type: integer}
+            maxFeedFileBytes: {type: integer, description: Largest price and quantity feed or stock file (25 MB)}
+            maxFeedRows: {type: integer, description: 'Most rows in a price and quantity feed or stock file (50,000)'}
     ListingWriterRequest:
       type: object
       required: [productType, title]
@@ -5507,10 +5667,77 @@ components:
         description: {type: string}
         bullets: {type: array, items: {type: string}}
     SpreadsheetFormat: {type: string, enum: [xlsx, csv], default: xlsx}
-    ImportMode: {type: string, enum: [CREATE, UPDATE], default: CREATE}
+    ImportMode: {type: string, enum: [CREATE, UPDATE, OFFER, PRICE_QTY], default: CREATE}
+    StockImportMode: {type: string, enum: [ABSOLUTE, DELTA], default: ABSOLUTE, description: 'ABSOLUTE sets on hand to the counted number; DELTA adds a change to it'}
+    StockImportRowOutcome: {type: string, enum: [PENDING, APPLIED, UNCHANGED, FAILED, SKIPPED]}
+    StockImport:
+      type: object
+      required: [id, reference, fileName, fileSha256, sameFileAs, mode, status, totalRows, validRows, warningRows, errorRows, processedRows,
+                 appliedRows, unchangedRows, failedRows, header, createdAt, startedAt, finishedAt, reportUrl]
+      properties:
+        id: {type: string}
+        reference: {type: string}
+        fileName: {type: string}
+        fileSha256: {type: [string, 'null']}
+        sameFileAs: {type: [string, 'null'], description: "The organisation's earlier upload of the same file in the same mode"}
+        mode: {$ref: '#/components/schemas/StockImportMode'}
+        status: {$ref: '#/components/schemas/ImportStatus'}
+        totalRows: {type: integer}
+        validRows: {type: integer}
+        warningRows: {type: integer}
+        errorRows: {type: integer}
+        processedRows: {type: integer}
+        appliedRows: {type: integer, description: Rows that changed the stock}
+        unchangedRows: {type: integer, description: Rows whose count was already right}
+        failedRows: {type: integer}
+        header: {type: array, items: {type: string}, description: The uploaded header cells}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: [string, 'null'], format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+        reportUrl: {type: string, description: App-relative download of the row report (csv)}
+    StockImportPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StockImport'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+    StockImportMessage:
+      type: object
+      required: [column, severity, message]
+      properties:
+        column: {type: [string, 'null']}
+        severity: {type: string, enum: [ERROR, WARNING]}
+        message: {type: string}
+    StockImportRow:
+      type: object
+      required: [rowNumber, sku, location, lot, quantity, expiry, status, outcome, outcomeNote, before, after, messages, cells]
+      properties:
+        rowNumber: {type: integer}
+        sku: {type: string}
+        location: {type: string}
+        lot: {type: [string, 'null']}
+        quantity: {type: [integer, 'null'], description: The counted number (ABSOLUTE) or the change (DELTA)}
+        expiry: {type: [string, 'null']}
+        status: {$ref: '#/components/schemas/ImportRowStatus'}
+        outcome: {$ref: '#/components/schemas/StockImportRowOutcome'}
+        outcomeNote: {type: [string, 'null']}
+        before: {type: [integer, 'null'], description: On hand before the import changed it}
+        after: {type: [integer, 'null'], description: On hand after}
+        messages: {type: array, items: {$ref: '#/components/schemas/StockImportMessage'}}
+        cells: {type: array, items: {type: string}}
+    StockImportRowPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StockImportRow'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
     ImportStatus: {type: string, enum: [VALIDATED, QUEUED, RUNNING, COMPLETED, FAILED]}
     ImportRowStatus: {type: string, enum: [VALID, WARNING, ERROR]}
-    ImportRowOutcome: {type: string, enum: [PENDING, CREATED, UPDATED, FAILED, SKIPPED]}
+    ImportRowOutcome: {type: string, enum: [PENDING, CREATED, UPDATED, OFFER_CREATED, HELD, FAILED, SKIPPED], description: 'OFFER_CREATED: an offer on an existing page. HELD: valid but not for sale yet (tax decision pending, selling approval missing, or a photo held for review); never live. SKIPPED: nothing to do (no change, or an error row)'}
     ProductImport:
       type: object
       required: [id, reference, fileName, format, mode, productType, status, validOnly, totalRows, validRows, warningRows, errorRows,
@@ -5541,6 +5768,10 @@ components:
         startedAt: {type: [string, 'null'], format: date-time}
         finishedAt: {type: [string, 'null'], format: date-time}
         reportUrl: {type: string, description: App-relative download of the error report (xlsx)}
+        fileSha256: {type: [string, 'null'], description: SHA-256 of the uploaded file (S393)}
+        sameFileAs: {type: [string, 'null'], description: "The organisation's earlier upload of the same file in the same mode: offer to show that result instead of running it again"}
+        offersCreated: {type: integer, description: Rows that created an offer on an existing page}
+        heldRows: {type: integer, description: 'Valid rows that are not for sale yet (tax decision pending, selling approval missing, photo held)'}
     ProductImportPage:
       type: object
       required: [items, total, page, size]
@@ -5568,6 +5799,8 @@ components:
         outcome: {$ref: '#/components/schemas/ImportRowOutcome'}
         outcomeNote: {type: [string, 'null']}
         productId: {type: [string, 'null']}
+        atin: {type: [string, 'null'], description: 'The page or variant the row matched or ended on (offer rows)'}
+        offerId: {type: [string, 'null'], description: The offer the row created or changed}
         messages: {type: array, items: {$ref: '#/components/schemas/ImportRowMessage'}}
         cells: {type: array, items: {type: string}, description: Cell text in header order}
         images: {type: array, items: {$ref: '#/components/schemas/ImportRowImage'}, description: "The row's images: found in the library (thumbnail), links, missing or bad links"}
@@ -5582,6 +5815,11 @@ components:
         state: {type: string, enum: [FOUND, LINK, HELD, MISSING, BAD_LINK], description: 'FOUND in the library, a LINK copied when the import runs, HELD by moderation, MISSING from the library, or a BAD_LINK'}
         url: {type: [string, 'null'], description: Thumbnail of a FOUND library image}
         message: {type: [string, 'null']}
+        check:
+          oneOf:
+            - {$ref: '#/components/schemas/ImageCheck'}
+            - {type: 'null'}
+          description: 'The finding in the same code, level and params as the product form image cards (S391): Seller Center shows sc.img.check.<code>, so the preview never has its own wording. Null for an image that is fine.'
     ImageLibraryItem:
       type: object
       required: [assetId, fileName, sku, slot, status, url, width, height, bytes, flags, createdAt, usedBy, skuKnown]

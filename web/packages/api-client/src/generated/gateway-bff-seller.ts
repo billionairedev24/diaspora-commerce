@@ -1195,8 +1195,13 @@ export interface paths {
          * @description catalog `POST /v1/imports` (multipart). Rows are checked for required fields, allowed values, numbers and
          *     units, GTIN check digits, duplicate SKUs in the file and against the organisation's listings, and image URL
          *     format; images are fetched when the import runs. Nothing is imported yet: review the preview, then start it.
-         *     422 `VALIDATION_FAILED` (`errors.file`) when the file can't be read: wrong type, over 10 MB or 5,000 rows,
-         *     missing required columns. `mode` CREATE adds products; UPDATE changes listings by SKU (blank cells unchanged).
+         *     422 `VALIDATION_FAILED` (`errors.file`) when the file can't be read: wrong type, over 10 MB (25 MB for PRICE_QTY)
+         *     or 5,000 rows (50,000 for PRICE_QTY), missing required columns. `mode` CREATE adds products; UPDATE changes
+         *     listings by SKU (blank cells unchanged); OFFER puts the seller's offers on existing pages (a barcode that
+         *     matches turns a CREATE row into an offer row too); PRICE_QTY changes price and stock of the seller's own offers
+         *     by SKU or ATIN (blank = unchanged). Rows the seller may not sell yet, or that have no stored tax decision, end
+         *     `HELD` and are never live. 409 when an upload of this mode is already running or the daily limit is reached.
+         *     403 for a member without edit access to listings; PRICE_QTY also needs edit access to inventory.
          */
         post: operations["uploadImport"];
         delete?: never;
@@ -1279,6 +1284,131 @@ export interface paths {
          *     they finish.
          */
         post: operations["startImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/stock/imports/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the stock file template (CSV)
+         * @description inventory `GET /v1/stock/imports/template`. Columns: Seller SKU, Location, On hand (`ABSOLUTE`: what you counted)
+         *     or Change (`DELTA`: added to what is on hand; a DELTA file is never applied twice), Lot and Expiry (perishables).
+         */
+        get: operations["downloadStockImportTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/stock/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stock file history of the active organisation (newest first) */
+        get: operations["listStockImports"];
+        put?: never;
+        /**
+         * Upload a stock CSV and validate every row
+         * @description inventory `POST /v1/stock/imports` (multipart). Every row is checked: the SKU is one the organisation holds at
+         *     that location (a SKU of another organisation looks unknown), the location, a whole number never below zero
+         *     and at most 99,999, lot and expiry. Nothing is applied yet: review the preview, then start it. The organisation is
+         *     the signed-in member's active organisation; a request cannot name another. 422 `VALIDATION_FAILED`
+         *     (`errors.file`) when the file can't be read (not .csv, over 25 MB or 50,000 rows, missing columns). 403 for
+         *     AfroTransact Retail's own stock. 409 when a stock file is already running.
+         */
+        post: operations["uploadStockImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/stock/imports/{importId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A stock file with its validation counts and progress (poll while QUEUED or RUNNING) */
+        get: operations["getStockImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/stock/imports/{importId}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rows of a stock file for the preview (status ERROR = errors only) */
+        get: operations["listStockImportRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/stock/imports/{importId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the row report (CSV)
+         * @description The uploaded columns first, then Row, Result, Severity, Column, Message, Before and After. Cells that start with
+         *     = + - @ are prefixed with ' so spreadsheet apps never run them as formulas.
+         */
+        get: operations["downloadStockImportReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/stock/imports/{importId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the stock import (background; each row is applied once)
+         * @description inventory `POST /v1/stock/imports/{id}/start`. Each row locks the position, refuses a count below the units
+         *     already reserved for orders (row error) and writes an adjustment with the reason BULK_COUNT and the import id.
+         *     With rows in error send `validOnly: true` to import the others; otherwise 409. 409 for a DELTA file that was
+         *     already applied.
+         */
+        post: operations["startStockImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5232,6 +5362,10 @@ export interface components {
                 maxRows: number;
                 maxImagesPerProduct: number;
                 maxVariantsPerProduct: number;
+                /** @description Largest price and quantity feed or stock file (25 MB) */
+                maxFeedFileBytes: number;
+                /** @description Most rows in a price and quantity feed or stock file (50,000) */
+                maxFeedRows: number;
             };
         };
         ListingWriterRequest: {
@@ -5257,13 +5391,90 @@ export interface components {
          * @default CREATE
          * @enum {string}
          */
-        ImportMode: "CREATE" | "UPDATE";
+        ImportMode: "CREATE" | "UPDATE" | "OFFER" | "PRICE_QTY";
+        /**
+         * @description ABSOLUTE sets on hand to the counted number; DELTA adds a change to it
+         * @default ABSOLUTE
+         * @enum {string}
+         */
+        StockImportMode: "ABSOLUTE" | "DELTA";
+        /** @enum {string} */
+        StockImportRowOutcome: "PENDING" | "APPLIED" | "UNCHANGED" | "FAILED" | "SKIPPED";
+        StockImport: {
+            id: string;
+            reference: string;
+            fileName: string;
+            fileSha256: string | null;
+            /** @description The organisation's earlier upload of the same file in the same mode */
+            sameFileAs: string | null;
+            mode: components["schemas"]["StockImportMode"];
+            status: components["schemas"]["ImportStatus"];
+            totalRows: number;
+            validRows: number;
+            warningRows: number;
+            errorRows: number;
+            processedRows: number;
+            /** @description Rows that changed the stock */
+            appliedRows: number;
+            /** @description Rows whose count was already right */
+            unchangedRows: number;
+            failedRows: number;
+            /** @description The uploaded header cells */
+            header: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+            /** @description App-relative download of the row report (csv) */
+            reportUrl: string;
+        };
+        StockImportPage: {
+            items: components["schemas"]["StockImport"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        StockImportMessage: {
+            column: string | null;
+            /** @enum {string} */
+            severity: "ERROR" | "WARNING";
+            message: string;
+        };
+        StockImportRow: {
+            rowNumber: number;
+            sku: string;
+            location: string;
+            lot: string | null;
+            /** @description The counted number (ABSOLUTE) or the change (DELTA) */
+            quantity: number | null;
+            expiry: string | null;
+            status: components["schemas"]["ImportRowStatus"];
+            outcome: components["schemas"]["StockImportRowOutcome"];
+            outcomeNote: string | null;
+            /** @description On hand before the import changed it */
+            before: number | null;
+            /** @description On hand after */
+            after: number | null;
+            messages: components["schemas"]["StockImportMessage"][];
+            cells: string[];
+        };
+        StockImportRowPage: {
+            items: components["schemas"]["StockImportRow"][];
+            total: number;
+            page: number;
+            size: number;
+        };
         /** @enum {string} */
         ImportStatus: "VALIDATED" | "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
         /** @enum {string} */
         ImportRowStatus: "VALID" | "WARNING" | "ERROR";
-        /** @enum {string} */
-        ImportRowOutcome: "PENDING" | "CREATED" | "UPDATED" | "FAILED" | "SKIPPED";
+        /**
+         * @description OFFER_CREATED: an offer on an existing page. HELD: valid but not for sale yet (tax decision pending, selling approval missing, or a photo held for review); never live. SKIPPED: nothing to do (no change, or an error row)
+         * @enum {string}
+         */
+        ImportRowOutcome: "PENDING" | "CREATED" | "UPDATED" | "OFFER_CREATED" | "HELD" | "FAILED" | "SKIPPED";
         ProductImport: {
             id: string;
             /** @description e.g. BU-000123 */
@@ -5298,6 +5509,14 @@ export interface components {
             finishedAt: string | null;
             /** @description App-relative download of the error report (xlsx) */
             reportUrl: string;
+            /** @description SHA-256 of the uploaded file (S393) */
+            fileSha256?: string | null;
+            /** @description The organisation's earlier upload of the same file in the same mode: offer to show that result instead of running it again */
+            sameFileAs?: string | null;
+            /** @description Rows that created an offer on an existing page */
+            offersCreated?: number;
+            /** @description Valid rows that are not for sale yet (tax decision pending, selling approval missing, photo held) */
+            heldRows?: number;
         };
         ProductImportPage: {
             items: components["schemas"]["ProductImport"][];
@@ -5324,6 +5543,10 @@ export interface components {
             outcome: components["schemas"]["ImportRowOutcome"];
             outcomeNote: string | null;
             productId: string | null;
+            /** @description The page or variant the row matched or ended on (offer rows) */
+            atin?: string | null;
+            /** @description The offer the row created or changed */
+            offerId?: string | null;
             messages: components["schemas"]["ImportRowMessage"][];
             /** @description Cell text in header order */
             cells: string[];
@@ -5349,6 +5572,8 @@ export interface components {
             /** @description Thumbnail of a FOUND library image */
             url: string | null;
             message: string | null;
+            /** @description The finding in the same code, level and params as the product form image cards (S391): Seller Center shows sc.img.check.<code>, so the preview never has its own wording. Null for an image that is fine. */
+            check?: components["schemas"]["ImageCheck"] | null;
         };
         ImageLibraryItem: {
             assetId: string;
@@ -8684,6 +8909,8 @@ export interface operations {
     downloadImportTemplate: {
         parameters: {
             query?: {
+                /** @description OFFER and PRICE_QTY templates are generated server-side and do not depend on a category (productType and categoryId are ignored): OFFER has barcode, ATIN or brand and part number, price, quantity, condition, shipping and handling and no photo, title or attribute columns; PRICE_QTY has seller SKU or ATIN, price, list price and quantity (blank = unchanged) */
+                mode?: components["schemas"]["ImportMode"];
                 productType?: string;
                 categoryId?: string;
                 format?: components["schemas"]["SpreadsheetFormat"];
@@ -8752,7 +8979,7 @@ export interface operations {
                 "multipart/form-data": {
                     /**
                      * Format: binary
-                     * @description .xlsx or .csv, at most 10 MB
+                     * @description .xlsx or .csv, at most 10 MB (25 MB for PRICE_QTY)
                      */
                     file: string;
                     mode?: components["schemas"]["ImportMode"];
@@ -8893,6 +9120,218 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadStockImportTemplate: {
+        parameters: {
+            query?: {
+                mode?: components["schemas"]["StockImportMode"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStockImports: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stock files */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockImportPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    uploadStockImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description .csv, at most 25 MB
+                     */
+                    file: string;
+                    mode?: components["schemas"]["StockImportMode"];
+                };
+            };
+        };
+        responses: {
+            /** @description Validated upload */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStockImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stock file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStockImportRows: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ImportRowStatus"];
+                outcome?: components["schemas"]["StockImportRowOutcome"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockImportRowPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadStockImportReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Report file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    startStockImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StartImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockImport"];
                 };
             };
             401: components["responses"]["Problem"];

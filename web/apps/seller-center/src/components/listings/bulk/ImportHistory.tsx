@@ -15,8 +15,10 @@ import { ErrorState } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
-import { dateTime } from '@/lib/format';
+import { dateTime, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+
+import { modeLabelKey } from './bulk-model';
 
 /** Upload history (S308): every bulk upload of the organisation, newest first, server-paged; a row opens its preview or result. */
 export function ImportHistory() {
@@ -32,11 +34,11 @@ export function ImportHistory() {
     { id: 'reference', accessorFn: (r) => r.reference, header: t('sc.bulk.col.reference'), size: 120, meta: { kind: 'mono' } },
     { id: 'createdAt', accessorFn: (r) => r.createdAt, header: t('sc.bulk.col.uploaded'), size: 170, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.createdAt) },
     { id: 'uploadedByName', accessorFn: (r) => r.uploadedByName ?? '', header: t('sc.bulk.col.by'), size: 150 },
-    { id: 'mode', accessorFn: (r) => (r.mode === 'UPDATE' ? t('sc.bulk.mode.UPDATE') : t('sc.bulk.mode.CREATE')), header: t('sc.bulk.col.mode'), size: 130 },
+    { id: 'mode', accessorFn: (r) => t(modeLabelKey(r.mode)), header: t('sc.bulk.col.mode'), size: 130 },
     { id: 'totalRows', accessorFn: (r) => r.totalRows, header: t('sc.bulk.col.rows'), size: 80, meta: { kind: 'number', align: 'end' } },
     { id: 'errorRows', accessorFn: (r) => r.errorRows, header: t('sc.bulk.col.errors'), size: 80, meta: { kind: 'number', align: 'end' },
       cell: ({ row }) => <span className={row.original.errorRows ? 'font-semibold text-danger' : undefined}>{row.original.errorRows}</span> },
-    { id: 'products', accessorFn: (r) => r.createdProducts + r.updatedProducts, header: t('sc.bulk.col.products'), size: 100, meta: { kind: 'number', align: 'end' } },
+    { id: 'products', accessorFn: (r) => r.createdProducts + r.updatedProducts + (r.offersCreated ?? 0), header: t('sc.bulk.col.products'), size: 100, meta: { kind: 'number', align: 'end' } },
     { id: 'status', accessorFn: (r) => t(`sc.bulk.status.${r.status}`), header: t('sc.bulk.col.status'), size: 140, meta: { kind: 'status' },
       cell: ({ row }) => <StatusPill tone={toneOf(row.original.status === 'VALIDATED' && row.original.errorRows ? 'OPEN' : row.original.status)}>{t(`sc.bulk.status.${row.original.status}`)}</StatusPill> }
   ], [t]);
@@ -61,6 +63,32 @@ export function ImportHistory() {
         empty={t('sc.bulk.historyEmpty')}
         noMatches={t('sc.bulk.noMatches')}
       />
+      <StockFiles />
     </>
+  );
+}
+
+/** The organisation's latest stock files (S395): each opens its preview or result. */
+function StockFiles() {
+  const api = sellerApi();
+  const t = useT();
+  const { orgId, can } = useSeller();
+  const q = useQuery({ ...sellerQueries.stockImports(api, orgId, 0, 10), enabled: can('inventory', 'VIEW') });
+  if (!q.data?.items.length) return null;
+  return (
+    <section aria-labelledby="stock-files" className="flex flex-col gap-2" data-testid="stock-files">
+      <h2 id="stock-files" className="m-0 text-lg font-semibold">{t('sc.bulk.historyStock')}</h2>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {q.data.items.map((i) => (
+          <li key={i.id}>
+            <Link href={`/listings/bulk/stock/${encodeURIComponent(i.id)}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-sm border border-border bg-surface px-3 py-2 text-sm">
+              <strong className="text-text">{i.fileName}</strong>
+              <span className="text-xs text-muted">{i.reference} · {shortDate(i.createdAt)} · {t('sc.bulk.rowsCount', { count: i.totalRows })} · {t(i.mode === 'DELTA' ? 'sc.bulk.stockMode.DELTA' : 'sc.bulk.stockMode.ABSOLUTE')}</span>
+              <span className="ml-auto"><StatusPill tone={toneOf(i.status === 'VALIDATED' && i.errorRows ? 'OPEN' : i.status)}>{t(`sc.bulk.status.${i.status}`)}</StatusPill></span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

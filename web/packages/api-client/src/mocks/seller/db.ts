@@ -41,6 +41,7 @@ import {
   type Subscription,
   type TeamMember} from '../../schemas/seller';
 import { chargeTermsOf, planFeatureList } from '../../staff-plans';
+import { type MockHolding, type MockStockImport } from './bulk-modes';
 import { MOCK_FASHION_ORG, MOCK_FOOD_ORG } from './departments';
 import { type MockDraft, type MockImport } from './listing-form';
 import { type MockMatchingState } from './matching';
@@ -131,6 +132,9 @@ export interface MockSellerDb {
   drafts: MockDraft[];
   /** Bulk uploads with their validated rows (S308). */
   imports: MockImport[];
+  /** Stock files (S395) and the counts they change, by `SKU|LOCATION`; created on first use. */
+  stockImports?: MockStockImport[];
+  stockHoldings?: Record<string, MockHolding>;
   seq: number;
 }
 

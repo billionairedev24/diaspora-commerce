@@ -72,6 +72,22 @@ import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { SERVICE_PLACES } from '../shopper-state';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
+import {
+  applyStockRows,
+  FEED_SAMPLE,
+  finishFeedRows,
+  type MockHolding,
+  type MockStockImport,
+  OFFER_SAMPLE,
+  offerTemplateCsv,
+  priceQtyTemplateCsv,
+  stockImportView,
+  stockReportCsv,
+  stockTemplateCsv,
+  validateFeedSheet,
+  validateOfferSheet,
+  validateStockCsv
+} from './bulk-modes';
 import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import { MOCK_DEPARTMENTS, MOCK_ORG_DEPARTMENTS } from './departments';
 import { homeModules } from './home-modules';
@@ -638,6 +654,20 @@ const AI_PLANS = ['seller_growth', 'seller_pro'];
 
 const SPREADSHEET_TYPES: Record<string, string> = { csv: 'text/csv; charset=utf-8', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
 /** A generated file (the mock writes CSV text even for .xlsx names: it isn't parsed back except as a download). */
+/** What the seller holds in stock (SKU|LOCATION): the Fulfilled by AfroTransact listings, as the inventory page shows them. */
+function stockHoldings(ctx: Ctx): Map<string, MockHolding> {
+  const nodes = ['HOU1', 'ATL1', 'NJ1', 'DFW1'];
+  const held: Record<string, MockHolding> = (ctx.db.stockHoldings ??= {});
+  if (Object.keys(held).length === 0) {
+    ctx.db.listings
+      .filter((l) => l.fulfilment === 'AFROTRANSACT')
+      .forEach((l, i) => l.variants.forEach((v, j) => {
+        held[`${v.sku.toUpperCase()}|${nodes[(i + j) % nodes.length] ?? 'HOU1'}`] = { onHand: v.quantity + 10, reserved: (i + j) % 6 };
+      }));
+  }
+  return new Map(Object.entries(held));
+}
+
 const fileResponse = (text: string, fileName: string, format: string) =>
   new HttpResponse(text, { status: 200, headers: { 'Content-Type': SPREADSHEET_TYPES[format] ?? 'text/csv', 'Content-Disposition': `attachment; filename="${fileName}"` } });
 
@@ -1712,6 +1742,10 @@ export const sellerHandlers = [
       const q = query(ctx);
       const format = q.get('format') ?? 'xlsx';
       if (format !== 'xlsx' && format !== 'csv') throw invalid({ format: 'xlsx or csv' });
+      const tplMode = (q.get('mode') ?? 'CREATE').toUpperCase();
+      if (!['CREATE', 'UPDATE', 'OFFER', 'PRICE_QTY'].includes(tplMode)) throw invalid({ mode: 'CREATE, UPDATE, OFFER or PRICE_QTY' });
+      if (tplMode === 'OFFER') return fileResponse(offerTemplateCsv(), `afrotransact-offer.${format}`, format);
+      if (tplMode === 'PRICE_QTY') return fileResponse(priceQtyTemplateCsv(), `afrotransact-price-qty.${format}`, format);
       const type = q.get('productType') ?? categoryLeaves().find((l) => l.id === q.get('categoryId'))?.productType ?? undefined;
       if (type && !PRODUCT_TYPES[type]) throw notFound('Unknown product type.');
       return fileResponse(templateCsv(type), `afrotransact-${type ?? 'products'}-template.${format}`, format);
@@ -1743,17 +1777,24 @@ export const sellerHandlers = [
       }
       const file = form.get('file');
       const mode = String(form.get('mode') ?? 'CREATE').toUpperCase();
-      if (mode !== 'CREATE' && mode !== 'UPDATE') throw invalid({ mode: 'CREATE or UPDATE' });
+      if (mode !== 'CREATE' && mode !== 'UPDATE' && mode !== 'OFFER' && mode !== 'PRICE_QTY') throw invalid({ mode: 'CREATE, UPDATE, OFFER or PRICE_QTY' });
       // Duck-typed: test runners mix Blob implementations (jsdom's and Node's).
       if (typeof file === 'string' || file === null || file.size === 0) throw invalid({ file: 'Choose an Excel (.xlsx) or CSV (.csv) file' });
       const name = file.name || 'upload.csv';
       const ext = name.toLowerCase().split('.').pop();
       if (ext !== 'xlsx' && ext !== 'csv') throw invalid({ file: 'Upload an Excel (.xlsx) or CSV (.csv) file; save .xls workbooks as .xlsx' });
-      if (file.size > IMPORT_LIMITS.maxFileBytes) throw invalid({ file: 'The file is larger than 10 MB; split it into several files' });
+      const maxBytes = mode === 'PRICE_QTY' ? IMPORT_LIMITS.maxFeedFileBytes : IMPORT_LIMITS.maxFileBytes;
+      if (file.size > maxBytes) throw invalid({ file: `The file is larger than ${maxBytes >> 20} MB; split it into several files` });
       require(ctx, 'listings', 'EDIT', 'SELLER');
-      const sheet = ext === 'csv' ? parseCsv(await file.text()) : SAMPLE_UPLOAD;
+      if (mode === 'PRICE_QTY') require(ctx, 'inventory', 'EDIT', 'SELLER');
       const existing = new Set(ctx.db.listings.flatMap((l) => l.variants.map((v) => v.sku.toUpperCase())));
-      const v = validateSheet(sheet, mode, existing);
+      // The feed and offer files are read as CSV; an .xlsx stands in with a small sample like the product upload does.
+      const text = ext === 'csv' ? await file.text() : '';
+      const csv = parseCsv(text.replace(/^(#.*\r?\n)+/, ''));
+      const sheet = ext === 'csv' ? csv : mode === 'OFFER' ? OFFER_SAMPLE : mode === 'PRICE_QTY' ? FEED_SAMPLE : SAMPLE_UPLOAD;
+      const v = mode === 'OFFER' ? validateOfferSheet(sheet, IMPORT_LIMITS.maxRows)
+        : mode === 'PRICE_QTY' ? validateFeedSheet(sheet, existing, IMPORT_LIMITS.maxFeedRows)
+        : validateSheet(sheet, mode, existing);
       if (v.fileProblem) throw invalid({ file: v.fileProblem });
       const id = nextId(ctx.db, 'imp');
       const imp: MockImport = {
@@ -1761,7 +1802,9 @@ export const sellerHandlers = [
         productType: String(form.get('productType') ?? '') || null, status: 'VALIDATED', validOnly: false, ...importSummary(v.rows),
         processedRows: 0, createdProducts: 0, updatedProducts: 0, failedRows: 0, header: v.header, fileWarnings: [],
         uploadedByName: `${ctx.db.user.firstName} ${ctx.db.user.lastName}`, createdAt: ctx.now.toISOString(), startedAt: null, finishedAt: null,
-        reportUrl: `/api/bff/v1/seller/imports/${id}/report?format=xlsx`, rows: v.rows
+        reportUrl: `/api/bff/v1/seller/imports/${id}/report?format=xlsx`, rows: v.rows,
+        fileSha256: `mock-${name}-${file.size}`, sameFileAs: ctx.db.imports.find((i) => i.orgId === ctx.org.id && i.mode === mode && i.fileSha256 === `mock-${name}-${file.size}`)?.id ?? null,
+        offersCreated: 0, heldRows: 0
       };
       ctx.db.imports.unshift(imp);
       return importView(imp);
@@ -1773,7 +1816,16 @@ export const sellerHandlers = [
       require(ctx, 'listings', 'VIEW', 'SELLER');
       const imp = ctx.db.imports.find((i) => i.id === p.id && i.orgId === ctx.org.id);
       if (!imp) throw notFound('No such upload.');
-      advanceImport(imp, ctx.now, (rows) => importedListing(ctx, imp, rows));
+      if (imp.mode === 'OFFER' || imp.mode === 'PRICE_QTY') {
+        if (imp.status === 'QUEUED' || imp.status === 'RUNNING') {
+          finishFeedRows(imp.mode, imp.rows);
+          Object.assign(imp, {
+            status: 'COMPLETED', processedRows: imp.rows.length, finishedAt: ctx.now.toISOString(),
+            offersCreated: imp.rows.filter((r) => r.outcome === 'OFFER_CREATED').length, heldRows: imp.rows.filter((r) => r.outcome === 'HELD').length,
+            createdProducts: 0, updatedProducts: imp.rows.filter((r) => r.outcome === 'UPDATED').length, failedRows: 0
+          });
+        }
+      } else advanceImport(imp, ctx.now, (rows) => importedListing(ctx, imp, rows));
       return importView(imp);
     })
   ),
@@ -1813,11 +1865,127 @@ export const sellerHandlers = [
       require(ctx, 'listings', 'EDIT', 'SELLER');
       const imp = ctx.db.imports.find((i) => i.id === p.id && i.orgId === ctx.org.id);
       if (!imp) throw notFound('No such upload.');
+      if (imp.mode === 'PRICE_QTY') require(ctx, 'inventory', 'EDIT', 'SELLER');
       if (imp.status !== 'VALIDATED') return importView(imp);
       if (imp.errorRows > 0 && !b.validOnly) throw new SellerProblem(409, 'CONFLICT', 'The file has errors', `${imp.errorRows} rows have errors. Fix them and upload again, or import the valid rows only.`);
       if (imp.validRows + imp.warningRows === 0) throw new SellerProblem(409, 'CONFLICT', 'Nothing to import', 'No row of this file can be imported.');
       Object.assign(imp, { status: 'QUEUED', validOnly: b.validOnly ?? false, startedAt: ctx.now.toISOString() });
       return importView(imp);
+    }, 202)
+  ),
+  /* ── Stock CSV import (S395): counts for the organisation's own stock ── */
+  http.get(`${W}/stock/imports/template`, async ({ request }) => {
+    try {
+      const ctx = context(request);
+      require(ctx, 'inventory', 'VIEW', 'SELLER');
+      const mode = (query(ctx).get('mode') ?? 'ABSOLUTE').toUpperCase();
+      if (mode !== 'ABSOLUTE' && mode !== 'DELTA') throw invalid({ mode: 'ABSOLUTE or DELTA' });
+      return fileResponse(stockTemplateCsv(mode), `afrotransact-stock-${mode.toLowerCase()}.csv`, 'csv');
+    } catch (e) {
+      if (e instanceof SellerProblem) return problemResponse(e);
+      throw e;
+    }
+  }),
+  http.get(
+    `${W}/stock/imports`,
+    route((ctx) => {
+      require(ctx, 'inventory', 'VIEW', 'SELLER');
+      const q = query(ctx);
+      const page = Number(q.get('page') ?? '0');
+      const size = Number(q.get('size') ?? '25');
+      if (size < 1 || size > 100 || page < 0) throw invalid({ size: 'Between 1 and 100' });
+      const mine = (ctx.db.stockImports ?? []).filter((i) => i.orgId === ctx.org.id);
+      return { items: mine.slice(page * size, page * size + size).map(stockImportView), total: mine.length, page, size };
+    })
+  ),
+  http.post(
+    `${W}/stock/imports`,
+    route(async (ctx) => {
+      let form: FormData;
+      try {
+        form = await ctx.request.formData();
+      } catch {
+        throw invalid({ file: 'Choose a CSV (.csv) file' });
+      }
+      const file = form.get('file');
+      const mode = String(form.get('mode') ?? 'ABSOLUTE').toUpperCase();
+      if (mode !== 'ABSOLUTE' && mode !== 'DELTA') throw invalid({ mode: 'ABSOLUTE or DELTA' });
+      if (typeof file === 'string' || file === null || file.size === 0) throw invalid({ file: 'Choose a CSV (.csv) file' });
+      const name = file.name || 'stock.csv';
+      if (!name.toLowerCase().endsWith('.csv')) throw invalid({ file: 'Upload a CSV (.csv) file; save a spreadsheet as CSV first' });
+      if (file.size > IMPORT_LIMITS.maxFeedFileBytes) throw invalid({ file: 'The file is larger than 25 MB; split it into several files' });
+      require(ctx, 'inventory', 'EDIT', 'SELLER');
+      const list = (ctx.db.stockImports ??= []);
+      if (list.some((i) => i.orgId === ctx.org.id && (i.status === 'QUEUED' || i.status === 'RUNNING'))) {
+        throw new SellerProblem(409, 'inventory.import-already-running', 'A stock file is already running', 'Wait for the stock file that is running to finish, then upload this one.');
+      }
+      const v = validateStockCsv(parseCsv((await file.text()).replace(/^(#.*\r?\n)+/, '')), mode, stockHoldings(ctx), IMPORT_LIMITS.maxFeedRows);
+      if (v.fileProblem) throw invalid({ file: v.fileProblem });
+      const id = nextId(ctx.db, 'stk');
+      const sha = `mock-${name}-${file.size}-${mode}`;
+      const imp: MockStockImport = {
+        id, orgId: ctx.org.id, reference: `SI-${String(1000 + ctx.db.seq)}`, fileName: name, fileSha256: sha, sameFileAs: list.find((i) => i.orgId === ctx.org.id && i.fileSha256 === sha)?.id ?? null,
+        mode, status: 'VALIDATED', totalRows: v.rows.length, validRows: v.rows.filter((r) => r.status !== 'ERROR').length, warningRows: 0, errorRows: v.rows.filter((r) => r.status === 'ERROR').length,
+        processedRows: 0, appliedRows: 0, unchangedRows: 0, failedRows: 0, header: v.header, createdAt: ctx.now.toISOString(), startedAt: null, finishedAt: null,
+        reportUrl: `/api/bff/v1/seller/stock/imports/${id}/report`, rows: v.rows
+      };
+      list.unshift(imp);
+      return stockImportView(imp);
+    }, 201)
+  ),
+  http.get(
+    `${W}/stock/imports/:id`,
+    route((ctx, p) => {
+      require(ctx, 'inventory', 'VIEW', 'SELLER');
+      const imp = (ctx.db.stockImports ?? []).find((i) => i.id === p.id && i.orgId === ctx.org.id);
+      if (!imp) throw new SellerProblem(404, 'NOT_FOUND', 'Not found', 'No such stock file.');
+      if (imp.status === 'QUEUED' || imp.status === 'RUNNING') {
+        applyStockRows(imp, stockHoldings(ctx));
+        imp.finishedAt = ctx.now.toISOString();
+      }
+      return stockImportView(imp);
+    })
+  ),
+  http.get(
+    `${W}/stock/imports/:id/rows`,
+    route((ctx, p) => {
+      require(ctx, 'inventory', 'VIEW', 'SELLER');
+      const imp = (ctx.db.stockImports ?? []).find((i) => i.id === p.id && i.orgId === ctx.org.id);
+      if (!imp) throw new SellerProblem(404, 'NOT_FOUND', 'Not found', 'No such stock file.');
+      const q = query(ctx);
+      const status = q.get('status');
+      const outcome = q.get('outcome');
+      const page = Number(q.get('page') ?? '0');
+      const size = Number(q.get('size') ?? '50');
+      if (size < 1 || size > 200 || page < 0) throw invalid({ size: 'Between 1 and 200' });
+      const rows = imp.rows.filter((r) => (!status || r.status === status) && (!outcome || r.outcome === outcome));
+      return { items: rows.slice(page * size, page * size + size), total: rows.length, page, size };
+    })
+  ),
+  http.get(`${W}/stock/imports/:id/report`, ({ request, params }) => {
+    try {
+      const ctx = context(request);
+      require(ctx, 'inventory', 'VIEW', 'SELLER');
+      const imp = (ctx.db.stockImports ?? []).find((i) => i.id === params.id && i.orgId === ctx.org.id);
+      if (!imp) throw new SellerProblem(404, 'NOT_FOUND', 'Not found', 'No such stock file.');
+      return fileResponse(stockReportCsv(imp), `${imp.fileName.replace(/\.[^.]+$/, '')}-report.csv`, 'csv');
+    } catch (e) {
+      if (e instanceof SellerProblem) return problemResponse(e);
+      throw e;
+    }
+  }),
+  http.post(
+    `${W}/stock/imports/:id/start`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, z.object({ validOnly: z.boolean().optional() }));
+      require(ctx, 'inventory', 'EDIT', 'SELLER');
+      const imp = (ctx.db.stockImports ?? []).find((i) => i.id === p.id && i.orgId === ctx.org.id);
+      if (!imp) throw new SellerProblem(404, 'NOT_FOUND', 'Not found', 'No such stock file.');
+      if (imp.status !== 'VALIDATED') return stockImportView(imp);
+      if (imp.errorRows > 0 && !b.validOnly) throw new SellerProblem(409, 'CONFLICT', 'The file has errors', `${imp.errorRows} rows have errors. Fix them and upload again, or import the valid rows only.`);
+      if (imp.validRows === 0) throw new SellerProblem(409, 'CONFLICT', 'Nothing to import', 'No row of this file can be imported.');
+      Object.assign(imp, { status: 'QUEUED', startedAt: ctx.now.toISOString() });
+      return stockImportView(imp);
     }, 202)
   ),
   // The category tree never depends on the department lookup: `scopeUnavailable` only breaks the (optional) hint below.
