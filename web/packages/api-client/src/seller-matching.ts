@@ -1,4 +1,4 @@
-/* Seller Center "Add a product" (S382) and Improve your image (S391): the barcode lookup, the offer-only offer, change requests
+/* Seller Center "Add a product" (S382) and Improve your image (S391): the search box (a name, no barcode needed), the optional barcode shortcut, the offer-only offer, change requests
    and image tasks (contracts/openapi/gateway-bff-seller.yaml, tags Matching and Image quality). catalog owns the page; a seller
    who finds it sells an offer on it and never changes the page. Everything here is plain words: no ids reach the screen. */
 import { queryOptions } from '@tanstack/react-query';
@@ -26,9 +26,9 @@ export const ImageCheckSchema = z.object({
 });
 export type ImageCheck = z.infer<typeof ImageCheckSchema>;
 
-/* ── The barcode step ── */
+/* ── The barcode shortcut ── */
 
-export const MatchRequestSchema = z.object({ gtin: z.string().max(20).optional(), brand: z.string().max(120).optional(), mpn: z.string().max(80).optional() });
+export const MatchRequestSchema = z.object({ gtin: z.string().max(20) });
 export type MatchRequest = z.infer<typeof MatchRequestSchema>;
 export const MatchResultKindSchema = z.enum(['MATCH', 'NO_MATCH', 'INVALID', 'RESTRICTED']);
 export type MatchResultKind = z.infer<typeof MatchResultKindSchema>;
@@ -38,7 +38,6 @@ export const MatchVariantSchema = z.object({ atin: z.string(), options: z.record
 export type MatchVariant = z.infer<typeof MatchVariantSchema>;
 export const CatalogMatchSchema = z.object({
   result: MatchResultKindSchema,
-  matchedOn: z.enum(['GTIN', 'BRAND_MPN']).nullish(),
   digits: nullableString.optional(),
   /** The matched variant: offers attach to it. Never shown. */
   atin: nullableString.optional(),
@@ -60,7 +59,59 @@ export const CatalogMatchSchema = z.object({
 });
 export type CatalogMatch = z.infer<typeof CatalogMatchSchema>;
 
-/* ── The offer-only form: terms only, never page content ── */
+/* ── The search box: "What are you selling?" Name, brand, size and category are read from the one text; nothing about any seller is returned ── */
+
+export const CandidateRequestSchema = z.object({ query: z.string().min(1).max(200), categoryId: z.string().optional() });
+export type CandidateRequest = z.infer<typeof CandidateRequestSchema>;
+export const MatchCategorySchema = z.object({ id: z.string(), path: z.string() });
+export type MatchCategory = z.infer<typeof MatchCategorySchema>;
+export const MatchCandidateSchema = z.object({
+  parentAtin: z.string(),
+  /** The variant to sell when the page has exactly one. Never shown. */
+  atin: nullableString.optional(),
+  title: z.string(),
+  brand: nullableString.optional(),
+  image: z.object({ url: z.string(), width: z.number().int().nullish(), height: z.number().int().nullish() }).nullish(),
+  category: nullableString.optional(),
+  /** The page's size in words, for the one-tap "Same size, 5 kg?"; null when it states none. */
+  sizeLabel: nullableString.optional(),
+  variants: z.array(MatchVariantSchema).default([]),
+  /** SAME_NAME is exact and SIMILAR a suggestion; both always need the seller's click. */
+  kind: z.enum(['SAME_NAME', 'SIMILAR']),
+  likely: z.boolean(),
+  sellerCount: z.number().int().nullish(),
+  canOffer: z.boolean(),
+  blockers: z.array(BlockerSchema)
+});
+export type MatchCandidate = z.infer<typeof MatchCandidateSchema>;
+export const CandidateListSchema = z.object({
+  candidates: z.array(MatchCandidateSchema),
+  suggestedCategory: MatchCategorySchema.nullish(),
+  category: MatchCategorySchema.nullish(),
+  tooShort: z.boolean(),
+  /** The search did not answer: no suggestions, and the seller may still add the product as new. */
+  searchUnavailable: z.boolean()
+});
+export type CandidateList = z.infer<typeof CandidateListSchema>;
+export const DecisionRequestSchema = z.object({
+  choice: z.enum(['SELL_EXISTING', 'NONE_OF_THESE']),
+  query: z.string().min(1).max(200),
+  categoryId: z.string().optional(),
+  atin: z.string().optional(),
+  sizeConfirmed: z.boolean().optional()
+});
+export type DecisionRequest = z.infer<typeof DecisionRequestSchema>;
+export const MatchDecisionSchema = z.object({
+  decisionId: nullableString.optional(),
+  choice: z.enum(['SELL_EXISTING', 'NONE_OF_THESE']),
+  atin: nullableString.optional(),
+  canOffer: z.boolean(),
+  blockers: z.array(BlockerSchema),
+  possibleDuplicateQueued: z.boolean()
+});
+export type MatchDecision = z.infer<typeof MatchDecisionSchema>;
+
+/* ── The price-and-stock form: terms only, never page content ── */
 
 export const OFFER_CONDITIONS = ['NEW', 'RENEWED', 'USED_LIKE_NEW', 'USED_VERY_GOOD', 'USED_GOOD', 'USED_ACCEPTABLE'] as const;
 export type OfferCondition = (typeof OFFER_CONDITIONS)[number];
@@ -150,6 +201,9 @@ const idem = (key?: string): Record<string, string> | undefined => (key ? { 'Ide
 export function createSellerMatchingApi(request: Requester) {
   return {
     match: (input: MatchRequest, signal?: AbortSignal): Promise<CatalogMatch> => request('/v1/seller/catalog/matches', CatalogMatchSchema, { method: 'POST', body: input, signal }),
+    candidates: (input: CandidateRequest, signal?: AbortSignal): Promise<CandidateList> =>
+      request('/v1/seller/catalog/candidates', CandidateListSchema, { method: 'POST', body: input, signal }),
+    decide: (input: DecisionRequest): Promise<MatchDecision> => request('/v1/seller/catalog/candidates/decisions', MatchDecisionSchema, { method: 'POST', body: input }),
     createOffer: (input: OfferOnlyInput, key?: string): Promise<OfferOnlyResult> =>
       request('/v1/seller/offers', OfferOnlyResultSchema, { method: 'POST', body: input, headers: idem(key) }),
     fileChangeRequest: (atin: string, input: ChangeRequestInput): Promise<ChangeRequest> =>
@@ -166,6 +220,7 @@ export type SellerMatchingApi = ReturnType<typeof createSellerMatchingApi>;
 
 export const matchingKeys = {
   all: ['seller-matching'] as const,
+  candidates: (orgId: string, q: CandidateRequest) => [...matchingKeys.all, orgId, 'candidates', q] as const,
   match: (orgId: string, q: MatchRequest) => [...matchingKeys.all, orgId, 'match', q] as const,
   changeRequests: (orgId: string) => [...matchingKeys.all, orgId, 'change-requests'] as const,
   imageTasks: (orgId: string) => [...matchingKeys.all, orgId, 'image-tasks'] as const
@@ -175,6 +230,9 @@ export const matchingQueries = {
   /** One lookup per barcode; the answer is never reused, because another seller may create the page, or staff approve it, meanwhile. */
   match: (api: SellerMatchingApi, orgId: string, q: MatchRequest, enabled: boolean) =>
     queryOptions({ queryKey: matchingKeys.match(orgId, q), queryFn: ({ signal }) => api.match(q, signal), enabled, staleTime: 0, gcTime: 0, retry: false }),
+  /** One search per typed name and category; a stale list is never reused, because another seller may add the page meanwhile. */
+  candidates: (api: SellerMatchingApi, orgId: string, q: CandidateRequest, enabled: boolean) =>
+    queryOptions({ queryKey: matchingKeys.candidates(orgId, q), queryFn: ({ signal }) => api.candidates(q, signal), enabled, staleTime: 0, gcTime: 0, retry: false }),
   changeRequests: (api: SellerMatchingApi, orgId: string) =>
     queryOptions({ queryKey: matchingKeys.changeRequests(orgId), queryFn: ({ signal }) => api.listChangeRequests({ size: 50 }, signal), staleTime: 30_000 }),
   imageTasks: (api: SellerMatchingApi, orgId: string) =>

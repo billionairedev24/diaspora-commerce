@@ -1,14 +1,20 @@
 /* Catalog matching, offers on an existing page, change requests, image verdicts and Improve your image tasks in the mock seller
    BFF (docs/engineering/bulk-upload-and-images.md, sections 3 and 6). Mirrors catalog's POST /v1/catalog/matches and offers'
-   POST /v1/offers for a handful of rules: the barcode is cleaned and checked, a page created by one organisation is found by
+   POST /v1/offers for a handful of rules: the search box reads a name (never a barcode or part number) and returns up to six live pages
+   with a photo, each needing the seller's click; "None of these" is recorded; the barcode shortcut is cleaned and checked, a page created by one organisation is found by
    another, an offer never carries page content, a page that is not live cannot be sold, a gated brand needs approval, and an
    offer is TAX_HELD while the seller's own tax decision is missing. State lives on the mock database, per organisation. */
 import {
+  type CandidateList,
+  type CandidateRequest,
   type CatalogMatch,
   type ChangeRequest,
   type ChangeRequestInput,
+  type DecisionRequest,
   type ImageCheck,
   type ImageTask,
+  type MatchCandidate,
+  type MatchDecision,
   type MatchRequest,
   type MatchVariant,
   OFFER_CONDITIONS,
@@ -41,8 +47,9 @@ export interface MockPage {
   parentAtin: string;
   title: string;
   brand: string;
-  mpn: string | null;
   category: string;
+  /** The leaf of the category tree the page sits in. */
+  categoryId: string;
   imageUrl: string;
   ownerOrg: string;
   status: 'LIVE' | 'IN_REVIEW';
@@ -62,6 +69,9 @@ interface MockOffer {
 export interface MockMatchingState {
   pages: MockPage[];
   offers: MockOffer[];
+  /** Per organisation: the variants the last search for a name showed, and the answers given ("None of these" is kept for staff). */
+  shown: Record<string, string[]>;
+  decisions: { orgId: string; choice: string; query: string; atin: string | null; likelyShown: boolean }[];
   requests: (ChangeRequest & { orgId: string })[];
   /** Variants other organisations already sell (the seller count of a card). */
   seq: number;
@@ -104,17 +114,17 @@ export const MOCK_GTIN = {
 
 function seedPages(): MockPage[] {
   return [
-    { parentAtin: 'ATRICE0001', title: 'Fine Ofada Rice, 5 lb', brand: 'Mama Ngozi', mpn: 'OF-5', category: 'Groceries > Rice and grains', imageUrl: 'https://img.afrotransact.dev/seed-rice.webp',
+    { parentAtin: 'ATRICE0001', title: 'Fine Ofada Rice, 5 lb', brand: 'Mama Ngozi', category: 'Groceries › Pantry › Rice, grains & flours', categoryId: 'pt-grains', imageUrl: 'https://img.afrotransact.dev/seed-rice.webp',
       ownerOrg: MOCK_FOOD_ORG, status: 'LIVE', gated: false, taxHeld: false, children: [{ atin: 'ATCAT00042', gtin14: gtin14Of(MOCK_GTIN.rice), options: { 'Net weight': '5 lb' } }] },
-    { parentAtin: 'ATSHEA0001', title: 'Raw Shea Butter, 8 oz', brand: 'Kente Naturals', mpn: 'SB-8', category: 'Beauty > Skin care > Body butter', imageUrl: 'https://img.afrotransact.dev/seed-shea.webp',
+    { parentAtin: 'ATSHEA0001', title: 'Raw Shea Butter, 8 oz', brand: 'Kente Naturals', category: 'Beauty › Skin & body › Butters & oils', categoryId: 'pt-butters', imageUrl: 'https://img.afrotransact.dev/seed-shea.webp',
       ownerOrg: MOCK_FOOD_ORG, status: 'LIVE', gated: false, taxHeld: false, children: [{ atin: 'ATSHEAV001', gtin14: gtin14Of(MOCK_GTIN.live), options: { Size: '8 oz' } }] },
-    { parentAtin: 'ATBSOAP001', title: 'African Black Soap, 8 oz', brand: 'Accra Naturals', mpn: 'BS-8', category: 'Beauty > Bath and body > Soap', imageUrl: 'https://img.afrotransact.dev/seed-soap.webp',
+    { parentAtin: 'ATBSOAP001', title: 'African Black Soap, 8 oz', brand: 'Accra Naturals', category: 'Beauty › Skin & body › Butters & oils', categoryId: 'pt-butters', imageUrl: 'https://img.afrotransact.dev/seed-soap.webp',
       ownerOrg: MOCK_FOOD_ORG, status: 'LIVE', gated: false, taxHeld: true, children: [{ atin: 'ATBSOAPV01', gtin14: gtin14Of(MOCK_GTIN.taxHeld), options: { Size: '8 oz' } }] },
-    { parentAtin: 'ATNIKE0001', title: 'Air Zoom Runner', brand: 'Nike', mpn: 'AZ-100', category: 'Fashion > Shoes > Sneakers', imageUrl: 'https://img.afrotransact.dev/seed-shoe.webp',
+    { parentAtin: 'ATNIKE0001', title: 'Air Zoom Runner', brand: 'Nike', category: 'Fashion › Footwear › Sandals & shoes', categoryId: 'pt-shoes', imageUrl: 'https://img.afrotransact.dev/seed-shoe.webp',
       ownerOrg: MOCK_FASHION_ORG, status: 'LIVE', gated: true, taxHeld: false, children: [{ atin: 'ATNIKEV001', gtin14: gtin14Of(MOCK_GTIN.gated), options: { Size: '10' } }] },
-    { parentAtin: 'ATPENDNG01', title: 'Ankara Fabric, 6 yards', brand: 'Adire Atelier', mpn: null, category: 'Fashion > Fabric', imageUrl: 'https://img.afrotransact.dev/seed-fabric.webp',
+    { parentAtin: 'ATPENDNG01', title: 'Ankara Fabric, 6 yards', brand: 'Adire Atelier', category: 'Fashion › Women › Dresses', categoryId: 'pt-dresses', imageUrl: 'https://img.afrotransact.dev/seed-fabric.webp',
       ownerOrg: MOCK_FASHION_ORG, status: 'IN_REVIEW', gated: false, taxHeld: false, children: [{ atin: 'ATPENDNGV1', gtin14: gtin14Of(MOCK_GTIN.pending), options: {} }] },
-    { parentAtin: 'ATKAFTAN01', title: 'Linen Kaftan', brand: 'Adire Atelier', mpn: 'KF-1', category: 'Fashion > Women > Tops', imageUrl: 'https://img.afrotransact.dev/seed-kaftan.webp',
+    { parentAtin: 'ATKAFTAN01', title: 'Linen Kaftan', brand: 'Adire Atelier', category: 'Fashion › Men › Kaftans & shirts', categoryId: 'pt-mens-tops', imageUrl: 'https://img.afrotransact.dev/seed-kaftan.webp',
       ownerOrg: MOCK_FASHION_ORG, status: 'LIVE', gated: false, taxHeld: false,
       children: [{ atin: 'ATKAFTANS1', gtin14: gtin14Of(MOCK_GTIN.sizeA), options: { Size: 'Small' } }, { atin: 'ATKAFTANL1', gtin14: gtin14Of(MOCK_GTIN.sizeB), options: { Size: 'Large' } }] }
   ];
@@ -130,7 +140,7 @@ function seedOffers(): MockOffer[] {
 }
 
 export function freshMatching(): MockMatchingState {
-  return { pages: seedPages(), offers: seedOffers(), requests: [], seq: 0 };
+  return { pages: seedPages(), offers: seedOffers(), shown: {}, decisions: [], requests: [], seq: 0 };
 }
 
 /** What the mock database holds for matching; created on first use so older fixtures keep working. */
@@ -138,8 +148,6 @@ export interface MatchingHost {
   matching?: MockMatchingState;
 }
 const stateOf = (db: MatchingHost): MockMatchingState => (db.matching ??= freshMatching());
-
-const normalise = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 function findChild(st: MockMatchingState, atin: string): { page: MockPage; child: MockChild } | undefined {
   for (const page of st.pages) {
@@ -151,39 +159,134 @@ function findChild(st: MockMatchingState, atin: string): { page: MockPage; child
 
 const sellerCount = (st: MockMatchingState, atin: string): number => st.offers.filter((o) => o.atin === atin).length;
 
-/** The barcode step: MATCH, NO_MATCH, INVALID or RESTRICTED, as catalog answers it. */
+/* ── The search box ── */
+
+const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'for', 'with', 'in']);
+const SIZE_RE = /(\d+(?:[.,]\d+)?)\s*(kg|g|lbs?|oz|ml|l|litres?|liters?|packs?|pk|ct|count)\b/i;
+const UNIT: Record<string, string> = { lbs: 'lb', litre: 'l', litres: 'l', liter: 'l', liters: 'l', packs: 'pack', pk: 'pack', ct: 'pack', count: 'pack' };
+
+/** "5kg" from "Tilda basmati rice 5 kg": a size is the number and the unit, compared as written by nobody in particular. */
+export const sizeKey = (text: string): string | null => {
+  const m = SIZE_RE.exec(text);
+  if (!m) return null;
+  const unit = (m[2] ?? '').toLowerCase();
+  return `${(m[1] ?? '').replace(',', '.')}${UNIT[unit] ?? unit}`;
+};
+const wordsOf = (text: string): string[] =>
+  text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(SIZE_RE, ' ').split(/[^a-z0-9]+/).filter((w) => w.length > 1 && !STOP.has(w));
+
+const pageSize = (p: MockPage): string | null => sizeKey(p.title) ?? sizeKey(Object.values(p.children[0]?.options ?? {}).join(' '));
+const sizeWords = (p: MockPage): string | null => {
+  const m = SIZE_RE.exec(p.title) ?? SIZE_RE.exec(Object.values(p.children[0]?.options ?? {}).join(' '));
+  return m ? m[0].replace(/\s+/g, ' ') : null;
+};
+export const MIN_QUERY_LENGTH = 3;
+
+interface Ranked {
+  page: MockPage;
+  score: number;
+  same: boolean;
+}
+
+/** The mock ranking: every typed word found in the title, brand or category scores; the same size and category rank higher; a different size is only similar. */
+function rank(st: MockMatchingState, query: string, categoryId: string | undefined): Ranked[] {
+  const words = wordsOf(query);
+  const size = sizeKey(query);
+  if (!words.length) return [];
+  const out: Ranked[] = [];
+  for (const page of st.pages) {
+    if (page.status !== 'LIVE' || !page.imageUrl) continue;
+    const have = wordsOf(`${page.title} ${page.brand} ${page.category}`);
+    const hit = words.filter((w) => have.some((h) => h === w || (w.length > 3 && h.startsWith(w)))).length;
+    if (hit === 0) continue;
+    let score = (hit / words.length) * 80;
+    const ps = pageSize(page);
+    const conflict = size !== null && ps !== null && size !== ps;
+    if (size !== null && ps === size) score += 10;
+    if (conflict) score -= 25;
+    if (categoryId && page.categoryId === categoryId) score += 10;
+    if (score < 45) continue;
+    // SAME_NAME: the typed words are the title's words (the brand may be left out); anything else is only similar.
+    const titleWords = wordsOf(page.title);
+    const brandWords = wordsOf(page.brand);
+    out.push({ page, score, same: !conflict && words.every((w) => titleWords.includes(w) || brandWords.includes(w)) && titleWords.every((w) => words.includes(w)) });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, 6);
+}
+
+const blockersOf = (st: MockMatchingState, orgId: string, page: MockPage, atin: string | null) => {
+  const blockers = [];
+  if (page.status !== 'LIVE') blockers.push({ code: 'catalog.page-not-live', message: 'This product page is not live yet. Try again once it is approved.' });
+  if (page.gated) blockers.push({ code: 'offers.selling-approval-required', message: 'You need approval to sell this brand. Apply under Listings.' });
+  if (atin && st.offers.some((o) => o.atin === atin && o.orgId === orgId)) blockers.push({ code: 'offers.offer-exists', message: 'You already sell this item. Change your offer under Listings.' });
+  return blockers;
+};
+
+/** "What are you selling?": the pages that look like the typed name, never the other sellers' names, prices or stock. */
+export function searchCandidates(db: MatchingHost, orgId: string, req: CandidateRequest): CandidateList {
+  const st = stateOf(db);
+  const query = req.query.trim().replace(/\s+/g, ' ');
+  if (!query) throw new MatchingMockError(422, 'VALIDATION_FAILED', 'Type what you are selling', { query: 'Type what you are selling' });
+  if (query.replace(/\s/g, '').length < MIN_QUERY_LENGTH) return { candidates: [], tooShort: true, searchUnavailable: false };
+  if (/^offline\b/i.test(query)) return { candidates: [], tooShort: false, searchUnavailable: true };
+  const ranked = rank(st, query, req.categoryId);
+  const candidates: MatchCandidate[] = ranked.map(({ page, score, same }) => {
+    const variants = page.children.map((c) => ({ atin: c.atin, options: c.options }));
+    const only = page.children.length === 1 ? (page.children[0]?.atin ?? null) : null;
+    const blockers = blockersOf(st, orgId, page, only);
+    return { parentAtin: page.parentAtin, atin: only, title: page.title, brand: page.brand, image: { url: page.imageUrl, width: 1600, height: 1600 }, category: page.category,
+      sizeLabel: sizeWords(page), variants, kind: same ? 'SAME_NAME' : 'SIMILAR', likely: score >= 75, sellerCount: only ? sellerCount(st, only) : new Set(st.offers.filter((o) => page.children.some((c) => c.atin === o.atin)).map((o) => o.orgId)).size,
+      canOffer: blockers.length === 0, blockers };
+  });
+  st.shown[`${orgId}|${query}|${req.categoryId ?? ''}`] = ranked.flatMap((r) => r.page.children.map((c) => c.atin));
+  const top = ranked[0]?.page;
+  const leaf = req.categoryId ? { id: req.categoryId, path: st.pages.find((p) => p.categoryId === req.categoryId)?.category ?? '' } : null;
+  return { candidates, tooShort: false, searchUnavailable: false, suggestedCategory: !req.categoryId && top ? { id: top.categoryId, path: top.category } : null, category: leaf && leaf.path ? leaf : null };
+}
+
+/** "This is my product" (a page that was shown, size confirmed) or "Not here" (kept for staff; a likely page shown next to it queues a duplicate check). */
+export function decideMatch(db: MatchingHost, orgId: string, req: DecisionRequest): MatchDecision {
+  const st = stateOf(db);
+  const shown = st.shown[`${orgId}|${req.query.trim().replace(/\s+/g, ' ')}|${req.categoryId ?? ''}`] ?? [];
+  const id = `00000000-0000-4000-9000-${String(st.decisions.length + 1).padStart(12, '0')}`;
+  if (req.choice === 'NONE_OF_THESE') {
+    const likely = shown.length > 0 && rank(st, req.query, req.categoryId).some((r) => r.score >= 75);
+    st.decisions.push({ orgId, choice: req.choice, query: req.query, atin: null, likelyShown: likely });
+    return { decisionId: id, choice: 'NONE_OF_THESE', atin: null, canOffer: false, blockers: [], possibleDuplicateQueued: likely };
+  }
+  const hit = req.atin ? findChild(st, req.atin) : undefined;
+  if (!hit || !shown.includes(hit.child.atin)) throw new MatchingMockError(422, 'CHOICE_NOT_SHOWN', 'Choose a product from the list.');
+  if (pageSize(hit.page) !== null && req.sizeConfirmed !== true) throw new MatchingMockError(422, 'SIZE_UNCONFIRMED', 'Confirm the size first.');
+  const blockers = blockersOf(st, orgId, hit.page, hit.child.atin);
+  st.decisions.push({ orgId, choice: req.choice, query: req.query, atin: hit.child.atin, likelyShown: false });
+  return { decisionId: id, choice: 'SELL_EXISTING', atin: hit.child.atin, canOffer: blockers.length === 0, blockers, possibleDuplicateQueued: false };
+}
+
+/** The barcode shortcut: MATCH, NO_MATCH, INVALID or RESTRICTED, as catalog answers it (an exact match, never a guess). */
 export function matchCatalog(db: MatchingHost, orgId: string, req: MatchRequest): CatalogMatch {
   const st = stateOf(db);
-  const gtin = (req.gtin ?? '').trim();
-  const brand = (req.brand ?? '').trim();
-  const mpn = (req.mpn ?? '').trim();
-  if (!gtin && (!brand || !mpn)) throw new MatchingMockError(422, 'VALIDATION_FAILED', 'Enter the barcode, or the brand and the part number', { gtin: 'Enter the barcode, or the brand and the part number' });
+  const gtin = req.gtin.trim();
+  if (!gtin) throw new MatchingMockError(422, 'VALIDATION_FAILED', 'Enter the barcode', { gtin: 'Enter the barcode' });
   const none = { variants: [] as MatchVariant[], canOffer: false, blockers: [], canCreate: false, createBlockers: [] };
-  let found: { page: MockPage; child: MockChild | null; on: 'GTIN' | 'BRAND_MPN' } | undefined;
-  let digits: string | null = null;
-  if (gtin) {
-    digits = gtin.replace(/[\s-]/g, '').replace(DIGITS, '');
-    if (!/^(\d{8}|\d{12,14})$/.test(digits)) {
-      return { result: 'INVALID', digits, ...none, message: 'Barcodes have 8, 12, 13 or 14 digits.' };
-    }
-    if (!checkOk(digits)) {
-      const fixed = gtinWith(digits.slice(0, -1));
-      return { result: 'INVALID', digits, ...none, suggestion: fixed, message: `That barcode does not look right. Did you mean ${fixed}?` };
-    }
-    if (restricted(digits)) return { result: 'RESTRICTED', digits, ...none, message: 'This number is for store use or coupons, not a product barcode.' };
-    const key = gtin14Of(digits);
-    for (const page of st.pages) {
-      const child = page.children.find((c) => c.gtin14 === key);
-      if (child) found = { page, child, on: 'GTIN' };
-    }
-  } else {
-    const page = st.pages.find((p) => p.mpn && normalise(p.brand) === normalise(brand) && normalise(p.mpn) === normalise(mpn));
-    if (page) found = { page, child: page.children.length === 1 ? (page.children[0] ?? null) : null, on: 'BRAND_MPN' };
+  let found: { page: MockPage; child: MockChild | null } | undefined;
+  const digits = gtin.replace(/[\s-]/g, '').replace(DIGITS, '');
+  if (!/^(\d{8}|\d{12,14})$/.test(digits)) {
+    return { result: 'INVALID', digits, ...none, message: 'Barcodes have 8, 12, 13 or 14 digits.' };
+  }
+  if (!checkOk(digits)) {
+    const fixed = gtinWith(digits.slice(0, -1));
+    return { result: 'INVALID', digits, ...none, suggestion: fixed, message: `That barcode does not look right. Did you mean ${fixed}?` };
+  }
+  if (restricted(digits)) return { result: 'RESTRICTED', digits, ...none, message: 'This number is for store use or coupons, not a product barcode.' };
+  const key = gtin14Of(digits);
+  for (const page of st.pages) {
+    const child = page.children.find((c) => c.gtin14 === key);
+    if (child) found = { page, child };
   }
   if (!found) {
     return { result: 'NO_MATCH', digits, ...none, canCreate: true };
   }
-  const { page, child, on } = found;
+  const { page, child } = found;
   const blockers = [];
   if (page.status !== 'LIVE') blockers.push({ code: 'catalog.page-not-live', message: 'This product page is not live yet. Try again once it is approved.' });
   if (page.gated) blockers.push({ code: 'offers.selling-approval-required', message: 'You need approval to sell this brand. Apply under Listings.' });
@@ -191,7 +294,7 @@ export function matchCatalog(db: MatchingHost, orgId: string, req: MatchRequest)
   const own = child ? st.offers.some((o) => o.atin === child.atin && o.orgId === orgId) : false;
   if (own) blockers.push({ code: 'offers.offer-exists', message: 'You already sell this item. Change your offer under Listings.' });
   return {
-    result: 'MATCH', matchedOn: on, digits, atin: child?.atin ?? null, parentAtin: page.parentAtin, productStatus: page.status, title: page.title, brand: page.brand,
+    result: 'MATCH', digits, atin: child?.atin ?? null, parentAtin: page.parentAtin, productStatus: page.status, title: page.title, brand: page.brand,
     image: { url: page.imageUrl, width: 1600, height: 1600 }, category: page.category, variantOptions: child?.options ?? {},
     variants: page.children.map((c) => ({ atin: c.atin, options: c.options })), sellerCount: child ? sellerCount(st, child.atin) : null,
     canOffer: blockers.length === 0, blockers, canCreate: false,
@@ -202,7 +305,7 @@ export function matchCatalog(db: MatchingHost, orgId: string, req: MatchRequest)
 }
 
 /** Registers the page a seller creates, so another seller finds it by its barcode (first creator stays the owner). */
-export function registerPage(db: MatchingHost, orgId: string, p: { title: string; brand: string; gtins: { gtin: string; options: Record<string, string> }[]; imageUrl: string | null; category: string }): void {
+export function registerPage(db: MatchingHost, orgId: string, p: { title: string; brand: string; gtins: { gtin: string; options: Record<string, string> }[]; imageUrl: string | null; category: string; categoryId?: string }): void {
   const st = stateOf(db);
   const children: MockChild[] = [];
   p.gtins.forEach((g, i) => {
@@ -214,7 +317,7 @@ export function registerPage(db: MatchingHost, orgId: string, p: { title: string
     children.push({ atin: `ATNEW${String(st.seq).padStart(3, '0')}V${i}`.slice(0, 10), gtin14: key, options: g.options });
   });
   if (!children.length) return;
-  st.pages.push({ parentAtin: `ATNEW${String(st.seq).padStart(3, '0')}`.slice(0, 10).padEnd(10, '0'), title: p.title, brand: p.brand, mpn: null, category: p.category, imageUrl: p.imageUrl ?? '', ownerOrg: orgId,
+  st.pages.push({ parentAtin: `ATNEW${String(st.seq).padStart(3, '0')}`.slice(0, 10).padEnd(10, '0'), title: p.title, brand: p.brand, category: p.category, categoryId: p.categoryId ?? '', imageUrl: p.imageUrl ?? '', ownerOrg: orgId,
     status: 'IN_REVIEW', gated: false, taxHeld: false, children });
 }
 
@@ -228,7 +331,7 @@ export function approveMockPage(db: MatchingHost, gtin: string): boolean {
 }
 
 const PAGE_CONTENT = ['title', 'description', 'bullets', 'attributes', 'attrs', 'brand', 'category', 'categoryId', 'categoryPath', 'productType', 'productTypeCode', 'gtin', 'gtinExempt',
-  'variationTheme', 'variants', 'options', 'images', 'image', 'taxFacts', 'facts', 'keywords', 'sizeChartId', 'mpn'];
+  'variationTheme', 'variants', 'options', 'images', 'image', 'taxFacts', 'facts', 'keywords', 'sizeChartId'];
 
 /** Offers terms only: the same answers as offers' POST /v1/offers. */
 export function createOffer(db: MatchingHost, orgId: string, raw: Record<string, unknown>): OfferOnlyResult {

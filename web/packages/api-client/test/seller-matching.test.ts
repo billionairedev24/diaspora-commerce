@@ -32,8 +32,44 @@ describe('catalog matching (mock BFF, S382)', () => {
     expect(wrong.message).toBe(`That barcode does not look right. Did you mean ${MOCK_GTIN.live}?`);
     expect(await matching.match({ gtin: '021234567893' })).toMatchObject({ result: 'RESTRICTED', message: 'This number is for store use or coupons, not a product barcode.' });
     expect(await matching.match({ gtin: '12345' })).toMatchObject({ result: 'INVALID', message: 'Barcodes have 8, 12, 13 or 14 digits.' });
-    expect(await matching.match({ brand: 'kente naturals', mpn: 'sb 8' })).toMatchObject({ result: 'MATCH', matchedOn: 'BRAND_MPN' });
-    expect((await problem(matching.match({}))).status).toBe(422);
+    expect((await problem(matching.match({ gtin: '' }))).status).toBe(422);
+  });
+
+  it('finds products by name with a photo, brand, size and seller count, and shows nothing about a seller', async () => {
+    const { matching } = client();
+    const found = await matching.candidates({ query: 'raw shea butter 8oz' });
+    expect(found).toMatchObject({ tooShort: false, searchUnavailable: false, suggestedCategory: { id: 'pt-butters' } });
+    expect(found.candidates[0]).toMatchObject({ title: 'Raw Shea Butter, 8 oz', brand: 'Kente Naturals', sizeLabel: '8 oz', kind: 'SAME_NAME', sellerCount: 2, canOffer: true });
+    expect(found.candidates[0]?.image?.url).toBeTruthy();
+    expect(JSON.stringify(found)).not.toMatch(/org-|ownerOrg|priceMinor/);
+    expect(found.candidates.length).toBeLessThanOrEqual(6);
+  });
+
+  it('never lists a page that is not live, and a different size is only similar', async () => {
+    const { matching } = client();
+    expect((await matching.candidates({ query: 'ankara fabric 6 yards' })).candidates).toEqual([]);
+    const other = await matching.candidates({ query: 'raw shea butter 16oz' });
+    expect(other.candidates[0]).toMatchObject({ kind: 'SIMILAR', likely: false });
+  });
+
+  it('answers a short name, an unreachable search and a category chip', async () => {
+    const { matching } = client();
+    expect(await matching.candidates({ query: 'ra' })).toMatchObject({ candidates: [], tooShort: true });
+    expect(await matching.candidates({ query: 'offline rice' })).toMatchObject({ candidates: [], searchUnavailable: true });
+    const chip = await matching.candidates({ query: 'shea', categoryId: 'pt-butters' });
+    expect(chip.category).toMatchObject({ id: 'pt-butters' });
+    expect(chip.suggestedCategory ?? null).toBeNull();
+  });
+
+  it('needs the one-tap size answer and only a page that was shown; "Not here" is recorded and queues a likely duplicate', async () => {
+    const { matching } = client();
+    const found = await matching.candidates({ query: 'raw shea butter 8oz' });
+    const atin = found.candidates[0]?.atin ?? '';
+    expect((await problem(matching.decide({ choice: 'SELL_EXISTING', query: 'raw shea butter 8oz', atin }))).status).toBe(422);
+    expect(await matching.decide({ choice: 'SELL_EXISTING', query: 'raw shea butter 8oz', atin, sizeConfirmed: true })).toMatchObject({ canOffer: true, atin });
+    expect((await problem(matching.decide({ choice: 'SELL_EXISTING', query: 'raw shea butter 8oz', atin: 'ATNIKEV001', sizeConfirmed: true }))).status).toBe(422);
+    expect(await matching.decide({ choice: 'NONE_OF_THESE', query: 'raw shea butter 8oz' })).toMatchObject({ choice: 'NONE_OF_THESE', possibleDuplicateQueued: true });
+    expect(getSellerDb().matching?.decisions.map((d) => d.choice)).toEqual(['SELL_EXISTING', 'NONE_OF_THESE']);
   });
 
   it('matches UPC-A and EAN-13 of the same item, and lists every child of a page', async () => {

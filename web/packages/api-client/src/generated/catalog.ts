@@ -322,7 +322,7 @@ export interface paths {
         put?: never;
         /**
          * Upload and validate a .xlsx or .csv file
-         * @description Every row is validated (required fields, allowed values, numbers and units, GTIN check digit, duplicate SKUs in the file and against the organisation's listings, image URL format). 422 catalog.upload-rejected when the file cannot be read (format, 10 MB, 5,000 rows, missing required columns); nothing is stored then. Starts nothing: see POST /v1/imports/{id}/start.
+         * @description Every row is validated (required fields, allowed values, numbers and units, GTIN check digit, duplicate SKUs in the file and against the organisation's listings, image URL format). 422 catalog.upload-rejected when the file cannot be read (format, 10 MB (25 MB for PRICE_QTY), 5,000 rows (50,000 for PRICE_QTY), missing required columns); nothing is stored then. mode=OFFER matches each row to an existing page (barcode, ATIN or brand and part number) and PRICE_QTY reads a price and quantity feed (S393, S394). 409 catalog.import-already-running (one active upload per mode) and catalog.import-daily-limit (20 a day). fileSha256 and sameFileAs say when the organisation uploaded the same file before. Starts nothing: see POST /v1/imports/{id}/start.
          */
         post: operations["uploadImport"];
         delete?: never;
@@ -693,8 +693,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Departments my organisation may list in, whether any sells sized goods, and my department requests
-         * @description Recorded by seller-service from the departments chosen at onboarding (and later approved requests). exempt is true for AfroTransact Retail and staff. hasSizing is true when an allowed department has a product type with the sizing trait. 503 catalog.scope-unavailable when seller-service cannot say.
+         * Departments my organisation may list in (every department), and whether any sells sized goods
+         * @description A seller may list in any department, so exempt is always true, every department is returned and there are no requests. hasSizing is true when a department has a product type with the sizing trait. Never calls seller-service.
          */
         get: operations["mine"];
         put?: never;
@@ -1016,7 +1016,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a product in review (catalog:moderate) */
+        /**
+         * Approve a product in review (catalog:moderate)
+         * @description Only a product in review can be approved, and only through the selling approval and the tax gate. Any other status (already live, say) is a 409 with a plain message and changes nothing.
+         */
         post: operations["approve"];
         delete?: never;
         options?: never;
@@ -1780,13 +1783,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Find the existing product page for a barcode, or for a brand plus part number (S381)
+         * Find the existing product page for a barcode (the optional exact shortcut, S381)
          * @description One call for the Seller Center form and bulk upload (docs/engineering/bulk-upload-and-images.md, section 3.2).
          *     The GTIN is cleaned (spaces and dashes dropped), an ISBN-10 becomes the ISBN-13, the check digit is verified and
          *     the code is normalised to 14 digits (`gtin14`), so the UPC `012345678905` and the EAN `0012345678905` meet on the
          *     same variant. Reserved numbers (store prefixes 02, 04, 20 to 29, coupons 981 to 984 and 99; staff-editable) answer
-         *     `RESTRICTED`. Brand plus `mpn` is used when there is no barcode. A match returns the ATIN of the child (variant)
-         *     and the page summary; the seller never edits page content. `canOffer` and `blockers` say whether the caller's
+         *     `RESTRICTED`. A seller without a barcode searches by name instead (`/v1/catalog/matches/candidates`); a barcode is
+         *     never required. A match returns the ATIN of the child (variant) and the page summary; the seller never edits page content. `canOffer` and `blockers` say whether the caller's
          *     organisation may sell it (page not live, department or brand approval, brand retired or rejected); offers
          *     re-checks at offer creation and also refuses an open duplicate (`offers.offer-exists`) and a full plan
          *     (`offers.listing-limit-reached`). The number of sellers is not known to catalog; the BFF reads it from offers.
@@ -1794,6 +1797,59 @@ export interface paths {
          *     (`catalog_match_total{result}`), never the barcode.
          */
         post: operations["match"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/matches/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Is your product already on AfroTransact? Up to six pages for a name, no barcode needed
+         * @description Search-first matching (docs/engineering/product-matching-without-barcode.md). One text: what the seller is selling,
+         *     with the size and the brand inside it ("Tilda basmati rice 5kg"). The category is optional (the chip): omitted, catalog
+         *     suggests the one most of the best pages share. Recall comes from the search index (Meilisearch or Elasticsearch,
+         *     through search-service); ranking is on catalog's own data, so only live pages with a real photo are returned, best
+         *     first, at most six, scored below the show threshold dropped. `SAME_NAME` is exact (the normalised name, brand and
+         *     size are equal in the category); `SIMILAR` is fuzzy and is only a suggestion: both need the seller's click, and a
+         *     page that states a size needs the one-tap size confirmation. Nothing about any seller is returned (no name, price,
+         *     stock or cost). An unreachable index answers `searchUnavailable` with no suggestions, never a guess. Limited per
+         *     organisation per hour (422 `catalog.match-rate-limited`). Needs catalog:write (sellers) or catalog:read.
+         */
+        post: operations["matchCandidates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/matches/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record the seller's answer to the candidate list
+         * @description `SELL_EXISTING`: the variant must have been in the list for the same `query` and `categoryId`, and when its page
+         *     states a size `sizeConfirmed` must be true (422 `catalog.match-size-unconfirmed`); the answer says whether the
+         *     organisation may sell it (`canOffer` with `blockers`), and the next step is the price, quantity and condition form.
+         *     `NONE_OF_THESE`: stored with the pages that were shown. When one of them scored as likely, `possibleDuplicateQueued`
+         *     is true and staff are asked to compare the new page with it later; it never blocks adding the page. Limited to a
+         *     number of `NONE_OF_THESE` answers per organisation per day (422 `catalog.match-rate-limited`).
+         */
+        post: operations["matchDecision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2184,19 +2240,25 @@ export interface components {
             /** Format: double */
             weightLb?: number;
         };
+        /** @description A picture of the listing, by public URL or, for a photo held for review, by media asset id. Give url or assetId. */
         ProductImage: {
-            url: string;
+            /** @description Public URL. Empty while the photo is held for review (then assetId is set); send assetId instead of url for such a photo */
+            url?: string;
             /** Format: int32 */
             width?: number;
             /** Format: int32 */
             height?: number;
             /** Format: int64 */
             bytes?: number;
-            contentType: string;
+            contentType?: string;
             /** @description Optional alternative text (what the picture shows), stored with the image */
             alt?: string;
             /** @description LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); absent for a product picture */
             role?: string;
+            /** @description Media asset id of a photo uploaded to media-service (S390). Send it instead of url for a photo that is held for review (it has no public URL): catalog asks media (the asset must belong to the seller), publishes the photo into the listing when it is cleared and keeps the listing off sale while it is held. A photo that media already published may also be given by id: catalog replaces it with its public URL. Rejected, unknown or another seller's assets are refused (422, images[i]). Not allowed in a variant's own images. */
+            assetId?: string;
+            /** @description Response only. True while the photo is held for review ("We are checking your photo"); the listing is saved and can be submitted but is not live until the photo is cleared */
+            readonly held?: boolean;
         };
         /** @description The seller's ship-from location (snapshot) */
         ShipFrom: {
@@ -2287,6 +2349,10 @@ export interface components {
             preorderEligible?: boolean;
             shipsNow?: boolean;
             listing?: components["schemas"]["ListingDetails"];
+            /** @description What the catalog's state machine allows on this page now, whatever the caller's permissions: approve, reject, pause, resume, takedown, restore */
+            allowedActions?: string[];
+            /** @description True while the tax gate holds the listing (in review, not live, until tax review approves its tax details) */
+            heldForTax?: boolean;
         };
         Variant: {
             /** Format: uuid */
@@ -2501,7 +2567,7 @@ export interface components {
             /** @enum {string} */
             format?: "XLSX" | "CSV";
             /** @enum {string} */
-            mode?: "CREATE" | "UPDATE";
+            mode?: "CREATE" | "UPDATE" | "OFFER" | "PRICE_QTY";
             productType?: string;
             /** @enum {string} */
             status?: "VALIDATED" | "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
@@ -2535,6 +2601,23 @@ export interface components {
             startedAt?: string;
             /** Format: date-time */
             finishedAt?: string;
+            /** @description SHA-256 of the uploaded file (S393) */
+            fileSha256?: string;
+            /**
+             * Format: uuid
+             * @description The organisation's earlier upload of the same file in the same mode: offer to show that result instead of running it again (S393)
+             */
+            sameFileAs?: string;
+            /**
+             * Format: int32
+             * @description Rows that created an offer on an existing page
+             */
+            offersCreated?: number;
+            /**
+             * Format: int32
+             * @description Valid rows that are not for sale yet: no resolved tax decision, a selling approval is missing, or moderation holds the image. Never live (S393)
+             */
+            heldRows?: number;
         };
         /** @description validOnly: import the valid and warning rows and skip the rows with errors (required when the upload has errors) */
         StartImportRequest: {
@@ -3017,10 +3100,17 @@ export interface components {
             /** @enum {string} */
             status?: "VALID" | "WARNING" | "ERROR";
             /** @enum {string} */
-            outcome?: "PENDING" | "CREATED" | "UPDATED" | "FAILED" | "SKIPPED";
+            outcome?: "PENDING" | "CREATED" | "UPDATED" | "OFFER_CREATED" | "HELD" | "FAILED" | "SKIPPED";
             outcomeNote?: string;
             /** Format: uuid */
             productId?: string;
+            /** @description The page or variant the row ended on or matched (offer rows, S393) */
+            atin?: string;
+            /**
+             * Format: uuid
+             * @description The offer the row created or changed
+             */
+            offerId?: string;
             messages?: components["schemas"]["ImportRowMessage"][];
             cells?: string[];
             /** @description The row's images as the preview shows them (S310) */
@@ -3902,22 +3992,13 @@ export interface components {
             fitNote?: "RUNS_SMALL" | "TRUE_TO_SIZE" | "RUNS_LARGE";
             howToMeasure?: string;
         };
-        /** @description A barcode (UPC, EAN, GTIN or ISBN), or a brand with its manufacturer part number. At least one of the two. */
+        /** @description A barcode (UPC, EAN, GTIN or ISBN), the optional exact shortcut. Without a barcode, search by name (CandidateSearchRequest). */
         MatchRequest: {
             /**
              * @description Digits with optional spaces or dashes; 8, 12, 13 or 14 digits, or an ISBN-10
              * @example 012345678905
              */
-            gtin?: string;
-            /** @description Brand name or registry id (with mpn, for items without a barcode) */
-            brand?: string;
-            /** @description Manufacturer part number (letters and digits are compared; case and punctuation ignored) */
-            mpn?: string;
-            /**
-             * Format: uuid
-             * @description Narrows a brand plus part number match to a category
-             */
-            categoryId?: string;
+            gtin: string;
         };
         PageImage: {
             url?: string;
@@ -3935,12 +4016,7 @@ export interface components {
         MatchResult: {
             /** @enum {string} */
             result: "MATCH" | "NO_MATCH" | "INVALID" | "RESTRICTED";
-            /**
-             * @description Present on MATCH
-             * @enum {string}
-             */
-            matchedOn?: "GTIN" | "BRAND_MPN";
-            /** @description The normalised 14-digit key (null for a brand plus part number lookup or an unreadable code) */
+            /** @description The normalised 14-digit key (null for an unreadable code) */
             gtin14?: string;
             /** @description The cleaned input digits (an ISBN-10 shown as its ISBN-13) */
             digits?: string;
@@ -3959,7 +4035,7 @@ export interface components {
             variantOptions?: {
                 [key: string]: string;
             };
-            /** @description Every child of the matched page, so the seller may offer the others too. A brand plus part number match on a page with several children has no `atin`; the seller picks one of these. */
+            /** @description Every child of the matched page, so the seller may offer the others too. */
             variants?: components["schemas"]["MatchVariant"][];
             canOffer: boolean;
             blockers: components["schemas"]["Blocker"][];
@@ -3977,6 +4053,97 @@ export interface components {
                 [key: string]: string;
             };
             gtin14?: string;
+        };
+        /** @description What the seller is selling, as they would type it. The category is optional. */
+        CandidateSearchRequest: {
+            /**
+             * @description The name, with the size and the brand inside it
+             * @example Tilda basmati rice 5kg
+             */
+            query: string;
+            /**
+             * Format: uuid
+             * @description The category chip, when the seller set it; omitted lets catalog suggest one
+             */
+            categoryId?: string;
+            /** @description Service and staff tokens only */
+            sellerOrgId?: string;
+        };
+        CandidateImage: {
+            url?: string;
+            /** Format: int32 */
+            width?: number;
+            /** Format: int32 */
+            height?: number;
+        };
+        CandidateVariant: {
+            atin?: string;
+            options?: {
+                [key: string]: string;
+            };
+        };
+        MatchCategory: {
+            /** Format: uuid */
+            id?: string;
+            path?: string;
+        };
+        /** @description One existing product page. Nothing about any seller - no name, price, stock or cost. */
+        MatchCandidate: {
+            /** @description ATIN of the page */
+            parentAtin?: string;
+            /** @description The variant to sell when the page has exactly one; otherwise the seller picks from variants */
+            atin?: string;
+            title?: string;
+            brand?: string;
+            image?: components["schemas"]["CandidateImage"];
+            category?: string;
+            /** @description The page's size in words, for the one-tap question ("5 kg"); null when it states none */
+            sizeLabel?: string;
+            variants?: components["schemas"]["CandidateVariant"][];
+            /**
+             * @description SAME_NAME: normalised name, brand and size are equal (exact). SIMILAR: a suggestion by name (fuzzy). Both need the seller's click.
+             * @enum {string}
+             */
+            kind?: "SAME_NAME" | "SIMILAR";
+            /** @description High enough to say "likely your product" */
+            likely?: boolean;
+            canOffer?: boolean;
+            blockers?: components["schemas"]["Blocker"][];
+        };
+        CandidateSearchResult: {
+            /** @description Best first, at most six */
+            candidates: components["schemas"]["MatchCandidate"][];
+            suggestedCategory?: components["schemas"]["MatchCategory"];
+            category?: components["schemas"]["MatchCategory"];
+            /** @description The name is too short to search yet */
+            tooShort: boolean;
+            /** @description The search index did not answer; no suggestions, the seller may still add the product */
+            searchUnavailable: boolean;
+        };
+        MatchDecisionRequest: {
+            /** @enum {string} */
+            choice: "SELL_EXISTING" | "NONE_OF_THESE";
+            /** @description The same name the candidates were searched with */
+            query: string;
+            /** Format: uuid */
+            categoryId?: string;
+            /** @description SELL_EXISTING: the variant ATIN of a page that was shown */
+            atin?: string;
+            /** @description SELL_EXISTING: the seller tapped "yes, the same size"; required when the page states a size */
+            sizeConfirmed?: boolean;
+            /** @description Service and staff tokens only */
+            sellerOrgId?: string;
+        };
+        MatchDecisionResult: {
+            /** Format: uuid */
+            decisionId?: string;
+            /** @enum {string} */
+            choice: "SELL_EXISTING" | "NONE_OF_THESE";
+            atin?: string;
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
+            /** @description NONE_OF_THESE: a likely page was shown, so staff will compare the new page with it */
+            possibleDuplicateQueued: boolean;
         };
         OfferEligibilityRequest: {
             /** @description Variant ATIN */
@@ -4658,7 +4825,7 @@ export interface operations {
     uploadImport: {
         parameters: {
             query?: {
-                mode?: "CREATE" | "UPDATE";
+                mode?: "CREATE" | "UPDATE" | "OFFER" | "PRICE_QTY";
                 productType?: string;
                 uploadedByName?: string;
             };
@@ -4691,6 +4858,8 @@ export interface operations {
             query?: {
                 productType?: string;
                 categoryId?: string;
+                /** @description OFFER (sell products already on AfroTransact: barcode, ATIN or brand and part number, with price, quantity, condition, shipping and handling; no image, title or attribute columns) and PRICE_QTY (seller SKU or ATIN with price, list price and quantity) are generated server-side and do not depend on a category (S393, S394) */
+                mode?: "CREATE" | "UPDATE" | "OFFER" | "PRICE_QTY";
                 format?: string;
             };
             header?: never;
@@ -5319,6 +5488,7 @@ export interface operations {
                 orgId?: string;
                 status?: "IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED" | "TAKEN_DOWN" | "PENDING_EXEMPTION" | "MERGED";
                 q?: string;
+                heldForTax?: boolean;
                 page?: number;
                 size?: number;
             };
@@ -6922,7 +7092,83 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Neither a GTIN nor a brand with a part number was given */
+            /** @description No barcode was given */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    matchCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description The candidates (possibly none) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateSearchResult"];
+                };
+            };
+            /** @description Missing catalog:read or catalog:write */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.match-rate-limited */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    matchDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatchDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchDecisionResult"];
+                };
+            };
+            /** @description Missing catalog:read or catalog:write */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.match-size-unconfirmed, catalog.match-choice-not-shown, catalog.match-choice-missing or catalog.match-rate-limited */
             422: {
                 headers: {
                     [name: string]: unknown;

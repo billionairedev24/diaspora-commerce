@@ -40,7 +40,9 @@ describe('Offer upload, price and quantity feed and stock import (S393 to S395)'
     expect(offer.fileName).toBe('afrotransact-offer.csv');
     const text = await offer.blob.text();
     expect(text).toContain('Barcode');
-    expect(text).toContain('Part number');
+    expect(text).toContain('Product name');
+    expect(text).toContain('Size or pack');
+    expect(text).not.toMatch(/part number|mpn/i);
     expect(text).toContain('Condition');
     expect(text).toContain('Shipping charge');
     expect(text).toContain('Handling days');
@@ -81,6 +83,19 @@ describe('Offer upload, price and quantity feed and stock import (S393 to S395)'
     const first = await api.uploadImport(csv('"Barcode (UPC, EAN, ISBN)",Seller SKU,Price *,Quantity', '4006381333931,A-1,24.99,10'), 'OFFER');
     expect(again.sameFileAs ?? null).toBeNull();
     expect(first.sameFileAs).toBe(again.id);
+  });
+
+  it('links a row without a barcode only on the exact name and size, and holds anything else', async () => {
+    const api = client();
+    const upload = await api.uploadImport(
+      csv('Product name,Brand,Size or pack,Seller SKU,Price *,Quantity', 'Tilda basmati rice,Tilda,5 kg,R-1,9.99,5', 'Tilda basmati rice,Tilda,10 kg,R-2,9.99,5', 'Basmati,,,R-3,9.99,5'),
+      'OFFER'
+    );
+    const rows = (await api.listImportRows(upload.id, { page: 0, size: 50 })).items;
+    expect(rows[0]).toMatchObject({ status: 'VALID', atin: 'ATTILDA001' });
+    expect(rows[1]?.status).toBe('ERROR');
+    expect(rows[1]?.messages[0]?.message).toContain('Nothing was added for this row');
+    expect(rows[2]?.status).toBe('ERROR');
   });
 
   it('refuses an offer file with no price or no way to name the page, and caps rows', async () => {

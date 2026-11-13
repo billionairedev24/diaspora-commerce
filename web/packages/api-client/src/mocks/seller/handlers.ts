@@ -63,7 +63,7 @@ import {
   UploadRequestSchema,
   validatePickupHours
 } from '../../schemas/seller';
-import { ChangeRequestInputSchema, ChangeRequestStatusSchema, MatchRequestSchema, type ProductImageSlot } from '../../seller-matching';
+import { CandidateRequestSchema, ChangeRequestInputSchema, ChangeRequestStatusSchema, DecisionRequestSchema, MatchRequestSchema, type ProductImageSlot } from '../../seller-matching';
 import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { miles } from '../delivery';
@@ -114,11 +114,13 @@ import { listingRulesFor } from './listing-rules';
 import {
   changeRequestsOf,
   createOffer as createMockOffer,
+  decideMatch,
   fileChange,
   imageTasksOf,
   matchCatalog,
   MatchingMockError,
   registerPage,
+  searchCandidates,
   verdictForFile,
   withdrawChange
 } from './matching';
@@ -1572,7 +1574,7 @@ export const sellerHandlers = [
       };
       ctx.db.listings.unshift({ ...row, variants: d.variants.map((v) => ({ sku: (v.sellerSku ?? '').toUpperCase(), quantity: v.quantity })) });
       // The page this seller creates is found by its barcode when another seller adds a product (S382); it waits for review like the listing.
-      registerPage(ctx.db, ctx.org.id, { title: d.title, brand: d.attributes.brand ?? '', imageUrl: d.images[0]?.url ?? null, category: leaf?.path ?? '',
+      registerPage(ctx.db, ctx.org.id, { title: d.title, brand: d.attributes.brand ?? '', imageUrl: d.images[0]?.url ?? null, category: leaf?.path ?? '', categoryId: leaf?.id,
         gtins: d.variants.filter((v) => v.gtin && !v.gtinExempt).map((v) => ({ gtin: v.gtin ?? '', options: v.options })) });
       ctx.db.productDetails[row.productId] = detailOf(row.productId, d, row, 1, leaf?.path ?? 'Requested category', leaf?.productType ?? 'custom');
       if (d.draftId) ctx.db.drafts = ctx.db.drafts.filter((x) => x.id !== d.draftId);
@@ -2067,6 +2069,22 @@ export const sellerHandlers = [
       const b = await body(ctx.request, MatchRequestSchema);
       require(ctx, 'listings', 'EDIT', 'SELLER');
       return matchingMock(() => matchCatalog(ctx.db, ctx.org.id, b));
+    })
+  ),
+  http.post(
+    `${W}/catalog/candidates`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, CandidateRequestSchema);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return matchingMock(() => searchCandidates(ctx.db, ctx.org.id, b));
+    })
+  ),
+  http.post(
+    `${W}/catalog/candidates/decisions`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, DecisionRequestSchema);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return matchingMock(() => decideMatch(ctx.db, ctx.org.id, b));
     })
   ),
   http.post(

@@ -789,6 +789,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/offers/{offerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the price and/or quantity of one of the organisation's own offers
+         * @description offers `PATCH /v1/offers/{id}` `{priceMinor, quantity, version}` (Listings: EDIT). Only fields present change. The
+         *     offer must be one of the active organisation's own (another organisation's offer is a 404, checked here as well as
+         *     in offers). `version` is the offer's version the seller edited: a newer stored version answers 409 `CONFLICT`.
+         *     An offer held for tax can be edited; it stays held.
+         */
+        patch: operations["setOfferTerms"];
+        trace?: never;
+    };
     "/v1/seller/offers/{offerId}/fulfilment": {
         parameters: {
             query?: never;
@@ -968,7 +991,11 @@ export interface paths {
         };
         /**
          * The organisation's listings (server-driven table)
-         * @description catalog `GET /v1/products` (own organisation; status, page, size). `q` searches every column the table shows
+         * @description catalog `GET /v1/products` (own organisation; status, page, size). When the organisation has offers on other sellers'
+         *     pages (offer only, S382) they are rows of kind `OFFER` next to its own pages (offers `GET /v1/offers` for the token's
+         *     organisation joined with the page names of catalog's public page); an offer held for tax has status `IN_REVIEW`, the
+         *     status label and note "We are checking the tax details for this item.", and a page that is not on sale reads
+         *     "The product page is not on sale right now." The BFF then builds the table itself (cached 20 seconds). `q` searches every column the table shows
          *     (product, ATIN, SKU, variants, price, stock, fulfilment, status, updated) and `sort` orders by any of them: the BFF
          *     then reads the organisation's listings (up to 5,000, cached 20 seconds per member) and pages them itself.
          */
@@ -1706,14 +1733,64 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Does a product page already exist for this barcode, or brand and part number?
-         * @description catalog `POST /v1/catalog/matches` for the active organisation (Listings: EDIT), the first step of "Add a product".
-         *     Send a barcode (UPC, EAN, GTIN, ISBN; spaces and dashes allowed) or a brand with its part number. A barcode that
-         *     is too short is answered `INVALID` with a plain message, not an error. `sellerCount` is read from offers (null
-         *     when it cannot be read). `canOffer` is false with `blockers` when the seller may not sell the item (page not
-         *     live, department or brand approval); `canCreate` is false when a new page with this barcode must not be made.
+         * Does a product page already exist for this barcode? (the optional shortcut)
+         * @description catalog `POST /v1/catalog/matches` for the active organisation (Listings: EDIT). The optional "I have a barcode"
+         *     shortcut of "Add a product": an exact match on the barcode (UPC, EAN, GTIN, ISBN; spaces and dashes allowed). A
+         *     barcode that is too short is answered `INVALID` with a plain message, not an error. `sellerCount` is read from
+         *     offers (null when it cannot be read). `canOffer` is false with `blockers` when the seller may not sell the item
+         *     (page not live, brand approval); `canCreate` is false when a new page with this barcode must not be made. A seller
+         *     without a barcode uses `/v1/seller/catalog/candidates`.
          */
         post: operations["matchCatalog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Is your product already on AfroTransact? (one search box, no barcode)
+         * @description catalog `POST /v1/catalog/matches/candidates` for the active organisation (Listings: EDIT). `query` is what the
+         *     seller types ("basmati rice 5kg"); name, brand and size are read from it and the category is the optional chip
+         *     (`categoryId`). Up to six live pages with a real photo, best first, each with its photo, brand, size and the number of
+         *     sellers (`sellerCount`, null when offers cannot be read). `kind` is `SAME_NAME` or `SIMILAR`; both always need the
+         *     seller's click. Nothing about any seller is returned. `searchUnavailable` means no suggestions, never a guess.
+         *     429 `RATE_LIMITED` when the organisation searched too often.
+         */
+        post: operations["matchCandidates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/candidates/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "This is my product" or "Not here, add it as new"
+         * @description catalog `POST /v1/catalog/matches/decisions` (Listings: EDIT). `SELL_EXISTING` names a page that was in the list and
+         *     carries the one-tap size answer (`sizeConfirmed`, 422 `SIZE_UNCONFIRMED` when the page states a size and it is not
+         *     true; 422 `CHOICE_NOT_SHOWN` for a page that was not in the list); the answer says whether the seller may sell it
+         *     and the next step is the price, quantity and condition form. `NONE_OF_THESE` is recorded so staff can review likely
+         *     duplicates and never blocks adding the product.
+         */
+        post: operations["matchDecision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4097,9 +4174,19 @@ export interface components {
             /** @example Houston, TX */
             shipsFrom: string | null;
             /** @enum {string} */
-            status: "ACTIVE" | "PAUSED" | "WITHDRAWN";
+            status: "ACTIVE" | "PAUSED" | "WITHDRAWN" | "TAX_HELD";
             /** Format: int64 */
             version: number;
+        };
+        /** @description Only the fields present change; send at least one */
+        OfferTermsRequest: {
+            priceMinor?: number;
+            quantity?: number;
+            /**
+             * Format: int64
+             * @description The offer's version the seller edited
+             */
+            version?: number;
         };
         SellerOfferList: {
             items: components["schemas"]["SellerOffer"][];
@@ -4457,6 +4544,17 @@ export interface components {
             imageUrl: string | null;
             /** Format: date-time */
             updatedAt: string;
+            /**
+             * @description PRODUCT: a page the organisation owns. OFFER: the organisation's offer on another seller's page (offer only, S382). An OFFER row is named after the page (plus the variant's options when the page has several), shows the offer's own price and quantity, and its price and quantity are changed with PATCH /v1/seller/offers/{offerId}. A product page the organisation does not own is never editable from here.
+             * @enum {string}
+             */
+            kind: "PRODUCT" | "OFFER";
+            /** @description The offer to change (OFFER rows only) */
+            offerId: string | null;
+            /** @description The offer's version, sent back when it is changed (OFFER rows only) */
+            offerVersion: number | null;
+            /** @description Units the seller declared for the offer (OFFER rows only; `stock` is what shoppers can buy now) */
+            quantity: number | null;
         };
         ListingPage: {
             items: components["schemas"]["ListingRow"][];
@@ -5727,16 +5825,13 @@ export interface components {
             /** @description Plain English for API readers */
             message: string;
         };
-        /** @description A barcode, or a brand with its manufacturer part number */
+        /** @description A barcode (the optional exact shortcut) */
         MatchRequest: {
             /**
              * @description UPC, EAN, GTIN or ISBN; spaces and dashes are allowed
              * @example 012345678905
              */
-            gtin?: string;
-            brand?: string;
-            /** @description Manufacturer part number */
-            mpn?: string;
+            gtin: string;
         };
         /** @enum {string} */
         MatchResultKind: "MATCH" | "NO_MATCH" | "INVALID" | "RESTRICTED";
@@ -5756,10 +5851,71 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** @description What the seller is selling, as typed in the one search box. The category is the optional chip. */
+        CandidateRequest: {
+            /** @example basmati rice 5kg */
+            query: string;
+            /** Format: uuid */
+            categoryId?: string;
+        };
+        MatchCategory: {
+            /** Format: uuid */
+            id: string;
+            path: string;
+        };
+        /** @description One existing product page the seller may be selling. Nothing about any seller except how many sell it. */
+        MatchCandidate: {
+            parentAtin: string;
+            /** @description The variant to sell when the page has exactly one (never shown) */
+            atin?: string | null;
+            title: string;
+            brand?: string | null;
+            image?: components["schemas"]["MatchImage"] | null;
+            /** @description Category path */
+            category?: string | null;
+            /** @description The page size in words, for "Same size, 5 kg?"; null when it states none */
+            sizeLabel?: string | null;
+            variants: components["schemas"]["MatchVariant"][];
+            /** @enum {string} */
+            kind: "SAME_NAME" | "SIMILAR";
+            likely: boolean;
+            /** @description How many sellers list the page (null when not known) */
+            sellerCount?: number | null;
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
+        };
+        CandidateList: {
+            candidates: components["schemas"]["MatchCandidate"][];
+            suggestedCategory?: components["schemas"]["MatchCategory"] | null;
+            category?: components["schemas"]["MatchCategory"] | null;
+            /** @description The name is too short to search yet */
+            tooShort: boolean;
+            /** @description The search did not answer; the seller may still add the product as new */
+            searchUnavailable: boolean;
+        };
+        DecisionRequest: {
+            /** @enum {string} */
+            choice: "SELL_EXISTING" | "NONE_OF_THESE";
+            query: string;
+            /** Format: uuid */
+            categoryId?: string;
+            /** @description SELL_EXISTING: the variant of a page that was shown */
+            atin?: string;
+            /** @description SELL_EXISTING: the one tap "Same size" */
+            sizeConfirmed?: boolean;
+        };
+        MatchDecision: {
+            /** Format: uuid */
+            decisionId?: string | null;
+            /** @enum {string} */
+            choice: "SELL_EXISTING" | "NONE_OF_THESE";
+            atin?: string | null;
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
+            possibleDuplicateQueued: boolean;
+        };
         CatalogMatch: {
             result: components["schemas"]["MatchResultKind"];
-            /** @enum {string|null} */
-            matchedOn?: "GTIN" | "BRAND_MPN" | null;
             /** @description The cleaned barcode digits */
             digits?: string | null;
             /** @description The matched variant; offers attach to it (never shown to the seller) */
@@ -8254,6 +8410,38 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    setOfferTerms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferTermsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOffer"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     setOfferFulfilment: {
         parameters: {
             query?: never;
@@ -9743,6 +9931,66 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    matchCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateRequest"];
+            };
+        };
+        responses: {
+            /** @description The pages that look like it (possibly none) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    matchDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchDecision"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

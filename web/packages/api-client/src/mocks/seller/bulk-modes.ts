@@ -10,7 +10,7 @@ const csvCell = (v: string) => {
 };
 const toCsv = (rows: string[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
 
-export const OFFER_HEADER = ['Barcode (UPC, EAN, ISBN)', 'ATIN', 'Brand', 'Part number (MPN)', 'Seller SKU', 'Condition', 'Condition note', 'Price *', 'List price', 'Quantity', 'Shipping charge', 'Fulfilment', 'Handling days'];
+export const OFFER_HEADER = ['Product name', 'Category', 'Brand', 'Size or pack', 'Barcode (UPC, EAN, ISBN)', 'ATIN', 'Seller SKU', 'Condition', 'Condition note', 'Price *', 'List price', 'Quantity', 'Shipping charge', 'Fulfilment', 'Handling days'];
 export const PRICE_QTY_HEADER = ['Seller SKU', 'ATIN', 'Price', 'List price', 'Quantity'];
 export const STOCK_HEADER: Record<StockImportMode, string[]> = {
   ABSOLUTE: ['Seller SKU', 'Location', 'On hand', 'Lot', 'Expiry'],
@@ -18,7 +18,7 @@ export const STOCK_HEADER: Record<StockImportMode, string[]> = {
 };
 
 export const offerTemplateCsv = () =>
-  `# AfroTransact offer upload. Sell products that are already on AfroTransact: no photos, titles or details needed.\r\n# Give the barcode, or the ATIN, or the brand and part number.\r\n${toCsv([OFFER_HEADER, ['4006381333931', '', '', '', 'MY-SKU-1', 'New', '', '24.99', '', '10', '0', 'Ships from you', '2']])}`;
+  `# AfroTransact offer upload. Sell products that are already on AfroTransact: no photos, titles or details needed.\r\n# Type the product name and its size or pack. A barcode or ATIN, when you have one, is an exact match.\r\n${toCsv([OFFER_HEADER, ['Tilda basmati rice', '', 'Tilda', '5 kg', '', '', 'MY-SKU-1', 'New', '', '24.99', '', '10', '0', 'Ships from you', '2']])}`;
 export const priceQtyTemplateCsv = () =>
   `# AfroTransact price and quantity feed. A blank cell leaves that value unchanged.\r\n${toCsv([PRICE_QTY_HEADER, ['MY-SKU-1', '', '24.99', '', '10']])}`;
 export const stockTemplateCsv = (mode: StockImportMode) => toCsv([STOCK_HEADER[mode], ['MY-SKU-1', 'HOU-FC', '120', '', '']]);
@@ -26,10 +26,10 @@ export const stockTemplateCsv = (mode: StockImportMode) => toCsv([STOCK_HEADER[m
 /** The sample an .xlsx offer upload yields in the mock: a page that exists, one held for tax, a bad barcode and an unknown page. */
 export const OFFER_SAMPLE: string[][] = [
   OFFER_HEADER,
-  ['4006381333931', '', '', '', 'OFADA-OFFER-1', 'New', '', '24.99', '', '10', '0', 'Ships from you', '2'],
-  ['4006381333948', '', '', '', 'OFADA-OFFER-2', 'New', '', '41.00', '', '4', '0', 'Ships from you', '2'],
-  ['4006381333932', '', '', '', 'OFADA-OFFER-3', 'New', '', '9.00', '', '1', '0', 'Ships from you', '2'],
-  ['4006381333955', '', '', '', 'OFADA-OFFER-4', 'New', '', '12.50', '', '3', '0', 'Ships from you', '2']
+  ['', '', '', '', '4006381333931', '', 'OFADA-OFFER-1', 'New', '', '24.99', '', '10', '0', 'Ships from you', '2'],
+  ['', '', '', '', '4006381333948', '', 'OFADA-OFFER-2', 'New', '', '41.00', '', '4', '0', 'Ships from you', '2'],
+  ['', '', '', '', '4006381333932', '', 'OFADA-OFFER-3', 'New', '', '9.00', '', '1', '0', 'Ships from you', '2'],
+  ['', '', '', '', '4006381333955', '', 'OFADA-OFFER-4', 'New', '', '12.50', '', '3', '0', 'Ships from you', '2']
 ];
 /** The sample an .xlsx feed yields: two SKUs of the seller and one that is not. */
 export const FEED_SAMPLE: string[][] = [PRICE_QTY_HEADER, ['OFADA-5LB', '', '24.99', '', '40'], ['OFADA-10LB', '', '', '', '12'], ['NOT-MINE-1', '', '5.00', '', '1']];
@@ -38,6 +38,11 @@ export const FEED_SAMPLE: string[][] = [PRICE_QTY_HEADER, ['OFADA-5LB', '', '24.
 export const KNOWN_PAGES: Record<string, { atin: string; heldForTax: boolean }> = {
   '4006381333931': { atin: 'ATADEV0001', heldForTax: false },
   '4006381333948': { atin: 'ATADEV0002', heldForTax: true }
+};
+
+/** Pages the mock catalog finds by exact name and size (lower case), for the rows that have no barcode. */
+const NAMED_PAGES: Record<string, { atin: string; heldForTax: boolean; brand: string }> = {
+  'tilda basmati rice 5 kg': { atin: 'ATTILDA001', heldForTax: false, brand: 'tilda' }
 };
 
 export const gtinOk = (code: string): boolean => {
@@ -61,17 +66,18 @@ const row = (n: number, sku: string, cells: string[], messages: ImportRowMessage
   outcomeNote: null, productId: null, atin: null, offerId: null, messages, cells, images: [], ...extra
 });
 
-/** OFFER mode: every row names a page (barcode, ATIN or brand and part number) and gives a price. */
+/** OFFER mode: every row names a page (barcode, ATIN, or the product name with its size) and gives a price. */
 export function validateOfferSheet(sheet: string[][], maxRows = 5000): FeedValidation {
   const [header = [], ...data] = sheet;
   const gtin = indexOf(header, 'barcode (upc, ean, isbn)', 'barcode', 'gtin');
   const atin = indexOf(header, 'atin');
   const brand = indexOf(header, 'brand');
-  const mpn = indexOf(header, 'part number (mpn)', 'part number', 'mpn');
+  const name = indexOf(header, 'product name', 'product_name', 'name');
+  const size = indexOf(header, 'size or pack', 'size_pack', 'size', 'pack');
   const sku = indexOf(header, 'seller sku', 'sku', 'seller_sku');
   const price = indexOf(header, 'price');
   if (price < 0) return { header, rows: [], fileProblem: 'The header row is missing "Price". Download the template and keep its first row.' };
-  if (gtin < 0 && atin < 0 && (brand < 0 || mpn < 0)) return { header, rows: [], fileProblem: 'The file needs a Barcode, ATIN, or Brand and Part number column. Download the template and keep its first row.' };
+  if (gtin < 0 && atin < 0 && name < 0) return { header, rows: [], fileProblem: 'The file needs a Product name, Barcode or ATIN column. Download the template and keep its first row.' };
   if (data.length === 0) return { header, rows: [], fileProblem: 'The file has no rows under the header.' };
   if (data.length > maxRows) return { header, rows: [], fileProblem: `The file has ${data.length.toLocaleString()} rows; upload at most ${maxRows.toLocaleString()} at a time.` };
   const seen = new Set<string>();
@@ -92,7 +98,12 @@ export function validateOfferSheet(sheet: string[][], maxRows = 5000): FeedValid
     } else if (get(atin)) {
       page = Object.values(KNOWN_PAGES).find((p) => p.atin === get(atin).toUpperCase());
       if (!page) msg(atin, 'We could not find this product on AfroTransact.');
-    } else if (!(get(brand) && get(mpn))) msg(gtin >= 0 ? gtin : atin, 'Give the barcode, the ATIN, or the brand and part number.');
+    } else if (get(name)) {
+      // No barcode: only the exact product is linked; a guess is held for the seller, never sold on.
+      const found = Object.entries(NAMED_PAGES).find(([n, v]) => n === `${get(name)} ${get(size)}`.trim().toLowerCase() && (!get(brand) || v.brand === get(brand).toLowerCase()));
+      page = found?.[1];
+      if (!page) msg(name, 'We could not find exactly this product. Nothing was added for this row. Check the size, add the barcode, or use Add a product.');
+    } else msg(name >= 0 ? name : gtin >= 0 ? gtin : atin, 'Type the product name, or give the barcode or the ATIN.');
     const p = get(price);
     if (!/^\d+(\.\d{1,2})?$/.test(p.replace(/^\$/, ''))) msg(price, p ? `"${p}" is not a price; use digits like 24.99` : 'Price is required');
     if (page?.heldForTax) messages.push({ column: null, columnIndex: -1, severity: 'WARNING', message: 'We are checking the tax details for this item.' });
