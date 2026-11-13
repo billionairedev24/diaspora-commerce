@@ -1,0 +1,29 @@
+# Tenant isolation matrix of orders-service. Format: METHOD /path | CLASS | enforcement | testClass
+GET /v1/orders | CUSTOMER_SELF | OrderQueryServiceImpl.mine: byCustomer(token subject); only customer=me | OrdersTenantIsolationTest
+GET /v1/orders/{number} | ORG_OWNED | OrdersAccess.viewerOf: customer subject == order.customerId, seller org claim == shipment owner (requireOwned), seller sees only own shipments, else 404 | OrdersTenantIsolationTest
+POST /v1/orders/{number}/shipments/{shipmentId}/cancel | CUSTOMER_SELF | ShipmentServiceImpl.cancelByCustomer: access.customer + ensureOwner(order.customerId) | OrdersTenantIsolationTest
+POST /v1/orders/{id}/shipments/{shipmentId}/missed-delivery | CUSTOMER_SELF | PreorderDeliveryServiceImpl.answerMissedDelivery: access.customer + ensureOwner | OrdersTenantIsolationTest
+GET /v1/orders/{number}/payment-split | ORG_OWNED | viewerOf (404 for foreign), customers refused, seller gets own recipient rows and own charge only | OrdersTenantIsolationTest
+@OrderLookupController | SERVICE_ONLY | OrdersAccess.lookupCaller/purchaseCheckCaller: SERVICE with orders:lookup or purchase-check, or staff with orders:read; org members refused | -
+POST /v1/shipments/{id}/transitions | ORG_OWNED | OrdersAccess.transitionActor: seller org claim == shipment.sellerOrgId else 404, plus RBAC require() owner tuple | OrdersTenantIsolationTest
+POST /v1/shipments/{id}/courier-events | UNVERIFIED | DRIVER with delivery:operate (or relaying SERVICE) may post for any AfroTransact Delivery shipment id; orders does not know the route assignment (fulfilment does) | -
+GET /v1/shipments/{id}/delivery-brief | UNVERIFIED | any driver with delivery:operate or dispatcher can read the ship-to of any AfroTransact Delivery shipment id; assignment is known to fulfilment only | -
+POST /v1/shipments/{id}/tracking | ORG_OWNED | ShipmentServiceImpl.attachTracking: transitionActor (seller org claim == shipment owner) | OrdersTenantIsolationTest
+GET /v1/seller/shipments | ORG_SCOPED_LIST | OrdersAccess.sellerOrg: org from the token for non-staff (param ignored), staff must name it; SQL where seller_org_id | OrdersTenantIsolationTest
+GET /v1/admin/orders | STAFF_ONLY | OrdersAccess.staffReader: orders:read and STAFF/SERVICE principal | -
+GET /v1/shipments/stream | ORG_SCOPED_LIST | OrderQueryServiceImpl.liveFeedScope: seller org from token, staff all, others refused | OrdersTenantIsolationTest
+POST /v1/service/pay-links/{orderNumber}/lookup | TOKEN_LINK | SERVICE orders:pay-link plus HMAC token bound to order id and number with expiry; wrong token and unknown order are the same 404 | PayLinkAccessTest
+POST /v1/service/pay-links/{orderNumber}/confirm | TOKEN_LINK | same as lookup; idempotent placement | PayLinkAccessTest
+POST /v1/checkout | CUSTOMER_SELF | CheckoutServiceImpl.checkout: customer id is the token subject, cart and address fetched with the caller's bearer | OrdersTenantIsolationTest
+POST /v1/orders | CUSTOMER_SELF | alias of POST /v1/checkout | OrdersTenantIsolationTest
+GET /v1/checkout/{orderNumber} | CUSTOMER_SELF | CheckoutServiceImpl.ownRequest: request.customerId == token subject else 404 | OrdersTenantIsolationTest
+POST /v1/checkout/{orderNumber}/confirm | CUSTOMER_SELF | CheckoutServiceImpl.ownRequest | OrdersTenantIsolationTest
+GET /v1/seller/analytics | ORG_SCOPED_LIST | SellerAnalyticsServiceImpl: access.sellerOrg (token org for non-staff), SQL filtered by org | OrdersTenantIsolationTest
+POST /v1/delivery-quotes | CUSTOMER_SELF | DeliveryQuoteServiceImpl.request: customer subject, cart/address by caller bearer | OrdersTenantIsolationTest
+GET /v1/delivery-quotes | CUSTOMER_SELF | forCustomer(token subject) | OrdersTenantIsolationTest
+GET /v1/delivery-quotes/{id} | CUSTOMER_SELF | own(): quote.customerId == token subject else 404 | OrdersTenantIsolationTest
+@DeliveryQuoteStaffController | STAFF_ONLY | OrdersAccess.quoteStaff: STAFF principal (or super admin) with delivery-quotes permission | -
+@LatePreorderController | SERVICE_ONLY | OrdersAccess.onBehalfCaller: SERVICE with orders:on-behalf | -
+GET /v1/public/shipping-settings | PUBLIC | platform-wide flat fee, no tenant data | -
+PUT /v1/shipping-settings/{currency} | STAFF_ONLY | orders:shipping.edit, granted only to platform roles | -
+GET /v1/shipping-settings/{currency}/changes | STAFF_ONLY | orders:shipping.view, granted only to platform roles | -

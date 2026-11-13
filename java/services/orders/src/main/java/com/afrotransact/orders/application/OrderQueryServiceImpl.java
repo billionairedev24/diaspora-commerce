@@ -100,8 +100,11 @@ class OrderQueryServiceImpl implements OrderQueryService {
         if (viewer.kind() == Viewer.Kind.STAFF) {
             return split;
         }
-        return new PaymentsClient.Split(split.orderId(), split.chargeMinor(), 0, 0, split.currency(),
-                split.recipients().stream().filter(r -> viewer.orgId().equals(r.recipient())).toList());
+        // A seller sees its own rows only; the whole order's charge would reveal what the other sellers sold.
+        List<PaymentsClient.Recipient> own = split.recipients().stream()
+                .filter(r -> viewer.orgId().equals(r.recipient())).toList();
+        long ownCharge = own.stream().mapToLong(r -> r.itemsMinor() + r.shippingMinor() + r.taxMinor()).sum();
+        return new PaymentsClient.Split(split.orderId(), ownCharge, 0, 0, split.currency(), own);
     }
 
     private Order find(String numberOrId) {
