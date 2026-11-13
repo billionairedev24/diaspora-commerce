@@ -13,6 +13,8 @@ import (
 
 func (h *handlersImpl) registerSellerMatch(route func(pattern string, fn http.HandlerFunc)) {
 	route("POST /v1/seller/catalog/matches", h.matchCatalog)
+	route("POST /v1/seller/catalog/candidates", h.matchCandidates)
+	route("POST /v1/seller/catalog/candidates/decisions", h.matchDecision)
 	route("POST /v1/seller/offers", h.createOffer)
 	route("POST /v1/seller/products/{atin}/change-requests", h.fileChangeRequest)
 	route("GET /v1/seller/change-requests", h.changeRequests)
@@ -28,6 +30,28 @@ func (h *handlersImpl) matchCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.s.SellerMatch.Match(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) matchCandidates(w http.ResponseWriter, r *http.Request) {
+	var b domain.CandidateInput
+	r.Body = http.MaxBytesReader(w, r.Body, app.MaxMatchBodyBytes)
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerMatch.Candidates(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) matchDecision(w http.ResponseWriter, r *http.Request) {
+	var b domain.DecisionInput
+	r.Body = http.MaxBytesReader(w, r.Body, app.MaxMatchBodyBytes)
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerMatch.Decide(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

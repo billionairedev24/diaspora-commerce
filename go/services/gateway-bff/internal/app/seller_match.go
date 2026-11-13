@@ -16,14 +16,19 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// SellerMatchService is "Add a product" for a seller (docs/engineering/bulk-upload-and-images.md, section 3.3): the barcode
-// step (does a page exist for this barcode, or brand and part number?), the offer-only form for a page that exists, the
+// SellerMatchService is "Add a product" for a seller (docs/engineering/product-matching-without-barcode.md): one search box (is
+// the product already on AfroTransact? up to six pages, "This is my product" or "Not here, add it as new"), the optional barcode
+// shortcut, the price-and-stock form for a page that exists, the
 // suggest-a-change, wrong-product and duplicate reports, and the Improve-your-image tasks of live listings (section 6.7).
 // catalog owns the page and the checks; offers owns the offer and its tax hold. The BFF checks the Listings module,
 // validates what it can cheaply (an offer never carries page content), adds the seller count and relays plain answers.
 type SellerMatchService interface {
-	// Match is catalog POST /v1/catalog/matches for the active organisation, with the number of sellers from offers.
+	// Match is the barcode shortcut: catalog POST /v1/catalog/matches for the active organisation, with the number of sellers from offers.
 	Match(ctx context.Context, c *domain.Caller, in domain.MatchInput) (domain.CatalogMatch, error)
+	// Candidates is catalog POST /v1/catalog/matches/candidates: the pages that look like the typed name, with the number of sellers.
+	Candidates(ctx context.Context, c *domain.Caller, in domain.CandidateInput) (domain.CandidateList, error)
+	// Decide is catalog POST /v1/catalog/matches/decisions: "This is my product" (size confirmed) or "Not here, add it as new".
+	Decide(ctx context.Context, c *domain.Caller, in domain.DecisionInput) (domain.MatchDecision, error)
 	// CreateOffer is offers POST /v1/offers for a page that exists; body is the request's JSON (page content is refused).
 	CreateOffer(ctx context.Context, c *domain.Caller, idempotencyKey string, body json.RawMessage) (domain.OfferOnlyResult, error)
 	// FileChangeRequest is catalog POST /v1/products/{atin}/change-requests.
@@ -91,6 +96,10 @@ var matchProblems = map[string]struct {
 	"offers.brand-unavailable":          {http.StatusUnprocessableEntity, "BRAND_UNAVAILABLE"},
 	"offers.page-content-locked":        {http.StatusUnprocessableEntity, "PAGE_CONTENT_LOCKED"},
 	"catalog.wrong-match-open":          {http.StatusConflict, "WRONG_MATCH_OPEN"},
+	"catalog.match-rate-limited":        {http.StatusTooManyRequests, "RATE_LIMITED"},
+	"catalog.match-size-unconfirmed":    {http.StatusUnprocessableEntity, "SIZE_UNCONFIRMED"},
+	"catalog.match-choice-not-shown":    {http.StatusUnprocessableEntity, "CHOICE_NOT_SHOWN"},
+	"catalog.match-choice-missing":      {http.StatusUnprocessableEntity, domain.CodeValidationFailed},
 	"catalog.change-request-exists":     {http.StatusConflict, "CHANGE_REQUEST_EXISTS"},
 	"catalog.not-your-offer":            {http.StatusForbidden, "NOT_YOUR_OFFER"},
 	"catalog.change-request-decided":    {http.StatusConflict, "CHANGE_REQUEST_DECIDED"},
@@ -135,7 +144,6 @@ func (s *sellerMatchImpl) catalog() (port.StaffUpstream, error) {
 // upstreamMatch is catalog's MatchResult.
 type upstreamMatch struct {
 	Result        string `json:"result"`
-	MatchedOn     string `json:"matchedOn"`
 	Digits        string `json:"digits"`
 	ATIN          string `json:"atin"`
 	ParentATIN    string `json:"parentAtin"`
@@ -159,19 +167,13 @@ type upstreamMatch struct {
 }
 
 func (s *sellerMatchImpl) Match(ctx context.Context, c *domain.Caller, in domain.MatchInput) (domain.CatalogMatch, error) {
-	in.GTIN, in.Brand, in.MPN = strings.TrimSpace(in.GTIN), strings.TrimSpace(in.Brand), strings.TrimSpace(in.MPN)
+	in.GTIN = strings.TrimSpace(in.GTIN)
 	errs := map[string]string{}
 	switch {
-	case in.GTIN == "" && (in.Brand == "" || in.MPN == ""):
-		errs["gtin"] = "Enter the barcode, or the brand and the part number"
+	case in.GTIN == "":
+		errs["gtin"] = "Enter the barcode"
 	case utf8.RuneCountInString(in.GTIN) > 20:
 		errs["gtin"] = "At most 20 characters"
-	}
-	if utf8.RuneCountInString(in.Brand) > 120 {
-		errs["brand"] = "At most 120 characters"
-	}
-	if utf8.RuneCountInString(in.MPN) > 80 {
-		errs["mpn"] = "At most 80 characters"
 	}
 	if len(errs) > 0 {
 		return domain.CatalogMatch{}, domain.ValidationProblem(errs)
@@ -179,7 +181,7 @@ func (s *sellerMatchImpl) Match(ctx context.Context, c *domain.Caller, in domain
 	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
 		return domain.CatalogMatch{}, err
 	}
-	if in.GTIN != "" && !barcodeRe.MatchString(barcodeStripRe.ReplaceAllString(in.GTIN, "")) {
+	if !barcodeRe.MatchString(barcodeStripRe.ReplaceAllString(in.GTIN, "")) {
 		// Too short or not digits: an answer, not an error (the field asks again), like the GTIN check.
 		digits := barcodeStripRe.ReplaceAllString(in.GTIN, "")
 		return domain.CatalogMatch{Result: domain.MatchInvalid, Digits: strPtr(digits), Blockers: []domain.Blocker{}, CreateBlockers: []domain.Blocker{},
@@ -189,18 +191,11 @@ func (s *sellerMatchImpl) Match(ctx context.Context, c *domain.Caller, in domain
 	if err != nil {
 		return domain.CatalogMatch{}, err
 	}
-	body := map[string]string{}
-	if in.GTIN != "" {
-		body["gtin"] = in.GTIN
-	}
-	if in.Brand != "" && in.MPN != "" {
-		body["brand"], body["mpn"] = in.Brand, in.MPN
-	}
 	var m upstreamMatch
-	if err := up.Call(ctx, c.BearerToken, port.StaffCall{Method: http.MethodPost, Path: "/v1/catalog/matches", Body: body}, &m); err != nil {
+	if err := up.Call(ctx, c.BearerToken, port.StaffCall{Method: http.MethodPost, Path: "/v1/catalog/matches", Body: map[string]string{"gtin": in.GTIN}}, &m); err != nil {
 		return domain.CatalogMatch{}, matchErr("catalog", err)
 	}
-	out := domain.CatalogMatch{Result: m.Result, MatchedOn: strPtr(m.MatchedOn), Digits: strPtr(m.Digits), ATIN: strPtr(m.ATIN), ParentATIN: strPtr(m.ParentATIN),
+	out := domain.CatalogMatch{Result: m.Result, Digits: strPtr(m.Digits), ATIN: strPtr(m.ATIN), ParentATIN: strPtr(m.ParentATIN),
 		ProductStatus: strPtr(m.ProductStatus), Title: strPtr(m.Title), Brand: strPtr(m.Brand), Category: strPtr(m.Category), VariantOptions: m.VariantOptions,
 		Variants: m.Variants, CanOffer: m.CanOffer, Blockers: m.Blockers, CanCreate: m.CanCreate, CreateBlockers: m.CreateBlockers,
 		Suggestion: strPtr(m.Suggestion), Message: strPtr(m.Message)}
@@ -221,6 +216,138 @@ func (s *sellerMatchImpl) Match(ctx context.Context, c *domain.Caller, in domain
 		if box, berr := s.r.d.OfferListings.BuyBox(ctx, m.ATIN); berr == nil {
 			out.SellerCount = ptr(max(0, box.OfferCount))
 		}
+	}
+	return out, nil
+}
+
+// ---------------------------------------------------------------- search-first candidates
+
+const (
+	maxCandidateQuery  = 200
+	maxCandidateSeller = 6
+)
+
+// upstreamCandidates is catalog's CandidateSearchResult.
+type upstreamCandidates struct {
+	Candidates []struct {
+		ParentATIN string `json:"parentAtin"`
+		ATIN       string `json:"atin"`
+		Title      string `json:"title"`
+		Brand      string `json:"brand"`
+		Image      *struct {
+			URL    string `json:"url"`
+			Width  *int   `json:"width"`
+			Height *int   `json:"height"`
+		} `json:"image"`
+		Category  string                `json:"category"`
+		SizeLabel string                `json:"sizeLabel"`
+		Variants  []domain.MatchVariant `json:"variants"`
+		Kind      string                `json:"kind"`
+		Likely    bool                  `json:"likely"`
+		CanOffer  bool                  `json:"canOffer"`
+		Blockers  []domain.Blocker      `json:"blockers"`
+	} `json:"candidates"`
+	SuggestedCategory *domain.MatchCategory `json:"suggestedCategory"`
+	Category          *domain.MatchCategory `json:"category"`
+	TooShort          bool                  `json:"tooShort"`
+	SearchUnavailable bool                  `json:"searchUnavailable"`
+}
+
+func (s *sellerMatchImpl) Candidates(ctx context.Context, c *domain.Caller, in domain.CandidateInput) (domain.CandidateList, error) {
+	in.Query, in.CategoryID = strings.Join(strings.Fields(in.Query), " "), strings.TrimSpace(in.CategoryID)
+	errs := map[string]string{}
+	switch {
+	case in.Query == "":
+		errs["query"] = "Type what you are selling"
+	case utf8.RuneCountInString(in.Query) > maxCandidateQuery:
+		errs["query"] = "At most 200 characters"
+	}
+	if in.CategoryID != "" && !uuidRe.MatchString(in.CategoryID) {
+		errs["categoryId"] = "Choose a category from the list"
+	}
+	if len(errs) > 0 {
+		return domain.CandidateList{}, domain.ValidationProblem(errs)
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+		return domain.CandidateList{}, err
+	}
+	up, err := s.catalog()
+	if err != nil {
+		return domain.CandidateList{}, err
+	}
+	body := map[string]string{"query": in.Query}
+	if in.CategoryID != "" {
+		body["categoryId"] = in.CategoryID
+	}
+	var m upstreamCandidates
+	if err := up.Call(ctx, c.BearerToken, port.StaffCall{Method: http.MethodPost, Path: "/v1/catalog/matches/candidates", Body: body}, &m); err != nil {
+		return domain.CandidateList{}, matchErr("catalog", err)
+	}
+	out := domain.CandidateList{Candidates: []domain.MatchCandidate{}, SuggestedCategory: m.SuggestedCategory, Category: m.Category, TooShort: m.TooShort, SearchUnavailable: m.SearchUnavailable}
+	for i, x := range m.Candidates {
+		if i >= maxCandidateSeller {
+			break
+		}
+		cand := domain.MatchCandidate{ParentATIN: x.ParentATIN, ATIN: strPtr(x.ATIN), Title: x.Title, Brand: strPtr(x.Brand), Category: strPtr(x.Category),
+			SizeLabel: strPtr(x.SizeLabel), Variants: x.Variants, Kind: x.Kind, Likely: x.Likely, CanOffer: x.CanOffer, Blockers: x.Blockers}
+		if x.Image != nil && x.Image.URL != "" {
+			cand.Image = &domain.MatchImage{URL: x.Image.URL, Width: x.Image.Width, Height: x.Image.Height}
+		}
+		if cand.Variants == nil {
+			cand.Variants = []domain.MatchVariant{}
+		}
+		if cand.Blockers == nil {
+			cand.Blockers = []domain.Blocker{}
+		}
+		if s.r.d.OfferListings != nil && len(x.Variants) > 0 {
+			// The number of sellers is best effort: the card shows without it when offers cannot be read.
+			if box, berr := s.r.d.OfferListings.BuyBox(ctx, x.Variants[0].ATIN); berr == nil {
+				cand.SellerCount = ptr(max(0, box.OfferCount))
+			}
+		}
+		out.Candidates = append(out.Candidates, cand)
+	}
+	return out, nil
+}
+
+func (s *sellerMatchImpl) Decide(ctx context.Context, c *domain.Caller, in domain.DecisionInput) (domain.MatchDecision, error) {
+	in.Query, in.CategoryID, in.ATIN = strings.Join(strings.Fields(in.Query), " "), strings.TrimSpace(in.CategoryID), strings.ToUpper(strings.TrimSpace(in.ATIN))
+	errs := map[string]string{}
+	if in.Choice != domain.ChoiceSellExisting && in.Choice != domain.ChoiceNoneOfThese {
+		errs["choice"] = "Choose This is my product or Not here"
+	}
+	if in.Query == "" || utf8.RuneCountInString(in.Query) > maxCandidateQuery {
+		errs["query"] = "Type what you are selling"
+	}
+	if in.CategoryID != "" && !uuidRe.MatchString(in.CategoryID) {
+		errs["categoryId"] = "Choose a category from the list"
+	}
+	if in.Choice == domain.ChoiceSellExisting && !atinRe.MatchString(in.ATIN) {
+		errs["atin"] = "Choose the product you are selling"
+	}
+	if len(errs) > 0 {
+		return domain.MatchDecision{}, domain.ValidationProblem(errs)
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+		return domain.MatchDecision{}, err
+	}
+	up, err := s.catalog()
+	if err != nil {
+		return domain.MatchDecision{}, err
+	}
+	body := map[string]any{"choice": in.Choice, "query": in.Query}
+	if in.CategoryID != "" {
+		body["categoryId"] = in.CategoryID
+	}
+	if in.Choice == domain.ChoiceSellExisting {
+		body["atin"], body["sizeConfirmed"] = in.ATIN, in.SizeConfirmed
+	}
+	var out domain.MatchDecision
+	if err := up.Call(ctx, c.BearerToken, port.StaffCall{Method: http.MethodPost, Path: "/v1/catalog/matches/decisions", Body: body}, &out); err != nil {
+		return domain.MatchDecision{}, matchErr("catalog", err)
+	}
+	if out.Blockers == nil {
+		out.Blockers = []domain.Blocker{}
 	}
 	return out, nil
 }

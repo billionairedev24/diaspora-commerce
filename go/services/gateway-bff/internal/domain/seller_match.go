@@ -35,7 +35,6 @@ type MatchVariant struct {
 // CatalogMatch is the answer to "does a page already exist for this barcode, or brand and part number?".
 type CatalogMatch struct {
 	Result         string            `json:"result"`
-	MatchedOn      *string           `json:"matchedOn"`
 	Digits         *string           `json:"digits"`
 	ATIN           *string           `json:"atin"`
 	ParentATIN     *string           `json:"parentAtin"`
@@ -56,11 +55,75 @@ type CatalogMatch struct {
 	Message        *string   `json:"message"`
 }
 
-// MatchInput is a barcode (UPC, EAN, GTIN, ISBN) or a brand with its manufacturer part number.
+// MatchInput is a barcode (UPC, EAN, GTIN, ISBN): the optional exact shortcut of "Add a product".
 type MatchInput struct {
-	GTIN  string `json:"gtin"`
-	Brand string `json:"brand"`
-	MPN   string `json:"mpn"`
+	GTIN string `json:"gtin"`
+}
+
+// MatchCategory is a category as the seller sees it: an editable chip, never an id on screen.
+type MatchCategory struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
+}
+
+// CandidateInput is what the seller is selling, as typed in the one search box: the name (the brand and the size may be inside it).
+// The category is the optional chip.
+type CandidateInput struct {
+	Query      string `json:"query"`
+	CategoryID string `json:"categoryId,omitempty"`
+}
+
+// MatchCandidate is one existing product page the seller may be selling. It carries nothing about any seller except how many sell it.
+type MatchCandidate struct {
+	ParentATIN string         `json:"parentAtin"`
+	ATIN       *string        `json:"atin"`
+	Title      string         `json:"title"`
+	Brand      *string        `json:"brand"`
+	Image      *MatchImage    `json:"image"`
+	Category   *string        `json:"category"`
+	SizeLabel  *string        `json:"sizeLabel"`
+	Variants   []MatchVariant `json:"variants"`
+	// Kind is SAME_NAME (exact) or SIMILAR (a suggestion); both need the seller's click.
+	Kind   string `json:"kind"`
+	Likely bool   `json:"likely"`
+	// SellerCount is how many sellers list the page (offers; null when it cannot be read).
+	SellerCount *int      `json:"sellerCount"`
+	CanOffer    bool      `json:"canOffer"`
+	Blockers    []Blocker `json:"blockers"`
+}
+
+// CandidateList is the answer to the search box: up to six pages, the category suggestion and whether the search could answer.
+type CandidateList struct {
+	Candidates        []MatchCandidate `json:"candidates"`
+	SuggestedCategory *MatchCategory   `json:"suggestedCategory"`
+	Category          *MatchCategory   `json:"category"`
+	TooShort          bool             `json:"tooShort"`
+	SearchUnavailable bool             `json:"searchUnavailable"`
+}
+
+// Choices of the candidate list.
+const (
+	ChoiceSellExisting = "SELL_EXISTING"
+	ChoiceNoneOfThese  = "NONE_OF_THESE"
+)
+
+// DecisionInput is the seller's answer to the list: "This is my product" (with the one-tap size confirmation) or "Not here, add it as new".
+type DecisionInput struct {
+	Choice        string `json:"choice"`
+	Query         string `json:"query"`
+	CategoryID    string `json:"categoryId,omitempty"`
+	ATIN          string `json:"atin,omitempty"`
+	SizeConfirmed bool   `json:"sizeConfirmed"`
+}
+
+// MatchDecision is catalog's recorded answer.
+type MatchDecision struct {
+	DecisionID              *string   `json:"decisionId"`
+	Choice                  string    `json:"choice"`
+	ATIN                    *string   `json:"atin"`
+	CanOffer                bool      `json:"canOffer"`
+	Blockers                []Blocker `json:"blockers"`
+	PossibleDuplicateQueued bool      `json:"possibleDuplicateQueued"`
 }
 
 // Offer statuses a new offer starts in.
