@@ -1756,3 +1756,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Rate limits on candidate searches and None of these answers
 - Matching creates no live page without a RESOLVED tax decision (TaxGateArchitectureTest green)
 - Java unit tests on JDK 25, Go gateway tests, vitest and tsc/eslint clean; five locales with machine drafts flagged needsReview","E24","","High","8","seller-center matching catalog i18n","seller-center","In Review"
+"S437","Story","Compact seller product form, no country of origin, optional grocery label photo","Seller product form redesigned: photo slot row, main photo rules popover, required markers, allergen multi-select, one-row package, one focus ring; country of origin removed end to end; label photo optional for groceries by listing-rules data.","- Photos are a compact slot row with the main photo rules in an accessible info popover
+- Required fields carry a token-colour asterisk, aria-required and screen-reader text
+- Allergens are a keyboard-accessible multi-select with an exclusive None
+- Package size is one row with inline units and one group error shown after blur or submit
+- One focus ring for every control
+- Country of origin removed from form, catalog rules, gateway-bff, contracts, storefront and mocks; stored values kept
+- Label photo optional for groceries, still required for health, beauty, baby feeding and pet food; tax gate unchanged
+- Five locales; tests and a real-browser axe run","E03","","High","8","seller-center catalog","catalog","In Progress"
