@@ -13,6 +13,12 @@ public interface PlacementDeliveryService {
 
     ResolvedPlacements resolve(PlacementContext ctx);
 
+    /**
+     * The placements whose schedule window contains {@code at} (staff preview "as of" a date, S430): what will be live
+     * then, scheduled ones included. Never cached.
+     */
+    ResolvedPlacements resolveAt(PlacementContext ctx, Instant at);
+
     PlacementBundle bundle(String market);
 
     /**

@@ -1,5 +1,6 @@
 package com.afrotransact.content.adapter.in.web;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -74,12 +75,14 @@ class PlacementPublicController {
             @RequestParam(required = false) Boolean returning,
             @RequestParam(required = false) @Parameter(description = "Comma-separated community keys") String communities,
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) @Parameter(description = "Impressions per placement: plc_a:2,plc_b:1") String seen) {
+            @RequestParam(required = false) @Parameter(description = "Impressions per placement: plc_a:2,plc_b:1") String seen,
+            @RequestParam(required = false) @Parameter(description = "As-of instant (RFC 3339) for staff previews; never cached")
+            Instant at) {
         SlotKey slotKey = slot == null || slot.isBlank() ? null : SlotKey.fromKey(slot);
         PlacementContext ctx = new PlacementContext(market, slotKey, zip, dma, Device.parse(device), returning,
                 csv(communities), category, seenCounts(seen));
-        ResolvedPlacements r = delivery.resolve(ctx);
-        CacheControl cache = r.personalised() ? CacheControl.noStore()
+        ResolvedPlacements r = at == null ? delivery.resolve(ctx) : delivery.resolveAt(ctx, at);
+        CacheControl cache = r.personalised() || at != null ? CacheControl.noStore()
                 : CacheControl.maxAge(settings.resolveMaxAge()).cachePublic();
         return ResponseEntity.ok().cacheControl(cache).eTag(r.etag())
                 .header("Cache-Tag", "placements:" + r.market())

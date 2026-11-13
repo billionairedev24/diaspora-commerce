@@ -16,7 +16,7 @@ class TargetGuard(unittest.TestCase):
 
     def test_production_and_uat_names_are_refused_in_any_spelling(self) -> None:
         for name in ("APP_ENV", "ENVIRONMENT", "DEPLOY_ENV", "SPRING_PROFILES_ACTIVE", "ENV"):
-            for value in ("prod", "PROD", " Production ", "uat", "staging", "local,prod", "prod, uat"):
+            for value in ("prod", "PROD", " Production ", "uat", "staging", "trial", "Trial", "local,prod", "prod, uat"):
                 with self.subTest(name=name, value=value):
                     self.assertIsNotNone(seed.target_problem({name: value}))
 

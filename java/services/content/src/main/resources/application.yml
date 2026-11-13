@@ -93,6 +93,8 @@ at:
       - /v1/markets/countries
       - /v1/markets/countries/*
       - /v1/site-config
+      - /v1/home-settings
+      - /v1/community-registry
       - /v1/legal
       - /v1/legal/*
       - /v1/legal/*/versions

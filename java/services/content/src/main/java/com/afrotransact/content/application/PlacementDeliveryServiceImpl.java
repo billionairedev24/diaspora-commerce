@@ -32,9 +32,14 @@ class PlacementDeliveryServiceImpl implements PlacementDeliveryService {
 
     @Override
     public ResolvedPlacements resolve(PlacementContext ctx) {
+        return resolveAt(ctx, Instant.now(clock));
+    }
+
+    @Override
+    public ResolvedPlacements resolveAt(PlacementContext ctx, Instant at) {
         requireMarket(ctx.market());
         PlacementCache.Snapshot snap = cache.get();
-        List<Placement> out = resolver.resolve(snap.approved(), snap.slots(), ctx, Instant.now(clock));
+        List<Placement> out = resolver.resolve(snap.approved(), snap.slots(), ctx, at);
         String etag = Fingerprint.of(ctx.market(), ctx.slot(), fingerprint(out));
         return new ResolvedPlacements(ctx.market(), out, etag, !ctx.seen().isEmpty());
     }

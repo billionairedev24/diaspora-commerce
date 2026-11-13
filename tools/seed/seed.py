@@ -40,7 +40,7 @@ from seedlib.seeder import STEPS, Seeder, load_env
 ROOT = Path(__file__).resolve().parents[2]
 
 
-PRODUCTION_ENV_NAMES = ("prod", "production", "prd", "live", "uat", "staging", "stage")
+PRODUCTION_ENV_NAMES = ("prod", "production", "prd", "live", "uat", "staging", "stage", "trial")
 # Variables other tools use to say which environment they run in; any of them naming production or UAT stops the seeder.
 ENV_NAME_VARIABLES = ("APP_ENV", "ENVIRONMENT", "DEPLOY_ENV", "SPRING_PROFILES_ACTIVE", "ENV")
 SEEDED_URL_VARIABLES = ("CATALOG_URL", "OFFERS_URL", "INVENTORY_URL", "MEDIA_URL", "CONTENT_URL", "DELIVERY_RUNS_URL",
@@ -48,7 +48,7 @@ SEEDED_URL_VARIABLES = ("CATALOG_URL", "OFFERS_URL", "INVENTORY_URL", "MEDIA_URL
                         "FULFILMENT_URL", "TRUST_OPS_URL", "TAX_RETURNS_URL", "CART_URL", "GEO_URL",
                         "CARRIER_GATEWAY_URL", "AUTH_ISSUER_URL", "SEED_TOKEN_URL")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
-# Only the shared dev cluster's hosts may ever receive demo data (with SEED_ALLOW_REMOTE=1). Hosts are flat, one label below the zone
+# Only the shared dev cluster's hosts may ever receive demo data (with SEED_ALLOW_REMOTE=1). The trial environment (test.) never does. Hosts are flat, one label below the zone
 # (infra/cloudflare/hosts.json): dev.<zone> (storefront) and <role>-dev.<zone>. The apex, api., auth., uat, the 8-day trial (test, which runs
 # the prod profile and must never get demo data) and every other name are treated as production.
 DEMO_SUFFIXES = ("-dev.afrotransact.com",)
@@ -76,8 +76,9 @@ def is_production_host(host: str) -> bool:
 
 
 def target_problem(env: Mapping[str, str]) -> str | None:
-    """Why this environment must not be seeded, or None. Demo sellers, products, orders and test users are for local,
-    dev and trial stacks only: production and UAT are refused in every case, `SEED_ALLOW_REMOTE` or not."""
+    """Why this environment must not be seeded, or None. Demo sellers, products, orders, test users and demo home content
+    (hero slides, tiles, banners, announcements) are for local and dev stacks only: production, UAT and the trial
+    environment are refused in every case, `SEED_ALLOW_REMOTE` or not."""
     for name in ENV_NAME_VARIABLES:
         for part in re.split(r"[\s,;]+", env.get(name, "").lower()):
             if part in PRODUCTION_ENV_NAMES:
@@ -101,7 +102,7 @@ def target_problem(env: Mapping[str, str]) -> str | None:
 
 
 def guard_not_production() -> None:
-    """The seeder writes demo sellers, products, orders and test users: it must never run against production or UAT."""
+    """The seeder writes demo sellers, products, orders, test users and demo home content: it must never run against production, UAT or trial."""
     problem = target_problem(os.environ)
     if problem:
         sys.exit("seed: " + problem)

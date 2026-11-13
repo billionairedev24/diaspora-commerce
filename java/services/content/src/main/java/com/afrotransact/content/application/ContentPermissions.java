@@ -20,6 +20,10 @@ public final class ContentPermissions {
     public static final String FLAGS_EDIT = "content:flags.edit";
     public static final String CAREERS_VIEW = "content:careers.view";
     public static final String CAREERS_EDIT = "content:careers.edit";
+    /** View the dynamic home's settings versions and community registry changes. */
+    public static final String HOME_VIEW = "content:home.view";
+    /** Change the dynamic home's thresholds, caps, mode, department labels and community registry (reason mandatory). */
+    public static final String HOME_EDIT = "content:home.edit";
     /** Read the audit trail of content changes. */
     public static final String AUDIT_VIEW = "content:audit.view";
     /** Staff: read every organisation's sponsored-products campaigns and reports. */
