@@ -56,7 +56,7 @@
 .message { margin: 0; min-height: 14px; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .message-error { color: var(--at-color-danger); }
 .control { width: 100%; min-width: 0; height: var(--at-size-control); padding: 0 var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); background: var(--at-color-surface); color: var(--at-color-text); font-family: inherit; font-size: var(--at-text-base); }
-.control:focus { outline: none; border-color: var(--at-color-focus); box-shadow: var(--at-shadow-focus); }
+.control:focus { outline: var(--at-focus-ring); outline-offset: var(--at-focus-offset); border-color: var(--at-color-focus); }
 .control[aria-invalid='true'] { border-color: var(--at-color-danger); }
 .control::placeholder { color: var(--at-color-text-subtle); }
 select.control { padding: 0 var(--at-space-2); cursor: pointer; }
