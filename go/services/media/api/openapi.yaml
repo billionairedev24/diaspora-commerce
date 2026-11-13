@@ -164,7 +164,9 @@ paths:
         image was uploaded, for the slot the caller says (a main image is judged by the main rules even when it was
         uploaded as an additional picture), with the current thresholds. Width and height are media's own; a client's
         numbers are never used. An URL media does not know as a published image is `found: false` and a `REJECT` with
-        `NOT_VERIFIED`. Images stored before the checks existed (no measurements) are judged on their size only until
+        `NOT_VERIFIED`. An image can also be named by `assetId` (S390 with held photos): a READY one is judged like one
+        asked for by URL and the answer carries its public URL; a HELD one answers `status: HELD`, verdict `HOLD`, no
+        URL, so catalog can save the listing and keep it off sale until staff decide. Images stored before the checks existed (no measurements) are judged on their size only until
         they are rescored. At most 100 images.
       requestBody:
         required: true
@@ -487,9 +489,12 @@ components:
           maxItems: 100
           items:
             type: object
-            required: [url, slot]
+            required: [slot]
+            description: 'Name the image by `url` (a published image) or by `assetId` (any product image, including a held one that has no public URL). One of the two is required.'
             properties:
               url: {type: string, maxLength: 2048, description: Public URL of a published image}
+              assetId: {type: string, maxLength: 64, description: Media asset id of a product image; the way a listing refers to a photo that is held for review}
+              ownerOrg: {type: string, maxLength: 64, description: 'With assetId: the organisation that must own the asset; another organisation''s image is answered as UNKNOWN'}
               slot: {$ref: '#/components/schemas/ImageSlot'}
               productTypeCode: {type: string, maxLength: 80}
     VerifyResponse:
@@ -501,7 +506,12 @@ components:
       type: object
       required: [url, found, slot, verdict, checks, measured]
       properties:
-        url: {type: string}
+        url: {type: string, description: 'Public URL; empty for a held image'}
+        assetId: {type: string, description: Set when the image was asked for by asset id}
+        status:
+          type: string
+          enum: [READY, HELD, REJECTED, UNKNOWN]
+          description: 'Set with assetId. READY: published, url is its public URL. HELD: kept private until staff decide (verdict HOLD, no url). REJECTED or UNKNOWN (no such asset, someone else''s, not a product image): verdict REJECT with NOT_VERIFIED.'
         found: {type: boolean}
         slot: {$ref: '#/components/schemas/ImageSlot'}
         verdict: {$ref: '#/components/schemas/ImageVerdict'}

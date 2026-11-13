@@ -213,6 +213,9 @@ type Asset struct {
 	Hint ModerationHint `json:"-"`
 }
 
+// ErrAssetNotFound is returned by a repository when no asset has the id.
+var ErrAssetNotFound = errors.New("asset not found")
+
 // ErrConflict is returned when an asset changed since it was read (concurrent completion or review).
 var ErrConflict = errors.New("asset changed concurrently")
 

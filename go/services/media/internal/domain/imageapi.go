@@ -8,18 +8,35 @@ type ImageOptions struct {
 	Hint ModerationHint
 }
 
-// VerifyItem names a published image (by its public URL) and the slot it is to be judged for.
+// VerifyItem names an image and the slot it is to be judged for: by its public URL, or by its asset id (a held
+// image has no public URL yet; the id is how a listing refers to it). With an asset id, OwnerOrg (when given) must
+// be the organisation that uploaded it, so a seller cannot attach another seller's image.
 type VerifyItem struct {
 	URL             string
+	AssetID         string
+	OwnerOrg        string
 	Slot            ImageSlot
 	ProductTypeCode string
 }
+
+// Asset states a verify answer reports. HELD is an image kept private until staff review it (it will become READY or
+// REJECTED); UNKNOWN is an image media cannot vouch for (no such asset, someone else's, or not a product image).
+const (
+	AssetReady    = "READY"
+	AssetHeld     = "HELD"
+	AssetRejected = "REJECTED"
+	AssetUnknown  = "UNKNOWN"
+)
 
 // VerifyResult is the verdict of one image for one slot, from what media stored about it. Found is false for a URL
 // media does not know as a published image; such an image is a REJECT with NOT_VERIFIED, so a caller that only reads
 // the verdict is safe by default.
 type VerifyResult struct {
-	URL         string       `json:"url"`
+	URL string `json:"url"`
+	// AssetID and Status are set when the image was asked for by asset id: Status is READY (URL is its public URL),
+	// HELD (no URL yet, Verdict HOLD), REJECTED or UNKNOWN.
+	AssetID     string       `json:"assetId,omitempty"`
+	Status      string       `json:"status,omitempty"`
 	Found       bool         `json:"found"`
 	Slot        ImageSlot    `json:"slot"`
 	Verdict     ImageVerdict `json:"verdict"`

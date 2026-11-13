@@ -19,7 +19,7 @@ import (
 )
 
 // ErrNotFound is returned when an asset does not exist.
-var ErrNotFound = errors.New("asset not found")
+var ErrNotFound = domain.ErrAssetNotFound
 
 type repoImpl struct {
 	pool *pgxpool.Pool

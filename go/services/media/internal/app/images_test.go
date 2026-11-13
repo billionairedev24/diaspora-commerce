@@ -559,3 +559,38 @@ func TestStaffReviewQueueShowsHeldImagesWithLabelsScoreAndAPreview(t *testing.T)
 		t.Fatalf("limit: %d %v", len(one), err)
 	}
 }
+
+func TestVerifyByAssetIDAnswersForHeldReadyAndForeignImages(t *testing.T) {
+	ai := &fakeModerator{verdict: domain.AIVerdict{Decision: domain.AIAllow, Labels: []string{"PROPS"}}}
+	f := newImageFixture(t, nil, ai)
+	ctx := context.Background()
+	held := f.put(t, sellerMember, shot(t, 1600, 1600, white, 0.92), main())
+	if held.Status != domain.StatusFlagged {
+		t.Fatalf("held wanted: %+v", held)
+	}
+	ready := newImageFixture(t, nil, nil)
+	ok := ready.put(t, sellerMember, shot(t, 1600, 1600, white, 0.92), main())
+	res, err := f.svc.VerifyImages(ctx, catalogService, []domain.VerifyItem{
+		{AssetID: held.ID, OwnerOrg: sellerMember.OrgID, Slot: domain.ImageSlotMain},
+		{AssetID: held.ID, OwnerOrg: "org_other", Slot: domain.ImageSlotMain},
+		{AssetID: "missing", Slot: domain.ImageSlotMain},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res[0].Status != domain.AssetHeld || res[0].Verdict != domain.VerdictHold || res[0].URL != "" || res[0].AssetID != held.ID {
+		t.Fatalf("a held image is a HOLD with no URL: %+v", res[0])
+	}
+	for _, r := range res[1:] {
+		if r.Status != domain.AssetUnknown || r.Verdict != domain.VerdictReject || r.Checks[0].Code != "NOT_VERIFIED" {
+			t.Fatalf("a foreign or missing image is not verified: %+v", r)
+		}
+	}
+	res, err = ready.svc.VerifyImages(ctx, catalogService, []domain.VerifyItem{{AssetID: ok.ID, OwnerOrg: sellerMember.OrgID, Slot: domain.ImageSlotMain}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res[0].Status != domain.AssetReady || res[0].URL != ok.URL || res[0].Verdict != domain.VerdictPass {
+		t.Fatalf("a ready image answers with its public URL: %+v", res[0])
+	}
+}

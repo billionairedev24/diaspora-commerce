@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -166,6 +167,14 @@ func (s *mediaServiceImpl) judgeStored(ctx context.Context, actor auth.Actor, it
 		if !ok {
 			return nil, fmt.Errorf("%w: slot must be MAIN, OTHER, SWATCH or LABEL", domain.ErrRejected)
 		}
+		if strings.TrimSpace(it.AssetID) != "" {
+			res, err := s.judgeAsset(ctx, rules, it, slot, rescore)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, res)
+			continue
+		}
 		a, found, err := s.repo.FindByURL(ctx, strings.TrimSpace(it.URL))
 		if err != nil {
 			return nil, fmt.Errorf("find image: %w", err)
@@ -186,6 +195,57 @@ func (s *mediaServiceImpl) judgeStored(ctx context.Context, actor auth.Actor, it
 		out = append(out, s.resultFor(rules, a, slot, it.ProductTypeCode))
 	}
 	return out, nil
+}
+
+// judgeAsset answers for an image a listing refers to by asset id (S390 with held photos). A READY image is judged
+// like one asked for by URL, and the answer carries its public URL. A HELD image has no public URL: the answer is a
+// HOLD with the findings media stored, so the listing can be saved and kept off sale until staff decide. A rejected,
+// missing or foreign image is a REJECT with NOT_VERIFIED, so a caller that only reads the verdict is safe by default.
+func (s *mediaServiceImpl) judgeAsset(ctx context.Context, rules domain.ImageRules, it domain.VerifyItem, slot domain.ImageSlot,
+	rescore bool,
+) (domain.VerifyResult, error) {
+	id := strings.TrimSpace(it.AssetID)
+	unknown := domain.VerifyResult{AssetID: id, Status: domain.AssetUnknown, Slot: slot, Verdict: domain.VerdictReject,
+		Checks: []domain.Check{domain.NewCheck(domain.CodeNotVerified, domain.VerdictReject, nil)}}
+	a, err := s.repo.Get(ctx, id)
+	if errors.Is(err, domain.ErrAssetNotFound) {
+		return unknown, nil
+	}
+	if err != nil {
+		return domain.VerifyResult{}, fmt.Errorf("find image: %w", err)
+	}
+	if a.Purpose != domain.PurposeProductImage || (it.OwnerOrg != "" && a.OwnerOrg != it.OwnerOrg) {
+		return unknown, nil
+	}
+	switch a.Status {
+	case domain.StatusReady:
+		if rescore {
+			if err := s.rescore(ctx, &a, rules); err != nil {
+				s.log.WarnContext(ctx, "image could not be rescored", "asset_id", a.ID, "error", err)
+				return domain.VerifyResult{AssetID: id, Status: domain.AssetReady, URL: a.URL, Found: true, Slot: slot, Verdict: domain.VerdictReject,
+					Checks: []domain.Check{domain.NewCheck(domain.CodeNotAnImage, domain.VerdictReject, nil)}}, nil
+			}
+		}
+		res := s.resultFor(rules, a, slot, it.ProductTypeCode)
+		res.AssetID, res.Status = id, domain.AssetReady
+		return res, nil
+	case domain.StatusFlagged:
+		checks := a.Checks
+		if domain.VerdictOf(checks) != domain.VerdictHold {
+			checks = append(slices.Clone(checks), domain.NewCheck(domain.CodeHeldReview, domain.VerdictHold, nil))
+		}
+		return domain.VerifyResult{AssetID: id, Status: domain.AssetHeld, Found: true, Slot: slot, Verdict: domain.VerdictHold, Checks: checks,
+			Width: a.Width, Height: a.Height, Bytes: a.Bytes, ContentType: a.ContentType, Measured: a.Metrics != nil && a.Metrics.Measured}, nil
+	case domain.StatusRejected:
+		res := unknown
+		res.Found, res.Status = true, domain.AssetRejected
+		if len(a.Checks) > 0 {
+			res.Checks = a.Checks
+		}
+		return res, nil
+	default:
+		return unknown, nil
+	}
 }
 
 // resultFor judges a stored image for a slot. When the image was accepted for another slot, what that slot allowed

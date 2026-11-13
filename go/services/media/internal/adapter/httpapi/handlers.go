@@ -173,6 +173,8 @@ func (h *handlersImpl) importURL(w http.ResponseWriter, r *http.Request) {
 type verifyRequest struct {
 	Images []struct {
 		URL             string `json:"url"`
+		AssetID         string `json:"assetId"`
+		OwnerOrg        string `json:"ownerOrg"`
 		Slot            string `json:"slot"`
 		ProductTypeCode string `json:"productTypeCode"`
 	} `json:"images"`
@@ -181,7 +183,7 @@ type verifyRequest struct {
 func (r verifyRequest) items() []domain.VerifyItem {
 	out := make([]domain.VerifyItem, 0, len(r.Images))
 	for _, i := range r.Images {
-		out = append(out, domain.VerifyItem{URL: i.URL, Slot: domain.ImageSlot(i.Slot), ProductTypeCode: i.ProductTypeCode})
+		out = append(out, domain.VerifyItem{URL: i.URL, AssetID: i.AssetID, OwnerOrg: i.OwnerOrg, Slot: domain.ImageSlot(i.Slot), ProductTypeCode: i.ProductTypeCode})
 	}
 	return out
 }

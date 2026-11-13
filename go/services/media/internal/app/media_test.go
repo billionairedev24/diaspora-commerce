@@ -63,7 +63,7 @@ func (r *memRepo) Insert(_ context.Context, a domain.Asset) error { r.assets[a.I
 func (r *memRepo) Get(_ context.Context, id string) (domain.Asset, error) {
 	a, ok := r.assets[id]
 	if !ok {
-		return domain.Asset{}, errors.New("not found")
+		return domain.Asset{}, domain.ErrAssetNotFound
 	}
 	return a, nil
 }
