@@ -2656,5 +2656,20 @@
   "st.tour.audit.table.title": "Wá kí o sì ṣàlẹ̀",
   "st.tour.audit.table.body": "Wá kí o sì ṣàlẹ̀ àtòkọ náà, kí o sì ṣí àkọsílẹ̀ kan fún àlàyé rẹ̀.",
   "st.tour.audit.wrap.title": "Kíkà nìkan, lórí àmì ìdí",
-  "st.tour.audit.wrap.body": "Kò sí ẹni tó lè ṣàtúnṣe tàbí pa àkọsílẹ̀ kan rẹ́, kódà àwọn olùṣàkóso. Ohun tó mú kí ó ṣeé gbẹ́kẹ̀lé nìyẹn nígbà tí o bá fẹ́ mọ ohun tó ṣẹlẹ̀."
+  "st.tour.audit.wrap.body": "Kò sí ẹni tó lè ṣàtúnṣe tàbí pa àkọsílẹ̀ kan rẹ́, kódà àwọn olùṣàkóso. Ohun tó mú kí ó ṣeé gbẹ́kẹ̀lé nìyẹn nígbà tí o bá fẹ́ mọ ohun tó ṣẹlẹ̀.",
+  "st.bulk.selected": "{label} · {n} ti a yàn",
+  "st.bulk.someOf": "{label} {n} nínú {m}",
+  "st.bulk.runsOnEligible": "Ó ń ṣiṣẹ́ lórí {n} nínú {m} tí a yàn níbi tí ó ti ṣeé ṣe nìkan. A fò: {list}.",
+  "st.bulk.runsOnAll": "Ó ń ṣiṣẹ́ lórí ìlà kọ̀ọ̀kan tí a yàn; ìlà tó yí padà láàrin àkókò yìí ni a máa fò, a sì máa ròyìn rẹ̀.",
+  "st.bulk.skipItem": "{n} ti jẹ́ {status} tẹ́lẹ̀",
+  "st.bulk.noneEligible": "«{label}» kò ṣeé ṣe fún àwọn ìlà tí a yàn: {list}.",
+  "st.bulk.progress": "{done} nínú {total} ti parí…",
+  "st.bulk.cancel": "Fagilé",
+  "st.bulk.close": "Ti",
+  "st.bulk.doneHeading": "Ti parí ({n})",
+  "st.bulk.skippedHeading": "A fò ({n})",
+  "st.bulk.failedHeading": "Kò yọrí ({n})",
+  "st.bulk.rowReason": "{name} — {reason}",
+  "st.bulk.optional": "{label} (kò pọn dandan)",
+  "st.bulk.failedGeneric": "Kò lọ."
 }

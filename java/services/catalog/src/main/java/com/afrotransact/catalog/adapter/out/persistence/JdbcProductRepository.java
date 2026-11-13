@@ -372,6 +372,11 @@ class JdbcProductRepository implements ProductRepository {
             where.append(" and status = :status");
             params.put("status", q.status().name());
         }
+        if (q.heldForTax()) {
+            // Closed by the tax gate: back in review with the tax-hold note (Product.heldForTax()).
+            where.append(" and status = 'IN_REVIEW' and moderation_note = :holdNote");
+            params.put("holdNote", Product.TAX_HOLD_NOTE);
+        }
         if (q.text() != null && !q.text().isBlank()) {
             where.append(" and (title ilike :text or atin = upper(:raw))");
             params.put("text", "%" + q.text().trim() + "%");

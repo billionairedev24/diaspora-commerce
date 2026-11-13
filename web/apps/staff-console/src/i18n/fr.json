@@ -2656,5 +2656,20 @@
   "st.tour.audit.table.title": "Chercher et filtrer",
   "st.tour.audit.table.body": "Cherchez et filtrez la liste, et ouvrez une entrée pour son détail.",
   "st.tour.audit.wrap.title": "Lecture seule, volontairement",
-  "st.tour.audit.wrap.body": "Personne ne peut modifier ni supprimer une entrée, pas même les administrateurs. C’est ce qui permet de s’y fier pour savoir ce qui s’est passé."
+  "st.tour.audit.wrap.body": "Personne ne peut modifier ni supprimer une entrée, pas même les administrateurs. C’est ce qui permet de s’y fier pour savoir ce qui s’est passé.",
+  "st.bulk.selected": "{label} · {n} sélectionné(s)",
+  "st.bulk.someOf": "{label} {n} sur {m}",
+  "st.bulk.runsOnEligible": "S'applique uniquement aux {n} lignes sur {m} où c'est possible. Ignorées : {list}.",
+  "st.bulk.runsOnAll": "S'applique à chaque ligne sélectionnée ; une ligne modifiée entre-temps est ignorée et signalée.",
+  "st.bulk.skipItem": "{n} déjà {status}",
+  "st.bulk.noneEligible": "« {label} » n'est pas possible pour les lignes sélectionnées : {list}.",
+  "st.bulk.progress": "{done} sur {total} terminé(s)…",
+  "st.bulk.cancel": "Annuler",
+  "st.bulk.close": "Fermer",
+  "st.bulk.doneHeading": "Terminé ({n})",
+  "st.bulk.skippedHeading": "Ignoré ({n})",
+  "st.bulk.failedHeading": "Échec ({n})",
+  "st.bulk.rowReason": "{name} — {reason}",
+  "st.bulk.optional": "{label} (facultatif)",
+  "st.bulk.failedGeneric": "L'opération n'a pas abouti."
 }

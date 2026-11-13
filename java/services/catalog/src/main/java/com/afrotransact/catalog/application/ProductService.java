@@ -33,8 +33,17 @@ public interface ProductService {
     }
 
     /** Products of the caller's organisation (staff see all and may filter by org). */
-    PageView<Product> list(String ownerOrgId, ProductStatus status, String text, int page, int size);
+    default PageView<Product> list(String ownerOrgId, ProductStatus status, String text, int page, int size) {
+        return list(ownerOrgId, status, false, text, page, size);
+    }
 
+    /** As above; {@code heldForTax} keeps only the listings closed by the tax gate (in review with the tax-hold note). */
+    PageView<Product> list(String ownerOrgId, ProductStatus status, boolean heldForTax, String text, int page, int size);
+
+    /**
+     * Approves a product in review (catalog:moderate) through the selling approval and the tax gate. A product that is
+     * not in review (already live, say) is refused with a plain 409 and nothing about it changes.
+     */
     Product approve(UUID id);
 
     Product reject(UUID id, String note);

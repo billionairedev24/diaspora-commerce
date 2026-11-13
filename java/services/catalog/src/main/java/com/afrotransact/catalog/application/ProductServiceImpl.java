@@ -11,6 +11,7 @@ import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.catalog.domain.ProductAction;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -109,7 +110,8 @@ class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageView<Product> list(String ownerOrgId, ProductStatus status, String text, int page, int size) {
+    public PageView<Product> list(String ownerOrgId, ProductStatus status, boolean heldForTax, String text, int page,
+                                  int size) {
         Actor actor = permissions.require(CatalogPermissions.WRITE);
         String org = isStaff(actor) ? blankToNull(ownerOrgId) : owners.ownerFor(actor).orgId();
         if (org == null) {
@@ -118,7 +120,7 @@ class ProductServiceImpl implements ProductService {
             access.requireForOrg(CatalogPermissions.WRITE, CatalogRelations.ORG_VIEW_PRODUCTS, org);
         }
         ProductRepository.ProductPage result = products.search(new ProductRepository.ProductQuery(org, status, text,
-                Math.max(page, 0), Math.clamp(size, 1, 100)));
+                Math.max(page, 0), Math.clamp(size, 1, 100), heldForTax));
         return new PageView<>(result.items(), result.total(), result.page(), result.size());
     }
 
@@ -127,6 +129,11 @@ class ProductServiceImpl implements ProductService {
     public Product approve(UUID id) {
         permissions.require(CatalogPermissions.MODERATE);
         return transition(id, p -> {
+            // First, before any gate: a product that is not waiting for a decision is never re-approved (its approval
+            // metadata, audit trail and events stay as they were).
+            if (!p.allowedActions().contains(ProductAction.APPROVE)) {
+                throw new IllegalStateException(approveRefusal(p));
+            }
             sellingGate.requireApprovable(p);
             // The tax gate: refuses (TaxNotReady) unless every variant has a resolved tax decision.
             return liveGate.approve(p, Instant.now(clock));
@@ -171,6 +178,19 @@ class ProductServiceImpl implements ProductService {
         requireEditable(id);
         return transition(id, p -> p.withPreorderFlags(preorderEligible, shipsNow, Instant.now(clock)),
                 CatalogEvents.PRODUCT_UPDATED);
+    }
+
+    private static String approveRefusal(Product p) {
+        return switch (p.status()) {
+            case LIVE -> "This product is already live.";
+            case PAUSED -> "This product is already approved (the seller paused it).";
+            case TAKEN_DOWN -> "This product was taken down; restore it instead of approving it.";
+            case REJECTED -> "This product was rejected; the seller must resubmit it.";
+            case PENDING_CATEGORY_APPROVAL -> "This product is waiting for its category to be approved.";
+            case PENDING_EXEMPTION -> "This product is waiting for its barcode exemption to be decided.";
+            case MERGED -> "This product was merged into another page.";
+            case IN_REVIEW -> "This product cannot be approved now.";
+        };
     }
 
     private Product transition(UUID id, UnaryOperator<Product> change, String eventType) {

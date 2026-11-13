@@ -262,6 +262,31 @@ func shipmentSteps(o jobj) []domain.FieldOption {
 
 // ---------------------------------------------------------------- products (catalog)
 
+// productHeldForTax is the Products filter and status for a listing the tax gate closed (not a catalog status).
+const productHeldForTax = "HELD_FOR_TAX"
+
+// productStatusOf is the status staff read: a listing closed by the tax gate says so instead of "In review".
+func productStatusOf(o jobj) string {
+	if b, _ := o["heldForTax"].(bool); b {
+		return productHeldForTax
+	}
+	return jstr(o, "status")
+}
+
+// productAllows is the catalog's own answer (allowedActions on the product, from its state machine) to "may this action run
+// on this page now". Only a catalog that predates allowedActions falls back to the listed statuses.
+func productAllows(action string, fallback ...string) func(staffCtx, jobj) string {
+	return func(sc staffCtx, o jobj) string {
+		if _, ok := o["allowedActions"].([]any); !ok {
+			return inState(fallback...)(sc, o)
+		}
+		if slices.Contains(strs(o, "allowedActions"), action) {
+			return ""
+		}
+		return "Not possible while " + strings.ToLower(domain.Humanize(productStatusOf(o))) + "."
+	}
+}
+
 func productsResource() *staffResource {
 	act := func(path string, body func(v jobj) jobj) func(context.Context, staffCtx, jobj, jobj) error {
 		return func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
@@ -272,13 +297,21 @@ func productsResource() *staffResource {
 		key: "products", module: "catalog", title: "Products", statusKey: "status", exportable: true, searchPlaceholder: "Title or ATIN",
 		columns: []domain.Column{col("atin", "ATIN", "mono", 15), col("title", "Product", "strong", 30), col("ownerOrgName", "Seller", "text", 20),
 			col("productType", "Type", "text", 15), col("status", "Status", "status", 20)},
-		facets: domain.StaffFacets("IN_REVIEW", "PENDING_CATEGORY_APPROVAL", "LIVE", "PAUSED", "REJECTED", "TAKEN_DOWN"),
+		facets: domain.StaffFacets("IN_REVIEW", productHeldForTax, "PENDING_CATEGORY_APPROVAL", "LIVE", "PAUSED", "REJECTED", "TAKEN_DOWN"),
 		list: listPaged("/v1/products", upCatalog, func(q staffQuery, v url.Values) {
 			if q.Q != "" {
 				v.Set("q", q.Q)
 			}
+			// "Held for tax" is not a catalog status: the tax gate sends a listing back to review with a tax note.
+			if q.Status == productHeldForTax {
+				v.Del("status")
+				v.Set("heldForTax", "true")
+			}
 		}),
 		get:        getByPath("/v1/products/", upCatalog),
+		status:     productStatusOf,
+		cells:      func(o jobj) map[string]any { return map[string]any{"status": productStatusOf(o)} },
+		rowActions: []string{"approve", "reject", "takedown", "restore"},
 		names:      []nameRef{sellerRef("ownerOrgId")},
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
 		subtitleOf: func(o jobj) string { return jstr(o, "atin") + " · " + jstr(o, "ownerOrgName") },
@@ -301,17 +334,17 @@ func productsResource() *staffResource {
 				col("priceMinor", "Price", "money", 16), col("quantity", "In stock", "number", 14)}, "atin")}
 		},
 		actions: []staffAction{
-			{key: "approve", label: "Approve", tone: "primary", permission: "catalog:moderate", confirm: "Approve this product and make it live?", when: inState("IN_REVIEW"),
+			{key: "approve", label: "Approve", tone: "primary", permission: "catalog:moderate", confirm: "Approve this product and make it live?", when: productAllows("approve", "IN_REVIEW"),
 				run: act("/approve", func(jobj) jobj { return jobj{} })},
-			{key: "reject", label: "Reject", tone: "danger", permission: "catalog:moderate", form: noteForm("Reject the product", "Reject", true), when: inState("IN_REVIEW"),
+			{key: "reject", label: "Reject", tone: "danger", permission: "catalog:moderate", form: noteForm("Reject the product", "Reject", true), when: productAllows("reject", "IN_REVIEW", "PENDING_CATEGORY_APPROVAL"),
 				run: act("/reject", func(v jobj) jobj { return jobj{"note": vs(v, "note")} })},
-			{key: "takedown", label: "Take down", tone: "danger", permission: "catalog:moderate", when: inState("LIVE", "PAUSED"),
+			{key: "takedown", label: "Take down", tone: "danger", permission: "catalog:moderate", when: productAllows("takedown", "LIVE", "PAUSED"),
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
 					return &domain.Form{Title: "Take the listing down", SubmitLabel: "Take down", Fields: []domain.FormField{
 						withOptions(ff("reasonCode", "Reason", "select", true), moderationReasonCodes), withMax(ff("note", "Note", "textarea", false), 1000)}}
 				},
 				run: act("/takedown", func(v jobj) jobj { return omitEmpty(jobj{"reasonCode": vs(v, "reasonCode"), "note": vs(v, "note")}) })},
-			{key: "restore", label: "Restore", tone: "neutral", permission: "catalog:moderate", form: noteForm("Restore the listing", "Restore", false), when: inState("TAKEN_DOWN"),
+			{key: "restore", label: "Restore", tone: "neutral", permission: "catalog:moderate", form: noteForm("Restore the listing", "Restore", false), when: productAllows("restore", "TAKEN_DOWN"),
 				run: act("/restore", func(v jobj) jobj { return omitEmpty(jobj{"note": vs(v, "note")}) })},
 		},
 	}

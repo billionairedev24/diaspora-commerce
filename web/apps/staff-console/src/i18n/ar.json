@@ -2656,5 +2656,20 @@
   "st.tour.audit.table.title": "ابحث وصفِّ",
   "st.tour.audit.table.body": "ابحث وصفِّ القائمة وافتح مدخلًا لتفاصيله.",
   "st.tour.audit.wrap.title": "للقراءة فقط عن قصد",
-  "st.tour.audit.wrap.body": "لا أحد يستطيع تعديل مدخل أو حذفه، حتى المسؤولون. وهذا ما يجعله موثوقًا عندما تحتاج إلى معرفة ما حدث."
+  "st.tour.audit.wrap.body": "لا أحد يستطيع تعديل مدخل أو حذفه، حتى المسؤولون. وهذا ما يجعله موثوقًا عندما تحتاج إلى معرفة ما حدث.",
+  "st.bulk.selected": "{label} · تم تحديد {n}",
+  "st.bulk.someOf": "{label} {n} من {m}",
+  "st.bulk.runsOnEligible": "يُنفَّذ فقط على {n} من {m} من الصفوف المحددة حيث يكون ذلك ممكنًا. تم التخطي: {list}.",
+  "st.bulk.runsOnAll": "يُنفَّذ على كل صف محدد؛ يتم تخطي أي صف تغيّر في الأثناء والإبلاغ عنه.",
+  "st.bulk.skipItem": "{n} بالفعل {status}",
+  "st.bulk.noneEligible": "لا يمكن تنفيذ «{label}» على الصفوف المحددة: {list}.",
+  "st.bulk.progress": "اكتمل {done} من {total}…",
+  "st.bulk.cancel": "إلغاء",
+  "st.bulk.close": "إغلاق",
+  "st.bulk.doneHeading": "تم ({n})",
+  "st.bulk.skippedHeading": "تم التخطي ({n})",
+  "st.bulk.failedHeading": "فشل ({n})",
+  "st.bulk.rowReason": "{name} — {reason}",
+  "st.bulk.optional": "{label} (اختياري)",
+  "st.bulk.failedGeneric": "لم تكتمل العملية."
 }

@@ -201,7 +201,7 @@ function seed(now: Date): MockStaffDb {
       title: pick(['Jollof seasoning 200 g', 'Kente print tote', 'Shea butter, raw 500 g', 'Ankara headwrap', 'Suya spice 100 g', 'Black soap bar', 'Palm oil 1 L', 'Adire throw pillow']),
       seller: pick(SELLERS),
       productType: pick(['SPICE_BLEND', 'BAG', 'SKIN_CARE', 'APPAREL_ACCESSORY']),
-      status: (['IN_REVIEW', 'IN_REVIEW', 'LIVE', 'LIVE', 'LIVE', 'REJECTED', 'TAKEN_DOWN', 'PAUSED'] as const)[i % 8] ?? 'LIVE',
+      status: (['IN_REVIEW', i === 1 ? 'HELD_FOR_TAX' : 'IN_REVIEW', 'LIVE', 'LIVE', 'LIVE', 'REJECTED', 'TAKEN_DOWN', 'PAUSED'] as const)[i % 8] ?? 'LIVE',
       moderationNote: i % 8 === 5 ? 'Image shows a competitor logo' : null,
       createdAt: ago(20 - i)
     })

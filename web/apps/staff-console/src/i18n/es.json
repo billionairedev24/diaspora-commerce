@@ -2656,5 +2656,20 @@
   "st.tour.audit.table.title": "Buscar y filtrar",
   "st.tour.audit.table.body": "Busca y filtra la lista y abre una entrada para ver su detalle.",
   "st.tour.audit.wrap.title": "Solo lectura, a propósito",
-  "st.tour.audit.wrap.body": "Nadie puede editar ni borrar una entrada, ni siquiera los administradores. Eso permite fiarse de él para saber qué ocurrió."
+  "st.tour.audit.wrap.body": "Nadie puede editar ni borrar una entrada, ni siquiera los administradores. Eso permite fiarse de él para saber qué ocurrió.",
+  "st.bulk.selected": "{label} · {n} seleccionados",
+  "st.bulk.someOf": "{label} {n} de {m}",
+  "st.bulk.runsOnEligible": "Solo se aplica a las {n} de {m} filas seleccionadas donde es posible. Se omiten: {list}.",
+  "st.bulk.runsOnAll": "Se aplica a cada fila seleccionada; una fila que cambió mientras tanto se omite y se informa.",
+  "st.bulk.skipItem": "{n} ya {status}",
+  "st.bulk.noneEligible": "«{label}» no es posible para las filas seleccionadas: {list}.",
+  "st.bulk.progress": "{done} de {total} listos…",
+  "st.bulk.cancel": "Cancelar",
+  "st.bulk.close": "Cerrar",
+  "st.bulk.doneHeading": "Hecho ({n})",
+  "st.bulk.skippedHeading": "Omitido ({n})",
+  "st.bulk.failedHeading": "Con error ({n})",
+  "st.bulk.rowReason": "{name} — {reason}",
+  "st.bulk.optional": "{label} (opcional)",
+  "st.bulk.failedGeneric": "No se pudo completar."
 }

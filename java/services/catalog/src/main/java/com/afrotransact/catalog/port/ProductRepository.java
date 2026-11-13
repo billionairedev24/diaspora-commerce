@@ -144,7 +144,11 @@ public interface ProductRepository {
     }
 
     /** Filter for listing products. Null fields are ignored. */
-    record ProductQuery(String ownerOrgId, ProductStatus status, String text, int page, int size) {
+    record ProductQuery(String ownerOrgId, ProductStatus status, String text, int page, int size, boolean heldForTax) {
+
+        public ProductQuery(String ownerOrgId, ProductStatus status, String text, int page, int size) {
+            this(ownerOrgId, status, text, page, size, false);
+        }
     }
 
     /** One page of results. */

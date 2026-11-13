@@ -2649,5 +2649,20 @@
   "st.tour.audit.table.title": "Search and filter",
   "st.tour.audit.table.body": "Search and filter the list, and open an entry for its details.",
   "st.tour.audit.wrap.title": "Read only, on purpose",
-  "st.tour.audit.wrap.body": "Nobody can edit or delete an entry, not even administrators. That is what makes it safe to rely on when you need to know what happened."
+  "st.tour.audit.wrap.body": "Nobody can edit or delete an entry, not even administrators. That is what makes it safe to rely on when you need to know what happened.",
+  "st.bulk.selected": "{label} · {n} selected",
+  "st.bulk.someOf": "{label} {n} of {m}",
+  "st.bulk.runsOnEligible": "Runs only on the {n} of {m} selected where it is possible. Skipping {list}.",
+  "st.bulk.runsOnAll": "Runs on each selected row; a row that changed in the meantime is skipped and reported.",
+  "st.bulk.skipItem": "{n} already {status}",
+  "st.bulk.noneEligible": "{label} is not possible for the selected rows: {list}.",
+  "st.bulk.progress": "{done} of {total} done…",
+  "st.bulk.cancel": "Cancel",
+  "st.bulk.close": "Close",
+  "st.bulk.doneHeading": "Done ({n})",
+  "st.bulk.skippedHeading": "Skipped ({n})",
+  "st.bulk.failedHeading": "Failed ({n})",
+  "st.bulk.rowReason": "{name} — {reason}",
+  "st.bulk.optional": "{label} (optional)",
+  "st.bulk.failedGeneric": "It did not go through."
 }

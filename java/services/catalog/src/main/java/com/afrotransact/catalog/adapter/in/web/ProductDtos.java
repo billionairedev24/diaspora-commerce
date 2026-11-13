@@ -16,6 +16,7 @@ import com.afrotransact.catalog.domain.ListingDocument;
 import com.afrotransact.catalog.domain.ListingReasonCode;
 import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.catalog.domain.ProductAction;
 import com.afrotransact.catalog.domain.ProductFlag;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ShipFromRef;
@@ -249,7 +250,13 @@ final class ProductDtos {
                            UUID categoryRequestId, String productType, String title, Map<String, String> attributes,
                            List<ImageDto> images, String variationTheme, List<VariantResponse> variants, String status,
                            String moderationNote, Instant createdAt, Instant updatedAt, long version,
-                           boolean preorderEligible, boolean shipsNow, ListingDto listing) {
+                           boolean preorderEligible, boolean shipsNow, ListingDto listing,
+                           @Schema(description = "What the catalog's state machine allows on this page now, whatever the "
+                                   + "caller's permissions: approve, reject, pause, resume, takedown, restore")
+                           List<String> allowedActions,
+                           @Schema(description = "True while the tax gate holds the listing (in review, not live, until tax "
+                                   + "review approves its tax details)")
+                           boolean heldForTax) {
 
         static ProductResponse of(Product p) {
             return new ProductResponse(p.id(), p.atin().value(), p.owner().kind().name(), p.owner().orgId(),
@@ -257,7 +264,8 @@ final class ProductDtos {
                     p.images().stream().map(ImageDto::of).toList(), p.variationTheme(),
                     p.variants().stream().map(VariantResponse::of).toList(), p.status().name(), p.moderationNote(),
                     p.createdAt(), p.updatedAt(), p.version(), p.preorderEligible(), p.shipsNow(),
-                    ListingDto.of(p.details()));
+                    ListingDto.of(p.details()), p.allowedActions().stream().map(ProductAction::key).toList(),
+                    p.heldForTax());
         }
     }
 

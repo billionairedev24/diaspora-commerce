@@ -363,15 +363,16 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     title: 'Products',
     columns: [col('atin', 'ATIN', 'mono', 15), col('title', 'Product', 'strong', 30), col('seller', 'Seller', 'text', 20), col('productType', 'Type', 'text', 15), col('status', 'Status', 'status', 20)],
     statusKey: 'status',
-    facets: facets('IN_REVIEW', 'LIVE', 'PAUSED', 'REJECTED', 'TAKEN_DOWN'),
+    facets: facets('IN_REVIEW', 'HELD_FOR_TAX', 'LIVE', 'PAUSED', 'REJECTED', 'TAKEN_DOWN'),
+    rowActions: ['approve', 'reject', 'takedown', 'restore'],
     search: ['title', 'atin'],
     searchPlaceholder: 'Title or ATIN',
     exportable: true,
     titleOf: (r) => str(r.fields.title),
     subtitleOf: (r) => `${str(r.fields.atin)} · ${str(r.fields.seller)}`,
     actions: [
-      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'catalog:moderate', confirm: 'Approve this product and make it live?', when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('LIVE', 'Approved') },
-      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'catalog:moderate', form: noteForm('Reject the product', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW'), apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.moderationNote = str(v.note); log(r, ctx, 'Rejected'); } },
+      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'catalog:moderate', confirm: 'Approve this product and make it live?', when: (r) => stateReason(r, 'IN_REVIEW', 'HELD_FOR_TAX'), apply: setStatus('LIVE', 'Approved') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'catalog:moderate', form: noteForm('Reject the product', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW', 'HELD_FOR_TAX'), apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.moderationNote = str(v.note); log(r, ctx, 'Rejected'); } },
       { key: 'takedown', label: 'Take down', tone: 'danger', permission: 'catalog:moderate', form: () => form('Take the listing down', 'Take down', [field('reasonCode', 'Reason', 'select', true, { options: REASON_CODES }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'LIVE', 'PAUSED'), apply: setStatus('TAKEN_DOWN', 'Taken down') },
       { key: 'restore', label: 'Restore', tone: 'neutral', permission: 'catalog:moderate', form: noteForm('Restore the listing', 'Restore', false), when: (r) => stateReason(r, 'TAKEN_DOWN'), apply: setStatus('LIVE', 'Restored') }
     ]

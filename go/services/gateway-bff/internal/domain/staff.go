@@ -585,7 +585,7 @@ type RecordDetail struct {
 
 var statusTones = map[string]string{
 	"PENDING_REVIEW": "brand", "FLAGGED": "bad", "AWAITING_FINAL_APPROVAL": "warn", "INFO_REQUESTED": "warn", "APPROVED": "good", "REJECTED": "bad",
-	"LIVE": "good", "IN_REVIEW": "brand", "PAUSED": "info", "TAKEN_DOWN": "bad", "PENDING": "warn", "ESCALATED": "bad", "CLOSED": "info",
+	"LIVE": "good", "IN_REVIEW": "brand", "HELD_FOR_TAX": "warn", "PAUSED": "info", "TAKEN_DOWN": "bad", "PENDING": "warn", "ESCALATED": "bad", "CLOSED": "info",
 	"UNDER_REVIEW": "brand", "AWAITING_SELLER": "warn", "RESOLVED_REFUND": "good", "RESOLVED_DENIED": "info", "WITHDRAWN": "info",
 	"REQUESTED": "brand", "ON_HOLD": "bad", "HELD": "bad", "PAID": "good", "FAILED": "bad", "SELLABLE": "good", "QUARANTINED": "bad", "DAMAGED": "bad",
 	"EXPIRED": "info", "DRAFT": "info", "PENDING_APPROVAL": "warn", "SENT": "info", "CONFIRMED": "info", "RECEIVED": "good", "CANCELLED": "bad",

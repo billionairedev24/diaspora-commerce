@@ -87,6 +87,27 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
         return withStatus(ProductStatus.LIVE, null, now);
     }
 
+    /** True while the listing is closed because its tax details are not approved (in review with the tax-hold note). */
+    public boolean heldForTax() {
+        return status == ProductStatus.IN_REVIEW && TAX_HOLD_NOTE.equals(moderationNote);
+    }
+
+    /**
+     * The actions the state machine allows on this page now, whatever the caller's permissions. Mirrors the guards of
+     * approve, reject, pause, resume, takeDown and restoreFromTakedown; approving still goes through the tax gate and
+     * the selling approval.
+     */
+    public List<ProductAction> allowedActions() {
+        return switch (status) {
+            case IN_REVIEW -> List.of(ProductAction.APPROVE, ProductAction.REJECT);
+            case PENDING_CATEGORY_APPROVAL -> List.of(ProductAction.REJECT);
+            case LIVE -> List.of(ProductAction.PAUSE, ProductAction.TAKEDOWN);
+            case PAUSED -> List.of(ProductAction.RESUME, ProductAction.TAKEDOWN);
+            case TAKEN_DOWN -> List.of(ProductAction.RESTORE);
+            case REJECTED, PENDING_EXEMPTION, MERGED -> List.of();
+        };
+    }
+
     public Product approve(Instant now) {
         if (status != ProductStatus.IN_REVIEW) {
             throw new IllegalStateException("Only products in review can be approved (was " + status + ")");

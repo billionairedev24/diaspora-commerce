@@ -1380,6 +1380,12 @@ paths:
         required: false
         schema:
           type: string
+      - name: heldForTax
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
       - name: page
         in: query
         required: false
@@ -1798,6 +1804,8 @@ paths:
       tags:
       - Products
       summary: Approve a product in review (catalog:moderate)
+      description: Only a product in review can be approved, and only through the selling approval and the tax gate. Any other
+        status (already live, say) is a 409 with a plain message and changes nothing.
       operationId: approve
       parameters:
       - name: id
@@ -4017,6 +4025,15 @@ components:
           type: boolean
         listing:
           $ref: '#/components/schemas/ListingDetails'
+        allowedActions:
+          type: array
+          description: 'What the catalog''s state machine allows on this page now, whatever the caller''s permissions: approve,
+            reject, pause, resume, takedown, restore'
+          items:
+            type: string
+        heldForTax:
+          type: boolean
+          description: True while the tax gate holds the listing (in review, not live, until tax review approves its tax details)
     Variant:
       type: object
       properties:

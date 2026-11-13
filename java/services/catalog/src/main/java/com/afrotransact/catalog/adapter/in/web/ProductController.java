@@ -69,9 +69,10 @@ class ProductController {
     ProductPageResponse list(@RequestParam(required = false) String orgId,
                              @RequestParam(required = false) ProductStatus status,
                              @RequestParam(required = false) String q,
+                             @RequestParam(defaultValue = "false") boolean heldForTax,
                              @RequestParam(defaultValue = "0") int page,
                              @RequestParam(defaultValue = "25") int size) {
-        PageView<Product> result = products.list(orgId, status, q, page, size);
+        PageView<Product> result = products.list(orgId, status, heldForTax, q, page, size);
         return new ProductPageResponse(result.items().stream().map(ProductResponse::of).toList(), result.total(),
                 result.page(), result.size());
     }
@@ -88,7 +89,9 @@ class ProductController {
         return ProductResponse.of(products.getByAtin(atin));
     }
 
-    @Operation(summary = "Approve a product in review (catalog:moderate)")
+    @Operation(summary = "Approve a product in review (catalog:moderate)",
+            description = "Only a product in review can be approved, and only through the selling approval and the tax "
+                    + "gate. Any other status (already live, say) is a 409 with a plain message and changes nothing.")
     @PostMapping("/{id}/approve")
     ProductResponse approve(@PathVariable UUID id) {
         return ProductResponse.of(products.approve(id));
