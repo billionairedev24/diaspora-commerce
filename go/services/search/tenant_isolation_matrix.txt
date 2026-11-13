@@ -1,0 +1,9 @@
+# METHOD pattern | CLASS | enforcement | test
+# The read model holds public catalogue data only: queries always filter status = LIVE (meilisearch buildFilter, elastic query); Hit has no
+# cost, seller id, status or per-node stock; availableQty is capped (domain.MaxPublicQty). No organisation filter comes from the client for private rows.
+GET /v1/search | PUBLIC | status=LIVE filter in every adapter; sellerId narrows to one seller's public page; availableQty capped | TestExactStockOfASellerIsNotPublic
+GET /v1/suggest | PUBLIC | status=LIVE filter; availableQty capped | TestExactStockOfASellerIsNotPublic
+POST /v1/search/clicks | PUBLIC | click attribution uses the verified CUSTOMER subject; body customerId honoured only for SERVICE tokens; ad token is signed | TestSearchStaffRoutesAndClickAttribution
+GET /v1/search/synonyms | STAFF_ONLY | search:synonyms.edit | TestSearchStaffRoutesAndClickAttribution
+PUT /v1/search/synonyms/{ruleId} | STAFF_ONLY | search:synonyms.edit | TestSearchStaffRoutesAndClickAttribution
+DELETE /v1/search/synonyms/{ruleId} | STAFF_ONLY | search:synonyms.edit | TestSearchStaffRoutesAndClickAttribution

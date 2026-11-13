@@ -25,9 +25,14 @@ func StockSignal(inStock bool, available int) (Availability, bool) {
 	}
 }
 
-// ApplyStockSignal sets Availability and LowStock on a hit from its quantity.
+// MaxPublicQty is the most units a public hit reports. Search is anonymous, so a seller's exact stock must not be
+// readable by competitors; the storefront's quantity stepper never goes above 99 anyway.
+const MaxPublicQty = 99
+
+// ApplyStockSignal sets Availability and LowStock on a hit from its quantity, then caps the quantity it exposes.
 func (h *Hit) ApplyStockSignal() {
 	h.Availability, h.LowStock = StockSignal(h.InStock, h.AvailableQty)
+	h.AvailableQty = min(h.AvailableQty, MaxPublicQty)
 }
 
 // Retrieval says how a results page was retrieved (S036).
