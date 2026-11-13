@@ -25,7 +25,6 @@ import {
   validateForm,
   withCategory
 } from '@/components/listings/form-model';
-import { useSellingStatus } from '@/lib/selling-status';
 
 import { LISTING_RULE_CATEGORIES, listingRulesFor } from '../../../packages/api-client/src/mocks/seller/listing-rules';
 
@@ -60,7 +59,7 @@ function complete(rules: ListingRules): FormState {
   const units: Record<string, string> = {};
   rules.fields.forEach((f) => {
     if (f.attributeKey && f.id !== 'brand' && (f.status === 'required' || f.status === 'required_or_exemption')) {
-      attrs[f.attributeKey] = SAMPLE[f.id] ?? (f.id === 'country_of_origin' ? 'Nigeria' : 'Sample');
+      attrs[f.attributeKey] = SAMPLE[f.id] ?? 'Sample';
       if (f.units.length) units[f.attributeKey] = f.units[0] ?? '';
     }
   });
@@ -81,19 +80,19 @@ const PKG = fieldId.rowPkg('');
 
 /** kind, a category of that kind, the field ids an otherwise valid but empty listing is refused for. */
 const KINDS: [string, string, string[]][] = [
-  ['PKG', 'beans-pantry-sauces', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('origin'), attr('net_weight'), attr('servings'), attr('shelf'), GTIN, PKG]],
-  ['PER', 'dairy-eggs', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('origin'), attr('net_weight'), attr('shelf'), attr('storage'), PKG]],
+  ['PKG', 'beans-pantry-sauces', [fieldId.description, fieldId.brand, attr('net_weight'), attr('servings'), attr('shelf'), GTIN, PKG]],
+  ['PER', 'dairy-eggs', [fieldId.description, fieldId.brand, attr('net_weight'), attr('shelf'), attr('storage'), PKG]],
   ['SFD', 'prepared-meals', [fieldId.description, attr('net_weight'), attr('servings'), attr('shelf'), attr('storage'), attr('ingredients'), attr('allergens'), PKG]],
-  ['BBY', 'baby-bottles', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('origin'), attr('net_weight'), attr('servings'), attr('shelf'), attr('age'.concat('_grade')), GTIN, PKG]],
-  ['BEA', 'skincare-cosmetics', [fieldId.description, fieldId.labelPhoto, fieldId.dangerous, fieldId.brand, attr('origin'), attr('net_weight'), attr('ingredients'), attr('shelf'), GTIN, PKG]],
-  ['HLT', 'dietary-supplements', [fieldId.description, fieldId.labelPhoto, fieldId.dangerous, fieldId.brand, attr('origin'), attr('net_weight'), attr('servings'), attr('shelf'), GTIN, PKG]],
-  ['FSH', 'adult-clothing-footwear', [fieldId.description, fieldId.brand, attr('origin'), attr('material'), attr('age_grade'), GTIN, PKG]],
-  ['JWL', 'jewelry-accessories', [fieldId.description, fieldId.brand, attr('origin'), attr('material'), GTIN, PKG]],
-  ['ELC', 'phones', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('origin'), attr('model'), GTIN, PKG]],
-  ['HOM', 'bedding-linens', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('origin'), attr('material'), attr('model'), GTIN, PKG]],
-  ['KID', 'toys-games', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('origin'), attr('age_grade'), GTIN, PKG]],
-  ['PET', 'pet-food', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('origin'), attr('net_weight'), attr('shelf'), GTIN, PKG]],
-  ['BOK', 'printed-books', [fieldId.description, attr('origin'), GTIN, PKG]],
+  ['BBY', 'baby-bottles', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('net_weight'), attr('servings'), attr('shelf'), attr('age'.concat('_grade')), GTIN, PKG]],
+  ['BEA', 'skincare-cosmetics', [fieldId.description, fieldId.labelPhoto, fieldId.dangerous, fieldId.brand, attr('net_weight'), attr('ingredients'), attr('shelf'), GTIN, PKG]],
+  ['HLT', 'dietary-supplements', [fieldId.description, fieldId.labelPhoto, fieldId.dangerous, fieldId.brand, attr('net_weight'), attr('servings'), attr('shelf'), GTIN, PKG]],
+  ['FSH', 'adult-clothing-footwear', [fieldId.description, fieldId.brand, attr('material'), attr('age_grade'), GTIN, PKG]],
+  ['JWL', 'jewelry-accessories', [fieldId.description, fieldId.brand, attr('material'), GTIN, PKG]],
+  ['ELC', 'phones', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('model'), GTIN, PKG]],
+  ['HOM', 'bedding-linens', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('material'), attr('model'), GTIN, PKG]],
+  ['KID', 'toys-games', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('age_grade'), GTIN, PKG]],
+  ['PET', 'pet-food', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('net_weight'), attr('shelf'), GTIN, PKG]],
+  ['BOK', 'printed-books', [fieldId.description, GTIN, PKG]],
   ['DIG', 'downloadable-ebooks', [fieldId.description, fieldId.brand]],
   ['GFT', 'gift-cards', [fieldId.description, fieldId.brand]],
   ['SRV', 'repairs', [fieldId.description]]
@@ -126,7 +125,7 @@ describe('product form follows the listing rules: one test per kind', () => {
     expect(LISTING_RULE_CATEGORIES).toHaveLength(74);
     LISTING_RULE_CATEGORIES.forEach((code) => {
       const r = rulesOf(code);
-      expect(r.fields, code).toHaveLength(31);
+      expect(r.fields, code).toHaveLength(30);
       expect(r.approval, code).toBeTruthy();
       expect(validateForm(complete(r), typeOf(r.kind === 'BOK' ? 'isbn' : 'gtin'), { rules: r }), code).toEqual({});
     });
@@ -176,19 +175,26 @@ describe('product form follows the listing rules: specific rules', () => {
     expect(validateForm(excused, typeOf(), { rules })[attr('material')]).toBeUndefined();
     expect(toProductDraft(excused, typeOf(), null, rules).listing?.exemptions).toEqual({ material: 'Mixed handmade fabric' });
     // A reason for a field that must be answered is not sent.
-    expect(toProductDraft({ ...s, exemptions: { origin: 'n/a', country_of_origin: 'n/a' } }, typeOf(), null, rules).listing?.exemptions).toBeUndefined();
+    expect(toProductDraft({ ...s, exemptions: { brand: 'n/a' } }, typeOf(), null, rules).listing?.exemptions).toBeUndefined();
   });
 
   it('the label photo is its own slot: pictures do not fill it, and a label alone is no picture', () => {
-    const rules = rulesOf('packaged-snacks');
+    const rules = rulesOf('dietary-supplements');
     const s = complete(rules);
     expect(validateForm({ ...s, labelImage: null }, typeOf(), { rules })).toHaveProperty([fieldId.labelPhoto]);
     expect(validateForm({ ...s, images: [] }, typeOf(), { rules })).toHaveProperty([fieldId.images]);
     expect(toProductDraft(s, typeOf(), null, rules).images.map((i) => i.role ?? 'photo')).toEqual(['photo', 'LABEL']);
-    // Perishable food may give a reason instead of the label photo.
-    const perishable = rulesOf('dairy-eggs');
-    const p = { ...complete(perishable), labelImage: null, exemptions: { label_photo: 'Sold loose' } };
-    expect(validateForm(p, typeOf(), { rules: perishable })[fieldId.labelPhoto]).toBeUndefined();
+  });
+
+  it('groceries do not need a label photo (optional, no missing item), supplements and drugs still do', () => {
+    ['packaged-snacks', 'dairy-eggs', 'beans-pantry-sauces'].forEach((category) => {
+      const rules = rulesOf(category);
+      expect(statusOf(rules, 'label_photo')).toBe('optional');
+      const s = { ...complete(rules), labelImage: null };
+      expect(validateForm(s, typeOf(), { rules })[fieldId.labelPhoto]).toBeUndefined();
+      expect(qualityItems(s, typeOf(), validateForm(s, typeOf(), { rules }), rules).find((i) => i.id === fieldId.labelPhoto)?.required).not.toBe(true);
+    });
+    expect(statusOf(rulesOf('dietary-supplements'), 'label_photo')).toBe('required');
   });
 
   it('packaged groceries ask no typed ingredients, food service does; allergens are a tick list', () => {
@@ -322,13 +328,7 @@ describe('product form: server errors land on the field they name', () => {
     expect(serverFieldId('variants[0].gtin', [''])).toBe(fieldId.gtin);
     expect(serverFieldId('labelPhoto')).toBe(fieldId.labelPhoto);
     expect(serverFieldId('dangerousGoods')).toBe(fieldId.dangerous);
-    expect(serverFieldId('attributes.origin')).toBe(attr('origin'));
+    expect(serverFieldId('attributes.material')).toBe(attr('material'));
     expect(serverFieldId('description')).toBe(fieldId.description);
-  });
-});
-
-describe('selling status placeholder', () => {
-  it('answers Sell this product until the approval engine exposes its endpoint', () => {
-    expect(useSellingStatus('dairy-eggs', 'Brand')).toMatchObject({ status: 'SELL', placeholder: true, loading: false });
   });
 });

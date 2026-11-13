@@ -19,8 +19,6 @@ export interface SellingStatusResult {
   /** Why the state is APPLY or NOT_AVAILABLE, in plain words; null for SELL. */
   reason: string | null;
   loading: boolean;
-  /** Always false now: the answer is seller-service's. Kept so callers written against the placeholder still compile. */
-  placeholder: boolean;
   /** Each scope in the way (what to apply for, or why it cannot be sold); empty for SELL. */
   missing: SellingMissing[];
   /** The scope the Apply to sell button applies for first; null when nothing can be applied for. */
@@ -62,7 +60,6 @@ export function useSellingStatus(category: string, brand: string, extra: Selling
     status: data?.level ?? 'SELL',
     reason: data?.reason ?? null,
     loading: enabled && q.isPending,
-    placeholder: false,
     missing,
     applyTo,
     applyHref: applyTo ? sellingApplyHref(applyTo.scope.type, applyTo.scope.key) : null,

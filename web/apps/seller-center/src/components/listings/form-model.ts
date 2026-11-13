@@ -246,7 +246,7 @@ export const isShown = (rules: ListingRules | undefined, id: string) => !rules |
 export const ruleField = (rules: ListingRules | undefined, id: string): ListingRuleField | undefined => rules?.fields.find((f) => f.id === id);
 /** True for every physical product (all kinds except digital, gift cards and services): a package per variant is asked. */
 export const isPhysical = (rules: ListingRules | undefined) => isShown(rules, 'package_size') && Boolean(rules);
-/** The product details the rules own (net weight, servings, shelf life, storage, ingredients, allergens, material, model, age grade, country of origin) that this category asks. */
+/** The product details the rules own (net weight, servings, shelf life, storage, ingredients, allergens, material, model, age grade) that this category asks. */
 export const ruleAttributeFields = (rules: ListingRules | undefined): ListingRuleField[] =>
   rules ? rules.fields.filter((f) => f.attributeKey && f.id !== 'brand' && f.status !== 'hidden') : [];
 /** The document slots this category shows. */
@@ -542,7 +542,7 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
     if (a.kind === 'ENUM' && a.options.length && !a.options.includes(v)) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.chooseOption');
     if (a.kind === 'NUMBER' && positive(v) === null) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.number');
   });
-  // The questions the rules own (net weight, servings, shelf life, storage, ingredients, allergens, material, model, age grade, origin).
+  // The questions the rules own (net weight, servings, shelf life, storage, ingredients, allergens, material, model, age grade).
   ruleAttributeFields(rules).forEach((f) => {
     const key = f.attributeKey ?? f.id;
     const id = fieldId.attr(key);
