@@ -1541,27 +1541,27 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Importer cannot call Product.approve (architecture test)
 - Same file uploaded again offers to show the old result; re-run creates no duplicates and unchanged rows are SKIPPED
 - file_sha256 stored; new outcomes OFFER_CREATED and HELD in contract and report
-- Templates for every category still come from the rules book with nothing hard-coded per category (test)","E03","","High","8","bulk catalog matching","catalog","To Do"
+- Templates for every category still come from the rules book with nothing hard-coded per category (test)","E03","","High","8","bulk catalog matching","catalog","In Review"
 "S394","Story","Bulk upload: price and quantity feed","Spec: docs/engineering/bulk-upload-and-images.md. Section 5.1 PRICE_QTY. A lightweight file that changes price and stock by SKU or ATIN without rewriting products.","- Template with seller_sku or atin, price, list_price, quantity; blank means unchanged
 - Up to 50,000 rows and 25 MB
 - Applies through batch offer endpoints; seller can only touch own offers (scope test)
 - Row level report with errors and warnings; good rows proceed
 - Re-upload of the same file changes nothing
 - One audit row per changed offer with import id
-- Contract for batch offer prices and stock added","E03","","Medium","5","bulk offers","catalog","To Do"
+- Contract for batch offer prices and stock added","E03","","Medium","5","bulk offers","catalog","In Review"
 "S395","Story","Stock CSV import (inventory counts)","Spec: docs/engineering/bulk-upload-and-images.md. Section 5.1 STOCK. No stock file import exists today (only the single-offer quick stock sheet).","- Template with seller_sku, location, on_hand, optional lot and expiry
 - Imports write ledger entries with reason BULK_COUNT and the import id; no negative or over-limit values
 - Seller scope enforced; unknown SKUs are row errors
 - Async job with row report (errors and warnings), partial success and idempotent re-upload
 - Reserved stock is never overwritten below reserved quantity (row error)
-- Contract inventory.yaml and a concurrency IT with live reservations","E09","","Medium","5","inventory bulk","inventory","To Do"
+- Contract inventory.yaml and a concurrency IT with live reservations","E09","","Medium","5","inventory bulk","inventory","Done"
 "S396","Story","Bulk upload hardening: image fetch budget, port 443, report columns, audit","Spec: docs/engineering/bulk-upload-and-images.md. Sections 5.3, 5.4 and 5.7. media urlfetch is SSRF safe already; add the missing limits and the report and audit detail.","- Only port 443 is dialled; IP literal hosts refused
 - Per upload budget (200 MB, 4 parallel fetches, 2 per host) and a daily per organisation fetch cap
 - Plain fetch failure messages (link did not answer, not a photo, private address) per image column
 - Report has Result, ATIN, Severity, Column and Message with original columns first; CSV and XLSX
 - Events catalog.import.started and completed with who, file hash, mode and counts; one audit row per product or offer touched
 - One active upload per mode per organisation; 20 per day (setting)
-- SSRF table tests incl. metadata IP, DNS rebinding, redirect to private or http","E03","","High","5","bulk security media","catalog","To Do"
+- SSRF table tests incl. metadata IP, DNS rebinding, redirect to private or http","E03","","High","5","bulk security media","catalog","In Progress"
 "S397","Story","Test and rollout plan for matching, bulk and image enforcement","Spec: docs/engineering/bulk-upload-and-images.md. Sections 9 to 11. Dashboards, alerts, shadow mode and the staging scenario.","- Dashboards and alerts for the metrics in section 9 (reject rate over 60 percent for 1 hour pages)
 - Shadow mode report from real uploads before enforcement is turned on
 - Staging scenario: seller A creates a page, seller B sells it by UPC without a photo, both appear in the buy box

@@ -23,11 +23,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param auth                 client-credentials token of inventory-service for those calls
  * @param costCurrencies       currencies stock may be sourced and received in (USD is always accepted); default
  *                             USD, MXN, NGN, GHS, CAD, EUR, GBP, ZAR, KES and XOF (ADR 0005 §7)
+ * @param stockImport          stock CSV import limits (S395): {@code at.inventory.stock-import.max-rows}, default 50,000
  */
 @ConfigurationProperties(prefix = "at.inventory")
 public record InventoryProperties(String retailOrgId, Duration reservationTtl, Integer fefoMinRemainingDays,
                                   ShelfLife shelfLife, Jobs jobs, Storage storage, Endpoint catalog,
-                                  Endpoint carrierGateway, Auth auth, List<String> costCurrencies) {
+                                  Endpoint carrierGateway, Auth auth, List<String> costCurrencies,
+                                  StockImport stockImport) {
 
     public InventoryProperties {
         retailOrgId = retailOrgId == null ? "org_afrotransact_retail" : retailOrgId;
@@ -40,6 +42,18 @@ public record InventoryProperties(String retailOrgId, Duration reservationTtl, I
         carrierGateway = carrierGateway == null ? new Endpoint("http://localhost:8209", null) : carrierGateway;
         auth = auth == null ? new Auth(null, null, null, null) : auth;
         costCurrencies = normalise(costCurrencies);
+        stockImport = stockImport == null ? new StockImport(null) : stockImport;
+    }
+
+    /** Rows allowed in one stock file when the limit is not configured. */
+    public static final int DEFAULT_STOCK_IMPORT_MAX_ROWS = 50_000;
+
+    /** Limits of the stock CSV import. */
+    public record StockImport(Integer maxRows) {
+
+        public StockImport {
+            maxRows = maxRows == null || maxRows < 1 ? DEFAULT_STOCK_IMPORT_MAX_ROWS : maxRows;
+        }
     }
 
     /** Currencies accepted when the list is not configured. */

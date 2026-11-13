@@ -153,6 +153,46 @@ class StockImportServiceTest {
         verify(imports, never()).insert(any(), any());
     }
 
+    /** A file with {@code rows} data rows under the header. */
+    private static byte[] fileOf(int rows) {
+        StringBuilder sb = new StringBuilder("Seller SKU,Location,On hand\r\n");
+        for (int i = 0; i < rows; i++) {
+            sb.append("SKU-").append(i).append(",HOU-FC,1\r\n");
+        }
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void aFileOverTheDefaultRowCapOf50000IsRefusedWholeAndStoresNothing() {
+        asSeller("org_seller");
+
+        assertThat(new InventorySettings("org_retail", Duration.ofMinutes(15), 7, 200, BigDecimal.ONE, List.of("USD"))
+                .stockImportMaxRows()).isEqualTo(50_000);
+        assertThatThrownBy(() -> service.upload("big.csv", fileOf(50_001), StockImportMode.ABSOLUTE, null))
+                .isInstanceOf(InventoryRuleViolation.class).hasMessageContaining("50000");
+        verify(imports, never()).insert(any(), any());
+    }
+
+    @Test
+    void theRowCapIsConfigurableAndTheFileAtTheCapIsAccepted() {
+        PlatformTransactionManager tm = mock(PlatformTransactionManager.class);
+        when(tm.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        InventorySettings small = new InventorySettings("org_retail", Duration.ofMinutes(15), 7, 200, BigDecimal.ONE,
+                List.of("USD"), 3);
+        StockImportServiceImpl capped = new StockImportServiceImpl(imports, positions, nodes, job, access, small,
+                Runnable::run, Clock.fixed(NOW, ZoneOffset.UTC), tm);
+        asSeller("org_seller");
+
+        capped.upload("three.csv", fileOf(3), StockImportMode.ABSOLUTE, null);
+        assertThat(captured().totalRows()).isEqualTo(3);
+
+        assertThatThrownBy(() -> capped.upload("four.csv", fileOf(4), StockImportMode.ABSOLUTE, null))
+                .isInstanceOf(InventoryRuleViolation.class).hasMessageContaining("3 rows");
+        // a file far past the cap is cut off while reading, without holding it all in memory
+        assertThatThrownBy(() -> capped.upload("many.csv", fileOf(5_000), StockImportMode.ABSOLUTE, null))
+                .isInstanceOf(InventoryRuleViolation.class);
+    }
+
     @Test
     void theSameFileUploadedAgainIsRecognised() {
         asSeller("org_seller");
@@ -179,7 +219,7 @@ class StockImportServiceTest {
                 "samehash", null, StockImportMode.DELTA, List.of(), StockImportStatus.COMPLETED, 2, 2, 0, 0, 2, 2, 0, 0,
                 NOW, NOW, NOW, NOW, 4);
         when(imports.lock(id)).thenReturn(Optional.of(pending));
-        when(imports.findLatestByHash("org_seller", StockImportMode.DELTA, "samehash")).thenReturn(Optional.of(applied));
+        when(imports.findStartedByHash("org_seller", StockImportMode.DELTA, "samehash", id)).thenReturn(Optional.of(applied));
 
         assertThatThrownBy(() -> service.start(id, false)).isInstanceOfSatisfying(ConflictException.class,
                 e -> assertThat(e.code()).isEqualTo("inventory.import-already-applied"));

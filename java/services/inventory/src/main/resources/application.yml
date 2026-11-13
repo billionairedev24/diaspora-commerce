@@ -86,6 +86,9 @@ at:
     enabled: ${CONSUMERS_ENABLED:true}
   inventory:
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # Stock CSV import (S395): most rows in one file (the file itself may be 25 MB).
+    stock-import:
+      max-rows: ${STOCK_IMPORT_MAX_ROWS:50000}
     # Checkout holds are released automatically after this long unless confirmed (payment authorised).
     reservation-ttl: ${RESERVATION_TTL:15m}
     # FEFO skips lots that would expire within this many days of today (node-local date).

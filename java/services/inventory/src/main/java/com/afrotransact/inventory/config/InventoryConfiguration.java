@@ -54,7 +54,8 @@ class InventoryConfiguration {
     @Bean
     InventorySettings inventorySettings(InventoryProperties props) {
         return new InventorySettings(props.retailOrgId(), props.reservationTtl(), props.fefoMinRemainingDays(),
-                props.jobs().reservationSweepBatch(), props.storage().defaultUnitCubicFeet(), props.costCurrencies());
+                props.jobs().reservationSweepBatch(), props.storage().defaultUnitCubicFeet(), props.costCurrencies(),
+                props.stockImport().maxRows());
     }
 
     /** Runs stock file imports in the background (one virtual thread per started import, S395). */

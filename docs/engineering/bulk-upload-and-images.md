@@ -179,6 +179,8 @@ Per row, before validation of content columns:
 
 SSRF and fetch safety (`urlfetch` already: https only, no user info, every dialled IP must be public unicast, 3 redirects re-checked at dial, 20 s, 8 MB, `Accept` image types). Add: **port 443 only**; reject IP-literal hosts; a per-upload budget (max 200 MB total, max 4 parallel fetches, max 2 per host); a daily per-organisation fetch cap; cache by URL hash within an upload; record `fetch_failed` reasons in plain words ("The link did not answer", "The link is not a photo", "The link points to a private address"). Row result says which image column failed.
 
+**Built (S396, 2026-11-13):** port 443 only; IP-literal hosts refused in every spelling (dotted, decimal, octal, hex, bracketed IPv6) before any lookup; the name is resolved once, a name with any non-public answer is refused whole, and the connection goes to the checked address (no second lookup, so DNS rebinding cannot swap it); every redirect hop goes through the same checks; more reserved ranges blocked (this-network, 6to4 relay, IPv4-compatible, NAT64 local, 6to4, Teredo, discard, site-local). Table tests in `go/services/media/internal/adapter/urlfetch/ssrf_test.go`. **Still to build:** the per-upload budget (200 MB, 4 parallel, 2 per host), the daily per-organisation fetch cap and the per-upload URL cache.
+
 ### 5.4 Job, report and partial success
 
 * Upload -> parse (zip-bomb guards, exist) -> validate -> `VALIDATED` preview -> seller starts -> async job (`QUEUED/RUNNING/COMPLETED/FAILED`, resumable, exists).

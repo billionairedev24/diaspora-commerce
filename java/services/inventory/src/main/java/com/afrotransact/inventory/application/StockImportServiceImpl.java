@@ -88,7 +88,7 @@ class StockImportServiceImpl implements StockImportService {
         records.add(List.of("# Lot is needed when the SKU has several lots at the location; Expiry (year-month-day) helps "
                 + "to find the lot of perishables."));
         records.add(List.of("# Only your own stock can be changed, never fewer than the units already reserved for orders. "
-                + "At most " + StockImportValidator.MAX_STOCK + " units and " + StockImportValidator.MAX_ROWS
+                + "At most " + StockImportValidator.MAX_STOCK + " units and " + settings.stockImportMaxRows()
                 + " rows per file."));
         records.add(List.of("Seller SKU", "Location", delta ? "Change" : "On hand", "Lot", "Expiry"));
         records.add(List.of("MY-SKU-1", "HOU-FC", delta ? "5" : "120", "", ""));
@@ -112,12 +112,12 @@ class StockImportServiceImpl implements StockImportService {
                     + "imported. Wait for it to finish, then upload this one.");
         }
         StockImportMode wanted = mode == null ? StockImportMode.ABSOLUTE : mode;
-        List<List<String>> records = StockCsv.parse(content, StockImportValidator.MAX_ROWS + 1000);
+        List<List<String>> records = StockCsv.parse(content, settings.stockImportMaxRows() + 1000);
         Set<String> held = heldKeys(org, StockImportValidator.skusOf(records));
         Set<String> activeNodes = nodes.findAll().stream().filter(Node::active).map(Node::id)
                 .collect(Collectors.toSet());
         StockImportValidator.Result result = StockImportValidator.validate(records, wanted, activeNodes, held,
-                StockImportValidator.MAX_ROWS);
+                settings.stockImportMaxRows());
         Instant now = Instant.now(clock);
         String sha = sha256(content);
         UUID sameFile = imports.findLatestByHash(org, wanted, sha).map(StockImport::id).orElse(null);
@@ -239,8 +239,7 @@ class StockImportServiceImpl implements StockImportService {
                         + "imported");
             }
             if (u.mode() == StockImportMode.DELTA) {
-                imports.findLatestByHash(u.ownerOrg(), u.mode(), u.fileSha256()).filter(x -> !x.id().equals(u.id())
-                        && x.status().started()).ifPresent(x -> {
+                imports.findStartedByHash(u.ownerOrg(), u.mode(), u.fileSha256(), u.id()).ifPresent(x -> {
                             throw new ConflictException("inventory.import-already-applied", "You already applied this "
                                     + "file on " + x.startedAt() + " (" + x.reference() + "). A change is never applied "
                                     + "twice.");

@@ -1,6 +1,7 @@
 package com.afrotransact.catalog.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -239,6 +240,28 @@ class OfferImportJobTest {
         verify(metrics).row("PRICE_QTY", "UPDATED");
         verify(metrics).row("PRICE_QTY", "SKIPPED");
         verify(metrics).row("PRICE_QTY", "FAILED");
+    }
+
+    @Test
+    void everyOfferTheFeedChangesOrHoldsHasOneAuditRowWithTheUploadRowAndActorAndFailedOrSkippedRowsHaveNone() {
+        pending(upload(ImportMode.PRICE_QTY, FEED_HEADER), row(2, "SKU-1", "22.50", ""), row(3, "SKU-2", "", ""),
+                row(4, "SKU-3", "", "8"), row(5, "SKU-4", "9.00", ""));
+        UUID changed = UUID.randomUUID();
+        UUID held = UUID.randomUUID();
+        when(offers.setPricesAndStock(eq("org_b"), eq(IMPORT), eq("user_b"), anyList())).thenReturn(List.of(
+                new OfferWriter.Result("2", "UPDATED", changed, "AT00000002", "ACTIVE", null, "Saved."),
+                new OfferWriter.Result("4", "FAILED", null, null, null, "offers.sku-not-found", "None of your open offers uses the SKU SKU-3."),
+                new OfferWriter.Result("5", "HELD", held, "AT00000003", "TAX_HELD", "TAX_DECISION_MISSING",
+                        "We are checking the tax details for this item.")));
+
+        job.drive(IMPORT);
+
+        ArgumentCaptor<List<AuditRow>> audit = ArgumentCaptor.forClass(List.class);
+        verify(imports).audit(eq(IMPORT), eq("org_b"), eq("user_b"), eq(NOW), audit.capture());
+        assertThat(audit.getValue()).extracting(AuditRow::rowNumber, AuditRow::action, AuditRow::atin, AuditRow::offerId)
+                .containsExactlyInAnyOrder(
+                        tuple(2, "UPDATED", "AT00000002", changed),
+                        tuple(5, "HELD", "AT00000003", held));
     }
 
     @Test

@@ -209,6 +209,13 @@ class JdbcStockImportRepository implements StockImportRepository {
     }
 
     @Override
+    public Optional<StockImport> findStartedByHash(String ownerOrg, StockImportMode mode, String fileSha256, UUID exceptId) {
+        return jdbc.sql(SELECT + " where owner_org = :org and mode = :mode and file_sha256 = :sha and id <> :id "
+                + "and started_at is not null order by started_at desc limit 1").param("org", ownerOrg)
+                .param("mode", mode.name()).param("sha", fileSha256).param("id", exceptId).query(this::map).optional();
+    }
+
+    @Override
     public boolean hasActive(String ownerOrg) {
         return jdbc.sql("select count(*) from stock_import where owner_org = :org and status in ('QUEUED', 'RUNNING')")
                 .param("org", ownerOrg).query(Integer.class).single() > 0;

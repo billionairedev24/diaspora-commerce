@@ -50,6 +50,13 @@ public interface StockImportRepository {
     /** The organisation's latest earlier import of the same file in the same mode. */
     Optional<StockImport> findLatestByHash(String ownerOrg, StockImportMode mode, String fileSha256);
 
+    /**
+     * An earlier import of the same file in the same mode that was started (queued, running or done), other than
+     * {@code exceptId}: what makes a DELTA file refuse a second application. The newest upload of the file is the one being
+     * started, so "latest by hash" alone would never find the earlier one.
+     */
+    Optional<StockImport> findStartedByHash(String ownerOrg, StockImportMode mode, String fileSha256, UUID exceptId);
+
     /** Whether the organisation has an import that is queued or running. */
     boolean hasActive(String ownerOrg);
 
