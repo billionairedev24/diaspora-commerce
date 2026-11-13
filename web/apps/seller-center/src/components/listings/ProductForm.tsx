@@ -440,7 +440,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
             </Disclosure>
           </FormSection>
 
-          <FormSection {...section('images')} hint={t('sc.pf.s.imagesHint')}>
+          <FormSection {...section('images')}>
             <ImagesField images={s.images} update={(fn) => update((prev) => ({ ...prev, images: fn(prev.images) }))} error={err(fieldId.images)}
               context={{ title: s.title, brand: s.attrs.brand, productTypeCode: s.productType ?? undefined }} />
             {editing && productId ? <ImprovePrompt productId={productId} /> : null}

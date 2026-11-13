@@ -30,9 +30,11 @@ export function useShortReason(im: FormImage): string | null {
   if (im.status === 'error') return t('sc.pf.images.failed');
   const verdict = verdictOf(im);
   if (!verdict || verdict === 'PASS') return null;
-  const code = visibleChecks(im)[0]?.code;
+  const first = visibleChecks(im)[0];
+  const code = first?.code;
   const key = (code && SHORT[code]) || (verdict === 'HOLD' ? 'sc.pf.photo.short.held' : verdict === 'WARN' ? 'sc.pf.photo.short.better' : 'sc.pf.photo.short.rejected');
-  return t(key, { px: MIN_IMAGE_PX });
+  const vars = first ? checkVars(first, im) : { px: MIN_IMAGE_PX };
+  return t(key, { px: code === 'TOO_SMALL' ? vars.min ?? MIN_IMAGE_PX : vars.px ?? MIN_IMAGE_PX });
 }
 
 interface ThumbProps {
@@ -84,13 +86,15 @@ export function PhotoFindings({ image: im, index: i }: { image: FormImage; index
   const verdict = verdictOf(im);
   if (!checks.length) return null;
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0" role={verdict === 'REJECT' ? 'alert' : 'status'} aria-label={t('sc.pf.images.findings', { n: i + 1 })}>
-      {checks.map((c) => (
-        <li key={c.code} className={cx('text-sm', c.level === 'REJECT' && 'text-danger')} data-check={c.code}>
-          {t(`sc.img.check.${c.code}` as MessageKey, checkVars(c, im))}
-        </li>
-      ))}
-    </ul>
+    <div role={verdict === 'REJECT' ? 'alert' : 'status'} aria-label={t('sc.pf.images.findings', { n: i + 1 })}>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {checks.map((c) => (
+          <li key={c.code} className={cx('text-sm', c.level === 'REJECT' && 'text-danger')} data-check={c.code}>
+            {t(`sc.img.check.${c.code}` as MessageKey, checkVars(c, im))}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

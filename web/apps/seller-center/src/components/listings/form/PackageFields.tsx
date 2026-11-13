@@ -34,16 +34,16 @@ export function PackageInputs({ rowKey, value, units, onUnits, inherited, name, 
   const labels = useFormLabels();
   const id = fieldId.rowPkg(rowKey);
   const msg = `${id}-msg`;
-  const box = (f: keyof PackageInput, label: MessageKey, width: string) => (
-    <span className="flex flex-col gap-0.5">
+  const box = (f: keyof PackageInput, label: MessageKey) => (
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <label htmlFor={`${id}-${f}`} className="text-xs text-muted">{t(label)}</label>
       <input id={`${id}-${f}`} inputMode="decimal" value={value[f]} placeholder={inherited?.[f] ?? ''} aria-label={name ? `${t(label)} · ${name}` : undefined}
         aria-invalid={error ? true : undefined} aria-describedby={error ? msg : undefined} onChange={(e) => onChange({ ...value, [f]: e.target.value })}
-        className={`${fieldStyles.control} ${width} text-end`} />
-    </span>
+        className={`${fieldStyles.control} text-end`} />
+    </div>
   );
   const unit = <T extends string>(current: T, options: readonly T[], label: MessageKey, set: (u: T) => void) => (
-    <select aria-label={name ? `${t(label)} · ${name}` : t(label)} value={current} onChange={(e) => set(e.target.value as T)} className={`${fieldStyles.control} w-[4.5rem]`}>
+    <select aria-label={name ? `${t(label)} · ${name}` : t(label)} value={current} onChange={(e) => set(e.target.value as T)} className={`${fieldStyles.control} shrink-0`} style={{ width: '4.75rem' }}>
       {options.map((u) => <option key={u} value={u}>{u}</option>)}
     </select>
   );
@@ -56,17 +56,17 @@ export function PackageInputs({ rowKey, value, units, onUnits, inherited, name, 
         </span>
       )}
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-        <div className="flex items-end gap-1.5" data-testid="package-size">
+        <div className="flex min-w-[17rem] flex-[2_1_17rem] items-end gap-1.5" data-testid="package-size">
           {SIZE_FIELDS.map((f, i) => (
-            <span key={f} className="flex items-end gap-1.5">
-              {i > 0 ? <span aria-hidden className="grid h-[var(--at-size-control)] place-items-center text-muted">×</span> : null}
-              {box(f, `sc.pf.pkg.${f}`, 'w-20')}
+            <span key={f} className="flex min-w-0 flex-1 items-end gap-1.5">
+              {i > 0 ? <span aria-hidden className="grid h-[var(--at-size-control)] flex-none place-items-center text-muted">×</span> : null}
+              {box(f, `sc.pf.pkg.${f}`)}
             </span>
           ))}
           <span className="flex items-end">{unit(units.size, SIZE_UNITS, 'sc.pf.pkg.sizeUnit', (u) => onUnits({ ...units, size: u }))}</span>
         </div>
-        <div className="flex items-end gap-1.5" data-testid="package-weight">
-          {box('weight', 'sc.pf.pkg.weight', 'w-24')}
+        <div className="flex min-w-[10rem] flex-[1_1_10rem] items-end gap-1.5" data-testid="package-weight">
+          {box('weight', 'sc.pf.pkg.weight')}
           {unit(units.weight, WEIGHT_UNITS, 'sc.pf.pkg.weightUnit', (u) => onUnits({ ...units, weight: u }))}
         </div>
       </div>

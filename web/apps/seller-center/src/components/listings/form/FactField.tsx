@@ -38,10 +38,10 @@ export function FactField({ def, id, value, error, onChange }: Props) {
       return (
         <Field id={id} label={label} required={required} help={help} error={error}>
           {(a11y) => (
-            <span className="flex items-stretch gap-2">
+            <div className="flex items-stretch gap-2">
               <input {...a11y} inputMode={def.kind === 'INTEGER' ? 'numeric' : 'decimal'} className={fieldStyles.control} value={value} onChange={(e) => onChange(e.target.value)} />
               {unit ? <span className="grid min-w-10 place-items-center text-sm text-muted">{unit}</span> : null}
-            </span>
+            </div>
           )}
         </Field>
       );

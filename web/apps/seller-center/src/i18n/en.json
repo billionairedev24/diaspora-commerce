@@ -489,7 +489,6 @@
   "sc.pf.unitOf": "Unit of {label}",
   "sc.pf.s.basics": "Basics",
   "sc.pf.s.images": "Photos",
-  "sc.pf.s.imagesHint": "The first image is the main one. It needs a plain white background and at least 1000 pixels on its longest side.",
   "sc.pf.s.details": "Details",
   "sc.pf.s.food": "Food information",
   "sc.pf.s.foodHint": "Required by US food labelling rules (FALCPA). Shoppers see it before they buy.",

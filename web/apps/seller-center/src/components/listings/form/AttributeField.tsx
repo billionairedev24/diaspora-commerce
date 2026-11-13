@@ -37,14 +37,14 @@ export function AttributeField({ def, value, unit, error, onChange, onUnit }: Pr
     return (
       <Field id={id} label={label} required={required} help={help} error={error}>
         {(a11y) => (
-          <span className="flex items-stretch gap-2">
+          <div className="flex items-stretch gap-2">
             <input {...a11y} inputMode="decimal" className={fieldStyles.control} value={value} onChange={(e) => onChange(e.target.value)} />
             {def.units.length === 1 ? <span className="grid min-w-12 place-items-center text-sm text-muted">{def.units[0]}</span> : def.units.length ? (
               <select aria-label={t('sc.pf.unitOf', { label: def.label })} className={`${fieldStyles.control} max-w-32`} value={unit || def.units[0]} onChange={(e) => onUnit(e.target.value)}>
                 {def.units.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
             ) : null}
-          </span>
+          </div>
         )}
       </Field>
     );

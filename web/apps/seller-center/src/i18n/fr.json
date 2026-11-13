@@ -477,7 +477,6 @@
   "sc.pf.unitOf": "Unité de {label}",
   "sc.pf.s.basics": "L’essentiel",
   "sc.pf.s.images": "Photos",
-  "sc.pf.s.imagesHint": "La première image est la principale. Elle doit avoir un fond blanc uni et au moins 1000 pixels sur son plus grand côté.",
   "sc.pf.s.details": "Détails",
   "sc.pf.s.food": "Informations alimentaires",
   "sc.pf.s.foodHint": "Exigées par les règles d’étiquetage alimentaire américaines (FALCPA). Les acheteurs les voient avant d’acheter.",

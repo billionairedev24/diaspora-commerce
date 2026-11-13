@@ -60,7 +60,7 @@ export function QualityLists({ problems, tips, sections, titleOf, onGo }: { prob
           <section key={g.section} aria-labelledby={`pf-q-${g.section}`} data-testid={`quality-${g.section}`} className="flex flex-col gap-0.5">
             <h3 id={`pf-q-${g.section}`} className="m-0 flex items-center justify-between gap-2 px-2 text-xs font-semibold text-muted">
               <a href={`#pf-s-${g.section}`} aria-label={t('sc.pf.q.groupGo', { section: name })} onClick={(e) => { e.preventDefault(); goToSection(g.section); }}
-                className="text-muted no-underline hover:text-text hover:underline">{name}</a>
+                className="inline-flex min-h-6 items-center text-muted no-underline hover:text-text hover:underline">{name}</a>
               <span className={cx('rounded-pill px-1.5 font-semibold', g.problems.length ? 'bg-warning-bg text-warning' : 'bg-surface-muted text-muted')}>
                 {g.problems.length ? t('sc.pf.q.groupTodo', { count: g.problems.length }) : t('sc.pf.q.groupTips', { count: g.tips.length })}
               </span>

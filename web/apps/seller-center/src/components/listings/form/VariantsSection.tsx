@@ -186,13 +186,13 @@ export function VariantsSection({ s, type, set, problems, shown, locked, physica
                     const id = fieldId.variant(k, col.field);
                     const e = err(id);
                     return (
-                      <span role="cell" key={col.field} className={cx('flex flex-col gap-0.5', col.field === 'sku' && 'col-span-2 md:col-span-1')}>
+                      <div role="cell" key={col.field} className={cx('flex flex-col gap-0.5', col.field === 'sku' && 'col-span-2 md:col-span-1')}>
                         <label htmlFor={id} className="text-2xs text-muted md:sr-only">{col.label}</label>
                         <input id={id} aria-label={`${col.label} · ${k}`} aria-invalid={e ? true : undefined} inputMode={col.mode} value={r[col.field]}
                           readOnly={col.field === 'sku' && locked.has(k)} onChange={(ev) => setRow(k, { [col.field]: ev.target.value })}
                           className={cx('h-8 w-full min-w-0 rounded-sm border bg-surface px-1.5 text-sm read-only:bg-surface-muted', e ? 'border-danger' : 'border-border-strong', col.mono && 'font-mono text-xs')} />
                         {e ? <span className="text-2xs text-danger">{e}</span> : null}
-                      </span>
+                      </div>
                     );
                   })}
                   <span role="cell" className="col-span-2 flex flex-col gap-0.5 md:col-span-1">
