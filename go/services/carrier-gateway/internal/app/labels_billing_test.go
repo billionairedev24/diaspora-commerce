@@ -73,10 +73,10 @@ func TestSellerLabelPurchaseAndVoidArePublished(t *testing.T) {
 		t.Fatalf("purchase payload\n got %+v\nwant %+v", e, want)
 	}
 
-	if _, err := svc.Void(ctx, v.ID); err != nil {
+	if _, err := svc.Void(ctx, platformActor, v.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Void(ctx, v.ID); !errors.Is(err, domain.ErrConflict) {
+	if _, err := svc.Void(ctx, platformActor, v.ID); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("second void: %v", err)
 	}
 	got = publishAll(t, store)

@@ -128,6 +128,7 @@ func run() error {
 		Pickups:   app.NewPickupService(carriers, resolver, store, store, time.Now),
 		Prompt:    app.NewPickupPromptService(store, time.Now),
 		Addresses: app.NewAddressService(carriers),
+		Billing:   billing,
 	}
 
 	if cfg.Kafka.Enabled {

@@ -129,7 +129,7 @@ func TestLabelPurchaseIsIdempotent(t *testing.T) {
 	if _, err := svc.Buy(ctx, app.BuyRequest{Shipment: shipment("x"), Carrier: domain.UPS, Service: "03"}); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatal("missing Idempotency-Key must be rejected")
 	}
-	doc, ct, err := svc.Document(ctx, a.ID)
+	doc, ct, err := svc.Document(ctx, platformActor, a.ID)
 	if err != nil || string(doc) != "%PDF" || ct != "application/pdf" {
 		t.Fatalf("document %q %s %v", doc, ct, err)
 	}
@@ -162,11 +162,11 @@ func TestVoidOnlyBeforeAcceptance(t *testing.T) {
 		State: domain.StatePickedUp, OccurredAt: time.Now()}}); err != nil {
 		t.Fatal(err)
 	}
-	v, err := svc.Void(ctx, a.ID)
+	v, err := svc.Void(ctx, platformActor, a.ID)
 	if err != nil || v.Status != domain.LabelVoided || ups.voidCalls.Load() != 1 {
 		t.Fatalf("void %+v %v", v, err)
 	}
-	if _, err := svc.Void(ctx, b.ID); !errors.Is(err, domain.ErrConflict) || ups.voidCalls.Load() != 1 {
+	if _, err := svc.Void(ctx, platformActor, b.ID); !errors.Is(err, domain.ErrConflict) || ups.voidCalls.Load() != 1 {
 		t.Fatalf("picked-up label must not be voided: %v", err)
 	}
 }

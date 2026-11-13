@@ -1,0 +1,23 @@
+# METHOD pattern | CLASS | enforcement | test
+# Isolation rests on RBAC permission + the verified JWT org claim + owner checks (OpenFGA is not deployed).
+POST /v1/rates | ORG_OWNED | shipping:rate; origin must be the caller's own org (BillingPolicy.MayShipFrom) | TestSellerCannotSpendAnotherOriginsCarrierAccount
+POST /v1/labels | ORG_OWNED | shipping:label; origin guard; label recorded under the verified org | TestSellerCannotSpendAnotherOriginsCarrierAccount
+POST /v1/return-labels | ORG_OWNED | shipping:label; origin guard; label recorded under the verified org | TestSellerCannotSpendAnotherOriginsCarrierAccount
+GET /v1/labels/{id} | ORG_OWNED | shipping:label; labelServiceImpl.owned (OrgID == label org, staff/service any) | TestCrossTenantPickupLocationsAndLabels
+GET /v1/labels/{id}/document | ORG_OWNED | shipping:label; labelServiceImpl.owned | TestCrossTenantPickupLocationsAndLabels
+GET /v1/labels/by-tracking/{carrier}/{trackingNumber}/document | ORG_OWNED | shipping:label; mayAccessLabel on the label found by tracking number | TestCrossTenantPickupLocationsAndLabels
+POST /v1/labels/{id}/void | ORG_OWNED | shipping:void; labelServiceImpl.owned | TestCrossTenantPickupLocationsAndLabels
+GET /v1/tracking/{carrier}/{trackingNumber} | ORG_OWNED | shipping:rate; CheckTrackingAccess (numbers of another org's label refused; unknown numbers are carrier-public) | TestCrossTenantPickupLocationsAndLabels
+POST /v1/tracking | ORG_OWNED | shipping:label; CheckTrackingAccess | TestCrossTenantPickupLocationsAndLabels
+POST /v1/pickups | ORG_OWNED | shipping:label; origin guard | TestSellerCannotSpendAnotherOriginsCarrierAccount
+POST /v1/addresses/validate | PUBLIC | shipping:rate; carrier address validation, no tenant data read or written | n/a
+GET /v1/pickup-locations | PUBLIC | active locations only, audit fields stripped; includeInactive needs auth and is org-filtered from the claim (ManagedLocations) | TestCrossTenantPickupLocationsAndLabels
+GET /v1/pickup-locations/{id} | PUBLIC | inactive drafts visible only to managers (mayManageLocation); audit fields stripped | TestCrossTenantPickupLocationsAndLabels
+POST /v1/pickup-locations | ORG_OWNED | requiredAuth; canManage (own org SELLER locations, or shipping:admin) | TestPickupLocationsAreOrgScoped
+PUT /v1/pickup-locations/{id} | ORG_OWNED | canManage on the stored row and on the new body | TestCrossTenantPickupLocationsAndLabels
+POST /v1/pickup-locations/{id}/ready | ORG_OWNED | canManage or staff with shipping:label (orderRef/customerRef are not checked against orders: residual) | TestCrossTenantPickupLocationsAndLabels
+GET /v1/pickup-prompt | ORG_OWNED | requiredAuth; org from claim, shipping:label | TestPickupPromptSnoozeReappearsAfterTheSetting
+PUT /v1/pickup-prompt | ORG_OWNED | requiredAuth; org from claim, shipping:label | TestPickupPromptSnoozeReappearsAfterTheSetting
+GET /v1/pickup-prompt/settings | PUBLIC | requiredAuth; one global number, no tenant data | n/a
+PUT /v1/pickup-prompt/settings | STAFF_ONLY | shipping:admin (pickup_prompt.go) | TestPickupPromptSettingIsStaffOnlyAndBounded
+POST /v1/webhooks/{carrier} | WEBHOOK | carrier HMAC/credential over the raw body; empty secret rejects | TestWebhookUsesSignatureNotBearer

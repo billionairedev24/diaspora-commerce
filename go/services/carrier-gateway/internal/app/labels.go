@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/port"
@@ -52,11 +53,16 @@ type LabelView struct {
 // LabelService buys, reads and voids labels.
 type LabelService interface {
 	Buy(ctx context.Context, req BuyRequest) (LabelView, error)
-	Get(ctx context.Context, id string) (LabelView, error)
-	Document(ctx context.Context, id string) ([]byte, string, error)
+	// Get, Document, DocumentByTracking and Void act on a label only for the organisation that bought it (or platform
+	// staff and services): any other caller gets domain.ErrNotFound, so a label id or tracking number confirms nothing.
+	Get(ctx context.Context, actor auth.Actor, id string) (LabelView, error)
+	Document(ctx context.Context, actor auth.Actor, id string) ([]byte, string, error)
 	// DocumentByTracking is the printable document of the purchased label with this tracking number.
-	DocumentByTracking(ctx context.Context, carrier domain.CarrierCode, trackingNumber string) ([]byte, string, error)
-	Void(ctx context.Context, id string) (LabelView, error)
+	DocumentByTracking(ctx context.Context, actor auth.Actor, carrier domain.CarrierCode, trackingNumber string) ([]byte, string, error)
+	Void(ctx context.Context, actor auth.Actor, id string) (LabelView, error)
+	// CheckTrackingAccess refuses (domain.ErrNotFound) tracking of a number whose label another organisation bought.
+	// A number we sold no label for is carrier-public information and passes.
+	CheckTrackingAccess(ctx context.Context, actor auth.Actor, carrier domain.CarrierCode, trackingNumber string) error
 }
 
 // ErrIdempotencyMismatch is returned when an Idempotency-Key is reused with a different request.
@@ -253,28 +259,70 @@ func (s *labelServiceImpl) view(ctx context.Context, rec domain.LabelRecord) Lab
 	return v
 }
 
-func (s *labelServiceImpl) Get(ctx context.Context, id string) (LabelView, error) {
+// mayAccessLabel is the owner check of every label route: the organisation that bought the label, or platform staff
+// and services (whose routes are already gated by the shipping permissions). A label bought by a platform caller has no
+// organisation, so no organisation member reaches it.
+func mayAccessLabel(actor auth.Actor, rec domain.LabelRecord) bool {
+	if actor.IsStaff() {
+		return true
+	}
+	return actor.OrgID != "" && actor.OrgID == rec.OrgID
+}
+
+func notYours(what string) error { return fmt.Errorf("%w: %s", domain.ErrNotFound, what) }
+
+func (s *labelServiceImpl) owned(ctx context.Context, actor auth.Actor, id string) (domain.LabelRecord, error) {
 	rec, err := s.labels.Get(ctx, id)
 	if err != nil {
-		return LabelView{}, fmt.Errorf("get label: %w", err)
+		return domain.LabelRecord{}, fmt.Errorf("get label: %w", err)
+	}
+	if !mayAccessLabel(actor, rec) {
+		return domain.LabelRecord{}, notYours("label")
+	}
+	return rec, nil
+}
+
+func (s *labelServiceImpl) Get(ctx context.Context, actor auth.Actor, id string) (LabelView, error) {
+	rec, err := s.owned(ctx, actor, id)
+	if err != nil {
+		return LabelView{}, err
 	}
 	return s.view(ctx, rec), nil
 }
 
-func (s *labelServiceImpl) DocumentByTracking(ctx context.Context, carrier domain.CarrierCode, trackingNumber string) ([]byte, string, error) {
+func (s *labelServiceImpl) DocumentByTracking(ctx context.Context, actor auth.Actor, carrier domain.CarrierCode, trackingNumber string) ([]byte, string, error) {
 	rec, err := s.labels.ByTracking(ctx, carrier, strings.TrimSpace(trackingNumber))
 	if err != nil {
 		return nil, "", fmt.Errorf("get label by tracking number: %w", err)
 	}
+	if !mayAccessLabel(actor, rec) {
+		return nil, "", notYours("label")
+	}
 	return s.document(ctx, rec)
 }
 
-func (s *labelServiceImpl) Document(ctx context.Context, id string) ([]byte, string, error) {
-	rec, err := s.labels.Get(ctx, id)
+func (s *labelServiceImpl) Document(ctx context.Context, actor auth.Actor, id string) ([]byte, string, error) {
+	rec, err := s.owned(ctx, actor, id)
 	if err != nil {
-		return nil, "", fmt.Errorf("get label: %w", err)
+		return nil, "", err
 	}
 	return s.document(ctx, rec)
+}
+
+func (s *labelServiceImpl) CheckTrackingAccess(ctx context.Context, actor auth.Actor, carrier domain.CarrierCode, trackingNumber string) error {
+	if actor.IsStaff() {
+		return nil
+	}
+	rec, err := s.labels.ByTracking(ctx, carrier, strings.TrimSpace(trackingNumber))
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		return nil
+	case err != nil:
+		return fmt.Errorf("get label by tracking number: %w", err)
+	case !mayAccessLabel(actor, rec):
+		return notYours("tracking number")
+	}
+	return nil
 }
 
 func (s *labelServiceImpl) document(ctx context.Context, rec domain.LabelRecord) ([]byte, string, error) {
@@ -288,10 +336,10 @@ func (s *labelServiceImpl) document(ctx context.Context, rec domain.LabelRecord)
 	return data, rec.Format.ContentType(), nil
 }
 
-func (s *labelServiceImpl) Void(ctx context.Context, id string) (LabelView, error) {
-	rec, err := s.labels.Get(ctx, id)
+func (s *labelServiceImpl) Void(ctx context.Context, actor auth.Actor, id string) (LabelView, error) {
+	rec, err := s.owned(ctx, actor, id)
 	if err != nil {
-		return LabelView{}, fmt.Errorf("get label: %w", err)
+		return LabelView{}, err
 	}
 	if err := rec.CanVoid(); err != nil {
 		return LabelView{}, fmt.Errorf("void: %w", err)

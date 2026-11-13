@@ -111,6 +111,26 @@ func (p BillingPolicy) Decide(payer LabelPayer, origin string, kind LabelKind, f
 	}
 }
 
+// MayShipFrom reports whether the payer may use origin, which selects the carrier account (negotiated rates, label
+// billing) the call runs under. Platform callers may use any origin. An organisation member may only ship from its own
+// origin (the origin node is the seller's organisation id), except AfroTransact Retail organisations, which also use the
+// platform fulfilment centres. Anyone else may not choose an origin: another organisation's id would spend that
+// organisation's carrier account, a fulfilment centre's would spend the platform's negotiated rates.
+func (p BillingPolicy) MayShipFrom(payer LabelPayer, origin string) bool {
+	if payer.Platform {
+		return true
+	}
+	org := strings.TrimSpace(payer.OrgID)
+	switch {
+	case org == "":
+		return false
+	case origin == org:
+		return true
+	default:
+		return slices.Contains(p.RetailOrgIDs, org) && slices.Contains(p.PlatformNodes, origin)
+	}
+}
+
 // Handling is the markup on a seller-paid label of costMinor (percentage rounded half away from zero, plus the
 // fixed amount).
 func (p BillingPolicy) Handling(costMinor int64) int64 {

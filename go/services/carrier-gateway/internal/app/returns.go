@@ -17,6 +17,9 @@ import (
 type ReturnLabelRequest struct {
 	IdempotencyKey string `json:"-"`
 	Caller         string `json:"-"`
+	// Payer is the caller's organisation: the label is recorded under it, so only that organisation (and platform
+	// staff) can read or void it. Returns are always AfroTransact's cost whoever buys them.
+	Payer domain.LabelPayer `json:"-"`
 	// Shipment goes from the customer to the seller's or the AfroTransact return centre's address.
 	Shipment domain.Shipment `json:"shipment"`
 	// RateChoice is CHEAPEST (default), FASTEST, or SERVICE with Carrier + Service (a choice made from /v1/rates).
@@ -137,7 +140,7 @@ func (s *returnLabelServiceImpl) Buy(ctx context.Context, req ReturnLabelRequest
 	}
 	label, err := s.labels.Buy(ctx, BuyRequest{IdempotencyKey: req.IdempotencyKey, Caller: req.Caller, Shipment: req.Shipment,
 		Carrier: carrier, Service: service, Kind: domain.KindReturn, RateChoice: choice,
-		BoxFree: view.Mode == domain.ReturnBoxFreeQR, RequestHash: hash})
+		BoxFree: view.Mode == domain.ReturnBoxFreeQR, RequestHash: hash, Payer: req.Payer})
 	if err != nil {
 		return ReturnLabelView{}, fmt.Errorf("buy return label: %w", err)
 	}

@@ -39,8 +39,12 @@ type ReadyRequest struct {
 type PickupService interface {
 	Schedule(ctx context.Context, req domain.PickupRequest) (domain.Pickup, error)
 	SaveLocation(ctx context.Context, actor auth.Actor, loc domain.PickupLocation) (domain.PickupLocation, error)
-	GetLocation(ctx context.Context, id string) (domain.PickupLocation, error)
-	ListLocations(ctx context.Context, ownerOrg, postalPrefix string) ([]domain.PickupLocation, error)
+	// GetLocation reads one location. An inactive one (a seller's draft) is visible only to those who manage it
+	// (domain.ErrNotFound for everyone else, anonymous callers included); the switch-on audit fields (who, when) are
+	// shown only to them too.
+	GetLocation(ctx context.Context, actor auth.Actor, id string) (domain.PickupLocation, error)
+	// ListLocations is the public list of active locations (checkout), without the audit fields.
+	ListLocations(ctx context.Context, actor auth.Actor, ownerOrg, postalPrefix string) ([]domain.PickupLocation, error)
 	// ManagedLocations lists every location the actor manages, inactive ones too: staff with shipping:admin (all, or
 	// one owner's), a seller its own org's SELLER locations.
 	ManagedLocations(ctx context.Context, actor auth.Actor, ownerOrg string) ([]domain.PickupLocation, error)
@@ -154,18 +158,37 @@ func stampEnablement(loc *domain.PickupLocation, prev *domain.PickupLocation, ac
 	return nil
 }
 
-func (s *pickupServiceImpl) GetLocation(ctx context.Context, id string) (domain.PickupLocation, error) {
+// mayManageLocation: who sees a location's drafts and audit fields.
+func mayManageLocation(actor auth.Actor, l domain.PickupLocation) bool {
+	return canManage(actor, l) || (actor.IsStaff() && actor.Can(PermLabel))
+}
+
+// publicView is a location as anyone may see it: without the audit of who switched it on.
+func publicView(actor auth.Actor, l domain.PickupLocation) domain.PickupLocation {
+	if !mayManageLocation(actor, l) {
+		l.EnabledBy, l.EnabledAt, l.HoursConfirmed = "", nil, false
+	}
+	return l
+}
+
+func (s *pickupServiceImpl) GetLocation(ctx context.Context, actor auth.Actor, id string) (domain.PickupLocation, error) {
 	l, err := s.repo.GetLocation(ctx, id)
 	if err != nil {
 		return domain.PickupLocation{}, fmt.Errorf("get location: %w", err)
 	}
-	return l, nil
+	if !l.Active && !mayManageLocation(actor, l) {
+		return domain.PickupLocation{}, fmt.Errorf("get location: %w", domain.ErrNotFound)
+	}
+	return publicView(actor, l), nil
 }
 
-func (s *pickupServiceImpl) ListLocations(ctx context.Context, ownerOrg, postalPrefix string) ([]domain.PickupLocation, error) {
+func (s *pickupServiceImpl) ListLocations(ctx context.Context, actor auth.Actor, ownerOrg, postalPrefix string) ([]domain.PickupLocation, error) {
 	ls, err := s.repo.ListLocations(ctx, ownerOrg, postalPrefix, true)
 	if err != nil {
 		return nil, fmt.Errorf("list locations: %w", err)
+	}
+	for i := range ls {
+		ls[i] = publicView(actor, ls[i])
 	}
 	return ls, nil
 }

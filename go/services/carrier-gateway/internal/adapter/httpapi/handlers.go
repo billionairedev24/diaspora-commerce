@@ -4,6 +4,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -24,6 +25,8 @@ type Services struct {
 	Pickups   app.PickupService
 	Prompt    app.PickupPromptService
 	Addresses app.AddressService
+	// Billing decides which origins (carrier accounts) an organisation member may ship from.
+	Billing domain.BillingPolicy
 }
 
 // Handlers exposes carrier-gateway over HTTP.
@@ -101,6 +104,9 @@ func (h *handlersImpl) rates(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
+	if !h.mayShipFrom(w, r, s.OriginNode) {
+		return
+	}
 	res, err := h.svc.Rates.Shop(r.Context(), app.RateRequest{CartID: b.CartID, Shipment: s, Carriers: b.Carriers})
 	respond(w, r, http.StatusOK, res, err)
 }
@@ -125,6 +131,9 @@ func (h *handlersImpl) buyLabel(w http.ResponseWriter, r *http.Request) {
 	f, err := domain.ParseFulfilment(b.Fulfilment)
 	if err != nil {
 		writeErr(w, r, err)
+		return
+	}
+	if !h.mayShipFrom(w, r, s.OriginNode) {
 		return
 	}
 	a, _ := auth.FromContext(r.Context())
@@ -156,24 +165,39 @@ func (h *handlersImpl) buyReturnLabel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
+	if !h.mayShipFrom(w, r, s.OriginNode) {
+		return
+	}
 	a, _ := auth.FromContext(r.Context())
 	caller := a.OrgID
 	if caller == "" {
 		caller = a.Subject
 	}
 	v, err := h.svc.Returns.Buy(r.Context(), app.ReturnLabelRequest{IdempotencyKey: r.Header.Get("Idempotency-Key"),
-		Caller: caller, Shipment: s, RateChoice: b.RateChoice, Carrier: b.Carrier, Service: b.Service, Carriers: b.Carriers,
+		Caller: caller, Payer: domain.LabelPayer{OrgID: a.OrgID, Platform: a.IsStaff()}, Shipment: s, RateChoice: b.RateChoice, Carrier: b.Carrier, Service: b.Service, Carriers: b.Carriers,
 		Mode: b.Mode, FallbackToLabel: b.FallbackToLabel})
 	respond(w, r, http.StatusCreated, v, err)
 }
 
+// mayShipFrom refuses (403) an origin the caller may not spend the carrier account of; see BillingPolicy.MayShipFrom.
+func (h *handlersImpl) mayShipFrom(w http.ResponseWriter, r *http.Request, origin string) bool {
+	a, _ := auth.FromContext(r.Context())
+	if h.svc.Billing.MayShipFrom(domain.LabelPayer{OrgID: a.OrgID, Platform: a.IsStaff()}, origin) {
+		return true
+	}
+	writeErr(w, r, fmt.Errorf("%w: shipments of this account leave from its own origin", app.ErrForbidden))
+	return false
+}
+
 func (h *handlersImpl) getLabel(w http.ResponseWriter, r *http.Request) {
-	v, err := h.svc.Labels.Get(r.Context(), r.PathValue("id"))
+	a, _ := auth.FromContext(r.Context())
+	v, err := h.svc.Labels.Get(r.Context(), a, r.PathValue("id"))
 	respond(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) labelDocument(w http.ResponseWriter, r *http.Request) {
-	data, ct, err := h.svc.Labels.Document(r.Context(), r.PathValue("id"))
+	a, _ := auth.FromContext(r.Context())
+	data, ct, err := h.svc.Labels.Document(r.Context(), a, r.PathValue("id"))
 	if err != nil {
 		writeErr(w, r, err)
 		return
@@ -190,7 +214,8 @@ func (h *handlersImpl) labelDocumentByTracking(w http.ResponseWriter, r *http.Re
 		writeErr(w, r, err)
 		return
 	}
-	data, ct, err := h.svc.Labels.DocumentByTracking(r.Context(), c, r.PathValue("trackingNumber"))
+	a, _ := auth.FromContext(r.Context())
+	data, ct, err := h.svc.Labels.DocumentByTracking(r.Context(), a, c, r.PathValue("trackingNumber"))
 	if err != nil {
 		writeErr(w, r, err)
 		return
@@ -202,13 +227,19 @@ func (h *handlersImpl) labelDocumentByTracking(w http.ResponseWriter, r *http.Re
 }
 
 func (h *handlersImpl) voidLabel(w http.ResponseWriter, r *http.Request) {
-	v, err := h.svc.Labels.Void(r.Context(), r.PathValue("id"))
+	a, _ := auth.FromContext(r.Context())
+	v, err := h.svc.Labels.Void(r.Context(), a, r.PathValue("id"))
 	respond(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) track(w http.ResponseWriter, r *http.Request) {
 	c, err := domain.ParseCarrier(r.PathValue("carrier"))
 	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	a, _ := auth.FromContext(r.Context())
+	if err := h.svc.Labels.CheckTrackingAccess(r.Context(), a, c, r.PathValue("trackingNumber")); err != nil {
 		writeErr(w, r, err)
 		return
 	}
@@ -230,6 +261,11 @@ func (h *handlersImpl) registerTracking(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, r, err)
 		return
 	}
+	a, _ := auth.FromContext(r.Context())
+	if err := h.svc.Labels.CheckTrackingAccess(r.Context(), a, c, strings.TrimSpace(b.TrackingNumber)); err != nil {
+		writeErr(w, r, err)
+		return
+	}
 	v, err := h.svc.Tracking.Register(r.Context(), c, strings.TrimSpace(b.TrackingNumber), b.Reference)
 	respond(w, r, http.StatusCreated, v, err)
 }
@@ -245,6 +281,9 @@ func (h *handlersImpl) schedulePickup(w http.ResponseWriter, r *http.Request) {
 	d, err := time.Parse(time.DateOnly, b.Date)
 	if err != nil {
 		writeErr(w, r, problem.New(http.StatusBadRequest, "carrier-gateway.invalid-request", "date must be YYYY-MM-DD"))
+		return
+	}
+	if !h.mayShipFrom(w, r, b.OriginNode) {
 		return
 	}
 	req := b.PickupRequest
@@ -285,12 +324,14 @@ func (h *handlersImpl) listLocations(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusOK, map[string]any{"items": ls}, err)
 		return
 	}
-	ls, err := h.svc.Pickups.ListLocations(r.Context(), q.Get("ownerOrg"), q.Get("postalPrefix"))
+	a, _ := auth.FromContext(r.Context())
+	ls, err := h.svc.Pickups.ListLocations(r.Context(), a, q.Get("ownerOrg"), q.Get("postalPrefix"))
 	respond(w, r, http.StatusOK, map[string]any{"items": ls}, err)
 }
 
 func (h *handlersImpl) getLocation(w http.ResponseWriter, r *http.Request) {
-	l, err := h.svc.Pickups.GetLocation(r.Context(), r.PathValue("id"))
+	a, _ := auth.FromContext(r.Context())
+	l, err := h.svc.Pickups.GetLocation(r.Context(), a, r.PathValue("id"))
 	respond(w, r, http.StatusOK, l, err)
 }
 

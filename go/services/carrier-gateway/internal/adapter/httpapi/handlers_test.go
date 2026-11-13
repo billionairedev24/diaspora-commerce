@@ -54,19 +54,23 @@ func (f *fakeLabels) Buy(_ context.Context, r app.BuyRequest) (app.LabelView, er
 	return app.LabelView{LabelRecord: domain.LabelRecord{ID: "l1", TrackingNumber: "1Z", Status: domain.LabelPurchased}}, nil
 }
 
-func (f *fakeLabels) Get(context.Context, string) (app.LabelView, error) {
+func (f *fakeLabels) Get(context.Context, auth.Actor, string) (app.LabelView, error) {
 	return app.LabelView{}, domain.ErrNotFound
 }
 
-func (f *fakeLabels) Document(context.Context, string) ([]byte, string, error) {
+func (f *fakeLabels) Document(context.Context, auth.Actor, string) ([]byte, string, error) {
 	return []byte("^XA^XZ"), "application/x-zpl", nil
 }
 
-func (f *fakeLabels) DocumentByTracking(context.Context, domain.CarrierCode, string) ([]byte, string, error) {
+func (f *fakeLabels) DocumentByTracking(context.Context, auth.Actor, domain.CarrierCode, string) ([]byte, string, error) {
 	return []byte("^XA^XZ"), "application/x-zpl", nil
 }
 
-func (f *fakeLabels) Void(context.Context, string) (app.LabelView, error) {
+func (f *fakeLabels) CheckTrackingAccess(context.Context, auth.Actor, domain.CarrierCode, string) error {
+	return nil
+}
+
+func (f *fakeLabels) Void(context.Context, auth.Actor, string) (app.LabelView, error) {
 	return app.LabelView{}, domain.ErrConflict
 }
 
@@ -171,13 +175,15 @@ func TestLabelEndpoints(t *testing.T) {
 	if !labels.got.Payer.Platform || labels.got.Fulfilment != domain.FulfilmentSellerShipped {
 		t.Fatalf("a service caller is a platform payer; fulfilment defaults to seller-shipped: %+v", labels.got)
 	}
-	billed := strings.TrimSuffix(body, "}") + `,"fulfilment":"fba","shipmentId":"shp-9","orderId":"ord-9"}`
+	// A seller ships from its own origin (the BFF sets originNode to the organisation id).
+	sellerBody := strings.Replace(body, "fc_houston_tx", "org_s", 1)
+	billed := strings.TrimSuffix(sellerBody, "}") + `,"fulfilment":"fba","shipmentId":"shp-9","orderId":"ord-9"}`
 	if res, _ := call(t, srv, "POST", "/v1/labels", "seller", billed, map[string]string{"Idempotency-Key": "k-3"}); res.StatusCode != http.StatusCreated ||
 		labels.got.Payer != (domain.LabelPayer{OrgID: "org_s"}) || labels.got.Fulfilment != domain.FulfilmentFBA ||
 		labels.got.ShipmentID != "shp-9" || labels.got.OrderID != "ord-9" {
 		t.Fatalf("seller payer and billing fields: %d %+v", res.StatusCode, labels.got)
 	}
-	bogus := strings.TrimSuffix(body, "}") + `,"fulfilment":"drone"}`
+	bogus := strings.TrimSuffix(sellerBody, "}") + `,"fulfilment":"drone"}`
 	if res, out := call(t, srv, "POST", "/v1/labels", "seller", bogus, map[string]string{"Idempotency-Key": "k-4"}); res.StatusCode != http.StatusBadRequest ||
 		out["code"] != "carrier-gateway.invalid-request" {
 		t.Fatalf("unknown fulfilment: %d %v", res.StatusCode, out)
