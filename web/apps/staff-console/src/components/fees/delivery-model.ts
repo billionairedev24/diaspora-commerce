@@ -203,5 +203,3 @@ export function previewQuote(p: PricingLike | null, orgId: string, miles: number
   };
 }
 
-/** Example trips shown on review: what a shopper and a seller pay now and under the new version. */
-export const EXAMPLE_MILES = [3, 10, 20] as const;

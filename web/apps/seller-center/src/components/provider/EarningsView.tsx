@@ -1,6 +1,6 @@
 'use client';
 
-import { type Earnings, type EarningsRow, type ProviderFees, sellerQueries } from '@afrotransact/api-client';
+import { type EarningsRow, type ProviderFees, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { ChipGroup, StatStrip } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -16,7 +16,6 @@ import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
-import { toCsv } from '@/lib/export/csv';
 import { dateTime, isoDay, money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 import { exportDataset, pollExport } from '@/lib/table-export';
@@ -43,15 +42,6 @@ const columns: ColumnDef<EarningsRow>[] = [
   { id: 'lateCancelFeeMinor', accessorFn: (r) => r.lateCancelFeeMinor, header: 'Late-cancel fee', size: 120, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.lateCancelFeeMinor ? <span className="text-danger">−{money(row.original.lateCancelFeeMinor)}</span> : '—') },
   { id: 'netMinor', accessorFn: (r) => r.netMinor, header: 'Net', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => <strong>{money(row.original.netMinor)}</strong> }
 ];
-
-export function earningsCsv(e: Earnings): string {
-  return toCsv({
-    title: 'Earnings',
-    headers: ['Reference', 'Customer', 'Service', 'Date', 'Status', 'Collected', 'Connection fee', 'Stripe fees', 'Late-cancel fee', 'Net'],
-    rows: e.rows.map((r) => [r.reference, r.customerName, r.serviceName, r.startAt.slice(0, 10), r.statusLabel, r.collectedMinor / 100, r.commissionMinor / 100, r.cardFeesMinor / 100,
-      r.lateCancelFeeMinor / 100, r.netMinor / 100])
-  });
-}
 
 /** Outstanding provider fees (late-cancellation fees the platform could not net from a payout yet). */
 export function ProviderFeesCard({ fees, currency }: { fees: ProviderFees; currency: string }) {

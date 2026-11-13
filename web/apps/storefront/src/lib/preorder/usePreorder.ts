@@ -1,6 +1,6 @@
 'use client';
 
-import { type PreorderItemState, preorderItemState, type PreorderPlace, preorderQueries, type PreorderResolution, type PreorderWindow } from '@afrotransact/api-client';
+import { type PreorderPlace, preorderQueries, type PreorderResolution, type PreorderWindow } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
@@ -17,12 +17,6 @@ export function usePreorderResolution(place?: PreorderPlace) {
 
 export function useOpenPreorders() {
   return useQuery(preorderQueries.open(browserApi()));
-}
-
-/** Badge / add-to-cart state of a product for the shopper's place. */
-export function usePreorderItem(eligible: boolean | undefined): PreorderItemState {
-  const { data } = usePreorderResolution();
-  return preorderItemState(eligible, data);
 }
 
 export interface LivePreorder {

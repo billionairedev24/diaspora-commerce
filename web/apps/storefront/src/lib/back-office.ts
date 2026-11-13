@@ -9,8 +9,6 @@ import { onboardingUrl } from './sell/entry';
 
 export type BackOfficeApp = BackOffice['app'];
 
-export const BACK_OFFICE_APPS: readonly BackOfficeApp[] = ['seller-center', 'provider-hub', 'staff-console'];
-
 /** The storefront link for a back office (an application in progress continues onboarding). */
 export function backOfficeHref({ app, state }: BackOffice): string {
   return state === 'application' ? `/back-office/${app}?state=application` : `/back-office/${app}`;

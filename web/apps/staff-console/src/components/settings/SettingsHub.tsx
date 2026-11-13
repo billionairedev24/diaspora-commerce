@@ -21,7 +21,7 @@ import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useT } from '@/i18n/t';
 import { useStaff } from '@/lib/session';
-import { SETTINGS_GROUPS, SETTINGS_SECTIONS, settingsHref, type SettingsSection, visibleSections } from '@/lib/settings-sections';
+import { SETTINGS_GROUPS, settingsHref, type SettingsSection, visibleSections } from '@/lib/settings-sections';
 
 function SectionBody({ section }: { section: SettingsSection }): ReactNode {
   const t = useT();
@@ -211,4 +211,3 @@ export function SettingsHub() {
   );
 }
 
-export const SETTINGS_SECTION_KEYS = SETTINGS_SECTIONS.map((s) => s.key);

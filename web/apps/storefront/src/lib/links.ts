@@ -50,7 +50,3 @@ export function referralSignUpHref(raw: string): string {
   return REFERRAL_CODE.test(code) ? signUpHref('/', { referral: code }) : signUpHref('/');
 }
 
-/** Only same-site relative paths are allowed as post-login destinations. */
-export function safeReturnTo(value: string | null | undefined): string {
-  return value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/signin') && !value.startsWith('/signup') ? value : '/';
-}

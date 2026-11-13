@@ -19,7 +19,6 @@ const MAX_AGE_S = 30 * 86_400;
 /** Sources a link may carry plus the on-site placements. Anything else is ignored. */
 export const ATTRIBUTION_SOURCES = ['ig', 'fb', 'tt', 'wa', 'email', 'sms', 'app', 'hero', 'ribbon', 'pdp', 'page'] as const;
 export type AttributionSource = (typeof ATTRIBUTION_SOURCES)[number];
-export type PlacementSource = Extract<AttributionSource, 'hero' | 'ribbon' | 'pdp' | 'page'>;
 
 interface StoredAttribution extends PreorderAttribution {
   at: number;

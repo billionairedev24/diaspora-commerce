@@ -4,7 +4,6 @@
 export const MAX_URLS_PER_SITEMAP = 50_000;
 /** Protocol limit is 50 MB (52,428,800 bytes) uncompressed; stay clear of it. */
 export const MAX_BYTES_PER_SITEMAP = 49_000_000;
-export const MAX_SITEMAPS_PER_INDEX = 50_000;
 
 export interface SitemapImage {
   loc: string;
