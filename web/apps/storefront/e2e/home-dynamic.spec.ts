@@ -12,10 +12,12 @@ const AXE = require.resolve('axe-core');
 
 const CONSENT = encodeURIComponent(JSON.stringify({ necessary: true, functional: true, analytics: false, advertising: false, dns: false, gpc: false, v: '2.1', at: '2026-10-01T00:00:00.000Z' }));
 
-async function visit(browser: Browser, size: number, extra: { locale?: string; userAgent?: string; consent?: boolean } = {}): Promise<{ page: Page; context: BrowserContext }> {
+const CONSENT_ANALYTICS = encodeURIComponent(JSON.stringify({ necessary: true, functional: true, analytics: true, advertising: false, dns: false, gpc: false, v: '2.1', at: '2026-10-01T00:00:00.000Z' }));
+
+async function visit(browser: Browser, size: number, extra: { locale?: string; userAgent?: string; consent?: boolean; analytics?: boolean } = {}): Promise<{ page: Page; context: BrowserContext }> {
   const context = await browser.newContext({ baseURL: `http://localhost:${process.env.E2E_PORT ?? 3005}`, ...(extra.userAgent ? { userAgent: extra.userAgent } : {}) });
   const cookies = [{ name: 'at_mock_catalogue', value: String(size), url: `http://localhost:${process.env.E2E_PORT ?? 3005}` }];
-  if (extra.consent !== false) cookies.push({ name: 'at_consent', value: CONSENT, url: `http://localhost:${process.env.E2E_PORT ?? 3005}` });
+  if (extra.consent !== false) cookies.push({ name: 'at_consent', value: extra.analytics ? CONSENT_ANALYTICS : CONSENT, url: `http://localhost:${process.env.E2E_PORT ?? 3005}` });
   if (extra.locale) cookies.push({ name: 'at_locale', value: extra.locale, url: `http://localhost:${process.env.E2E_PORT ?? 3005}` });
   await context.addCookies(cookies);
   const page = await context.newPage();
@@ -159,8 +161,70 @@ test.describe('visits', () => {
   });
 });
 
+test.describe('links and analytics', () => {
+  for (const size of [0, 10, 100]) {
+    test(`${size} products: every link on the home answers (no dead link) and nothing links to a hidden community`, async ({ browser }) => {
+      const { page, context } = await visit(browser, size);
+      await page.goto('/');
+      await ready(page);
+      const hrefs = await page.locator('main a[href^="/"], footer a[href^="/"]').evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute('href') as string))]);
+      expect(hrefs.length).toBeGreaterThan(0);
+      // Product and service pages are not checked: the synthetic fixture products and services are not in the mock database (the real gateway serves them).
+      for (const href of hrefs.filter((h) => !h.startsWith('/p/') && !h.startsWith('/services/svc_'))) {
+        const res = await page.request.get(href, { maxRedirects: 0 });
+        expect(res.status(), href).toBeLessThan(400);
+      }
+      if (size < 100) expect(hrefs.filter((h) => h.startsWith('/communities'))).toEqual([]);
+      await context.close();
+    });
+  }
+
+  test('module analytics: with consent each module counts one impression and a click carries module, position and variant; without consent nothing is sent', async ({ browser }) => {
+    const sent: Array<Record<string, unknown>> = [];
+    const watch = async (analytics: boolean) => {
+      const { page, context } = await visit(browser, 100, { analytics });
+      await page.route('**/v1/home/events', async (route) => {
+        sent.push(route.request().postDataJSON() as Record<string, unknown>);
+        await route.fulfill({ status: 202, body: '' });
+      });
+      await page.goto('/');
+      await ready(page);
+      // Scroll the page in steps so every module is on screen for longer than half a second.
+      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      for (let y = 0; y < height; y += 500) {
+        await page.evaluate((to) => window.scrollTo(0, to), y);
+        await page.waitForTimeout(650);
+      }
+      return { page, context };
+    };
+
+    const off = await watch(false);
+    expect(sent).toEqual([]);
+    await off.context.close();
+
+    const on = await watch(true);
+    const impressions = sent.filter((e) => e.event === 'impression');
+    expect(impressions.length).toBeGreaterThanOrEqual(3);
+    const modules = impressions.map((e) => e.module);
+    expect(new Set(modules).size).toBe(modules.length); // once per module per view
+    for (const e of impressions) {
+      expect(Object.keys(e).sort()).toEqual(['event', 'module', 'position', 'variant']);
+      expect(e.variant).toBe('control');
+      expect(Number.isInteger(e.position)).toBe(true);
+    }
+    await on.page.evaluate(() => window.scrollTo(0, 0));
+    const [request] = await Promise.all([
+      on.page.waitForRequest((r) => r.url().includes('/v1/home/events') && (r.postData() ?? '').includes('"click"')),
+      on.page.getByTestId('department-tiles').getByRole('link').first().click()
+    ]);
+    expect(request.postDataJSON()).toMatchObject({ event: 'click', module: 'department-tiles', target: 'department', variant: 'control' });
+    expect(Object.keys(request.postDataJSON() as object).sort()).toEqual(['event', 'module', 'position', 'target', 'variant']);
+    await on.context.close();
+  });
+});
+
 test.describe('budgets and accessibility', () => {
-  for (const size of [10, 100, 10000]) {
+  for (const size of [0, 10, 100, 10000]) {
     test(`${size} products: LCP at most 2.5 s, CLS at most 0.05, home JS at most 90 KB gzip beyond the shell`, async ({ browser }) => {
       const { page, context } = await visit(browser, size);
       await page.addInitScript(() => {

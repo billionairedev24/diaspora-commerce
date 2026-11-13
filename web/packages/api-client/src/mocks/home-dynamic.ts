@@ -382,7 +382,7 @@ export function verdict(key: ModuleKey, r: HomeModuleRule, name: string, catalog
     case 'hero':
       return heroSlides(catalog).length
         ? v(true, 'shown', 'An approved slide with a real photo is scheduled today.', heroSlides(catalog).length, 1)
-        : v(true, 'shown', 'No approved slide with a real photo is scheduled: the text-only brand hero is shown instead.', 0, 1);
+        : v(true, 'shown', 'No approved slide with a real photo is scheduled: the text-only brand hero is shown instead.', 0, 0);
     case 'continue-shopping':
       if (!ctx.signedIn) return v(false, 'no-shopper-signal', `${name} needs a signed-in shopper with past orders; this view is a guest.`, 0, r.minProducts);
       return products.length >= r.minProducts ? v(true, 'shown', `${name} is built from the products the shopper bought.`, products.length, r.minProducts) : v(false, 'no-shopper-signal', `${name} needs ${plural(r.minProducts, 'bought product', 'bought products')} still in stock.`, products.length, r.minProducts);

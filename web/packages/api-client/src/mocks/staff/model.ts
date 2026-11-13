@@ -30,7 +30,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
     label: 'Plans & billing',
     description: 'Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges.'
   },
-  marketing: { label: 'Marketing', description: 'Announcements, placements & ads, and platform checkout coupons.' },
+  marketing: { label: 'Marketing', description: 'Announcements, placements & ads, the home page, and platform checkout coupons.' },
   disputes: { label: 'Disputes & returns', description: 'A-to-z claims and returns with SLAs.' },
   audit: { label: 'Audit log', description: 'Immutable, hash-chained record of every privileged action.' },
   markets: { label: 'Markets & locations', description: 'Turn AfroTransact on or off by country and by state.' },

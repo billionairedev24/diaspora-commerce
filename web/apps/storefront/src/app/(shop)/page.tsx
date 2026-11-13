@@ -1,10 +1,8 @@
 import { type Metadata } from 'next';
-import { Suspense } from 'react';
 
 import { Hero } from '@/components/home/Hero';
 import { HomeBlocks } from '@/components/home/HomeBlocks';
 import { Tiles } from '@/components/home/HomeSections';
-import { HomeSkeleton } from '@/components/home/HomeSkeleton';
 import { HomeVisitMemory } from '@/components/home/HomeVisitMemory';
 import { PreorderHome } from '@/components/preorder/PreorderHome';
 import { RunAdvertorials } from '@/components/runs/RunAdvertorials';
@@ -40,9 +38,8 @@ export default async function HomePage() {
       <RunAdvertorials />
       <Hero slides={home.hero} flat={dynamic} />
       {dynamic ? null : <Tiles tiles={home.tiles} />}
-      <Suspense fallback={<HomeSkeleton />}>
-        <HomeBlocks blocks={home.blocks} lcpTiles={dynamic && !heroPhoto} />
-      </Suspense>
+      {/* No Suspense fallback: everything is already fetched, and a skeleton that is swapped for the real modules is a layout shift. */}
+      <HomeBlocks blocks={home.blocks} lcpTiles={dynamic && !heroPhoto} />
       {home.visit ? <HomeVisitMemory window={home.visit.window} seen={home.visit.seen} deterministic={home.visit.deterministic ?? false} /> : null}
     </>
   );

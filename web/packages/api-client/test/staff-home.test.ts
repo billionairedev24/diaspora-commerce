@@ -83,6 +83,17 @@ describe('home settings mock', () => {
     await expect(api().revert(0, '')).rejects.toMatchObject({ status: 422 });
   });
 
+  it('refuses staff without Marketing access, customers and guests on every route', async () => {
+    // Signed in without Marketing: 403. Not signed in as staff at all: 401 (sign in first).
+    for (const [roles, status] of [['platform.finance', 403], ['customer', 403], ['guest', 401]] as const) {
+      const other = client(roles).home;
+      await expect(other.settings(), roles).rejects.toMatchObject({ status });
+      await expect(other.preview({}), roles).rejects.toMatchObject({ status });
+      await expect(other.communities(), roles).rejects.toMatchObject({ status });
+      await expect(other.versions(), roles).rejects.toMatchObject({ status });
+    }
+  });
+
   it('refuses a caller without Marketing access (read and write)', async () => {
     const guest = client('platform.auditor').home;
     await expect(guest.settings()).resolves.toBeDefined();

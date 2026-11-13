@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MarketingView } from '@/components/marketing/MarketingView';
 
-import { asRoles } from './mock-api';
+import { asRoles, interceptStaff } from './mock-api';
 import { renderScreen } from './render';
 import { nav } from './setup';
 
@@ -221,6 +221,22 @@ describe('Home preview', () => {
     // A seed pasted back shows the same view; the default order says there is no variety.
     await user.click(screen.getByRole('switch', { name: 'Default order (what crawlers get)' }));
     await waitFor(() => expect(facts().getByTestId('preview-seed')).toHaveTextContent('default'));
+  });
+
+  it('the language and the 10,000 product catalogue reach the request and change the result', async () => {
+    const urls: string[] = [];
+    interceptStaff(async (req, next) => {
+      urls.push(req.url);
+      return next(req);
+    });
+    const user = userEvent.setup();
+    await open('preview');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Shopper language' }), 'fr');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Catalogue' }), '10000');
+    await waitFor(() => expect(urls.some((u) => u.includes('/home/preview') && u.includes('locale=fr') && u.includes('catalog=10000'))).toBe(true));
+    const list = within(await screen.findByTestId('preview-decisions'));
+    await waitFor(() => expect(within(list.getByRole('heading', { name: 'Shop by community' }).closest('li')!).getByText('Shown')).toBeInTheDocument());
+    interceptStaff(null);
   });
 
   it('is read only: the settings, the audit log and the catalogue are untouched, for a viewer too', async () => {

@@ -1,5 +1,5 @@
 import { type HomeBlock, type ProductSummary } from '@afrotransact/api-client';
-import { buttonClassName, ImagePlaceholder } from '@afrotransact/ui';
+import { buttonClassName } from '@afrotransact/ui';
 import Link from 'next/link';
 
 import { Countdown } from '@/components/preorder/Countdown';
@@ -7,6 +7,7 @@ import { getT } from '@/i18n/server';
 
 import blocks from '../Blocks.module.css';
 import { RailSection } from '../HomeSections';
+import { HomePhoto } from '../modules/HomePhoto';
 
 const TONES: Record<string, string> = { ink: blocks.ink ?? '', gold: blocks.gold ?? '', green: blocks.green ?? '', sand: blocks.sand ?? '' };
 
@@ -78,7 +79,7 @@ export function Occasions({ block }: { block: HomeBlock }) {
         {cells.map((c) => (
           <li key={c.href + c.label}>
             <Link href={c.href} className={blocks.occasion}>
-              <ImagePlaceholder className={blocks.occasionImage} src={c.imageUrl} alt="" ratio="4 / 3" />
+              <HomePhoto className={blocks.occasionImage} src={c.imageUrl} ratio="4 / 3" />
               <span>{c.label}</span>
             </Link>
           </li>

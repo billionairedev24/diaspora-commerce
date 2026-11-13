@@ -1,7 +1,7 @@
 'use client';
 
 import { type HomeBlock, type ProductSummary } from '@afrotransact/api-client';
-import { buttonClassName, ImagePlaceholder } from '@afrotransact/ui';
+import { buttonClassName } from '@afrotransact/ui';
 import Link from 'next/link';
 import { type MouseEvent, type ReactNode } from 'react';
 
@@ -12,6 +12,7 @@ import { useAdTracking } from '@/lib/home/adTracking';
 
 import blocks from '../Blocks.module.css';
 import home from '../Home.module.css';
+import { HomePhoto } from '../modules/HomePhoto';
 import { RailCarousel } from '../RailCarousel';
 
 /*
@@ -53,7 +54,7 @@ export function BrandBanner({ block }: { block: HomeBlock }) {
             {block.products.map((p) => (
               <li key={p.atin}>
                 <Link href={`/p/${p.atin}`} className={blocks.stripItem} onClick={click}>
-                  <ImagePlaceholder src={p.imageUrl} alt="" />
+                  <HomePhoto src={p.imageUrl} />
                   <span>{p.title}</span>
                 </Link>
               </li>
@@ -62,7 +63,7 @@ export function BrandBanner({ block }: { block: HomeBlock }) {
         ) : null}
         <span className={home.adNote ?? blocks.sub}>{t('home.adNote')}</span>
       </div>
-      <ImagePlaceholder className={blocks.brandImage} src={block.imageUrl} alt="" ratio="5 / 2" />
+      <HomePhoto className={blocks.brandImage} src={block.imageUrl} ratio="5 / 2" />
     </section>
   );
 }
@@ -75,7 +76,7 @@ export function DisplayBanner({ block }: { block: HomeBlock }) {
   const advertiser = block.advertiser ?? '';
   return (
     <section ref={ref} className={home.banner} aria-label={t('home.sponsored', { advertiser })}>
-      <ImagePlaceholder className={home.bannerImage} src={block.imageUrl} alt="" ratio="970 / 250" />
+      <HomePhoto className={home.bannerImage} src={block.imageUrl} ratio="970 / 250" />
       <div className={home.bannerBody}>
         <SponsoredLabel advertiser={advertiser} />
         <h2 className={home.bannerTitle}>{block.title}</h2>
@@ -102,7 +103,7 @@ export function AdRow({ block }: { block: HomeBlock }) {
           <span className={blocks.adTag} aria-hidden>
             {t('home.adTag')}
           </span>
-          <ImagePlaceholder className={blocks.adImage} src={ad.imageUrl} alt="" ratio="49 / 20" />
+          <HomePhoto className={blocks.adImage} src={ad.imageUrl} ratio="49 / 20" />
         </a>
       ))}
     </section>
@@ -122,7 +123,7 @@ export function Advertorial({ block }: { block: HomeBlock }) {
         <SponsoredLabel advertiser={advertiser} />
       </div>
       <div className={blocks.partner}>
-        <ImagePlaceholder className={blocks.partnerImage} src={block.imageUrl} alt="" ratio="3 / 2" />
+        <HomePhoto className={blocks.partnerImage} src={block.imageUrl} ratio="3 / 2" />
         <div className={blocks.partnerText}>
           <h3 className={blocks.partnerTitle}>{block.title}</h3>
           {block.body ? <p className={blocks.partnerBody}>{block.body}</p> : null}

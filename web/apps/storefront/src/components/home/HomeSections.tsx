@@ -1,5 +1,4 @@
 import { type Rail, type Tile } from '@afrotransact/api-client';
-import { ImagePlaceholder } from '@afrotransact/ui';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
 
@@ -7,6 +6,7 @@ import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
 import { getT } from '@/i18n/server';
 
 import styles from './Home.module.css';
+import { HomePhoto } from './modules/HomePhoto';
 import { RailCarousel } from './RailCarousel';
 
 /** Server-rendered tiles under the hero. The columns follow the tile count (see Home.module.css): no empty tracks. */
@@ -22,7 +22,7 @@ export async function Tiles({ tiles }: { tiles: Tile[] }) {
             {tile.cells.map((c) => (
               <li key={c.atin ?? c.label}>
                 <Link href={c.href} className={styles.cell}>
-                  <ImagePlaceholder src={c.imageUrl} alt="" />
+                  <HomePhoto src={c.imageUrl} ratio="1 / 1" />
                   <span className={styles.cellLabel}>{c.label}</span>
                 </Link>
               </li>

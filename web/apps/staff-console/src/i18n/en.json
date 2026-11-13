@@ -2682,7 +2682,7 @@
   "st.home.mode.shadow": "Shadow (compare only)",
   "st.home.mode.on": "On (built from what exists)",
   "st.home.modules.title": "Home modules",
-  "st.home.modules.help": "Each module appears only when it has enough to show. Change the bar, the order band and the weight; the page order follows the bands, then the weight.",
+  "st.home.modules.help": "Each module appears only when it has enough to show. Change the minimum it needs, its order band and its weight; the page order follows the bands, then the weight.",
   "st.home.module.enabled": "Show {name} on the home page",
   "st.home.band.hero": "Top: campaign",
   "st.home.band.personal": "Personal",

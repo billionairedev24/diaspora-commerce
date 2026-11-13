@@ -23,10 +23,11 @@
 .servicePrice { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-price); }
 @media (hover: hover) { .service:hover .serviceName { color: var(--at-color-link); text-decoration: underline; } }
 
-/* Text-only brand hero: reserved height so the page below never moves. */
+/* Text-only brand hero: reserved height so the page below never moves. Widths are in em, not ch: a ch follows the font's glyphs, so when the
+   heading font arrives the line breaks (and everything under them) would move. */
 .brandHero { min-height: 240px; padding: var(--at-space-12) 0 var(--at-space-8); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--at-space-4); border-bottom: 1px solid var(--at-color-border); }
-.brandTitle { margin: 0; max-width: 22ch; font-size: var(--at-text-5xl); line-height: 1.08; font-weight: var(--at-weight-black); letter-spacing: var(--at-tracking-tight); }
-.brandSub { margin: 0; max-width: 52ch; font-size: var(--at-text-lg); color: var(--at-color-text-muted); }
+.brandTitle { margin: 0; max-width: 15em; min-height: 2.2em; font-size: var(--at-text-5xl); line-height: 1.08; font-weight: var(--at-weight-black); letter-spacing: var(--at-tracking-tight); }
+.brandSub { margin: 0; max-width: 36em; font-size: var(--at-text-lg); color: var(--at-color-text-muted); }
 @media (max-width: 640px) { .brandHero { min-height: 220px; padding-top: var(--at-space-8); } .brandTitle { font-size: var(--at-text-4xl); } }
 
 .sellBand { margin-top: var(--at-space-10); padding: var(--at-space-6) 0; border-top: 1px solid var(--at-color-border); display: flex; align-items: center; justify-content: space-between; gap: var(--at-space-4); flex-wrap: wrap; }
