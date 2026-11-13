@@ -10,7 +10,7 @@ import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { useAccountEnv } from './context';
 import { type AccountMessageKey, type AccountT, useAccountT } from './i18n/t';
 import { TwoStepCard } from './mfa';
-import { Card, Confirm, errorText, LoadError, Loading, PageHead, Row, styles, useShowMore } from './parts';
+import { Block, Confirm, errorText, LoadError, Loading, PageHead, Row, styles, useShowMore } from './parts';
 
 export type AccountAudience = 'customer' | 'seller' | 'staff';
 
@@ -58,26 +58,24 @@ export function PasswordCard({ profile }: { profile: AccountProfile | undefined 
     if (!Object.keys(errs).length) change.mutate();
   };
   return (
-    <Card
+    <Block
       id="password"
       title={t('password.title')}
       lead={t('password.sub')}
       action={
         !open ? (
-          <button type="button" className={styles.pill} onClick={() => setOpen(true)}>
+          <button type="button" className={styles.link} onClick={() => setOpen(true)}>
             {t('password.change')}
           </button>
         ) : undefined
       }
     >
       {open ? (
-        <form className={`${styles.form} ${styles.formFirst}`} onSubmit={submit} noValidate>
+        <form className={styles.form} onSubmit={submit} noValidate>
           <input type="text" name="username" autoComplete="username" value={profile?.email ?? ''} readOnly hidden />
           <PasswordField label={t('password.current')} autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} error={errors.currentPassword} />
-          <div className={styles.grid2}>
-            <PasswordField label={t('password.new')} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} error={errors.newPassword} />
-            <PasswordField label={t('password.confirm')} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} error={errors.confirm} />
-          </div>
+          <PasswordField label={t('password.new')} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} error={errors.newPassword} />
+          <PasswordField label={t('password.confirm')} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} error={errors.confirm} />
           {errors._ ? <p className={styles.error} role="alert">{errors._}</p> : null}
           <div className={styles.actions}>
             <Button type="submit" loading={change.isPending}>
@@ -89,7 +87,7 @@ export function PasswordCard({ profile }: { profile: AccountProfile | undefined 
           </div>
         </form>
       ) : null}
-    </Card>
+    </Block>
   );
 }
 
@@ -164,12 +162,12 @@ export function PasskeysCard({ security }: { security: AccountSecurity }) {
     return () => window.removeEventListener('focus', onFocus);
   }, [qc]);
   return (
-    <Card
+    <Block
       id="passkeys"
       title={t('passkeys.title')}
       lead={t('passkeys.lead')}
       action={
-        <a className={styles.pill} href={security.passkeyRegistrationUrl} target="_blank" rel="noopener noreferrer">
+        <a className={styles.link} href={security.passkeyRegistrationUrl} target="_blank" rel="noopener noreferrer">
           <Fingerprint aria-hidden /> {t('passkeys.add')}
         </a>
       }
@@ -190,7 +188,7 @@ export function PasskeysCard({ security }: { security: AccountSecurity }) {
         onConfirm={() => removing && remove.mutate(removing)}
         onClose={() => setRemoving(null)}
       />
-    </Card>
+    </Block>
   );
 }
 
@@ -208,13 +206,13 @@ export function TrustedBrowsersCard({ security }: { security: AccountSecurity })
   const list = security.trustedBrowsers;
   const { visible, toggle } = useShowMore(list, 3);
   return (
-    <Card
+    <Block
       id="trusted"
       title={t('trusted.title')}
       lead={t('trusted.lead')}
       action={
         list.length > 1 ? (
-          <button type="button" className={styles.pill} onClick={() => forget.mutate(null)} disabled={forget.isPending}>
+          <button type="button" className={styles.link} onClick={() => forget.mutate(null)} disabled={forget.isPending}>
             {t('trusted.forgetAll')}
           </button>
         ) : undefined
@@ -238,7 +236,7 @@ export function TrustedBrowsersCard({ security }: { security: AccountSecurity })
         ))}
       </ul>
       {toggle}
-    </Card>
+    </Block>
   );
 }
 
@@ -264,13 +262,13 @@ export function SessionsCard({ security, showDevices }: { security: AccountSecur
   const { visible, toggle } = useShowMore(sorted);
   const iconOf = (name: string) => (/app|iphone|android|ios/i.test(name) ? <DeviceMobile /> : <Desktop />);
   return (
-    <Card
+    <Block
       id="sessions"
       title={t('sessions.title')}
       lead={t('sessions.lead')}
       action={
         others > 0 ? (
-          <button type="button" className={styles.pill} onClick={() => act.mutate({ kind: 'others' })} disabled={act.isPending}>
+          <button type="button" className={styles.link} onClick={() => act.mutate({ kind: 'others' })} disabled={act.isPending}>
             {t('sessions.signOutOthers')}
           </button>
         ) : undefined
@@ -302,9 +300,7 @@ export function SessionsCard({ security, showDevices }: { security: AccountSecur
       {toggle}
       {showDevices && security.devices.length > 0 ? (
         <>
-          <p className={styles.note} style={{ borderTop: '1px solid var(--at-color-border)' }}>
-            {t('sessions.devices')}
-          </p>
+          <p className={styles.note}>{t('sessions.devices')}</p>
           <ul className={styles.list}>
             {security.devices.map((d) => (
               <Row
@@ -322,7 +318,7 @@ export function SessionsCard({ security, showDevices }: { security: AccountSecur
           </ul>
         </>
       ) : null}
-    </Card>
+    </Block>
   );
 }
 
@@ -342,7 +338,7 @@ export function ActivityCard() {
   const q = useQuery(settingsQueries.activity(api));
   const { visible, toggle } = useShowMore(q.data ?? [], 6);
   return (
-    <Card id="activity" title={t('activity.title')} lead={t('activity.lead')}>
+    <Block id="activity" title={t('activity.title')} lead={t('activity.lead')}>
       {q.isPending ? <Loading height={96} /> : null}
       {q.isError ? <LoadError onRetry={() => void q.refetch()} /> : null}
       {q.data && q.data.length === 0 ? <p className={styles.empty}>{t('activity.none')}</p> : null}
@@ -362,7 +358,7 @@ export function ActivityCard() {
         })}
       </ul>
       {toggle}
-    </Card>
+    </Block>
   );
 }
 
@@ -380,7 +376,7 @@ export function LinkedAccountsCard({ security }: { security: AccountSecurity }) 
   });
   const list = security.linkedAccounts.accounts;
   return (
-    <Card id="linked" title={t('linked.title')}>
+    <Block id="linked" title={t('linked.title')}>
       {list.length === 0 ? <p className={styles.empty}>{t('linked.none')}</p> : null}
       <ul className={styles.list}>
         {list.map((a) => (
@@ -399,7 +395,7 @@ export function LinkedAccountsCard({ security }: { security: AccountSecurity }) 
           />
         ))}
       </ul>
-    </Card>
+    </Block>
   );
 }
 
@@ -419,9 +415,7 @@ export function SecurityScreen({ audience, heading = true }: { audience: Account
       <PasswordCard profile={profile.data} />
       {sec.isPending ? <Loading height={220} /> : null}
       {sec.isError ? (
-        <div className={styles.card}>
-          <LoadError onRetry={() => void sec.refetch()} />
-        </div>
+        <LoadError onRetry={() => void sec.refetch()} />
       ) : null}
       {s ? (
         <>

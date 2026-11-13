@@ -1,16 +1,13 @@
 'use client';
 
 import { isApiError } from '@afrotransact/api-client';
-import { Button, Dialog, Skeleton } from '@afrotransact/ui';
-import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Button, Dialog, Section, Skeleton } from '@afrotransact/ui';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './Account.module.css';
 import { type AccountT, useAccountT } from './i18n/t';
 
 export { styles };
-
-/** Wrap the account screens in an element with this class for the flat (no boxed cards) look. */
-export const flatAccountClassName: string = styles.flat ?? '';
 
 /** The problem's message (or the field's), else a generic line. */
 export function errorText(t: AccountT, e: unknown, field?: string): string {
@@ -27,8 +24,8 @@ export function PageHead({ title, lead }: { title: string; lead?: ReactNode }) {
   );
 }
 
-/** A settings block: title bar (with an optional action and badge), content, optional footnote. */
-export function Card({ title, lead, badge, action, note, children, id, testId }: {
+/** A settings block: heading over a hairline (a status after it, an action at its end), lead, content, optional footnote. */
+export function Block({ title, lead, badge, action, note, children, id, testId }: {
   title: ReactNode;
   lead?: ReactNode;
   badge?: ReactNode;
@@ -38,23 +35,11 @@ export function Card({ title, lead, badge, action, note, children, id, testId }:
   id?: string;
   testId?: string;
 }) {
-  const auto = useId();
-  const headingId = `${id ?? auto}-h`;
   return (
-    <section className={styles.card} aria-labelledby={headingId} id={id} data-testid={testId}>
-      <div className={styles.cardHead}>
-        <div className={styles.cardTitle}>
-          <h2 id={headingId} className={styles.h2}>
-            {title}
-            {badge}
-          </h2>
-          {lead ? <p className={styles.cardLead}>{lead}</p> : null}
-        </div>
-        {action}
-      </div>
+    <Section title={badge ? <>{title} {badge}</> : title} lead={lead} action={action} id={id} testId={testId}>
       {children}
-      {note ? <div className={styles.note}>{note}</div> : null}
-    </section>
+      {note ? <p className={styles.note}>{note}</p> : null}
+    </Section>
   );
 }
 

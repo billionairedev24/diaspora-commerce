@@ -1,14 +1,15 @@
 'use client';
 
 import { type AlertChannel, type AlertPreference, type AlertPreferences, type AlertTopic, type NotificationPreferences, type QuietHours, settingsKeys, settingsQueries } from '@afrotransact/api-client';
-import { Button, useToast } from '@afrotransact/ui';
+import { fieldStyles, useToast } from '@afrotransact/ui';
 import { BellRinging, ChatText, DeviceMobile, EnvelopeSimple, MegaphoneSimple } from '@phosphor-icons/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useMemo, useState } from 'react';
 
 import { useAccountEnv } from './context';
 import { type AccountMessageKey, useAccountT } from './i18n/t';
-import { Card, errorText, LoadError, Loading, PageHead, Row, styles, Switch } from './parts';
+import { Block, errorText, LoadError, Loading, PageHead, Row, styles, Switch } from './parts';
+import { SaveBar, SettingRow } from './settings';
 
 const CHANNELS: AlertChannel[] = ['email', 'sms'];
 const keyOf = (topic: AlertTopic, channel: AlertChannel) => `${topic}/${channel}`;
@@ -23,7 +24,7 @@ function AlertsForm({ data }: { data: AlertPreferences }) {
   const t = useAccountT();
   const { api } = useAccountEnv();
   const qc = useQueryClient();
-  const toast = useToast();
+  const [saved, setSaved] = useState(false);
   const [draft, setDraft] = useState(() => new Map<string, boolean>());
   const [quiet, setQuiet] = useState<QuietHours>(data.quietHours);
   const [error, setError] = useState<string | null>(null);
@@ -32,20 +33,21 @@ function AlertsForm({ data }: { data: AlertPreferences }) {
   const value = (topic: AlertTopic, channel: AlertChannel) => draft.get(keyOf(topic, channel)) ?? pref(topic, channel)?.enabled ?? true;
   const changes = alertChanges(data.preferences, draft);
   const quietChanged = quiet.enabled !== data.quietHours.enabled || quiet.start !== data.quietHours.start || quiet.end !== data.quietHours.end;
+  const dirty = changes.length > 0 || quietChanged;
   const save = useMutation({
     mutationFn: () => api.saveAlertPreferences({ preferences: changes, ...(quietChanged ? { quietHours: quiet } : {}) }),
     onSuccess: (saved) => {
       qc.setQueryData(settingsKeys.alerts(), saved);
       setDraft(new Map());
       setError(null);
-      toast.show(t('notify.saved'));
+      setSaved(true);
     },
     onError: (e) => setError(errorText(t, e))
   });
   const label = (topic: AlertTopic) => t(`notify.topic.${topic}` as AccountMessageKey);
   return (
-    <>
-      <Card id="alerts" testId="alerts" title={t('notify.alerts')} lead={t('notify.alertsLead')}>
+    <form className={styles.page} onSubmit={(e) => { e.preventDefault(); if (dirty) save.mutate(); }} noValidate>
+      <Block id="alerts" testId="alerts" title={t('notify.alerts')} lead={t('notify.alertsLead')}>
         <table className={styles.matrix}>
           <thead>
             <tr>
@@ -89,32 +91,22 @@ function AlertsForm({ data }: { data: AlertPreferences }) {
             ))}
           </tbody>
         </table>
-      </Card>
-      <Card id="quiet" testId="quiet-hours" title={t('notify.quiet')} lead={t('notify.quietLead')}>
-        <div className={styles.cardBody}>
-          <div className={styles.switchRow}>
-            <span className={styles.rowTitle}>{t('notify.quietOn')}</span>
+      </Block>
+      <Block id="quiet" testId="quiet-hours" title={t('notify.quiet')} lead={t('notify.quietLead')}>
+        <div className={styles.settings}>
+          <SettingRow label={t('notify.quietOn')} end>
             <Switch checked={quiet.enabled} label={t('notify.quietOn')} onChange={(v) => setQuiet((q) => ({ ...q, enabled: v }))} />
-          </div>
-          <div className={styles.times}>
-            <label>
-              {t('notify.quietFrom')}
-              <input type="time" value={quiet.start} disabled={!quiet.enabled} onChange={(e) => setQuiet((q) => ({ ...q, start: e.target.value }))} />
-            </label>
-            <label>
-              {t('notify.quietTo')}
-              <input type="time" value={quiet.end} disabled={!quiet.enabled} onChange={(e) => setQuiet((q) => ({ ...q, end: e.target.value }))} />
-            </label>
-          </div>
+          </SettingRow>
+          <SettingRow label={t('notify.quietFrom')}>
+            {(c) => <input id={c.id} type="time" className={fieldStyles.control} value={quiet.start} disabled={!quiet.enabled} onChange={(e) => setQuiet((q) => ({ ...q, start: e.target.value }))} />}
+          </SettingRow>
+          <SettingRow label={t('notify.quietTo')}>
+            {(c) => <input id={c.id} type="time" className={fieldStyles.control} value={quiet.end} disabled={!quiet.enabled} onChange={(e) => setQuiet((q) => ({ ...q, end: e.target.value }))} />}
+          </SettingRow>
         </div>
-      </Card>
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
-      <div className={`${styles.actions} ${styles.actionsEnd}`}>
-        <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!changes.length && !quietChanged}>
-          {t('common.save')}
-        </Button>
-      </div>
-    </>
+      </Block>
+      <SaveBar dirty={dirty} saving={save.isPending} saved={saved} error={error} />
+    </form>
   );
 }
 
@@ -127,11 +119,7 @@ export function AlertsScreen({ heading = true }: { heading?: boolean }) {
     <div className={styles.page} data-testid="notifications-screen">
       {heading ? <PageHead title={t('notify.title')} lead={t('notify.lead')} /> : null}
       {q.isPending ? <Loading height={320} /> : null}
-      {q.isError ? (
-        <div className={styles.card}>
-          <LoadError onRetry={() => void q.refetch()} />
-        </div>
-      ) : null}
+      {q.isError ? <LoadError onRetry={() => void q.refetch()} /> : null}
       {q.data ? <AlertsForm key={JSON.stringify(q.data)} data={q.data} /> : null}
     </div>
   );
@@ -163,21 +151,17 @@ export function CustomerNotificationsScreen({ links, heading = true }: { links: 
     <div className={styles.page} data-testid="notifications-screen">
       {heading ? <PageHead title={t('notify.title')} lead={t('notify.lead')} /> : null}
       {q.isPending ? <Loading height={220} /> : null}
-      {q.isError ? (
-        <div className={styles.card}>
-          <LoadError onRetry={() => void q.refetch()} />
-        </div>
-      ) : null}
+      {q.isError ? <LoadError onRetry={() => void q.refetch()} /> : null}
       {p ? (
         <>
-          <Card id="contact" title={t('contact.title')} lead={t('contact.lead')} badge={<BellRinging aria-hidden />}>
+          <Block id="contact" title={t('contact.title')} lead={t('contact.lead')} badge={<BellRinging aria-hidden />}>
             <ul className={styles.list}>
               {rows.map((r) => (
                 <Row key={r.k} icon={r.icon} title={t(r.title)} sub={t(r.sub)} actions={<Switch checked={p[r.k]} label={t(r.title)} disabled={save.isPending} onChange={(v) => toggle(r.k, v)} />} />
               ))}
             </ul>
-          </Card>
-          <Card
+          </Block>
+          <Block
             id="marketing"
             testId="marketing"
             title={t('marketing.title')}
@@ -192,7 +176,7 @@ export function CustomerNotificationsScreen({ links, heading = true }: { links: 
             <ul className={styles.list}>
               <Row icon={<MegaphoneSimple />} title={t('marketing.optIn')} actions={<Switch checked={p.marketingOptIn} label={t('marketing.optIn')} disabled={save.isPending} onChange={(v) => toggle('marketingOptIn', v)} />} />
             </ul>
-          </Card>
+          </Block>
         </>
       ) : null}
     </div>

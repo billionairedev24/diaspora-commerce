@@ -5,8 +5,8 @@ export { ACCOUNT_CATALOGS, type AccountMessageKey, accountTranslator, useAccount
 export { EmailCodesDialog, PasswordConfirm, RecoveryCodesPanel, SecureAccountPrompt, SmsEnrolmentDialog, TotpEnrolmentDialog, TwoStepCard } from './mfa';
 export { ACCOUNT_ROUTES, type AccountSection, accountSectionOf, AccountShell } from './nav';
 export { alertChanges, AlertsScreen, CustomerNotificationsScreen } from './notifications';
-export { flatAccountClassName } from './parts';
 export { AccountFormatPreferences, PreferencesScreen } from './preferences';
 export { ProfileScreen } from './profile';
 export { type AccountAudience, ActivityCard, activityTitle, LinkedAccountsCard, PasskeysCard, PasswordCard, SecurityScreen, SessionsCard, TrustedBrowsersCard } from './security';
 export { SessionSignedOutLanding, type SessionSignedOutLandingProps, SessionTimeout, type SessionTimeoutProps } from './session-timeout';
+export { SettingRow } from './settings';

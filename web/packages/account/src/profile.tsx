@@ -1,7 +1,7 @@
 'use client';
 
 import { type AccountMembership, type AccountProfile, settingsKeys, settingsQueries } from '@afrotransact/api-client';
-import { Button, PhoneNumberField, TextField, useToast } from '@afrotransact/ui';
+import { Button, fieldStyles, PhoneNumberField, useToast } from '@afrotransact/ui';
 import { Buildings, CheckCircle, IdentificationBadge, LockSimple, WarningCircle } from '@phosphor-icons/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
@@ -9,7 +9,8 @@ import { type FormEvent, useState } from 'react';
 import { useAccountEnv } from './context';
 import { cleanCode } from './enrolment';
 import { type AccountMessageKey, useAccountT } from './i18n/t';
-import { Card, Confirm, errorText, LoadError, Loading, PageHead, Row, Status, styles } from './parts';
+import { Block, Confirm, errorText, LoadError, Loading, PageHead, Row, Status, styles } from './parts';
+import { SaveBar, SettingRow } from './settings';
 
 function DetailsCard({ profile }: { profile: AccountProfile }) {
   const t = useAccountT();
@@ -24,6 +25,10 @@ function DetailsCard({ profile }: { profile: AccountProfile }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [verifying, setVerifying] = useState(false);
   const [code, setCode] = useState('');
+  const [saved, setSaved] = useState(false);
+  const dirty = first.trim() !== profile.firstName || last.trim() !== profile.lastName || phone.trim() !== (profile.phone ?? '') || (backOffice && title.trim() !== (profile.jobTitle ?? ''));
+  /** Withdraws a field's message once it is edited: an error is only shown for what was submitted, never while typing. */
+  const clear = (field: string) => setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== field)));
   const save = useMutation({
     mutationFn: () =>
       api.updateAccountProfile({
@@ -35,7 +40,7 @@ function DetailsCard({ profile }: { profile: AccountProfile }) {
     onSuccess: (p) => {
       qc.setQueryData(settingsKeys.profile(), p);
       setErrors({});
-      toast.show(t('profile.saved'));
+      setSaved(true);
     },
     onError: (e) => {
       const fields: Record<string, string> = {};
@@ -61,7 +66,7 @@ function DetailsCard({ profile }: { profile: AccountProfile }) {
     if (!Object.keys(errs).length) save.mutate();
   };
   return (
-    <Card id="details" testId="profile-details" title={t('profile.details')}>
+    <Block id="details" testId="profile-details" title={t('profile.details')}>
       <div className={styles.identity}>
         <span className={styles.avatar} aria-hidden>
           {profile.initials}
@@ -74,62 +79,61 @@ function DetailsCard({ profile }: { profile: AccountProfile }) {
           <span className={styles.rowSub}>{t('profile.avatar')}</span>
         </span>
       </div>
-      <form className={styles.form} onSubmit={submit} noValidate>
-        <div className={styles.grid2}>
-          <TextField label={t('profile.firstName')} autoComplete="given-name" value={first} maxLength={80} onChange={(e) => setFirst(e.target.value)} error={errors.firstName} />
-          <TextField label={t('profile.lastName')} autoComplete="family-name" value={last} maxLength={80} onChange={(e) => setLast(e.target.value)} error={errors.lastName} />
-        </div>
-        <div className={styles.readonly}>
-          <span className={styles.readonlyLabel}>{backOffice ? t('profile.workEmail') : t('profile.email')}</span>
+      <form className={styles.settings} onSubmit={submit} noValidate>
+        <SettingRow label={t('profile.firstName')} error={errors.firstName}>
+          {(c) => <input id={c.id} className={fieldStyles.control} autoComplete="given-name" value={first} maxLength={80} aria-describedby={c['aria-describedby']} aria-invalid={c['aria-invalid']} onChange={(e) => { setFirst(e.target.value); clear('firstName'); }} />}
+        </SettingRow>
+        <SettingRow label={t('profile.lastName')} error={errors.lastName}>
+          {(c) => <input id={c.id} className={fieldStyles.control} autoComplete="family-name" value={last} maxLength={80} aria-describedby={c['aria-describedby']} aria-invalid={c['aria-invalid']} onChange={(e) => { setLast(e.target.value); clear('lastName'); }} />}
+        </SettingRow>
+        <SettingRow label={backOffice ? t('profile.workEmail') : t('profile.email')} hint={profile.emailManaged ? t('profile.emailManaged') : t('profile.emailFixed')}>
           <span className={styles.readonlyValue} data-testid="profile-email">
             <LockSimple aria-hidden /> {profile.email}
           </span>
-          <span className={styles.rowSub}>{profile.emailManaged ? t('profile.emailManaged') : t('profile.emailFixed')}</span>
-        </div>
-        <div className={styles.grid2}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--at-space-2)' }}>
-            <PhoneNumberField label={t('profile.phone')} value={phone} onChange={setPhone} error={errors.phone} help={t('profile.phoneHelp')} />
-            {profile.phone && phone.trim() === profile.phone ? (
-              <span className={styles.actions}>
-                {profile.phoneVerified ? (
-                  <Status tone="on">
-                    <CheckCircle aria-hidden /> {t('profile.phoneVerified')}
+        </SettingRow>
+        <SettingRow label={t('profile.phone')} hint={t('profile.phoneHelp')}>
+          <PhoneNumberField label={t('profile.phone')} value={phone} onChange={(v) => { setPhone(v); clear('phone'); }} error={errors.phone} />
+          {profile.phone && phone.trim() === profile.phone ? (
+            <span className={styles.actions}>
+              {profile.phoneVerified ? (
+                <Status tone="on">
+                  <CheckCircle aria-hidden /> {t('profile.phoneVerified')}
+                </Status>
+              ) : (
+                <>
+                  <Status tone="required">
+                    <WarningCircle aria-hidden /> {t('profile.phoneUnverified')}
                   </Status>
-                ) : (
-                  <>
-                    <Status tone="required">
-                      <WarningCircle aria-hidden /> {t('profile.phoneUnverified')}
-                    </Status>
-                    {!verifying ? (
-                      <button type="button" className={styles.link} onClick={() => start.mutate()} disabled={start.isPending}>
-                        {t('profile.verifyPhone')}
-                      </button>
-                    ) : null}
-                  </>
-                )}
-              </span>
-            ) : null}
-          </div>
-          {backOffice ? (
-            <TextField label={t('profile.jobTitle')} autoComplete="organization-title" value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} error={errors.jobTitle} help={t('profile.jobTitleHelp')} />
+                  {!verifying ? (
+                    <button type="button" className={styles.link} onClick={() => start.mutate()} disabled={start.isPending}>
+                      {t('profile.verifyPhone')}
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </span>
           ) : null}
-        </div>
+        </SettingRow>
         {verifying ? (
-          <div className={styles.actions} style={{ alignItems: 'flex-end' }}>
-            <TextField className={styles.codeInput} label={t('profile.phoneCode')} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(cleanCode(e.target.value))} error={errors.code} />
-            <Button size="sm" onClick={() => confirm.mutate()} loading={confirm.isPending} disabled={code.length !== 6}>
-              {t('profile.phoneConfirm')}
-            </Button>
-          </div>
+          <SettingRow label={t('profile.phoneCode')} error={errors.code}>
+            {(c) => (
+              <>
+                <input id={c.id} className={fieldStyles.control} inputMode="numeric" autoComplete="one-time-code" value={code} aria-describedby={c['aria-describedby']} aria-invalid={c['aria-invalid']} onChange={(e) => { setCode(cleanCode(e.target.value)); clear('code'); }} />
+                <Button size="sm" onClick={() => confirm.mutate()} loading={confirm.isPending} disabled={code.length !== 6}>
+                  {t('profile.phoneConfirm')}
+                </Button>
+              </>
+            )}
+          </SettingRow>
         ) : null}
-        {errors._ ? <p className={styles.error} role="alert">{errors._}</p> : null}
-        <div className={`${styles.actions} ${styles.actionsEnd}`}>
-          <Button type="submit" loading={save.isPending}>
-            {t('common.save')}
-          </Button>
-        </div>
+        {backOffice ? (
+          <SettingRow label={t('profile.jobTitle')} hint={t('profile.jobTitleHelp')} error={errors.jobTitle}>
+            {(c) => <input id={c.id} className={fieldStyles.control} autoComplete="organization-title" value={title} maxLength={80} aria-describedby={c['aria-describedby']} aria-invalid={c['aria-invalid']} onChange={(e) => { setTitle(e.target.value); clear('jobTitle'); }} />}
+          </SettingRow>
+        ) : null}
+        <SaveBar dirty={dirty} saving={save.isPending} saved={saved} error={errors._} />
       </form>
-    </Card>
+    </Block>
   );
 }
 
@@ -146,7 +150,7 @@ function OrganisationsCard({ profile, onSwitchOrg, switching }: { profile: Accou
     onError: (e) => { setLeaving(null); toast.show(errorText(t, e), 'error'); }
   });
   return (
-    <Card id="organisations" testId="organisations" title={t('orgs.title')} lead={t('orgs.lead')}>
+    <Block id="organisations" testId="organisations" title={t('orgs.title')} lead={t('orgs.lead')}>
       {profile.memberships.length === 0 ? <p className={styles.empty}>{t('orgs.none')}</p> : null}
       <ul className={styles.list}>
         {profile.memberships.map((m) => (
@@ -187,21 +191,21 @@ function OrganisationsCard({ profile, onSwitchOrg, switching }: { profile: Accou
         onConfirm={() => leaving && leave.mutate(leaving)}
         onClose={() => setLeaving(null)}
       />
-    </Card>
+    </Block>
   );
 }
 
 function RolesCard({ profile }: { profile: AccountProfile }) {
   const t = useAccountT();
   return (
-    <Card id="roles" testId="staff-roles" title={t('roles.title')} lead={t('roles.lead')}>
+    <Block id="roles" testId="staff-roles" title={t('roles.title')} lead={t('roles.lead')}>
       {profile.roles.length === 0 ? <p className={styles.empty}>{t('roles.none')}</p> : null}
       <ul className={styles.list}>
         {profile.roles.map((r) => (
           <Row key={r.key} icon={<IdentificationBadge />} title={r.label} sub={r.key} />
         ))}
       </ul>
-    </Card>
+    </Block>
   );
 }
 
@@ -216,13 +220,11 @@ export function ProfileScreen({ onSwitchOrg, switching, heading = true }: { onSw
       {heading ? <PageHead title={t('profile.title')} lead={t('profile.lead')} /> : null}
       {q.isPending ? <Loading height={260} /> : null}
       {q.isError ? (
-        <div className={styles.card}>
-          <LoadError onRetry={() => void q.refetch()} />
-        </div>
+        <LoadError onRetry={() => void q.refetch()} />
       ) : null}
       {p ? (
         <>
-          <DetailsCard key={`${p.firstName}|${p.lastName}|${p.phone}|${p.jobTitle}`} profile={p} />
+          <DetailsCard profile={p} />
           {p.kind === 'seller' ? <OrganisationsCard profile={p} onSwitchOrg={onSwitchOrg} switching={switching} /> : null}
           {p.kind === 'staff' ? <RolesCard profile={p} /> : null}
         </>

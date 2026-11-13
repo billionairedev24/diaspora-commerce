@@ -4,16 +4,18 @@ import { type AccountPreferences, DATE_FORMATS, NUMBER_FORMATS, settingsKeys, se
 import { writeDefaultDensity } from '@afrotransact/data-table';
 import { createFormatters, type FormatPreferences, intlTag, isLocale, type Locale, localeCookie, LOCALES, matchLocale } from '@afrotransact/i18n';
 import { FormatPreferencesProvider, useI18n } from '@afrotransact/i18n/react';
-import { Button, Select, useToast } from '@afrotransact/ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { useAccountEnv, useOptionalAccountEnv } from './context';
 import { type AccountMessageKey, useAccountT } from './i18n/t';
-import { Card, errorText, LoadError, Loading, PageHead, styles } from './parts';
+import { Block, errorText, LoadError, Loading, PageHead, styles } from './parts';
+import { SaveBar, SegmentedToggle, SettingRow, SettingSelect } from './settings';
 
 const SAMPLE_DATE = '2026-10-31T18:45:00Z';
 const SAMPLE_NUMBER = 1234567.89;
+const SAMPLE_AMOUNT_MINOR = 129900;
+const SAVE_KEY = ['account', 'preferences', 'save'] as const;
 
 function deviceZone(): string {
   try {
@@ -31,36 +33,13 @@ function zones(): string[] {
   }
 }
 
-function Choices<T extends string>({ legend, name, values, value, onChange, title, sub }: {
-  legend: string;
-  name: string;
-  values: readonly T[];
-  value: T;
-  onChange: (v: T) => void;
-  title: (v: T) => string;
-  sub?: (v: T) => ReactNode;
-}) {
-  return (
-    <fieldset className={styles.choices}>
-      <legend>{legend}</legend>
-      {values.map((v) => (
-        <label key={v} className={styles.choice}>
-          <input type="radio" name={name} value={v} checked={value === v} onChange={() => onChange(v)} />
-          <span className={styles.choiceTitle}>{title(v)}</span>
-          {sub ? <span className={styles.choiceSub}>{sub(v)}</span> : null}
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
 function PreferencesForm({ data, showDensity, onLanguageChanged }: { data: AccountPreferences; showDensity: boolean; onLanguageChanged?: (locale: Locale) => void }) {
   const t = useAccountT();
   const { api } = useAccountEnv();
   const { locale: uiLocale } = useI18n();
   const qc = useQueryClient();
-  const toast = useToast();
-  const [language, setLanguage] = useState<Locale>(() => (data.locale ? (matchLocale([data.locale]) ?? uiLocale) : uiLocale));
+  const languageOf = (d: AccountPreferences): Locale => (d.locale ? (matchLocale([d.locale]) ?? uiLocale) : uiLocale);
+  const [language, setLanguage] = useState<Locale>(() => languageOf(data));
   const [zone, setZone] = useState(data.timeZone ?? '');
   const [date, setDate] = useState(data.dateFormat);
   const [num, setNum] = useState(data.numberFormat);
@@ -68,14 +47,18 @@ function PreferencesForm({ data, showDensity, onLanguageChanged }: { data: Accou
   const [error, setError] = useState<string | null>(null);
   const device = useMemo(deviceZone, []);
   const zoneOptions = useMemo(() => [{ value: '', label: t('prefs.timeZoneDevice', { zone: device }) }, ...zones().map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))], [t, device]);
-  const sample = (d: AccountPreferences['dateFormat'], n: AccountPreferences['numberFormat']) => createFormatters(language, { timeZone: zone || null, dateFormat: d, numberFormat: n });
+  const formatters = (d: AccountPreferences['dateFormat'], n: AccountPreferences['numberFormat']) => createFormatters(language, { timeZone: zone || null, dateFormat: d, numberFormat: n });
+  const dirty = language !== languageOf(data) || zone !== (data.timeZone ?? '') || date !== data.dateFormat || num !== data.numberFormat || (showDensity && density !== data.tableDensity);
+  // A saved date or number style re-mounts the pages (so every figure re-formats): the cached mutation keeps "Saved" on screen.
+  const saved = useMutationState({ filters: { mutationKey: SAVE_KEY, status: 'success' } }).length > 0;
   const save = useMutation({
+    mutationKey: SAVE_KEY,
+    gcTime: 15_000,
     mutationFn: () => api.saveAccountPreferences({ locale: intlTag(language), timeZone: zone || null, dateFormat: date, numberFormat: num, tableDensity: density }),
-    onSuccess: (saved) => {
-      qc.setQueryData(settingsKeys.preferences(), saved);
-      writeDefaultDensity(saved.tableDensity === 'COMPACT' ? 'compact' : 'comfortable');
+    onSuccess: (done) => {
+      qc.setQueryData(settingsKeys.preferences(), done);
+      writeDefaultDensity(done.tableDensity === 'COMPACT' ? 'compact' : 'comfortable');
       setError(null);
-      toast.show(t('prefs.saved'));
       if (language !== uiLocale) {
         document.cookie = localeCookie(language);
         onLanguageChanged?.(language);
@@ -83,50 +66,55 @@ function PreferencesForm({ data, showDensity, onLanguageChanged }: { data: Accou
     },
     onError: (e) => setError(errorText(t, e, 'timeZone'))
   });
+  const chosen = formatters(date, num);
+  const withExample = (name: string, example: string) => t('prefs.withExample', { name, example });
   return (
-    <Card id="preferences" testId="preferences" title={t('prefs.title')} lead={t('prefs.lead')}>
-      <form className={`${styles.form} ${styles.formFirst}`} onSubmit={(e) => { e.preventDefault(); save.mutate(); }} noValidate>
-        <div className={styles.grid2}>
-          <Select
-            label={t('prefs.language')}
-            help={t('prefs.languageHelp')}
-            value={language}
-            onChange={(e) => isLocale(e.target.value) && setLanguage(e.target.value)}
-            options={LOCALES.map((l) => ({ value: l.code, label: l.code === 'en' ? l.name : `${l.name} · ${l.english}` }))}
-          />
-          <Select label={t('prefs.timeZone')} help={t('prefs.timeZoneHelp')} value={zone} onChange={(e) => setZone(e.target.value)} options={zoneOptions} error={error} />
-        </div>
-        <Choices
-          legend={t('prefs.dateFormat')}
-          name="dateFormat"
-          values={DATE_FORMATS}
-          value={date}
-          onChange={setDate}
-          title={(v) => t(`prefs.date.${v}` as AccountMessageKey)}
-          sub={(v) => t('prefs.example', { value: sample(v, num).date(SAMPLE_DATE, 'short') })}
-        />
-        <Choices
-          legend={t('prefs.numberFormat')}
-          name="numberFormat"
-          values={NUMBER_FORMATS}
-          value={num}
-          onChange={setNum}
-          title={(v) => (v === 'AUTO' ? t('prefs.number.AUTO') : t(`prefs.number.${v}` as AccountMessageKey))}
-          sub={(v) => t('prefs.example', { value: sample(date, v).money(SAMPLE_NUMBER * 100) })}
-        />
+    <Block id="preferences" testId="preferences" title={t('prefs.title')} lead={t('prefs.lead')}>
+      <form className={styles.settings} onSubmit={(e) => { e.preventDefault(); if (dirty) save.mutate(); }} noValidate>
+        <SettingRow label={t('prefs.language')} hint={t('prefs.languageHelp')}>
+          {(c) => (
+            <SettingSelect
+              control={c}
+              value={language}
+              onChange={(v) => isLocale(v) && setLanguage(v)}
+              options={LOCALES.map((l) => ({ value: l.code, label: l.code === 'en' ? l.name : `${l.name} · ${l.english}` }))}
+            />
+          )}
+        </SettingRow>
+        <SettingRow label={t('prefs.timeZone')} hint={t('prefs.timeZoneHelp')} error={error}>
+          {(c) => <SettingSelect control={c} value={zone} onChange={setZone} options={zoneOptions} />}
+        </SettingRow>
+        <SettingRow label={t('prefs.dateFormat')}>
+          {(c) => (
+            <SettingSelect
+              control={c}
+              value={date}
+              onChange={(v) => setDate(v as typeof date)}
+              options={DATE_FORMATS.map((v) => ({ value: v, label: withExample(t(`prefs.date.${v}` as AccountMessageKey), formatters(v, num).date(SAMPLE_DATE, 'short')) }))}
+            />
+          )}
+        </SettingRow>
+        <SettingRow label={t('prefs.numberFormat')}>
+          {(c) => (
+            <SettingSelect
+              control={c}
+              value={num}
+              onChange={(v) => setNum(v as typeof num)}
+              options={NUMBER_FORMATS.map((v) => ({ value: v, label: v === 'AUTO' ? withExample(t('prefs.number.AUTO'), formatters(date, v).number(SAMPLE_NUMBER)) : formatters(date, v).number(SAMPLE_NUMBER) }))}
+            />
+          )}
+        </SettingRow>
         {showDensity ? (
-          <>
-            <Choices legend={t('prefs.density')} name="tableDensity" values={TABLE_DENSITIES} value={density} onChange={setDensity} title={(v) => t(`prefs.density.${v}` as AccountMessageKey)} />
-            <p className={styles.muted}>{t('prefs.densityHelp')}</p>
-          </>
+          <SettingRow label={t('prefs.density')} hint={t('prefs.densityHelp')} group>
+            {(c) => <SegmentedToggle control={c} value={density} onChange={setDensity} options={TABLE_DENSITIES.map((v) => ({ value: v, label: t(`prefs.density.${v}` as AccountMessageKey) }))} />}
+          </SettingRow>
         ) : null}
-        <div className={`${styles.actions} ${styles.actionsEnd}`}>
-          <Button type="submit" loading={save.isPending}>
-            {t('common.save')}
-          </Button>
-        </div>
+        <p className={styles.preview} data-testid="prefs-preview">
+          {t('prefs.preview', { date: chosen.date(SAMPLE_DATE, 'short'), number: chosen.number(SAMPLE_NUMBER), amount: chosen.money(SAMPLE_AMOUNT_MINOR) })}
+        </p>
+        <SaveBar dirty={dirty} saving={save.isPending} saved={saved} />
       </form>
-    </Card>
+    </Block>
   );
 }
 
@@ -139,12 +127,8 @@ export function PreferencesScreen({ showDensity, onLanguageChanged, heading = tr
     <div className={styles.page} data-testid="preferences-screen">
       {heading ? <PageHead title={t('prefs.title')} lead={t('prefs.lead')} /> : null}
       {q.isPending ? <Loading height={320} /> : null}
-      {q.isError ? (
-        <div className={styles.card}>
-          <LoadError onRetry={() => void q.refetch()} />
-        </div>
-      ) : null}
-      {q.data ? <PreferencesForm key={JSON.stringify(q.data)} data={q.data} showDensity={showDensity} onLanguageChanged={onLanguageChanged} /> : null}
+      {q.isError ? <LoadError onRetry={() => void q.refetch()} /> : null}
+      {q.data ? <PreferencesForm data={q.data} showDensity={showDensity} onLanguageChanged={onLanguageChanged} /> : null}
     </div>
   );
 }

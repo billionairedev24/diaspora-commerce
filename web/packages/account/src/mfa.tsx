@@ -9,7 +9,7 @@ import { type FormEvent, useEffect, useReducer, useState } from 'react';
 import { useAccountEnv } from './context';
 import { cleanCode, enrolmentReducer, groupKey, initialEnrolment, recoveryFile } from './enrolment';
 import { useAccountT } from './i18n/t';
-import { Card, Confirm, downloadText, errorText, Row, Status, styles, useCopy } from './parts';
+import { Block, Confirm, downloadText, errorText, Row, Status, styles, useCopy } from './parts';
 
 /** Recovery codes shown once: grid, copy, download and an "I've saved them" check before closing. */
 export function RecoveryCodesPanel({ codes, email, onDone }: { codes: string[]; email: string; onDone: () => void }) {
@@ -17,7 +17,7 @@ export function RecoveryCodesPanel({ codes, email, onDone }: { codes: string[]; 
   const [copy, copied] = useCopy();
   const [saved, setSaved] = useState(false);
   return (
-    <div className={styles.cardBody} style={{ padding: 0 }} data-testid="recovery-codes">
+    <div className={styles.cardBody} data-testid="recovery-codes">
       <p className={styles.muted}>{t('codes.lead')}</p>
       <ol className={styles.codes} aria-label={t('mfa.recovery')}>
         {codes.map((c) => (
@@ -189,16 +189,16 @@ export function SmsEnrolmentDialog({ open, phone, email, onClose }: { open: bool
       {codes ? (
         <RecoveryCodesPanel codes={codes} email={email} onDone={() => void finish()} />
       ) : !phone ? (
-        <div className={styles.cardBody} style={{ padding: 0 }}>
+        <div className={styles.cardBody}>
           <p className={styles.muted}>{t('sms.noPhone')}</p>
           <div>
-            <Link href={profileHref} className={styles.pill}>
+            <Link href={profileHref} className={styles.link}>
               {t('sms.goProfile')}
             </Link>
           </div>
         </div>
       ) : !sent ? (
-        <div className={styles.cardBody} style={{ padding: 0 }}>
+        <div className={styles.cardBody}>
           <p className={styles.muted}>{t('sms.intro', { phone: masked })}</p>
           {error ? <p className={styles.error} role="alert">{error}</p> : null}
           <div className={`${styles.actions} ${styles.actionsEnd}`}>
@@ -210,7 +210,6 @@ export function SmsEnrolmentDialog({ open, phone, email, onClose }: { open: bool
       ) : (
         <form
           className={styles.cardBody}
-          style={{ padding: 0 }}
           onSubmit={(e) => {
             e.preventDefault();
             if (code.length !== 6) return setError(t('totp.codeInvalid'));
@@ -270,7 +269,7 @@ export function EmailCodesDialog({ open, email, onClose }: { open: boolean; emai
       {codes ? (
         <RecoveryCodesPanel codes={codes} email={email} onDone={() => void finish()} />
       ) : !sent ? (
-        <div className={styles.cardBody} style={{ padding: 0 }}>
+        <div className={styles.cardBody}>
           <p className={styles.muted}>{t('email.intro', { email })}</p>
           {error ? <p className={styles.error} role="alert">{error}</p> : null}
           <div className={`${styles.actions} ${styles.actionsEnd}`}>
@@ -282,7 +281,6 @@ export function EmailCodesDialog({ open, email, onClose }: { open: boolean; emai
       ) : (
         <form
           className={styles.cardBody}
-          style={{ padding: 0 }}
           onSubmit={(e) => {
             e.preventDefault();
             if (code.length !== 6) return setError(t('totp.codeInvalid'));
@@ -326,7 +324,6 @@ export function PasswordConfirm({ open, title, body, confirmLabel, busy, error, 
     <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={title} closeLabel={t('common.close')} width={440}>
       <form
         className={styles.cardBody}
-        style={{ padding: 0 }}
         onSubmit={(e) => {
           e.preventDefault();
           if (password) onConfirm(password);
@@ -355,8 +352,8 @@ export function SecureAccountPrompt({ onChoose, onLater, busy }: { onChoose: (me
     <div className={styles.note} role="region" aria-label={t('mfa.suggestTitle')} data-testid="mfa-setup-prompt">
       <ShieldCheck aria-hidden /> <strong>{t('mfa.suggestTitle')}</strong> {t('mfa.suggestBody')}
       <div className={styles.actions}>
-        <button type="button" className={styles.pill} onClick={() => onChoose('totp')}>{t('mfa.suggestAuth')}</button>
-        <button type="button" className={styles.pill} onClick={() => onChoose('email')}>{t('mfa.suggestEmail')}</button>
+        <button type="button" className={styles.link} onClick={() => onChoose('totp')}>{t('mfa.suggestAuth')}</button>
+        <button type="button" className={styles.link} onClick={() => onChoose('email')}>{t('mfa.suggestEmail')}</button>
         <button type="button" className={styles.link} onClick={onLater} disabled={busy}>{t('mfa.suggestLater')}</button>
       </div>
     </div>
@@ -407,7 +404,7 @@ export function TwoStepCard({ security, email, phone }: { security: AccountSecur
     </button>
   );
   return (
-    <Card
+    <Block
       id="two-step"
       testId="two-step"
       title={t('mfa.title')}
@@ -428,14 +425,14 @@ export function TwoStepCard({ security, email, phone }: { security: AccountSecur
           icon={<DeviceMobile />}
           title={<>{t('mfa.app')} {m.totp ? <Status tone="on">{t('common.on')}</Status> : null}</>}
           sub={m.totp ? t('mfa.appOn') : t('mfa.appSub')}
-          actions={m.totp ? offButton('totp', m.mayRemoveTotp) : <button type="button" className={styles.pill} onClick={() => setDialog('totp')}>{t('mfa.setUp')}</button>}
+          actions={m.totp ? offButton('totp', m.mayRemoveTotp) : <button type="button" className={styles.link} onClick={() => setDialog('totp')}>{t('mfa.setUp')}</button>}
         />
         <Row
           testId="mfa-email"
           icon={<EnvelopeSimple />}
           title={<>{t('mfa.email')} {m.emailOtp ? <Status tone="on">{t('common.on')}</Status> : null}</>}
           sub={m.emailOtp ? t('mfa.emailOn', { email }) : t('mfa.emailSub', { email })}
-          actions={m.emailOtp ? offButton('email', m.mayRemoveEmailOtp) : <button type="button" className={styles.pill} onClick={() => setDialog('email')}>{t('mfa.setUp')}</button>}
+          actions={m.emailOtp ? offButton('email', m.mayRemoveEmailOtp) : <button type="button" className={styles.link} onClick={() => setDialog('email')}>{t('mfa.setUp')}</button>}
         />
         {m.smsAvailable ? (
           <Row
@@ -443,7 +440,7 @@ export function TwoStepCard({ security, email, phone }: { security: AccountSecur
             icon={<ChatText />}
             title={<>{t('mfa.sms')} {m.sms ? <Status tone="on">{t('common.on')}</Status> : null}</>}
             sub={m.sms ? t('mfa.smsOn', { phone: m.smsPhone ?? '' }) : t('mfa.smsSub')}
-            actions={m.sms ? offButton('sms', m.mayRemoveSms) : <button type="button" className={styles.pill} onClick={() => setDialog('sms')}>{t('mfa.setUp')}</button>}
+            actions={m.sms ? offButton('sms', m.mayRemoveSms) : <button type="button" className={styles.link} onClick={() => setDialog('sms')}>{t('mfa.setUp')}</button>}
           />
         ) : null}
         <Row
@@ -470,6 +467,6 @@ export function TwoStepCard({ security, email, phone }: { security: AccountSecur
       <Dialog open={newCodes !== null} onOpenChange={() => undefined} title={t('codes.title')} closeLabel={t('common.close')} width={560}>
         {newCodes ? <RecoveryCodesPanel codes={newCodes} email={email} onDone={() => setNewCodes(null)} /> : null}
       </Dialog>
-    </Card>
+    </Block>
   );
 }

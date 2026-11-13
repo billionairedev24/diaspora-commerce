@@ -20,14 +20,62 @@ describe('preferences', () => {
     );
     await user.selectOptions(await screen.findByLabelText('Language'), 'fr');
     await user.selectOptions(screen.getByLabelText('Time zone'), 'America/Chicago');
-    await user.click(screen.getByRole('radio', { name: /Day, month, year/ }));
-    await user.click(screen.getByRole('radio', { name: /1\.234,56/ }));
+    await user.selectOptions(screen.getByLabelText('Date format'), 'DMY');
+    await user.selectOptions(screen.getByLabelText('Number format'), 'DOT_COMMA');
     await user.click(screen.getByRole('radio', { name: 'Compact' }));
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(saveAccountPreferences).toHaveBeenCalledWith({ locale: 'fr-FR', timeZone: 'America/Chicago', dateFormat: 'DMY', numberFormat: 'DOT_COMMA', tableDensity: 'COMPACT' }));
     await waitFor(() => expect(readDefaultDensity()).toBe('compact'));
     expect(onLanguageChanged).toHaveBeenCalledWith('fr');
     expect(document.cookie).toContain('at_locale=fr');
+  });
+});
+
+describe('preferences rows', () => {
+  const prefs = { locale: 'en-US', timeZone: 'UTC', dateFormat: 'MDY', numberFormat: 'COMMA_DOT', tableDensity: 'COMFORTABLE' };
+
+  it('shows the example inside each option and a live one-line preview', async () => {
+    const user = userEvent.setup();
+    renderWith(<PreferencesScreen showDensity />, fakeApi({ getAccountPreferences: vi.fn(async () => prefs) }));
+    const date = await screen.findByLabelText('Date format');
+    expect(within(date).getByRole('option', { name: 'Month, day, year (Oct 31, 2026)' })).toBeInTheDocument();
+    const preview = screen.getByTestId('prefs-preview');
+    expect(preview).toHaveTextContent('Oct 31, 2026');
+    expect(preview).toHaveTextContent('1,234,567.89');
+    await user.selectOptions(date, 'DMY');
+    expect(preview).toHaveTextContent('31 Oct 2026');
+  });
+
+  it('keeps Save disabled until something changes, then confirms quietly and disables it again', async () => {
+    const user = userEvent.setup();
+    const saveAccountPreferences = vi.fn(async (p: unknown) => ({ ...prefs, ...(p as object) }));
+    renderWith(<PreferencesScreen showDensity />, fakeApi({ getAccountPreferences: vi.fn(async () => prefs), saveAccountPreferences }));
+    const save = await screen.findByRole('button', { name: 'Save changes' });
+    expect(save).toBeDisabled();
+    await user.click(screen.getByRole('radio', { name: 'Compact' }));
+    expect(save).toBeEnabled();
+    await user.click(screen.getByRole('radio', { name: 'Comfortable' }));
+    expect(save).toBeDisabled();
+    await user.click(screen.getByRole('radio', { name: 'Compact' }));
+    await user.click(save);
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(save).toBeDisabled();
+  });
+
+  it('moves the table-rows choice with the arrow keys (one tab stop, native radios)', async () => {
+    const user = userEvent.setup();
+    renderWith(<PreferencesScreen showDensity />, fakeApi({ getAccountPreferences: vi.fn(async () => prefs) }));
+    const group = await screen.findByRole('radiogroup', { name: 'Table rows' });
+    const comfortable = within(group).getByRole('radio', { name: 'Comfortable' });
+    comfortable.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(within(group).getByRole('radio', { name: 'Compact' })).toBeChecked();
+  });
+
+  it('hides table rows where the app has no tables', async () => {
+    renderWith(<PreferencesScreen showDensity={false} />, fakeApi({ getAccountPreferences: vi.fn(async () => prefs) }));
+    await screen.findByLabelText('Language');
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
   });
 });
 

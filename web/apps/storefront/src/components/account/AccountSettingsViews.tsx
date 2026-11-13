@@ -1,6 +1,6 @@
 'use client';
 
-import { CustomerNotificationsScreen, flatAccountClassName, ProfileScreen, SecurityScreen, useAccountT } from '@afrotransact/account';
+import { CustomerNotificationsScreen, ProfileScreen, SecurityScreen, useAccountT } from '@afrotransact/account';
 import { legalHref } from '@afrotransact/api-client';
 import { FlatPage } from '@afrotransact/ui';
 import { type ReactNode } from 'react';
@@ -8,12 +8,12 @@ import { type ReactNode } from 'react';
 import { AccountEnv } from './AccountEnv';
 import { AccountHeader } from './AccountHeader';
 
-/** "Your account › Section", the page title and the shared settings screens in their flat (no boxed cards) variant. */
+/** "Your account › Section", the page title and the shared settings screens. */
 export function SettingsPage({ title, children }: { title: string; children: ReactNode }) {
   return (
     <FlatPage>
       <AccountHeader title={title} />
-      <div className={flatAccountClassName}>{children}</div>
+      {children}
     </FlatPage>
   );
 }

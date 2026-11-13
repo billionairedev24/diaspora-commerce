@@ -1,5 +1,6 @@
 'use client';
 
+import { SettingRow } from '@afrotransact/account';
 import { Button } from '@afrotransact/ui';
 import { useRouter } from 'next/navigation';
 
@@ -20,14 +21,12 @@ export function OfferServices() {
   const decision = entryDecision(session, 'provider');
   const key = decision.action === 'home' ? 'open' : decision.action === 'resume' ? 'continue' : 'apply';
   return (
-    <section aria-label={t('sc.services.offer.title')} className="flex flex-col gap-2 border-t border-line pt-4">
-      <h2 className="m-0 text-base font-semibold">{t('sc.services.offer.title')}</h2>
-      <p className="m-0 text-sm text-muted">{t(`sc.services.offer.${key}.hint` as MessageKey)}</p>
-      <div>
+    <section aria-label={t('sc.services.offer.title')}>
+      <SettingRow label={t('sc.services.offer.title')} hint={t(`sc.services.offer.${key}.hint` as MessageKey)} end>
         <Button variant="neutral" type="button" onClick={() => router.push('/onboarding?role=provider')}>
           {t(`sc.services.offer.${key}.action` as MessageKey)}
         </Button>
-      </div>
+      </SettingRow>
     </section>
   );
 }
