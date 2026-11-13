@@ -17,7 +17,7 @@ acceptance criteria are met and verified.
 | Spring Boot | 4.1.1 (`spring-boot.version` in `java/platform-parent/pom.xml`; bump to 4.1.4 when GA) |
 | Spring AI | 2.0.1 (AI gateway + MCP server, OpenRouter via OpenAI-compatible API) |
 | Build (Java) | Maven 3.9 with `./mvnw` |
-| Go | 1.27.2 toolchain (`go 1.27.1` directive + `toolchain go1.27.2` in every `go.mod` and `go/go.work`; Dockerfiles `golang:1.27.2`, CI `GO_VERSION`) |
+| Go | 1.27.4 toolchain (`go 1.27.1` directive + `toolchain go1.27.4` in every `go.mod` and `go/go.work`; Dockerfiles `golang:1.27.4`, CI `GO_VERSION`) |
 | Node | 22 LTS, pnpm 10 |
 | Next.js | 16, React 19, TanStack Query 5 / Table, Zod 4, Tailwind 4 |
 | TypeScript | 7.0.2 everywhere (`tsc`, Next.js). Tools that need the compiler's JS API (typescript-eslint, openapi-typescript) run on the TS 6 API through the root `typescript` alias `@typescript/typescript6`; both are pinned in the root `package.json` |

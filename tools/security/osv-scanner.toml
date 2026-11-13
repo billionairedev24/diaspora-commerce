@@ -16,3 +16,10 @@
 
 # Package-level overrides (build/dev-only toolchains that never reach a runtime image) use [[PackageOverrides]]
 # with ecosystem/name, `vulnerability.ignore = true`, `effectiveUntil` and `reason`. None are accepted today.
+
+# Accepted (F7): the only open advisory in the web workspace, LOW (CVSS 5.3), no patched deepmerge exists.
+# Mirrors `pnpm.auditConfig.ignoreGhsas` in the root package.json (remove both together).
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-02-13
+reason = "deepmerge 4.3.1 prototype pollution needs attacker-controlled input to mergeObject(); only reached by the Docusaurus build (docs/portal) merging our own static config; never shipped; no patched version. Owner: docs."

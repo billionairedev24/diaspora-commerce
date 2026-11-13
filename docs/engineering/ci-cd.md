@@ -304,6 +304,6 @@ must define those three profiles with matching channels.
    `rewrite-timestamp`; two `--no-cache` builds of `go/services/cart` gave the same OCI manifest digest. Remaining:
    (a) `java/platform-parent/pom.xml`: set `<project.build.outputTimestamp>` (e.g. `2026-01-01T00:00:00Z`, or
    `${git.commit.time}`) so jar entries and `build-info.properties` are reproducible; (b) pin the base images by
-   digest in `java/Dockerfile` and `go/services/*/Dockerfile` (`golang:1.27.2@sha256:…`,
+   digest in `java/Dockerfile` and `go/services/*/Dockerfile` (`golang:1.27.4@sha256:…`,
    `gcr.io/distroless/static-debian12:nonroot@sha256:…`, `eclipse-temurin:25-jre@sha256:…`; Dependabot's docker
    ecosystem keeps the digests current), otherwise a rebuild after a base-image refresh changes the digest.

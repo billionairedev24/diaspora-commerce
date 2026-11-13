@@ -123,7 +123,7 @@ The optional OKMS + External Secrets path (not verified against a live account):
 
 ## 7. Pin the images
 
-**Trial and prod have separate pin files.** Every launch-set chart pins `image.tag` to a full commit sha of a green `main` build (the base value `dev` does not
+**Trial and prod have separate pin files.** Every launch-set chart pins `image.tag` (a full commit sha of a green `main` build) **and `image.digest`** (the `sha256:` of the signed manifest, written by the promote workflow after `cosign verify`; the chart renders `repo:tag@sha256:...`, so the kubelet pulls by digest) in its values file (the base value `dev` does not
 exist in GHCR) in **its own file per environment**: production in `values-prod.yaml`, the trial in `values-trial.yaml` (the trial Applications read `values.yaml`, `values-prod.yaml`,
 `values-trial.yaml`, then the trial platform values, so the trial pin wins and promoting to the trial never edits the production pin). Use the **promote** workflow once per service
 (`environment: trial` or `prod`, `tag: <sha>`; prod waits for the `prod` environment reviewers, the trial uses its own GitHub environment `trial`; it refuses services outside the launch set).
@@ -133,6 +133,16 @@ Repository variables of each GitHub environment: `CLOUD=ovh`, `REGISTRY_URL=ghcr
 python3 infra/argocd/scripts/check_launch_set.py --env trial --require-tags    # every launch-set service pinned in values-trial.yaml
 python3 infra/argocd/scripts/check_launch_set.py --env prod --require-tags     # every launch-set service pinned in values-prod.yaml
 ```
+
+### Image trust in production: signatures, digests, and the admission control that is NOT deployed
+
+What protects production from a wrong or tampered image today:
+
+1. **Signature verification happens at promote time.** `_deploy.yml` runs `cosign verify` (keyless; the certificate identity must be this repository's `_go-service.yml` / `_java-service.yml` on `main`) on the GHCR image, reads the manifest digest from the verification result, verifies again **by digest**, and only then writes `image.tag` and `image.digest` into `values-<env>.yaml` on the GitOps branch. The prod job also waits for the `prod` environment reviewers.
+2. **Deploy is by digest.** The pod spec carries `repo:tag@sha256:<digest>`. A tag that is later moved or re-pushed in GHCR cannot change what runs; a changed image needs a new promote (new verify, new reviewed commit). `python3 infra/argocd/scripts/check_launch_set.py --env prod --require-tags` fails if any launch-set service has no digest pin.
+3. **Registry push rights** are limited to the CI workflows (GITHUB_TOKEN with `packages: write` on image jobs only); the cluster pulls with a read-only secret.
+
+What is **not** in place: **admission control (Kyverno `signed-images`, `infra/k8s/platform/policies/signed-images.yaml`) is deferred and excluded from the lean OVH platform** (`infra/argocd/applicationsets/lean/platform-charts.yaml`). Nothing in the cluster re-checks signatures when a pod is created, so someone with `kubectl`/Argo CD write access could still run an arbitrary image; the controls above stop a bad image arriving through the pipeline, not through a stolen cluster credential. Cost to add it later: about **0.3-0.5 GiB RAM** for Kyverno (admission controller, plus background/cleanup controllers if enabled) on the single prod node. Revisit when the node is upsized or before the first untrusted-operator access; until then keep cluster-admin credentials to the owner only. This supersedes the older wording that said Kyverno admits only signed images: that holds for dev/UAT clusters that run the full platform, not for the lean production platform.
 
 ## 8. Argo CD (trimmed)
 
@@ -309,6 +319,7 @@ outbound traffic charges. **Cloudflare:** free-plan WAF and rate-limit rule quot
 
 ## 16. Known gaps (not done, do not forget)
 
+- No admission control in prod (Kyverno deferred, ~0.3-0.5 GiB): image trust rests on signature verification at promote plus digest pinning (section 7).
 - Nothing was applied, rendered by tofu, or tested against OVH, Layerbase or Cloudflare. Argo CD, `kustomize build` and `helm template` were run for the
   repository's own manifests only.
 - The backup CronJob installs `rclone`, `age` and `curl` with `apk` at run time (root, default capabilities): a pre-built tools image would remove that.

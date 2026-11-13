@@ -100,14 +100,14 @@ jobs:
         run: echo "::notice::EXPO_TOKEN is not set; EAS ${{ needs.plan.outputs.action }} skipped."
       - uses: actions/checkout@v7
         if: env.HAS_EXPO == 'true'
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
         if: env.HAS_EXPO == 'true'
       - uses: actions/setup-node@v7
         if: env.HAS_EXPO == 'true'
         with:
           node-version: "22"
           cache: pnpm
-      - uses: expo/expo-github-action@v9
+      - uses: expo/expo-github-action@5273c2136bd09c2a341fe3340d3e767ce5a13015 # v9
         if: env.HAS_EXPO == 'true'
         with:
           eas-version: latest

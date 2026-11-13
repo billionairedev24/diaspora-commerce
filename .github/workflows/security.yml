@@ -2,13 +2,14 @@
 # Semgrep, govulncheck (Go), osv-scanner (web), Trivy image (CRITICAL fails) and SBOMs; this workflow adds the
 # whole-repo, scheduled view (docs/engineering/security-scanning.md section 3):
 #   CodeQL (java-kotlin, go, javascript-typescript, actions) -> code scanning alerts
-#   Trivy repo scan (vulns, secrets, IaC misconfig) -> SARIF; CRITICAL vulns/secrets fail;
+#   Trivy repo scan (vulns, secrets, IaC misconfig) -> SARIF; CRITICAL and HIGH vulns, CRITICAL secrets fail;
 #     Trivy IaC (infra/) CRITICAL/HIGH fail
 #   Semgrep (our rules + registry packs) over the whole tree -> SARIF; ERROR fails
 #   govulncheck over every Go module (reachable vulnerabilities fail)
-#   osv-scanner over every lockfile -> SARIF (report; CRITICAL fails)
+#   osv-scanner over every lockfile -> SARIF; HIGH and above (CVSS >= 7) or unscored fail (tools/security/osv-gate.sh)
 #   gitleaks over the full git history
-#   OWASP Dependency-Check for the Maven reactor (weekly / manual; needs the NVD_API_KEY secret)
+#   OWASP Dependency-Check for the Maven reactor (weekly / manual; NVD_API_KEY is mandatory, a missing key fails the job)
+#   supply-chain checks: Go toolchain pins agree, third-party actions SHA-pinned, security ignores not expired
 #   OWASP ZAP baseline against the dev environment (scheduled / manual)
 name: security
 
@@ -17,20 +18,44 @@ on:
     branches: [main]
   pull_request:
     paths:
-      - .github/workflows/security.yml
+      - .github/workflows/**
+      - .github/actions/**
+      - go/go.work
+      - go/**/go.mod
+      - go/services/*/Dockerfile
+      - tools/ci/check_*_pins.py
+      - Makefile
+      - CLAUDE.md
       - trivy.yaml
       - .gitleaks.toml
       - tools/security/**
   schedule:
     - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC
+    - cron: "43 4 * * *" # daily: expiring ignores and fresh advisories
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  supply-chain:
+    name: Supply-chain checks (pins, ignores)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Go toolchain pins agree everywhere
+        run: python3 tools/ci/check_go_pins.py
+      - name: Third-party actions are pinned to a commit SHA
+        run: python3 tools/ci/check_action_pins.py
+      - name: Accepted-risk ignores have reason, owner and a future expiry
+        run: python3 tools/security/check_ignores.py
+
   codeql:
     name: CodeQL ${{ matrix.language }}
+    if: github.event.schedule != '43 4 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -54,7 +79,7 @@ jobs:
       - uses: actions/setup-go@v7
         if: matrix.language == 'go'
         with:
-          go-version: "1.27.2"
+          go-version: "1.27.4"
           cache-dependency-path: go/**/go.sum
       - uses: github/codeql-action/init@v4
         with:
@@ -80,7 +105,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v7
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           trivy-config: trivy.yaml
           scan-type: fs
@@ -96,14 +121,14 @@ jobs:
         with:
           sarif_file: trivy.sarif
           category: trivy
-      - name: Fail on CRITICAL
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Fail on fixable CRITICAL and HIGH
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           trivy-config: trivy.yaml
           scan-type: fs
           scan-ref: .
           scanners: vuln,secret
-          severity: CRITICAL
+          severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
           skip-dirs: design
@@ -114,13 +139,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5
       - name: Build Helm chart dependencies (charts are rendered with the prod platform values)
         run: |
           for chart in java/services/*/deploy/helm go/services/*/deploy/helm; do
             [[ -f "$chart/Chart.yaml" ]] && helm dependency build "$chart" >/dev/null
           done
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           trivy-config: trivy.yaml
           scan-type: config
@@ -162,7 +187,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.2"
+          go-version: "1.27.4"
           cache-dependency-path: go/**/go.sum
       - run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
       - run: tools/security/govulncheck.sh
@@ -173,33 +198,21 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    env:
-      OSV_SCANNER_VERSION: v2.6.0
     steps:
       - uses: actions/checkout@v7
-      - name: Install osv-scanner
-        run: |
-          curl -sSfL -o "$RUNNER_TEMP/osv-scanner" \
-            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
-          chmod +x "$RUNNER_TEMP/osv-scanner"
-      - name: Scan (SARIF report)
-        run: |
-          "$RUNNER_TEMP/osv-scanner" scan source --config tools/security/osv-scanner.toml -r \
-            --format sarif --output osv.sarif . || true
+      - name: osv-scanner (SARIF + gate: CVSS >= 7 or unscored fails; checksum-verified binary)
+        # --no-resolve: the reactor poms depend on each other (0.1.0-SNAPSHOT), which the online resolver cannot fetch (exit 127).
+        # Transitive Java dependencies are judged by Trivy and OWASP Dependency-Check (real Maven resolution).
+        run: tools/security/osv-gate.sh --no-resolve -r .
       - uses: github/codeql-action/upload-sarif@v4
         if: always() && hashFiles('osv.sarif') != ''
         with:
           sarif_file: osv.sarif
           category: osv-scanner
-      - name: Fail on CRITICAL (CVSS >= 9)
-        run: |
-          "$RUNNER_TEMP/osv-scanner" scan source --config tools/security/osv-scanner.toml -r \
-            --format json --output osv.json . || true
-          jq -e '[.results[]?.packages[]?.groups[]? | select((.max_severity // "0" | tonumber? // 0) >= 9)] | length == 0' osv.json
 
   dependency-check:
     name: OWASP Dependency-Check (Maven, weekly)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 3 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -208,26 +221,26 @@ jobs:
     env:
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
     steps:
-      - name: NVD key not configured
-        if: env.NVD_API_KEY == ''
-        run: echo "::notice::NVD_API_KEY is not set; OWASP Dependency-Check skipped (see docs/engineering/security-scanning.md)."
+      - name: NVD API key is mandatory
+        run: |
+          if [[ -z "$NVD_API_KEY" ]]; then
+            echo "::error title=NVD_API_KEY missing::OWASP Dependency-Check cannot run without the NVD_API_KEY secret. Create a key at https://nvd.nist.gov/developers/request-an-api-key and add it as the repository secret NVD_API_KEY. This job fails until it exists: the zero-known-vulnerabilities rule needs the Java scan."
+            exit 1
+          fi
       - uses: actions/checkout@v7
-        if: env.NVD_API_KEY != ''
       - uses: actions/setup-java@v6
-        if: env.NVD_API_KEY != ''
         with:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - name: Dependency-Check (CVSS >= 9 fails)
-        if: env.NVD_API_KEY != ''
+      - name: Dependency-Check (CVSS >= 7 fails)
         working-directory: java
         run: |
           ./mvnw -B -ntp org.owasp:dependency-check-maven:12.1.0:aggregate -DnvdApiKey="$NVD_API_KEY" \
-            -DfailBuildOnCVSS=9 -Dformats=SARIF,HTML \
+            -DfailBuildOnCVSS=7 -Dformats=SARIF,HTML \
             -DsuppressionFile=../tools/security/dependency-check-suppressions.xml
       - uses: github/codeql-action/upload-sarif@v4
-        if: always() && env.NVD_API_KEY != '' && hashFiles('java/target/dependency-check-report.sarif') != ''
+        if: always() && hashFiles('java/target/dependency-check-report.sarif') != ''
         with:
           sarif_file: java/target/dependency-check-report.sarif
           category: dependency-check
@@ -246,7 +259,7 @@ jobs:
 
   zap:
     name: OWASP ZAP baseline (dev)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 3 * * 1'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -264,7 +277,7 @@ jobs:
         run: |
           if [[ "$TARGET" == storefront ]]; then echo "url=https://${BASE}" >> "$GITHUB_OUTPUT"
           else echo "url=https://${TARGET}.${BASE}/healthz" >> "$GITHUB_OUTPUT"; fi
-      - uses: zaproxy/action-baseline@v0.15.0
+      - uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: ${{ steps.url.outputs.url }}
           allow_issue_writing: true

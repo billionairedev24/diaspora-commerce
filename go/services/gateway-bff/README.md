@@ -1,7 +1,7 @@
 # gateway-bff
 
 Screen-shaped API for the storefront (`web/apps/storefront`, through its same-origin `/api/bff` proxy), the customer
-app, and the Seller Center & Provider Hub (`web/apps/seller-center`, same proxy pattern, `/v1/seller/...`). Go 1.27.1 ·
+app, and the Seller Center & Provider Hub (`web/apps/seller-center`, same proxy pattern, `/v1/seller/...`). Go 1.27.4 ·
 Valkey · local port **8200**. Contracts:
 [`contracts/openapi/gateway-bff.yaml`](../../../contracts/openapi/gateway-bff.yaml) (embedded copy in `api/openapi.yaml`,
 served at `/openapi.yaml`, `/docs`, `/redoc`) and
@@ -221,7 +221,7 @@ not `Secure` (plain-http localhost).
 
 ```bash
 cd go/services/gateway-bff
-export GOTOOLCHAIN=go1.27.1 GOWORK=off
+export GOTOOLCHAIN=go1.27.4 GOWORK=off
 go test ./...      # unit, API flows, session/OIDC with an httptest identity, contract conformance (kin-openapi), Valkey Testcontainers
 ~/go/bin/golangci-lint run --config ../../.golangci.yml ./...
 APP_ENV=local go run ./cmd/gateway-bff                      # http://localhost:8200/docs

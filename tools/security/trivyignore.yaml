@@ -35,8 +35,10 @@ misconfigurations:
       - "k8s/platform/edge/base/cloudflared.yaml"
     statement: >-
       Trivy's default trusted-registry list does not include GHCR / the cloud registries. Service charts default to
-      GHCR and Argo CD replaces image.registry with the environment's registry (platform-values.yaml); Kyverno admits
-      only images signed by our pipelines. OpenFGA, the Elasticsearch setup job and cloudflared use pinned official images.
-      Owner: platform.
+      GHCR and Argo CD replaces image.registry with the environment's registry (platform-values.yaml). Images are
+      signature-verified by the promote workflow and deployed by digest (docs/runbooks/ovh-production.md, "Image trust
+      in production"); in-cluster admission control (Kyverno signed-images) runs only on dev/UAT-style full platforms
+      and is deferred on the lean prod platform. OpenFGA, the Elasticsearch setup job and cloudflared use pinned
+      official images. Owner: platform.
     expired_at: 2027-04-10
 secrets: []

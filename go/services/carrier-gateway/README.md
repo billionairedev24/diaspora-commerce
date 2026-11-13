@@ -1,7 +1,7 @@
 # carrier-gateway
 
 Direct carrier integrations — **USPS, UPS, FedEx and DHL Express, no aggregator** — behind one `Carrier` port
-(`Rate`, `BuyLabel`, `Void`, `Track`, `SchedulePickup`, `ValidateAddress`). Go 1.27.2 · PostgreSQL `carriers` ·
+(`Rate`, `BuyLabel`, `Void`, `Track`, `SchedulePickup`, `ValidateAddress`). Go 1.27.4 · PostgreSQL `carriers` ·
 Valkey · local port **8209**.
 
 | Capability | How |
@@ -74,7 +74,7 @@ account from env).
 
 ```bash
 cd go/services/carrier-gateway
-export GOTOOLCHAIN=go1.27.2 GOWORK=off
+export GOTOOLCHAIN=go1.27.4 GOWORK=off
 go test ./...      # adapters vs httptest fakes, fan-out/budget, cache, idempotency, ingest, Postgres + Valkey Testcontainers
 APP_ENV=local go run ./cmd/carrier-gateway   # needs the carriers database, Valkey and Kafka from infra/local
 ```

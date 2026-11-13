@@ -42,7 +42,7 @@ jobs:
         run: |
           if [[ -f "$PORTAL/package.json" ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"
           else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "::notice::$PORTAL does not exist yet."; fi
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
         if: steps.exists.outputs.exists == 'true'
       - uses: actions/setup-node@v7
         if: steps.exists.outputs.exists == 'true'
@@ -55,7 +55,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         id: pages
         if: steps.exists.outputs.exists == 'true' && env.HAS_CF == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: cloudflare/wrangler-action@v4
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

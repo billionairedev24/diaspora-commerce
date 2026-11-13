@@ -64,7 +64,7 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -98,8 +98,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    env:
-      OSV_SCANNER_VERSION: v2.6.0
     steps:
       - uses: actions/checkout@v7
       - name: gitleaks
@@ -122,17 +120,8 @@ jobs:
         with:
           sarif_file: semgrep.sarif
           category: semgrep-web-${{ inputs.app }}
-      - name: osv-scanner (pnpm-lock.yaml; CRITICAL = CVSS >= 9 fails)
-        run: |
-          curl -sSfL -o "$RUNNER_TEMP/osv-scanner" \
-            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
-          chmod +x "$RUNNER_TEMP/osv-scanner"
-          # osv-scanner exits 1 on any finding, so the gate is on the highest severity per advisory group.
-          "$RUNNER_TEMP/osv-scanner" scan source --config tools/security/osv-scanner.toml --lockfile pnpm-lock.yaml \
-            --format json --output osv.json || true
-          jq -r '.results[]?.packages[]? as $p | $p.groups[]? | "\(.max_severity // "?")\t\($p.package.name)@\($p.package.version)\t\(.ids | join(","))"' \
-            osv.json | sort -rn | tee -a "$GITHUB_STEP_SUMMARY"
-          jq -e '[.results[]?.packages[]?.groups[]? | select((.max_severity // "0" | tonumber? // 0) >= 9)] | length == 0' osv.json
+      - name: osv-scanner (pnpm-lock.yaml; HIGH and above fail; checksum-verified binary)
+        run: tools/security/osv-gate.sh --lockfile pnpm-lock.yaml
 
   cloudflare:
     name: Cloudflare Workers (${{ inputs.target }})
@@ -179,7 +168,7 @@ jobs:
       - name: Deploy
         id: deploy
         if: env.HAS_CF == 'true'
-        uses: cloudflare/wrangler-action@v4
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -216,7 +205,7 @@ jobs:
       VERCEL_ENV: ${{ inputs.target == 'prod' && 'production' || 'preview' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}

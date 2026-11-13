@@ -11,18 +11,23 @@ Related: [testing.md](testing.md), [ci-cd.md](ci-cd.md).
 | Code patterns (our rules + OWASP basics) | **Semgrep** | `tools/security/semgrep.yml` | ERROR-severity findings of our rules (registry packs: SARIF report only until their first full scan is triaged) | per service + web (PR), repo-wide (main, weekly) |
 | Deep code analysis (dataflow) | **CodeQL** | GitHub default queries (`security-extended`) | high/critical alerts (branch protection) | `security.yml`, optional per service |
 | Secrets | **gitleaks** | `.gitleaks.toml` | any finding | per service (PR diff), `security.yml` (full history) |
-| Dependencies + IaC + secrets | **Trivy** fs / config | `trivy.yaml` (+ `tools/security/trivy-secret.yaml`, `trivyignore.yaml`) | CRITICAL (repo), CRITICAL+HIGH (per service) | per service, `security.yml` |
+| Dependencies + IaC + secrets | **Trivy** fs / config | `trivy.yaml` (+ `tools/security/trivy-secret.yaml`, `trivyignore.yaml`) | CRITICAL+HIGH (repo, fixable), any fixable severity for dependencies (per service) | per service, `security.yml` |
 | Go reachable vulns | **govulncheck** | — (`tools/security/govulncheck.sh`) | any reachable vuln | per Go service |
-| Dependencies (all ecosystems, OSV.dev) | **osv-scanner** | `tools/security/osv-scanner.toml` | CRITICAL (CVSS ≥ 9) | `security.yml`, web pipeline |
+| Dependencies (all ecosystems, OSV.dev) | **osv-scanner** | `tools/security/osv-scanner.toml` | HIGH and above (CVSS ≥ 7) or unscored, via `tools/security/osv-gate.sh` (checksum-verified binary) | `security.yml`, web pipeline |
 | Java dependencies (NVD, optional) | OWASP **Dependency-Check** | `tools/security/dependency-check-suppressions.xml` | CVSS ≥ 9 | `security.yml` (weekly; needs `NVD_API_KEY`) |
-| Container images | **Trivy** image | `trivy.yaml` | CRITICAL | `.github/actions/publish-image` (after build, before sign) |
+| Container images | **Trivy** image | `trivy.yaml` | CRITICAL+HIGH | `.github/actions/publish-image` (after build, before sign; CRITICAL and HIGH fail) |
 | SBOM | **Syft** (SPDX) + cosign attestation | — | — | `.github/actions/publish-image` |
 | Running app (DAST) | **OWASP ZAP** baseline | — | — (issues opened) | `security.yml` vs dev (weekly) |
 
-Severity policy: **CRITICAL fails every pipeline. HIGH fails the per-service PR pipeline** (so it is fixed by the
-team that owns it) and is reported in the weekly scan. MEDIUM/LOW are uploaded as SARIF to GitHub code scanning
-and triaged weekly. Accepted risks live in the tool's ignore file with an owner, a reason and an expiry date —
-never as a pipeline flag.
+Severity policy (owner rule: zero known vulnerabilities, F7 of `security-audit.md`): **HIGH and CRITICAL fail every
+pipeline** (Trivy fs repo + per service + image, osv-scanner, OWASP Dependency-Check at CVSS 7). The per-service pipelines
+also fail on **any fixable dependency vulnerability** (MEDIUM and LOW included; unfixed ones are not reported because there is
+nothing to upgrade to). Go reachability is judged by govulncheck. Accepted risks live in the tool's ignore file
+(`tools/security/trivyignore.yaml`, `osv-scanner.toml`, `dependency-check-suppressions.xml`) with a **reason, an `Owner:` and an
+expiry date**; `tools/security/check_ignores.py` (job `supply-chain` in `security.yml`, run on push, PR and daily) fails when any
+ignore lacks one of the three, has expired, or is more than 400 days out. OWASP Dependency-Check needs the `NVD_API_KEY`
+secret: without it the weekly job FAILS (no silent skip). `tools/ci/check_go_pins.py` fails when the Go toolchain pins disagree and
+`tools/ci/check_action_pins.py` fails on a third-party GitHub Action that is not pinned to a commit SHA.
 
 ## 2. Tools
 
@@ -299,13 +304,12 @@ Trivy 0.69.1 re-scan of the working tree with `trivy.yaml` (`trivy fs .` and `tr
 
 ## Accepted dependency advisories (no upstream fix)
 
-`pnpm audit --prod` must be clean except for these, which have **no patched version**, are reached only through build or
-developer tooling (never shipped to users or run in production), and are re-checked at every audit. Each is listed in
-`auditConfig.ignoreGhsas` in the root `package.json`; remove the entry as soon as a fix exists.
+`pnpm audit --prod` and `pnpm audit` must be clean at HIGH and above, and today show only the entry below, which has **no
+patched version**, is reached only through build tooling, and expires 2027-02-13 (`tools/security/osv-scanner.toml`, mirrored in
+`auditConfig.ignoreGhsas` in the root `package.json`; remove both as soon as a fix exists).
 
 | Advisory | Package | Severity | Where | Why it is accepted |
 |---|---|---|---|---|
-| GHSA-86w9-cpqp-85rv | node-forge | high | Expo dev tooling (mobile) | No patched release; only the local Expo dev server uses it |
 | GHSA-gcqx-w48m-w2h4 | deepmerge (4.2.0 to 4.3.1) | low | Docusaurus build (`docs/portal`, `@docusaurus/preset-classic`) | Prototype poisoning needs attacker-controlled input to `mergeObject()`; the portal merges only our own static config at build time; no patched version exists |
 
 Fixed with overrides in the root `package.json` (2026-10-29): `decode-uri-component` to 0.5.1 (GHSA-qr28-fpjm-wq7f, high, via

@@ -110,6 +110,10 @@ def main():
                 if not re.fullmatch(r"[0-9a-f]{40}", str(tag)):
                     bad += 1
                     print(f"  FAIL [{env}] {svc}: image.tag is {tag!r}, expected a 40-character commit sha (run the promote workflow)")
+                digest = values.get("image", {}).get("digest", "")
+                if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(digest)):
+                    bad += 1
+                    print(f"  FAIL [{env}] {svc}: image.digest is {digest!r}, expected sha256:<64 hex> (the promote workflow pins it after verifying the signature; a tag alone can move)")
     print("launch-set check: " + ("FAILED" if bad else "OK"))
     return 1 if bad else 0
 

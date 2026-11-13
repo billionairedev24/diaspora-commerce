@@ -99,7 +99,7 @@ jobs:
           # Web hosts: validated before anything is created (warns when a host is deeper than one label under the zone).
           if [[ "$ACTION" != destroy && "$ACTION" != plan ]]; then tools/ovh/web-hosts.sh > /dev/null; fi
 
-      - uses: opentofu/setup-opentofu@v2
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2
         with:
           tofu_version: 1.10.6
 

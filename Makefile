@@ -10,7 +10,7 @@ HELM         ?= $(shell command -v helm 2>/dev/null || echo $(HOME)/go/bin/helm)
 KUBECONFORM  ?= $(shell command -v kubeconform 2>/dev/null || echo $(HOME)/go/bin/kubeconform)
 GOLANGCI     ?= $(shell command -v golangci-lint 2>/dev/null || echo $(HOME)/go/bin/golangci-lint)
 # Same versions as CI (.github/workflows/_go-service.yml): golangci-lint must be built with the repo's Go toolchain.
-GO_TOOLCHAIN       := go1.27.2
+GO_TOOLCHAIN       := go1.27.4
 GOLANGCI_VERSION   := v2.14.0
 GO_MODULES   := $(sort $(wildcard go/services/*/go.mod) go/pkg/go.mod)
 HELM_CHARTS  := $(sort $(dir $(wildcard java/services/*/deploy/helm/Chart.yaml go/services/*/deploy/helm/Chart.yaml)))
@@ -20,7 +20,7 @@ ENV          ?= dev
 TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
-.PHONY: help db-reset ovh-gh-setup deploy-guide deploy-guide-test upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
+.PHONY: supply-chain-check help db-reset ovh-gh-setup deploy-guide deploy-guide-test upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
@@ -172,7 +172,12 @@ tf-check: ## OpenTofu: fmt, module interface drift, conftest policy unit tests (
 	bash infra/tofu/scripts/sync-interface.sh --check
 	$(CONFTEST) verify --policy infra/policy/tofu
 
-security: ## Local security scans that work offline-first: gitleaks, Semgrep rules, govulncheck, Trivy (if installed)
+supply-chain-check: ## Go toolchain pins agree, third-party actions SHA-pinned, security ignores not expired (also CI job `supply-chain`)
+	python3 tools/ci/check_go_pins.py
+	python3 tools/ci/check_action_pins.py
+	python3 tools/security/check_ignores.py
+
+security: supply-chain-check ## Local security scans that work offline-first: pins/ignores, gitleaks, Semgrep rules, govulncheck, Trivy (if installed)
 	@if command -v gitleaks >/dev/null || [ -x $(HOME)/go/bin/gitleaks ]; then \
 	  $$(command -v gitleaks || echo $(HOME)/go/bin/gitleaks) dir . --config .gitleaks.toml --redact --no-banner; \
 	else echo "gitleaks not installed - skipped"; fi

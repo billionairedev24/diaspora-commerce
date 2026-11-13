@@ -1,6 +1,6 @@
 # indexer
 
-Kafka → Elasticsearch projection of the product read model used by [search](../search). Go 1.27.2 · local port **8202**.
+Kafka → Elasticsearch projection of the product read model used by [search](../search). Go 1.27.4 · local port **8202**.
 
 - Consumes `catalog.product.created|approved|rejected|paused|resumed|hidden|restored` (topic `at.product.events`),
   `inventory.availability.changed` (`at.inventory.events`) and `seller.org.approved|updated` (`at.seller-org.events`)
@@ -90,11 +90,11 @@ Retail).
 
 ```bash
 cd go/services/indexer
-GOTOOLCHAIN=go1.27.2 go test ./...      # unit (fake embedder) + Elasticsearch Testcontainers integration (version
+GOTOOLCHAIN=go1.27.4 go test ./...      # unit (fake embedder) + Elasticsearch Testcontainers integration (version
                                         # guards, stock sums, embeddings kept across upserts, backfill guard)
 APP_ENV=local go run ./cmd/indexer
 APP_ENV=local go run ./cmd/indexer reindex --dry-run
 
 # Meilisearch tests (adapter, and the reindex against the event path), skipped unless set:
-MEILISEARCH_TEST_URL=http://127.0.0.1:7700 MEILISEARCH_TEST_KEY=testkey GOTOOLCHAIN=go1.27.2 go test ./...
+MEILISEARCH_TEST_URL=http://127.0.0.1:7700 MEILISEARCH_TEST_KEY=testkey GOTOOLCHAIN=go1.27.4 go test ./...
 ```

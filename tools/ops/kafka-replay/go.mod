@@ -2,7 +2,7 @@ module github.com/billionairedev24/diaspora-commerce/tools/ops/kafka-replay
 
 go 1.27.1
 
-toolchain go1.27.2
+toolchain go1.27.4
 
 require (
 	github.com/twmb/franz-go v1.22.2

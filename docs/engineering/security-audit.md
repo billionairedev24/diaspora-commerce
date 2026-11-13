@@ -147,3 +147,54 @@ deny rules, a management port for Java actuator and Go `/metrics`. F4: `enforce`
 9. Postgres: do not go live on `sslmode=require` without a Layerbase answer on `verify-full` (F11)?
 10. Shopper session idle of 92 days acceptable (F17)?
 11. Give a reviewer access to repository settings (branch protection, `prod` environment reviewers, secret scopes) so F9 and the unverified items can be closed.
+
+## Remediation log
+
+### 2026-11-13: F1, F7, F8 (supply-chain part), F9
+
+Owner approved fixing these. The findings above are left as written.
+
+**F1 (Go vulnerabilities).** `govulncheck` v1.9.0, `tools/security/govulncheck.sh`, all modules.
+
+| | Before (audit, go1.27.2, excelize v2.11.0) | After (go1.27.4, excelize v2.11.1) |
+|---|---|---|
+| go/pkg, authz-sync, carrier-gateway, cart, geo, indexer, media, notifications, promise, search | stdlib GO-2026-6859 and GO-2026-6809 reachable (all 8 modules audited) | No vulnerabilities found |
+| gateway-bff | above, plus 7 reachable excelize advisories (GO-2026-6674/6676/6677/6678/6680/6684/6688) | No vulnerabilities found |
+
+- Toolchain pinned to **go1.27.4** (newest 1.27 patch on golang/go today; fixes 6859 in 1.27.4 and 6809 in 1.27.3) in every `go.mod` (11 modules incl. `tools/ops/kafka-replay`), `go/go.work`, the 8 Go-service Dockerfiles (`golang:1.27.4@sha256:5e8afd49...`, digest resolved with `docker buildx imagetools inspect`), CI `GO_VERSION` / `go-version`, `Makefile`, `tools/security/govulncheck.sh`, READMEs, `docs/` and the CLAUDE.md toolchain row. The `go 1.27.1` language directive is unchanged. The toolchain downloaded fine in the sandbox.
+- `github.com/xuri/excelize/v2` v2.11.0 to **v2.11.1** (all seven fixes landed before it; its `efp` dependency is dated after the last fix). `go.mod`/`go.sum` updated, no vendor directory exists.
+- Also bumped `golang.org/x/net` to v0.62.0 (GO-2026-6860/6866), `github.com/klauspost/compress` to v1.20.2 (GO-2026-6865) and `golang.org/x/crypto` to v0.59.0 (GO-2026-5932, module-level, never called) in every module, because osv-scanner and Trivy report them as fixable.
+- New guard: `tools/ci/check_go_pins.py` fails when any of the above pins disagree (job `supply-chain` in `security.yml`, `make supply-chain-check`).
+- `go build ./... && go test ./...` per module: all pass except `notifications/internal/adapter/postgres` (`events_integration_test.go`: "no email rendered"), which fails identically on go1.27.2, so it is not caused by this change. `indexer` Elasticsearch Testcontainers test timed out once under load and passed on re-run. `golangci-lint` was not run (CI builds it with the job's Go).
+- Images still have to be rebuilt and re-promoted (not done here).
+
+**F7 (zero known vulnerabilities in CI).**
+
+| Gate | Before | After |
+|---|---|---|
+| Trivy fs (repo, `security.yml`) | CRITICAL | CRITICAL + HIGH, fixed only (SARIF report unchanged) |
+| Trivy fs per service (Go and Java) | CRITICAL + HIGH (vuln+misconfig together) | unchanged, plus a second step: **any severity** for fixable vulnerabilities |
+| Trivy image (`publish-image`) | CRITICAL | CRITICAL + HIGH |
+| osv-scanner (repo and web) | CVSS >= 9, scan step ended `\|\| true` | `tools/security/osv-gate.sh`: CVSS >= 7 or unscored fails, scanner errors fail, binary SHA-256 verified |
+| OWASP Dependency-Check | CVSS >= 9, skipped without `NVD_API_KEY` | CVSS >= 7, job **fails with an error** if the key is missing |
+| Ignores | free-form | `tools/security/check_ignores.py`: reason, `Owner:` and expiry required, fails when expired or more than 400 days out (Trivy, osv, Dependency-Check files); runs on push, PR and a new daily schedule |
+
+- `pnpm audit --prod`: before 28 advisories (10 high, 11 moderate, 7 low). After: 1 low (`deepmerge`, GHSA-gcqx-w48m-w2h4, accepted below). Full `pnpm audit` is the same. Fixed with root `pnpm.overrides`: `node-forge` 1.4.3, `follow-redirects` 1.16.3, `joi` 17.13.9, `glob` 14.0.6 (replaces the old 10.5.0 override), `minimatch` 11.0.8. The old ignore for the node-forge high advisory was removed (fixed).
+- Verified after the overrides: `pnpm install --frozen-lockfile`, mobile customer and driver `tsc`, seller-center `vitest` (458 of 459 pass; the one failure, `product-form-rules.test.ts` "useContext of null", is unrelated to these packages) and `opennextjs-cloudflare build` (uses `glob` through `@node-minify/core`) succeeded. Not caused by this change and left alone: `web/packages/api-client` `tsc` errors in `test/seller-contract.test.ts` (zod/contract types) and the docs portal build (a broken `application-review-workflow.md` link).
+- osv-scanner v2.6.0 run locally (darwin build of the same release): web lockfile clean at CVSS >= 7. Repo-wide it found Go advisories (fixed above) and Java `snappy-java` 1.1.10.7 (GHSA-gwq9-9ffj-mvrv, GHSA-q233-g92q-qxp6 at 7.5, GHSA-xqrx-qh46-34m7) through `kafka-clients`: fixed by managing `snappy-java` 1.1.10.12 in `java/platform-parent/pom.xml` (`mvnw dependency:tree` on platform-events shows 1.1.10.12). The repo-wide CI scan uses `--no-resolve` because the online Maven resolver cannot fetch the reactor's own `0.1.0-SNAPSHOT` modules (exit 127); transitive Java dependencies are judged by Trivy and Dependency-Check.
+- **Not run here:** Trivy, OWASP Dependency-Check (no NVD key), Maven-wide scan beyond the above, container image scans. The CI jobs are the enforcement. The new per-service "any fixable severity" Trivy step and Trivy HIGH on images may be red on the first CI run for Java services; triage by upgrading, not by loosening.
+
+**Accepted ignores left (all time-boxed):**
+
+| Where | What | Expires | Owner |
+|---|---|---|---|
+| `osv-scanner.toml` and root `package.json` `auditConfig` | GHSA-gcqx-w48m-w2h4 deepmerge 4.3.1 (low, Docusaurus build only, no patched version) | 2027-02-13 | docs |
+| `trivyignore.yaml` | AZU-0057 (Azure queue logging false positive) | 2027-04-10 | platform |
+| `trivyignore.yaml` | KSV-0125 (trusted registries list; note corrected, see F8) | 2027-04-10 | platform |
+| `dependency-check-suppressions.xml` | first-party `com.afrotransact` CPE name collision | 2027-06-30 | platform |
+
+**F8 (supply chain part).** `_deploy.yml` now reads the manifest digest from `cosign verify`, re-verifies by digest, mirrors by digest and writes **both** `image.tag` and `image.digest` to `values-<env>.yaml` (prod, trial, uat and dev), so pods pull `repo:tag@sha256:...`; `check_launch_set.py --require-tags` also requires `image.digest`. The wrong "Kyverno admits only signed images" note in `trivyignore.yaml` is corrected. `docs/runbooks/ovh-production.md` ("Image trust in production" under section 7, and section 16) states that signatures are verified at promote and by digest pinning, and that Kyverno admission control is deferred (about 0.3-0.5 GiB on the single node). Kyverno was not installed. Existing `values-prod.yaml` files carry no digest until the next promote of each service.
+
+**F9 (action pinning).** All 48 third-party `uses:` (wrangler, trivy, zaproxy, cosign, docker/*, aws/azure/google auth and login, helm, opentofu, tflint, pnpm, golangci-lint, expo, anchore) are pinned to full commit SHAs with the tag in a trailing comment; SHAs resolved with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (all were lightweight or dereferenced to commits). GitHub-owned `actions/*` and `github/*` stay on version tags (the check allows them). `tools/ci/check_action_pins.py` fails on any unpinned third-party action (job `supply-chain`). osv-scanner download is verified against a SHA-256 stored in `osv-gate.sh` (it matches the release's `osv-scanner_SHA256SUMS`). Dependabot `github-actions` is unchanged. Not pinned: container images run with `docker run` in workflows (`ghcr.io/gitleaks/gitleaks:v8.30.1`) and the actionlint download script, which are tag/version based.
+
+**Needs the owner (repository settings, not visible or settable from here):** add the `NVD_API_KEY` repository secret (the weekly Dependency-Check job now fails until it exists); branch protection on `main` requiring the `supply-chain`, `govulncheck`, `osv-scanner` and `Trivy (repo)` checks; required reviewers on the `prod` environment; rebuild and re-promote the 7 launch-set Go images and the Java services (new digests get pinned at promote).

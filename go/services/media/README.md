@@ -1,6 +1,6 @@
 # media
 
-Direct uploads and file inspection. Go 1.27.1 · PostgreSQL · local port **8207**.
+Direct uploads and file inspection. Go 1.27.4 · PostgreSQL · local port **8207**.
 
 ## Flow
 
@@ -138,7 +138,7 @@ Contract: [`contracts/openapi/media.yaml`](../../../contracts/openapi/media.yaml
 
 ```bash
 cd go/services/media
-GOTOOLCHAIN=go1.27.2 go test ./...   # rules, link policy, inspector (CSV/XLSX), service-client and forwarded tokens,
+GOTOOLCHAIN=go1.27.4 go test ./...   # rules, link policy, inspector (CSV/XLSX), service-client and forwarded tokens,
                                      # handlers, UploadThing (httptest: private uploads, multipart ingest, local URL
                                      # signing), metadata stripping + dHash, moderation flows with a fake AI hook,
                                      # media-hosted links, MinIO and PostgreSQL (postgres:17) Testcontainers

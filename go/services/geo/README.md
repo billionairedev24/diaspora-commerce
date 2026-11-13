@@ -1,6 +1,6 @@
 # geo
 
-Addresses and places for every surface. Go 1.27.2 · PostgreSQL + PostGIS · local port **8205**.
+Addresses and places for every surface. Go 1.27.4 · PostgreSQL + PostGIS · local port **8205**.
 
 | Capability | How |
 |---|---|
@@ -41,6 +41,6 @@ parsing (both), fallback order (failure and timeout), cache hits.
 
 ```bash
 cd go/services/geo
-GOTOOLCHAIN=go1.27.2 go test ./...      # address + routing providers via httptest, fakes for the provider chain and cache, PostGIS Testcontainers (local imresamu/postgis:17-3.5.4-alpine3.22) for zones and geodesic distance
+GOTOOLCHAIN=go1.27.4 go test ./...      # address + routing providers via httptest, fakes for the provider chain and cache, PostGIS Testcontainers (local imresamu/postgis:17-3.5.4-alpine3.22) for zones and geodesic distance
 APP_ENV=local go run ./cmd/geo           # needs the geo database from infra/local
 ```

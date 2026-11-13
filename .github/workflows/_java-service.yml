@@ -148,7 +148,7 @@ jobs:
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
             dir "/repo/$SERVICE_DIR" --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
       - name: Trivy filesystem scan (dependencies, IaC, secrets)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           trivy-config: trivy.yaml
           scan-type: fs
@@ -157,6 +157,17 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+      - name: Trivy fixable vulnerabilities (any severity fails; unfixed are not reported)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          scan-type: fs
+          scan-ref: ${{ env.SERVICE_DIR }}
+          scanners: vuln
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-setup-trivy: true
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"

@@ -20,6 +20,6 @@ jobs:
       - uses: actions/checkout@v7
       - name: Wizard tests (stubbed environment)
         run: bash tools/deploy/test/test-guide.sh   # SHELLCHECK=1 adds shellcheck (not run yet: it was not installed where this was written)
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5
       - name: Web host tests (host computation, validation, render-config, at-service chart)
         run: bash tools/ovh/test/web-hosts.test.sh
