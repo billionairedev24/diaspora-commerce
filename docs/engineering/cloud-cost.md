@@ -102,6 +102,7 @@ Requests are what the scheduler counts; limits are what the kernel enforces. Com
 | Temporal (auto-setup, all four roles) | 512 Mi (limit 768 Mi) | 512 Mi | 768 Mi |
 | Valkey | 128 Mi (limit 256 Mi) | 128 Mi | 256 Mi |
 | Meilisearch | 384 Mi (limit 768 Mi) | 384 Mi | 768 Mi |
+| ClamAV (media's malware scan, F10; **UNMEASURED**, signatures in RAM; not in the subtotal and total below, which still read 7.79 and 10.0 GiB: add 1.25 GiB request and 1.75 GiB limit, leaving about 1.75 GiB spare requests, or use a hosted scanner) | 1,280 Mi (limit 1,792 Mi) | 1,280 Mi | 1,792 Mi |
 | OTLP collector | 128 Mi (limit 384 Mi) | 128 Mi | 384 Mi |
 | Grafana Alloy (metrics + logs to Grafana Cloud; **request/limit UNMEASURED**) | 96 Mi (limit 256 Mi) | 96 Mi | 256 Mi |
 | kube-state-metrics (restarts, OOMKilled, backup CronJob state; **UNMEASURED**) | 32 Mi (limit 96 Mi) | 32 Mi | 96 Mi |

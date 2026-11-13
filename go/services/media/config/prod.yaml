@@ -116,3 +116,13 @@ images:
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampleRatio: 0.1
+# F10: malware scan of every upload before it can be served. ClamAV in the cluster (infra/k8s/platform/lean/data/clamav.yaml,
+# ~1.25 GiB request) or a hosted scanner (provider http, MEDIA_SCAN_URL + MEDIA_SCAN_TOKEN). documents: required is
+# fail-closed: while the scanner is down, résumés, KYC, purchase orders, shipping documents and proofs stay quarantined and
+# the uploader sees "We are checking this file". Validate refuses provider none and documents other than required.
+scan:
+  provider: clamd
+  address: clamav.data.svc.cluster.local:3310
+  timeout: 30s
+  documents: required
+  images: best-effort

@@ -1,0 +1,88 @@
+# ClamAV for media's malware scan of uploads (audit F10): clamd on :3310, signatures kept in an emptyDir and refreshed by
+# the image's freshclam. Memory is the cost: clamd holds the signature set in RAM (~1 GiB) and reloads it on update, so it
+# is the biggest single pod on the lean node (request 1280 Mi, limit 1792 Mi; docs/engineering/cloud-cost.md has the table,
+# docs/runbooks/malware-scanning.md the owner decision). If it does not fit, use a hosted scanner instead
+# (MEDIA_SCAN_PROVIDER=http) and remove this file from the kustomization. While clamd is down or still loading, media keeps
+# documents quarantined (fail closed) and uploaders see "We are checking this file".
+# Image tag UNVERIFIED against the registry: pin a current clamav/clamav release (or a digest) before the first sync.
+apiVersion: v1
+kind: Service
+metadata:
+  name: clamav
+  namespace: data
+spec:
+  selector: {app.kubernetes.io/name: clamav}
+  ports:
+    - {name: clamd, port: 3310}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clamav
+  namespace: data
+spec:
+  replicas: 1
+  strategy: {type: Recreate}   # one node, one replica: never two clamd (2 x 1 GiB) during a rollout
+  selector:
+    matchLabels: {app.kubernetes.io/name: clamav}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: clamav}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100        # clamav
+        runAsGroup: 101
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: clamav
+          image: clamav/clamav:1.4
+          env:
+            - {name: CLAMAV_NO_MILTERD, value: "true"}
+            - {name: CLAMAV_NO_CLAMD, value: "false"}
+          ports:
+            - {name: clamd, containerPort: 3310}
+          # Signatures download on first start (a minute or two) and clamd then needs time to load them.
+          startupProbe:
+            tcpSocket: {port: 3310}
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: {port: 3310}
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 1280Mi}
+            limits: {memory: 1792Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: db, mountPath: /var/lib/clamav}
+            - {name: run, mountPath: /run/clamav}
+            - {name: tmp, mountPath: /tmp}
+            - {name: logs, mountPath: /var/log/clamav}
+      volumes:
+        - {name: db, emptyDir: {sizeLimit: 1Gi}}
+        - {name: run, emptyDir: {}}
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}
+        - {name: logs, emptyDir: {sizeLimit: 64Mi}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clamav
+  namespace: data
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: clamav}
+  policyTypes: [Ingress]
+  ingress:
+    # Only media talks to clamd.
+    - from:
+        - namespaceSelector:
+            matchLabels: {app.kubernetes.io/part-of: afrotransact}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: media}
+      ports:
+        - {port: 3310}

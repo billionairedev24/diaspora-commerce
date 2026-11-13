@@ -43,6 +43,12 @@ type Inspector interface {
 	Inspect(r io.Reader, size int64, declaredType string) (domain.Inspection, error)
 }
 
+// Scanner checks a file for malware. A clean or infected verdict is returned as a ScanResult; any failure to get a
+// verdict is an error wrapping domain.ErrScannerUnavailable.
+type Scanner interface {
+	Scan(ctx context.Context, r io.Reader, size int64) (domain.ScanResult, error)
+}
+
 // AssetRepository persists assets.
 type AssetRepository interface {
 	Insert(ctx context.Context, a domain.Asset) error

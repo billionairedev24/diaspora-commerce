@@ -21,6 +21,7 @@ resources:
   - temporal.yaml
   - data/valkey.yaml
   - data/meilisearch.yaml
+  - data/clamav.yaml      # F10: malware scan of uploads, ~1.25 GiB request; remove if a hosted scanner is used (docs/runbooks/malware-scanning.md)
   - backup
   - alloy
   # - data/postgres-trial.yaml   # TRIAL ONLY: a Postgres pod on the node's disk (never production)

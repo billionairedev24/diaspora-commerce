@@ -145,7 +145,10 @@ func (s *storeImpl) SignedGetURL(ctx context.Context, key string, ttl time.Durat
 	if key == "" {
 		return "", errors.New("empty key")
 	}
-	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.opts.Bucket), Key: aws.String(key)},
+	// Downloads are always attachments: a browser saves the file instead of rendering it (F10; staff open résumés and
+	// KYC documents). The stored content type was checked against the purpose's allow-list when the upload completed.
+	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.opts.Bucket), Key: aws.String(key),
+		ResponseContentDisposition: aws.String("attachment")},
 		s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", fmt.Errorf("presign get: %w", err)

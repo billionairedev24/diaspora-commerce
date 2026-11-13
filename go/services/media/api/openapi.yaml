@@ -440,6 +440,12 @@ components:
         height: {type: integer}
         status: {type: string, enum: [PENDING, READY, FLAGGED, REJECTED]}
         flags: {type: array, items: {type: string}}
+        notice:
+          type: string
+          description: >
+            "We are checking this file" while the malware scan has no verdict yet (status stays PENDING, no url is
+            served); ask again with POST /v1/assets/{id}/complete. A file the scanner found infected is REJECTED with
+            the flag "malware detected".
         createdAt: {type: string, format: date-time}
         urlExpiresAt:
           type: string

@@ -106,7 +106,29 @@ func (c Config) Validate(env string, getenv func(string) string) error {
 	if !c.Auth.Enabled {
 		fail("auth.enabled must be true in prod")
 	}
+	errs = append(errs, c.Scan.problems()...)
 	return errors.Join(errs...)
+}
+
+// problems lists what a prod scan configuration must fix: a real scanner is required (F10), and documents fail closed.
+func (s ScanConfig) problems() []error {
+	var errs []error
+	switch s.Provider {
+	case "clamd":
+		if strings.TrimSpace(s.Address) == "" {
+			errs = append(errs, errors.New("scan.address (MEDIA_SCAN_ADDR) is required for provider clamd"))
+		}
+	case "http":
+		if u, err := url.Parse(s.URL); err != nil || u.Scheme != "https" {
+			errs = append(errs, errors.New("scan.url (MEDIA_SCAN_URL) must be an https URL for provider http"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("scan.provider %q: prod needs clamd or http; malware scanning cannot be disabled", s.Provider))
+	}
+	if s.Documents != "required" {
+		errs = append(errs, fmt.Errorf("scan.documents is %q: prod must be required (documents stay quarantined while the scanner is down)", s.Documents))
+	}
+	return errs
 }
 
 func validateR2Store(name string, st Store, getenv func(string) string) []error {

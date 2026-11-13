@@ -105,3 +105,6 @@ images:
 telemetry:
   otlpEndpoint: localhost:4318
   sampleRatio: 1.0
+# F10: no scanner locally (docker run -p 3310:3310 clamav/clamav then provider: clamd, address: localhost:3310 to try it).
+scan:
+  provider: none

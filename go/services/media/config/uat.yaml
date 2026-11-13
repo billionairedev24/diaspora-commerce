@@ -104,3 +104,10 @@ images:
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampleRatio: 0.5
+# F10: malware scan (see dev.yaml). uat rehearses prod: switch documents to required once clamav is deployed there.
+scan:
+  provider: clamd
+  address: clamav.data.svc.cluster.local:3310
+  timeout: 30s
+  documents: best-effort
+  images: best-effort

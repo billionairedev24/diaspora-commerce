@@ -187,6 +187,9 @@ type mediaServiceImpl struct {
 	rulesAt    time.Time
 	rulesNow   domain.ImageRules
 	rescoring  chan struct{}
+
+	scanner    port.Scanner
+	scanPolicy ScanPolicy
 }
 
 var _ MediaService = (*mediaServiceImpl)(nil)
@@ -533,12 +536,25 @@ func (s *mediaServiceImpl) finish(ctx context.Context, a domain.Asset) (domain.A
 	if isImage && status != domain.StatusRejected {
 		flags = []string{} // quality is judged by the checks below, not by flags
 	}
+	infected := false
+	if status != domain.StatusRejected {
+		switch s.scan(ctx, st, a, data) {
+		case scanHeld:
+			// Fail closed: the object stays quarantined (PENDING, never served) and the uploader asks again.
+			a.Notice = domain.NoticeChecking
+			return a, nil
+		case scanInfected:
+			infected = true
+			status, flags = domain.StatusRejected, []string{domain.FlagMalware}
+		case scanPassed:
+		}
+	}
 	a.ContentType, a.Bytes, a.Width, a.Height, a.Status, a.Flags = in.ContentType, in.Bytes, in.Width, in.Height, status, flags
 	switch {
 	case status == domain.StatusRejected:
 		_ = st.Delete(ctx, a.Key)
 		a.URL = ""
-		if isImage {
+		if isImage && !infected {
 			setChecks(&a, checks)
 		}
 	case moderated:
@@ -815,6 +831,10 @@ func (s *mediaServiceImpl) Get(ctx context.Context, actor auth.Actor, id string,
 		return domain.Asset{}, ErrForbidden
 	}
 	switch {
+	case a.Status == domain.StatusPending && s.scanMode(a.Purpose) == ScanRequired:
+		// Not scanned yet: never served.
+		a.Notice, a.URL = domain.NoticeChecking, ""
+		return a, nil
 	case rules.Public:
 		// A held image is shown to its owner and to staff through a short-lived signed URL.
 		if a.Status == domain.StatusFlagged && !a.Moderation.Published() {

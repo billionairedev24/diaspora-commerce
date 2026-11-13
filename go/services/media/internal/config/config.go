@@ -11,7 +11,25 @@ import (
 
 // Default is the configuration before the environment file and variables are applied: every image threshold has
 // its approved value, so an environment file only names what it changes.
-func Default() Config { return Config{Images: domain.DefaultImageRules()} }
+func Default() Config {
+	return Config{Images: domain.DefaultImageRules(), Scan: ScanConfig{Documents: "required", Images: "best-effort"}}
+}
+
+// ScanConfig configures the malware scanner.
+type ScanConfig struct {
+	// Provider is clamd (ClamAV INSTREAM over TCP at Address), http (hosted scanner at URL) or none (local only).
+	Provider string `yaml:"provider" env:"MEDIA_SCAN_PROVIDER"`
+	Address  string `yaml:"address" env:"MEDIA_SCAN_ADDR"`
+	URL      string `yaml:"url" env:"MEDIA_SCAN_URL"`
+	// Token is the bearer token of an http scanner (secret).
+	Token   string        `env:"MEDIA_SCAN_TOKEN"`
+	Timeout time.Duration `yaml:"timeout" env:"MEDIA_SCAN_TIMEOUT"`
+	// Documents is required (fail closed: the file stays quarantined while the scanner is down) or best-effort, for
+	// résumés, KYC, purchase orders, shipping documents and proofs.
+	Documents string `yaml:"documents" env:"MEDIA_SCAN_DOCUMENTS"`
+	// Images is skip, best-effort or required, for public product and storefront images (already decode-checked).
+	Images string `yaml:"images" env:"MEDIA_SCAN_IMAGES"`
+}
 
 // Store configures one object store.
 type Store struct {
@@ -143,6 +161,8 @@ type Config struct {
 			Scopes       []string      `yaml:"scopes" env:"MEDIA_CLIENT_SCOPES"`
 		} `yaml:"ai"`
 	} `yaml:"moderation"`
+	// Scan is the malware scan on the step that releases an upload (F10). Provider none is for local only; prod refuses it.
+	Scan ScanConfig `yaml:"scan"`
 	// Images are the thresholds of the slot-aware image checks (S388); defaults come from domain.DefaultImageRules
 	// (see Default) and staff may override the starred ones at run time (PUT /v1/image-rules).
 	Images    domain.ImageRules `yaml:"images"`

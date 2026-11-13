@@ -28,6 +28,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/imageproc"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/inspect"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/linktoken"
+	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/malwarescan"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/pgrepo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/s3store"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/uploadthing"
@@ -121,6 +122,11 @@ func run() error {
 		}
 		opts = append(opts, app.WithQuarantine(qs))
 	}
+	if o, err := scanner(cfg, log); err != nil {
+		return err
+	} else if o != nil {
+		opts = append(opts, o)
+	}
 	if o, err := links(cfg, log); err != nil {
 		return err
 	} else if o != nil {
@@ -170,6 +176,24 @@ func resolveUploadThing(cfg *config.Config) error {
 
 // moderation wires the S030 gate for public images (metadata stripping, perceptual hashes and, when enabled, the AI
 // hook on ai-gateway) and the S388 image checks (thresholds from config, the staff override from the database).
+// scanner wires the malware scanner (F10); nil when the provider is none (local only: Validate refuses it in prod).
+func scanner(cfg config.Config, log *slog.Logger) (app.Option, error) {
+	var sc port.Scanner
+	switch cfg.Scan.Provider {
+	case "clamd":
+		sc = malwarescan.NewClamd(cfg.Scan.Address, cfg.Scan.Timeout)
+	case "http":
+		sc = malwarescan.NewHTTP(cfg.Scan.URL, cfg.Scan.Token, cfg.Scan.Timeout)
+	case "", "none":
+		log.Warn("malware scanning is OFF (scan.provider none): uploads are not scanned")
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("scan.provider %q is not clamd, http or none", cfg.Scan.Provider)
+	}
+	log.Info("malware scanning on", "provider", cfg.Scan.Provider, "documents", cfg.Scan.Documents, "images", cfg.Scan.Images)
+	return app.WithScanner(sc, app.ScanPolicy{Documents: app.ScanMode(cfg.Scan.Documents), Images: app.ScanMode(cfg.Scan.Images)}), nil
+}
+
 func moderation(cfg config.Config, log *slog.Logger, repo port.ImageRulesStore) []app.Option {
 	m := cfg.Moderation
 	maxPixels := m.MaxPixels
