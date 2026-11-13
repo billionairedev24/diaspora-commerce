@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { barcodeReady, blockerKey, digitsOf, emptyOffer, type OfferForm, offerProblems, requestOf, serverOfferField, toOfferInput } from '@/components/listings/add/match-model';
+import { barcodeReady, blockerKey, candidateAsMatch, digitsOf, emptyOffer, type OfferForm, offerProblems, searchTextOf, serverOfferField, sizeToConfirm, toOfferInput } from '@/components/listings/add/match-model';
 import { withStart } from '@/components/listings/form-model';
 import { emptyForm } from '@/components/listings/form-model';
 import { CATALOG_FILES } from '@/i18n/catalogs';
 import { EN_MESSAGES } from '@/i18n/t';
 
-describe('the barcode step (S382)', () => {
+describe('the add-product search and the barcode shortcut (S382)', () => {
   it('cleans spaces and dashes and looks up on its own from 12 to 14 digits', () => {
     expect(digitsOf('0123 4567-8905')).toBe('012345678905');
     expect(barcodeReady('012345678905', false)).toBe(true);
@@ -23,16 +23,28 @@ describe('the barcode step (S382)', () => {
     expect(barcodeReady('043942089X', true)).toBe(true);
   });
 
-  it('asks catalog for the way the seller chose', () => {
-    expect(requestOf('barcode', { code: '0123 4567 8905', brand: '', mpn: '' }, false)).toEqual({ gtin: '012345678905' });
-    expect(requestOf('barcode', { code: '0123', brand: '', mpn: '' }, false)).toBeNull();
-    expect(requestOf('brand', { code: '', brand: ' Kente ', mpn: ' SB-8 ' }, false)).toEqual({ brand: 'Kente', mpn: 'SB-8' });
-    expect(requestOf('brand', { code: '', brand: 'Kente', mpn: '' }, false)).toBeNull();
-    expect(requestOf('none', { code: '012345678905', brand: 'Kente', mpn: 'SB-8' }, true)).toBeNull();
+  it('searches a name only from 3 letters, with one space between words and at most 200 characters', () => {
+    expect(searchTextOf('  basmati   rice 5kg ')).toBe('basmati rice 5kg');
+    expect(searchTextOf('ba')).toBeNull();
+    expect(searchTextOf('  a b ')).toBeNull();
+    expect(searchTextOf('x'.repeat(300))).toHaveLength(200);
+  });
+
+  it('asks the one-tap size question from the page’s size, else from the chosen variant, and none when the page states none', () => {
+    const page = { parentAtin: 'ATRICE0001', title: 'Rice', kind: 'SIMILAR' as const, likely: false, canOffer: true, blockers: [], variants: [{ atin: 'ATRICEV001', options: { Size: '5 kg' } }, { atin: 'ATRICEV002', options: { Size: '10 kg' } }] };
+    expect(sizeToConfirm({ ...page, sizeLabel: '5 kg' }, 'ATRICEV001')).toBe('5 kg');
+    expect(sizeToConfirm(page, 'ATRICEV002')).toBe('Size: 10 kg');
+    expect(sizeToConfirm({ ...page, variants: [{ atin: 'ATRICEV001', options: {} }] }, 'ATRICEV001')).toBeNull();
+  });
+
+  it('hands a found page to the price-and-stock form as the same match the barcode shortcut gives', () => {
+    const m = candidateAsMatch({ parentAtin: 'ATSHEA0001', title: 'Raw Shea Butter, 8 oz', brand: 'Kente Naturals', kind: 'SAME_NAME', likely: true, canOffer: true, blockers: [], sellerCount: 2,
+      variants: [{ atin: 'ATSHEAV001', options: { Size: '8 oz' } }] }, 'ATSHEAV001');
+    expect(m).toMatchObject({ result: 'MATCH', atin: 'ATSHEAV001', title: 'Raw Shea Butter, 8 oz', sellerCount: 2, canOffer: true, variantOptions: { Size: '8 oz' } });
   });
 
   it('has the seller’s words for every blocker catalog and offers send', () => {
-    for (const code of ['catalog.page-not-live', 'offers.selling-approval-required', 'catalog.brand-unavailable', 'catalog.department-not-allowed', 'offers.offer-exists', 'offers.listing-limit-reached',
+    for (const code of ['catalog.page-not-live', 'offers.selling-approval-required', 'catalog.brand-unavailable', 'offers.offer-exists', 'offers.listing-limit-reached',
       'catalog.wrong-match-open', 'catalog.gtin-exists']) {
       const key = blockerKey(code);
       expect(key, code).toBeDefined();
@@ -41,15 +53,21 @@ describe('the barcode step (S382)', () => {
     expect(blockerKey('something.new')).toBeUndefined();
   });
 
-  it('starts the full form from the barcode, or from "no barcode", with the brand typed on the way', () => {
+  it('starts the full form from the barcode, or from the name and category chip typed in the search box', () => {
     const withCode = withStart(emptyForm(), { gtin: '012345678905', brand: ' Kente Naturals ' });
     expect(withCode.single.gtin).toBe('012345678905');
     expect(withCode.noGtin).toBe(false);
     expect(withCode.attrs.brand).toBe('Kente Naturals');
-    const none = withStart(emptyForm(), { noGtin: true, gtin: '012345678905' });
-    expect(none.noGtin).toBe(true);
-    expect(none.single.gtin).toBe('');
+    const typed = withStart(emptyForm(), { noGtin: true, gtin: '012345678905', title: ' basmati rice 5kg ', category: { id: 'pt-grains', path: 'Groceries › Pantry › Rice', productType: 'grocery' } });
+    expect(typed.noGtin).toBe(true);
+    expect(typed.single.gtin).toBe('');
+    expect(typed).toMatchObject({ title: 'basmati rice 5kg', categoryId: 'pt-grains', productType: 'grocery' });
+    expect(withStart(emptyForm(), { noGtin: true }).categoryId).toBeNull();
     expect(withStart(emptyForm(), undefined)).toEqual(emptyForm());
+  });
+
+  it('has no part number anywhere a seller reads', () => {
+    for (const [key, text] of Object.entries(EN_MESSAGES)) if (key.startsWith('sc.match.') || key.startsWith('sc.tour.firstProduct') || key.startsWith('sc.bulk.')) expect(text, key).not.toMatch(/part number|\bMPN\b/i);
   });
 });
 
@@ -109,6 +127,5 @@ describe('the matching words in the five locales', () => {
 
   it('shows the tax hold in the words the brief gave', () => {
     expect(EN_MESSAGES['sc.match.offer.held.title']).toBe('We are checking the tax details for this item.');
-    expect(EN_MESSAGES['sc.match.exemptWait']).toBe('We are checking that this item has no barcode.');
   });
 });

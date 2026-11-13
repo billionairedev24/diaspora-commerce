@@ -112,17 +112,17 @@ export const SELLER_TOURS = [
     id: 'first-product',
     prefix: 'sc.tour.firstProduct',
     journey: 'catalogue',
-    // 2: Add a product opens on the barcode step (S382). A page that already exists is sold with a short offer form; the full product form
-    // (category, photos ...) comes after it, once the person carries on, so its steps are optional and appear only then.
-    version: 2,
+    // 3: Add a product opens on one search box, "What are you selling?" (S382); no barcode is needed. A page that already exists is sold with a
+    // short price-and-stock form; the full product form (category, photos ...) comes after "Not here, add it as new", so its steps are optional.
+    version: 3,
     route: '/listings',
     audience: { permissions: ['listings:edit'] },
     autoStart: { routes: ['/listings'] },
     steps: [
       ['add', 'listings-add', { doIt: true, success: { target: 'listings-add', when: 'click' } }],
-      ['barcode', 'barcode-input', { route: '/listings/new', placement: 'bottom' }],
+      ['search', 'search-input', { route: '/listings/new', placement: 'bottom' }],
       ['offer-only'],
-      ['carry-on', 'barcode-step', { placement: 'top', success: { target: 'product-form-basics', when: 'appear' } }],
+      ['carry-on', 'add-product-step', { placement: 'top', success: { target: 'product-form-basics', when: 'appear' } }],
       ['category', 'product-form-basics', { placement: 'top', optional: true }],
       ['photos', 'product-form-images', { placement: 'top', optional: true }],
       ['missing', 'product-form-readiness', { placement: 'start', optional: true }],
@@ -137,8 +137,8 @@ export const SELLER_TOURS = [
     route: '/listings/new',
     audience: { permissions: ['listings:edit'] },
     steps: [
-      // The barcode step comes first; the sections below belong to the full form, which opens once the person carries on.
-      ['carry-on', 'barcode-step', { placement: 'top', success: { target: 'product-form-basics', when: 'appear' } }],
+      // The search step comes first; the sections below belong to the full form, which opens once the person carries on.
+      ['carry-on', 'add-product-step', { placement: 'top', success: { target: 'product-form-basics', when: 'appear' } }],
       ['basics', 'product-form-basics', { placement: 'top', optional: true }],
       ['nav', 'product-form-nav', { optional: true }],
       ['offer', 'product-form-offer', { placement: 'top', optional: true }],

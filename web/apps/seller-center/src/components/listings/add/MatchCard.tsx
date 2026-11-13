@@ -7,12 +7,8 @@ import { useId, useState } from 'react';
 import { Notice } from '@/components/ui/Notice';
 import { useT } from '@/i18n/t';
 
-import { blockerKey } from './match-model';
+import { blockerKey, optionsText } from './match-model';
 import { ReportWrongProduct } from './ReportForms';
-
-/** "Size: 8 oz · Colour: Red": the options of one child, in the seller's words (never an id). */
-export const optionsText = (options: Record<string, string> | null | undefined): string =>
-  Object.entries(options ?? {}).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(' · ');
 
 interface Props {
   match: CatalogMatch;

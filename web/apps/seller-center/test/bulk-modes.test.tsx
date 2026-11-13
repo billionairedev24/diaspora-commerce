@@ -101,7 +101,7 @@ describe('bulk upload screen: upload types, templates and uploads', () => {
     await user.click(screen.getByTestId('bulk-kind-OFFER'));
     expect(screen.queryByLabelText('Template for')).not.toBeInTheDocument();
     expect(screen.queryByText('Photos first')).not.toBeInTheDocument();
-    expect(screen.getByTestId('bulk-columns')).toHaveTextContent('barcode (UPC, EAN, ISBN), its ATIN, or its brand and part number');
+    expect(screen.getByTestId('bulk-columns')).toHaveTextContent('its name with the size or pack (5 kg, 500 ml, 6 pack)');
     expect(screen.getByTestId('bulk-columns')).toHaveTextContent('No photos, titles or details');
     expect(document.querySelector('[data-tour="bulk-upload-types"]')).not.toBeNull();
   });

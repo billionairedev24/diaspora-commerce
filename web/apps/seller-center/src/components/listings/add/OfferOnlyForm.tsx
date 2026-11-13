@@ -14,8 +14,7 @@ import { sellerApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-import { emptyOffer, OFFER_CONDITIONS, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, serverOfferField, toOfferInput } from './match-model';
-import { optionsText } from './MatchCard';
+import { emptyOffer, OFFER_CONDITIONS, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
 import { type ReportKind,ReportPanel } from './ReportForms';
 
 const FULFILMENTS = ['SELLER', 'AFROTRANSACT', 'AFROTRANSACT_DELIVERY'] as const;

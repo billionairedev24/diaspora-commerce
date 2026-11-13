@@ -1,13 +1,16 @@
-import { type MatchRequest, OFFER_CONDITIONS, type OfferCondition, type OfferFulfilment, type OfferOnlyInput } from '@afrotransact/api-client';
+import { type CatalogMatch, type MatchCandidate, OFFER_CONDITIONS, type OfferCondition, type OfferFulfilment, type OfferOnlyInput } from '@afrotransact/api-client';
 
 import { type MessageKey } from '@/i18n/t';
 
 import { priceMinor } from '../form-model';
 
-/* Pure rules of "Add a product" (S382): when the barcode lookup runs, what is asked, why a seller may not sell a matched page, and the
+/* Pure rules of "Add a product" (S382): when the search and the barcode lookup run, why a seller may not sell a matched page, and the
    offer-only form's checks. The server checks everything again (catalog and offers); these keep the answers fast and in the seller's words. */
 
-export type FindMode = 'barcode' | 'brand' | 'none';
+/** The name is searched from this many letters (catalog says the same: tooShort). */
+export const MIN_SEARCH_LETTERS = 3;
+/** The search follows what was typed after this pause, so every keystroke is not a request. */
+export const SEARCH_DEBOUNCE_MS = 400;
 
 /** The lookup runs on its own from this many digits (a UPC has 12, an EAN 13, a GTIN-14 14). Shorter codes (EAN-8, ISBN-10) use the button. */
 export const AUTO_LOOKUP_DIGITS = 12;
@@ -23,24 +26,33 @@ export function barcodeReady(code: string, asked: boolean): boolean {
   return asked && /^(\d{8,11}|\d{9}[\dXx])$/.test(d);
 }
 
-export interface FindFields {
-  code: string;
-  brand: string;
-  mpn: string;
+/** What the seller typed in the search box, tidied (one space between words); null while it is too short to search. */
+export function searchTextOf(raw: string): string | null {
+  const text = raw.trim().replace(/\s+/g, ' ');
+  return text.replace(/\s/g, '').length >= MIN_SEARCH_LETTERS ? text.slice(0, 200) : null;
 }
 
-/** What to ask catalog for the chosen way of finding the product (null: nothing to look up yet). */
-export function requestOf(mode: FindMode, f: FindFields, asked: boolean): MatchRequest | null {
-  if (mode === 'barcode') return barcodeReady(f.code, asked) ? { gtin: digitsOf(f.code) } : null;
-  if (mode === 'brand') return f.brand.trim() && f.mpn.trim() ? { brand: f.brand.trim(), mpn: f.mpn.trim() } : null;
-  return null;
+/** "Size: Large · Colour: Red": the options of one child, in the seller's words (never an id). */
+export const optionsText = (options: Record<string, string> | null | undefined): string =>
+  Object.entries(options ?? {}).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(' · ');
+
+/** The size the seller is asked to confirm with one tap: the page's size in words, else the chosen child's options; null when the page states none. */
+export function sizeToConfirm(c: MatchCandidate, atin: string): string | null {
+  if (c.sizeLabel) return c.sizeLabel;
+  return optionsText(c.variants.find((v) => v.atin === atin)?.options) || null;
+}
+
+/** A found page as the price-and-stock form and the reports read it (the same shape the barcode shortcut answers with). */
+export function candidateAsMatch(c: MatchCandidate, atin: string): CatalogMatch {
+  const child = c.variants.find((v) => v.atin === atin);
+  return { result: 'MATCH', atin, parentAtin: c.parentAtin, title: c.title, brand: c.brand ?? null, image: c.image ?? null, category: c.category ?? null, variantOptions: child?.options ?? {},
+    variants: c.variants, sellerCount: c.sellerCount ?? null, canOffer: c.canOffer, blockers: c.blockers, canCreate: false, createBlockers: [] };
 }
 
 const BLOCKERS: Record<string, MessageKey> = {
   'catalog.page-not-live': 'sc.match.blocker.pageNotLive',
   'offers.selling-approval-required': 'sc.match.blocker.approval',
   'catalog.brand-unavailable': 'sc.match.blocker.brand',
-  'catalog.department-not-allowed': 'sc.match.blocker.department',
   'offers.offer-exists': 'sc.match.blocker.offerExists',
   'offers.listing-limit-reached': 'sc.match.blocker.limit',
   'catalog.wrong-match-open': 'sc.match.blocker.wrongOpen',

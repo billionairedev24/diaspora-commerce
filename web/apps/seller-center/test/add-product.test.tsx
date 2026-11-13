@@ -27,20 +27,109 @@ const uploads = () => bffCalls.filter((c) => c.includes('/uploads'));
 
 const LOOKUP = { timeout: 4000 };
 
+/** The barcode is the optional shortcut: it opens from "I have a barcode" under the search box. */
 async function typeBarcode(code: string) {
   const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'I have a barcode' }));
   await user.type(await screen.findByLabelText(/Barcode \(UPC, EAN, ISBN\)/), code);
   return user;
 }
 
-describe('Add a product starts with the barcode (S382)', () => {
-  it('is the first step: a barcode, a brand and part number, or no barcode, and no product form yet', async () => {
+/** The search box: "What are you selling?". */
+async function typeName(text: string) {
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText('What are you selling?'), text);
+  return user;
+}
+
+describe('Add a product starts with one search box, the barcode is an optional shortcut (S382)', () => {
+  it('is the first step: one box, What are you selling?, with no part number, no required category and no product form yet', async () => {
     await renderScreen(<AddProductFlow />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Add a product' })).toBeInTheDocument();
-    const modes = within(screen.getByRole('group', { name: 'How do you want to find the product?' }));
-    expect(modes.getAllByRole('button').map((b) => b.textContent)).toEqual(['I have the barcode', 'Search by brand and part number', 'I don’t have a barcode']);
+    expect(screen.getByLabelText('What are you selling?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'I have a barcode' })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/part number|MPN/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Barcode \(UPC, EAN, ISBN\)/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('category-chip')).not.toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Product' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Product title')).not.toBeInTheDocument();
+  });
+
+  it('finds the page by its name with the photo, brand, size and seller count, suggests the category as a chip and matches nothing silently', async () => {
+    await renderScreen(<AddProductFlow />);
+    await typeName('raw shea butter 8oz');
+    const card = within(await screen.findByTestId('candidate', undefined, LOOKUP));
+    expect(card.getByText('Raw Shea Butter, 8 oz')).toBeInTheDocument();
+    expect(card.getByText('Kente Naturals')).toBeInTheDocument();
+    expect(card.getByTestId('candidate-size')).toHaveTextContent('8 oz');
+    expect(card.getByTestId('candidate-sellers')).toHaveTextContent('2 sellers');
+    expect(card.getByRole('img')).toHaveAttribute('alt', 'Raw Shea Butter, 8 oz');
+    expect(card.getByRole('button', { name: 'This is my product' })).toBeEnabled();
+    expect(await screen.findByTestId('category-chip-value')).toHaveTextContent('Suggested: Beauty › Skin & body › Butters & oils');
+    // Nothing is matched or recorded until the seller says so; no id is on the screen.
+    expect(bffCalls.some((c) => c.includes('/candidates/decisions'))).toBe(false);
+    expect(screen.queryByRole('heading', { level: 1, name: 'Sell this product' })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/ATSHEA|AT[0-9A-Z]{8}/);
+  });
+
+  it('asks the size with one tap (Same size, 8 oz?) before it goes on to the price and stock', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 8oz');
+    await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
+    expect(screen.getByTestId('size-question')).toHaveTextContent('Same size, 8 oz?');
+    expect(bffCalls.some((c) => c.includes('/candidates/decisions'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Yes, same size' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sell this product' })).toBeInTheDocument();
+    expect(screen.getByRole('form', { name: 'Sell this product' })).toBeInTheDocument();
+    expect(bffCalls.filter((c) => c.includes('/candidates/decisions'))).toHaveLength(1);
+  });
+
+  it('says a different size is not the product and goes on without selling it', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 16oz');
+    await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
+    await user.click(screen.getByRole('button', { name: 'No, a different size' }));
+    expect(screen.getByTestId('size-differs')).toHaveTextContent('Then this is not your product');
+    expect(bffCalls.some((c) => c.includes('/candidates/decisions'))).toBe(false);
+  });
+
+  it('waits for 3 letters, and says when nothing was found or the search is unavailable, never guessing', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('ra');
+    expect(await screen.findByText('Keep typing. We need at least 3 letters to look.')).toBeInTheDocument();
+    expect(bffCalls.some((c) => c.includes('/candidates'))).toBe(false);
+    await user.clear(screen.getByLabelText('What are you selling?'));
+    await user.type(screen.getByLabelText('What are you selling?'), 'offline rice');
+    expect(await screen.findByText('We can’t search right now. You can still add your product as new.', undefined, LOOKUP)).toBeInTheDocument();
+    expect(screen.queryByTestId('candidate')).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText('What are you selling?'));
+    await user.type(screen.getByLabelText('What are you selling?'), 'handwoven kente strip');
+    expect(await screen.findByText('We did not find this product on AfroTransact.', undefined, LOOKUP)).toBeInTheDocument();
+  });
+
+  it('lets the seller change the category chip, and uses it for the search', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 8oz');
+    await screen.findByTestId('candidate', undefined, LOOKUP);
+    await user.click(screen.getByRole('button', { name: 'Change' }));
+    await user.type(screen.getByLabelText('Search categories'), 'butters');
+    await user.click(await screen.findByRole('button', { name: /Butters & oils/ }));
+    expect(await screen.findByTestId('category-chip-value')).toHaveTextContent('Butters & oils');
+    expect(screen.getByTestId('category-chip-value')).not.toHaveTextContent('Suggested');
+    await waitFor(() => expect(bffCalls.filter((c) => c.includes('/catalog/candidates')).length).toBeGreaterThan(1), LOOKUP);
+  });
+
+  it('adds it as new when it is not here: the form starts with the name and the category, and the answer is recorded for staff', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 8oz');
+    await screen.findByTestId('candidate', undefined, LOOKUP);
+    await user.click(screen.getByRole('button', { name: 'Not here, add it as new' }));
+    expect(await screen.findByRole('form', { name: 'Product' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Product title')).toHaveValue('raw shea butter 8oz');
+    expect(screen.getByRole('heading', { level: 2, name: 'Photos' })).toBeInTheDocument();
+    await waitFor(() => expect(getSellerDb().matching?.decisions.map((d) => d.choice)).toEqual(['NONE_OF_THESE']));
+    expect(getSellerDb().matching?.decisions[0]?.likelyShown).toBe(true);
+    expect(screen.getByRole('button', { name: 'Search again' })).toBeInTheDocument();
   });
 
   it('shows the existing product after the 12th digit, with its photo, title, brand, options and seller count', async () => {
@@ -59,7 +148,7 @@ describe('Add a product starts with the barcode (S382)', () => {
     expect(document.body.textContent).not.toMatch(/ATSHEA|AT[0-9A-Z]{8}/);
   });
 
-  it('opens only the offer fields for a page that exists: no photo, title or attribute field, and the page content says whose it is', async () => {
+  it('opens only the price and stock fields for a page that exists: no photo, title or attribute field, and the page content says whose it is', async () => {
     await renderScreen(<AddProductFlow />);
     const user = await typeBarcode(MOCK_GTIN.live);
     await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
@@ -148,7 +237,7 @@ describe('Add a product starts with the barcode (S382)', () => {
     expect(screen.getByRole('button', { name: 'Yes, sell this' })).toBeDisabled();
   });
 
-  it('continues into the full form with the barcode filled in and photos required when there is no page', async () => {
+  it('continues into the full form with the barcode filled in and photos required when the barcode has no page', async () => {
     await renderScreen(<AddProductFlow />);
     const user = await typeBarcode('9780306406157');
     expect(await screen.findByText('This product is not on AfroTransact yet', undefined, LOOKUP)).toBeInTheDocument();
@@ -156,34 +245,14 @@ describe('Add a product starts with the barcode (S382)', () => {
     expect(await screen.findByRole('form', { name: 'Product' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Photos' })).toBeInTheDocument();
     expect(screen.getByTestId('image-input')).toBeInTheDocument();
-    // Submitting without a photo says so; the barcode step can be taken again.
-    expect(screen.getByRole('button', { name: 'Change the barcode' })).toBeInTheDocument();
+    // Submitting without a photo says so; the search can be taken again.
+    expect(screen.getByRole('button', { name: 'Search again' })).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('pf-primary'));
     expect((await screen.findAllByText('Add at least one image.')).length).toBeGreaterThan(0);
     // The barcode that found no page is already in the form (it shows once the category says the product has one).
     fireEvent.change(await screen.findByRole('combobox', { name: 'Category' }), { target: { value: 'books' } });
     fireEvent.click((await screen.findAllByRole('option'))[0] as HTMLElement);
     expect(await screen.findByLabelText(/ISBN|Barcode/, undefined, LOOKUP)).toHaveValue('9780306406157');
-  });
-
-  it('takes the no-barcode path with the brand, and says the item is checked', async () => {
-    await renderScreen(<AddProductFlow />);
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'I don’t have a barcode' }));
-    expect(screen.getByText('We are checking that this item has no barcode.')).toBeInTheDocument();
-    await user.type(screen.getByLabelText('Brand'), 'Adire Atelier');
-    await user.click(screen.getByRole('button', { name: 'Continue without a barcode' }));
-    expect(await screen.findByRole('form', { name: 'Product' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Photos' })).toBeInTheDocument();
-  });
-
-  it('finds the page by brand and part number', async () => {
-    await renderScreen(<AddProductFlow />);
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Search by brand and part number' }));
-    await user.type(screen.getByLabelText('Brand'), 'Kente Naturals');
-    await user.type(screen.getByLabelText('Part number'), 'sb 8');
-    expect(await screen.findByTestId('match-title', undefined, LOOKUP)).toHaveTextContent('Raw Shea Butter, 8 oz');
   });
 
   it('files the wrong-product report from the card, and reads it as Waiting', async () => {

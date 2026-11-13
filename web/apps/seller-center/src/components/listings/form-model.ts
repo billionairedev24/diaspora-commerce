@@ -147,16 +147,22 @@ export const emptyForm = (): FormState => ({
   pkgUnits: { size: 'in', weight: 'lb' }, dangerousGoods: '', exemptions: {}, labelImage: null, documents: {}, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: '', facts: {}, behaviour: {}
 });
 
-/** What the barcode step (S382) hands to a new product: the barcode that found no page, or "no barcode", and the brand typed on the way. */
+/** What the add-product search (S382) hands to a new product: the name typed in the search box and its category chip, or the barcode that found no page. */
 export interface ProductFormStart {
   gtin?: string;
   noGtin?: boolean;
   brand?: string;
+  /** The name typed in "What are you selling?". */
+  title?: string;
+  /** The category chip, when there is one. */
+  category?: { id: string; path: string; productType: string };
 }
-/** A new form that starts from the barcode step: the barcode (or "I don't have one") and the brand are filled in. */
+/** A new form that starts from the add-product search: the name and the category chip, or the barcode, are filled in. */
 export function withStart(s: FormState, start?: ProductFormStart): FormState {
   if (!start) return s;
-  return { ...s, noGtin: start.noGtin === true, attrs: start.brand?.trim() ? { ...s.attrs, brand: start.brand.trim() } : s.attrs, single: { ...s.single, gtin: start.noGtin ? '' : (start.gtin ?? '') } };
+  const base = start.category ? withCategory(s, start.category) : s;
+  return { ...base, title: start.title?.trim() ?? base.title, noGtin: start.noGtin === true,
+    attrs: start.brand?.trim() ? { ...base.attrs, brand: start.brand.trim() } : base.attrs, single: { ...base.single, gtin: start.noGtin ? '' : (start.gtin ?? '') } };
 }
 
 export const MAX_IMAGES = 10;
