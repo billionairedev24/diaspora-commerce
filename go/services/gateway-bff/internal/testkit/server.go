@@ -72,6 +72,10 @@ type Config struct {
 	Store      valkey.Store
 	// AuthPerMinute overrides the auth rate limit (default 1000).
 	AuthPerMinute int
+	// ClientIPHeader is the single trusted visitor-IP header (prod: CF-Connecting-IP); empty = socket peer.
+	ClientIPHeader string
+	// ProxyToken enables the web proxy's X-AT-Client-IP.
+	ProxyToken string
 	// StockAlertLimits overrides the per-hour limits of "Email me when available" (defaults 20 / 10 / 300).
 	StockAlertLimits app.StockAlertLimits
 }
@@ -206,6 +210,6 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	services.Shopper = shopperServices(u, client, identity, store, services, estimator, clock, log)
 	mux := http.NewServeMux()
 	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin, StaffConsoleOrigin}, CookieName: "at_session",
-		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000}, log).Register(mux)
+		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000, ClientIPHeader: cfg.ClientIPHeader, ProxyToken: cfg.ProxyToken}, log).Register(mux)
 	return &BFF{Handler: mux, Upstreams: u, Store: store, Metrics: reg, Clock: clock}
 }

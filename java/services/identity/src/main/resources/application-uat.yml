@@ -1,5 +1,9 @@
 # UAT / staging: production-like, anonymised data, API reference pages on for testers.
 at:
+  client-ip:
+    # Per-IP sign-in throttle, device and reset records see the visitor, not the Envoy pod: the ONE header Cloudflare sets,
+    # believed only from an in-cluster peer (TrustedClientIpFilter). X-Forwarded-For is never read.
+    header: CF-Connecting-IP
   api-docs:
     enabled: true
   identity:

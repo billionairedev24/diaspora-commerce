@@ -2,10 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,11 +23,17 @@ type SecurityOptions struct {
 	AllowedOrigins []string
 	// LocalDev (APP_ENV=local only) also accepts any http://localhost:<port> or http://127.0.0.1:<port> origin, so a web
 	// app that moved to another port (3010 taken → 3020) is never refused as "not an AfroTransact page".
-	LocalDev        bool
-	CookieName      string
-	CookieSecure    bool
-	CookieDomain    string
-	TrustForwarded  bool
+	LocalDev     bool
+	CookieName   string
+	CookieSecure bool
+	CookieDomain string
+	// ClientIPHeader names the ONE header a trusted proxy sets to the visitor address (Cloudflare: CF-Connecting-IP).
+	// Empty (local) means the socket peer. X-Forwarded-For is never read: its first entry is client-controlled.
+	ClientIPHeader string
+	// ProxyToken (optional, env secret) lets the first-party web proxy pass the visitor it saw in ProxyIPHeader
+	// ("X-AT-Client-IP"): honoured only when X-AT-Proxy-Token carries this exact secret, so a direct caller cannot forge it.
+	// Needed only if Cloudflare reports the Worker's address, not the visitor's, in CF-Connecting-IP on proxy calls.
+	ProxyToken      string
 	MaxBodyBytes    int64
 	AuthPerMinute   int
 	LookupPerMinute int
@@ -61,13 +69,25 @@ func bearerOf(r *http.Request) string {
 	return strings.TrimSpace(t)
 }
 
-func clientIP(r *http.Request, trustForwarded bool) string {
-	if trustForwarded {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first, _, _ := strings.Cut(xff, ",")
-			if ip := strings.TrimSpace(first); ip != "" {
-				return ip
-			}
+const (
+	// ProxyIPHeader and ProxyTokenHeader are set by the web apps' /api/bff proxy (see web/packages/api-client correlation.ts).
+	ProxyIPHeader    = "X-AT-Client-IP"
+	ProxyTokenHeader = "X-AT-Proxy-Token"
+)
+
+// clientIP is the address used for rate limits and abuse signals: the web proxy's visitor IP when it proved itself with
+// the shared token; otherwise ClientIPHeader's value (only valid because nothing but the trusted proxy can reach the
+// BFF); a missing or malformed value falls back to the socket peer. A client-supplied X-Forwarded-For is deliberately
+// ignored, so rotating it cannot change the key.
+func (o SecurityOptions) clientIP(r *http.Request) string {
+	if o.ProxyToken != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get(ProxyTokenHeader)), []byte(o.ProxyToken)) == 1 {
+		if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get(ProxyIPHeader))); err == nil {
+			return ip.String()
+		}
+	}
+	if o.ClientIPHeader != "" {
+		if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get(o.ClientIPHeader))); err == nil {
+			return ip.String()
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -247,7 +267,7 @@ func identify(sessions app.SessionService, o SecurityOptions, log *slog.Logger) 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			in := app.ResolveInput{BearerToken: bearerOf(r), AppGuestCartID: r.Header.Get("X-Guest-Cart"),
-				ClientIP: clientIP(r, o.TrustForwarded), Language: r.Header.Get("Accept-Language"),
+				ClientIP: o.clientIP(r), Language: r.Header.Get("Accept-Language"),
 				Origin: r.Header.Get("Origin"), Path: r.URL.Path, Activity: activityOf(r)}
 			if ck, err := r.Cookie(o.CookieName); err == nil {
 				in.CookieValue = ck.Value
@@ -272,7 +292,7 @@ type limiter struct {
 func (l limiter) wrap(bucket string, perMinute int, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if perMinute > 0 && l.rl != nil {
-			ok, retry, err := l.rl.Allow(r.Context(), bucket+":"+clientIP(r, l.o.TrustForwarded), perMinute, time.Minute)
+			ok, retry, err := l.rl.Allow(r.Context(), bucket+":"+l.o.clientIP(r), perMinute, time.Minute)
 			if err != nil {
 				l.log.WarnContext(r.Context(), "rate limiter unavailable; allowing", "error", err)
 			} else if !ok {

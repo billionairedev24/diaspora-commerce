@@ -72,6 +72,25 @@ export function forwardBffProxyRequestHeaders(incoming: Headers, outgoing: Heade
   }
 }
 
+/**
+ * Tells the BFF who the visitor is, from `cf-connecting-ip` ONLY (Cloudflare sets it; a browser cannot override it at the
+ * edge). An incoming `x-forwarded-for` is never read: Cloudflare appends the real IP to whatever the client sent, so its
+ * first entry is attacker-controlled. Without Cloudflare (local dev) nothing is sent and the BFF uses the socket peer.
+ * `proxyToken` (BFF_PROXY_TOKEN) additionally lets the BFF accept the address as `x-at-client-ip`.
+ */
+export function forwardBffClientIp(incoming: Headers, outgoing: Headers, proxyToken?: string): void {
+  outgoing.delete('x-forwarded-for');
+  outgoing.delete('x-at-client-ip');
+  outgoing.delete('x-at-proxy-token');
+  const ip = incoming.get('cf-connecting-ip')?.trim();
+  if (!ip) return;
+  outgoing.set('x-forwarded-for', ip);
+  if (proxyToken) {
+    outgoing.set('x-at-client-ip', ip);
+    outgoing.set('x-at-proxy-token', proxyToken);
+  }
+}
+
 export function forwardBffProxyResponseHeaders(upstream: Headers, outgoing: Headers): void {
   BFF_PROXY_FORWARD_RESPONSE.forEach((h) => {
     const v = upstream.get(h);

@@ -185,9 +185,10 @@ resource "cloudflare_ruleset" "custom_waf" {
   rules = [
     {
       description = "Block non-GET to /admin from outside the allow-list"
-      expression  = "(starts_with(http.request.uri.path, \"/admin\") or starts_with(http.request.uri.path, \"/v1/admin\")) and http.request.method ne \"GET\" and not ip.src in $afrotransact_admin_allowlist"
-      action      = "block"
-      enabled     = true
+      # contains, not starts_with: the public path is prefixed (/identity/..., /bff/v1/..., /api/bff/v1/...), so a start-anchored match never saw the real path.
+      expression = "http.request.uri.path contains \"/admin\" and http.request.method ne \"GET\" and not ip.src in $afrotransact_admin_allowlist"
+      action     = "block"
+      enabled    = true
     },
     {
       description = "Challenge the staff console from outside the allow-list"
@@ -196,10 +197,12 @@ resource "cloudflare_ruleset" "custom_waf" {
       enabled     = true
     },
     {
-      description = "Block actuator/internal endpoints at the edge"
-      expression  = "starts_with(http.request.uri.path, \"/actuator\") or starts_with(http.request.uri.path, \"/internal\")"
-      action      = "block"
-      enabled     = true
+      description = "Block actuator/metrics/internal endpoints at the edge, under any prefix"
+      # Anywhere in the path (/identity/actuator/prometheus, /bff/metrics, /api/bff/internal/...): the services are published under prefixes.
+      # /bff/healthz stays public on purpose: external uptime checks use it.
+      expression = "http.request.uri.path contains \"/actuator\" or http.request.uri.path contains \"/internal\" or http.request.uri.path contains \"/metrics\""
+      action     = "block"
+      enabled    = true
     },
     {
       description = "Only expected methods"
@@ -222,9 +225,11 @@ resource "cloudflare_ruleset" "rate_limit" {
   rules = [
     {
       description = "Rate limit /v1/auth"
-      expression  = "starts_with(http.request.uri.path, \"/v1/auth\") or starts_with(http.request.uri.path, \"/oauth2/token\") or starts_with(http.request.uri.path, \"/login\")"
-      action      = "block"
-      enabled     = true
+      # Real public forms: /api/bff/v1/auth (web hosts), /bff/v1/auth (api host), auth. host /oauth2/token and /login, plus the
+      # code-sending / lookup routes (second-factor and phone verification, password change, pay-link lookup).
+      expression = join(" or ", [for frag in ["/v1/auth", "/v1/account/mfa", "/v1/account/phone/verification", "/v1/account/password", "/lookup", "/oauth2/token", "/login"] : "http.request.uri.path contains \"${frag}\""])
+      action     = "block"
+      enabled    = true
       ratelimit = {
         characteristics     = ["cf.colo.id", "ip.src"]
         period              = var.auth_rate_limit.period

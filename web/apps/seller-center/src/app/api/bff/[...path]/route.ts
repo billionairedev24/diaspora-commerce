@@ -1,4 +1,4 @@
-import { forwardBffProxyRequestHeaders, forwardBffProxyResponseHeaders } from '@afrotransact/api-client/correlation';
+import { forwardBffClientIp, forwardBffProxyRequestHeaders, forwardBffProxyResponseHeaders } from '@afrotransact/api-client/correlation';
 import { bffProblemType } from '@afrotransact/api-client/problem-types';
 import { type NextRequest } from 'next/server';
 
@@ -22,8 +22,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const target = `${bffOrigin().replace(/\/$/, '')}/${path.map(encodeURIComponent).join('/')}${req.nextUrl.search}`;
   const headers = new Headers();
   forwardBffProxyRequestHeaders(req.headers, headers);
-  const fwdFor = req.headers.get('x-forwarded-for') ?? req.headers.get('cf-connecting-ip');
-  if (fwdFor) headers.set('x-forwarded-for', fwdFor);
+  forwardBffClientIp(req.headers, headers, process.env['BFF_PROXY_TOKEN'] || undefined);
   let upstream: Response;
   try {
     upstream = await fetch(target, {

@@ -4,9 +4,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import com.afrotransact.platform.security.ManagementEndpoints;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,14 +27,14 @@ import org.springframework.security.web.SecurityFilterChain;
 class SellerSecurityConfiguration {
 
     private static final String[] ALWAYS_PUBLIC = {
-        "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
+        "/actuator/health/**", "/actuator/info",
         "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc", "/error"
     };
     private static final String[] PUBLIC_POSTS = {"/v1/webhooks/stripe-connect", "/v1/webhooks/stripe-billing",
         "/v1/launch-list"};
 
     @Bean
-    SecurityFilterChain sellerSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties props)
+    SecurityFilterChain sellerSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties props, Environment env)
             throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -44,6 +46,7 @@ class SellerSecurityConfiguration {
         String[] publicGets = props.publicPaths().toArray(String[]::new);
         http.authorizeHttpRequests(a -> {
             a.requestMatchers(ALWAYS_PUBLIC).permitAll();
+            a.requestMatchers(ManagementEndpoints.prometheusOnManagementPort(env)).permitAll();
             a.requestMatchers(HttpMethod.POST, PUBLIC_POSTS).permitAll();
             a.requestMatchers(HttpMethod.GET, "/v1/public/business-pages/*").permitAll();
             if (publicGets.length > 0) {

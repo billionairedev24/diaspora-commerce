@@ -4,10 +4,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import jakarta.servlet.Filter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -23,13 +28,31 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /** Stateless resource-server defaults. API docs, health and metrics stay public; everything else needs a JWT. */
 @AutoConfiguration(beforeName = "org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration")
-@EnableConfigurationProperties(PlatformSecurityProperties.class)
+@EnableConfigurationProperties({PlatformSecurityProperties.class, ClientIpProperties.class})
 public class PlatformSecurityAutoConfiguration {
 
-    private static final String[] ALWAYS_PUBLIC = {
-        "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
+    /** Public on the main listener. /actuator/prometheus is NOT here: see {@link ManagementEndpoints}. */
+    static final String[] ALWAYS_PUBLIC = {
+        "/actuator/health/**", "/actuator/info",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc", "/error"
     };
+
+    /** Refuses to start with security off outside local/test (security audit F5). */
+    @Bean
+    public static SecurityEnabledGuard securityEnabledGuard(PlatformSecurityProperties props, Environment env) {
+        return new SecurityEnabledGuard(props, env);
+    }
+
+    /**
+     * {@code getRemoteAddr()} becomes the visitor address from the one configured edge header (at.client-ip.header), only
+     * when the direct peer is a trusted proxy. Off unless the header is configured.
+     */
+    @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE + 20)
+    @ConditionalOnProperty(prefix = "at.client-ip", name = "header")
+    public Filter trustedClientIpFilter(ClientIpProperties props) {
+        return new TrustedClientIpFilter(props);
+    }
 
     /**
      * The token's actor (local profile: {@link LocalActorResolver}), acting as a shopper when a storefront request asks
@@ -68,8 +91,8 @@ public class PlatformSecurityAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public SecurityFilterChain platformSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties props)
-            throws Exception {
+    public SecurityFilterChain platformSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties props,
+            Environment env) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(Customizer.withDefaults());
@@ -81,6 +104,7 @@ public class PlatformSecurityAutoConfiguration {
         String[] posts = props.publicPostPaths().toArray(String[]::new);
         http.authorizeHttpRequests(a -> {
             a.requestMatchers(ALWAYS_PUBLIC).permitAll();
+            a.requestMatchers(ManagementEndpoints.prometheusOnManagementPort(env)).permitAll();
             if (extra.length > 0) {
                 a.requestMatchers(HttpMethod.GET, extra).permitAll();
             }

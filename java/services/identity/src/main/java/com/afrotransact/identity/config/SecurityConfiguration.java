@@ -36,9 +36,11 @@ import com.afrotransact.identity.application.SignInProtectionService;
 import com.afrotransact.identity.application.SignInService;
 import com.afrotransact.identity.port.PasskeyAssertions;
 import com.afrotransact.identity.port.PasskeyRegistrations;
+import com.afrotransact.platform.security.ManagementEndpoints;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
@@ -96,7 +98,7 @@ class SecurityConfiguration {
     private static final String[] PUBLIC_BROWSER_PATHS = {
         "/", "/login", "/login/mfa", "/login/mfa/**", "/login/forgot", "/login/forgot/**", "/signup", "/signup/**", "/assets/**",
         "/error", "/favicon.ico", "/.well-known/appspecific/**",
-        "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
+        "/actuator/health/**", "/actuator/info",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc"
     };
 
@@ -169,13 +171,14 @@ class SecurityConfiguration {
                                      RequestCache requestCache, ClientRegistrationRepository registrations,
                                      IdentityProviderService providers, FederatedLoginService federated,
                                      SignInProtectionService protection, AuthSettingsService authSettings,
-                                     Clock clock, HostedPageContentSecurityPolicy csp)
+                                     Clock clock, HostedPageContentSecurityPolicy csp, Environment env)
             throws Exception {
         IdentitySecurityHeaders.apply(http, csp);
         HostedLoginProtection hostedProtection = new HostedLoginProtection(protection);
         MfaAwareAuthenticationSuccessHandler success = new MfaAwareAuthenticationSuccessHandler(signIn,
                 hostedProtection, trustedBrowser, contexts, props.homeUrl());
         http.authorizeHttpRequests(a -> a.requestMatchers(PUBLIC_BROWSER_PATHS).permitAll()
+                        .requestMatchers(ManagementEndpoints.prometheusOnManagementPort(env)).permitAll()
                         .anyRequest().authenticated())
                 .securityContext(c -> c.securityContextRepository(contexts))
                 .requestCache(r -> r.requestCache(requestCache))

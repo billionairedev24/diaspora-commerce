@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -452,5 +453,59 @@ func TestRateLimitOnAuthEndpoints(t *testing.T) {
 	r := b.do("GET", "/v1/auth/login", nil)
 	if r.header.Get("Retry-After") == "" || problemCode(t, r) != "RATE_LIMITED" {
 		t.Fatalf("429 = %v %s", r.header, r.body)
+	}
+}
+
+// A spoofed X-Forwarded-For must not change the rate-limit key: rotating it still hits the limit.
+func TestRateLimitIgnoresSpoofedForwardedFor(t *testing.T) {
+	u := testkit.NewUpstreams(testkit.Options{})
+	t.Cleanup(u.Close)
+	bff := testkit.NewBFF(u, testkit.Config{AuthPerMinute: 2, ClientIPHeader: "CF-Connecting-IP"})
+	b := newBrowser(t, bff.Handler)
+	b.headers["CF-Connecting-IP"] = "203.0.113.7"
+	var codes []int
+	for i := range 4 {
+		b.headers["X-Forwarded-For"] = "198.51.100." + strconv.Itoa(i+1)
+		codes = append(codes, b.do("GET", "/v1/auth/login", nil).status)
+	}
+	if !slices.Equal(codes, []int{302, 302, 429, 429}) {
+		t.Fatalf("statuses with rotating X-Forwarded-For = %v", codes)
+	}
+	// A different edge-reported visitor has its own bucket.
+	b.headers["CF-Connecting-IP"] = "203.0.113.8"
+	if st := b.do("GET", "/v1/auth/login", nil).status; st != 302 {
+		t.Fatalf("other visitor = %d", st)
+	}
+	// Without the trusted header the socket peer is the key, still not X-Forwarded-For.
+	delete(b.headers, "CF-Connecting-IP")
+	b.headers["X-Forwarded-For"] = "192.0.2.99"
+	if st := b.do("GET", "/v1/auth/login", nil).status; st != 302 {
+		t.Fatalf("socket peer bucket = %d", st)
+	}
+}
+
+func TestRateLimitProxyTokenGatesForwardedVisitor(t *testing.T) {
+	u := testkit.NewUpstreams(testkit.Options{})
+	t.Cleanup(u.Close)
+	bff := testkit.NewBFF(u, testkit.Config{AuthPerMinute: 1, ClientIPHeader: "CF-Connecting-IP", ProxyToken: "s3cret"})
+	b := newBrowser(t, bff.Handler)
+	b.headers["CF-Connecting-IP"] = "203.0.113.7"
+	// Without the token X-AT-Client-IP is ignored: rotating it still hits the limit.
+	var codes []int
+	for i := range 3 {
+		b.headers["X-AT-Client-IP"] = "198.51.100." + strconv.Itoa(i+1)
+		codes = append(codes, b.do("GET", "/v1/auth/login", nil).status)
+	}
+	if !slices.Equal(codes, []int{302, 429, 429}) {
+		t.Fatalf("forged proxy header statuses = %v", codes)
+	}
+	// With the token each visitor the proxy names gets its own bucket.
+	b.headers["X-AT-Proxy-Token"] = "s3cret"
+	b.headers["X-AT-Client-IP"] = "198.51.100.50"
+	if st := b.do("GET", "/v1/auth/login", nil).status; st != 302 {
+		t.Fatalf("proxied visitor = %d", st)
+	}
+	if st := b.do("GET", "/v1/auth/login", nil).status; st != 429 {
+		t.Fatalf("proxied visitor repeat = %d", st)
 	}
 }

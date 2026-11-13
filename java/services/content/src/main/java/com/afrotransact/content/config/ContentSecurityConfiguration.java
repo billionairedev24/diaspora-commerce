@@ -1,8 +1,10 @@
 package com.afrotransact.content.config;
 
+import com.afrotransact.platform.security.ManagementEndpoints;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -18,14 +20,14 @@ import org.springframework.security.web.SecurityFilterChain;
 class ContentSecurityConfiguration {
 
     private static final String[] ALWAYS_PUBLIC = {
-        "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
+        "/actuator/health/**", "/actuator/info",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc",
         "/error"
     };
 
     @Bean
     SecurityFilterChain contentSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties security,
-                                                   ContentProperties content) throws Exception {
+                                                   ContentProperties content, Environment env) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(Customizer.withDefaults());
@@ -37,6 +39,7 @@ class ContentSecurityConfiguration {
         String[] publicPosts = content.publicPostPaths().toArray(String[]::new);
         http.authorizeHttpRequests(a -> {
             a.requestMatchers(ALWAYS_PUBLIC).permitAll();
+            a.requestMatchers(ManagementEndpoints.prometheusOnManagementPort(env)).permitAll();
             if (publicGets.length > 0) {
                 a.requestMatchers(HttpMethod.GET, publicGets).permitAll();
             }

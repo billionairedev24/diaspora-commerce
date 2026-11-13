@@ -2,11 +2,13 @@ package com.afrotransact.mcp.config;
 
 import java.util.List;
 
+import com.afrotransact.platform.security.ManagementEndpoints;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -27,14 +29,14 @@ import org.springframework.security.web.SecurityFilterChain;
 class McpSecurityConfiguration {
 
     private static final String[] PUBLIC = {
-        "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
+        "/actuator/health/**", "/actuator/info",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs",
         "/redoc", "/error", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/**"
     };
 
     @Bean
     SecurityFilterChain mcpSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties security,
-                                               McpProperties props,
+                                               McpProperties props, Environment env,
                                                @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
                                                String issuer) throws Exception {
         http.csrf(csrf -> csrf.disable())
@@ -48,6 +50,7 @@ class McpSecurityConfiguration {
         String[] extra = security.publicPaths().toArray(String[]::new);
         http.authorizeHttpRequests(a -> {
             a.requestMatchers(PUBLIC).permitAll();
+            a.requestMatchers(ManagementEndpoints.prometheusOnManagementPort(env)).permitAll();
             if (extra.length > 0) {
                 a.requestMatchers(HttpMethod.GET, extra).permitAll();
             }

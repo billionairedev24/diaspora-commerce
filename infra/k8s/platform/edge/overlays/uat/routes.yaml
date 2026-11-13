@@ -69,6 +69,131 @@ spec:
         - type: URLRewrite
           urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /v1/webhooks/stripe-billing}}
       backendRefs: [{name: seller, port: 80}]
+    # DENY operational paths under every published prefix (security audit F3): the longest matching prefix wins, so these beat the
+    # service prefix above. /bff/healthz stays reachable on purpose (external uptime checks); every other healthz is denied.
+    - matches:
+      - {path: {type: PathPrefix, value: /bff/actuator}}
+      - {path: {type: PathPrefix, value: /bff/metrics}}
+      - {path: {type: PathPrefix, value: /bff/internal}}
+      - {path: {type: PathPrefix, value: /bff/admin}}
+      - {path: {type: PathPrefix, value: /bff/v1/admin}}
+      - {path: {type: PathPrefix, value: /bff/readyz}}
+      - {path: {type: PathPrefix, value: /bff/openapi.yaml}}
+      - {path: {type: PathPrefix, value: /bff/v3/api-docs}}
+      - {path: {type: PathPrefix, value: /bff/docs}}
+      - {path: {type: PathPrefix, value: /bff/redoc}}
+      - {path: {type: PathPrefix, value: /bff/swagger-ui.html}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+    - matches:
+      - {path: {type: PathPrefix, value: /identity/actuator}}
+      - {path: {type: PathPrefix, value: /identity/metrics}}
+      - {path: {type: PathPrefix, value: /identity/internal}}
+      - {path: {type: PathPrefix, value: /identity/admin}}
+      - {path: {type: PathPrefix, value: /identity/v1/admin}}
+      - {path: {type: PathPrefix, value: /identity/readyz}}
+      - {path: {type: PathPrefix, value: /identity/openapi.yaml}}
+      - {path: {type: PathPrefix, value: /identity/v3/api-docs}}
+      - {path: {type: PathPrefix, value: /identity/docs}}
+      - {path: {type: PathPrefix, value: /identity/redoc}}
+      - {path: {type: PathPrefix, value: /identity/swagger-ui.html}}
+      - {path: {type: PathPrefix, value: /identity/healthz}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+    - matches:
+      - {path: {type: PathPrefix, value: /bookings/actuator}}
+      - {path: {type: PathPrefix, value: /bookings/metrics}}
+      - {path: {type: PathPrefix, value: /bookings/internal}}
+      - {path: {type: PathPrefix, value: /bookings/admin}}
+      - {path: {type: PathPrefix, value: /bookings/v1/admin}}
+      - {path: {type: PathPrefix, value: /bookings/readyz}}
+      - {path: {type: PathPrefix, value: /bookings/openapi.yaml}}
+      - {path: {type: PathPrefix, value: /bookings/v3/api-docs}}
+      - {path: {type: PathPrefix, value: /bookings/docs}}
+      - {path: {type: PathPrefix, value: /bookings/redoc}}
+      - {path: {type: PathPrefix, value: /bookings/swagger-ui.html}}
+      - {path: {type: PathPrefix, value: /bookings/healthz}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+    - matches:
+      - {path: {type: PathPrefix, value: /fulfilment/actuator}}
+      - {path: {type: PathPrefix, value: /fulfilment/metrics}}
+      - {path: {type: PathPrefix, value: /fulfilment/internal}}
+      - {path: {type: PathPrefix, value: /fulfilment/admin}}
+      - {path: {type: PathPrefix, value: /fulfilment/v1/admin}}
+      - {path: {type: PathPrefix, value: /fulfilment/readyz}}
+      - {path: {type: PathPrefix, value: /fulfilment/openapi.yaml}}
+      - {path: {type: PathPrefix, value: /fulfilment/v3/api-docs}}
+      - {path: {type: PathPrefix, value: /fulfilment/docs}}
+      - {path: {type: PathPrefix, value: /fulfilment/redoc}}
+      - {path: {type: PathPrefix, value: /fulfilment/swagger-ui.html}}
+      - {path: {type: PathPrefix, value: /fulfilment/healthz}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+    - matches:
+      - {path: {type: PathPrefix, value: /media/actuator}}
+      - {path: {type: PathPrefix, value: /media/metrics}}
+      - {path: {type: PathPrefix, value: /media/internal}}
+      - {path: {type: PathPrefix, value: /media/admin}}
+      - {path: {type: PathPrefix, value: /media/v1/admin}}
+      - {path: {type: PathPrefix, value: /media/readyz}}
+      - {path: {type: PathPrefix, value: /media/openapi.yaml}}
+      - {path: {type: PathPrefix, value: /media/v3/api-docs}}
+      - {path: {type: PathPrefix, value: /media/docs}}
+      - {path: {type: PathPrefix, value: /media/redoc}}
+      - {path: {type: PathPrefix, value: /media/swagger-ui.html}}
+      - {path: {type: PathPrefix, value: /media/healthz}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+    - matches:
+      - {path: {type: PathPrefix, value: /notifications/actuator}}
+      - {path: {type: PathPrefix, value: /notifications/metrics}}
+      - {path: {type: PathPrefix, value: /notifications/internal}}
+      - {path: {type: PathPrefix, value: /notifications/admin}}
+      - {path: {type: PathPrefix, value: /notifications/v1/admin}}
+      - {path: {type: PathPrefix, value: /notifications/readyz}}
+      - {path: {type: PathPrefix, value: /notifications/openapi.yaml}}
+      - {path: {type: PathPrefix, value: /notifications/v3/api-docs}}
+      - {path: {type: PathPrefix, value: /notifications/docs}}
+      - {path: {type: PathPrefix, value: /notifications/redoc}}
+      - {path: {type: PathPrefix, value: /notifications/swagger-ui.html}}
+      - {path: {type: PathPrefix, value: /notifications/healthz}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+    - matches:
+      - {path: {type: PathPrefix, value: /carrier-gateway/actuator}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/metrics}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/internal}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/admin}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/v1/admin}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/readyz}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/openapi.yaml}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/v3/api-docs}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/docs}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/redoc}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/swagger-ui.html}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/healthz}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+metadata:
+  name: deny-operational-paths
+  namespace: afrotransact-uat
+spec:
+  directResponse:
+    statusCode: 404
+    contentType: text/plain
+    body: {type: Inline, inline: "not found"}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -80,6 +205,18 @@ spec:
   hostnames: [auth-uat.afrotransact.com]
   rules:
     - backendRefs: [{name: identity, port: 80}]
+    # DENY operational paths on the auth host (security audit F3)
+    - matches:
+      - {path: {type: PathPrefix, value: /actuator}}
+      - {path: {type: PathPrefix, value: /metrics}}
+      - {path: {type: PathPrefix, value: /internal}}
+      - {path: {type: PathPrefix, value: /readyz}}
+      - {path: {type: PathPrefix, value: /healthz}}
+      - {path: {type: PathPrefix, value: /openapi.yaml}}
+      - {path: {type: PathPrefix, value: /v3/api-docs}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

@@ -147,7 +147,8 @@ upstreams:
 rateLimit:
   authPerMinute: 60
   lookupPerMinute: 120
-  trustForwardedFor: false
+  # Single trusted header (never X-Forwarded-For); empty = socket peer.
+  clientIpHeader: ""
   maxBodyBytes: 65536
 cache:
   maxEntries: 5000

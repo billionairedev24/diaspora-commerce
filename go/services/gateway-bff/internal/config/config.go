@@ -137,10 +137,13 @@ type Config struct {
 	Upstreams Upstreams `yaml:"upstreams"`
 
 	RateLimit struct {
-		AuthPerMinute   int  `yaml:"authPerMinute" env:"RATE_LIMIT_AUTH_PER_MINUTE"`
-		LookupPerMinute int  `yaml:"lookupPerMinute" env:"RATE_LIMIT_LOOKUP_PER_MINUTE"`
-		TrustForwarded  bool `yaml:"trustForwardedFor" env:"TRUST_FORWARDED_FOR"`
-		MaxBodyBytes    int  `yaml:"maxBodyBytes" env:"MAX_BODY_BYTES"`
+		AuthPerMinute   int `yaml:"authPerMinute" env:"RATE_LIMIT_AUTH_PER_MINUTE"`
+		LookupPerMinute int `yaml:"lookupPerMinute" env:"RATE_LIMIT_LOOKUP_PER_MINUTE"`
+		// Single header the trusted edge sets to the visitor IP ("CF-Connecting-IP" behind Cloudflare); empty = socket peer.
+		ClientIPHeader string `yaml:"clientIpHeader" env:"CLIENT_IP_HEADER"`
+		// Optional shared secret (env only) for the web proxy's X-AT-Client-IP; empty disables that path.
+		ProxyToken   string `yaml:"-" env:"GATEWAY_PROXY_TOKEN"`
+		MaxBodyBytes int    `yaml:"maxBodyBytes" env:"MAX_BODY_BYTES"`
 		// "Email me when available" (guests included), per hour; 0 = defaults 20 / 10 / 300.
 		StockAlertPerIPPerHour    int `yaml:"stockAlertPerIpPerHour" env:"RATE_LIMIT_STOCK_ALERT_PER_IP_HOUR"`
 		StockAlertPerEmailPerHour int `yaml:"stockAlertPerEmailPerHour" env:"RATE_LIMIT_STOCK_ALERT_PER_EMAIL_HOUR"`

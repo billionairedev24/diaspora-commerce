@@ -150,7 +150,8 @@ upstreams:
 rateLimit:
   authPerMinute: 20
   lookupPerMinute: 120
-  trustForwardedFor: true
+  # Single trusted header (never X-Forwarded-For); empty = socket peer.
+  clientIpHeader: "CF-Connecting-IP"
   maxBodyBytes: 65536
 cache:
   maxEntries: 5000
