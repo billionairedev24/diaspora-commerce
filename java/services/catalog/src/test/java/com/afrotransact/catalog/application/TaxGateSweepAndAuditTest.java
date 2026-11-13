@@ -100,7 +100,7 @@ class TaxGateSweepAndAuditTest {
         Product offender = live("AT00000011", TaxStatus.PENDING_REVIEW);
         Product closed = offender.holdForTax(NOW);
         when(products.findLiveWithoutTaxDecision(eq(0), anyInt())).thenReturn(List.of(offender)).thenReturn(List.of());
-        when(liveGate.reconcile(offender.id())).thenReturn(closed);
+        when(liveGate.reconcileChecked(offender.id())).thenReturn(new ProductLiveGate.Reconciliation(closed, false));
         UUID migrated = UUID.randomUUID();
         Product migratedProduct = live("AT00000012", TaxStatus.MISSING_FACTS).holdForTax(NOW);
         when(holds.unannounced(anyInt())).thenReturn(List.of(new ProductTaxHoldRepository.Held(migrated, "TAX_DECISION_MISSING")));
@@ -110,7 +110,7 @@ class TaxGateSweepAndAuditTest {
         int changed = sweep().sweep();
 
         assertThat(changed).isEqualTo(2);
-        verify(liveGate).reconcile(offender.id());
+        verify(liveGate).reconcileChecked(offender.id());
         verify(events).publishWithReason(eq(CatalogEvents.PRODUCT_PAUSED), eq(migratedProduct), eq("TAX_DECISION_MISSING"));
         verify(holds).markAnnounced(eq(migrated), any());
     }
@@ -121,7 +121,7 @@ class TaxGateSweepAndAuditTest {
         Product back = live("AT00000011", TaxStatus.READY);
         when(products.findLiveWithoutTaxDecision(anyInt(), anyInt())).thenReturn(List.of());
         when(holds.openHolds(any(), anyInt())).thenReturn(List.of(id));
-        when(liveGate.reconcile(id)).thenReturn(back);
+        when(liveGate.reconcileChecked(id)).thenReturn(new ProductLiveGate.Reconciliation(back, false));
         when(holds.unannounced(anyInt())).thenReturn(List.of());
         assertThat(sweep().sweep()).isEqualTo(1);
     }

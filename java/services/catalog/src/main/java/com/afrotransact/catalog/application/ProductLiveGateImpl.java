@@ -17,6 +17,7 @@ import com.afrotransact.catalog.domain.tax.LiveRequiresTax;
 import com.afrotransact.catalog.domain.tax.TaxNotReady;
 import com.afrotransact.catalog.domain.tax.TaxReadiness;
 import com.afrotransact.catalog.port.CategoryRepository;
+import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.ProductTaxHoldRepository;
 import com.afrotransact.catalog.port.TaxDecisionAuthority;
@@ -121,21 +122,30 @@ class ProductLiveGateImpl implements ProductLiveGate {
 
     @Override
     public Product reconcile(UUID productId) {
+        return reconcileChecked(productId).product();
+    }
+
+    @Override
+    public Reconciliation reconcileChecked(UUID productId) {
         Product p = products.findById(productId).orElse(null);
         if (p == null) {
-            return null;
+            return new Reconciliation(null, false);
         }
         Instant now = Instant.now(clock);
-        p = clearedPhotosOrSame(p, now);
+        // 1. Tax first. Nothing in this block asks media: a media outage must never keep a LIVE listing without a
+        //    resolved tax decision on sale.
         if (p.status() == ProductStatus.LIVE && !LiveRequiresTax.holds(p)) {
-            return products.update(closeIfNotReady(p, now));
+            return new Reconciliation(products.update(closeIfNotReady(p, now)), false);
         }
         if (p.status() == ProductStatus.LIVE) {
             TaxAuthorityCheck.Verdict verdict = verdictOrNull(p);
             if (verdict != null && !verdict.resolved()) {
-                return products.update(hold(p, verdict.reasonCode(), now, true));
+                return new Reconciliation(products.update(hold(p, verdict.reasonCode(), now, true)), false);
             }
         }
+        // 2. Only now the held photos. Media unavailable: skip this part, keep the state (fail closed).
+        PhotoLookup photos = clearedPhotosOrSame(p, now);
+        p = photos.product();
         if (p.status() == ProductStatus.IN_REVIEW && TaxReadiness.of(p, null, null).ready() && !p.hasHeldImage()
                 && holds.isHeld(p.id()) && authorityAllows(p) && mayStillSell(p)) {
             Product live = products.update(p.restoreAfterTaxHold(now));
@@ -143,13 +153,13 @@ class ProductLiveGateImpl implements ProductLiveGate {
             events.publish(CatalogEvents.PRODUCT_RESUMED, live);
             metrics.restored();
             LOG.info("Listing {} back on sale: every variant has a resolved tax decision", p.atin().value());
-            return live;
+            return new Reconciliation(live, photos.skipped());
         }
         if (p.status() != ProductStatus.IN_REVIEW) {
             // The listing is no longer waiting on tax (a person decided, or it was never closed): forget the hold.
             holds.release(p.id(), now);
         }
-        return p;
+        return new Reconciliation(p, photos.skipped());
     }
 
     @Override
@@ -229,20 +239,33 @@ class ProductLiveGateImpl implements ProductLiveGate {
         return product.withImages(resolved.images(), withPictures(product, resolved), now);
     }
 
-    /** Publishes the held photos media has cleared since the last look; unchanged when media cannot be asked. */
-    private Product clearedPhotosOrSame(Product p, Instant now) {
+    private record PhotoLookup(Product product, boolean skipped) {
+    }
+
+    /**
+     * Publishes the held photos media has cleared since the last look. When media cannot be asked the product is returned
+     * unchanged and the skip is counted and logged: a held photo stays held, nothing is published on an unknown answer.
+     */
+    private PhotoLookup clearedPhotosOrSame(Product p, Instant now) {
         if (!p.hasHeldImage()) {
-            return p;
+            return new PhotoLookup(p, false);
         }
+        ImageGate.Resolved resolved;
         try {
-            ImageGate.Resolved resolved = imageGate.resolveHeld(p.images(), variantPictures(p), p.owner().orgId());
-            List<Variant> variants = withPictures(p, resolved);
-            return resolved.images().equals(p.images()) && variants.equals(p.variants()) ? p
-                    : products.update(p.withImages(resolved.images(), variants, now));
+            resolved = imageGate.resolveHeld(p.images(), variantPictures(p), p.owner().orgId());
+        } catch (ImageServiceUnavailable ex) {
+            metrics.mediaUnavailable();
+            LOG.warn("Listing {} ({}): media is unavailable, held photo check skipped and the listing stays as it is: {}",
+                    p.atin().value(), p.id(), ex.getMessage());
+            return new PhotoLookup(p, true);
         } catch (RuntimeException ex) {
-            LOG.warn("Listing {}: held photos could not be looked up now: {}", p.atin().value(), ex.getMessage());
-            return p;
+            LOG.warn("Listing {} ({}): held photos could not be looked up now, check skipped: {}", p.atin().value(),
+                    p.id(), ex.getMessage());
+            return new PhotoLookup(p, true);
         }
+        List<Variant> variants = withPictures(p, resolved);
+        return new PhotoLookup(resolved.images().equals(p.images()) && variants.equals(p.variants()) ? p
+                : products.update(p.withImages(resolved.images(), variants, now)), false);
     }
 
     private static List<List<ProductImage>> variantPictures(Product product) {

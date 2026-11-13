@@ -18,6 +18,12 @@ public interface TaxGateMetrics {
     /** tax-returns could not be asked (timeout, 5xx): states were kept, nobody was marked OK (alert on a rising count). */
     void authorityUnreachable();
 
+    /**
+     * Media could not be asked about a held photo while repairing tax state: the photo part was skipped and the listing
+     * kept held ({@code catalog_tax_gate_media_unavailable_total}, no labels). Tax enforcement never waits for media.
+     */
+    void mediaUnavailable();
+
     /** tax-returns answered a check: stamps {@code catalog_tax_gate_authority_last_check_timestamp_seconds}. */
     void authorityChecked();
 }

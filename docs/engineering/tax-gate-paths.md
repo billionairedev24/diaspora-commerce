@@ -67,7 +67,16 @@ make tax-gate-sweep                      # POST http://localhost:8101/v1/tax-gat
 make tax-gate-sweep TOKEN=<staff token>  # elsewhere: permission tax:classify-admin (Tax Reviewer, Catalog Manager, Super Admin)
 ```
 
-It returns `{closed, closedByTaxReturns, reopened, announced, checked, taxReturnsReachable}`. Safe to repeat.
+It returns `{closed, closedByTaxReturns, reopened, announced, checked, taxReturnsReachable, photoCheckSkipped}`. Safe to repeat.
+
+**Tax never waits for media.** `ProductLiveGateImpl.reconcileChecked` decides tax first (a LIVE listing without a resolved
+decision, or one tax-returns does not resolve, is closed without asking media). Only after tax passes is a held photo looked up.
+When media is unavailable during the sweep (or any `reconcile`), that photo part is skipped: a held listing stays held, a photo
+is never published and a held-tax listing is never reopened on an unknown media answer (fail closed). Each skip is counted in
+`photoCheckSkipped` (sweep result), in `catalog_tax_gate_media_unavailable_total` (no labels) and logged at WARN with the product
+id and ATIN; the sweep carries on with the other products and never answers 503 for this. Approve and resume are different: they
+publish, so with media down they still refuse (`ImageServiceUnavailable`, 503 `catalog.media-unavailable`) or `ImageHeld` (422).
+After a media outage, restart media (`tools/dev/local.sh restart media`) and run `make tax-gate-sweep` again.
 
 **Carts and checkout.** Closing a listing publishes `catalog.product.paused` (status IN_REVIEW): search drops it, offers set
 `productLive=false`, so the cart service (`live()`: a non-buyable offer is unavailable) shows the line as "Currently unavailable"
@@ -146,7 +155,7 @@ by the gate on its own: it waits for a person ([migration runbook, 4.7](../runbo
 | 28 | Catalog change requests, page merges and no-barcode exemptions (S385-S387) | `ChangeRequestApplierImpl`, `PageMergerImpl`, `GtinExemptionServiceImpl` | never put a page on sale and never change its status; an approved exemption goes to IN_REVIEW only | catalog `TaxGateArchitectureTest.theChangeRequestApplierNeverChangesAPagesStatus`, `...mergesAndExemptionDecisionsNeverPutAPageOnSale` |
 | 29 | Bulk offer upload and price/quantity feed (S393, S394): rows become offers only through `OfferBatchServiceImpl` (`POST /v1/offers/batch`); a row without a stored RESOLVED tax decision comes back `TAX_HELD` and is reported HELD, never live. Catalog's importer calls it through the `OfferWriter` port and never sets a status | `offers/.../OfferBatchServiceImpl.java`, `catalog/.../OfferRowProcessorImpl.java` | yes: the batch service asks `OfferTaxGate` per row | `offers` `OfferBatchServiceTest`, `offers` and `catalog` `TaxGateArchitectureTest` |
 | 30 | Stock CSV import (S395): writes only inventory ledger entries (`BULK_COUNT`); it cannot change an offer or listing status | `inventory/.../StockImportJobImpl.java` | not needed: no listing state is touched | `StockImportJobTest` |
-| 31 | A **photo held for review** (S390/S391): the listing refers to it by media asset id, is saved and submitted, but is not live until media clears it | `LiveRequiresTax.holds` (same invariant as rows 12-13, so search, offers, events and public reads fail closed), `ProductLiveGateImpl.approve/resume` (`requirePhotosCleared`: media is asked again, a cleared photo is published into the listing, a held or refused one throws `ImageHeld`, 422 plain words), `closeIfNotReady` (a LIVE edit with a held photo goes back to review with the note "We are checking your photo.", reason `IMAGE_HELD`), `reconcile` (resolves held photos, reopens a held-for-photo listing once cleared; run by the 5 min sweep over open holds) | yes: no new path to LIVE; `Product.holdForImage` takes a listing off sale and is not a live transition | `HeldPhotoTest`, `ProductLiveGateImplTest`, `TaxGateArchitectureTest` (unchanged, green) |
+| 31 | A **photo held for review** (S390/S391): the listing refers to it by media asset id, is saved and submitted, but is not live until media clears it | `LiveRequiresTax.holds` (same invariant as rows 12-13, so search, offers, events and public reads fail closed), `ProductLiveGateImpl.approve/resume` (`requirePhotosCleared`: media is asked again, a cleared photo is published into the listing, a held or refused one throws `ImageHeld`, 422 plain words), `closeIfNotReady` (a LIVE edit with a held photo goes back to review with the note "We are checking your photo.", reason `IMAGE_HELD`), `reconcile` (tax first, then resolves held photos, reopens a held-for-photo listing once cleared; run by the 5 min sweep over open holds; a media outage skips only the photo part and is counted, see "Tax never waits for media") | yes: no new path to LIVE; `Product.holdForImage` takes a listing off sale and is not a live transition | `HeldPhotoTest`, `ProductLiveGateImplTest`, `TaxGateArchitectureTest` (unchanged, green) |
 
 ### Gaps found by this audit, all closed
 

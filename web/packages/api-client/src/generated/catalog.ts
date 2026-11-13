@@ -3117,6 +3117,11 @@ export interface components {
             checked?: number;
             /** @description False when tax-returns could not be asked */
             taxReturnsReachable?: boolean;
+            /**
+             * Format: int32
+             * @description Listings whose held-photo check was skipped because the image library (media) was unavailable; they stay as they were. Tax closing is never skipped.
+             */
+            photoCheckSkipped?: number;
         };
         /** @description Live listings that have a variant without a stored, resolved tax decision in tax-returns (the decision checkout reads). Must always be empty. */
         LiveWithoutTaxDecisionPage: {

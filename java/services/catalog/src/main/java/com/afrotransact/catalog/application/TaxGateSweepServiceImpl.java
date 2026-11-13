@@ -80,12 +80,17 @@ class TaxGateSweepServiceImpl implements TaxGateSweepService {
     }
 
     private Result run(boolean askTaxReturns) {
-        int closed = closeOffenders();
+        int[] skipped = new int[1];
+        int closed = closeOffenders(skipped);
         AuthorityPass pass = askTaxReturns ? againstTaxReturns() : new AuthorityPass(0, 0, true);
-        int reopened = reopenResolved();
+        int reopened = reopenResolved(skipped);
         int announced = announceClosed();
         Result result = new Result(closed + pass.closed(), pass.closed(), reopened, announced, pass.checked(),
-                pass.reachable());
+                pass.reachable(), skipped[0]);
+        if (skipped[0] > 0) {
+            LOG.warn("Tax gate sweep: media unavailable, {} held-photo checks skipped (those listings stay as they were)",
+                    skipped[0]);
+        }
         if (result.changed() > 0) {
             LOG.info("Tax gate sweep: {} closed ({} because tax-returns is not RESOLVED), {} back on sale, {} announced,"
                     + " {} live listings checked against tax-returns", result.closed(), result.closedByTaxReturns(),
@@ -152,7 +157,7 @@ class TaxGateSweepServiceImpl implements TaxGateSweepService {
         events.publishTaxFactsChanged(p, node, null, List.of(), Set.of());
     }
 
-    private int closeOffenders() {
+    private int closeOffenders(int[] skipped) {
         int closed = 0;
         for (int page = 0; page < MAX_PAGES; page++) {
             List<Product> offenders = products.findLiveWithoutTaxDecision(0, pageSize);
@@ -160,7 +165,11 @@ class TaxGateSweepServiceImpl implements TaxGateSweepService {
                 break;
             }
             for (Product p : offenders) {
-                Product after = tx.execute(s -> liveGate.reconcile(p.id()));
+                ProductLiveGate.Reconciliation done = tx.execute(s -> liveGate.reconcileChecked(p.id()));
+                Product after = done == null ? null : done.product();
+                if (done != null && done.photoCheckSkipped()) {
+                    skipped[0]++;
+                }
                 if (after != null && after.status() != ProductStatus.LIVE) {
                     closed++;
                 }
@@ -172,13 +181,17 @@ class TaxGateSweepServiceImpl implements TaxGateSweepService {
         return closed;
     }
 
-    private int reopenResolved() {
+    private int reopenResolved(int[] skipped) {
         int reopened = 0;
         UUID after = null;
         while (true) {
             List<UUID> page = holds.openHolds(after, pageSize);
             for (UUID id : page) {
-                Product result = tx.execute(s -> liveGate.reconcile(id));
+                ProductLiveGate.Reconciliation done = tx.execute(s -> liveGate.reconcileChecked(id));
+                Product result = done == null ? null : done.product();
+                if (done != null && done.photoCheckSkipped()) {
+                    skipped[0]++;
+                }
                 if (result != null && result.status() == ProductStatus.LIVE) {
                     reopened++;
                 }

@@ -34,3 +34,7 @@ Catalog's own tax state is only a cache; **tax-returns' stored decision is the a
 - A seller who offers an item on a page another seller created gets an offer that is `TAX_HELD` (not buyable, not in search, not in the buy box) until tax-returns holds that seller's RESOLVED decision; the tax release component (and its sweep) moves it to ACTIVE. An offer that was moved by a page merge, or by staff moving a variant, waits the same way.
 - Diagnose: the offers log for `tax release`, the `tax.classification.changed` consumer lag, and which path set the offer ACTIVE (`TaxGateArchitectureTest` in offers should have refused a new one). Never write a decision or a basis by hand to clear it.
 - `OffersTaxGateMetricMissing`: the offers service is down or its count fails.
+
+## Media is down during the sweep
+
+The sweep closes listings without a resolved tax decision first and never asks media for that. If media (image library) is unreachable it skips only the held-photo check: the result shows `photoCheckSkipped` above 0, the counter `catalog_tax_gate_media_unavailable_total` rises and the log has a WARN "media is unavailable" with the product id. Those listings stay as they were (held stays held). Restart or fix media, then run `make tax-gate-sweep` again; it reopens the ones whose photo and tax are now clear.

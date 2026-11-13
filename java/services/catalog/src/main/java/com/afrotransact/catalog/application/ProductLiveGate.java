@@ -51,6 +51,21 @@ interface ProductLiveGate {
      */
     Product reconcile(UUID productId);
 
+    /**
+     * {@link #reconcile} that also says whether the held-photo check had to be skipped because media could not be asked.
+     * Tax is decided first and never depends on media: a listing without a resolved tax decision is closed without asking
+     * media. Only after tax passes is a held photo looked up; when media is down the photo part is skipped and the listing
+     * stays as it is (a held listing stays held, a photo is never published on an unknown answer).
+     */
+    Reconciliation reconcileChecked(UUID productId);
+
+    /**
+     * @param product           the stored product, or null when it does not exist
+     * @param photoCheckSkipped true when a held photo could not be looked up because media was unavailable
+     */
+    record Reconciliation(Product product, boolean photoCheckSkipped) {
+    }
+
     /** Forgets the tax hold of a product a person decided about (approved or rejected), so it never auto-restores. */
     void releaseHold(UUID productId, Instant now);
 }

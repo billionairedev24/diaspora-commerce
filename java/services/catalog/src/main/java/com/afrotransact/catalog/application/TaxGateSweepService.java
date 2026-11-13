@@ -35,9 +35,11 @@ public interface TaxGateSweepService {
      * @param announced          closings published
      * @param checked            live listings asked about tax-returns
      * @param authorityReachable false when tax-returns could not be asked (nothing was marked OK)
+     * @param photoCheckSkipped  listings whose held-photo check was skipped because media could not be asked; they stay
+     *                           as they were (a held listing stays held). Tax closing is never skipped.
      */
     record Result(int closed, int closedByTaxReturns, int reopened, int announced, int checked,
-                  boolean authorityReachable) {
+                  boolean authorityReachable, int photoCheckSkipped) {
 
         public int changed() {
             return closed + reopened + announced;

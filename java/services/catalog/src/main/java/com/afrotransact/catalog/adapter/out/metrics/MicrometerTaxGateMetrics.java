@@ -82,6 +82,13 @@ class MicrometerTaxGateMetrics implements TaxGateMetrics {
     }
 
     @Override
+    public void mediaUnavailable() {
+        Counter.builder("catalog.tax.gate.media.unavailable")
+                .description("Held-photo checks skipped during tax repair because media could not be asked")
+                .register(registry).increment();
+    }
+
+    @Override
     public void authorityChecked() {
         lastAuthorityCheck.set(System.currentTimeMillis() / 1000);
     }

@@ -5848,6 +5848,10 @@ components:
         taxReturnsReachable:
           type: boolean
           description: False when tax-returns could not be asked
+        photoCheckSkipped:
+          type: integer
+          format: int32
+          description: Listings whose held-photo check was skipped because the image library (media) was unavailable; they stay as they were. Tax closing is never skipped.
     LiveWithoutTaxDecisionPage:
       type: object
       description: Live listings that have a variant without a stored, resolved tax decision in tax-returns (the decision checkout reads). Must always be empty.

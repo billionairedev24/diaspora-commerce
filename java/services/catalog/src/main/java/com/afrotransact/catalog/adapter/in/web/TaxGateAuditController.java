@@ -30,11 +30,14 @@ class TaxGateAuditController {
     @Schema(name = "TaxGateSweepResult", description = "What one run of the tax gate sweep did")
     record SweepResultBody(int closed, int closedByTaxReturns, int reopened, int announced, int checked,
                            @Schema(description = "False when tax-returns could not be asked: nothing was marked OK and "
-                                   + "every state was kept") boolean taxReturnsReachable) {
+                                   + "every state was kept") boolean taxReturnsReachable,
+                           @Schema(description = "Listings whose held-photo check was skipped because the image library "
+                                   + "(media) was unavailable; they stay as they were. Tax closing is never skipped.")
+                           int photoCheckSkipped) {
 
         static SweepResultBody of(TaxGateSweepService.Result r) {
             return new SweepResultBody(r.closed(), r.closedByTaxReturns(), r.reopened(), r.announced(), r.checked(),
-                    r.authorityReachable());
+                    r.authorityReachable(), r.photoCheckSkipped());
         }
     }
 
