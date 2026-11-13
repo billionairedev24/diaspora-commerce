@@ -19,14 +19,12 @@
 .fieldError { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-danger); }
 
 .textarea { inline-size: 100%; min-width: 0; min-block-size: 140px; resize: vertical; padding: var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); font: inherit; font-size: var(--at-text-base); color: var(--at-color-text); background: var(--at-color-surface); line-height: var(--at-leading-normal); }
-.textarea:focus { outline: none; border-color: var(--at-color-focus); box-shadow: var(--at-shadow-focus); }
 .textarea[aria-invalid='true'] { border-color: var(--at-color-danger); }
 
 .drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-2); padding: var(--at-space-4); border: 1px dashed var(--at-color-border-strong); border-radius: var(--at-radius-sm); color: var(--at-color-text-muted); font-size: var(--at-text-md); }
 .dropActive { border-color: var(--at-color-focus); color: var(--at-color-text); }
 .dropIcon { font-size: var(--at-text-xl); }
 .pick { padding: 0; border: 0; background: none; font: inherit; color: var(--at-color-link); text-decoration: underline; cursor: pointer; min-block-size: var(--at-size-touch); }
-.pick:focus-visible { outline: none; box-shadow: var(--at-shadow-focus); border-radius: var(--at-radius-sm); }
 .fileInput { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
 
 .files { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
@@ -44,7 +42,6 @@
 .progress::-moz-progress-bar { background: var(--at-color-action-secondary); }
 .fileActions { display: flex; gap: var(--at-space-1); align-items: center; }
 .iconButton { display: inline-grid; place-items: center; min-inline-size: var(--at-size-touch); min-block-size: var(--at-size-touch); border: 0; border-radius: var(--at-radius-sm); background: none; color: var(--at-color-text); cursor: pointer; font: inherit; }
-.iconButton:focus-visible { outline: none; box-shadow: var(--at-shadow-focus); }
 @media (hover: hover) {
   .iconButton:hover { background: var(--at-color-surface-hover); }
 }

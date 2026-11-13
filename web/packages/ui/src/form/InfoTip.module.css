@@ -1,0 +1,31 @@
+.wrap { display: inline-flex; align-items: center; }
+.button {
+  display: inline-grid;
+  place-items: center;
+  /* A 24px target inside a 44px-tall row on phones comes from the padding of the label row; the icon itself stays small. */
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--at-radius-full, 50%);
+  background: transparent;
+  color: var(--at-color-text-muted);
+  cursor: pointer;
+}
+.button:hover { color: var(--at-color-text); }
+.panel {
+  position: fixed;
+  z-index: var(--at-z-dropdown);
+  box-sizing: border-box;
+  padding: var(--at-space-3);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface);
+  box-shadow: var(--at-shadow-md);
+  color: var(--at-color-text);
+  font-size: var(--at-text-sm);
+  font-weight: var(--at-weight-regular);
+  line-height: var(--at-leading-normal);
+  text-align: start;
+}
+@media (max-width: 640px) { .button { min-width: 32px; min-height: 32px; } }

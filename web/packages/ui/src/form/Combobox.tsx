@@ -35,6 +35,8 @@ export interface ComboboxProps {
   placeholder?: string;
   error?: string | null;
   help?: ReactNode;
+  required?: boolean;
+  tip?: ReactNode;
   id?: string;
   name?: string;
   disabled?: boolean;
@@ -67,7 +69,7 @@ interface Row {
  * nothing is typed. Use a native Select for a handful of choices; this is for long lists.
  */
 export function Combobox({
-  label, options, value, onChange, recent = [], popular = [], onCreate, createLabel = (t) => `Add “${t}”`, clearable = false, placeholder, error, help, id, name, disabled,
+  label, options, value, onChange, recent = [], popular = [], onCreate, createLabel = (t) => `Add “${t}”`, clearable = false, placeholder, error, help, required, tip, id, name, disabled,
   limit = 50, recentLabel = 'Recent', popularLabel = 'Popular', allLabel = 'All', emptyLabel = 'No matches', resultsLabel = (n) => `${n} results`, listLabel, footerAction
 }: ComboboxProps) {
   const auto = useId().replace(/:/g, '');
@@ -189,7 +191,7 @@ export function Combobox({
   };
 
   return (
-    <Field label={label} error={error} help={help} id={id}>
+    <Field label={label} error={error} help={help} required={required} tip={tip} id={id}>
       {(a11y) => (
         <div className={styles.wrap}>
           <input

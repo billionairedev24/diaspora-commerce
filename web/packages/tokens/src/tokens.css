@@ -114,7 +114,8 @@
   --at-shadow-sm: 0 1px 2px rgb(25 24 22 / .08);
   --at-shadow-md: 0 4px 14px rgb(25 24 22 / .12);
   --at-shadow-lg: 0 16px 40px rgb(25 24 22 / .22);
-  --at-shadow-focus: 0 0 0 3px var(--at-green-200);
+  --at-focus-ring: 2px solid var(--at-color-focus);   /* the one keyboard focus ring: same colour and weight on every control */
+  --at-focus-offset: 1px;
   /* Page rhythm: the one place vertical spacing between page parts is set (header, tabs, alerts, stat strip, toolbar, table). */
   --at-page-gap-header:24px;   /* page header → tabs / first block */
   --at-page-gap-tabs:24px;     /* tab row → tab content */
@@ -178,20 +179,16 @@
   a, button, input, select, textarea, label, summary, [role="button"] { touch-action: manipulation; }
 }
 
-/* Visible keyboard focus everywhere (WCAG 2.4.7 / 2.4.11): unlayered so no component can remove it by accident. */
-:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+/* One focus ring for every control (WCAG 2.4.7 / 2.4.11): a quiet 2px line in the focus colour, the same on buttons, links, fields,
+   selects, chips and the bordered wrappers around a field. Unlayered so no component can remove it by accident. */
+:focus-visible { outline: var(--at-focus-ring); outline-offset: var(--at-focus-offset); }
 
-/* Text-entry controls never draw a second ring inside their own border: the control (Field) or the bordered wrapper
-   around it (search boxes, pickers) shows focus instead, so a field is always one box, not a box in a box. */
-input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']):focus-visible,
-select:focus-visible,
-textarea:focus-visible { outline: none; }
-input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']):focus-visible,
-select:focus-visible,
-textarea:focus-visible { border-color: var(--at-color-focus); }
+/* A text-entry control inside a bordered wrapper (search boxes, pickers, a field with a unit) never draws a second ring inside it:
+   the wrapper shows the one ring, so a field is always one box, not a box in a box. */
+:where(label, span) > input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']):focus-visible { outline: none; }
 :where(label, span):has(> input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']):focus-visible) {
-  border-color: var(--at-color-focus);
-  box-shadow: var(--at-shadow-focus);
+  outline: var(--at-focus-ring);
+  outline-offset: var(--at-focus-offset);
 }
 
 /* No visible scrollbars anywhere (content still scrolls by wheel, touch, keyboard: scrollable regions that hold no

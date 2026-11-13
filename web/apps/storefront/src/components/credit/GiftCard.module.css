@@ -18,7 +18,6 @@
 
 .textareaLabel { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); }
 .textarea { inline-size: 100%; min-block-size: 6rem; padding: var(--at-space-2) var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); background: var(--at-color-surface); color: var(--at-color-text); font: inherit; line-height: var(--at-leading-normal); resize: vertical; }
-.textarea:focus { outline: none; border-color: var(--at-color-focus); box-shadow: var(--at-shadow-focus); }
 .counter { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); text-align: end; }
 
 .fine { margin: 0; font-size: var(--at-text-sm); line-height: var(--at-leading-normal); color: var(--at-color-text-muted); }

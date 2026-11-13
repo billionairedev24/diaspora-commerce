@@ -206,7 +206,8 @@ export const cssVariables = {
   "--at-shadow-sm": "0 1px 2px rgb(25 24 22 / .08)",
   "--at-shadow-md": "0 4px 14px rgb(25 24 22 / .12)",
   "--at-shadow-lg": "0 16px 40px rgb(25 24 22 / .22)",
-  "--at-shadow-focus": "0 0 0 3px var(--at-green-200)",
+  "--at-focus-ring": "2px solid var(--at-color-focus)",
+  "--at-focus-offset": "1px",
   "--at-page-gap-header": "24px",
   "--at-page-gap-tabs": "24px",
   "--at-page-gap-alert": "16px",
@@ -437,7 +438,8 @@ export const resolvedVariables = {
   "--at-shadow-sm": "0 1px 2px rgb(25 24 22 / .08)",
   "--at-shadow-md": "0 4px 14px rgb(25 24 22 / .12)",
   "--at-shadow-lg": "0 16px 40px rgb(25 24 22 / .22)",
-  "--at-shadow-focus": "0 0 0 3px #93D2BC",
+  "--at-focus-ring": "2px solid #0A8264",
+  "--at-focus-offset": "1px",
   "--at-page-gap-header": "24px",
   "--at-page-gap-tabs": "24px",
   "--at-page-gap-alert": "16px",
@@ -709,8 +711,11 @@ export const tokens = {
   "shadow": {
     "sm": "0 1px 2px rgb(25 24 22 / .08)",
     "md": "0 4px 14px rgb(25 24 22 / .12)",
-    "lg": "0 16px 40px rgb(25 24 22 / .22)",
-    "focus": "0 0 0 3px #93D2BC"
+    "lg": "0 16px 40px rgb(25 24 22 / .22)"
+  },
+  "focus": {
+    "ring": "2px solid #0A8264",
+    "offset": "1px"
   },
   "alert": {
     "max": "720px"
