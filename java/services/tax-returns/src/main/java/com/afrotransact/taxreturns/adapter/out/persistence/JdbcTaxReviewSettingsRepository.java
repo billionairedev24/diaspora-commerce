@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-/** Stores the review settings as one JSON value under the key {@code tax.review}; a missing or unreadable row means ALL. */
+/** Stores the review settings as one JSON value under the key {@code tax.review}; a missing row means the default (RISK_BASED), an unreadable one ALL. */
 @Repository
 class JdbcTaxReviewSettingsRepository implements TaxReviewSettingsRepository {
 
@@ -72,7 +72,7 @@ class JdbcTaxReviewSettingsRepository implements TaxReviewSettingsRepository {
                         rs.getString("changed_by"), rs.getTimestamp("changed_at").toInstant())).list();
     }
 
-    /** An unreadable value falls back to the safe default (every classification reviewed), never to RISK_BASED. */
+    /** An unreadable value falls back to ALL (every classification reviewed): staff may have chosen it on purpose. */
     private ReviewSettings parse(String value) {
         try {
             Map<String, Object> m = json.readMap(value);
@@ -83,7 +83,7 @@ class JdbcTaxReviewSettingsRepository implements TaxReviewSettingsRepository {
                     percent instanceof Number n ? n.intValue() : ReviewSettings.DEFAULT_AUDIT_PERCENT);
         } catch (RuntimeException e) {
             LOG.error("The stored tax review settings cannot be read; every classification stays in review", e);
-            return ReviewSettings.defaults();
+            return ReviewSettings.safeFallback();
         }
     }
 }

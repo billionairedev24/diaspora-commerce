@@ -28,7 +28,7 @@ import com.afrotransact.taxreturns.port.TaxTelemetry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-/** taxReview.mode: ALL keeps today's behaviour; RISK_BASED approves by rule, samples for audit and queues the rest. */
+/** taxReview.mode: RISK_BASED (default) approves by rule, samples for audit and queues the exceptions; ALL queues everything. */
 class RiskBasedReviewTest {
 
     private static final UUID PRODUCT = UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -55,16 +55,122 @@ class RiskBasedReviewTest {
                 List.of(new Variant(atin, null, facts, false)), "seller_1", TestRules.CLOCK.instant()));
     }
 
-    @Test
-    void theDefaultModeIsAllSoEveryRecordWaitsForAReviewer() {
-        assertThat(settings.current().mode()).isEqualTo(ReviewMode.ALL);
+    private void allMode() {
+        settings.change(new ReviewSettings(ReviewMode.ALL, ReviewSettings.DEFAULT_ALWAYS_REVIEW, 0), "Review everything "
+                + "for now", "staff_9", Instant.now());
+    }
 
-        submit("nuts-seeds", "AT10000001", TAXABLE_NUTS);
-        submit("haircare", "AT10000002", Map.of());
+    @Test
+    void withNothingStoredTheRulesDecideAndAPlainGroceryIsApprovedWithoutAPerson() {
+        assertThat(settings.current().mode()).isEqualTo(ReviewMode.RISK_BASED);
+
+        submit("rice-grains", "AT10000001", Map.of());
+
+        var rec = records.records.get("AT10000001");
+        assertThat(rec.status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(rec.classifiedBy()).isEqualTo("auto");
+        assertThat(records.audit("AT10000001")).extracting(AuditEntry::actor).containsExactly("seller_1", "auto");
+    }
+
+    @Test
+    void withNothingStoredAnExceptionStillWaitsForAPersonWithAPlainReason() {
+        submit("baby-food-formula", "AT10000002", Map.of());
+        submit("nuts-seeds", "AT10000013", Map.of("is_candy", false));
+        rules.status("haircare", ProfileStatus.CONFLICT_OPEN);
+        submit("haircare", "AT10000014", Map.of());
+
+        assertThat(records.records.get("AT10000002").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        assertThat(records.records.get("AT10000013").status()).isEqualTo(RecordStatus.MISSING_FACTS);
+        assertThat(records.records.get("AT10000014").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        Map<String, String> why = service.reviewReasons(List.copyOf(records.records.values()));
+        assertThat(why.get("AT10000002")).startsWith("Regulated category:").contains("Baby food");
+        assertThat(why.get("AT10000014")).startsWith("Conflict:").doesNotContain("AT1");
+        assertThat(why).doesNotContainKey("AT10000013");
+    }
+
+    @Test
+    void modeAllStillSendsEveryRecordToAReviewerAndSaysSo() {
+        allMode();
+
+        submit("rice-grains", "AT10000001", Map.of());
 
         assertThat(records.records.get("AT10000001").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
-        assertThat(records.records.get("AT10000002").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
-        assertThat(records.records.values()).allSatisfy(v -> assertThat(v.auditItem()).isFalse());
+        assertThat(service.reviewReasons(List.copyOf(records.records.values())).get("AT10000001"))
+                .startsWith("Review mode is ALL");
+    }
+
+    @Test
+    void theSweepApprovesWaitingRecordsTheRulesDecideAndLeavesTheExceptionsToAPerson() {
+        allMode();
+        submit("nuts-seeds", "AT10000015", EXEMPT_NUTS);
+        submit("rice-grains", "AT10000016", Map.of());
+        submit("baby-food-formula", "AT10000017", Map.of());
+        rules.status("haircare", ProfileStatus.CONFLICT_OPEN);
+        submit("haircare", "AT10000018", Map.of());
+        PendingReviewSweepService sweep = new PendingReviewSweepServiceImpl(service, settings);
+        assertThat(sweep.sweep()).isEqualTo(new PendingReviewSweepService.Report(0, 0, 0));
+        riskBased(0, "baby-food-formula");
+
+        PendingReviewSweepService.Report report = sweep.sweep();
+
+        assertThat(report).isEqualTo(new PendingReviewSweepService.Report(4, 2, 0));
+        assertThat(records.records.get("AT10000015").status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(records.records.get("AT10000016").status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(records.records.get("AT10000017").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        assertThat(records.records.get("AT10000018").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        var rec = records.records.get("AT10000015");
+        assertThat(rec.reviewedBy()).isEqualTo("auto");
+        assertThat(rec.ruleVersion()).startsWith(TestRules.RULES_V1);
+        AuditEntry approved = records.audit("AT10000015").getLast();
+        assertThat(approved.action()).isEqualTo(AuditAction.APPROVED);
+        assertThat(approved.actor()).isEqualTo("auto");
+        assertThat(approved.reason()).startsWith("Approved by the risk-based rule after waiting in review")
+                .contains("always-review list");
+        assertThat(approved.before()).containsEntry("status", "PENDING_REVIEW");
+        assertThat(records.decisions("AT10000015")).singleElement()
+                .satisfies(d -> assertThat(d.approvedBy()).isEqualTo("auto"));
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(publisher, times(2)).publish(eq("tax.classification.changed"), eq("taxreturns"), eq("AT10000015"),
+                payload.capture());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> last = (Map<String, Object>) payload.getAllValues().getLast();
+        assertThat(last).containsEntry("status", "APPROVED").containsEntry("previousStatus", "PENDING_REVIEW")
+                .containsEntry("changedBy", "auto");
+    }
+
+    @Test
+    void theSweepIsIdempotentAndNeverTouchesAStaffMoveOrAnOpenQuestionToTheSeller() {
+        allMode();
+        submit("nuts-seeds", "AT10000019", EXEMPT_NUTS);
+        submit("nuts-seeds", "AT10000020", EXEMPT_NUTS);
+        submit("nuts-seeds", "AT10000021", EXEMPT_NUTS);
+        service.reclassify("AT10000019", new ReclassifyCommand("rice-grains", null, "These are rice crackers"));
+        service.requestInformation("AT10000020", "Please send the label photo");
+        PendingReviewSweepService sweep = new PendingReviewSweepServiceImpl(service, settings);
+        riskBased(0);
+
+        assertThat(sweep.sweep().approved()).isEqualTo(1);
+        assertThat(sweep.sweep().approved()).isZero();
+
+        assertThat(records.records.get("AT10000019").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        assertThat(records.records.get("AT10000020").status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        assertThat(records.records.get("AT10000021").status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(records.audit("AT10000021")).extracting(AuditEntry::action)
+                .containsExactly(AuditAction.SUBMITTED, AuditAction.APPROVED);
+    }
+
+    @Test
+    void aSweptRecordInTheAuditSampleStaysLiveAndIsQueuedForAudit() {
+        allMode();
+        submit("nuts-seeds", "AT10000022", EXEMPT_NUTS);
+        riskBased(100);
+
+        new PendingReviewSweepServiceImpl(service, settings).sweep();
+
+        assertThat(records.records.get("AT10000022").status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(records.records.get("AT10000022").auditItem()).isTrue();
+        assertThat(records.audit("AT10000022")).extracting(AuditEntry::action).containsExactly(AuditAction.SUBMITTED,
+                AuditAction.APPROVED, AuditAction.AUDIT_SAMPLED);
     }
 
     @Test
@@ -212,7 +318,7 @@ class RiskBasedReviewTest {
     void switchingBackToAllSendsNewRecordsToReviewAndLeavesDecidedOnesAlone() {
         riskBased(0);
         submit("nuts-seeds", "AT10000011", EXEMPT_NUTS);
-        settings.change(ReviewSettings.defaults(), "Tax professional withdrew the approval", "staff_9", Instant.now());
+        allMode();
 
         submit("nuts-seeds", "AT10000012", EXEMPT_NUTS);
 

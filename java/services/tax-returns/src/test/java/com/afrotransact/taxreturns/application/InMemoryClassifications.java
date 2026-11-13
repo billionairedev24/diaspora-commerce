@@ -10,6 +10,7 @@ import java.util.Optional;
 import com.afrotransact.taxreturns.domain.profile.AuditEntry;
 import com.afrotransact.taxreturns.domain.profile.Evidence;
 import com.afrotransact.taxreturns.domain.profile.ListingDecision;
+import com.afrotransact.taxreturns.domain.profile.RecordStatus;
 import com.afrotransact.taxreturns.domain.profile.VariantClassification;
 import com.afrotransact.taxreturns.port.VariantClassificationRepository;
 
@@ -64,6 +65,11 @@ final class InMemoryClassifications implements VariantClassificationRepository {
                 .filter(v -> filter.categoryCode() == null || v.categoryCode().equals(filter.categoryCode()))
                 .filter(v -> !filter.auditOnly() || v.auditItem() && v.approved()).toList();
         return new Page(all, all.size());
+    }
+
+    @Override
+    public List<String> atinsWithStatus(RecordStatus status) {
+        return records.values().stream().filter(v -> v.status() == status).map(VariantClassification::atin).toList();
     }
 
     @Override

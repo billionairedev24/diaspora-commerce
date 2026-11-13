@@ -14,25 +14,32 @@ import com.afrotransact.taxreturns.domain.profile.ReviewSettings;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.port.TaxReviewSettingsRepository;
 import com.afrotransact.taxreturns.port.TaxSettingsRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 class TaxReviewSettingsServiceImpl implements TaxReviewSettingsService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(TaxReviewSettingsServiceImpl.class);
     private static final int HISTORY = 20;
     private static final int MIN_REASON = 10;
 
     private final TaxReviewSettingsRepository settings;
     private final ProfileCatalog catalog;
     private final Access access;
+    private final PendingReviewSweepService sweep;
     private final Clock clock;
 
     TaxReviewSettingsServiceImpl(TaxReviewSettingsRepository settings, ProfileCatalog catalog, Access access,
-                                 Clock clock) {
+                                 PendingReviewSweepService sweep, Clock clock) {
         this.settings = settings;
         this.catalog = catalog;
         this.access = access;
+        this.sweep = sweep;
         this.clock = clock;
     }
 
@@ -79,8 +86,29 @@ class TaxReviewSettingsServiceImpl implements TaxReviewSettingsService {
         ReviewSettings next = new ReviewSettings(mode, categories, percent);
         if (!next.equals(current)) {
             settings.change(next, reason.trim(), actor.subject(), Instant.now(clock));
+            if (next.riskBased()) {
+                sweepAfterCommit();
+            }
         }
         return view();
+    }
+
+    /** Records already waiting in review that the new settings let the rules decide are approved once the change is stored. */
+    private void sweepAfterCommit() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            sweep.sweep();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    sweep.sweep();
+                } catch (RuntimeException ex) {
+                    LOG.warn("Review sweep after a settings change failed; the scheduled sweep retries: {}", ex.getMessage());
+                }
+            }
+        });
     }
 
     private ReviewSettingsView view() {

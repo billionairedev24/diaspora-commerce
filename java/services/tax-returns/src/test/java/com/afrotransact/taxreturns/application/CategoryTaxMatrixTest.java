@@ -83,7 +83,7 @@ class CategoryTaxMatrixTest {
                 new TaxReturnsProperties.Shadow(null, null, false, null)), null, null, null, null);
         VariantClassificationService classifications = new VariantClassificationServiceImpl(records, rules.engine,
                 new ListingDecisions(records), new ClassificationEvents(publisher, telemetry), props,
-                new InMemoryReviewSettings(), TestActors.staff("*"), TestRules.CLOCK);
+                InMemoryReviewSettings.reviewingEverything(), TestActors.staff("*"), TestRules.CLOCK);
         ProductFacts facts = atins -> {
             Map<String, ProductFacts.Facts> out = new HashMap<>(catalogFacts);
             out.keySet().retainAll(atins);

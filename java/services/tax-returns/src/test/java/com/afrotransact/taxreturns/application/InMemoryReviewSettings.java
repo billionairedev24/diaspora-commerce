@@ -10,10 +10,18 @@ import com.afrotransact.taxreturns.domain.profile.ReviewSettingsChange;
 import com.afrotransact.taxreturns.port.TaxReviewSettingsRepository;
 import com.afrotransact.taxreturns.port.TaxSettingsRepository;
 
-/** A field-backed {@link TaxReviewSettingsRepository}: mode ALL until a test changes it. */
+/** A field-backed {@link TaxReviewSettingsRepository}: the production default (RISK_BASED) until a test changes it. */
 final class InMemoryReviewSettings implements TaxReviewSettingsRepository {
 
     private ReviewSettings stored;
+
+    /** Settings that send every classification to a person (mode ALL), for tests of the human review mechanics. */
+    static InMemoryReviewSettings reviewingEverything() {
+        InMemoryReviewSettings s = new InMemoryReviewSettings();
+        s.stored = ReviewSettings.safeFallback();
+        return s;
+    }
+
     private TaxSettingsRepository.Stamp stamp;
     private final List<ReviewSettingsChange> history = new ArrayList<>();
 

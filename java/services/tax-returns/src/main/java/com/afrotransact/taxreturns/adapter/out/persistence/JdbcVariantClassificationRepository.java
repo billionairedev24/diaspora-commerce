@@ -150,6 +150,12 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
     }
 
     @Override
+    public List<String> atinsWithStatus(RecordStatus status) {
+        return jdbc.sql("select atin from variant_classification where status = :s order by updated_at, atin")
+                .param("s", status.name()).query(String.class).list();
+    }
+
+    @Override
     public void addAudit(String atin, AuditEntry e) {
         jdbc.sql("""
                 insert into variant_classification_audit (atin, at, actor, action, reason, rule_version, before_state,

@@ -405,7 +405,7 @@ export const TaxReviewSettingsSchema = z.object({
   changedByName: z.string().default(''),
   changedAt: z.string().default(''),
   canChange: z.boolean(),
-  /** Plain-language warning: Review by risk must only be switched on after the Texas tax professional agrees. */
+  /** Plain-language note: Review by risk is the default; what still waits for a tax reviewer in both modes. */
   warning: z.string()
 });
 export type TaxReviewSettings = z.infer<typeof TaxReviewSettingsSchema>;

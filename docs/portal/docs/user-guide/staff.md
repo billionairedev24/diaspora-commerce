@@ -291,19 +291,21 @@ name. The tax rules are a **draft** until a Texas tax professional signs them of
   then exempt"), the notes flagged for the tax professional and the history. **Mark approved** needs the tax professional's name
   and the reference of their sign-off; **Reopen for approval** takes a category back. A category that needs a specific provider
   code is lifted product by product in Tax review, so the profile is read only.
-- **Tax review** is the queue of products whose tax waits for a person: the product, the seller, the category, what the seller
-  entered, the proof they attached, the proposed decision and why it needs review. **Approve**, **Move to another category** or
-  **Ask the seller for more**. The **Audit sample** tab lists items the system approved by itself (only when *Review by risk* is on):
+- **Tax review** is the queue of products whose tax waits for a person. The tax rules decide everything they can, so only
+  exceptions are here, each with the reason in one line: a *Conflict* (the category waits on an open decision), *No matching rule*,
+  a *Missing answer* or *Missing proof*, a *Regulated category* (always reviewed) or a category that *Needs sign-off*. You see the
+  product, the seller, the category, what the seller entered, the proof they attached and the proposed decision. **Approve**, **Move to another category** or
+  **Ask the seller for more**. The **Audit sample** tab lists items the system approved by itself (items the system approved under *Review by risk*, which is the default):
   they are live, and you **Confirm** each one or **Move it to another category**, which closes it until it is reviewed again. The
   **Decisions** view lists who decided, when and under which rule version; the system's own approvals read "Automatic approval
   (risk-based rule)".
-- **Review settings** says how tax review works: *Review every item* (the default: every product waits for a tax reviewer) or *Review
-  by risk* (the system approves an item itself only when its category is active, the tax rules give a clear answer, no required proof
-  is missing and the category is not on the always-review list). You also choose the categories that always go to a reviewer (by name;
+- **Review settings** says how tax review works: *Review by risk* (the default: the system approves an item itself when its category
+  is active, the tax rules give a clear answer, no required proof is missing and the category is not on the always-review list) or
+  *Review every item* (every product waits for a tax reviewer). Switching back to *Review by risk* approves the waiting items the rules
+  decide. You also choose the categories that always go to a reviewer (by name;
   supplements, over-the-counter medicines, medicated skincare, medical devices, baby food and formula and gift cards to start with,
   and any category that needs sign-off, a specific code, a decision or itemising is always reviewed) and the share of approved items
-  put in the Audit sample (5% to start with). **Only switch to Review by risk after the Texas tax professional has agreed**; put
-  their name or the reference in the reason. Needs `tax:classify-admin`. Checkout still blocks any item without a clear stored tax
+  put in the Audit sample (5% to start with). Needs `tax:classify-admin` and a reason. Checkout still blocks any item without a clear stored tax
   decision.
 - **Provider codes** shows, for Stripe and Avalara, the code for each outcome with whether a person verified it, and how many
   outcomes still need a code. A line with no verified code is blocked at checkout, never guessed. Export the map to CSV, or import a

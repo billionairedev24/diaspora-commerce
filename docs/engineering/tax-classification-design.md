@@ -81,12 +81,25 @@ stored decisions, quote lines and audit rows carry it; the resolve cache is keye
 
 ### Records and review
 
-A record is created or refreshed from the facts catalog reports. It is `MISSING_FACTS` while a required fact is empty, `PENDING_REVIEW`
-once the facts are complete (the review queue), `APPROVED` after an admin (`tax:classify-admin`) approves it. A later fact edit keeps the
+A record is created or refreshed from the facts catalog reports. It is `MISSING_FACTS` while a required fact is empty. Once the facts
+are complete **the rules decide**: under the default `taxReview.mode` `RISK_BASED` a record whose category is ACTIVE, whose rules
+resolve to `RESOLVED`, with no required evidence missing and outside the always-review list is `APPROVED` at once by actor `auto`;
+**only an exception is `PENDING_REVIEW`** (the review queue) and waits for an admin (`tax:classify-admin`): a conflict, no matching
+rule, a missing required fact or proof, a category in `NEEDS_APPROVAL`, `REFINE_CODE`, `CONFLICT_OPEN` or `BLOCKED_BUNDLE`, or a
+regulated category on the always-review list. The queue and `GET .../variant-classifications` say which of these it is in
+`reviewReason` ("Conflict: ...", "No matching rule: ...", "Missing answer: ...", "Missing proof: ...", "Regulated category: ...",
+"Needs sign-off: ..."), in words and with the category name, never an id. A later fact edit keeps the
 approval only when the decision (outcome, internal code, status) is unchanged; a new category or new evidence always returns it to review.
 `at.taxreturns.tax.classification.approval-policy=SENSITIVE` lets the system approve plain taxable, evidence-free records in ACTIVE profiles;
-the design default `ALL` reviews everything. Anything exempt, evidence-based or gated always needs a person under that policy.
-The staff setting `taxReview.mode` (V13, OFF = `ALL` by default, changed at runtime by `tax:classify-admin`) is separate: `RISK_BASED` lets the system approve any ACTIVE, RESOLVED record with no missing required evidence outside the always-review list, and samples 5% for audit ([category-tax-design.md](./category-tax-design.md) section 9). When it is `RISK_BASED` it replaces `approval-policy`; when it is `ALL` the policy above applies as before.
+the policy default `ALL` reviews everything. Anything exempt, evidence-based or gated always needs a person under that policy.
+The staff setting `taxReview.mode` (V13, changed at runtime by `tax:classify-admin`) is separate and **defaults to `RISK_BASED`** when staff
+stored no value (every environment, no migration): the system approves any ACTIVE, RESOLVED record with no missing required evidence outside
+the always-review list, and samples 5% for audit ([category-tax-design.md](./category-tax-design.md) section 9). When it is `RISK_BASED` it
+replaces `approval-policy` (the policy is then ignored); only when staff choose `ALL` does the policy above apply.
+**Backlog clearing:** a record that was held while the mode was `ALL` is approved by the same rule when it qualifies (`PendingReviewSweepService`):
+at once when staff switch to `RISK_BASED`, 20 s after tax-returns starts and every `at.taxreturns.jobs.review-sweep-interval` (5 m). Each is
+audited as actor `auto` (reason "Approved by the risk-based rule after waiting in review ..."), stores the decision and publishes
+`tax.classification.changed`, so catalog re-opens the gate. Skipped: a record staff reclassified or asked the seller about, and every exception.
 
 ### Never guess, as built
 

@@ -25,6 +25,9 @@ public interface VariantClassificationRepository {
 
     Page list(Filter filter, int page, int size);
 
+    /** ATINs of every record in this status, oldest change first. */
+    List<String> atinsWithStatus(RecordStatus status);
+
     void addAudit(String atin, AuditEntry entry);
 
     List<AuditEntry> audit(String atin);

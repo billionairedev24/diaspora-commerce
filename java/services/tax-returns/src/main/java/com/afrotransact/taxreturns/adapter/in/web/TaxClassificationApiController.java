@@ -172,7 +172,9 @@ class TaxClassificationApiController {
         int p = Math.max(page, 0);
         VariantClassificationRepository.Page result = variants.list(auditSample ? null : status, categoryCode, sellerOrgId, q,
                 auditSample, p, s);
-        return new VariantPage(result.items().stream().map(VariantDto::light).toList(), p, s, result.total());
+        Map<String, String> why = variants.reviewReasons(result.items());
+        return new VariantPage(result.items().stream().map(v -> VariantDto.light(v, why.get(v.atin()))).toList(), p, s,
+                result.total());
     }
 
     @Operation(summary = "The classification record of one variant ATIN with its audit trail (tax:read)")

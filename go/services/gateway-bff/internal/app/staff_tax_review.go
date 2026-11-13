@@ -129,10 +129,17 @@ func reviewRow(it jobj, names map[string]string) jobj {
 		"auditSample": boolean(it, "auditSample"), "autoApproved": status == "APPROVED" && jstr(it, "reviewedByName") == autoApprovalWho}
 }
 
-// reviewWhy says in plain words why this variant needs a person.
+// reviewWhy says in plain words why this variant needs a person. tax-returns names the cause (conflict, no matching
+// rule, missing answer or proof, regulated category, category awaiting sign-off) in reviewReason; the wording below
+// covers what it cannot see (a staff move, a seller's claim of exemption, a record that is not waiting).
 func reviewWhy(it jobj) string {
 	res, _ := it["resolution"].(map[string]any)
 	status := jstr(it, "status")
+	if status == "PENDING_REVIEW" {
+		if why := jstr(it, "reviewReason"); why != "" {
+			return why
+		}
+	}
 	if boolean(it, "auditSample") && status == "APPROVED" {
 		return "The system approved this under the risk-based rule and it is live. Check the category and the answers, then confirm it or move it to the right category."
 	}

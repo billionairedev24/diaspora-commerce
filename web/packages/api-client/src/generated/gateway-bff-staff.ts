@@ -3343,7 +3343,7 @@ export interface paths {
         };
         /**
          * How tax review works: every classification, or by risk, with the always-review list and the audit sample
-         * @description tax-returns `GET /v1/tax/review-settings` with category names. Mode ALL (the default) sends every classification to a tax reviewer. RISK_BASED must only be switched on after the Texas tax professional agrees.
+         * @description tax-returns `GET /v1/tax/review-settings` with category names. Mode RISK_BASED (the default) lets the tax rules decide and sends only exceptions to a tax reviewer; ALL sends every classification to one.
          */
         get: operations["getStaffTaxReviewSettings"];
         /**
@@ -10766,7 +10766,7 @@ export interface components {
             changedByName?: string;
             changedAt?: string;
             canChange: boolean;
-            /** @description Plain-language warning: RISK_BASED must only be switched on after the Texas tax professional agrees */
+            /** @description Plain-language note: Review by risk is the default; what still waits for a tax reviewer in both modes */
             warning: string;
         };
         StaffTaxReviewSettingsChange: {

@@ -131,7 +131,9 @@ reaches the catalog through `schemas.json` (initial data and importer). See `doc
 
 ### Tax review of the demo data, and the Retail offer wait
 
-**Tax review.** tax-returns' approval policy is `ALL` by default (`TAX_APPROVAL_POLICY`, kept for dev, uat and prod): every
+**Tax review.** The staff setting `taxReview.mode` is `RISK_BASED` by default, so the rules approve a plain grocery such as Basmati
+Rice themselves (actor `auto`) within seconds, with no click; the seeder then finds nothing to approve for those. What follows is the path
+when the mode is `ALL` (`TAX_APPROVAL_POLICY` applies only then, default `ALL`) and for the exceptions the rules send to a person: every
 variant catalog reports gets a classification record in `PENDING_REVIEW`, and catalog marks the variant `PENDING_REVIEW` too
 (log line `Variant ... tax status READY -> PENDING_REVIEW (tax-returns)`). The product stays LIVE, visible in listings and
 search and has its offers, but **checkout cannot charge it**: tax-returns quotes a line only when its record is `APPROVED`

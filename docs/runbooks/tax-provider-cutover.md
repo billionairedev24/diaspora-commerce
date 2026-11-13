@@ -78,13 +78,14 @@ The tax professional signs off the cutover; attach the signed note to the settin
 ## Risk-based tax review and a cutover
 
 `taxReview.mode` (Settings → Sales tax → *Review settings*, `GET|PUT /v1/tax/review-settings`) decides who approves a variant's tax
-classification: every variant waits for a reviewer (`ALL`, default) or the system approves when the category is ACTIVE, the rules
-resolve and the category is not on the always-review list (`RISK_BASED`, with a 5% audit sample). It does not change which provider
-calculates the amount. For a cutover: leave it on `ALL` until the tax professional has agreed in writing (record the reference in the
-change reason), do not change it in the same window as the method switch (a difference in the shadow report would then have two
+classification: the system approves when the category is ACTIVE, the rules resolve and the category is not on the always-review list
+(`RISK_BASED`, the default, with a 5% audit sample) or every variant waits for a reviewer (`ALL`). It does not change which provider
+calculates the amount. For a cutover: record the tax professional's sign-off reference in the change reason when the list or the rate
+changes, do not change the mode in the same window as the method switch (a difference in the shadow report would then have two
 possible causes), and keep the **Audit sample** tab clear. A reclassification from the audit sample re-closes the gate and re-resolves
 checkout lines, so its effect shows in the next shadow quotes. Rolling it back is a `PUT` with mode `ALL`: new events then go to
-review again; items the system already approved keep their approval until their facts change or a reviewer reclassifies them.
+review again; items the system already approved keep their approval until their facts change or a reviewer reclassifies them. A `PUT`
+back to `RISK_BASED` approves the waiting items the rules decide.
 
 ## Rollback
 

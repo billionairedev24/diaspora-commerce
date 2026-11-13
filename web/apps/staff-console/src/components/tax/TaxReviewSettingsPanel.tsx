@@ -13,11 +13,11 @@ import { dateTime } from '@/lib/format';
 import { ActionDialog, Section } from './shared';
 
 /**
- * How tax review works: every item waits for a tax reviewer (the default), or by risk, where the system approves an item
- * itself only when its category is active, the rules give a clear answer, no required proof is missing and the category is
- * not on the always-review list. The screen says in plain words that Review by risk must only be switched on after the
- * Texas tax professional agrees. Categories are shown by name; a category that is gated is always reviewed whatever the
- * list says (shown, not editable).
+ * How tax review works: by risk (the default), where the tax rules decide and the system approves an item itself when its
+ * category is active, the rules give a clear answer, no required proof is missing and the category is not on the
+ * always-review list; or every item waits for a tax reviewer. The screen says what still waits for a person in both
+ * modes. Categories are shown by name; a category that is gated is always reviewed whatever the list says (shown, not
+ * editable).
  */
 export function TaxReviewSettingsPanel() {
   const api = staffApi();
@@ -72,10 +72,10 @@ function Loaded({ s }: { s: TaxReviewSettings }) {
         <p className="m-0 max-w-[80ch] text-sm text-muted">{s.modeExplain}</p>
         <p className="m-0 text-sm">
           Last changed by {s.changedByName || 'nobody (this is the default)'}
-          {s.changedAt ? `, ${dateTime(s.changedAt)}` : ''}. A change applies to items as they are submitted or changed; items already decided keep their status.
+          {s.changedAt ? `, ${dateTime(s.changedAt)}` : ''}. Items already decided keep their status; items waiting for review that the tax rules decide are approved when Review by risk applies.
         </p>
       </div>
-      <Notice tone="warning" title="Switch on only after the tax professional agrees">
+      <Notice tone="info" title="What still waits for a person">
         {s.warning}
       </Notice>
       {!s.canChange ? (
@@ -95,7 +95,6 @@ function Loaded({ s }: { s: TaxReviewSettings }) {
                 {o.current ? ' (in use now)' : ''}
               </strong>
               <span className="text-muted">{o.explain}</span>
-              {o.current && o.mode === 'RISK_BASED' ? <span className="text-warning">Only the tax professional can say this is safe to leave on.</span> : null}
             </span>
           </label>
         ))}
@@ -182,15 +181,15 @@ function Loaded({ s }: { s: TaxReviewSettings }) {
                 {mode === 'RISK_BASED' ? 'Review by risk' : 'Review every item'}, {percentNumber}% audit sample, {always.length} categories always reviewed.
               </p>
               {switchingOn ? (
-                <Notice tone="warning" title="Has the tax professional agreed?">
-                  Switching on lets the system approve items without a person. Put the professional’s name or the reference of their advice in the reason.
+                <Notice tone="info" title="Items waiting now">
+                  Switching to Review by risk approves, right away, the items waiting for review that the tax rules decide. Items with a conflict, no matching rule, a missing answer or proof, or in an always-review category keep waiting.
                 </Notice>
               ) : null}
             </div>
           }
           submitLabel="Change"
           reasonLabel="Reason"
-          reasonHelp="Kept with your name in the history. Name the tax professional or link their note."
+          reasonHelp="Kept with your name in the history."
           reason={reason}
           onReason={setReason}
           pending={save.isPending}

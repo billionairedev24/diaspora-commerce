@@ -267,15 +267,19 @@ final class TaxClassificationDtos {
                       InfoRequestDto informationRequest, Long ordersAffected,
                       @Schema(description = "Approved by the system and waiting in the audit sample for a reviewer to "
                               + "confirm or reclassify it; the item is live meanwhile") boolean auditSample,
-                      Instant auditSampledAt) {
+                      Instant auditSampledAt,
+                      @Schema(description = "Why a person has to review it, in plain words: a conflict, no matching "
+                              + "rule, a missing answer or proof, a regulated category or a category that awaits "
+                              + "sign-off. Null when nothing waits, or when the rules would approve it (a staff "
+                              + "move, an open question to the seller).") String reviewReason) {
 
         /** A list item: the record without its audit, evidence and stored decisions. */
-        static VariantDto light(VariantClassification v) {
+        static VariantDto light(VariantClassification v, String reviewReason) {
             return new VariantDto(v.atin(), v.gtin(), v.productId(), v.title(), v.categoryCode(), v.productTypeCode(),
                     v.status().name(), v.facts(), v.staffFacts(), null, v.refinedProviderCodes(),
                     v.resolution() == null ? null : ResolveResponse.of(v.resolution()), null, v.ownerOrgId(),
                     v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.ruleVersion(), null,
-                    InfoRequestDto.of(v), null, v.auditItem(), v.auditSampledAt());
+                    InfoRequestDto.of(v), null, v.auditItem(), v.auditSampledAt(), reviewReason);
         }
 
         static VariantDto of(VariantClassificationService.ClassificationView view) {
@@ -293,7 +297,7 @@ final class TaxClassificationDtos {
                     v.refinedProviderCodes(), view.resolution() == null ? null : ResolveResponse.of(view.resolution()),
                     decisions, v.ownerOrgId(), v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(),
                     v.ruleVersion(), view.audit().stream().map(AuditDto::of).toList(), InfoRequestDto.of(v),
-                    view.ordersAffected(), v.auditItem(), v.auditSampledAt());
+                    view.ordersAffected(), v.auditItem(), v.auditSampledAt(), view.reviewReason());
         }
     }
 

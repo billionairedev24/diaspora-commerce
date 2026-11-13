@@ -92,7 +92,8 @@ at:
       classification:
         # States the rules (dataset) cover; a ship-to elsewhere is blocked at checkout, never guessed.
         rule-states: [TX]
-        # ALL = every variant record is reviewed by an admin before it is charged (design default).
+        # Only used when the staff setting taxReview.mode is ALL (the default mode is RISK_BASED, which ignores this).
+        # ALL = every variant record is reviewed by an admin before it is charged.
         # SENSITIVE = plain taxable, evidence-free records in ACTIVE profiles are approved by the system.
         approval-policy: ${TAX_APPROVAL_POLICY:ALL}
         # true = a provider code is sent only after staff marked the mapping verified (set true in prod).

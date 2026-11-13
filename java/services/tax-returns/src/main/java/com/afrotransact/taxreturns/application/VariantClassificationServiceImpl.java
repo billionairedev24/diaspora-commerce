@@ -3,6 +3,7 @@ package com.afrotransact.taxreturns.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -31,6 +32,7 @@ import com.afrotransact.taxreturns.port.VariantClassificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -160,6 +162,78 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean autoApproveIfQualified(String atin) {
+        VariantClassification rec = records.find(atin).orElse(null);
+        ReviewSettings review = reviewSettings.current();
+        if (rec == null || rec.status() != RecordStatus.PENDING_REVIEW || rec.informationRequest() != null
+                || !review.riskBased() || movedByStaff(atin)) {
+            return false;
+        }
+        Resolution r = resolve(rec);
+        if (r == null || r.status() != ResolveStatus.RESOLVED) {
+            return false;
+        }
+        Review rv = review(rec, r, review);
+        if (rv.needsReview()) {
+            return false;
+        }
+        Instant now = clock.instant();
+        String rules = r.ruleVersion();
+        Map<String, Object> before = summary(rec, rec.resolution());
+        VariantClassification saved = records.update(markAutoApproved(withStatus(rec, RecordStatus.APPROVED, r, rules, now),
+                rv, now));
+        String why = "Approved by the risk-based rule after waiting in review. " + rv.rule();
+        auditAutoApproval(saved, new Review(false, why, true, rv.sampled(), rv.auditPercent()), r, rules, before, now);
+        remember(saved, r, saved.ownerOrgId(), AUTO_RISK, now);
+        events.variant(saved, rec.status().name(), r, why, AUTO_RISK, now);
+        return true;
+    }
+
+    /** True when the latest thing that happened to the record was a staff reclassification: a person must confirm it. */
+    private boolean movedByStaff(String atin) {
+        List<AuditEntry> trail = records.audit(atin);
+        return !trail.isEmpty() && trail.getLast().action() == AuditAction.RECLASSIFIED;
+    }
+
+    @Override
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public List<String> pendingReviewAtins() {
+        return records.atinsWithStatus(RecordStatus.PENDING_REVIEW);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, String> reviewReasons(List<VariantClassification> recs) {
+        access.staff(TaxReturnsPermissions.TAX_READ);
+        ReviewSettings review = reviewSettings.current();
+        Map<String, String> out = new LinkedHashMap<>();
+        for (VariantClassification rec : recs) {
+            String why = reviewReason(rec, review);
+            if (rec.status() == RecordStatus.PENDING_REVIEW && why != null) {
+                out.put(rec.atin(), why);
+            }
+        }
+        return out;
+    }
+
+    /** What sends the record to a person under the risk rule; null when the rule would approve it (mode ALL: say so). */
+    private String reviewReason(VariantClassification rec, ReviewSettings review) {
+        TaxProfile profile;
+        try {
+            profile = engine.profile(rec.categoryCode());
+        } catch (NotFoundException ex) {
+            return "No matching rule: there is no tax profile for this category.";
+        }
+        Resolution r = resolve(rec);
+        RiskReviewDecision d = new RiskReviewPolicy(review).decide(profile, r, rec.allFacts());
+        if (!d.autoApprove()) {
+            return d.rule();
+        }
+        return review.riskBased() ? null : "Review mode is ALL: every item goes to a person, even when the rules resolve it.";
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public VariantClassificationRepository.Page list(RecordStatus status, String categoryCode, String sellerOrgId,
                                                      String q, boolean auditOnly, int page, int size) {
@@ -281,7 +355,8 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     private ClassificationView view(VariantClassification rec) {
         Resolution r = resolve(rec);
         return new ClassificationView(rec, r, records.evidence(rec.atin()), records.audit(rec.atin()),
-                records.decisions(rec.atin()), records.ordersAffected(rec.atin()));
+                records.decisions(rec.atin()), records.ordersAffected(rec.atin()),
+                rec.status() == RecordStatus.PENDING_REVIEW ? reviewReason(rec, reviewSettings.current()) : null);
     }
 
     /** The record under today's rules and the owner's behaviour; null when its category has no profile. */
@@ -295,8 +370,9 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     }
 
     /**
-     * Who looks at a classification: in RISK_BASED mode the risk rule decides (and may sample the item for audit); in ALL
-     * mode the configured approval policy does, and by default every record goes to a reviewer.
+     * Who looks at a classification: in RISK_BASED mode (the default) the risk rule decides (and may sample the item for
+     * audit); in ALL mode the configured approval policy does, and by default every record goes to a reviewer. The approval
+     * policy is ignored in RISK_BASED mode.
      */
     private Review review(VariantClassification rec, Resolution r, ReviewSettings settings) {
         TaxProfile profile = engine.profile(rec.categoryCode());

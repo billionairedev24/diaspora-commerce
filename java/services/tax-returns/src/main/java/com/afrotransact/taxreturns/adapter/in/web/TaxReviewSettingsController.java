@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-/** How variant classifications reach tax review: every one (ALL, default) or by risk (staff, tax:read / tax:classify-admin). */
+/** How variant classifications reach tax review: by risk (RISK_BASED, default) or every one (ALL) (staff, tax:read / tax:classify-admin). */
 @RestController
 @Tag(name = "Tax settings")
 class TaxReviewSettingsController {
@@ -50,10 +50,11 @@ class TaxReviewSettingsController {
 
     @Schema(name = "TaxReviewSettings")
     record SettingsDto(@Schema(allowableValues = {"ALL", "RISK_BASED"},
-                               description = "ALL: every classification waits for a tax reviewer (the default). "
-                                       + "RISK_BASED: only when the category is ACTIVE, the rules resolve and it is "
-                                       + "not on the always-review list; never switch on before the Texas tax "
-                                       + "professional agrees.") String mode,
+                               description = "RISK_BASED (the default when staff stored nothing): the rules decide; "
+                                       + "a person reviews only a conflict, no matching rule, a missing answer or "
+                                       + "proof, a category that awaits sign-off or an always-review category. ALL: "
+                                       + "every classification waits for a tax reviewer. Records already waiting "
+                                       + "that the rules decide are approved when RISK_BASED applies.") String mode,
                        @Schema(description = "Category codes that always go to review in RISK_BASED mode")
                        List<String> alwaysReview,
                        @Schema(description = "Categories whose status always sends them to review whatever the list says")

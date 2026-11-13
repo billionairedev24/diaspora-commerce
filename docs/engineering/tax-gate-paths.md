@@ -51,7 +51,7 @@ decision" from **its own copy** on the variant row (`tax_status = READY` plus a 
 
 **Why existing (pre-gate) listings are not auto-resolved.** The gate may only close a listing, never approve one. A listing
 comes back **only when tax-returns itself says RESOLVED**: the record must be `APPROVED` by a person (policy `ALL`, the default)
-or by the risk rule (`taxReview.mode` `RISK_BASED`), and if the category profile awaits staff approval (`NEEDS_APPROVAL`, a
+or by the risk rule (`taxReview.mode` `RISK_BASED`, the default; a record held under `ALL` is approved by the sweep when it qualifies), and if the category profile awaits staff approval (`NEEDS_APPROVAL`, a
 provisional category such as Fabrics & textiles) the profile must be approved first. Auto-resolving would mean inventing a tax
 decision, which the owner's rule forbids.
 

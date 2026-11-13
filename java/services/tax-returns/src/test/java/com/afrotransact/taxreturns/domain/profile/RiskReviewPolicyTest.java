@@ -58,7 +58,7 @@ class RiskReviewPolicyTest {
 
             assertThat(d.autoApprove()).as("status %s", status).isEqualTo(status == ProfileStatus.ACTIVE);
             if (status != ProfileStatus.ACTIVE) {
-                assertThat(d.rule()).contains(status.name());
+                assertThat(d.rule()).as("plain reason for %s", status).doesNotContain("_").contains("Haircare");
             }
         }
     }
@@ -85,6 +85,26 @@ class RiskReviewPolicyTest {
     }
 
     @Test
+    void everyReasonToReviewIsPlainAndNamesTheCategoryNotAnId() {
+        TaxProfile active = profile("haircare", ProfileStatus.ACTIVE);
+        Resolution noRule = new Resolution(ResolveStatus.MISSING_FACTS, null, null, Map.of(), null, null, List.of(),
+                "tx-test.1", "No rule matches these facts; escalate to tax review.", 0);
+        Resolution missing = new Resolution(ResolveStatus.MISSING_FACTS, null, null, Map.of(), null, null,
+                List.of(new MissingFact("net_weight_oz", "Net weight (oz)", "Say the net weight")), "tx-test.1", "Missing", 0);
+
+        assertThat(policy().decide(profile("haircare", ProfileStatus.CONFLICT_OPEN), resolved(), Map.of()).rule())
+                .startsWith("Conflict:");
+        assertThat(policy().decide(profile("haircare", ProfileStatus.NEEDS_APPROVAL), resolved(), Map.of()).rule())
+                .startsWith("Needs sign-off:");
+        assertThat(policy().decide(active, noRule, Map.of()).rule()).startsWith("No matching rule:");
+        assertThat(policy().decide(active, missing, Map.of()).rule()).startsWith("Missing answer:")
+                .contains("Net weight (oz)");
+        assertThat(policy().decide(active, with(ResolveStatus.BLOCKED), Map.of()).rule()).startsWith("Blocked:");
+        assertThat(policy().decide(profile("gift-cards", ProfileStatus.ACTIVE), resolved(), Map.of()).rule())
+                .startsWith("Regulated category:");
+    }
+
+    @Test
     void theDefaultAlwaysReviewListIsTheSixRegulatedCategoriesAndTheyAreReviewedEvenWhenActiveAndResolved() {
         assertThat(ReviewSettings.defaults().alwaysReview()).containsExactlyInAnyOrder("dietary-supplements",
                 "otc-medicines", "medicated-skincare", "medical-devices", "baby-food-formula", "gift-cards");
@@ -92,7 +112,7 @@ class RiskReviewPolicyTest {
             RiskReviewDecision d = policy().decide(profile(code, ProfileStatus.ACTIVE), resolved(), allEvidence(code));
 
             assertThat(d.autoApprove()).as(code).isFalse();
-            assertThat(d.rule()).contains("always-review list");
+            assertThat(d.rule()).startsWith("Regulated category:");
         }
     }
 
@@ -117,7 +137,7 @@ class RiskReviewPolicyTest {
         RiskReviewDecision missing = policy().decide(magazines, resolved(), noProof);
 
         assertThat(missing.autoApprove()).isFalse();
-        assertThat(missing.rule()).contains("Evidence");
+        assertThat(missing.rule()).startsWith("Missing proof:");
         assertThat(policy().decide(magazines, resolved(), withProof).autoApprove()).isTrue();
         assertThat(policy().decide(magazines, resolved(), ordinary).autoApprove()).as("evidence not required here").isTrue();
     }
@@ -159,13 +179,16 @@ class RiskReviewPolicyTest {
     }
 
     @Test
-    void theSettingsDefaultToTheSafeModeAndRejectAnImpossiblePercentage() {
+    void theSettingsDefaultToRiskBasedAndAnUnreadableValueFallsBackToAll() {
         ReviewSettings defaults = ReviewSettings.defaults();
 
-        assertThat(defaults.mode()).isEqualTo(ReviewMode.ALL);
-        assertThat(defaults.riskBased()).isFalse();
+        assertThat(defaults.mode()).isEqualTo(ReviewMode.RISK_BASED);
+        assertThat(defaults.riskBased()).isTrue();
         assertThat(defaults.auditPercent()).isEqualTo(5);
-        assertThat(new ReviewSettings(null, null, 5).mode()).isEqualTo(ReviewMode.ALL);
+        assertThat(defaults.alwaysReview()).isEqualTo(ReviewSettings.DEFAULT_ALWAYS_REVIEW);
+        assertThat(new ReviewSettings(null, null, 5).mode()).isEqualTo(ReviewMode.RISK_BASED);
+        assertThat(ReviewSettings.safeFallback().mode()).isEqualTo(ReviewMode.ALL);
+        assertThat(ReviewSettings.safeFallback().alwaysReview()).isEqualTo(ReviewSettings.DEFAULT_ALWAYS_REVIEW);
         assertThatThrownBy(() -> new ReviewSettings(ReviewMode.RISK_BASED, List.of(), 101))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ReviewSettings(ReviewMode.RISK_BASED, List.of(), -1))

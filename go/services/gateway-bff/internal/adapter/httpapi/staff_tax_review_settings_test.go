@@ -71,7 +71,7 @@ func TestStaffTaxAuditSampleTab(t *testing.T) {
 	}
 }
 
-func TestStaffTaxReviewSettingsAreOffByDefaultAndShowNames(t *testing.T) {
+func TestStaffTaxReviewSettingsShowTheModeInForceAndNames(t *testing.T) {
 	_, do, _ := taxBFF(t)
 
 	v := do("admin", "GET", "/v1/staff/tax/review-settings", nil, 200)
@@ -82,7 +82,7 @@ func TestStaffTaxReviewSettingsAreOffByDefaultAndShowNames(t *testing.T) {
 	if v["auditPercent"] != float64(5) {
 		t.Fatalf("auditPercent = %v", v["auditPercent"])
 	}
-	if w := v["warning"].(string); !strings.Contains(w, "Texas tax professional has agreed") {
+	if w := v["warning"].(string); !strings.Contains(w, "Review by risk is how tax review works by default") {
 		t.Fatalf("warning = %q", w)
 	}
 	names := v["alwaysReviewNames"].([]any)

@@ -25,6 +25,29 @@ public interface VariantClassificationService {
      */
     void onCatalogFactsChanged(CatalogFactsChanged event);
 
+    /**
+     * Approves a record that waits in review when the risk-based rule (taxReview.mode RISK_BASED) would have approved it
+     * on arrival: its category is ACTIVE and not on the always-review list, the rules resolve it and no required evidence
+     * is missing. This clears the backlog of records that were held before the mode was RISK_BASED. System call, no actor;
+     * recorded as actor {@code auto} with the rule as the reason, and published in tax.classification.changed so catalog
+     * re-opens the gate. Idempotent: anything else (not waiting, a staff reclassification or an open information request
+     * to the seller, an exception the rule sends to a person, mode ALL) is left alone.
+     *
+     * Runs in its own transaction, so a sweep started after another transaction commits writes its own changes.
+     *
+     * @return true when the record was approved by this call
+     */
+    boolean autoApproveIfQualified(String atin);
+
+    /** ATINs of the records waiting in review (system call). */
+    List<String> pendingReviewAtins();
+
+    /**
+     * Why each waiting record needs a person, in plain words (conflict, no matching rule, missing answer, missing proof,
+     * regulated category, gated category). A record the rule would approve has no entry (tax:read).
+     */
+    Map<String, String> reviewReasons(List<VariantClassification> records);
+
     /** Records, newest change first within the filter (tax:read). */
     default VariantClassificationRepository.Page list(RecordStatus status, String categoryCode, String sellerOrgId,
                                                       String q, int page, int size) {
@@ -129,9 +152,10 @@ public interface VariantClassificationService {
      * @param audit      the audit trail, oldest first
      * @param decisions  stored decision per seller behaviour
      * @param ordersAffected orders placed here that contain the variant
-     * @param ordersAffected orders placed with this variant
+     * @param reviewReason   why a person has to review it, in plain words; null when none waits or the rule would approve
      */
     record ClassificationView(VariantClassification record, Resolution resolution, List<Evidence> evidence,
-                              List<AuditEntry> audit, List<ListingDecision> decisions, long ordersAffected) {
+                              List<AuditEntry> audit, List<ListingDecision> decisions, long ordersAffected,
+                              String reviewReason) {
     }
 }

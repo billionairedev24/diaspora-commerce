@@ -16,6 +16,7 @@ import com.afrotransact.taxreturns.application.ClassificationResolveService.Reso
 import com.afrotransact.taxreturns.application.ProviderCodeService;
 import com.afrotransact.taxreturns.application.TaxProfileService;
 import com.afrotransact.taxreturns.application.TaxQuoteCommand;
+import com.afrotransact.taxreturns.application.TaxReviewSettingsService;
 import com.afrotransact.taxreturns.application.TaxService;
 import com.afrotransact.taxreturns.application.TaxSettingsService;
 import com.afrotransact.taxreturns.application.TaxShadowService;
@@ -30,6 +31,7 @@ import com.afrotransact.taxreturns.domain.profile.ProfileStatus;
 import com.afrotransact.taxreturns.domain.profile.RecordStatus;
 import com.afrotransact.taxreturns.domain.profile.Resolution;
 import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
+import com.afrotransact.taxreturns.domain.profile.ReviewMode;
 import com.afrotransact.taxreturns.domain.profile.TaxMapFixture;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.domain.shadow.ShadowKind;
@@ -58,6 +60,7 @@ abstract class CategoryTaxEngineScenarios {
     private final VariantClassificationService variants;
     private final TaxService tax;
     private final TaxSettingsService settings;
+    private final TaxReviewSettingsService reviewSettings;
     private final TaxShadowService shadow;
     private final ShadowQuoteRepository shadowRepository;
     private final TaxProfileRepository profileRepository;
@@ -71,6 +74,7 @@ abstract class CategoryTaxEngineScenarios {
         this.variants = context.getBean(VariantClassificationService.class);
         this.tax = context.getBean(TaxService.class);
         this.settings = context.getBean(TaxSettingsService.class);
+        this.reviewSettings = context.getBean(TaxReviewSettingsService.class);
         this.shadow = context.getBean(TaxShadowService.class);
         this.shadowRepository = context.getBean(ShadowQuoteRepository.class);
         this.profileRepository = context.getBean(TaxProfileRepository.class);
@@ -104,7 +108,27 @@ abstract class CategoryTaxEngineScenarios {
     }
 
     @Test
-    void aVariantGoesFromCatalogFactsToReviewToApprovalToATaxedQuoteLine() {
+    void underTheDefaultTheRulesApproveAPlainGroceryAndItsQuoteLineIsTaxedWithoutAPerson() {
+        String atin = "ATRC" + Long.toString(System.nanoTime() % 100_000_000L);
+        variants.onCatalogFactsChanged(new CatalogFactsChanged(UUID.randomUUID(), "org_a", "rice-grains", "rice-grains",
+                Map.of(), List.of(new Variant(atin, null, Map.of(), false)), "seller_1", Instant.now()));
+
+        assertThat(variants.get(atin).record().status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(variants.get(atin).record().reviewedBy()).isEqualTo("auto");
+        assertThat(quote(atin).lines().getFirst().decision().status()).isEqualTo(ResolveStatus.RESOLVED);
+    }
+
+    @Test
+    void whenStaffReviewEverythingAVariantGoesFromCatalogFactsToReviewToApprovalToATaxedQuoteLine() {
+        reviewSettings.change(ReviewMode.ALL, null, null, "Review everything for this scenario");
+        try {
+            reviewedByAPerson();
+        } finally {
+            reviewSettings.change(ReviewMode.RISK_BASED, null, null, "Scenario cleanup: back to the default");
+        }
+    }
+
+    private void reviewedByAPerson() {
         String atin = "ATIT" + Long.toString(System.nanoTime() % 100_000_000L);
         Map<String, Object> taxable = Map.of("is_candy", false, "candy_coated", false, "net_weight_oz", 1,
                 "servings_per_package", 1, "individual_serving", true);

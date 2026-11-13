@@ -8,9 +8,10 @@ import com.afrotransact.taxreturns.domain.profile.ReviewSettings;
 import com.afrotransact.taxreturns.domain.profile.ReviewSettingsChange;
 
 /**
- * The tax review settings (docs/engineering/listing-rules.md D7): {@code taxReview.mode} ALL (default, every
- * classification waits for a reviewer) or RISK_BASED, the always-review category list and the audit sampling percentage.
- * RISK_BASED may only be switched on after the Texas tax professional agrees; a change needs a reason and is recorded.
+ * The tax review settings (docs/engineering/listing-rules.md D7): {@code taxReview.mode} RISK_BASED (default: the rules
+ * decide, a person reviews only exceptions) or ALL (every classification waits for a reviewer), the always-review
+ * category list and the audit sampling percentage. A change needs a reason and is recorded; switching to RISK_BASED also
+ * approves the records already waiting that the rules decide.
  */
 public interface TaxReviewSettingsService {
 

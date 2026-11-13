@@ -288,7 +288,7 @@ export function seedTax(): MockTaxState {
     variants: seedVariants(),
     codes,
     method: { method: 'RULES', shadowProvider: 'STRIPE', stripeAvailable: true, avalaraAvailable: false, changedByName: 'Ada Okafor', changedAt: ago(3) },
-    review: { mode: 'ALL', alwaysReview: [...DEFAULT_ALWAYS_REVIEW], auditPercent: 5, changedByName: '', changedAt: '', history: [] },
+    review: { mode: 'RISK_BASED', alwaysReview: [...DEFAULT_ALWAYS_REVIEW], auditPercent: 5, changedByName: '', changedAt: '', history: [] },
     history: [
       { at: ago(3), changedByName: 'Ada Okafor', fromLabel: 'Stripe Tax', toLabel: 'Our own rules', reason: 'Back to our own rules while the provider codes are mapped.' },
       { at: ago(20), changedByName: 'Platform Admin', fromLabel: 'Our own rules', toLabel: 'Stripe Tax', reason: 'Trying Stripe Tax in the test environment.' }
@@ -725,15 +725,15 @@ const ReviewSettingsBody = z.object({
 });
 
 const REVIEW_MODE_TEXT: Record<'ALL' | 'RISK_BASED', { label: string; explain: string }> = {
-  ALL: { label: 'Review every item', explain: 'Every product variant waits for a tax reviewer before it can go live. This is the default and how tax review works today.' },
+  ALL: { label: 'Review every item', explain: 'Every product variant waits for a tax reviewer before it can go live, even when the tax rules give a clear answer.' },
   RISK_BASED: {
     label: 'Review by risk',
     explain:
-      'The system approves an item by itself only when its category is active, the tax rules give a clear answer, no required proof is missing and the category is not on the always-review list. Everything else waits for a tax reviewer. A share of the approved items is also put in the Audit sample to be checked by a person.'
+      'This is the default. The tax rules decide: an item is approved by itself when its category is active, the rules give a clear answer, no required proof is missing and the category is not on the always-review list. A tax reviewer is asked only when the rules conflict, no rule matches, an answer or proof is missing, the category waits for sign-off or the item is in the always-review list. A share of the approved items is also put in the Audit sample to be checked by a person.'
   }
 };
 const REVIEW_WARNING =
-  'Only switch to Review by risk after the Texas tax professional has agreed. It lets the system approve items without a person looking at them, and the tax rules are still a draft. Items in a category that needs sign-off, needs a specific code, waits on a decision or is a blocked bundle, items in the always-review list, and anything the rules can’t decide still wait for a tax reviewer. Checkout still blocks any item that has no clear stored tax decision.';
+  'Review by risk is how tax review works by default. Choose Review every item only if you want a person to look at every product, which fills the queue with items the tax rules already decide. Items in a category that needs sign-off, needs a specific code, waits on a decision or is a blocked bundle, items in the always-review list, and anything the rules can’t decide wait for a tax reviewer in both modes. When you switch back to Review by risk, items already waiting that the rules decide are approved by the system. Checkout still blocks any item that has no clear stored tax decision.';
 
 function reviewSummary(mode: 'ALL' | 'RISK_BASED', always: string[], percent: number): string {
   if (mode === 'ALL') return REVIEW_MODE_TEXT.ALL.label;

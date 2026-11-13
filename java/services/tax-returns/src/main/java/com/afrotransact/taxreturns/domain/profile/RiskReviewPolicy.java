@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The risk-based review rule (docs/engineering/listing-rules.md D7, category-tax-design.md section 9). A classification
@@ -32,17 +33,20 @@ public final class RiskReviewPolicy {
      */
     public RiskReviewDecision decide(TaxProfile profile, Resolution resolution, Map<String, Object> facts) {
         if (profile.status() != ProfileStatus.ACTIVE) {
-            return review(profile.name() + " is " + profile.status() + ", so a tax reviewer must look at it.");
+            return review(statusReason(profile));
         }
         if (alwaysReview.contains(profile.categoryCode())) {
-            return review(profile.name() + " is on the always-review list.");
+            return review("Regulated category: " + profile.name() + " always goes to a person.");
         }
-        if (resolution == null || resolution.status() != ResolveStatus.RESOLVED) {
-            return review("The tax rules did not resolve cleanly (" + (resolution == null ? "no decision"
-                    : resolution.status()) + ").");
+        if (resolution == null) {
+            return review("No decision: the rules could not be read for " + profile.name() + ".");
         }
-        if (evidenceMissing(profile, facts)) {
-            return review("Evidence the category requires is missing.");
+        if (resolution.status() != ResolveStatus.RESOLVED) {
+            return review(resolutionReason(profile, resolution));
+        }
+        String evidence = missingEvidence(profile, facts);
+        if (evidence != null) {
+            return review("Missing proof: " + profile.name() + " needs " + evidence + " and none is attached.");
         }
         return new RiskReviewDecision(true, "Risk-based review: the category " + profile.name() + " is ACTIVE, the rules "
                 + "resolved cleanly (" + resolution.outcome() + (resolution.rowId() == null ? "" : ", row "
@@ -50,17 +54,48 @@ public final class RiskReviewPolicy {
                 + "always-review list.");
     }
 
-    /** True when an evidence fact the profile requires for these facts has no value. */
-    private boolean evidenceMissing(TaxProfile profile, Map<String, Object> facts) {
+    /** Why a category that is not ACTIVE sends its items to a person, in plain words. */
+    private static String statusReason(TaxProfile profile) {
+        String name = profile.name();
+        return switch (profile.status()) {
+            case CONFLICT_OPEN -> "Conflict: " + name + " has an open decision about which tax code applies.";
+            case NEEDS_APPROVAL -> "Needs sign-off: the tax professional has not approved the rules for " + name + " yet.";
+            case REFINE_CODE -> "Code to verify: " + name + " uses a generic provider code that must be verified for "
+                    + "this item.";
+            case BLOCKED_BUNDLE -> "Blocked: " + name + " is a mixed bundle that must be itemised.";
+            default -> name + " is " + profile.status() + ", so a tax reviewer must look at it.";
+        };
+    }
+
+    /** Why rules that did not resolve cleanly send an item to a person, in plain words. */
+    private static String resolutionReason(TaxProfile profile, Resolution resolution) {
+        String name = profile.name();
+        return switch (resolution.status()) {
+            case MISSING_FACTS -> resolution.missingFacts().isEmpty()
+                    ? "No matching rule: the answers given fit none of the rules for " + name + "."
+                    : "Missing answer: the seller has not told us "
+                            + resolution.missingFacts().stream().map(MissingFact::label).collect(Collectors.joining(", "))
+                            + ".";
+            case BLOCKED -> "Blocked: as described this cannot be sold (" + resolution.reason() + ").";
+            case NEEDS_APPROVAL -> "Needs sign-off: the tax professional has not approved the rules for " + name + " yet.";
+            case REFINE_CODE -> "Code to verify: " + name + " uses a generic provider code that must be verified for "
+                    + "this item.";
+            case CONFLICT_OPEN -> "Conflict: " + name + " has an open decision about which tax code applies.";
+            case RESOLVED -> throw new IllegalArgumentException("A resolved decision needs no reason to review");
+        };
+    }
+
+    /** The label of the first evidence fact the profile requires for these facts that has no value, else null. */
+    private String missingEvidence(TaxProfile profile, Map<String, Object> facts) {
         Set<String> required = evaluator.requiredIds(profile, facts);
         Map<String, ProfileFact> byId = profile.factsById();
         for (String id : required) {
             ProfileFact f = byId.get(id);
             if (f != null && f.definition().evidence() && isBlank(facts.get(id))) {
-                return true;
+                return f.definition().label();
             }
         }
-        return false;
+        return null;
     }
 
     private static boolean isBlank(Object value) {

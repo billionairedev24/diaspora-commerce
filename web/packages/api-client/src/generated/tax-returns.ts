@@ -462,7 +462,7 @@ export interface paths {
         get: operations["taxReviewSettings"];
         /**
          * Set the tax review mode, always-review list and audit sample percentage (tax:classify-admin)
-         * @description taxReview.mode is ALL until staff change it (every classification waits for a tax reviewer). RISK_BASED lets the system approve a classification only when the category is ACTIVE, the rules resolve cleanly (RESOLVED), no required evidence is missing and the category is not on the always-review list; everything else, and every category whose status is NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN or BLOCKED_BUNDLE, stays in the review queue. Never switch it on before the Texas tax professional agrees (docs/engineering/listing-rules.md D7). A reason of 10+ characters is required (422 tax.reason-required) and the change is recorded. alwaysReview replaces the list, absent keeps it (422 tax.unknown-category); auditPercent 0 to 100, absent keeps it (422 tax.invalid-audit-percent). It applies to new classification events; records already decided keep their status. Needs tax:classify-admin only (403 otherwise).
+         * @description taxReview.mode is RISK_BASED until staff change it: the rules decide and a person reviews only exceptions. A classification is approved by the system (actor auto) only when the category is ACTIVE, the rules resolve cleanly (RESOLVED), no required evidence is missing and the category is not on the always-review list; everything else (a conflict, no matching rule, a missing answer or proof, a regulated category) and every category whose status is NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN or BLOCKED_BUNDLE stays in the review queue. ALL sends every classification to a person. A reason of 10+ characters is required (422 tax.reason-required) and the change is recorded. alwaysReview replaces the list, absent keeps it (422 tax.unknown-category); auditPercent 0 to 100, absent keeps it (422 tax.invalid-audit-percent). Switching to RISK_BASED also approves the records already waiting in review that the rules decide (audited as auto, tax.classification.changed published so catalog re-opens the gate); a scheduled sweep does the same for records that qualify later. Needs tax:classify-admin only (403 otherwise).
          */
         put: operations["changeTaxReviewSettings"];
         post?: never;
@@ -1089,7 +1089,7 @@ export interface components {
         /** @description ALL until staff change it. RISK_BASED must only be switched on after the Texas tax professional agrees. */
         TaxReviewSettings: {
             /**
-             * @description ALL: every classification waits for a tax reviewer (the default). RISK_BASED: only when the category is ACTIVE, the rules resolve, no required evidence is missing and the category is not on the always-review list.
+             * @description RISK_BASED (the default when staff stored nothing): a classification is approved by the rules when the category is ACTIVE, the rules resolve, no required evidence is missing and the category is not on the always-review list; anything else (conflict, no matching rule, missing answer or proof, a category awaiting sign-off, a regulated category) waits for a tax reviewer. ALL: every classification waits for a tax reviewer.
              * @enum {string}
              */
             mode?: "ALL" | "RISK_BASED";
@@ -1780,6 +1780,8 @@ export interface components {
             auditSample?: boolean;
             /** Format: date-time */
             auditSampledAt?: string | null;
+            /** @description Why a person has to review it, in plain words: Conflict, No matching rule, Missing answer, Missing proof, Regulated category, Needs sign-off or Blocked. Null when nothing waits or the rules would approve it. */
+            reviewReason?: string | null;
             /** @description What tax review asked the seller to provide; cleared when the seller's facts change */
             informationRequest?: {
                 message?: string;

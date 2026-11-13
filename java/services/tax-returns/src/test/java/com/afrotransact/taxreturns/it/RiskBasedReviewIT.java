@@ -42,8 +42,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Risk-based tax review against PostgreSQL (V13 applied by Flyway, real jsonb and optimistic locking): the setting is
- * OFF by default, RISK_BASED approves only by rule and samples for audit, a confirm or reclassify of an audit item
- * works, and checkout still blocks any line without a READY RESOLVED stored decision.
+ * RISK_BASED by default (the rules approve a clean record, exceptions wait), a switch from ALL approves the waiting
+ * records the rules decide, RISK_BASED samples for audit, a confirm or reclassify of an audit item works, and checkout still blocks any line without a READY RESOLVED stored decision.
  * {@code AT_IT_POSTGRES_URL=jdbc:postgresql://…} runs it on that PostgreSQL instead of a container.
  */
 @SpringBootTest(properties = {"at.events.relay-enabled=false", "at.consumers.enabled=false",
@@ -90,8 +90,8 @@ class RiskBasedReviewIT {
     void backToTheDefault() {
         actors.staff();
         if (!settings.current().settings().equals(ReviewSettings.defaults())) {
-            settings.change(ReviewMode.ALL, ReviewSettings.DEFAULT_ALWAYS_REVIEW, ReviewSettings.DEFAULT_AUDIT_PERCENT,
-                    "Test cleanup: back to the defaults");
+            settings.change(ReviewMode.RISK_BASED, ReviewSettings.DEFAULT_ALWAYS_REVIEW,
+                    ReviewSettings.DEFAULT_AUDIT_PERCENT, "Test cleanup: back to the defaults");
         }
     }
 
@@ -111,18 +111,42 @@ class RiskBasedReviewIT {
     }
 
     @Test
-    void theModeIsAllByDefaultAndEveryRecordWaitsForAReviewer() {
+    void theModeIsRiskBasedByDefaultAndOnlyExceptionsWaitForAReviewer() {
         ReviewSettingsView v = settings.current();
-        assertThat(v.settings().mode()).isEqualTo(ReviewMode.ALL);
+        assertThat(v.settings().mode()).isEqualTo(ReviewMode.RISK_BASED);
         assertThat(v.settings().auditPercent()).isEqualTo(5);
         assertThat(v.settings().alwaysReview()).containsExactlyInAnyOrder("dietary-supplements", "otc-medicines",
                 "medicated-skincare", "medical-devices", "baby-food-formula", "gift-cards");
 
-        String atin = atin();
-        submit("haircare", atin, Map.of());
+        String plain = atin();
+        String regulated = atin();
+        submit("haircare", plain, Map.of());
+        submit("gift-cards", regulated, Map.of());
 
-        assertThat(variants.get(atin).record().status()).isEqualTo(RecordStatus.PENDING_REVIEW);
-        assertThat(line(atin).decision().isBlocked()).as("not approved, so checkout blocks the line").isTrue();
+        assertThat(variants.get(plain).record().status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(line(plain).decision().status()).isEqualTo(ResolveStatus.RESOLVED);
+        assertThat(variants.get(regulated).record().status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        assertThat(variants.get(regulated).reviewReason()).startsWith("Regulated category:");
+        assertThat(line(regulated).decision().isBlocked()).as("not approved, so checkout blocks the line").isTrue();
+    }
+
+    @Test
+    void switchingToRiskBasedApprovesTheRecordsThatWaitedUnderAllAndLeavesTheExceptions() {
+        settings.change(ReviewMode.ALL, null, 0, "Review everything for this scenario");
+        String plain = atin();
+        String regulated = atin();
+        submit("haircare", plain, Map.of());
+        submit("gift-cards", regulated, Map.of());
+        assertThat(variants.get(plain).record().status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+
+        settings.change(ReviewMode.RISK_BASED, null, 0, "Rules decide, a person reviews the exceptions");
+
+        ClassificationView approved = variants.get(plain);
+        assertThat(approved.record().status()).isEqualTo(RecordStatus.APPROVED);
+        assertThat(approved.audit().getLast().actor()).isEqualTo("auto");
+        assertThat(approved.audit().getLast().reason()).startsWith("Approved by the risk-based rule after waiting");
+        assertThat(line(plain).decision().status()).isEqualTo(ResolveStatus.RESOLVED);
+        assertThat(variants.get(regulated).record().status()).isEqualTo(RecordStatus.PENDING_REVIEW);
     }
 
     @Test

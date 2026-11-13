@@ -44,7 +44,7 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
 
 ### D7. Should tax review become risk-based instead of reviewing every variant?
 
-- **Decision:** Auto-approve when the category is Active and the rules resolve cleanly. Send to a tax reviewer when the status is needs-approval, refine-code, conflict or bundle, or the item is medicated or a supplement. Sample 5% of auto-approved items for audit. Turn it on only after the Texas tax professional agrees.
+- **Decision:** Auto-approve when the category is Active and the rules resolve cleanly. Send to a tax reviewer when the status is needs-approval, refine-code, conflict or bundle, or the item is medicated or a supplement. Sample 5% of auto-approved items for audit. **Update 13 Nov: owner decision, this is now the default** (tax is automatic from the rules; a person reviews only exceptions). Staff can still choose to review every item.
 - **Amazon standard:** Amazon does not hold a listing for a per-product tax review.
 - **Why:** Today every variant waits, which is why the seeded items stayed queued. The checkout safeguard stays: a line without a clear decision is blocked.
 

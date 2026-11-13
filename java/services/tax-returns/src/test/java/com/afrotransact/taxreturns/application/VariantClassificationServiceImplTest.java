@@ -45,7 +45,7 @@ class VariantClassificationServiceImplTest {
     private final InMemoryClassifications records = new InMemoryClassifications();
     private final DomainEventPublisher publisher = mock(DomainEventPublisher.class);
     private final TaxTelemetry telemetry = mock(TaxTelemetry.class);
-    private final InMemoryReviewSettings reviewSettings = new InMemoryReviewSettings();
+    private final InMemoryReviewSettings reviewSettings = InMemoryReviewSettings.reviewingEverything();
 
     private VariantClassificationService service(ApprovalPolicy policy) {
         TaxReturnsProperties props = TestRules.props(new TaxReturnsProperties.Classification(null, policy, false, null));

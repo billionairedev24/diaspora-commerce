@@ -18,6 +18,25 @@
 
 Every one of these is also an `ERROR` log line `checkout tax estimate unavailable` with `reason` and `error`. The shopper sees "We couldn't work out your tax right now. Try again." with a Retry button; nothing is charged.
 
+## A plain item is blocked at checkout ("We can't sell Basmati Rice yet", no tax in the cart)
+
+This is not an alert, it is the `blocked_items` state: tax-returns has no `APPROVED` and `RESOLVED` decision for the variant. Tax is
+automatic from the rules (`taxReview.mode` `RISK_BASED`, the default), so a plain grocery should be approved by `auto` within seconds of
+catalog reporting it. If it is not:
+
+1. Open Settings → Sales tax → *Tax review*, search the product **by name**. If it is waiting, the line under it says why:
+   *Conflict*, *No matching rule*, *Missing answer*, *Missing proof*, *Regulated category* or *Needs sign-off*. Those need a person
+   (or the seller's answer); nothing else should wait. The shopper only sees the generic "We're still checking its details" on purpose:
+   no tax terms and no internal reasons on the storefront.
+2. If *Review settings* says *Review every item*, staff chose `ALL`; switching back to *Review by risk* approves the waiting items the rules
+   decide within seconds.
+3. If it waits with no reason line, or has no record at all: restart order is tax-returns, then catalog, then gateway-bff. tax-returns'
+   sweep approves the waiting records that qualify 20 s after it starts (and every 5 minutes: `at.taxreturns.jobs.review-sweep-interval`);
+   a record that has not arrived is created when catalog reports the product again. Then run `make tax-gate-sweep` so catalog re-opens
+   listings that were held (`TAX_RETURNS_*` holds) without waiting for its own schedule.
+4. Approved by `auto` but still blocked: the category is not `RESOLVED` for the line's facts (see the quote's `decisionStatus`), which
+   is a data problem for the seller or a rule for the tax professional, never something to approve around.
+
 ## CheckoutTaxEstimateMismatch (more than 1% of orders charged a different tax than the estimate)
 
 `checkout_tax_estimate_vs_final_total{inputs="same",outcome="mismatch"}` over `{inputs="same"}` (orders placed with a lock, for the inputs it was issued for). `checkout_tax_estimate_vs_final_delta_*` has the number and the amount of the differences. Orders also logs a `WARN` `final tax X differs from the estimate Y for unchanged inputs` per order. Causes, most likely first:

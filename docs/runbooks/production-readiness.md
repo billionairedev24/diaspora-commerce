@@ -195,11 +195,7 @@ specifics, a restore drill.
 ## 6. Tax
 
 - [ ] **blocker** `OWNER · Open` Sales tax method chosen (our own rules or Stripe Tax) and rates loaded for every state you ship to.
-- [ ] `OWNER/internal · Open` **Texas tax professional sign-off (handled internally by the owner, not blocking engineering) before `taxReview.mode` is changed from `ALL` to `RISK_BASED`.** At launch every variant's tax classification
-  waits for a reviewer (`ALL`, the default). `RISK_BASED` lets the system approve a variant when its category is active and the rules resolve,
-  with a 5 percent audit sample (`docs/runbooks/tax-provider-cutover.md`). Do not switch until a Texas tax professional has agreed in writing
-  to the classification rules and the sample rate; record the reference in the change reason, and do not change it in the same window as the
-  tax method. Staff capacity to review every variant must exist until then.
+- [ ] `OWNER/internal · Open` **Texas tax professional sign-off (handled internally by the owner, not blocking engineering) on the classification rules, the always-review list and the sample rate.** `taxReview.mode` is `RISK_BASED` by default (owner decision, 13 Nov): the rules decide and the system approves a variant when its category is active and the rules resolve, with a 5 percent audit sample (`docs/runbooks/tax-provider-cutover.md`); only conflicts, no matching rule, missing proof, gated and regulated categories wait for a person. Record the sign-off reference in a settings change reason if the list or the rate changes, and do not change the mode in the same window as the tax method. Staff capacity is needed for the exceptions and the audit sample only; choose `ALL` in *Review settings* if the owner wants a person on everything until the sign-off.
 - [ ] `OWNER · Open` Nexus tracker reviewed; registrations in states over the threshold are filed.
 - [ ] `ENGINEERING · Open` Remittance record and filings screens are accessible only to roles with the tax permissions.
 - [ ] `OWNER · Open` Stored value (AfroTransact credit, gift cards): terms reviewed by counsel for each launch state (no cash-out, expiry rules,

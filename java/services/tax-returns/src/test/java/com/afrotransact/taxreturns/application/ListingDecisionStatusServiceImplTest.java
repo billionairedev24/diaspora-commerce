@@ -37,7 +37,7 @@ class ListingDecisionStatusServiceImplTest {
             new TaxReturnsProperties.Classification(null, ApprovalPolicy.ALL, false, null));
     private final VariantClassificationService classifications = new VariantClassificationServiceImpl(records,
             rules.engine, new ListingDecisions(records),
-            new ClassificationEvents(mock(DomainEventPublisher.class), telemetry), props, new InMemoryReviewSettings(),
+            new ClassificationEvents(mock(DomainEventPublisher.class), telemetry), props, InMemoryReviewSettings.reviewingEverything(),
             TestActors.staff("tax:classify-admin", "tax:read"), TestRules.CLOCK);
     private final ProductFacts noFacts = atins -> Map.of();
     private final LineDecisionService lines = new LineDecisionServiceImpl(records, classifications, noFacts,

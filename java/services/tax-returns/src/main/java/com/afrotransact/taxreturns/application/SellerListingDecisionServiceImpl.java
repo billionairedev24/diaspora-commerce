@@ -47,7 +47,7 @@ class SellerListingDecisionServiceImpl implements SellerListingDecisionService {
         VariantClassification rec = record.get();
         if (rec.status() != RecordStatus.APPROVED) {
             return new State(a, sellerOrgId, unresolved(rec.status()).name(), false, null, null, null, null,
-                    List.of("The classification of " + a + " is " + rec.status() + ", not approved"));
+                    List.of(ReviewWording.notApproved(rec.status())));
         }
         String rulesNow = engine.snapshot().ruleVersion();
         Optional<ListingDecision> stored = records.decisions(a).stream()

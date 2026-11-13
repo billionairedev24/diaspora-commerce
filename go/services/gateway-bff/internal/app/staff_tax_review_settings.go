@@ -12,10 +12,10 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// How tax review works (docs/engineering/listing-rules.md D7). ALL sends every product variant to a tax reviewer and is
-// the default. RISK_BASED lets the system approve a variant itself when its category is active, the rules give a clear
-// answer, no required proof is missing and the category is not on the always-review list. It must only be switched on
-// after the Texas tax professional agrees, so the screen says so in plain words.
+// How tax review works (docs/engineering/listing-rules.md D7). RISK_BASED is the default: the tax rules decide, and the
+// system approves a variant itself when its category is active, the rules give a clear answer, no required proof is
+// missing and the category is not on the always-review list. A person looks only at the exceptions. ALL sends every
+// product variant to a tax reviewer and is a choice staff can make.
 
 const (
 	reviewModeAll   = "ALL"
@@ -24,12 +24,13 @@ const (
 )
 
 var taxReviewModes = map[string]taxLabel{
-	reviewModeAll:  {"Review every item", "Every product variant waits for a tax reviewer before it can go live. This is the default and how tax review works today."},
-	reviewModeRisk: {"Review by risk", "The system approves an item by itself only when its category is active, the tax rules give a clear answer, no required proof is missing and the category is not on the always-review list. Everything else waits for a tax reviewer. A share of the approved items is also put in the Audit sample to be checked by a person."},
+	reviewModeAll:  {"Review every item", "Every product variant waits for a tax reviewer before it can go live, even when the tax rules give a clear answer."},
+	reviewModeRisk: {"Review by risk", "This is the default. The tax rules decide: an item is approved by itself when its category is active, the rules give a clear answer, no required proof is missing and the category is not on the always-review list. A tax reviewer is asked only when the rules conflict, no rule matches, an answer or proof is missing, the category waits for sign-off or the item is in the always-review list. A share of the approved items is also put in the Audit sample to be checked by a person."},
 }
 
-const taxReviewWarning = "Only switch to Review by risk after the Texas tax professional has agreed. It lets the system approve items without a person looking at them, and the tax rules are still a draft. " +
-	"Items in a category that needs sign-off, needs a specific code, waits on a decision or is a blocked bundle, items in the always-review list, and anything the rules can't decide still wait for a tax reviewer. " +
+const taxReviewWarning = "Review by risk is how tax review works by default. Choose Review every item only if you want a person to look at every product, which fills the queue with items the tax rules already decide. " +
+	"Items in a category that needs sign-off, needs a specific code, waits on a decision or is a blocked bundle, items in the always-review list, and anything the rules can't decide wait for a tax reviewer in both modes. " +
+	"When you switch back to Review by risk, items already waiting that the rules decide are approved by the system. " +
 	"Checkout still blocks any item that has no clear stored tax decision."
 
 func reviewModeName(m string) string {
@@ -112,7 +113,7 @@ func settingsSummary(v jobj, names map[string]string) string {
 }
 
 func (s *staffTaxImpl) reviewSettingsView(ctx context.Context, sc staffCtx, st jobj) jobj {
-	mode := firstNonEmpty(jstr(st, "mode"), reviewModeAll)
+	mode := firstNonEmpty(jstr(st, "mode"), reviewModeRisk)
 	always := reviewStrings(st, "alwaysReview")
 	var profiles any
 	names := map[string]string{}

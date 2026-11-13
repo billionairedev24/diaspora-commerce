@@ -116,7 +116,7 @@ certification to sellers is a legal task; gift card redemption tax is decided pe
 ## 6. Publication gates
 
 A variant is **READY** only when the tax rules resolve to `RESOLVED` **and** the classification record is `APPROVED`: by admin tax review
-(section 9) or, only when the staff setting `taxReview.mode` is `RISK_BASED`, by the risk rule (section 9, "Risk-based review").
+(section 9) or, when the staff setting `taxReview.mode` is `RISK_BASED` (the default), by the risk rule (section 9, "Risk-based review").
 Catalog blocks publication otherwise.
 
 | Gate | Meaning | Who lifts it |
@@ -191,21 +191,37 @@ choose another provider code, ask the provider for a custom/refined code, or kee
 
 New permissions: `tax:classify` (resolve, service clients), `tax:classify-admin` (approve, reclassify, change profile status, edit code map). `tax:read` already exists. See [authorisation.md](./authorisation.md) for how roles are granted.
 
-### Risk-based review (staff setting `taxReview.mode`, OFF by default)
+### Risk-based review (staff setting `taxReview.mode`, the default)
 
-Decision D7 of `docs/engineering/listing-rules.md`. **Never switch it on before the Texas tax professional agrees**: it lets the
-system approve classifications without a person, and the rules in this document are a draft.
+Decision D7 of `docs/engineering/listing-rules.md`, made the default by the owner (13 Nov): **tax is automatic from the rules, and a
+person reviews only a conflict, no matching rule, missing required evidence, a gated category or a regulated category.** It never
+guesses: no default rate or outcome, and checkout still blocks a line without a stored `RESOLVED` decision. The rules are still a
+draft until the Texas tax professional signs them off; the sign-off gate is the rule set and the always-review list, not the mode.
 
-- `taxReview.mode` is `ALL` (default, the behaviour above: every variant classification waits in the review queue) or `RISK_BASED`.
+- `taxReview.mode` is `RISK_BASED` (the default) or `ALL` (every variant classification waits in the review queue; staff may choose it).
   It is a staff setting, `GET|PUT /v1/tax/review-settings` (a separate route from `/v1/tax/settings`, because that PUT replaces the
   method and the shadow provider together). Reading needs `tax:read`; changing needs `tax:classify-admin` only (not `tax:configure`).
   A change needs a reason of 10+ characters, is recorded with its before and after in the history (`tax_setting_history`, key
   `tax.review`) and applies to classification events from then on; records already decided keep their status. The value is absent
-  until someone changes it, and an unreadable stored value falls back to `ALL`, never to `RISK_BASED`.
+  until someone changes it and then means `RISK_BASED` (migrations are never edited: V13's comment that the default is `ALL` is
+  superseded by this section; no new migration is needed because the default lives in code). An **unreadable** stored value falls back
+  to `ALL` (staff may have chosen it on purpose, so an unknown choice reviews everything) and is logged as an error.
+- **Backlog clearing.** Records waiting in `PENDING_REVIEW` that the risk rule would have approved are approved by it: when staff change
+  the settings to `RISK_BASED` (after the change commits), 20 s after tax-returns starts and every `at.taxreturns.jobs.review-sweep-interval`
+  (default 5m, `PendingReviewSweepService`, idempotent, several replicas are safe). Audit row `APPROVED` by actor `auto` with the reason
+  "Approved by the risk-based rule after waiting in review" plus the rule, the stored decision, and `tax.classification.changed`
+  (previous status `PENDING_REVIEW`) so catalog re-opens the gate. Not touched: a record staff reclassified or asked the seller about
+  (a person acted on it), any exception, mode `ALL`. A `local` demo grocery such as Basmati Rice (category `rice-grains`, ACTIVE, EXEMPT) is
+  therefore `APPROVED` by `auto` within seconds of tax-returns starting; run `make tax-gate-sweep` to re-open catalog's gate at once.
 - In `RISK_BASED` mode a classification is approved by the system (`classifiedBy` and `reviewedBy` = `auto`, with the `ruleVersion`, the
   facts and an audit row `APPROVED` by actor `auto` whose reason states the rule) **only when all of these hold**: the category profile
   status is `ACTIVE`; the resolve result is `RESOLVED`; no evidence fact the category requires for these facts is missing; the category
   is not on the always-review list. Everything else goes to the existing review queue unchanged.
+- **Why a person is asked** (`reviewReason` on the record, shown in the queue): `Conflict:` (category `CONFLICT_OPEN`), `No matching rule:`
+  (the answers fit no rule), `Missing answer:` (a required fact is empty), `Missing proof:` (a required evidence fact has no file),
+  `Regulated category:` (always-review list), `Needs sign-off:` (`NEEDS_APPROVAL`), `Code to verify:` (`REFINE_CODE`), `Blocked:` (bundle
+  or an outcome that cannot be sold). In mode `ALL` a record the rule would approve says "Review mode is ALL". The queue is therefore only
+  real exceptions.
 - The always-review list is configurable. Default: `dietary-supplements`, `otc-medicines`, `medicated-skincare`, `medical-devices`,
   `baby-food-formula`, `gift-cards`. Every category whose status is `NEEDS_APPROVAL`, `REFINE_CODE`, `CONFLICT_OPEN` or
   `BLOCKED_BUNDLE` is always reviewed whatever the list says (the status rule cannot be switched off).
@@ -219,7 +235,8 @@ system approve classifications without a person, and the rules in this document 
 - **Checkout safeguard, unchanged**: a line without a stored decision that is `READY` and `RESOLVED` is blocked; there is never a default
   rate or outcome. The mode only changes who approves, not what a decision is.
 - Staff console: Settings → Sales tax → *Tax review* has the tab **Audit sample**; *Review settings* shows the mode, the always-review
-  categories (by name) and the sampling percentage with a plain-language warning. The BFF maps `status=AUDIT_SAMPLE`.
+  categories (by name) and the sampling percentage with a plain-language note of what still waits for a person. The BFF maps `status=AUDIT_SAMPLE`
+  and shows `reviewReason` as the queue's "why".
 
 Audit: every classification action (facts changed, submitted, approved, rejected, reclassified, marked stale, evidence added, audit sampled, audit confirmed) is
 an append-only row with actor, time, reason, `ruleVersion`, before and after. Profile status and code-map changes are audited the

@@ -210,8 +210,7 @@ class LineDecisionServiceImpl implements LineDecisionService {
             case REJECTED -> ResolveStatus.BLOCKED;
             default -> ResolveStatus.NEEDS_APPROVAL;
         };
-        return blocked(status, rules, rec.categoryCode(), "The classification of " + r.atin() + " is "
-                + rec.status() + ", not approved", count);
+        return blocked(status, rules, rec.categoryCode(), ReviewWording.notApproved(rec.status()), count);
     }
 
     private LineDecision blocked(ResolveStatus status, String rules, String category, String detail) {

@@ -2,30 +2,37 @@ package com.afrotransact.taxreturns.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import java.util.List;
 
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.taxreturns.application.TaxReviewSettingsService.ReviewSettingsView;
 import com.afrotransact.taxreturns.domain.profile.ReviewMode;
+import com.afrotransact.taxreturns.domain.profile.ReviewSettings;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import org.junit.jupiter.api.Test;
 
-/** The review settings: OFF (ALL) by default, a reason, the permission, the list and percentage checks, the history. */
+/** The review settings: RISK_BASED by default, a reason, the permission, the list and percentage checks, the history. */
 class TaxReviewSettingsServiceImplTest {
 
     private final TestRules rules = new TestRules();
     private final InMemoryReviewSettings repo = new InMemoryReviewSettings();
 
+    private final PendingReviewSweepService sweep = mock(PendingReviewSweepService.class);
+
     private TaxReviewSettingsService service(String... permissions) {
-        return new TaxReviewSettingsServiceImpl(repo, rules.catalog, TestActors.staff(permissions), TestRules.CLOCK);
+        return new TaxReviewSettingsServiceImpl(repo, rules.catalog, TestActors.staff(permissions), sweep, TestRules.CLOCK);
     }
 
     @Test
-    void itIsOffByDefaultWithTheDefaultListAndFivePercent() {
+    void itIsRiskBasedByDefaultWithTheDefaultListAndFivePercent() {
         ReviewSettingsView v = service("tax:read").current();
 
-        assertThat(v.settings().mode()).isEqualTo(ReviewMode.ALL);
+        assertThat(v.settings().mode()).isEqualTo(ReviewMode.RISK_BASED);
         assertThat(v.settings().alwaysReview()).containsExactlyInAnyOrder("dietary-supplements", "otc-medicines",
                 "medicated-skincare", "medical-devices", "baby-food-formula", "gift-cards");
         assertThat(v.settings().auditPercent()).isEqualTo(5);
@@ -82,6 +89,20 @@ class TaxReviewSettingsServiceImplTest {
                 .isInstanceOf(ReturnRuleViolation.class);
         assertThatThrownBy(() -> admin.change(ReviewMode.RISK_BASED, null, -1, "Tax professional agreed"))
                 .isInstanceOf(ReturnRuleViolation.class);
-        assertThat(repo.current().mode()).isEqualTo(ReviewMode.ALL);
+        assertThat(repo.current()).isEqualTo(ReviewSettings.defaults());
+    }
+
+    @Test
+    void switchingToRiskBasedSweepsTheWaitingRecordsAndSwitchingToAllDoesNot() {
+        TaxReviewSettingsService admin = service("tax:classify-admin", "tax:read");
+
+        admin.change(ReviewMode.ALL, null, null, "Review everything for now");
+        verify(sweep, never()).sweep();
+
+        admin.change(ReviewMode.RISK_BASED, null, null, "Tax professional agreed");
+        verify(sweep).sweep();
+
+        admin.change(ReviewMode.RISK_BASED, null, null, "Saving again, nothing new");
+        verify(sweep, times(1)).sweep();
     }
 }

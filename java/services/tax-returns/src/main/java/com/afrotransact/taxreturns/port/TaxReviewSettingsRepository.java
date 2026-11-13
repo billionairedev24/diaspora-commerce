@@ -10,7 +10,7 @@ import com.afrotransact.taxreturns.domain.profile.ReviewSettingsChange;
 /** The tax review settings staff change at runtime (taxReview.mode, always-review list, audit sampling percentage). */
 public interface TaxReviewSettingsRepository {
 
-    /** What staff chose, or {@link ReviewSettings#defaults()} (mode ALL) until someone does. */
+    /** What staff chose, or {@link ReviewSettings#defaults()} (mode RISK_BASED) until someone does. */
     ReviewSettings current();
 
     /** Who changed it last and when; empty until someone does. */
