@@ -1,0 +1,5 @@
+# METHOD pattern | CLASS | enforcement | test
+# authz-sync registers no HTTP route besides the platform ones (/healthz, /readyz, /metrics, docs). It mirrors identity and seller-org events
+# into OpenFGA tuples. OpenFGA is NOT deployed in production, so this service is not in the launch set and enforces nothing there.
+EVENT at.identity.events | SERVICE_ONLY | trusted producer (identity); malformed events are parked as poison, never guessed | TestMalformedEventsArePoison
+EVENT at.seller-org.events | SERVICE_ONLY | trusted producer (seller-service); role and org tuples only | TestSyncerMirrorsRolesAndOrganisations

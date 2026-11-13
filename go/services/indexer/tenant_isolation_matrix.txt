@@ -1,0 +1,8 @@
+# METHOD pattern | CLASS | enforcement | test
+# The indexer registers no HTTP route besides the platform ones (/healthz, /readyz, /metrics, docs). It consumes Kafka events from trusted
+# producers and writes the public search read model; nothing a user sends reaches it. The document has no cost, SKU, GTIN or per-node stock.
+EVENT at.product.events | SERVICE_ONLY | trusted producer (catalog); status copied as-is and SELLER_HIDDEN for hidden listings, so only LIVE products are searchable | TestHiddenListingsLeaveSearchAndRestoredOnesReturn
+EVENT at.product.events#taken_down | SERVICE_ONLY | taken-down listings leave search until reinstated | TestTakenDownListingsLeaveSearchAndReinstatedOnesReturn
+EVENT at.inventory.events | SERVICE_ONLY | availability per SKU/node reduced to the variant quantity (capped at read time by search) | TestBuyBoxChangeSetsTheVariantQuantity
+EVENT at.offers.events | SERVICE_ONLY | buy-box winner quantity only | TestBuyBoxChangeSetsTheVariantQuantity
+EVENT at.seller-org.events | SERVICE_ONLY | public display name only | TestSellerOrgUpdatedRenamesIndexedDocsAndFeedsTheDirectory

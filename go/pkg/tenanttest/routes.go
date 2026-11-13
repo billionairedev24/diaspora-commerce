@@ -191,7 +191,7 @@ func testFuncs(t testing.TB, dirs []string) map[string]bool {
 			if d.IsDir() || !strings.HasSuffix(path, "_test.go") {
 				return nil
 			}
-			b, rerr := os.ReadFile(path) // #nosec G304 -- test sources of the service under test
+			b, rerr := os.ReadFile(path) // #nosec G304 G122 -- test sources of the service under test, read by a test helper
 			if rerr != nil {
 				return fmt.Errorf("read %s: %w", path, rerr)
 			}

@@ -142,6 +142,9 @@ func run() error {
 		verifier = authn.NewVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, domain.AcceptedServiceClients(),
 			cfg.Auth.ForwardedAudiences, httpClient)
 	}
+	if err := auth.RequireVerifier(loader.Env(), verifier); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
 	openapi, err := media.Files.ReadFile("api/openapi.yaml")
 	if err != nil {
 		return fmt.Errorf("read openapi: %w", err)

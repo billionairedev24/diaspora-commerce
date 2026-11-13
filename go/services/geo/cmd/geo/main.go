@@ -130,6 +130,9 @@ func run() error {
 	if cfg.Auth.Enabled {
 		verifier = auth.NewJWKSVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, httpClient)
 	}
+	if err := auth.RequireVerifier(loader.Env(), verifier); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
 	openapi, err := geo.Files.ReadFile("api/openapi.yaml")
 	if err != nil {
 		return fmt.Errorf("read openapi: %w", err)

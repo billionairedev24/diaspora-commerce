@@ -1,0 +1,5 @@
+# METHOD pattern | CLASS | enforcement | test
+# promise is a calculator over public rules: the caller sends the origin rules, the answer is a delivery estimate. It reads no tenant record.
+# Residual: origin rules (handling days, cutoff) are caller input, so a promise is an estimate, not evidence of a seller's commitment.
+POST /v1/promises | PUBLIC | stateless; FC origins resolved from config, seller origins from the request body; Cache-Control private | TestPromiseSnapshotIdsMustHaveTheIssuedShape
+GET /v1/promises/{id} | TOKEN_LINK | snapshot id prm_ + 120 bits of a hash over the promise content; exact-shape check; expires with the snapshot TTL | TestPromiseSnapshotIdsMustHaveTheIssuedShape
