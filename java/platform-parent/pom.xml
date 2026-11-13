@@ -41,7 +41,7 @@
         <jackson-2-bom.version>2.21.8</jackson-2-bom.version>
         <lz4-java.version>1.12.1</lz4-java.version>
         <!-- S268: json-smart (via spring-boot-starter-oauth2-resource-server / nimbus) must be >= 2.5.2 (CVE-2024-57699). -->
-        <json-smart.version>2.6.0</json-smart.version>
+        <json-smart.version>2.6.1</json-smart.version>
         <!-- Security: Tomcat 11.0.24 (Boot 4.1.1 BOM) has CRITICAL CVE-2026-65182/65905/68525. -->
         <tomcat.version>11.0.25</tomcat.version>
 
