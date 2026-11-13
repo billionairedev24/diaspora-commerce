@@ -1,0 +1,32 @@
+# METHOD pattern | CLASS | enforcement | test
+# Caller identity is the verified JWT subject (auth.Middleware, required); notifications:* permissions are held by staff and services only.
+POST /v1/notifications | SERVICE_ONLY | notifications:send (services; recipient is the caller's input) | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/notifications | STAFF_ONLY | notifications:read (staff roles only; unfiltered log) | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/notifications/{id} | STAFF_ONLY | notifications:read | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/dead-letters | STAFF_ONLY | notifications:read | TestCrossTenantPreferencesAlertsAndStaffRoutes
+POST /v1/dead-letters/{id}/replay | STAFF_ONLY | notifications:manage | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/templates | STAFF_ONLY | notifications:read | TestCrossTenantPreferencesAlertsAndStaffRoutes
+POST /v1/templates | STAFF_ONLY | notifications:templates:write | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/templates/{key}/sample | STAFF_ONLY | notifications:read | TestCrossTenantPreferencesAlertsAndStaffRoutes
+POST /v1/templates/{key}/preview | STAFF_ONLY | notifications:read | TestCrossTenantPreferencesAlertsAndStaffRoutes
+POST /v1/templates/{key}/test-send | STAFF_ONLY | notifications:templates:write; sends only to the caller's own contact | TestCrossTenantPreferencesAlertsAndStaffRoutes
+POST /v1/consents/sms | SERVICE_ONLY | notifications:send | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/consents/sms/{phone} | STAFF_ONLY | notifications:read | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/suppressions | STAFF_ONLY | notifications:read | TestCrossTenantPreferencesAlertsAndStaffRoutes
+DELETE /v1/suppressions/{address} | STAFF_ONLY | notifications:manage | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/preferences/{recipientId} | CUSTOMER_SELF | canManageRecipient: token subject == recipientId, or notifications:manage | TestCrossTenantPreferencesAlertsAndStaffRoutes
+PUT /v1/preferences/{recipientId} | CUSTOMER_SELF | canManageRecipient | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/preferences/{recipientId}/alerts | CUSTOMER_SELF | canManageRecipient | TestCrossTenantPreferencesAlertsAndStaffRoutes
+PUT /v1/preferences/{recipientId}/alerts | CUSTOMER_SELF | canManageRecipient | TestCrossTenantPreferencesAlertsAndStaffRoutes
+POST /v1/stock-alerts | CUSTOMER_SELF | shopper(): user id is the verified token subject, services refused | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/stock-alerts | CUSTOMER_SELF | shopper(): list by token subject, no user parameter | TestCrossTenantPreferencesAlertsAndStaffRoutes
+DELETE /v1/stock-alerts/{atin} | CUSTOMER_SELF | shopper(): keyed by (token subject, atin) | TestCrossTenantPreferencesAlertsAndStaffRoutes
+POST /v1/stock-alerts/guest | SERVICE_ONLY | notifications:stock-alerts.guest (gateway-bff client) | TestCrossTenantPreferencesAlertsAndStaffRoutes
+GET /v1/stock-alerts/unsubscribe | TOKEN_LINK | signed token naming the alert; GET only confirms | n/a
+POST /v1/stock-alerts/unsubscribe | TOKEN_LINK | signed token naming the alert | n/a
+POST /v1/webhooks/resend | WEBHOOK | Svix signature; unconfigured = 503 | TestWebhooksAndUnsubscribeNeedTheirCredential
+POST /v1/webhooks/sendgrid | WEBHOOK | SendGrid ECDSA signature; unconfigured = 503 | TestWebhooksAndUnsubscribeNeedTheirCredential
+POST /v1/webhooks/twilio/status | WEBHOOK | Twilio signature; unconfigured = 503 | TestWebhooksAndUnsubscribeNeedTheirCredential
+POST /v1/webhooks/twilio/inbound | WEBHOOK | Twilio signature; unconfigured = 503 | TestWebhooksAndUnsubscribeNeedTheirCredential
+GET /v1/unsubscribe | TOKEN_LINK | signed unsubscribe token (address + category); GET only confirms | n/a
+POST /v1/unsubscribe | TOKEN_LINK | signed unsubscribe token (address + category) | n/a
