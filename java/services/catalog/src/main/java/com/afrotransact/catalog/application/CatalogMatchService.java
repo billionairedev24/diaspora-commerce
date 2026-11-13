@@ -5,8 +5,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * One lookup from a barcode, or a brand with a part number, to the product page that already exists (S381). The seller
- * of a matched item sells an offer on the page; the page content (images, title, attributes) is never theirs to change.
+ * The optional barcode shortcut of adding a product: one exact lookup from a barcode to the product page that already
+ * exists (S381). A seller without a barcode searches by name instead ({@link CandidateMatchService}). The seller of a
+ * matched item sells on the page; the page content (images, title, attributes) is never theirs to change.
  */
 public interface CatalogMatchService {
 
@@ -20,21 +21,14 @@ public interface CatalogMatchService {
     MatchResult matchForOrganisation(MatchCommand command, String sellerOrgId);
 
     /**
-     * @param gtin        a barcode as typed (spaces and dashes allowed; an ISBN-10 is converted), or null
-     * @param brand       brand name or registry id, for items without a barcode
-     * @param mpn         manufacturer part number
-     * @param categoryId  narrows a brand plus part number match
+     * @param gtin        a barcode as typed (spaces and dashes allowed; an ISBN-10 is converted)
      * @param sellerOrgId service and staff tokens only: the organisation asking; a seller always asks as itself
      */
-    record MatchCommand(String gtin, String brand, String mpn, UUID categoryId, String sellerOrgId) {
+    record MatchCommand(String gtin, String sellerOrgId) {
     }
 
     enum Result {
         MATCH, NO_MATCH, INVALID, RESTRICTED
-    }
-
-    enum MatchedOn {
-        GTIN, BRAND_MPN
     }
 
     record PageImage(String url, Integer width, Integer height) {
@@ -45,12 +39,11 @@ public interface CatalogMatchService {
     }
 
     /**
-     * @param atin         the matched child (variant); null when a brand plus part number match names a page with several
-     *                     children and the seller must pick one of {@code variants}
+     * @param atin         the matched child (variant)
      * @param canOffer     false with {@code blockers} when the organisation may not sell it
      * @param canCreate    false when a new page for this barcode must not be created, with {@code createBlockers}
      */
-    record MatchResult(Result result, MatchedOn matchedOn, String gtin14, String digits, String atin, String parentAtin,
+    record MatchResult(Result result, String gtin14, String digits, String atin, String parentAtin,
                        String productStatus, String title, String brand, PageImage image, String category,
                        UUID categoryId, Map<String, String> variantOptions, List<MatchVariant> variants,
                        boolean canOffer, List<Blocker> blockers, boolean canCreate, List<Blocker> createBlockers,

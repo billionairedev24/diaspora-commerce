@@ -3120,14 +3120,14 @@ paths:
     post:
       tags:
       - Catalog matching
-      summary: Find the existing product page for a barcode, or for a brand plus part number (S381)
+      summary: Find the existing product page for a barcode (the optional exact shortcut, S381)
       description: |
         One call for the Seller Center form and bulk upload (docs/engineering/bulk-upload-and-images.md, section 3.2).
         The GTIN is cleaned (spaces and dashes dropped), an ISBN-10 becomes the ISBN-13, the check digit is verified and
         the code is normalised to 14 digits (`gtin14`), so the UPC `012345678905` and the EAN `0012345678905` meet on the
         same variant. Reserved numbers (store prefixes 02, 04, 20 to 29, coupons 981 to 984 and 99; staff-editable) answer
-        `RESTRICTED`. Brand plus `mpn` is used when there is no barcode. A match returns the ATIN of the child (variant)
-        and the page summary; the seller never edits page content. `canOffer` and `blockers` say whether the caller's
+        `RESTRICTED`. A seller without a barcode searches by name instead (`/v1/catalog/matches/candidates`); a barcode is
+        never required. A match returns the ATIN of the child (variant) and the page summary; the seller never edits page content. `canOffer` and `blockers` say whether the caller's
         organisation may sell it (page not live, department or brand approval, brand retired or rejected); offers
         re-checks at offer creation and also refuses an open duplicate (`offers.offer-exists`) and a full plan
         (`offers.listing-limit-reached`). The number of sellers is not known to catalog; the BFF reads it from offers.
@@ -3150,7 +3150,70 @@ paths:
         '403':
           description: Missing catalog:read or catalog:write
         '422':
-          description: Neither a GTIN nor a brand with a part number was given
+          description: No barcode was given
+  /v1/catalog/matches/candidates:
+    post:
+      tags:
+      - Catalog matching
+      summary: Is your product already on AfroTransact? Up to six pages for a name, no barcode needed
+      description: |
+        Search-first matching (docs/engineering/product-matching-without-barcode.md). One text: what the seller is selling,
+        with the size and the brand inside it ("Tilda basmati rice 5kg"). The category is optional (the chip): omitted, catalog
+        suggests the one most of the best pages share. Recall comes from the search index (Meilisearch or Elasticsearch,
+        through search-service); ranking is on catalog's own data, so only live pages with a real photo are returned, best
+        first, at most six, scored below the show threshold dropped. `SAME_NAME` is exact (the normalised name, brand and
+        size are equal in the category); `SIMILAR` is fuzzy and is only a suggestion: both need the seller's click, and a
+        page that states a size needs the one-tap size confirmation. Nothing about any seller is returned (no name, price,
+        stock or cost). An unreachable index answers `searchUnavailable` with no suggestions, never a guess. Limited per
+        organisation per hour (422 `catalog.match-rate-limited`). Needs catalog:write (sellers) or catalog:read.
+      operationId: matchCandidates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidateSearchRequest'
+      responses:
+        '200':
+          description: The candidates (possibly none)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateSearchResult'
+        '403':
+          description: Missing catalog:read or catalog:write
+        '422':
+          description: catalog.match-rate-limited
+  /v1/catalog/matches/decisions:
+    post:
+      tags:
+      - Catalog matching
+      summary: Record the seller's answer to the candidate list
+      description: |
+        `SELL_EXISTING`: the variant must have been in the list for the same `query` and `categoryId`, and when its page
+        states a size `sizeConfirmed` must be true (422 `catalog.match-size-unconfirmed`); the answer says whether the
+        organisation may sell it (`canOffer` with `blockers`), and the next step is the price, quantity and condition form.
+        `NONE_OF_THESE`: stored with the pages that were shown. When one of them scored as likely, `possibleDuplicateQueued`
+        is true and staff are asked to compare the new page with it later; it never blocks adding the page. Limited to a
+        number of `NONE_OF_THESE` answers per organisation per day (422 `catalog.match-rate-limited`).
+      operationId: matchDecision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchDecisionRequest'
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchDecisionResult'
+        '403':
+          description: Missing catalog:read or catalog:write
+        '422':
+          description: catalog.match-size-unconfirmed, catalog.match-choice-not-shown, catalog.match-choice-missing or catalog.match-rate-limited
   /v1/catalog/offer-eligibility:
     post:
       tags:
@@ -7480,25 +7543,15 @@ components:
           type: string
     MatchRequest:
       type: object
-      description: A barcode (UPC, EAN, GTIN or ISBN), or a brand with its manufacturer part number. At least one of the two.
+      description: A barcode (UPC, EAN, GTIN or ISBN), the optional exact shortcut. Without a barcode, search by name (CandidateSearchRequest).
+      required:
+      - gtin
       properties:
         gtin:
           type: string
           description: Digits with optional spaces or dashes; 8, 12, 13 or 14 digits, or an ISBN-10
           example: '012345678905'
           maxLength: 20
-        brand:
-          type: string
-          description: Brand name or registry id (with mpn, for items without a barcode)
-          maxLength: 120
-        mpn:
-          type: string
-          description: Manufacturer part number (letters and digits are compared; case and punctuation ignored)
-          maxLength: 80
-        categoryId:
-          type: string
-          format: uuid
-          description: Narrows a brand plus part number match to a category
     PageImage:
       type: object
       properties:
@@ -7538,15 +7591,9 @@ components:
           - NO_MATCH
           - INVALID
           - RESTRICTED
-        matchedOn:
-          type: string
-          description: Present on MATCH
-          enum:
-          - GTIN
-          - BRAND_MPN
         gtin14:
           type: string
-          description: The normalised 14-digit key (null for a brand plus part number lookup or an unreadable code)
+          description: The normalised 14-digit key (null for an unreadable code)
           pattern: '[0-9]{14}'
         digits:
           type: string
@@ -7577,7 +7624,7 @@ components:
             type: string
         variants:
           type: array
-          description: Every child of the matched page, so the seller may offer the others too. A brand plus part number match on a page with several children has no `atin`; the seller picks one of these.
+          description: Every child of the matched page, so the seller may offer the others too.
           items:
             $ref: '#/components/schemas/MatchVariant'
         canOffer:
@@ -7611,6 +7658,168 @@ components:
         gtin14:
           type: string
           pattern: '[0-9]{14}'
+    CandidateSearchRequest:
+      type: object
+      description: What the seller is selling, as they would type it. The category is optional.
+      required:
+      - query
+      properties:
+        query:
+          type: string
+          description: The name, with the size and the brand inside it
+          example: Tilda basmati rice 5kg
+          maxLength: 200
+        categoryId:
+          type: string
+          format: uuid
+          description: The category chip, when the seller set it; omitted lets catalog suggest one
+        sellerOrgId:
+          type: string
+          description: Service and staff tokens only
+    CandidateImage:
+      type: object
+      properties:
+        url:
+          type: string
+        width:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+    CandidateVariant:
+      type: object
+      properties:
+        atin:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+    MatchCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        path:
+          type: string
+    MatchCandidate:
+      type: object
+      description: One existing product page. Nothing about any seller - no name, price, stock or cost.
+      properties:
+        parentAtin:
+          type: string
+          description: ATIN of the page
+        atin:
+          type: string
+          description: The variant to sell when the page has exactly one; otherwise the seller picks from variants
+        title:
+          type: string
+        brand:
+          type: string
+        image:
+          $ref: '#/components/schemas/CandidateImage'
+        category:
+          type: string
+        sizeLabel:
+          type: string
+          description: The page's size in words, for the one-tap question ("5 kg"); null when it states none
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateVariant'
+        kind:
+          type: string
+          description: 'SAME_NAME: normalised name, brand and size are equal (exact). SIMILAR: a suggestion by name (fuzzy). Both need the seller''s click.'
+          enum:
+          - SAME_NAME
+          - SIMILAR
+        likely:
+          type: boolean
+          description: High enough to say "likely your product"
+        canOffer:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Blocker'
+    CandidateSearchResult:
+      type: object
+      required:
+      - candidates
+      - tooShort
+      - searchUnavailable
+      properties:
+        candidates:
+          type: array
+          description: Best first, at most six
+          items:
+            $ref: '#/components/schemas/MatchCandidate'
+        suggestedCategory:
+          $ref: '#/components/schemas/MatchCategory'
+        category:
+          $ref: '#/components/schemas/MatchCategory'
+        tooShort:
+          type: boolean
+          description: The name is too short to search yet
+        searchUnavailable:
+          type: boolean
+          description: The search index did not answer; no suggestions, the seller may still add the product
+    MatchDecisionRequest:
+      type: object
+      required:
+      - choice
+      - query
+      properties:
+        choice:
+          type: string
+          enum:
+          - SELL_EXISTING
+          - NONE_OF_THESE
+        query:
+          type: string
+          maxLength: 200
+          description: The same name the candidates were searched with
+        categoryId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+          description: 'SELL_EXISTING: the variant ATIN of a page that was shown'
+        sizeConfirmed:
+          type: boolean
+          description: 'SELL_EXISTING: the seller tapped "yes, the same size"; required when the page states a size'
+        sellerOrgId:
+          type: string
+          description: Service and staff tokens only
+    MatchDecisionResult:
+      type: object
+      required:
+      - choice
+      - canOffer
+      - blockers
+      - possibleDuplicateQueued
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+        choice:
+          type: string
+          enum:
+          - SELL_EXISTING
+          - NONE_OF_THESE
+        atin:
+          type: string
+        canOffer:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Blocker'
+        possibleDuplicateQueued:
+          type: boolean
+          description: 'NONE_OF_THESE: a likely page was shown, so staff will compare the new page with it'
     OfferEligibilityRequest:
       type: object
       required:

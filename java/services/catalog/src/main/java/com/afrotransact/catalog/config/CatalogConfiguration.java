@@ -29,6 +29,7 @@ import com.afrotransact.catalog.domain.barcode.BarcodeEncoder;
 import com.afrotransact.catalog.domain.barcode.DefaultBarcodeEncoder;
 import com.afrotransact.catalog.domain.barcode.DefaultLabelPolicy;
 import com.afrotransact.catalog.domain.barcode.LabelPolicy;
+import com.afrotransact.catalog.domain.matching.MatchThresholds;
 import com.afrotransact.catalog.domain.prefill.CategoryHintPolicy;
 import com.afrotransact.catalog.domain.prefill.DefaultCategoryHintPolicy;
 import com.afrotransact.catalog.domain.sizing.DefaultSizeChartPolicy;
@@ -121,6 +122,19 @@ class CatalogConfiguration {
                                   @Value("${at.catalog.imports.max-feed-rows:50000}") int maxFeedRows,
                                   @Value("${at.catalog.imports.max-uploads-per-day:20}") int maxUploadsPerDay) {
         return new ImportSettings(notifyMinRows, stallAfter, maxRows, maxFeedRows, maxUploadsPerDay);
+    }
+
+    /** The numbers of the search-first add-a-product step (docs/engineering/product-matching-without-barcode.md section 4). */
+    @Bean
+    MatchThresholds matchThresholds(@Value("${at.catalog.matching.show-min:45}") int showMin,
+                                    @Value("${at.catalog.matching.likely-min:75}") int likelyMin,
+                                    @Value("${at.catalog.matching.max-candidates:6}") int maxCandidates,
+                                    @Value("${at.catalog.matching.recall:30}") int recall,
+                                    @Value("${at.catalog.matching.min-query-length:3}") int minQueryLength,
+                                    @Value("${at.catalog.matching.searches-per-hour:600}") int searchesPerHour,
+                                    @Value("${at.catalog.matching.none-decisions-per-day:30}") int noneDecisionsPerDay) {
+        return new MatchThresholds(showMin, likelyMin, maxCandidates, recall, minQueryLength, searchesPerHour,
+                noneDecisionsPerDay);
     }
 
     /** S381-S387: the configured starting values of the thresholds staff edit; the stored copy wins. */

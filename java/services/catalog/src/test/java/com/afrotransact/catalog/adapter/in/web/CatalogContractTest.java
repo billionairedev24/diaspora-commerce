@@ -28,6 +28,7 @@ import com.afrotransact.catalog.adapter.in.web.MatchDtos.MatchRequest;
 import com.afrotransact.catalog.adapter.in.web.MatchDtos.MatchResponse;
 import com.afrotransact.catalog.adapter.in.web.PublicProductController.AtinRedirectResponse;
 import com.afrotransact.catalog.application.Blocker;
+import com.afrotransact.catalog.application.CandidateMatchService;
 import com.afrotransact.catalog.application.CatalogMatchService;
 import com.afrotransact.catalog.application.CatalogMatchService.MatchResult;
 import com.afrotransact.catalog.application.CatalogMatchService.MatchVariant;
@@ -46,6 +47,7 @@ import com.afrotransact.catalog.domain.ExemptionRequirement;
 import com.afrotransact.catalog.domain.GtinExemptionRequest;
 import com.afrotransact.catalog.domain.ItemCondition;
 import com.afrotransact.catalog.domain.ProductChangeRequest;
+import com.afrotransact.catalog.domain.matching.CandidateRanker;
 import com.afrotransact.catalog.testsupport.OpenApiContract;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -75,7 +77,7 @@ class CatalogContractTest {
     @Test
     void theMatchResponseCarriesExactlyWhatTheContractDescribes() {
         MatchResult result = new MatchResult(CatalogMatchService.Result.MATCH,
-                CatalogMatchService.MatchedOn.GTIN, "00012345678905", "012345678905",
+                "00012345678905", "012345678905",
                 "AT00000002", "AT00000001", "LIVE", "Ankara tote", "Adire House",
                 new PageImage("https://cdn.example/a.jpg", 1200, 1200), "Fashion › Bags", UUID.randomUUID(),
                 Map.of("Colour", "Blue"), List.of(new MatchVariant("AT00000002", Map.of("Colour", "Blue"), "00012345678905")),
@@ -95,6 +97,25 @@ class CatalogContractTest {
     void theMatchAndEligibilityRequestsAcceptEveryFieldOfTheirSchemas() {
         assertRequestAccepts(MatchRequest.class, "MatchRequest");
         assertRequestAccepts(EligibilityRequest.class, "OfferEligibilityRequest");
+    }
+
+    @Test
+    void theCandidateSearchAndDecisionMatchTheContract() {
+        CandidateMatchService.Candidate candidate = new CandidateMatchService.Candidate("AT00000001", "AT00000002",
+                "Tilda Basmati Rice 5kg", "Tilda", new CandidateMatchService.CandidateImage("https://cdn.example/a.jpg", 1200, 1200),
+                "Grocery › Rice", "5 kg", List.of(new CandidateMatchService.CandidateVariant("AT00000002", Map.of())),
+                CandidateRanker.Kind.SAME_NAME, true, true, List.of(new Blocker("catalog.page-not-live", "Not on sale")));
+        CandidateMatchService.Category category = new CandidateMatchService.Category(UUID.randomUUID(), "Grocery › Rice");
+        assertResponseMatches(CandidateDtos.CandidateResponse.of(new CandidateMatchService.CandidateResult(List.of(candidate),
+                category, category, false, false)), "CandidateSearchResult");
+        assertResponseMatches(CandidateDtos.CandidateDto.of(candidate), "MatchCandidate");
+        assertResponseMatches(CandidateDtos.CandidateImageDto.of(candidate.image()), "CandidateImage");
+        assertResponseMatches(CandidateDtos.CandidateVariantDto.of(candidate.variants().getFirst()), "CandidateVariant");
+        assertResponseMatches(CandidateDtos.CategoryDto.of(category), "MatchCategory");
+        assertResponseMatches(CandidateDtos.DecisionResponse.of(new CandidateMatchService.DecisionResult(UUID.randomUUID(),
+                CandidateMatchService.Choice.SELL_EXISTING, "AT00000002", true, List.of(), false)), "MatchDecisionResult");
+        assertRequestAccepts(CandidateDtos.CandidateRequest.class, "CandidateSearchRequest");
+        assertRequestAccepts(CandidateDtos.DecisionRequest.class, "MatchDecisionRequest");
     }
 
     @Test

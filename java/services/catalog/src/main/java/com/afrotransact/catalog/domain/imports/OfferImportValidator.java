@@ -72,10 +72,10 @@ public final class OfferImportValidator {
                     + "row");
         }
         boolean namesAPage = index.containsKey(ImportColumns.GTIN) || index.containsKey(ImportColumns.ATIN)
-                || (index.containsKey(ImportColumns.BRAND) && index.containsKey(OfferImportColumns.MPN));
+                || index.containsKey(OfferImportColumns.NAME);
         if (!namesAPage) {
-            throw new SpreadsheetRejected("The file needs a Barcode, ATIN, or Brand and Part number column to say which "
-                    + "product each row sells");
+            throw new SpreadsheetRejected("The file needs a Product name, Barcode or ATIN column to say which product "
+                    + "each row sells");
         }
         List<String> ignored = ignoredColumns(header);
         if (!ignored.isEmpty()) {
@@ -109,8 +109,8 @@ public final class OfferImportValidator {
     private OfferRow row(SheetRow r, Map<String, Integer> seen) {
         TargetKey key = keyOf(index, r);
         if (!key.present()) {
-            add(r, RowMessage.error(ImportColumns.GTIN, idx(ImportColumns.GTIN), "Say which product this row sells: its "
-                    + "barcode, its ATIN, or its brand and part number"));
+            add(r, RowMessage.error(OfferImportColumns.NAME, idx(OfferImportColumns.NAME), "Say which product this row "
+                    + "sells: type its name (and its size), or give its barcode"));
             return null;
         }
         if (key.gtin() != null && !Gtin.isValid(key.gtin())) {
@@ -130,7 +130,7 @@ public final class OfferImportValidator {
             return null;
         }
         String column = key.gtin() != null ? ImportColumns.GTIN : key.atin() != null ? ImportColumns.ATIN
-                : OfferImportColumns.MPN;
+                : OfferImportColumns.NAME;
         switch (target.kind()) {
             case NO_MATCH -> {
                 add(r, RowMessage.error(column, idx(column), target.message() != null ? target.message()
@@ -357,7 +357,7 @@ public final class OfferImportValidator {
 
     private boolean contentGiven(SheetRow r) {
         for (int i = 0; i < header.size(); i++) {
-            if (isContentColumn(header.get(i)) && !r.cell(i).isBlank()) {
+            if (isContentColumn(header.get(i)) && !lookupColumn(i) && !r.cell(i).isBlank()) {
                 return true;
             }
         }
@@ -366,12 +366,18 @@ public final class OfferImportValidator {
 
     private List<String> ignoredColumns(List<String> header) {
         List<String> out = new ArrayList<>();
-        for (String h : header) {
-            if (isContentColumn(h)) {
-                out.add(h.strip());
+        for (int i = 0; i < header.size(); i++) {
+            if (isContentColumn(header.get(i)) && !lookupColumn(i)) {
+                out.add(header.get(i).strip());
             }
         }
         return out;
+    }
+
+    /** The category column of the offer template finds the product; it is not page content. */
+    private boolean lookupColumn(int column) {
+        Integer category = index.get(OfferImportColumns.CATEGORY_HINT);
+        return category != null && category == column;
     }
 
     private static boolean isContentColumn(String header) {
@@ -383,7 +389,8 @@ public final class OfferImportValidator {
 
     private static TargetKey keyOf(Map<String, Integer> index, SheetRow r) {
         return TargetKey.of(at(index, r, ImportColumns.GTIN), at(index, r, ImportColumns.ATIN),
-                at(index, r, ImportColumns.BRAND), at(index, r, OfferImportColumns.MPN));
+                at(index, r, OfferImportColumns.NAME), at(index, r, ImportColumns.BRAND),
+                at(index, r, OfferImportColumns.SIZE), at(index, r, OfferImportColumns.CATEGORY_HINT));
     }
 
     private static String at(Map<String, Integer> index, SheetRow r, String column) {

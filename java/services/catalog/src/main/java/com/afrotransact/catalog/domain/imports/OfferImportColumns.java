@@ -11,7 +11,9 @@ import java.util.List;
 public final class OfferImportColumns {
 
     public static final String SELLER_SKU = "seller_sku";
-    public static final String MPN = "mpn";
+    public static final String NAME = "product_name";
+    public static final String SIZE = "size_pack";
+    public static final String CATEGORY_HINT = "category_hint";
     public static final String CONDITION_NOTE = "condition_note";
     public static final String LIST_PRICE = "list_price";
     public static final String SHIPPING = "shipping";
@@ -28,15 +30,18 @@ public final class OfferImportColumns {
     /** The columns of the offer template, in order. */
     public static List<ImportColumn> offer() {
         List<ImportColumn> c = new ArrayList<>();
-        c.add(new ImportColumn(ImportColumns.GTIN, "Barcode (UPC, EAN, ISBN)", "The product's barcode. Give the barcode, "
-                + "or the ATIN, or the brand and part number: one of them names the product you sell.", false,
-                ColumnKind.GTIN, null, "4006381333931", false));
-        c.add(new ImportColumn(ImportColumns.ATIN, "ATIN", "The product's AfroTransact number (AT followed by 8 letters or "
-                + "digits), when you do not have the barcode.", false, ColumnKind.TEXT, null, "", false));
-        c.add(new ImportColumn(ImportColumns.BRAND, "Brand", "With Part number, when the product has no barcode.", false,
+        c.add(new ImportColumn(NAME, "Product name", "What the product is called, as a shopper would search for it, for "
+                + "example Tilda basmati rice. We look for it on AfroTransact. A barcode or an ATIN, when you have one, "
+                + "is the surest way.", false, ColumnKind.TEXT, null, "Tilda basmati rice", false));
+        c.add(new ImportColumn(CATEGORY_HINT, "Category", "Optional. It helps us find the right product.", false,
                 ColumnKind.TEXT, null, "", false));
-        c.add(new ImportColumn(MPN, "Part number (MPN)", "The manufacturer's part number, with Brand.", false,
-                ColumnKind.TEXT, null, "", false));
+        c.add(new ImportColumn(ImportColumns.BRAND, "Brand", "Optional.", false, ColumnKind.TEXT, null, "Tilda", false));
+        c.add(new ImportColumn(SIZE, "Size or pack", "Optional but important: 5 kg, 500 ml, 6 pack. A different size is a "
+                + "different product.", false, ColumnKind.TEXT, null, "5 kg", false));
+        c.add(new ImportColumn(ImportColumns.GTIN, "Barcode (UPC, EAN, ISBN)", "Optional. If you have the barcode, it is "
+                + "an exact match and the other columns above are not needed.", false, ColumnKind.GTIN, null, "", false));
+        c.add(new ImportColumn(ImportColumns.ATIN, "ATIN", "Optional. The product's AfroTransact number (AT followed by 8 "
+                + "letters or digits), if you already have it.", false, ColumnKind.TEXT, null, "", false));
         c.add(new ImportColumn(SELLER_SKU, "Seller SKU", "Your own code for this offer. Leave it blank and we make one "
                 + "from the product's ATIN.", false, ColumnKind.TEXT, null, "MY-SKU-1", false));
         c.add(new ImportColumn(ImportColumns.CONDITION, "Condition", "New unless stated. Used and renewed only where the "
@@ -99,7 +104,9 @@ public final class OfferImportColumns {
         all.add(new ImportColumn(LIST_PRICE, "Compare at price", "", false, ColumnKind.MONEY, null, "", false));
         all.add(new ImportColumn(ImportColumns.GTIN, "Barcode", "", false, ColumnKind.GTIN, null, "", false));
         all.add(new ImportColumn(ImportColumns.GTIN, "GTIN", "", false, ColumnKind.GTIN, null, "", false));
-        all.add(new ImportColumn(MPN, "MPN", "", false, ColumnKind.TEXT, null, "", false));
+        all.add(new ImportColumn(NAME, "Name", "", false, ColumnKind.TEXT, null, "", false));
+        all.add(new ImportColumn(SIZE, "Size", "", false, ColumnKind.TEXT, null, "", false));
+        all.add(new ImportColumn(SIZE, "Pack", "", false, ColumnKind.TEXT, null, "", false));
         // The product upload's own headers, so a CREATE row whose barcode matches a page is read as an offer (S393).
         all.add(new ImportColumn(ImportColumns.PRICE, "Price (USD)", "", false, ColumnKind.MONEY, null, "", false));
         all.add(new ImportColumn(LIST_PRICE, "Compare-at price (USD)", "", false, ColumnKind.MONEY, null, "", false));
@@ -112,12 +119,14 @@ public final class OfferImportColumns {
 
     public static TemplateSpec offerTemplate() {
         return new TemplateSpec("Sell products already on AfroTransact", "afrotransact-offers", offer(), List.of(
-                "One row per offer. Name the product by its barcode, or its ATIN, or its brand and part number. The product "
-                        + "page already has the photos, title and details, so this file has no image, title or attribute "
-                        + "columns: anything you add there is ignored.",
+                "One row per product you sell. Type the product's name and its size or pack (a different size is a different "
+                        + "product). We look for it on AfroTransact. If we find exactly the same product, your row is added "
+                        + "to it. If we are not sure, the row is left out and the report shows the products we found, so "
+                        + "nothing is matched on a guess. The product page already has the photos and details, so this file "
+                        + "has no image or attribute columns: anything you add there is ignored.",
                 "Price is required. Quantity is needed for items you ship yourself. Blank condition means New; anything "
                         + "else needs a condition note.",
-                "A product that is not on AfroTransact yet is not found here: add it with the products template.",
+                "A product that is not on AfroTransact yet is not found here: add it with the products template or Add a product.",
                 "If you do not have the tax approval for an item yet, its row is saved and held. It goes on sale by itself "
                         + "when the tax details are done. Held rows are never for sale.",
                 "Upload as .xlsx or .csv: at most 10 MB and 5,000 rows per file. Upload the same file again to change "

@@ -22,19 +22,14 @@ final class MatchDtos {
     private MatchDtos() {
     }
 
-    @Schema(name = "MatchRequest", description = "A barcode (UPC, EAN, GTIN or ISBN), or a brand with its manufacturer "
-            + "part number. At least one of the two.")
+    @Schema(name = "MatchRequest", description = "A barcode (UPC, EAN, GTIN or ISBN): the optional exact shortcut. "
+            + "Without a barcode, search by name (CandidateSearchRequest).")
     record MatchRequest(
-            @Size(max = 20) @Schema(example = "012345678905", description = "Digits with optional spaces or dashes; 8, "
-                    + "12, 13 or 14 digits, or an ISBN-10") String gtin,
-            @Size(max = 120) @Schema(description = "Brand name or registry id (with mpn, for items without a barcode)")
-            String brand,
-            @Size(max = 80) @Schema(description = "Manufacturer part number (letters and digits are compared; case and "
-                    + "punctuation ignored)") String mpn,
-            @Schema(description = "Narrows a brand plus part number match to a category") UUID categoryId) {
+            @NotBlank @Size(max = 20) @Schema(example = "012345678905", description = "Digits with optional spaces or "
+                    + "dashes; 8, 12, 13 or 14 digits, or an ISBN-10") String gtin) {
 
         MatchCommand toCommand() {
-            return new MatchCommand(gtin, brand, mpn, categoryId, null);
+            return new MatchCommand(gtin, null);
         }
     }
 
@@ -67,12 +62,10 @@ final class MatchDtos {
     @Schema(name = "MatchResult")
     record MatchResponse(
             @Schema(allowableValues = {"MATCH", "NO_MATCH", "INVALID", "RESTRICTED"}) String result,
-            @Schema(description = "Present on MATCH", allowableValues = {"GTIN", "BRAND_MPN"}) String matchedOn,
-            @Schema(description = "The normalised 14-digit key (null for a brand plus part number lookup or an "
-                    + "unreadable code)", pattern = "[0-9]{14}") String gtin14,
+            @Schema(description = "The normalised 14-digit key (null for an unreadable code)", pattern = "[0-9]{14}")
+            String gtin14,
             @Schema(description = "The cleaned input digits (an ISBN-10 shown as its ISBN-13)") String digits,
-            @Schema(description = "ATIN of the matched child (variant); offers attach to this. Null when a brand plus "
-                    + "part number match names a page with several children: pick one of variants") String atin,
+            @Schema(description = "ATIN of the matched child (variant); offers attach to this") String atin,
             @Schema(description = "ATIN of the product page") String parentAtin,
             String productStatus, String title, String brand, PageImageDto image,
             @Schema(description = "Category path") String category, UUID categoryId,
@@ -87,7 +80,7 @@ final class MatchDtos {
             @Schema(description = "Plain words for INVALID and RESTRICTED") String message) {
 
         static MatchResponse of(MatchResult r) {
-            return new MatchResponse(r.result().name(), r.matchedOn() == null ? null : r.matchedOn().name(), r.gtin14(),
+            return new MatchResponse(r.result().name(), r.gtin14(),
                     r.digits(), r.atin(), r.parentAtin(), r.productStatus(), r.title(), r.brand(),
                     PageImageDto.of(r.image()), r.category(), r.categoryId(), r.variantOptions(),
                     r.variants().stream().map(MatchVariantDto::of).toList(), r.canOffer(),

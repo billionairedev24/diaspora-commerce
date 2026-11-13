@@ -12,7 +12,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,9 +32,6 @@ import com.afrotransact.catalog.domain.ListingOwnerKind;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
-import com.afrotransact.catalog.domain.brand.Brand;
-import com.afrotransact.catalog.domain.brand.BrandStatus;
-import com.afrotransact.catalog.port.BrandRepository;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ChangeRequestRepository;
 import com.afrotransact.catalog.port.MatchMetrics;
@@ -43,7 +39,6 @@ import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
-import com.afrotransact.platform.web.error.BusinessRuleException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +51,6 @@ class CatalogMatchServiceImplTest {
             0);
 
     private final ProductRepository products = mock(ProductRepository.class);
-    private final BrandRepository brands = mock(BrandRepository.class);
     private final CategoryRepository categories = mock(CategoryRepository.class);
     private final ChangeRequestRepository changeRequests = mock(ChangeRequestRepository.class);
     private final OfferEligibilityService eligibility = mock(OfferEligibilityService.class);
@@ -75,7 +69,7 @@ class CatalogMatchServiceImplTest {
             return new Eligibility(v.atin().value(), p.atin().value(), true, List.of(), List.of(ItemCondition.NEW),
                     p.owner().orgId());
         });
-        service = new CatalogMatchServiceImpl(products, brands, categories, changeRequests, eligibility, settings,
+        service = new CatalogMatchServiceImpl(products, categories, changeRequests, eligibility, settings,
                 metrics, actors);
     }
 
@@ -84,8 +78,8 @@ class CatalogMatchServiceImplTest {
         Product page = page("Ankara tote", ProductStatus.LIVE, "012345678905");
         when(products.findByVariantGtin(anyString())).thenReturn(Optional.of(page));
 
-        MatchResult byUpc = service.match(new MatchCommand("012345678905", null, null, null, null));
-        MatchResult byEan = service.match(new MatchCommand("0012345678905", null, null, null, null));
+        MatchResult byUpc = service.match(new MatchCommand("012345678905", null));
+        MatchResult byEan = service.match(new MatchCommand("0012345678905", null));
 
         assertThat(byUpc.result()).isEqualTo(Result.MATCH);
         assertThat(byUpc.atin()).isEqualTo(byEan.atin()).isEqualTo(page.variants().getFirst().atin().value());
@@ -102,7 +96,7 @@ class CatalogMatchServiceImplTest {
         when(products.findByVariantGtin("9780306406157")).thenReturn(Optional.of(page("A book", ProductStatus.LIVE,
                 "9780306406157")));
 
-        MatchResult result = service.match(new MatchCommand("0-306-40615-2", null, null, null, null));
+        MatchResult result = service.match(new MatchCommand("0-306-40615-2", null));
 
         assertThat(result.result()).isEqualTo(Result.MATCH);
         assertThat(result.digits()).isEqualTo("9780306406157");
@@ -111,7 +105,7 @@ class CatalogMatchServiceImplTest {
     @Test
     void aReservedPrefixAnswersRestrictedInPlainWords() {
         String code = "2012345678903";
-        MatchResult result = service.match(new MatchCommand(code.substring(0, 12) + Gtin.checkDigit(code.substring(0, 12)), null, null, null, null));
+        MatchResult result = service.match(new MatchCommand(code.substring(0, 12) + Gtin.checkDigit(code.substring(0, 12)), null));
 
         assertThat(result.result()).isEqualTo(Result.RESTRICTED);
         assertThat(result.message()).isEqualTo("This number is for store use or coupons, not a product barcode.");
@@ -122,7 +116,7 @@ class CatalogMatchServiceImplTest {
 
     @Test
     void aBadCheckDigitAnswersInvalidWithASuggestion() {
-        MatchResult result = service.match(new MatchCommand("4006381333932", null, null, null, null));
+        MatchResult result = service.match(new MatchCommand("4006381333932", null));
 
         assertThat(result.result()).isEqualTo(Result.INVALID);
         assertThat(result.suggestion()).isEqualTo("4006381333931");
@@ -134,12 +128,12 @@ class CatalogMatchServiceImplTest {
     void noMatchLetsTheSellerCreateAPageUnlessAWrongMatchOnThatBarcodeIsOpen() {
         when(products.findByVariantGtin(anyString())).thenReturn(Optional.empty());
 
-        MatchResult free = service.match(new MatchCommand("4006381333931", null, null, null, null));
+        MatchResult free = service.match(new MatchCommand("4006381333931", null));
         assertThat(free.result()).isEqualTo(Result.NO_MATCH);
         assertThat(free.canCreate()).isTrue();
 
         when(changeRequests.existsOpenWrongMatch(GtinReader.key14("4006381333931"))).thenReturn(true);
-        MatchResult held = service.match(new MatchCommand("4006381333931", null, null, null, null));
+        MatchResult held = service.match(new MatchCommand("4006381333931", null));
         assertThat(held.result()).isEqualTo(Result.NO_MATCH);
         assertThat(held.canCreate()).isFalse();
         assertThat(held.createBlockers()).extracting(Blocker::code).containsExactly("catalog.wrong-match-open");
@@ -156,7 +150,7 @@ class CatalogMatchServiceImplTest {
                         + "under Listings.")), List.of(ItemCondition.NEW), "org_a"))
                 .when(eligibility).evaluate(any(), any(), anyString());
 
-        MatchResult result = service.match(new MatchCommand("4006381333931", null, null, null, null));
+        MatchResult result = service.match(new MatchCommand("4006381333931", null));
 
         assertThat(result.result()).isEqualTo(Result.MATCH);
         assertThat(result.canOffer()).isFalse();
@@ -164,51 +158,11 @@ class CatalogMatchServiceImplTest {
     }
 
     @Test
-    void brandAndPartNumberFindThePageOfAnItemWithoutABarcode() {
-        UUID brandId = UUID.randomUUID();
-        Brand brand = new Brand(brandId, "Adire House", "adirehouse", BrandStatus.APPROVED, null, null, NOW, NOW, 0, null,
-                null, null, Set.of());
-        when(brands.findLiveByKey("adirehouse")).thenReturn(List.of(brand));
-        Product page = page("Adire wrap", ProductStatus.LIVE, null);
-        when(products.findByBrandAndMpn(brandId.toString(), "model", "AH100")).thenReturn(List.of(page));
-
-        MatchResult result = service.match(new MatchCommand(null, "Adire House", "ah-100", null, null));
-
-        assertThat(result.result()).isEqualTo(Result.MATCH);
-        assertThat(result.matchedOn()).isEqualTo(CatalogMatchService.MatchedOn.BRAND_MPN);
-        assertThat(result.parentAtin()).isEqualTo(page.atin().value());
-        assertThat(result.atin()).isEqualTo(page.variants().getFirst().atin().value());
-    }
-
-    @Test
-    void aPartNumberMatchOnAPageWithSeveralChildrenAsksTheSellerToPickOne() {
-        UUID brandId = UUID.randomUUID();
-        when(brands.findById(brandId)).thenReturn(Optional.of(new Brand(brandId, "Adire House", "adirehouse",
-                BrandStatus.APPROVED, null, null, NOW, NOW, 0, null, null, null, Set.of())));
-        Product two = pageWithVariants("Adire wrap", List.of(Map.of("Colour", "Blue"), Map.of("Colour", "Red")));
-        when(products.findByBrandAndMpn(brandId.toString(), "model", "AH100")).thenReturn(List.of(two));
-
-        MatchResult result = service.match(new MatchCommand(null, brandId.toString(), "AH100", null, null));
-
-        assertThat(result.result()).isEqualTo(Result.MATCH);
-        assertThat(result.atin()).isNull();
-        assertThat(result.variants()).hasSize(2);
-        assertThat(result.variants()).extracting(CatalogMatchService.MatchVariant::options)
-                .containsExactly(Map.of("Colour", "Blue"), Map.of("Colour", "Red"));
-    }
-
-    @Test
-    void aBrandWithoutAPartNumberIsNotALookup() {
-        assertThatThrownBy(() -> service.match(new MatchCommand(null, "Adire House", " ", null, null)))
-                .isInstanceOf(BusinessRuleException.class);
-    }
-
-    @Test
     void aSellerAsksAsItselfAndIgnoresAnotherOrganisationInTheRequest() {
         Product page = page("Ankara tote", ProductStatus.LIVE, "4006381333931");
         when(products.findByVariantGtin(anyString())).thenReturn(Optional.of(page));
 
-        service.match(new MatchCommand("4006381333931", null, null, null, "org_someone_else"));
+        service.match(new MatchCommand("4006381333931", "org_someone_else"));
 
         verify(eligibility).evaluate(any(), any(), eq("org_b"));
     }
@@ -220,7 +174,7 @@ class CatalogMatchServiceImplTest {
         Product page = page("Ankara tote", ProductStatus.LIVE, "4006381333931");
         when(products.findByVariantGtin(anyString())).thenReturn(Optional.of(page));
 
-        service.match(new MatchCommand("4006381333931", null, null, null, "org_c"));
+        service.match(new MatchCommand("4006381333931", "org_c"));
 
         verify(eligibility).evaluate(any(), any(), eq("org_c"));
     }
@@ -229,7 +183,7 @@ class CatalogMatchServiceImplTest {
     void aCallerWithoutCatalogPermissionIsRefused() {
         when(actors.current()).thenReturn(new Actor("u", PrincipalType.SELLER_MEMBER, Optional.of("org_b"), Set.of(), Set.of()));
 
-        assertThatThrownBy(() -> service.match(new MatchCommand("4006381333931", null, null, null, null)))
+        assertThatThrownBy(() -> service.match(new MatchCommand("4006381333931", null)))
                 .isInstanceOf(ForbiddenActionException.class);
     }
 
@@ -243,15 +197,6 @@ class CatalogMatchServiceImplTest {
         Variant v = new Variant(UUID.randomUUID(), new Atin(String.format("AT%08d", ++counter)), "SKU-" + counter, gtin,
                 gtin == null, Map.of(), 899, "USD", 5);
         return product(title, status, List.of(v));
-    }
-
-    private static Product pageWithVariants(String title, List<Map<String, String>> options) {
-        List<Variant> variants = new ArrayList<>();
-        for (Map<String, String> o : options) {
-            variants.add(new Variant(UUID.randomUUID(), new Atin(String.format("AT%08d", ++counter)), "SKU-" + counter,
-                    null, true, o, 899, "USD", 5));
-        }
-        return product(title, ProductStatus.LIVE, variants);
     }
 
     private static Product product(String title, ProductStatus status, List<Variant> variants) {

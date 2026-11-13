@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class OfferImportValidatorTest {
 
     private static final String GTIN = ImportFixtures.VALID_GTIN;
-    private static final List<String> HEADER = List.of("Barcode (UPC, EAN, ISBN)", "ATIN", "Brand", "Part number (MPN)",
+    private static final List<String> HEADER = List.of("Barcode (UPC, EAN, ISBN)", "ATIN", "Product name", "Brand",
             "Seller SKU", "Condition", "Condition note", "Price *", "List price", "Quantity", "Shipping charge",
             "Fulfilment", "Handling days");
 
@@ -107,23 +107,34 @@ class OfferImportValidatorTest {
     }
 
     @Test
-    void aBrandAndPartNumberNamesThePageToo() {
-        OfferImportResult r = OfferImportValidator.validate(ImportFixtures.sheet(HEADER,
-                new String[] {"", "", "Jolie", "JB-100", "", "", "", "12.00", "", "4", "", "", ""}),
-                context(Map.of("mpn:jolie|JB100", FOUND)));
+    void aProductNameWithBrandAndSizeNamesThePageWhenThereIsNoBarcode() {
+        String key = TargetKey.of("", "", "Tilda basmati rice", "Tilda", "5 kg", "").id();
+        OfferImportResult r = OfferImportValidator.validate(ImportFixtures.sheet(
+                List.of("Product name", "Brand", "Size or pack", "Price", "Quantity"),
+                new String[] {"Tilda basmati rice", "Tilda", "5 kg", "12.00", "4"}), context(Map.of(key, FOUND)));
 
         assertThat(r.importable()).singleElement().extracting(OfferRow::atin).isEqualTo("AT00000002");
     }
 
     @Test
-    void aPartNumberOnAPageWithSeveralChildrenAsksForTheBarcodeOrAtin() {
-        OfferImportResult r = OfferImportValidator.validate(ImportFixtures.sheet(HEADER,
-                new String[] {"", "", "Jolie", "JB-100", "", "", "", "12.00", "", "4", "", "", ""}),
-                context(Map.of("mpn:jolie|JB100", OfferTarget.of(OfferTarget.Kind.AMBIGUOUS,
-                        "This part number is on a page with several sizes or colours. Add the barcode or the ATIN of the "
-                                + "one you sell."))));
+    void aNameThatMatchesSeveralPagesIsHeldOutWithTheProductsFoundAndNeverMatchedOnAGuess() {
+        String key = TargetKey.of("", "", "Basmati rice", "", "", "").id();
+        OfferImportResult r = OfferImportValidator.validate(ImportFixtures.sheet(
+                List.of("Product name", "Price", "Quantity"), new String[] {"Basmati rice", "12.00", "4"}),
+                context(Map.of(key, OfferTarget.of(OfferTarget.Kind.AMBIGUOUS, "We found products that look like this one "
+                        + "but are not sure which is yours: Tilda Basmati Rice (5 kg); Royal Basmati Rice (1 kg)."))));
 
-        assertThat(r.validation().rows().getFirst().summary()).contains("Add the barcode or the ATIN");
+        assertThat(r.importable()).isEmpty();
+        assertThat(r.validation().rows().getFirst().status()).isEqualTo(RowStatus.ERROR);
+        assertThat(r.validation().rows().getFirst().summary()).contains("Tilda Basmati Rice (5 kg)");
+    }
+
+    @Test
+    void theNameKeyIgnoresCaseAndPunctuationButNotTheSize() {
+        assertThat(TargetKey.of("", "", "TILDA basmati-rice", "tilda", "5KG", "").id())
+                .isEqualTo(TargetKey.of("", "", "Tilda Basmati Rice", "Tilda", "5 kg", "").id());
+        assertThat(TargetKey.of("", "", "Tilda Basmati Rice", "Tilda", "1 kg", "").id())
+                .isNotEqualTo(TargetKey.of("", "", "Tilda Basmati Rice", "Tilda", "5 kg", "").id());
     }
 
     @Test
@@ -214,7 +225,7 @@ class OfferImportValidatorTest {
                 .hasMessageContaining("no Price column");
         assertThatThrownBy(() -> OfferImportValidator.validate(ImportFixtures.sheet(List.of("Price", "Quantity"),
                 new String[] {"1", "1"}), context(Map.of()))).isInstanceOf(SpreadsheetRejected.class)
-                .hasMessageContaining("Barcode, ATIN, or Brand and Part number");
+                .hasMessageContaining("Product name, Barcode or ATIN");
     }
 
     @Test
@@ -222,11 +233,12 @@ class OfferImportValidatorTest {
         TemplateSpec spec = OfferImportColumns.offerTemplate();
 
         List<String> keys = spec.columns().stream().map(ImportColumn::key).toList();
-        assertThat(keys).contains("gtin", "atin", "brand", "mpn", "seller_sku", "condition", "price", "list_price",
+        assertThat(keys).contains("gtin", "atin", "product_name", "category_hint", "brand", "size_pack", "seller_sku", "condition", "price", "list_price",
                 "quantity", "shipping", "fulfilment", "handling_days");
+        assertThat(keys).doesNotContain("mpn");
         assertThat(keys).noneMatch(k -> k.startsWith("attr:") || k.startsWith("option:") || k.startsWith("fact:"));
         assertThat(spec.columns()).extracting(c -> c.label().toLowerCase()).noneMatch(l -> l.contains("image")
-                || l.contains("photo") || l.equals("title") || l.equals("description") || l.equals("category"));
+                || l.contains("photo") || l.equals("title") || l.equals("description") || l.contains("part number") || l.contains("mpn"));
         assertThat(spec.columns()).filteredOn(ImportColumn::required).extracting(ImportColumn::key)
                 .containsExactly("price");
         assertThat(spec.instructions()).anyMatch(i -> i.contains("held"));

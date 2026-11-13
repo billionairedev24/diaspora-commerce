@@ -51,7 +51,7 @@ public final class CreateMatchSplit {
         for (SheetRow r : sheet.rows()) {
             String digits = Gtin.digits(r.cell(gtin));
             if (!digits.isEmpty() && Gtin.isValid(digits)) {
-                out.add(TargetKey.of(digits, null, null, null));
+                out.add(TargetKey.ofBarcode(digits));
             }
         }
         return out;
