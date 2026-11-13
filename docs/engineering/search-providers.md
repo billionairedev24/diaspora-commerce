@@ -22,6 +22,8 @@ make reindex-search                     # local stack; add ARGS="--dry-run" to o
 # any Kubernetes: kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex
 ```
 
+**After upgrading to the release that adds `photo_ok` (dynamic home, S415) run the same reindex too**, before switching `home.dynamic` to shadow or on in an environment: documents indexed earlier lack `photo_ok`, so the eligible-only counts of the home, menu, footer and sitemap stay empty until they are rebuilt. See [dynamic-home.md](dynamic-home.md) section 7.
+
 It creates the index and its settings in the new engine, then rebuilds every product document from catalog, offers and
 inventory (the same documents the event path writes), so it works even when the Kafka topics have expired. It can be
 repeated safely and next to a running indexer. The embedding backfill then fills the vectors within

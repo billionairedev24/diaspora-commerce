@@ -41,3 +41,11 @@ type HomeMetrics interface {
 	SignalsAge(seconds float64)
 	ModuleEvent(module, event, variant, locale string)
 }
+
+// WishlistSignals is the hook for a wishlist (S425): the products a signed-in shopper saved. There is no wishlist yet, so
+// nothing implements it; when one exists, wiring it into SiteDeps lets saved products rank slightly higher in discovery
+// modules. It is read per request and never stored by the home.
+type WishlistSignals interface {
+	// Saved returns the ATINs the shopper saved (nil for none).
+	Saved(ctx context.Context, subject string) ([]string, error)
+}

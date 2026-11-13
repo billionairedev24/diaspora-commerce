@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -39,10 +40,26 @@ var tileRuleOptions = []domain.FieldOption{
 	{Value: rulePicked, Label: "Picked products (ATINs)"},
 }
 
-// tileDepartments are the storefront's department bar entries a rule can be scoped to.
-var tileDepartments = []domain.FieldOption{
-	{Value: "Groceries", Label: "Groceries"}, {Value: "Fashion", Label: "Fashion"}, {Value: "Beauty", Label: "Beauty"},
-	{Value: "Home & Art", Label: "Home & Art"}, {Value: "Books", Label: "Books"}, {Value: "Health", Label: "Health"}, {Value: "Event & party", Label: "Event & party"},
+// liveDepartments holds the department choices of the tile-rule and paid-module pickers. It is filled from the live taxonomy
+// by the home signals snapshot (GET /v1/site/departments reads the same list), never from a literal list; until the first
+// snapshot exists it is empty and the pickers offer no choice rather than a stale one.
+var liveDepartments atomic.Pointer[[]domain.FieldOption]
+
+// setLiveDepartments publishes the catalog's department names (the exact values the search filter takes) to the staff pickers.
+func setLiveDepartments(names []string) {
+	opts := make([]domain.FieldOption, 0, len(names))
+	for _, n := range names {
+		opts = append(opts, domain.FieldOption{Value: n, Label: domain.DepartmentLabels(n, nil)["en"]})
+	}
+	liveDepartments.Store(&opts)
+}
+
+// tileDepartments are the departments a rule can be scoped to, from the live taxonomy.
+func tileDepartments() []domain.FieldOption {
+	if p := liveDepartments.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 func cellKey(n int, field string) string { return fmt.Sprintf("cell%d_%s", n, field) }
@@ -127,7 +144,7 @@ func tileFields(prev jobj, create bool) []domain.FormField {
 		rule := withOptions(ff(cellKey(n, "rule"), "Product rule (leave empty for a fixed image)", "select", false), tileRuleOptions)
 		rule.Help = "A rule shows the best in-stock product with a real photo; its image, name and link are filled in for you."
 		add(withValue(rule, def["rule"]))
-		add(withValue(withOptions(ff(cellKey(n, "department"), "Department (for department rules)", "select", false), tileDepartments), def["department"]))
+		add(withValue(withOptions(ff(cellKey(n, "department"), "Department (for department rules)", "select", false), tileDepartments()), def["department"]))
 		add(withValue(withMax(ff(cellKey(n, "query"), "Search words (for search rules)", "text", false), 120), def["query"]))
 		add(withValue(withMax(ff(cellKey(n, "atins"), "Product ATINs, comma separated (for picked products)", "text", false), 240), def["atins"]))
 		add(withValue(withMax(ff(cellKey(n, "label"), "Fixed cell: label", "text", false), 40), def["label"]))

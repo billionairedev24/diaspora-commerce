@@ -1642,16 +1642,16 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S415","Story","Index photo_ok and expose eligible-only facet counts","Home, nav, footer and sitemap must count only what a shopper may see. The indexer stores photo_ok (same rule as gateway eligibleCard: real photo, no svg/ico/placeholder) and search returns facet counts (department, community, distinct sellers) over live, in-stock, photo_ok products. See docs/engineering/dynamic-home-spike.md.","- Index documents carry photo_ok computed by one shared rule with a table-driven test of placeholder, svg, ico, data: and empty URLs
 - Search accepts an eligibleOnly filter and returns department, community and distinct-seller counts that exclude out-of-stock, photo-less and non-live products, on Meilisearch and Elasticsearch
 - A fixture with 3 photo-less products shows counts that differ from the unfiltered facet by exactly 3
-- Existing indexed documents are backfilled by a reindex runbook step without downtime","E04","","High","5","home search spike","search","To Do"
+- Existing indexed documents are backfilled by a reindex runbook step without downtime","E04","","High","5","home search spike","search","In Progress"
 "S416","Story","Home signals snapshot and module eligibility engine (shadow mode)","Promote the spike prototype (go/services/gateway-bff/internal/domain/home_eligibility.go) into the home composition: build HomeSignals once (cached 60 s), evaluate module rules before any module resolves, resolve only shown modules, and run in shadow mode behind home.dynamic=off|shadow|on.","- Hidden modules trigger no upstream search or bookings call (asserted with a counting fake)
 - In shadow mode the live response is unchanged and differences are logged and counted in home_module_eligibility{module,shown,reason}
 - A module stays shown until 2 below its minimum (hysteresis) and a test covers the boundary
 - Gateway-level fixture tests for 0, 10, 100 and 10000 product catalogues pass
-- home.dynamic=off restores today's composition without a deploy","E20","","High","8","home gateway spike","content","To Do"
+- home.dynamic=off restores today's composition without a deploy","E20","","High","8","home gateway spike","content","Done"
 "S417","Story","Home module settings: thresholds, weights and switches","Store home.modules.<key> in content site config (enabled, minProducts, minSellers, minUnits, unitMinProducts, unitMinSellers, maxAgeDays, weight) with defaults from DefaultHomeRules, validation, versioning and audit.","- Defaults load when no row exists and equal the documented thresholds
 - Invalid values (negative, weight outside 0 to 100, unknown module) are rejected with an RFC 9457 problem
 - Every change is audit-logged with who, old and new values and can be reverted to the previous version
-- A change reaches the gateway within the cache TTL, proved by a test with a fake clock","E20","","High","5","home content spike","content","To Do"
+- A change reaches the gateway within the cache TTL, proved by a test with a fake clock","E20","","High","5","home content spike","content","Done"
 "S418","Story","Staff Home settings and Home preview with eligibility reasons","Staff console Marketing > Home: edit module thresholds and see the page for a chosen ZIP, signed-in state, language and as-of date, with every module listed by name as shown or hidden and the reason sentence. GET /v1/staff/home/preview returns blocks plus decisions.","- Preview lists every module by its name (never an id) with shown or hidden, reason code, sentence and live count against threshold
 - Choosing ZIP, signed-in, locale and date changes the result and is read-only
 - A simulate catalogue switch replays the 0, 10, 100 and 10000 fixtures
@@ -1662,38 +1662,38 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Electronics, Baby and Kids and Pets appear when they have products and disappear when they have none
 - Department tiles show the best eligible product photo of each department, never an icon or emoji
 - Labels render in en, fr, es, ar and yo with fallback to the catalog name
-- Staff tile-rule department choices come from the same endpoint","E23","","High","8","home navigation spike","storefront-web","To Do"
+- Staff tile-rule department choices come from the same endpoint","E23","","High","8","home navigation spike","storefront-web","In Progress"
 "S420","Story","Data-driven communities facet with threshold, registry and clean routes","Communities become an optional facet over the product community attribute. Optional content community registry (slug, five-locale labels, aliases, optional editorial image). A community is visible only above settings (default 8 eligible products and 2 sellers, and the module needs 3 such communities). Tile photos come from a real top product.","- Below threshold a community is absent from home, footer, nav and sitemap and its /communities/<slug> answers 404 or a redirect with notice, never a zero-result page
 - Case and alias variants (nigerian, Nigerian) merge into one community in a test
 - A real top product photo is used unless staff uploaded an editorial image that also passes the real-photo check
 - Label and href of a community cell come from the same key, so a label cannot point at another community
-- Sitemap and home use the same counts (contract test)","E20","","High","8","home communities spike","content","To Do"
+- Sitemap and home use the same counts (contract test)","E20","","High","8","home communities spike","content","In Progress"
 "S421","Story","Services as a first-class home module and nav entry","Services near you, Popular services and Book again as service cards (provider, from price, real photo, city) that need no physical product. Market-wide fallback when the visitor has no ZIP; nav Services entry only when a provider exists.","- With a ZIP and 1 or more provider nearby the module lists nearby services; without a ZIP, 3 or more providers market-wide show Popular services labelled with their cities
 - Signed-in shoppers with a past booking see Book again
 - 0 providers hides the module and the nav entry and the /services page shows an honest empty state
 - Copy never claims AfroTransact performs the service and names no carrier
-- Services without a real photo show text only, never an icon or emoji","E15","","High","8","home services spike","bookings","To Do"
+- Services without a real photo show text only, never an icon or emoji","E15","","High","8","home services spike","bookings","In Progress"
 "S422","Story","Automatic modules: new arrivals, top sellers, groceries, deals, generated department rails","Eligibility-gated automatic modules with generated Top in {department} rails for the biggest departments, never repeating a product on the page, never showing 0 reviews, and used as cold-start defaults for guests.","- Each module follows its settings thresholds and is absent below them (fixtures 10, 100, 10000)
 - A product appears once on the page and rails of the same department are not adjacent
 - Top sellers use only products with a real rating and a review count above 0
-- The page has at most 12 modules and at least 3 when the catalogue allows","E20","","High","5","home rails spike","content","To Do"
+- The page has at most 12 modules and at least 3 when the catalogue allows","E20","","High","5","home rails spike","content","In Progress"
 "S423","Story","Remove seeded demo content from production and gate fixed cells","New content migration ends Flyway-seeded community tiles, demo hero slides, kente banner and festive announcement bars that staff never edited; fixed tile cells, heroes and banners must pass the real-photo check or render text-only. The seed tool keeps them for dev and demo.","- A fresh production-profile database has no community tile and no hero or banner with a null image
 - A hero slide with no real image renders text-only in an e2e and never a striped box
 - Rows edited by staff are untouched by the migration
 - CI test fails if production seed data contains fixed community cells
-- ImagePlaceholder no longer shows a striped box for editorial cells on the home","E20","","High","5","home content seed spike","content","To Do"
+- ImagePlaceholder no longer shows a striped box for editorial cells on the home","E20","","High","5","home content seed spike","content","In Progress"
 "S424","Story","Seasonal calendar and relevance boosts","Staff-edited season windows (Diwali, Detty December, Eid, back to school) with department or keyword weights that boost module order and rail choice; copy is a locale map; a season never shows a module without eligible products.","- A season in its window raises the matching module's order in the preview and the live page
 - Outside the window there is no effect
 - Season copy exists for en with fallback and is shown only when the module is eligible
-- Preview as-of date shows next month's order","E20","","High","5","home content spike","content","To Do"
+- Preview as-of date shows next month's order","E20","","High","5","home content spike","content","In Progress"
 "S425","Story","Personalisation and cold start with consent","Recently viewed, continue shopping, location and language signals; guests default to regional popularity then new arrivals; server-side history only for signed-in shoppers with consent.","- A guest with no history sees only shared modules and two guests in the same region and language get the same page
 - A signed-in shopper with orders sees continue shopping first
 - Without analytics consent no browsing history leaves the browser
-- Visitor modules are fetched outside the shared cache entry (contract test that shared blocks hold no personal field)","E23","","High","8","home personalisation spike","storefront-web","To Do"
+- Visitor modules are fetched outside the shared cache entry (contract test that shared blocks hold no personal field)","E23","","High","8","home personalisation spike","storefront-web","In Progress"
 "S426","Story","Localise home module copy by keys and parameters","Gateway sends titleKey and params for module copy instead of English strings; storefront resolves in en, fr, es, ar and yo; staff-authored copy is a locale map with English fallback; department and community labels by key.","- No hard-coded English in home response fields (test over every module type)
 - All module keys exist in the five locale catalogs, drafts marked needsReview
 - Arabic home renders right-to-left with logical properties in a visual test
-- A missing translation falls back to English, never to a raw key","E31","","High","5","home i18n spike","legal","To Do"
+- A missing translation falls back to English, never to a raw key","E31","","High","5","home i18n spike","legal","In Progress"
 "S427","Story","Home module analytics, conversion and eligibility metrics","Events home_module_impression, home_module_click, add to cart and module-level order attribution (hm=<module>:<position>, 24 h last click), consent-gated aggregate counters, plus gateway eligibility and compose metrics and an alert when fewer than 3 modules are shown.","- Impression fires once per view at 50 percent visible for 500 ms in a browser test
 - Clicks carry module key, position and variant and no shopper identity
 - An order after a module click is attributed to that module within 24 hours in an integration test
@@ -1712,7 +1712,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S430","Story","Schedule and preview as-of date for every home module","Extend the hero schedule to all staff-curated modules (starts, ends) and let Home preview evaluate at a future date and ZIP, layering staff pins over automatic modules.","- Any module placement accepts starts and ends and is evaluated per request
 - Preview as-of date shows exactly what goes live at that time
 - Pinned placements win ties over automatic modules and the preview says so
-- Expired modules disappear without a deploy","E20","","High","3","home content spike","content","To Do"
+- Expired modules disappear without a deploy","E20","","High","3","home content spike","content","In Progress"
 "S431","Story","Prompt sellers to enable store pickup (never on by default)","A one-time card in Seller Center (home and Ship-from) offers an approved seller with a ship-from address and no pickup place the chance to let customers collect orders there. Pre-filled from the address, hours typed by the seller, off until the seller explicitly confirms. Dismissal is kept server side per organisation. Owner decision: prompted, never defaulted.","- Card shows on home and Ship-from only for an approved seller with an address and no active pickup place, pre-filled with name, address, ZIP and phone if present, with empty required hours and the plain-words explanation and a shopper preview
 - Turn on pickup is disabled until hours are valid, a ready time is typed and the seller ticks the confirmation; pickup is never switched on otherwise
 - Not now (asks again after the staff-set days, default 30) and Don't ask again (final) are saved server side per organisation in carrier-gateway, not in the browser

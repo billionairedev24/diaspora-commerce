@@ -147,7 +147,7 @@ func adFields(prev jobj, create bool) []domain.FormField {
 	add(withValue(withMax(ff("skus", "Product strip: up to 3 ATINs, comma separated", "text", false), 100), list("skus")), adsSection, slotBrandBanner)
 	add(withValue(withMax(ff("query", "Search words", "text", false), 200), p("query")), adsSection,
 		append([]string{slotSponsored}, blocks(domain.BlockDeals)...)...)
-	add(withValue(withOptions(ff("department", "Department", "select", false), tileDepartments), p("department")), adsSection,
+	add(withValue(withOptions(ff("department", "Department", "select", false), tileDepartments()), p("department")), adsSection,
 		append([]string{slotSponsored}, blocks(domain.BlockDeals, domain.BlockSeller)...)...)
 	add(withValue(withMax(ff("community", "Community key (leave empty to rotate by rule)", "text", false), 40), p("community")), adsSection, blocks(domain.BlockCommunity)...)
 	add(withValue(withOptions(ff("tone", "Colour", "select", false), domain.StaffOptions("ink", "gold", "green", "sand")), p("tone")), adsSection,

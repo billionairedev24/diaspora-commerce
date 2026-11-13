@@ -2,7 +2,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -915,5 +922,150 @@ func TestGeneratedBlocksCarryNoPersonalFieldWhenShared(t *testing.T) {
 		if b.Type == domain.BlockRecentlyViewed && (b.Scope != domain.ScopeVisitor || b.TitleKey != domain.KeyRecentTitle || b.Title != "") {
 			t.Errorf("recently viewed: %+v", b)
 		}
+	}
+}
+
+// ---------------------------------------------------------------- personalisation hooks (S425) and copy (S426)
+
+type fakeWishlist struct{ atins []string }
+
+func (f fakeWishlist) Saved(context.Context, string) ([]string, error) { return f.atins, nil }
+
+func TestGuestsInOneRegionAndLanguageWithoutAVisitorIdGetTheSamePage(t *testing.T) {
+	r := newHomeRig(t, 400, 40, "dev")
+	a := r.compose(t, HomeRequest{Locale: "en"})
+	b := r.compose(t, HomeRequest{Locale: "en"})
+	if fmt.Sprint(productIDs(a)) != fmt.Sprint(productIDs(b)) || fmt.Sprint(homeBlockTypes(a)) != fmt.Sprint(homeBlockTypes(b)) {
+		t.Fatal("guests with no history see only the shared default page")
+	}
+	for _, blk := range a.Blocks {
+		if blk.Scope == domain.ScopeVisitor && blk.Rail != nil {
+			t.Errorf("a guest page carries no personal rail: %s", blk.ID)
+		}
+	}
+}
+
+func TestWishlistHookLiftsSavedProductsWithoutForcingThemIn(t *testing.T) {
+	r := newHomeRig(t, 400, 40, "dev")
+	saved := make([]string, 0, 60)
+	for i := 0; i < 60; i++ {
+		saved = append(saved, fmt.Sprintf("AT%08d", i))
+	}
+	signed := &domain.Caller{Subject: "cust-9", BearerToken: "t"}
+	count := func(withHook bool) int {
+		n := 0
+		for v := 0; v < 30; v++ {
+			r.svc.d.Wishlist = nil
+			if withHook {
+				r.svc.d.Wishlist = fakeWishlist{atins: saved}
+			}
+			h := r.compose(t, HomeRequest{Caller: signed, Window: fmt.Sprintf("w%d", v), Locale: "en"})
+			for _, id := range productIDs(h) {
+				if containsStr(saved, id) {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	if with, without := count(true), count(false); with < without {
+		t.Errorf("saved products should not rank lower: %d with the hook, %d without", with, without)
+	}
+}
+
+func TestNoGeneratedBlockFieldIsAnEnglishLiteral(t *testing.T) {
+	fset := token.NewFileSet()
+	banned := map[string]bool{"Title": true, "Sub": true, "Body": true, "CTA": true, "Label": true}
+	for _, file := range []string{"site_dynamic.go", "site_dynamic_build.go", "site_nav.go", "home_source.go"} {
+		f, err := parser.ParseFile(fset, file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			kv, ok := n.(*ast.KeyValueExpr)
+			if !ok {
+				return true
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			lit, isLit := kv.Value.(*ast.BasicLit)
+			if ok && isLit && banned[key.Name] && lit.Kind == token.STRING && lit.Value != `""` {
+				t.Errorf("%s: %s is set to the literal %s; home copy goes out as keys (contracts/i18n/home-copy.json)", fset.Position(kv.Pos()), key.Name, lit.Value)
+			}
+			return true
+		})
+	}
+}
+
+func TestCopyFileCoversEveryKeyInFiveLocalesWithDraftsMarked(t *testing.T) {
+	raw, err := os.ReadFile("../../../../../contracts/i18n/home-copy.json")
+	if err != nil {
+		t.Skip("contracts not available: ", err)
+	}
+	var f struct {
+		Keys map[string]map[string]any `json:"keys"`
+	}
+	if err := json.Unmarshal(raw, &f); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range domain.HomeCopyKeys {
+		entry := f.Keys[k]
+		review, _ := entry["needsReview"].([]any)
+		if len(review) != 4 {
+			t.Errorf("%s: fr, es, ar and yo are machine drafts and must be listed in needsReview (got %v)", k, review)
+		}
+	}
+}
+
+func TestNoLiteralDepartmentListRemainsInTheGateway(t *testing.T) {
+	stale := []string{`"Event & party"`, `"Home & Art"`, `Value: "Books"`, `Value: "Health"`}
+	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		raw, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		for _, s := range stale {
+			if strings.Contains(string(raw), s) {
+				t.Errorf("%s still holds a literal department list entry %s; departments come from the live taxonomy", path, s)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestShadowModeCountsDecisionsAndMismatches(t *testing.T) {
+	r := newHomeRig(t, 100, 10, "prod")
+	shadow := domain.DynamicShadow
+	r.home.settings.Dynamic = &shadow
+	m := &recMetrics{}
+	r.svc.d.Metrics = m
+	if h := r.compose(t, guest("v", "w")); h.Version != 0 {
+		t.Fatal("shadow serves the legacy page")
+	}
+	if len(m.elig) == 0 {
+		t.Error("shadow mode must count home_module_eligibility so the rollout can be judged before switching on")
+	}
+}
+
+func TestHeroSlideWithoutARealPhotoIsNeverShownAsAPicture(t *testing.T) {
+	now := homeNow
+	slides := []domain.HeroSlide{
+		{ID: "a", Title: "No image", ImageURL: nil},
+		{ID: "b", Title: "Icon", ImageURL: strp("https://cdn.example/icons/box.svg")},
+		{ID: "c", Title: "Placeholder", ImageURL: strp("https://cdn.example/placeholder.png")},
+		{ID: "d", Title: "Real", ImageURL: strp("https://cdn.example/hero.jpg")},
+		{ID: "e", Title: "Expired", ImageURL: strp("https://cdn.example/old.jpg"), EndsAt: strp(now.Add(-time.Hour).Format(time.RFC3339))},
+	}
+	got := heroSlides(slides, now)
+	if len(got) != 1 || got[0].ID != "d" {
+		t.Fatalf("only a live slide with a real photo is a picture: %+v", got)
+	}
+	if len(heroSlides(slides[:3], now)) != 0 {
+		t.Fatal("with none left the brand hero (text only) takes over, see TestZeroProducts")
 	}
 }

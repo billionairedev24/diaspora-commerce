@@ -90,6 +90,8 @@ type SiteDeps struct {
 	HomeContent port.ContentHomeClient
 	Memory      port.HomeMemory
 	Metrics     port.HomeMetrics
+	// Wishlist (optional hook, S425): saved products lift a little in discovery modules. Nothing implements it yet.
+	Wishlist port.WishlistSignals
 }
 
 type siteServiceImpl struct {

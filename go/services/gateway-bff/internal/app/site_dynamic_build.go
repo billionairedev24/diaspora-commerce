@@ -412,7 +412,11 @@ func (c *composer) pick(module string, pool []domain.ProductSummary, show int) [
 		if !eligibleCard(p) {
 			continue
 		}
-		items = append(items, domain.VarietyItem{Key: p.ATIN, Seller: sellerKey(p), Quality: domain.QualityOf(p, 0)})
+		q := domain.QualityOf(p, 0)
+		if c.saved[p.ATIN] {
+			q = min(1, q*1.25) // wishlist hook: a saved product ranks a little higher, never forced in
+		}
+		items = append(items, domain.VarietyItem{Key: p.ATIN, Seller: sellerKey(p), Quality: q})
 		byKey[p.ATIN] = p
 	}
 	ex := make(map[string]bool, len(c.used)+len(c.exclude))

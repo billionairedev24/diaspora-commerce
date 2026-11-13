@@ -1,0 +1,31 @@
+# S423: production, UAT and trial never ship demo home content. Fails when a content migration seeds placements that no later
+# migration removes, when a migration after the cleanup inserts placements again, or when the seeder stops refusing
+# production, UAT and trial.
+name: seed-guard
+
+on:
+  pull_request:
+    paths:
+      - java/services/content/src/main/resources/db/migration/**
+      - tools/seed/**
+      - .github/workflows/seed-guard.yml
+  push:
+    branches: [main]
+    paths:
+      - java/services/content/src/main/resources/db/migration/**
+      - tools/seed/**
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: No demo home content in production, UAT or trial
+        working-directory: tools/seed
+        run: python -m unittest tests.test_guard tests.test_prod_content -v

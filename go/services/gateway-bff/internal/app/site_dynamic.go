@@ -96,6 +96,9 @@ func (s *siteServiceImpl) compareShadow(ctx context.Context, legacy, v2 domain.H
 		}
 	}
 	for _, d := range decisions {
+		if s.d.Metrics != nil {
+			s.d.Metrics.Eligibility(d.Module, d.Shown, d.Reason) // shadow mode counts every decision, so the dashboards fill before the switch
+		}
 		was, comparable := legacyShown[d.Module]
 		if d.Module == domain.ModDeals || d.Module == domain.ModServices || d.Module == domain.ModContinue || d.Module == domain.ModHero {
 			comparable = true
@@ -278,6 +281,7 @@ type composer struct {
 	seen    []string
 	pools   map[string][]domain.ProductSummary
 	near    *[]port.UpBkListing
+	saved   map[string]bool // wishlist hook: the signed-in shopper's saved ATINs (empty without a wishlist)
 }
 
 func (s *siteServiceImpl) composeV2(ctx context.Context, req HomeRequest, st domain.HomeSettings) (domain.Home, []domain.ModuleDecision, error) {
@@ -294,6 +298,14 @@ func (s *siteServiceImpl) composeV2(ctx context.Context, req HomeRequest, st dom
 		used: map[string]bool{}, exclude: map[string]bool{}, pools: map[string][]domain.ProductSummary{}}
 	c.res = s.communityResolver(ctx)
 	c.vis = s.visit(ctx, req, st, now)
+	c.saved = map[string]bool{}
+	if s.d.Wishlist != nil && c.vis.signedIn && !req.Preview && !c.vis.deterministic {
+		if atins, err := s.d.Wishlist.Saved(ctx, req.Caller.Subject); err == nil {
+			for _, a := range atins {
+				c.saved[a] = true
+			}
+		}
+	}
 	for _, a := range req.Exclude {
 		if a = strings.TrimSpace(a); a != "" && len(a) <= 40 {
 			c.exclude[a] = true
@@ -312,6 +324,7 @@ func (s *siteServiceImpl) composeV2(ctx context.Context, req HomeRequest, st dom
 		return legacy, nil, lerr
 	}
 	c.snap = snap
+	publishDepartments(snap)
 	if s.d.Metrics != nil && !req.Preview {
 		s.d.Metrics.SignalsAge(max(0, s.d.Clock.now().Sub(snap.At).Seconds()))
 	}
@@ -580,4 +593,15 @@ func (s *siteServiceImpl) PreviewHome(ctx context.Context, req HomeRequest) (dom
 // communityCounts exposes the shared snapshot to the staff community screen.
 func (s *siteServiceImpl) communityCounts(ctx context.Context) (homeSnapshot, domain.HomeSettings, domain.CommunityResolver, error) {
 	return s.navSnapshot(ctx)
+}
+
+// publishDepartments hands the live department names to the staff pickers.
+func publishDepartments(snap homeSnapshot) {
+	names := make([]string, 0, len(snap.Departments))
+	for _, d := range snap.Departments {
+		names = append(names, d.Name)
+	}
+	if len(names) > 0 && !snap.Fixture {
+		setLiveDepartments(names)
+	}
 }

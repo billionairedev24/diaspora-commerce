@@ -22,6 +22,7 @@ func (s *siteServiceImpl) navSnapshot(ctx context.Context) (homeSnapshot, domain
 	if err != nil {
 		return snap, st, res, fmt.Errorf("signals: %w", mapErr("search", err))
 	}
+	publishDepartments(snap)
 	return snap, st, res, nil
 }
 
