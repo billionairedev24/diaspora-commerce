@@ -1743,3 +1743,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Held for tax shows in the Products table and status filter
 - Five locales for new strings
 - Unit and UI tests for eligibility and mixed selections","E20","","High","3","staff catalog","content","Done"
+"S435","Story","Account settings as a flat settings list","Seller Center, staff console and storefront account tabs (Profile, Sign-in & security, Notifications, Preferences) use one flat row layout: label and hint left, compact control right, one Save disabled until changed.","- Preferences use dropdowns with inline examples, a Comfortable/Compact toggle and a live preview
+- One quiet focus ring and one control size across the four tabs
+- No early errors while typing
+- Provide services is a flat row in the same column
+- axe clean on the four tabs; vitest for rows, selects, toggle, dirty and save","E02","","High","3","web account design","identity","Done"
