@@ -903,7 +903,10 @@ type SellerOfferUp struct {
 	Status    string `json:"status"`
 	// HeldReason says why a TAX_HELD offer waits (TAX_DECISION_MISSING ...); empty otherwise.
 	HeldReason string `json:"heldReason"`
-	Version    int64  `json:"version"`
+	// ProductLive is false while the product page the offer is on is not on sale; nil when offers did not say.
+	ProductLive *bool     `json:"productLive"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	Version     int64     `json:"version"`
 }
 
 // OfferPage is offers' OfferPage.

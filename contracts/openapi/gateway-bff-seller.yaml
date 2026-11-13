@@ -898,6 +898,30 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/offers/{offerId}:
+    patch:
+      tags: [Listings]
+      operationId: setOfferTerms
+      security: [{sessionCookie: []}]
+      summary: Change the price and/or quantity of one of the organisation's own offers
+      description: |
+        offers `PATCH /v1/offers/{id}` `{priceMinor, quantity, version}` (Listings: EDIT). Only fields present change. The
+        offer must be one of the active organisation's own (another organisation's offer is a 404, checked here as well as
+        in offers). `version` is the offer's version the seller edited: a newer stored version answers 409 `CONFLICT`.
+        An offer held for tax can be edited; it stays held.
+      parameters:
+        - {name: offerId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OfferTermsRequest'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOffer'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/offers/{offerId}/fulfilment:
     put:
       tags: [Listings]
@@ -1079,7 +1103,11 @@ paths:
       security: [{sessionCookie: []}]
       summary: The organisation's listings (server-driven table)
       description: |
-        catalog `GET /v1/products` (own organisation; status, page, size). `q` searches every column the table shows
+        catalog `GET /v1/products` (own organisation; status, page, size). When the organisation has offers on other sellers'
+        pages (offer only, S382) they are rows of kind `OFFER` next to its own pages (offers `GET /v1/offers` for the token's
+        organisation joined with the page names of catalog's public page); an offer held for tax has status `IN_REVIEW`, the
+        status label and note "We are checking the tax details for this item.", and a page that is not on sale reads
+        "The product page is not on sale right now." The BFF then builds the table itself (cached 20 seconds). `q` searches every column the table shows
         (product, ATIN, SKU, variants, price, stock, fulfilment, status, updated) and `sort` orders by any of them: the BFF
         then reads the organisation's listings (up to 5,000, cached 20 seconds per member) and pages them itself.
       parameters:
@@ -4257,8 +4285,15 @@ components:
         availableQty: {type: integer}
         shipFromLocationId: {type: [string, 'null'], description: Pickup location (AFROTRANSACT_DELIVERY)}
         shipsFrom: {type: [string, 'null'], examples: ['Houston, TX']}
-        status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN]}
+        status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN, TAX_HELD]}
         version: {type: integer, format: int64}
+    OfferTermsRequest:
+      type: object
+      description: 'Only the fields present change; send at least one'
+      properties:
+        priceMinor: {type: integer, minimum: 1, maximum: 100000000}
+        quantity: {type: integer, minimum: 0, maximum: 100000}
+        version: {type: integer, format: int64, description: The offer's version the seller edited}
     SellerOfferList:
       type: object
       required: [items]
@@ -4603,7 +4638,7 @@ components:
     ListingStatus: {type: string, enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED, TAKEN_DOWN]}
     ListingRow:
       type: object
-      required: [productId, atin, title, sku, variantCount, priceMinor, currency, stock, fulfilment, status, statusLabel, moderationNote, imageUrl, updatedAt]
+      required: [productId, atin, title, sku, variantCount, priceMinor, currency, stock, fulfilment, status, statusLabel, moderationNote, imageUrl, updatedAt, kind, offerId, offerVersion, quantity]
       properties:
         productId: {type: string}
         atin: {type: [string, 'null']}
@@ -4619,6 +4654,13 @@ components:
         moderationNote: {type: [string, 'null']}
         imageUrl: {type: [string, 'null']}
         updatedAt: {type: string, format: date-time}
+        kind:
+          type: string
+          enum: [PRODUCT, OFFER]
+          description: 'PRODUCT: a page the organisation owns. OFFER: the organisation''s offer on another seller''s page (offer only, S382). An OFFER row is named after the page (plus the variant''s options when the page has several), shows the offer''s own price and quantity, and its price and quantity are changed with PATCH /v1/seller/offers/{offerId}. A product page the organisation does not own is never editable from here.'
+        offerId: {type: [string, 'null'], description: 'The offer to change (OFFER rows only)'}
+        offerVersion: {type: [integer, 'null'], description: 'The offer''s version, sent back when it is changed (OFFER rows only)'}
+        quantity: {type: [integer, 'null'], description: 'Units the seller declared for the offer (OFFER rows only; `stock` is what shoppers can buy now)'}
     ListingPage:
       type: object
       required: [items, total, page, size, sort, partial]

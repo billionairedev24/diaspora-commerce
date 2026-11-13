@@ -1459,6 +1459,7 @@
   "sc.listings.a.resume": "استئناف القائمة",
   "sc.listings.a.stock": "تحديث المخزون حسب النوع",
   "sc.listings.a.fulfilment": "خيارات التنفيذ",
+  "sc.listings.offerRow": "عرضك على صفحة بائع آخر",
   "sc.listings.a.takenDown": "تمت إزالته بواسطة الإشراف، لذا لا يمكن تعديله",
   "sc.listings.toast.paused": "تم إيقاف القائمة مؤقتًا",
   "sc.listings.toast.resumed": "عادت القائمة إلى النشر",

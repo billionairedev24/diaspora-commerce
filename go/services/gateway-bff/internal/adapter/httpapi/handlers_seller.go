@@ -66,6 +66,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	if h.s.SellerOffers != nil {
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
+		route("PATCH /v1/seller/offers/{offerId}", h.offerTerms)
 	}
 	if h.s.SellerCases != nil {
 		route("GET /v1/seller/returns", h.sellerReturns)
@@ -880,6 +881,16 @@ func (h *handlersImpl) offerFulfilment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.s.SellerOffers.SetFulfilment(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) offerTerms(w http.ResponseWriter, r *http.Request) {
+	var b domain.OfferTermsRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerOffers.SetTerms(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

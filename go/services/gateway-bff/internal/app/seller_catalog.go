@@ -50,7 +50,7 @@ func NewSellerCatalogService(d SellerDeps) SellerCatalogService {
 
 func listingOf(p port.CatalogOwnProduct) domain.ListingRow {
 	row := domain.ListingRow{ProductID: p.ID, ATIN: strPtr(p.ATIN), Title: p.Title, VariantCount: len(p.Variants), Currency: domain.Currency,
-		Fulfilment: domain.ShipsFromSeller, Status: strings.ToUpper(p.Status), ModerationNote: strPtr(p.ModerationNote), UpdatedAt: p.UpdatedAt}
+		Fulfilment: domain.ShipsFromSeller, Kind: domain.ListingKindProduct, Status: strings.ToUpper(p.Status), ModerationNote: strPtr(p.ModerationNote), UpdatedAt: p.UpdatedAt}
 	if p.Listing != nil {
 		switch {
 		case strings.EqualFold(p.Listing.Fulfilment, domain.FulfilledByAfroTransact):
@@ -105,7 +105,11 @@ func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q Se
 	if err != nil {
 		return domain.ListingPage{}, err
 	}
-	if strings.TrimSpace(q.Q) == "" && len(sort) == 0 {
+	// The organisation's offers on other sellers' pages (offer-only, S382) are rows of their own: with any, the table is built by
+	// the BFF from the organisation's listings and offers together. Offers being down leaves the table with the listings alone.
+	offers, _ := s.orgOffers(ctx, c.BearerToken)
+	merged := len(offers) > 0
+	if !merged && strings.TrimSpace(q.Q) == "" && len(sort) == 0 {
 		p, err := s.r.d.Catalog.Products(ctx, c.BearerToken, port.ProductQuery{Status: q.Status, Page: q.Page, Size: q.Size})
 		if err != nil {
 			return domain.ListingPage{}, mapErr("catalog", err)
@@ -118,7 +122,20 @@ func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q Se
 		return out, nil
 	}
 	// Search over every column and any sort: the BFF reads the organisation's listings and pages them.
-	rows, partial, err := s.cache.load(sc.member.ID+"@"+sc.org.ID, "listings", q.Status, func() ([]domain.ListingRow, bool, error) {
+	variant := q.Status
+	if merged {
+		variant = "+offers"
+	}
+	rows, partial, err := s.cache.load(sc.member.ID+"@"+sc.org.ID, "listings", variant, func() ([]domain.ListingRow, bool, error) {
+		if merged {
+			// Every status is read: which pages are the organisation's own decides which offers are offer-only.
+			own, partial, err := s.scanListings(ctx, c.BearerToken, "", domain.TableScanMaxRows)
+			if err != nil {
+				return nil, false, err
+			}
+			s.sellableStock(ctx, c.BearerToken, own)
+			return append(own, s.offerOnlyRows(ctx, c.BearerToken, sc.org.ID, offers, own)...), partial, nil
+		}
 		rows, partial, err := s.scanListings(ctx, c.BearerToken, q.Status, domain.TableScanMaxRows)
 		if err == nil {
 			s.sellableStock(ctx, c.BearerToken, rows)
@@ -127,6 +144,9 @@ func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q Se
 	})
 	if err != nil {
 		return domain.ListingPage{}, err
+	}
+	if merged && q.Status != "" {
+		rows = slices.DeleteFunc(rows, func(r domain.ListingRow) bool { return r.Status != q.Status })
 	}
 	picked := pickRows(rows, SellerListingColumns, sellerListingRowCells, q.Q, nil, sort)
 	items, _ := pageSlice(picked, q.Page*q.Size, q.Size)

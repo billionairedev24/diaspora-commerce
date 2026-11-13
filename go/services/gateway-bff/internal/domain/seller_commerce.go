@@ -378,7 +378,21 @@ type ListingRow struct {
 	ModerationNote *string   `json:"moderationNote"`
 	ImageURL       *string   `json:"imageUrl"`
 	UpdatedAt      time.Time `json:"updatedAt"`
+	// Kind is PRODUCT for a page the organisation owns and OFFER for its offer on another seller's page (S382): an offer
+	// row shows the page's name, the offer's own price and quantity, and carries the offer's id and version so the
+	// price and quantity can be changed (PATCH /v1/seller/offers/{offerId}).
+	Kind         string  `json:"kind"`
+	OfferID      *string `json:"offerId"`
+	OfferVersion *int64  `json:"offerVersion"`
+	// Quantity is the units the seller declared for an offer (Stock is what shoppers can buy now); nil on a PRODUCT row.
+	Quantity *int `json:"quantity"`
 }
+
+// Listing row kinds.
+const (
+	ListingKindProduct = "PRODUCT"
+	ListingKindOffer   = "OFFER"
+)
 
 // ListingPage is GET /v1/seller/listings.
 type ListingPage struct {
@@ -1416,6 +1430,14 @@ type SellerOfferList struct {
 type OfferFulfilmentRequest struct {
 	Fulfilment         string  `json:"fulfilment"`
 	ShipFromLocationID *string `json:"shipFromLocationId"`
+}
+
+// OfferTermsRequest is PATCH /v1/seller/offers/{id}: the price and the quantity of one of the organisation's offers. Only
+// the fields present change; Version is the offer's version the seller edited (a newer stored version answers 409).
+type OfferTermsRequest struct {
+	PriceMinor *int64 `json:"priceMinor"`
+	Quantity   *int   `json:"quantity"`
+	Version    *int64 `json:"version"`
 }
 
 // SellerLocalDelivery is AfroTransact Delivery from the seller's store on a shipment (S255).

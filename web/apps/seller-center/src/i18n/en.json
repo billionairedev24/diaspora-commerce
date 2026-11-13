@@ -1452,6 +1452,7 @@
   "sc.listings.a.resume": "Resume listing",
   "sc.listings.a.stock": "Update stock by variant",
   "sc.listings.a.fulfilment": "Fulfilment options",
+  "sc.listings.offerRow": "Your offer on another seller's page",
   "sc.listings.a.takenDown": "Taken down by moderation, so it can’t be edited",
   "sc.listings.toast.paused": "Listing paused",
   "sc.listings.toast.resumed": "Listing is live again",

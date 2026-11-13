@@ -93,6 +93,40 @@ describe('Listings table follows the row-action standard', () => {
     await waitFor(() => expect(getSellerDb().listings.find((x) => x.productId === l?.productId)?.priceMinor).toBe(1234), { timeout: 4000 });
   });
 
+  it('shows the offer on another seller\'s page by the page\'s name, with its tax status, and edits the offer, not the page', async () => {
+    const user = userEvent.setup();
+    const db = getSellerDb();
+    db.listings.push({ productId: 'p-shea', atin: 'ATSHEA0001', title: 'Raw Shea Butter (8 oz)', sku: 'SHEA-8OZ', variantCount: 1, priceMinor: 1100, currency: 'USD', stock: 0, fulfilment: 'SELLER',
+      status: 'IN_REVIEW', statusLabel: 'We are checking the tax details for this item.', moderationNote: 'We are checking the tax details for this item.', imageUrl: null, updatedAt: '2026-10-09T10:00:00Z',
+      kind: 'OFFER', offerId: 'of-shea', offerVersion: 1, quantity: 7, variants: [{ sku: 'SHEA-8OZ', quantity: 7 }] });
+    db.offers.push({ offerId: 'of-shea', atin: 'ATSHEAV001', productId: 'p-shea', sellerSku: 'SHEA-8OZ', condition: 'NEW', priceMinor: 1100, currency: 'USD', fulfilment: 'SELLER', quantity: 7, availableQty: 0,
+      shipFromLocationId: null, shipsFrom: 'Houston, TX', status: 'TAX_HELD', version: 1 });
+    nav.search = new URLSearchParams('q=Shea');
+    await renderScreen(<ListingsView />);
+    const row = (await screen.findByText('Raw Shea Butter (8 oz)')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Your offer on another seller\'s page')).toBeInTheDocument();
+    expect(within(row).getAllByText('We are checking the tax details for this item.').length).toBeGreaterThan(0);
+    // The name is not a link to the other seller's page, and the menu has no Edit, Pause or Resume of the page.
+    expect(within(row).queryByRole('link', { name: 'Raw Shea Butter (8 oz)' })).not.toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: 'Actions for Raw Shea Butter (8 oz)' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: /Pause|Resume/ })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    // Price and quantity change the offer.
+    await user.click(await screen.findByRole('button', { name: 'Edit price of Raw Shea Butter (8 oz)' }));
+    const price = screen.getByRole('textbox', { name: 'Edit price of Raw Shea Butter (8 oz)' });
+    await user.clear(price);
+    await user.type(price, '12.50{Enter}');
+    await waitFor(() => expect(getSellerDb().offers.find((o) => o.offerId === 'of-shea')?.priceMinor).toBe(1250), { timeout: 4000 });
+    await user.click(await screen.findByRole('button', { name: 'Edit stock of Raw Shea Butter (8 oz)' }));
+    const qty = screen.getByRole('textbox', { name: 'Edit stock of Raw Shea Butter (8 oz)' });
+    await user.clear(qty);
+    await user.type(qty, '9{Enter}');
+    await waitFor(() => expect(getSellerDb().offers.find((o) => o.offerId === 'of-shea')?.quantity).toBe(9), { timeout: 4000 });
+    expect(getSellerDb().listings.find((l) => l.productId === 'p-shea')?.title).toBe('Raw Shea Butter (8 oz)');
+  });
+
   it('has Update stock by variant for a multi-variant listing and a plain number in the cell', async () => {
     const user = userEvent.setup();
     await renderScreen(<ListingsView />);

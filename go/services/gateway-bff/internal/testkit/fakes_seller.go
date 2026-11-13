@@ -1320,6 +1320,10 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 			"shipsFrom": "Houston, TX", "status": "ACTIVE", "version": 3},
 		{"id": "of-2", "atin": "ATADEV0003", "productAtin": "ATOTHER001", "productId": "p-9", "sellerSku": "OTHER", "condition": "NEW", "priceMinor": 999,
 			"currency": "USD", "fulfilment": "AFROTRANSACT", "quantity": 0, "availableQty": 12, "status": "ACTIVE", "version": 1},
+		// An offer-only offer on another seller's page (Raw Shea Butter, owned by org_kente), held for tax (S382).
+		{"id": "of-3", "atin": "ATSHEAV001", "productAtin": "ATSHEA0001", "productId": "p-shea", "sellerSku": "SHEA-8OZ", "condition": "NEW", "priceMinor": 1100,
+			"currency": "USD", "fulfilment": "SELLER", "quantity": 7, "availableQty": 0, "status": "TAX_HELD", "heldReason": "TAX_DECISION_MISSING", "version": 1,
+			"updatedAt": "2026-11-10T09:00:00Z"},
 	}
 	mux.HandleFunc("GET /v1/offers", func(w http.ResponseWriter, _ *http.Request) {
 		u.mu.Lock()
@@ -1341,7 +1345,14 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 					map[string]any{"fieldErrors": map[string]any{"shipFrom.locationId": "Choose a ship-from location with AfroTransact pickup enabled"}})
 				return
 			}
-			o["fulfilment"] = b["fulfilment"]
+			if b["fulfilment"] != nil {
+				o["fulfilment"] = b["fulfilment"]
+			}
+			for _, k := range []string{"priceMinor", "quantity"} {
+				if b[k] != nil {
+					o[k] = b[k]
+				}
+			}
 			if loc != nil {
 				o["shipFrom"] = map[string]any{"city": "Houston", "region": "TX", "postalCode": "77002", "locationId": loc["locationId"]}
 			}

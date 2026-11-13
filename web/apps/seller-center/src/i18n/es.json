@@ -1459,6 +1459,7 @@
   "sc.listings.a.resume": "Reanudar anuncio",
   "sc.listings.a.stock": "Actualizar existencias por variante",
   "sc.listings.a.fulfilment": "Opciones de cumplimiento",
+  "sc.listings.offerRow": "Su oferta en la página de otro vendedor",
   "sc.listings.a.takenDown": "Retirado por moderación: no se puede editar",
   "sc.listings.toast.paused": "Anuncio pausado",
   "sc.listings.toast.resumed": "El anuncio vuelve a estar activo",

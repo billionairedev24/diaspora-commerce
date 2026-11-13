@@ -94,6 +94,7 @@ import {
   ListingWriterDraftSchema,
   type ListingWriterRequest,
   type OfferFulfilmentRequest,
+  type OfferTermsRequest,
   type OnboardingBusinessInput,
   type OnboardingComplianceInput,
   type OnboardingDetailsInput,
@@ -112,6 +113,9 @@ import {
   PayoutSchema,
   type PayoutsView,
   PayoutsViewSchema,
+  type PickupPrompt,
+  type PickupPromptAnswer,
+  PickupPromptSchema,
   type PlanFeeCollectionMode,
   type PlanFeeCollectionView,
   PlanFeeCollectionViewSchema,
@@ -190,9 +194,6 @@ import {
   type ServiceInput,
   type ServiceOffer,
   ServiceOfferSchema,
-  type PickupPrompt,
-  type PickupPromptAnswer,
-  PickupPromptSchema,
   type ShipFromAddress,
   ShipFromAddressSchema,
   type ShipFromInput,
@@ -380,6 +381,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/offers', SellerOfferListSchema, { query: { productId }, signal }),
     setOfferFulfilment: (offerId: string, body: OfferFulfilmentRequest): Promise<SellerOffer> =>
       request(`/v1/seller/offers/${enc(offerId)}/fulfilment`, SellerOfferSchema, { method: 'PUT', body }),
+    /** The price and/or quantity of one of the organisation's own offers (the Listings table edits offers on other sellers' pages this way). */
+    setOfferTerms: (offerId: string, body: OfferTermsRequest): Promise<SellerOffer> =>
+      request(`/v1/seller/offers/${enc(offerId)}`, SellerOfferSchema, { method: 'PATCH', body }),
     listReturns: async (status?: string, signal?: AbortSignal): Promise<SellerReturn[]> =>
       (await request(`/v1/seller/returns${status ? `?status=${enc(status)}` : ''}`, SellerReturnListSchema, { signal })).items,
     listDisputes: async (status?: string, signal?: AbortSignal): Promise<SellerDispute[]> =>

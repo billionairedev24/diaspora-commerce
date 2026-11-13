@@ -28,6 +28,8 @@ import { QuickStockSheet } from './QuickStockSheet';
 import { useSavePrice } from './useSavePrice';
 
 const MAX_STOCK = 100_000;
+/** A row that is the organisation's offer on another seller's page: it has no page of its own to open, pause or edit. */
+const isOffer = (r: ListingRow): boolean => r.kind === 'OFFER' && !!r.offerId;
 /** Statuses that read as news next to the name; a live listing needs no chip there (the Status column says it). */
 const ATTENTION = new Set(['IN_REVIEW', 'REJECTED', 'TAKEN_DOWN', 'PENDING_CATEGORY_APPROVAL', 'PAUSED']);
 
@@ -126,6 +128,13 @@ function ListingsTable() {
     refresh();
     void qc.invalidateQueries({ queryKey: sellerKeys.org(orgId) });
   };
+  /** Price and quantity of an offer on another seller's page: the offer, never the page. */
+  const saveOffer = async (row: ListingRow, terms: { priceMinor?: number; quantity?: number }) => {
+    if (!row.offerId) return;
+    await api.setOfferTerms(row.offerId, { ...terms, ...(typeof row.offerVersion === 'number' ? { version: row.offerVersion } : {}) });
+    refresh();
+    void qc.invalidateQueries({ queryKey: sellerKeys.org(orgId) });
+  };
   const columns = useMemo<ColumnDef<ListingRow>[]>(
     () => [
       {
@@ -134,12 +143,13 @@ function ListingsTable() {
           const r = row.original;
           return (
             <RowName
-              href={editable && r.status !== 'TAKEN_DOWN' ? `/listings/${encodeURIComponent(r.productId)}/edit` : undefined}
+              href={editable && !isOffer(r) && r.status !== 'TAKEN_DOWN' ? `/listings/${encodeURIComponent(r.productId)}/edit` : undefined}
               linkAs={Link}
               badge={ATTENTION.has(r.status) ? <StatusPill tone={toneOf(r.status)}>{r.statusLabel}</StatusPill> : null}
               meta={
                 <>
                   {r.atin ? <span className="font-mono">{r.atin}</span> : null}
+                  {isOffer(r) ? <span className="block">{t('sc.listings.offerRow')}</span> : null}
                   {r.moderationNote ? <span className="block text-danger">{r.moderationNote}</span> : null}
                 </>
               }
@@ -160,6 +170,7 @@ function ListingsTable() {
           const shown = r.variantCount > 1 ? t('sc.listings.pricesFrom', { price: money(r.priceMinor, r.currency) }) : money(r.priceMinor, r.currency);
           // One offer, a listing that can still be edited: click to change the price right here.
           if (!editable || r.variantCount !== 1 || r.status === 'TAKEN_DOWN') return shown;
+          const offer = isOffer(r);
           return (
             <InlineEdit
               value={(r.priceMinor / 100).toFixed(2)}
@@ -171,7 +182,7 @@ function ListingsTable() {
               onSave={async (v) => {
                 const minor = priceMinor(v) ?? 0;
                 try {
-                  await savePrice(r, minor);
+                  await (offer ? saveOffer(r, { priceMinor: minor }) : savePrice(r, minor));
                 } catch (e) {
                   throw new Error(problemMessage(e));
                 }
@@ -191,9 +202,10 @@ function ListingsTable() {
           const shown = <span className={low ? 'font-semibold text-danger' : undefined}>{r.stock}</span>;
           // One seller-held offer: click to count it. Several variants go through "Update stock by variant"; AfroTransact-held stock lives in Inventory.
           if (!editable || r.variantCount !== 1 || r.fulfilment !== 'SELLER' || !r.atin || r.status === 'TAKEN_DOWN') return shown;
+          const offer = isOffer(r);
           return (
             <InlineEdit
-              value={String(r.stock)}
+              value={String(offer ? (r.quantity ?? r.stock) : r.stock)}
               label={t('sc.listings.editStockOf', { title: r.title })}
               saveLabel={t('sc.rows.save')}
               cancelLabel={t('sc.rows.cancel')}
@@ -202,7 +214,7 @@ function ListingsTable() {
               validate={(v) => (/^\d+$/.test(v) && Number(v) <= MAX_STOCK ? undefined : t('sc.stock.invalid', { max: MAX_STOCK.toLocaleString() }))}
               onSave={async (v) => {
                 try {
-                  await saveStock(r, Number(v));
+                  await (offer ? saveOffer(r, { quantity: Number(v) }) : saveStock(r, Number(v)));
                 } catch (e) {
                   throw new Error(problemMessage(e));
                 }
@@ -227,14 +239,14 @@ function ListingsTable() {
         name: (r) => r.title,
         label: (r) => t('sc.rows.actionsFor', { name: r.title }),
         items: (r) => [
-          editable && { label: t('sc.listings.edit'), icon: <PencilSimple size={16} aria-hidden />, onSelect: () => go(`/listings/${encodeURIComponent(r.productId)}/edit`), disabled: r.status === 'TAKEN_DOWN' ? t('sc.listings.a.takenDown') : false },
+          editable && !isOffer(r) && { label: t('sc.listings.edit'), icon: <PencilSimple size={16} aria-hidden />, onSelect: () => go(`/listings/${encodeURIComponent(r.productId)}/edit`), disabled: r.status === 'TAKEN_DOWN' ? t('sc.listings.a.takenDown') : false },
           r.status === 'LIVE' && !!r.atin && { label: t('sc.listings.a.view'), icon: <Eye size={16} aria-hidden />, href: `${storefront.replace(/\/+$/, '')}/p/${encodeURIComponent(r.atin)}`, external: true },
-          editable && (r.status === 'LIVE' || r.status === 'PAUSED') && {
+          editable && !isOffer(r) && (r.status === 'LIVE' || r.status === 'PAUSED') && {
             label: t(r.status === 'LIVE' ? 'sc.listings.a.pause' : 'sc.listings.a.resume'),
             icon: r.status === 'LIVE' ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />,
             onSelect: () => toggle.mutate(r)
           },
-          editable && !!r.atin && r.variantCount > 1 && r.fulfilment === 'SELLER' && { label: t('sc.listings.a.stock'), icon: <Stack size={16} aria-hidden />, onSelect: () => setStockOf(r) },
+          editable && !isOffer(r) && !!r.atin && r.variantCount > 1 && r.fulfilment === 'SELLER' && { label: t('sc.listings.a.stock'), icon: <Stack size={16} aria-hidden />, onSelect: () => setStockOf(r) },
           editable && !!r.atin && { label: t('sc.listings.a.fulfilment'), icon: <Truck size={16} aria-hidden />, onSelect: () => setFulfilment(r) }
         ]
       })
@@ -249,9 +261,9 @@ function ListingsTable() {
         label={t('sc.listings.tab.listings')}
         columns={columns}
         data={q.data?.items ?? []}
-        getRowId={(r) => r.productId}
+        getRowId={(r) => (r.offerId ? `offer:${r.offerId}` : r.productId)}
         rowLabel={(r) => r.title}
-        onRowClick={editable ? (r) => (r.status === 'TAKEN_DOWN' ? undefined : go(`/listings/${encodeURIComponent(r.productId)}/edit`)) : undefined}
+        onRowClick={editable ? (r) => (r.status === 'TAKEN_DOWN' || isOffer(r) ? undefined : go(`/listings/${encodeURIComponent(r.productId)}/edit`)) : undefined}
         state={state}
         total={q.data?.total ?? null}
         loading={q.isPending}
@@ -267,17 +279,17 @@ function ListingsTable() {
           editable
             ? (rows, clear) => {
                 const run = async (active: boolean) => {
-                  const r = await runForEach(rows.filter((x) => x.status === (active ? 'PAUSED' : 'LIVE')), (x) => api.setListingActive(x.productId, active), active ? 'resumed' : 'paused', problemMessage);
+                  const r = await runForEach(rows.filter((x) => !isOffer(x) && x.status === (active ? 'PAUSED' : 'LIVE')), (x) => api.setListingActive(x.productId, active), active ? 'resumed' : 'paused', problemMessage);
                   refresh();
                   toast.show(r.text, r.tone);
                   clear();
                 };
                 return (
                   <>
-                    <Button size="sm" variant="neutral" onClick={() => void run(false)} disabled={!rows.some((x) => x.status === 'LIVE')}>
+                    <Button size="sm" variant="neutral" onClick={() => void run(false)} disabled={!rows.some((x) => !isOffer(x) && x.status === 'LIVE')}>
                       {t('sc.listings.bulk.pause')}
                     </Button>
-                    <Button size="sm" variant="neutral" onClick={() => void run(true)} disabled={!rows.some((x) => x.status === 'PAUSED')}>
+                    <Button size="sm" variant="neutral" onClick={() => void run(true)} disabled={!rows.some((x) => !isOffer(x) && x.status === 'PAUSED')}>
                       {t('sc.listings.bulk.resume')}
                     </Button>
                   </>

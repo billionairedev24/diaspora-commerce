@@ -1459,6 +1459,7 @@
   "sc.listings.a.resume": "Reprendre l’annonce",
   "sc.listings.a.stock": "Mettre à jour le stock par variante",
   "sc.listings.a.fulfilment": "Options d’expédition",
+  "sc.listings.offerRow": "Votre offre sur la page d’un autre vendeur",
   "sc.listings.a.takenDown": "Retiré par la modération : modification impossible",
   "sc.listings.toast.paused": "Annonce suspendue",
   "sc.listings.toast.resumed": "L’annonce est de nouveau en ligne",

@@ -16,6 +16,9 @@ import (
 type SellerOffersService interface {
 	List(ctx context.Context, c *domain.Caller, productID string) (domain.SellerOfferList, error)
 	SetFulfilment(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferFulfilmentRequest) (domain.SellerOffer, error)
+	// SetTerms changes the price and/or quantity of one of the organisation's own offers (the Listings table edits offers
+	// on other sellers' pages this way). Another organisation's offer is a 404.
+	SetTerms(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferTermsRequest) (domain.SellerOffer, error)
 }
 
 type sellerOffersImpl struct {
@@ -117,6 +120,66 @@ func (s *sellerOffersImpl) SetFulfilment(ctx context.Context, c *domain.Caller, 
 		if ship != nil {
 			body["shipFrom"] = ship
 		}
+	}
+	o, err := s.r.d.Offers.Update(ctx, c.BearerToken, offerID, body)
+	if err != nil {
+		return domain.SellerOffer{}, offerErr(err)
+	}
+	if s.cache != nil {
+		s.cache.drop("listings")
+	}
+	return sellerOfferOf(o), nil
+}
+
+func (s *sellerOffersImpl) SetTerms(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferTermsRequest) (domain.SellerOffer, error) {
+	notFound := domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such offer.")
+	if offerID = strings.TrimSpace(offerID); offerID == "" || len(offerID) > 64 {
+		return domain.SellerOffer{}, notFound
+	}
+	errs := map[string]string{}
+	if in.PriceMinor == nil && in.Quantity == nil {
+		errs["priceMinor"] = "Change the price or the quantity"
+	}
+	if in.PriceMinor != nil && (*in.PriceMinor < 1 || *in.PriceMinor > maxOfferMinor) {
+		errs["priceMinor"] = "Enter a price above zero"
+	}
+	if in.Quantity != nil && (*in.Quantity < 0 || *in.Quantity > maxOfferQuantity) {
+		errs["quantity"] = "Enter a quantity from 0 to 100,000"
+	}
+	if len(errs) > 0 {
+		return domain.SellerOffer{}, domain.ValidationProblem(errs)
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+		return domain.SellerOffer{}, err
+	}
+	// The offer must be one of this organisation's own: offers answers the token's organisation only, and the BFF checks it too.
+	mine := false
+	for page := range offerListMaxPages {
+		p, err := s.r.d.Offers.List(ctx, c.BearerToken, page, offerListPageSize)
+		if err != nil {
+			return domain.SellerOffer{}, mapErr("offers", err)
+		}
+		for _, o := range p.Items {
+			if o.ID == offerID {
+				mine = true
+			}
+		}
+		if mine || len(p.Items) == 0 || int64((page+1)*offerListPageSize) >= p.Total {
+			break
+		}
+	}
+	if !mine {
+		return domain.SellerOffer{}, notFound
+	}
+	body := map[string]any{}
+	if in.PriceMinor != nil {
+		body["priceMinor"] = *in.PriceMinor
+	}
+	if in.Quantity != nil {
+		body["quantity"] = *in.Quantity
+	}
+	if in.Version != nil {
+		body["version"] = *in.Version
 	}
 	o, err := s.r.d.Offers.Update(ctx, c.BearerToken, offerID, body)
 	if err != nil {

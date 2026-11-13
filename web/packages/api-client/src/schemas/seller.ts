@@ -730,7 +730,7 @@ export const SellerOfferSchema = z.object({
   availableQty: z.number().int(),
   shipFromLocationId: nullableString,
   shipsFrom: nullableString,
-  status: z.enum(['ACTIVE', 'PAUSED', 'WITHDRAWN']),
+  status: z.enum(['ACTIVE', 'PAUSED', 'WITHDRAWN', 'TAX_HELD']),
   version: z.number().int()
 });
 export type SellerOffer = z.infer<typeof SellerOfferSchema>;
@@ -814,6 +814,13 @@ export const CreateSellerCouponSchema = z.object({
   perCustomerLimit: z.number().int().optional()
 });
 export type CreateSellerCoupon = z.infer<typeof CreateSellerCouponSchema>;
+/** PATCH /v1/seller/offers/{offerId}: the price and/or quantity of one of the organisation's offers (only the fields present change). */
+export interface OfferTermsRequest {
+  priceMinor?: number;
+  quantity?: number;
+  /** The offer's version that was read: a newer stored version answers 409. */
+  version?: number;
+}
 export interface OfferFulfilmentRequest {
   fulfilment: FulfilmentKind;
   shipFromLocationId?: string | null;
@@ -888,7 +895,14 @@ export const ListingRowSchema = z.object({
   statusLabel: z.string(),
   moderationNote: nullableString,
   imageUrl: nullableString,
-  updatedAt: z.string()
+  updatedAt: z.string(),
+  /** PRODUCT: a page the organisation owns. OFFER: its offer on another seller's page (offer only): named after the page, with the offer's own price and quantity. */
+  kind: z.enum(['PRODUCT', 'OFFER']).optional(),
+  /** OFFER rows: the offer to change and the version that was read. */
+  offerId: z.string().nullable().optional(),
+  offerVersion: z.number().int().nullable().optional(),
+  /** OFFER rows: the units the seller declared (stock is what shoppers can buy now). */
+  quantity: z.number().int().nullable().optional()
 });
 export type ListingRow = z.infer<typeof ListingRowSchema>;
 export const ListingPageSchema = z.object({

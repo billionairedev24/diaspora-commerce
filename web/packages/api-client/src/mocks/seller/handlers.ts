@@ -700,6 +700,11 @@ const ShipFromBody = z.object({
 
 const CustomerPickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), readyHours: z.number().int().min(0).max(168).optional(), hoursConfirmed: z.boolean().optional() });
 const PickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), version: z.number().int().nullable().optional() });
+const OfferTermsBody = z.object({
+  priceMinor: z.number().int().min(1, 'Enter a price above zero').max(100_000_000).optional(),
+  quantity: z.number().int().min(0).max(100_000).optional(),
+  version: z.number().int().optional()
+});
 const OfferFulfilmentBody = z.object({ fulfilment: FulfilmentKindSchema, shipFromLocationId: z.string().max(64).nullable().optional() });
 
 const TokenBody = z.object({ token: z.string().trim().min(1, 'This invitation link is incomplete. Open it again from the email.').max(200) });
@@ -2712,6 +2717,32 @@ export const sellerHandlers = [
       if (!productId) throw invalid({ productId: 'Name the listing' });
       require(ctx, 'listings', 'VIEW', 'SELLER');
       return { items: ctx.db.offers.filter((o) => o.productId === productId && o.status !== 'WITHDRAWN') };
+    })
+  ),
+  /* The price and quantity of one of the organisation's offers (an offer on another seller's page is edited this way). */
+  http.patch(
+    `${W}/offers/:offerId`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, OfferTermsBody);
+      if (b.priceMinor === undefined && b.quantity === undefined) throw invalid({ priceMinor: 'Change the price or the quantity' });
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const o = ctx.db.offers.find((x) => x.offerId === p.offerId);
+      if (!o) throw notFound('No such offer.');
+      if (b.version !== undefined && b.version !== o.version) throw conflict('This offer changed. Reload and try again.');
+      if (b.priceMinor !== undefined) o.priceMinor = b.priceMinor;
+      if (b.quantity !== undefined) {
+        o.quantity = b.quantity;
+        o.availableQty = b.quantity;
+      }
+      o.version += 1;
+      const row = ctx.db.listings.find((l) => l.offerId === o.offerId);
+      if (row) {
+        row.priceMinor = o.priceMinor;
+        row.stock = o.availableQty;
+        row.quantity = o.quantity;
+        row.offerVersion = o.version;
+      }
+      return o;
     })
   ),
   http.put(
