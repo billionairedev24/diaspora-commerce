@@ -1,0 +1,61 @@
+# Tenant isolation matrix for content. Format: METHOD /path | CLASS | enforcement | testClass
+# Seller storefront and brand pages are not content-service data (seller service); the only tenant-owned content here is ad campaigns.
+@FlagAdminController | STAFF_ONLY | content:flags.view/edit; platform roles only | -
+@AuditController | STAFF_ONLY | content:audit.view; platform roles only | -
+@HelpAuthoringController | STAFF_ONLY | content:site.view/edit; platform roles only | -
+@LegalAuthoringController | STAFF_ONLY | content:legal.view/edit; platform roles only | -
+@LegalOverviewController | STAFF_ONLY | content:legal.view; platform roles only | -
+@MarketAdminController | STAFF_ONLY | content:markets.view/edit; platform roles only | -
+@PlacementAdminController | STAFF_ONLY | content:placements.* / advert:delete; platform roles only; placements are platform-curated | -
+@AdServingController | SERVICE_ONLY | SERVICE principal with ads:serve (search-service) | -
+@MarketPublicController | PUBLIC | published market list and launch-list sign-up; no tenant data | -
+@PlacementPublicController | PUBLIC | resolved public placements and impression/click beacons; no tenant data | -
+@FlagEvaluationController | PUBLIC | feature flag evaluation; flag rules are not tenant data | -
+@OfrepController | PUBLIC | OpenFeature remote evaluation; flag rules are not tenant data | -
+@NewsletterController | PUBLIC | anonymous newsletter double opt-in by emailed token | -
+DELETE /v1/community-registry/{key} | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+DELETE /v1/consent/cookies/{name} | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+GET /v1/ads/campaigns | ORG_SCOPED_LIST | AdCampaignServiceImpl.list: ads:manage and the query is pinned to the token org (other org id refused); staff need content:ads.view | ContentTenantIsolationTest
+GET /v1/ads/campaigns/{id} | ORG_OWNED | AdCampaignServiceImpl.requireRead: ads:manage and token org == campaign.sellerOrgId | ContentTenantIsolationTest
+GET /v1/ads/campaigns/{id}/report | ORG_OWNED | AdCampaignServiceImpl.requireRead | ContentTenantIsolationTest
+GET /v1/ads/spend | STAFF_ONLY | AdSpendServiceImpl: staff with content:ads.* or SERVICE with ads:spend.read; all orgs, never a seller | -
+GET /v1/careers/admin/jobs | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+GET /v1/careers/applications | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+GET /v1/careers/jobs | PUBLIC | open job posts | -
+GET /v1/careers/jobs/{id} | PUBLIC | open job post | -
+GET /v1/community-registry | PUBLIC | published community registry | -
+GET /v1/consent/cookie-policy | PUBLIC | cookie policy | -
+GET /v1/help/admin/articles | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+GET /v1/help/articles | PUBLIC | published help articles | -
+GET /v1/help/articles/{slug} | PUBLIC | published help article | -
+GET /v1/home-settings | PUBLIC | published home settings | -
+GET /v1/home-settings/versions | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+GET /v1/legal | PUBLIC | published legal documents | -
+GET /v1/legal/{type} | PUBLIC | published legal document | -
+GET /v1/legal/{type}/versions | PUBLIC | published versions | -
+GET /v1/legal/{type}/versions/{version} | PUBLIC | published version | -
+GET /v1/privacy/requests | STAFF_ONLY | content:legal.view/edit; platform roles only | -
+GET /v1/privacy/requests/{reference} | STAFF_ONLY | content:legal.view/edit; platform roles only | -
+GET /v1/site-config | PUBLIC | published site config | -
+GET /v1/site-config/revisions | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+GET /v1/site-config/settings | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+PATCH /v1/legal/{type}/current | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+POST /v1/ads/campaigns | ORG_OWNED | AdCampaignServiceImpl.create: ads:manage and token org == sellerOrgId; staff need content:ads.edit | ContentTenantIsolationTest
+POST /v1/ads/campaigns/{id}/end | ORG_OWNED | AdCampaignServiceImpl.requireWrite | ContentTenantIsolationTest
+POST /v1/ads/campaigns/{id}/pause | ORG_OWNED | AdCampaignServiceImpl.requireWrite | ContentTenantIsolationTest
+POST /v1/ads/campaigns/{id}/resume | ORG_OWNED | AdCampaignServiceImpl.requireWrite | ContentTenantIsolationTest
+POST /v1/careers/jobs | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+POST /v1/careers/jobs/{id}/applications | PUBLIC | applicant submits a form; nothing is read back | -
+POST /v1/consent/records | PUBLIC | stores the visitor's own consent decision | -
+POST /v1/home-settings/revert | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+POST /v1/legal/{type}/versions | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+POST /v1/privacy/requests | PUBLIC | visitor or account holder files a request; account id taken from the token, never the body | -
+POST /v1/privacy/requests/{reference}/resolution | STAFF_ONLY | content:legal.edit | -
+PUT /v1/ads/campaigns/{id} | ORG_OWNED | AdCampaignServiceImpl.requireWrite: owner org of the stored campaign | ContentTenantIsolationTest
+PUT /v1/careers/jobs/{id} | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+PUT /v1/community-registry/{key} | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+PUT /v1/consent/categories/{key} | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+PUT /v1/consent/cookies/{name} | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+PUT /v1/help/articles/{slug} | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+PUT /v1/home-settings | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -
+PUT /v1/site-config | STAFF_ONLY | content:* permission via ContentAccess (platform roles only; no seller/provider role holds content:*) | -

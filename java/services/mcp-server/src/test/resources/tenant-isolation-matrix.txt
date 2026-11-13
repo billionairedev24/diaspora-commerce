@@ -1,0 +1,3 @@
+# Tenant isolation matrix for mcp-server. Format: METHOD /path | CLASS | enforcement | testClass
+# The MCP JSON-RPC endpoint and its tools are not @Controller routes; they are covered by McpTenantIsolationTest.
+GET /v1/tools | PUBLIC | tool catalogue; anonymous callers see only the shopper toolset, mine=true filters by the token | -

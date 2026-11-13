@@ -1,0 +1,13 @@
+# Tenant isolation matrix for ai-gateway. Format: METHOD /path | CLASS | enforcement | testClass
+POST /v1/embeddings | PUBLIC | ai:use; stateless model relay, no tenant data read or stored | -
+POST /v1/ai/listing-writer | PUBLIC | ai:use; stateless, caller-supplied input only | -
+POST /v1/ai/translate | PUBLIC | ai:use; stateless, caller-supplied input only | -
+POST /v1/ai/tagline | PUBLIC | ai:use; stateless, caller-supplied input only | -
+POST /v1/ai/moderate-image | PUBLIC | ai:use; stateless, caller-supplied image only | -
+POST /v1/ai/seller-assistant/complete | PUBLIC | SellerAssistantServiceImpl: ai:use plus seller or provider principal with an org claim; messages and tool definitions are caller-supplied and tools run client-side, nothing tenant-owned is fetched; credits billed to the token org | -
+POST /v1/ai/staff-assistant/complete | STAFF_ONLY | SellerAssistantServiceImpl.completeForStaff: ai:use plus STAFF principal | -
+POST /v1/ai/triage | STAFF_ONLY | ai:triage (platform roles and the trust-ops service client); fields are caller-supplied, subjectId is only echoed | -
+GET /v1/ai/usage/orgs | STAFF_ONLY | OrgUsageServiceImpl: STAFF with ai:manage or SERVICE with ai:usage.read; all orgs, never a member | -
+POST /v1/lola/chat | CUSTOMER_SELF | memory keyed by (session, token subject); tools take no identity argument and relay the caller's bearer token, so orders, cart, bookings and returns are enforced by their owning services | AiTenantIsolationTest
+POST /v1/lola/chat/complete | CUSTOMER_SELF | same as /v1/lola/chat | AiTenantIsolationTest
+GET /v1/lola/sessions/{sessionId}/messages | CUSTOMER_SELF | ConversationStore.recent(session, token subject) | AiTenantIsolationTest
