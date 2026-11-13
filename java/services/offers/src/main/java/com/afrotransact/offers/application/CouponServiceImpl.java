@@ -269,6 +269,11 @@ class CouponServiceImpl implements CouponService {
         if (actor.type() == PrincipalType.CUSTOMER) {
             return actor.subject();
         }
+        // Only service callers (orders-service, staff tools) may speak for a named customer. A seller or provider
+        // member naming a customer would read that customer's coupon usage and clips, so it is ignored.
+        if (!Actors.isStaff(actor)) {
+            return null;
+        }
         return requested == null || requested.isBlank() ? null : requested;
     }
 

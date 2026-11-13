@@ -1,0 +1,30 @@
+# Tenant isolation matrix for offers-service (prod runs without OpenFGA: RBAC permission + signed org claim).
+# Format: METHOD /path | CLASS | enforcement | testClass
+
+GET /v1/offers | ORG_SCOPED_LIST | OfferServiceImpl.list: non-staff org = actor.orgId (param ignored, no org = 422, never 'all'); requireForOrg | OffersTenantIsolationTest
+GET /v1/offers/presence | ORG_OWNED | OfferServiceImpl.hasOpenOffer: non-staff sellerOrgId must equal actor org (403) | OffersTenantIsolationTest
+GET /v1/offers/{id} | ORG_OWNED | OfferServiceImpl.get: findById then requireOwned(offer.sellerOrgId) | OffersTenantIsolationTest
+PATCH /v1/offers/{id} | ORG_OWNED | OfferServiceImpl.change: findById then requireOwned(WRITE, offer.sellerOrgId) | OffersTenantIsolationTest
+POST /v1/offers | ORG_OWNED | OfferServiceImpl.create: org = actor.orgId for non-staff (body sellerOrgId ignored); requireForOrg | OffersTenantIsolationTest
+POST /v1/offers/{id}/pause | ORG_OWNED | OfferServiceImpl.change: requireOwned(offer.sellerOrgId) | OffersTenantIsolationTest
+POST /v1/offers/{id}/resume | ORG_OWNED | OfferServiceImpl.change: requireOwned(offer.sellerOrgId) | OffersTenantIsolationTest
+POST /v1/offers/{id}/withdraw | ORG_OWNED | OfferServiceImpl.change: requireOwned(offer.sellerOrgId) | OffersTenantIsolationTest
+PUT /v1/offers/stock/{sku} | ORG_OWNED | OfferServiceImpl.setSellerStock: org = actor.orgId (query sellerOrgId ignored for non-staff); SQL seller_org = :org | OffersTenantIsolationTest
+POST /v1/offers/batch | ORG_OWNED | OfferBatchServiceImpl.scope: non-staff body org must equal actor org else 403; every row uses that org (findOpen seller_org) | OffersTenantIsolationTest
+PUT /v1/offers/prices-and-stock | ORG_OWNED | OfferBatchServiceImpl.scope + findOpenBySellerSku(org, sku) per row | OffersTenantIsolationTest
+GET /v1/offers/settings | PUBLIC | global marketplace policy values, no tenant data (offers:read) | -
+PUT /v1/offers/settings | STAFF_ONLY | OfferSettingsServiceImpl.staff: offers:write plus staff principal | OffersTenantIsolationTest
+GET /v1/buy-boxes/{atin}/explanation | ORG_SCOPED_LIST | BuyBoxServiceImpl.explain: non-staff see the rank-1 winner (public buy box) and only their own other offers | OffersTenantIsolationTest
+GET /v1/buy-boxes/{atin}/history | STAFF_ONLY | BuyBoxServiceImpl.history: staff principal required (403 offers.staff-only) | OffersTenantIsolationTest
+GET /v1/sellers/{orgId}/standing | ORG_OWNED | SellerStandingServiceImpl.get: requireForOrg(READ, path orgId) compared with actor org | OffersTenantIsolationTest
+PUT /v1/sellers/{orgId}/performance | STAFF_ONLY | SellerStandingServiceImpl.updatePerformance: staff principal required | OffersTenantIsolationTest
+POST /v1/coupons | ORG_OWNED | CouponServiceImpl.create: SELLER funding fundedBy = actor.orgId for non-staff (body ignored); PLATFORM needs staff | OffersTenantIsolationTest
+GET /v1/coupons | ORG_SCOPED_LIST | CouponServiceImpl.list: non-staff list pinned to (SELLER, actor org); params ignored | OffersTenantIsolationTest
+GET /v1/coupons/{id} | ORG_OWNED | CouponServiceImpl.get: findById then ensureManager (requireForOrg(coupon.fundedByOrg)) | OffersTenantIsolationTest
+POST /v1/coupons/{id}/status | ORG_OWNED | CouponServiceImpl.changeStatus: lockById then ensureManager | OffersTenantIsolationTest
+POST /v1/coupons/{code}/clip | CUSTOMER_SELF | CouponServiceImpl.clip: CUSTOMER principal only, clip stored for token subject | OffersTenantIsolationTest
+POST /v1/coupons/validate | CUSTOMER_SELF | CouponServiceImpl.validate: customers use token subject; non-customers never get a customer's usage | OffersTenantIsolationTest
+POST /v1/coupons/redemptions | SERVICE_ONLY | CouponServiceImpl.redeem: staff or service principal only (orders-service); org members and customers get 403 | OffersTenantIsolationTest
+POST /v1/coupons/redemptions/{id}/release | SERVICE_ONLY | CouponServiceImpl.release: staff or service principal only | OffersTenantIsolationTest
+GET /v1/public/coupons/clippable | PUBLIC | clippable coupon list for an ATIN, public storefront data | -
+@PublicOfferController | PUBLIC | public storefront offer and buy box views, only live offers; seller org id is public marketplace data | -
