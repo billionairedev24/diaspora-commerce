@@ -182,8 +182,37 @@ the `at_hs` entry within a visit window.
 ### 6. Metrics
 
 `home_module_eligibility{module,shown,reason}`, `home_shadow_mismatch{module}`, `home_compose_seconds{mode}`,
-`home_signals_age_seconds`, `home_module_events{module,event,variant,locale}`. All labels come from fixed sets (module registry,
+`home_signals_age_seconds`, `home_module_events{module,event,variant,locale}`, `home_attributed_orders_total{module,variant,locale}` and
+`home_attributed_revenue_minor_total{module,variant,locale}` (section 6a). All labels come from fixed sets (module registry,
 reason enum, three modes, variant names `control, a, b, c, d` else `other`, five locales). Never a product, seller or shopper.
+
+### 6a. Order attribution and the analytics that exist
+
+What exists today, honestly:
+
+- `home_module_events`: impressions and clicks per module, variant and locale (the storefront sends them with the Analytics
+  choice). It says how often a module was seen and clicked. It says nothing about what happened after the click.
+- Paid placements keep their own per-placement impression and click counters.
+- Staff-console preview and `home_module_eligibility`: why a module was or was not shown. Not shopper behaviour.
+- Before this change nothing connected a module to an order. The storefront stored `at_hm` (the last clicked module, 24 hours, with
+  Analytics consent) but nothing read it.
+
+What this adds: when an order is placed (`POST /v1/checkout/orders` answered with the order, not "still being placed"), the gateway
+looks at the shopper's own consent cookie. Only if Analytics is on does it read `at_hm` (`module:position`; the position is
+discarded) and `at_variant`, and it adds 1 to `home_attributed_orders_total` and the order total in minor units of the market's
+currency to `home_attributed_revenue_minor_total`, labelled by module, variant and locale. Last click wins, within the cookie's 24
+hours (unchanged; not 7 days). Rules:
+
+- No consent, no read: without the Analytics choice the cookie is not looked at. No choice yet counts as no (unlike the visit
+  cookies).
+- No new field on the order, no shopper, order number or product in any label or log, no order-level record. The only storage is
+  the Prometheus counters. (The gateway remembers the last 4096 order numbers in memory, only so a retried request with the same
+  idempotency key is not counted twice; after a restart a retry of an older order could count again.)
+- Revenue is one number per module in the gateway's market currency; there are no value buckets. It is a count and a sum, not a
+  funnel: it cannot say which product was bought, only that the order was placed within 24 hours of a click on that module, so one
+  click can be credited with several orders and a click can be credited with an order of things the shopper found elsewhere.
+  Read it as a signal for comparing modules and variants, not as exact revenue.
+- Orders in "being placed" state (HTTP 202) are not counted; orders paid later outside the checkout call are not either.
 
 ### 7. Reindex (S415 runbook step)
 
@@ -266,9 +295,11 @@ the module list the gateway returns; it never decides which modules exist.
 | `at_visit` | middleware (HttpOnly) | 30 minutes, slides on every page load | random id of this visit |
 | `at_hs` | the page (`HomeVisitMemory`) | session | `window~keys of this visit~earlier visits` (short keys only) |
 | `at_hm` | the page, on a module click, analytics consent only | 24 hours | `module:position` of the last click |
+| `at_rv` | the browser, when a product page is opened | browser session | up to 12 recently viewed ATINs joined by `-` (about 130 bytes, 300 at most); cleared when Functional cookies are refused |
 | `at_variant` | the Worker (not built here) | | experiment variant |
 
-- The server relays them as `X-Visitor-Id`, `X-Visit-Window`, `X-Home-Seen` (earlier visits only), `X-Home-Variant`. A crawler
+- The server relays them as `X-Visitor-Id`, `X-Visit-Window`, `X-Home-Seen` (earlier visits only), `X-Home-Variant`, and
+  `X-Home-Exclude` (the `at_rv` ATINs). A crawler
   (known user agent, or the `X-Crawler` request header the middleware sets itself and a client cannot fake) gets no visit at all and
   therefore the gateway's deterministic page. Page responses for `/` are `Cache-Control: private, no-store`.
 - Refresh and back keep the page: the keys of the CURRENT visit are stored apart (`recordLoad` is idempotent for one window) and are
@@ -277,8 +308,13 @@ the module list the gateway returns; it never decides which modules exist.
 - Privacy: these ids are random, first-party, session-scoped and identify nobody. They are on until a shopper explicitly refuses
   Functional cookies (no choice yet counts as on); a refusal clears them and gives the default page. `at_hm` and every module event
   need the Analytics choice.
-- Not built: `X-Home-Exclude` (Recently viewed and cart ATINs). Recently viewed lives in the browser's local storage, so the server
-  render cannot send it; excluding it would need those ATINs in a first-party cookie (an owner decision, below).
+- Recently viewed and cart exclusion (owner decision, built). Recently viewed still lives in the browser's local storage (20
+  products); every time a product page is opened the newest 12 are also written to the first-party cookie `at_rv` (same rule as the
+  other visit cookies: on unless the shopper refused Functional cookies; a refusal clears it, on the next page load at the latest,
+  and nothing is written afterwards). The server render sends them as `X-Home-Exclude`. Signed-in shoppers' cart products are not
+  sent by the browser: the gateway reads the cart itself (`SiteDeps.Cart`, 800 ms budget, a failing cart changes nothing, never stored
+  or logged) and excludes its product and variant ATINs. Crawlers, previews and guests without a cart behave as before. Guest
+  carts are not read (guest history stays in the browser); only the `at_rv` list applies to them.
 
 ### 4. Navigation, footer, routes, sitemap
 
@@ -311,7 +347,7 @@ Marketing gets two tabs.
   deal percent, bar size); department names in five languages (English required once another is set, an empty language keeps the
   built-in translation); the community registry (names in five languages, spellings, editorial photo, shown or hidden now with
   counts); the version history with "go back to this version". Every save lists what changed in words and needs a reason of 10
-  characters or more (the server accepts 3); a stale save is a plain "saved by someone else" and the screen reloads.
+  characters or more (the gateway and the content service enforce the same 10); a stale save is a plain "saved by someone else" and the screen reloads.
 - **Home preview.** ZIP, signed in or guest, language, "as of" date, live or simulated catalogue (0, 10, 100, 10,000), variety seed
   ("another visit", replay by pasting a seed, or the default order crawlers get). Left: the page as a numbered list of modules by name
   with what each shows (product, department, community and service names, never ids). Right: every module with Shown or Hidden,
@@ -349,5 +385,6 @@ not the gateway: the real thresholds, pools and shuffle are in Go (Part 2).
   rules on the home), S427 (events), S428 (budgets in the browser test), S429 (fixtures).
 - Not verified: anything against the real gateway and real search (the mock search is not tied to the fixture catalogues, so
   "every linked department returns a product" is checked as "every link answers and the navigation counts are above zero");
-  the `at_hm` order attribution (the storefront stores it, the gateway does not read it yet); the Worker's `at_variant` cookie
+  the `at_hm` order attribution end to end in a browser (the gateway reads it since section 6a; covered by Go unit tests, not by an
+  e2e run); the Worker's `at_variant` cookie
   and per-variant weights (S428); "Book again" (S421); the CI wiring of the e2e budgets; native review of the machine translations.

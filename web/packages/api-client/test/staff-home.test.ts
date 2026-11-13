@@ -122,11 +122,12 @@ describe('home settings mock', () => {
 
   it('community registry: a staff entry is listed with its visibility; unregistered raw values are offered; a reason is required', async () => {
     await expect(api().saveCommunity('nigerian', { labels: { en: 'Nigerian' }, aliases: [], imageUrl: null }, '')).rejects.toMatchObject({ status: 422 });
+    await expect(api().saveCommunity('nigerian', { labels: { en: 'Nigerian' }, aliases: [], imageUrl: null }, 'too short')).rejects.toMatchObject({ status: 422 });
     await api().saveCommunity('nigerian', { labels: { en: 'Nigerian', fr: 'Nigérian' }, aliases: ['naija'], imageUrl: null }, 'First registry entry');
     const list = await api().communities();
     expect(list.registered[0]).toMatchObject({ key: 'nigerian', aliases: ['naija'], labels: { fr: 'Nigérian' } });
     expect(list.unregistered.map((u) => u.value)).not.toContain('Nigerian');
-    await api().deleteCommunity('nigerian', 'Remove it');
+    await api().deleteCommunity('nigerian', 'Remove it for now');
     expect((await api().communities()).registered).toEqual([]);
   });
 
@@ -140,8 +141,8 @@ describe('home settings mock', () => {
 
   it('client-side checks mirror the server: reason length and English required with another language', () => {
     const base = { dynamic: null, modules: {}, caps: { maxModules: 12, minModules: 3, sellerShare: 2, sponsoredPerOrganic: 3, poolMultiplier: 3, noveltyLoads: 3, noveltyPenalty: 0.6, visitWindowMinutes: 30, hysteresis: 2, dealMinPercent: 10, navBarSize: 7 }, departmentLabels: {} };
-    expect(homeSettingsProblems(base, 'ab')).toContain('reason');
-    expect(homeSettingsProblems(base, 'abc')).toEqual([]);
-    expect(homeSettingsProblems({ ...base, departmentLabels: { pets: { en: '', fr: 'Animaux' } } }, 'abc')).toContain('departmentLabels.pets');
+    expect(homeSettingsProblems(base, 'nine char')).toContain('reason');
+    expect(homeSettingsProblems(base, 'ten chars!')).toEqual([]);
+    expect(homeSettingsProblems({ ...base, departmentLabels: { pets: { en: '', fr: 'Animaux' } } }, 'ten chars!')).toContain('departmentLabels.pets');
   });
 });

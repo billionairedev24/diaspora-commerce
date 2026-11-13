@@ -1088,7 +1088,7 @@ paths:
               required: [toVersion, reason]
               properties:
                 toVersion: {type: integer, minimum: 1}
-                reason: {type: string, minLength: 3, maxLength: 300}
+                reason: {type: string, minLength: 10, maxLength: 300}
       responses:
         '200':
           description: Reverted
@@ -1133,7 +1133,7 @@ paths:
                 labels: {$ref: '#/components/schemas/LocaleLabels'}
                 aliases: {type: array, maxItems: 20, items: {type: string, maxLength: 60}}
                 imageUrl: {type: [string, 'null'], maxLength: 500, pattern: '^https://', description: Optional editorial image; used only when it passes the real-photo check}
-                reason: {type: string, minLength: 3, maxLength: 300}
+                reason: {type: string, minLength: 10, maxLength: 300}
       responses:
         '200':
           description: Saved
@@ -1148,7 +1148,7 @@ paths:
       operationId: deleteCommunity
       parameters:
       - {name: key, in: path, required: true, schema: {type: string}}
-      - {name: reason, in: query, required: true, schema: {type: string, minLength: 3, maxLength: 300}}
+      - {name: reason, in: query, required: true, schema: {type: string, minLength: 10, maxLength: 300}}
       responses:
         '204':
           description: Removed
@@ -2464,7 +2464,7 @@ components:
       properties:
         expectedVersion: {type: integer, minimum: 0}
         settings: {$ref: '#/components/schemas/HomeSettings'}
-        reason: {type: string, minLength: 3, maxLength: 300}
+        reason: {type: string, minLength: 10, maxLength: 300}
     HomeSettingsVersion:
       type: object
       required: [version, reason, changedBy, changedAt, changes]

@@ -181,6 +181,27 @@ func cleanID(s string) string {
 	return s
 }
 
+// cartATINs are the product and variant ATINs in a signed-in shopper's cart (guests send theirs in X-Home-Exclude from the
+// browser). A cart that cannot be read leaves the page as it is; nothing is stored or logged.
+func (s *siteServiceImpl) cartATINs(ctx context.Context, req HomeRequest, v visitCtx) []string {
+	if s.d.Cart == nil || !v.signedIn || v.deterministic || req.Preview || req.Caller == nil || req.Caller.BearerToken == "" {
+		return nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+	defer cancel()
+	cart, err := s.d.Cart.Get(cctx, port.CartOwner{BearerToken: req.Caller.BearerToken})
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range cart.Packages {
+		for _, l := range p.Lines {
+			out = append(out, l.ProductATIN, l.VariantATIN)
+		}
+	}
+	return out
+}
+
 func (s *siteServiceImpl) visit(ctx context.Context, req HomeRequest, st domain.HomeSettings, now time.Time) visitCtx {
 	v := visitCtx{novelty: map[string]bool{}}
 	if req.Caller.Authenticated() {
@@ -310,6 +331,9 @@ func (s *siteServiceImpl) composeV2(ctx context.Context, req HomeRequest, st dom
 		if a = strings.TrimSpace(a); a != "" && len(a) <= 40 {
 			c.exclude[a] = true
 		}
+	}
+	for _, a := range s.cartATINs(ctx, req, c.vis) {
+		c.exclude[a] = true
 	}
 	var src homeSource = &liveSource{s: s}
 	if n, err := strconv.Atoi(req.Catalog); err == nil && req.Catalog != "" {

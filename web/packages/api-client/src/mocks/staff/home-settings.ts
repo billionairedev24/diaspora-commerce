@@ -16,6 +16,7 @@ import {
   type HomeSettingsInput,
   homeSettingsProblems,
   type HomeSettingsVersion,
+  MIN_REASON_LENGTH,
   SIMULATED_CATALOGUES,
   type StaffCommunities,
   type StaffCommunity,
@@ -66,7 +67,7 @@ export function homeSettingsHandlers(W: string, deps: PreorderHandlerDeps) {
   };
   const view = (): HomeSettings => ({ ...homeMock.settings, effectiveDynamic: homeMock.settings.dynamic ?? 'on' });
   const reasonOk = (reason: string, field = 'reason') => {
-    if (reason.trim().length < 3) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Say why you are changing the home page.', { [field]: 'Say why you are changing the home page (3 characters or more).' });
+    if (reason.trim().length < MIN_REASON_LENGTH) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Say why you are changing the home page.', { [field]: 'Say why you are changing the home page (10 characters or more).' });
   };
   const commit = (ctx: PreorderCtx, next: HomeSettingsInput, reason: string, revertOf: number | null) => {
     const before = inputOf(homeMock.settings);
@@ -110,7 +111,7 @@ export function homeSettingsHandlers(W: string, deps: PreorderHandlerDeps) {
         const body = await json(ctx.request, InputSchema);
         const bad = homeSettingsProblems({ dynamic: body.dynamic, modules: body.modules, caps: body.caps, departmentLabels: body.departmentLabels }, body.reason);
         if (bad.length) {
-          const errors = Object.fromEntries(bad.map((f) => [f, f === 'reason' ? 'Say why you are changing the home page (3 characters or more).' : 'This value is not valid.']));
+          const errors = Object.fromEntries(bad.map((f) => [f, f === 'reason' ? 'Say why you are changing the home page (10 characters or more).' : 'This value is not valid.']));
           throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', errors);
         }
         if (body.expectedVersion !== homeMock.settings.version) throw problem(409, 'CONFLICT', 'Changed by someone else', 'Home settings were saved by someone else. Reload and apply your change again.');

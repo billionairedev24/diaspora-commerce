@@ -40,6 +40,9 @@ type HomeMetrics interface {
 	ComposeSeconds(mode string, seconds float64)
 	SignalsAge(seconds float64)
 	ModuleEvent(module, event, variant, locale string)
+	// OrderPlaced counts one order credited to a home module (last click within 24 hours, Analytics consent only) and adds
+	// its total in minor units of the market currency to the module's revenue counter.
+	OrderPlaced(module, variant, locale string, totalMinor int64)
 }
 
 // WishlistSignals is the hook for a wishlist (S425): the products a signed-in shopper saved. There is no wishlist yet, so

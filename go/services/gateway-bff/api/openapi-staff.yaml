@@ -350,7 +350,7 @@ paths:
               required: [toVersion, reason]
               properties:
                 toVersion: {type: integer, minimum: 1}
-                reason: {type: string, minLength: 3, maxLength: 300}
+                reason: {type: string, minLength: 10, maxLength: 300}
       responses:
         '200': {description: Reverted, content: {application/json: {schema: {$ref: '#/components/schemas/StaffHomeSettings'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -395,7 +395,7 @@ paths:
       summary: Remove a registry entry
       parameters:
         - {name: key, in: path, required: true, schema: {type: string}}
-        - {name: reason, in: query, required: true, schema: {type: string, minLength: 3, maxLength: 300}}
+        - {name: reason, in: query, required: true, schema: {type: string, minLength: 10, maxLength: 300}}
       responses:
         '204': {description: Removed}
         '401': {$ref: '#/components/responses/Problem'}
@@ -6774,7 +6774,7 @@ components:
         modules: {type: object, additionalProperties: {$ref: '#/components/schemas/StaffHomeModuleRule'}}
         caps: {$ref: '#/components/schemas/StaffHomeCaps'}
         departmentLabels: {type: object, additionalProperties: {$ref: '#/components/schemas/StaffLocaleLabels'}}
-        reason: {type: string, minLength: 3, maxLength: 300}
+        reason: {type: string, minLength: 10, maxLength: 300}
     StaffHomeSettingsVersion:
       type: object
       required: [version, reason, changedBy, changedAt, changes]
@@ -6812,7 +6812,7 @@ components:
         labels: {$ref: '#/components/schemas/StaffLocaleLabels'}
         aliases: {type: array, maxItems: 20, items: {type: string, maxLength: 60}}
         imageUrl: {type: [string, 'null'], pattern: '^https://'}
-        reason: {type: string, minLength: 3, maxLength: 300}
+        reason: {type: string, minLength: 10, maxLength: 300}
     StaffHomeCommunities:
       type: object
       required: [registered, unregistered]

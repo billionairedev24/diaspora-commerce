@@ -245,6 +245,33 @@ func (h *handlersImpl) checkoutSummary(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+// attributeHomeOrder credits a placed order to the home module the shopper last clicked (cookie at_hm, 24 hours). No consent,
+// no read: the cookie is not even looked at unless the shopper's own consent cookie says Analytics is on. Nothing is added
+// to the order and nothing identifies the shopper; the only effect is two aggregate counters.
+func (h *handlersImpl) attributeHomeOrder(r *http.Request, conf domain.OrderConfirmation) {
+	if h.s.Site == nil {
+		return
+	}
+	consent, err := r.Cookie(domain.ConsentCookie)
+	if err != nil || !domain.AnalyticsConsented(consent.Value) {
+		return
+	}
+	hm, err := r.Cookie(domain.HomeAttributionCookie)
+	if err != nil {
+		return
+	}
+	module, ok := domain.ParseHomeAttribution(hm.Value)
+	if !ok {
+		return
+	}
+	variant := ""
+	if v, verr := r.Cookie(domain.HomeVariantCookie); verr == nil {
+		variant = v.Value
+	}
+	h.s.Site.RecordHomeOrder(r.Context(), conf.OrderNumber, domain.HomeOrderAttribution{Module: module, Variant: variant,
+		Locale: firstNonBlank(r.URL.Query().Get("locale"), r.Header.Get("Accept-Language")), TotalMinor: conf.TotalMinor})
+}
+
 func (h *handlersImpl) placeOrder(w http.ResponseWriter, r *http.Request) {
 	var b domain.PlaceOrderRequest
 	if err := decode(r, &b, false); err != nil {
@@ -266,6 +293,9 @@ func (h *handlersImpl) placeOrder(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusCreated
 	if res.Status == http.StatusAccepted {
 		status = http.StatusAccepted
+	}
+	if err == nil && res.Status != http.StatusAccepted {
+		h.attributeHomeOrder(r, res.Confirmation)
 	}
 	h.reply(w, r, status, res.Confirmation, err)
 }

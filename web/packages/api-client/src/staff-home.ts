@@ -4,7 +4,7 @@
    GET /v1/staff/home/communities, PUT/DELETE .../{key}: the community registry (canonical key, five-locale labels, aliases).
    GET /v1/staff/home/preview: the home as shoppers would see it for a ZIP, signed-in state, language and date, plus one decision per
    module (shown or hidden, a reason code, a sentence in plain words and the live count against the threshold).
-   Module names, never ids. A change needs a reason (3 characters or more) and is audit-logged by the gateway. */
+   Module names, never ids. A change needs a reason (10 characters or more) and is audit-logged by the gateway. */
 import { queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
@@ -87,7 +87,7 @@ export interface HomeSettingsInput {
   departmentLabels: Record<string, StaffLocaleLabels>;
 }
 
-export const MIN_REASON_LENGTH = 3;
+export const MIN_REASON_LENGTH = 10;
 export const MAX_REASON_LENGTH = 300;
 
 export const HomeSettingsVersionSchema = z.object({

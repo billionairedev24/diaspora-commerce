@@ -187,7 +187,7 @@ func run() error {
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
 			Offers: storefrontOffers, Orders: orders, Services: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Promise: sitePromise,
 			Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log,
-			Env: loader.Env(), HomeContent: upstreams.NewContentHome(client("content", up.Content)), Memory: valkey.NewHomeMemory(rdb), Metrics: homemetrics.New(reg)}),
+			Env: loader.Env(), HomeContent: upstreams.NewContentHome(client("content", up.Content)), Memory: valkey.NewHomeMemory(rdb), Metrics: homemetrics.New(reg), Cart: cart}),
 		Location: location,
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil,
 			app.WithServices(upstreams.NewCustomerBookings(client("bookings", up.Bookings)))),

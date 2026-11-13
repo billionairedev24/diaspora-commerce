@@ -36,6 +36,9 @@ type SiteService interface {
 	SitemapSources(ctx context.Context) (domain.SitemapSources, error)
 	// RecordModuleEvent counts an impression or click on an organic home module (aggregate, no identity).
 	RecordModuleEvent(ctx context.Context, ev domain.HomeModuleEvent) error
+	// RecordHomeOrder counts a placed order against the home module last clicked (aggregate metric only, no identity). The
+	// caller reads the at_hm cookie only with Analytics consent.
+	RecordHomeOrder(ctx context.Context, orderNumber string, in domain.HomeOrderAttribution)
 	// PreviewHome is the staff preview: the home for an as-of instant, ZIP, signed-in state and catalogue, with the decisions.
 	PreviewHome(ctx context.Context, req HomeRequest) (domain.Home, []domain.ModuleDecision, error)
 	// RecentlyViewed resolves browser-remembered ATINs (most recent first) into eligible product cards; the storefront
@@ -92,6 +95,8 @@ type SiteDeps struct {
 	Metrics     port.HomeMetrics
 	// Wishlist (optional hook, S425): saved products lift a little in discovery modules. Nothing implements it yet.
 	Wishlist port.WishlistSignals
+	// Cart (optional): a signed-in shopper's cart products are left out of discovery modules. Read per request, never stored.
+	Cart port.CartClient
 }
 
 type siteServiceImpl struct {
@@ -103,6 +108,9 @@ type siteServiceImpl struct {
 	nearCache     *ttlCache[[]port.UpBkListing]
 	prevMu        sync.Mutex
 	prevShown     map[string]bool
+	attrMu        sync.Mutex
+	attrSeen      map[string]bool
+	attrOrder     []string
 }
 
 var _ SiteService = (*siteServiceImpl)(nil)

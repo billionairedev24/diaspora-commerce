@@ -1,3 +1,8 @@
+import { RECENT_COOKIE, RECENT_COOKIE_MAX, serializeRecent } from '@afrotransact/api-client/home-visit';
+
+import { CONSENT_COOKIE } from '@/lib/consent/consent';
+import { varietyAllowed } from '@/lib/home/visit';
+
 /** Recently viewed products live in this browser only (nothing is stored server side, signed in or not): the product
     ATINs, most recent first, one entry per product. */
 const KEY = 'at.recentlyViewed';
@@ -35,7 +40,9 @@ export function readViewed(): string[] {
 /** Puts a product ATIN first (moving it up when already remembered, never adding a second entry); a blocked storage is ignored. */
 export function rememberViewed(atin: string): void {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(normalizeViewed([atin, ...readViewed()])));
+    const next = normalizeViewed([atin, ...readViewed()]);
+    window.localStorage.setItem(KEY, JSON.stringify(next));
+    syncRecentCookie(next);
   } catch {
     /* private window or blocked storage: the rail simply stays empty */
   }
@@ -46,4 +53,25 @@ export function railItems<T extends { atin: string }>(items: readonly T[]): T[] 
   const seen = new Set<string>();
   const out = items.filter((p) => !seen.has(p.atin) && !!seen.add(p.atin)).slice(0, RECENTLY_VIEWED_SHOWN);
   return out.length >= RECENTLY_VIEWED_MIN ? out : [];
+}
+
+function cookieValue(name: string): string | undefined {
+  const hit = document.cookie.split('; ').find((c) => c.startsWith(`${name}=`));
+  return hit ? hit.slice(name.length + 1) : undefined;
+}
+
+/**
+ * Mirrors the newest RECENT_COOKIE_MAX products into the first-party cookie `at_rv` so the server render can leave them out of
+ * the home's discovery modules (header X-Home-Exclude). Same rule as the other visit cookies: on unless the shopper refused
+ * Functional cookies, and cleared when they did. A session cookie, about 130 bytes at most, never sent anywhere else.
+ */
+export function syncRecentCookie(atins: readonly string[]): void {
+  try {
+    const secure = location.protocol === 'https:' ? '; secure' : '';
+    const clear = `${RECENT_COOKIE}=; path=/; max-age=0; samesite=lax${secure}`;
+    const value = varietyAllowed(cookieValue(CONSENT_COOKIE)) ? serializeRecent(atins.slice(0, RECENT_COOKIE_MAX)) : '';
+    document.cookie = value ? `${RECENT_COOKIE}=${value}; path=/; samesite=lax${secure}` : clear;
+  } catch {
+    /* cookies blocked: the page simply does not exclude them */
+  }
 }

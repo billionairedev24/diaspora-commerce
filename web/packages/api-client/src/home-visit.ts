@@ -10,6 +10,8 @@ export const VISIT_WINDOW_HEADER = 'X-Visit-Window';
 export const HOME_SEEN_HEADER = 'X-Home-Seen';
 /** Experiment variant assigned at the Worker (cookie `at_variant`); part of the shared cache key. */
 export const HOME_VARIANT_HEADER = 'X-Home-Variant';
+/** Comma separated ATINs already in Recently viewed (and the cart): discovery modules leave them out. Request only. */
+export const HOME_EXCLUDE_HEADER = 'X-Home-Exclude';
 /** Set for known crawlers: the deterministic default page, no randomness. */
 export const CRAWLER_HEADER = 'X-Crawler';
 
@@ -17,6 +19,9 @@ export const VISITOR_COOKIE = 'at_vid';
 export const VISIT_COOKIE = 'at_visit';
 export const SEEN_COOKIE = 'at_hs';
 export const VARIANT_COOKIE = 'at_variant';
+/** The 12 most recently viewed ATINs, joined by `-` (about 130 bytes). Written by the browser, read by the server render. */
+export const RECENT_COOKIE = 'at_rv';
+export const RECENT_COOKIE_MAX = 12;
 
 /** A visit window slides: it ends after this long without a page load. */
 export const VISIT_WINDOW_MINUTES = 30;
@@ -29,6 +34,8 @@ export interface VisitHeaders {
   window?: string;
   seen?: readonly string[];
   variant?: string;
+  /** Recently viewed ATINs from the first-party cookie `at_rv`. */
+  exclude?: readonly string[];
   crawler?: boolean;
 }
 
@@ -43,7 +50,26 @@ export function homeVisitHeaders(v: VisitHeaders): Record<string, string> {
   if (v.window) h[VISIT_WINDOW_HEADER] = v.window;
   if (v.seen && v.seen.length > 0) h[HOME_SEEN_HEADER] = v.seen.join(',').slice(0, 600);
   if (v.variant) h[HOME_VARIANT_HEADER] = v.variant;
+  if (v.exclude && v.exclude.length > 0) h[HOME_EXCLUDE_HEADER] = v.exclude.join(',').slice(0, 600);
   return h;
+}
+
+const ATIN = /^[A-Z0-9]{4,20}$/;
+
+/** The cookie value for a list of ATINs (most recent first): valid ATINs only, each once, at most RECENT_COOKIE_MAX. */
+export function serializeRecent(atins: readonly string[]): string {
+  const seen = new Set<string>();
+  for (const a of atins) {
+    const atin = a.trim().toUpperCase();
+    if (ATIN.test(atin)) seen.add(atin);
+    if (seen.size >= RECENT_COOKIE_MAX) break;
+  }
+  return [...seen].join('-');
+}
+
+/** The ATINs in the cookie value (anything that is not an ATIN is ignored). */
+export function parseRecent(raw: string | null | undefined): string[] {
+  return serializeRecent((raw ?? '').split('-')).split('-').filter(Boolean);
 }
 
 const BOT = /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link|pinterest|whatsapp|telegram|lighthouse|pagespeed|gtmetrix/i;

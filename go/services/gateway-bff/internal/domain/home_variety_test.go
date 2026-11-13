@@ -124,6 +124,30 @@ func TestSellerShareCapAndRelaxationWhenFewSellers(t *testing.T) {
 	}
 }
 
+func TestSellerShareRelaxesJustEnoughToFillAModule(t *testing.T) {
+	// 3 sellers cannot fill 8 slots at 2 each (6): the share becomes ceil(8/3) = 3, not unlimited.
+	three := PickVariety(pool(24, 3), VarietyParams{Seed: 7, Module: "m", Show: 8, SellerShare: 2})
+	if len(three) != 8 {
+		t.Fatalf("3 sellers must fill 8 slots: %d", len(three))
+	}
+	per := map[string]int{}
+	for _, it := range three {
+		per[it.Seller]++
+		if per[it.Seller] > 3 {
+			t.Fatalf("seller %s has %d items; the share may relax only to 3", it.Seller, per[it.Seller])
+		}
+	}
+	// 4 sellers fill 8 at the configured 2 each: no relaxation at all.
+	four := PickVariety(pool(24, 4), VarietyParams{Seed: 7, Module: "m", Show: 8, SellerShare: 2})
+	per = map[string]int{}
+	for _, it := range four {
+		per[it.Seller]++
+		if per[it.Seller] > 2 {
+			t.Fatalf("4 sellers can fill 8 at 2 each, but %s has %d", it.Seller, per[it.Seller])
+		}
+	}
+}
+
 func TestNoDuplicateKeys(t *testing.T) {
 	pl := append(pool(10, 3), pool(10, 3)...)
 	got := keysOf(PickVariety(pl, VarietyParams{Seed: 1, Module: "m", Show: 20}))

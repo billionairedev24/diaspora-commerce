@@ -85,11 +85,26 @@ class HomeSettingsServiceTest {
     }
 
     @Test
+    void aReasonNeedsAtLeastTenCharactersToSaveOrRevert() {
+        assertThatThrownBy(() -> service.save(0, with(4, 2), "too short"))
+                .isInstanceOfSatisfying(ContentRuleViolation.class, e -> {
+                    assertThat(e.fieldErrors().get("reason")).isEqualTo("Say why you are changing this (10 to 300 characters)");
+                });
+        assertThatThrownBy(() -> service.save(0, with(4, 2), "   padded   "))
+                .as("spaces around a nine character reason do not count")
+                .isInstanceOf(ContentRuleViolation.class);
+        assertThatThrownBy(() -> service.revert(1, "nine char"))
+                .isInstanceOf(ContentRuleViolation.class);
+        assertThat(rows).isEmpty();
+        assertThat(service.save(0, with(4, 2), "ten chars!").version()).isEqualTo(1);
+    }
+
+    @Test
     void aReasonIsMandatoryAndInvalidValuesAreRefusedWithFields() {
         assertThatThrownBy(() -> service.save(0, with(4, 2), " "))
                 .isInstanceOfSatisfying(ContentRuleViolation.class, e -> assertThat(e.fieldErrors()).containsKey("reason"));
         HomeSettings bad = with(-1, 2);
-        assertThatThrownBy(() -> service.save(0, bad, "tighten"))
+        assertThatThrownBy(() -> service.save(0, bad, "Tighten the community bar"))
                 .isInstanceOfSatisfying(ContentRuleViolation.class,
                         e -> assertThat(e.fieldErrors()).containsKey("modules.communities.minUnits"));
         assertThat(rows).isEmpty();
@@ -108,15 +123,15 @@ class HomeSettingsServiceTest {
 
     @Test
     void aStaleExpectedVersionIsAConflictAndNothingIsSaved() {
-        service.save(0, with(4, 2), "first");
-        assertThatThrownBy(() -> service.save(0, with(5, 2), "second")).isInstanceOf(ConflictException.class);
+        service.save(0, with(4, 2), "First version here");
+        assertThatThrownBy(() -> service.save(0, with(5, 2), "Second version here")).isInstanceOf(ConflictException.class);
         assertThat(rows).hasSize(1);
     }
 
     @Test
     void revertRestoresAnEarlierVersionAsANewOneWithAReason() {
-        service.save(0, with(4, 2), "tighter");
-        service.save(1, with(4, 3), "more share");
+        service.save(0, with(4, 2), "Tighter community bar");
+        service.save(1, with(4, 3), "More share per seller");
         HomeSettings back = service.revert(1, "share was too generous");
         assertThat(back.version()).isEqualTo(3);
         assertThat(back.caps().sellerShare()).isEqualTo(2);
@@ -126,7 +141,7 @@ class HomeSettingsServiceTest {
 
     @Test
     void aSaveThatChangesNothingCreatesNoVersion() {
-        HomeSettings same = service.save(0, HomeSettings.defaults(), "no-op");
+        HomeSettings same = service.save(0, HomeSettings.defaults(), "No change at all");
         assertThat(same.version()).isZero();
         assertThat(rows).isEmpty();
     }

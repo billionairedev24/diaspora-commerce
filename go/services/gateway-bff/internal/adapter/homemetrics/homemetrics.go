@@ -18,6 +18,8 @@ type metricsImpl struct {
 	compose     *prometheus.HistogramVec
 	age         prometheus.Gauge
 	events      *prometheus.CounterVec
+	orders      *prometheus.CounterVec
+	revenue     *prometheus.CounterVec
 }
 
 var _ port.HomeMetrics = (*metricsImpl)(nil)
@@ -35,8 +37,12 @@ func New(reg prometheus.Registerer) port.HomeMetrics {
 		age: prometheus.NewGauge(prometheus.GaugeOpts{Name: "home_signals_age_seconds", Help: "Age of the signals snapshot used by the last composition."}),
 		events: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "home_module_events",
 			Help: "Organic home module impressions and clicks (no shopper identity)."}, []string{"module", "event", "variant", "locale"}),
+		orders: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "home_attributed_orders_total",
+			Help: "Orders placed within 24 hours of a click on a home module, Analytics consent only (no shopper identity)."}, []string{"module", "variant", "locale"}),
+		revenue: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "home_attributed_revenue_minor_total",
+			Help: "Sum of those orders' totals in minor units of the market currency."}, []string{"module", "variant", "locale"}),
 	}
-	reg.MustRegister(m.eligibility, m.mismatch, m.compose, m.age, m.events)
+	reg.MustRegister(m.eligibility, m.mismatch, m.compose, m.age, m.events, m.orders, m.revenue)
 	return m
 }
 
@@ -69,4 +75,25 @@ func (m *metricsImpl) ModuleEvent(module, event, variant, locale string) {
 		variant = "other"
 	}
 	m.events.WithLabelValues(module, event, variant, locale).Inc()
+}
+
+// OrderPlaced counts an attributed order and adds its total; the labels are folded exactly like ModuleEvent so the set stays fixed.
+func (m *metricsImpl) OrderPlaced(module, variant, locale string, totalMinor int64) {
+	if !domain.IsModule(module) {
+		module = "other"
+	}
+	known := false
+	for _, l := range domain.Locales {
+		known = known || l == locale
+	}
+	if !known {
+		locale = "en"
+	}
+	if !knownVariants[variant] {
+		variant = "other"
+	}
+	m.orders.WithLabelValues(module, variant, locale).Inc()
+	if totalMinor > 0 {
+		m.revenue.WithLabelValues(module, variant, locale).Add(float64(totalMinor))
+	}
 }

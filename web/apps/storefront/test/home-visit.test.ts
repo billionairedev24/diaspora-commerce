@@ -1,3 +1,4 @@
+import { homeVisitHeaders } from '@afrotransact/api-client/home-visit';
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
 
@@ -46,7 +47,19 @@ describe('visitFromCookies (what the server relays to the gateway)', () => {
   const jar = (o: Record<string, string>) => (n: string) => o[n];
   it('relays visitor, window and ONLY the earlier visits of the seen memory, so a refresh never reshuffles', () => {
     const v = visitFromCookies(jar({ at_vid: 'v', at_visit: 'w2', at_hs: 'w2~cur1-cur2~old1-old2.old3' }), {});
-    expect(v).toEqual({ visitor: 'v', window: 'w2', seen: ['old1', 'old2', 'old3'], variant: undefined });
+    expect(v).toEqual({ visitor: 'v', window: 'w2', seen: ['old1', 'old2', 'old3'], variant: undefined, exclude: [] });
+  });
+  it('relays the recently viewed cookie as X-Home-Exclude (valid ATINs only, at most 12)', () => {
+    const many = Array.from({ length: 15 }, (_, i) => `AT0000${String(i).padStart(4, '0')}`).join('-');
+    const v = visitFromCookies(jar({ at_vid: 'v', at_visit: 'w', at_rv: `${many}-bad!-` }), {});
+    expect(v.exclude).toHaveLength(12);
+    const headers = homeVisitHeaders(v);
+    expect(headers['X-Home-Exclude']?.split(',')).toEqual(v.exclude);
+    expect(headers['X-Home-Exclude']?.length).toBeLessThan(200);
+  });
+  it('a shopper who refused Functional cookies sends no exclusion, and the middleware clears the cookie', () => {
+    expect(visitFromCookies(jar({ at_rv: 'AT00000001', at_consent: consent(false).slice(11) }), {})).toEqual({});
+    expect(planVisit({ document: true, consentRaw: consent(false).slice('at_consent='.length), newId: () => 'x' }).clear).toContain('at_rv');
   });
   it('a crawler (agent or flag) is flagged and carries nothing else; a refusal carries nothing', () => {
     expect(visitFromCookies(jar({ at_vid: 'v' }), { userAgent: 'bingbot/2.0' })).toEqual({ crawler: true });

@@ -101,10 +101,13 @@ class HomeSettingsServiceImpl implements HomeSettingsService {
         return saved;
     }
 
+    /** The shortest reason staff may give for a home settings or community registry change (the staff console enforces the same). */
+    static final int MIN_REASON_LENGTH = 10;
+
     static void requireReason(String reason) {
-        if (reason == null || reason.trim().length() < 3 || reason.trim().length() > 300) {
+        if (reason == null || reason.trim().length() < MIN_REASON_LENGTH || reason.trim().length() > 300) {
             throw new ContentRuleViolation("content.reason-required", "Say why you are changing this",
-                    Map.of("reason", "Say why you are changing this (3 to 300 characters)"));
+                    Map.of("reason", "Say why you are changing this (10 to 300 characters)"));
         }
     }
 }

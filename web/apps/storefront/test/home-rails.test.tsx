@@ -47,6 +47,42 @@ describe('recently viewed memory', () => {
     renderWithProviders(<TrackView atin="ATAAAAAAA9" />);
     expect(readViewed()).toEqual(['ATAAAAAAA9']);
   });
+
+  describe('first-party cookie at_rv for the server render (X-Home-Exclude)', () => {
+    const clearCookie = (n: string) => {
+      document.cookie = `${n}=; path=/; max-age=0`;
+    };
+    const rv = () => document.cookie.split('; ').find((c) => c.startsWith('at_rv='));
+    beforeEach(() => ['at_rv', 'at_consent'].forEach(clearCookie));
+    const refuse = (functional: boolean) => {
+      document.cookie = `at_consent=${encodeURIComponent(JSON.stringify({ necessary: true, functional, analytics: false, advertising: false, dns: false, gpc: false, v: '1', at: '2026-11-01T00:00:00Z' }))}; path=/`;
+    };
+
+    it('holds the 12 newest ATINs, a few hundred bytes at most', () => {
+      for (let i = 0; i < 20; i += 1) rememberViewed(`ATCOOKIE${String(i).padStart(2, '0')}`);
+      const value = rv()?.slice('at_rv='.length) ?? '';
+      expect(value.split('-')).toHaveLength(12);
+      expect(value.split('-')[0]).toBe('ATCOOKIE19');
+      expect(value.length).toBeLessThan(300);
+    });
+
+    it('is written when the shopper has not chosen or allows Functional cookies', () => {
+      rememberViewed('ATAAAAAAA1');
+      expect(rv()).toBe('at_rv=ATAAAAAAA1');
+      refuse(true);
+      rememberViewed('ATAAAAAAA2');
+      expect(rv()).toBe('at_rv=ATAAAAAAA2-ATAAAAAAA1');
+    });
+
+    it('is not written, and is cleared, when the shopper refuses Functional cookies', () => {
+      rememberViewed('ATAAAAAAA1');
+      expect(rv()).toBeDefined();
+      refuse(false);
+      rememberViewed('ATAAAAAAA2');
+      expect(rv()).toBeUndefined();
+      expect(readViewed()[0]).toBe('ATAAAAAAA2'); // the rail itself still works from local storage
+    });
+  });
 });
 
 describe('the rail items', () => {

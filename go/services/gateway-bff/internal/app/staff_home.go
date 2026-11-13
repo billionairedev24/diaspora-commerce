@@ -132,9 +132,13 @@ func (s *staffHomeImpl) Settings(ctx context.Context, c *domain.Caller) (StaffHo
 	return s.wrap(h), nil
 }
 
+// minHomeReason is the shortest reason for a home settings, revert or community registry change (the content service and the
+// staff console enforce the same 10).
+const minHomeReason = 10
+
 func validReason(reason string) map[string]string {
-	if n := len([]rune(strings.TrimSpace(reason))); n < 3 || n > 300 {
-		return map[string]string{"reason": "Say why you are changing this (3 to 300 characters)"}
+	if n := len([]rune(strings.TrimSpace(reason))); n < minHomeReason || n > 300 {
+		return map[string]string{"reason": "Say why you are changing this (10 to 300 characters)"}
 	}
 	return nil
 }

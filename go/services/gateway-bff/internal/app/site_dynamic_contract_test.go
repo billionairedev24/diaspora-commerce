@@ -90,7 +90,7 @@ func TestStaffPreviewAndSettingsMatchTheStaffContract(t *testing.T) {
 		validate(t, schemas, "StaffHomeDecision", d)
 	}
 	validate(t, schemas, "StaffHomeSettings", (&staffHomeImpl{env: "prod"}).wrap(domain.DefaultHomeSettings()))
-	save := StaffHomeSave{ExpectedVersion: 0, Modules: domain.DefaultHomeRules(), Caps: domain.DefaultHomeCaps(), DepartmentLabels: map[string]domain.LocaleLabels{}, Reason: "launch"}
+	save := StaffHomeSave{ExpectedVersion: 0, Modules: domain.DefaultHomeRules(), Caps: domain.DefaultHomeCaps(), DepartmentLabels: map[string]domain.LocaleLabels{}, Reason: "Launch the new home"}
 	validate(t, schemas, "StaffHomeSettingsSave", save)
 }
 

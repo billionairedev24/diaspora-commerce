@@ -57,7 +57,7 @@ class HomeSettingsIT extends ContentIntegrationTest {
         HttpResponse<String> ok = put("/v1/home-settings", body.formatted("Shadow first, owner asked"));
         assertThat(ok.statusCode()).isEqualTo(200);
         assertThat(json(ok).get("version").asInt()).isEqualTo(1);
-        assertThat(put("/v1/home-settings", body.formatted("again")).statusCode()).as("stale version").isEqualTo(409);
+        assertThat(put("/v1/home-settings", body.formatted("Again with a stale version")).statusCode()).as("stale version").isEqualTo(409);
 
         JsonNode versions = json(get("/v1/home-settings/versions"));
         assertThat(versions.get(0).get("reason").asString()).isEqualTo("Shadow first, owner asked");
@@ -77,10 +77,10 @@ class HomeSettingsIT extends ContentIntegrationTest {
         assertThat(put("/v1/community-registry/nigerian", entry.formatted("")).statusCode()).isEqualTo(422);
         assertThat(put("/v1/community-registry/nigerian", entry.formatted("Merge spellings")).statusCode()).isEqualTo(200);
         assertThat(put("/v1/community-registry/ghanaian",
-                "{\"labels\":{\"en\":\"Ghanaian\"},\"aliases\":[\"Naija\"],\"reason\":\"clash\"}").statusCode())
+                "{\"labels\":{\"en\":\"Ghanaian\"},\"aliases\":[\"Naija\"],\"reason\":\"Clash with Nigerian\"}").statusCode())
                 .as("an alias cannot belong to two communities").isEqualTo(422);
         assertThat(json(get("/v1/community-registry")).size()).isEqualTo(1);
-        assertThat(delete("/v1/community-registry/nigerian?reason=Remove+it").statusCode()).isEqualTo(204);
+        assertThat(delete("/v1/community-registry/nigerian?reason=Remove+it+for+now").statusCode()).isEqualTo(204);
     }
 
     @Test

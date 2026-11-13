@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -385,6 +386,23 @@ func TestZeroProductsIsATextOnlyBrandPageWithNoDemoData(t *testing.T) {
 	}
 }
 
+func TestOneSellerMarketplaceStillFillsAModule(t *testing.T) {
+	r := newHomeRig(t, 100, 1, "dev") // one seller owns every product: the seller cap of 2 relaxes just enough
+	h := r.compose(t, guest("v1", "w1"))
+	var rail *domain.HomeBlock
+	for i := range h.Blocks {
+		if h.Blocks[i].Module == domain.ModNewArrivals && h.Blocks[i].Rail != nil {
+			rail = &h.Blocks[i]
+		}
+	}
+	if rail == nil {
+		t.Fatalf("new arrivals should show for one seller: %v", homeBlockTypes(h))
+	}
+	if got := len(rail.Rail.Items); got < 8 {
+		t.Fatalf("a one-seller marketplace must still fill the rail (8), got %d", got)
+	}
+}
+
 func TestHiddenModulesTriggerNoPoolSearch(t *testing.T) {
 	r := newHomeRig(t, 10, 3, "dev") // 10 products: deals (min 6 with 2 sellers) and groceries (min 6) and top sellers (min 8) are hidden
 	r.compose(t, guest("v1", "w1"))
@@ -543,6 +561,57 @@ func TestDiscoveryModulesExcludeRecentlyViewedAndCart(t *testing.T) {
 				t.Fatalf("%s is in the visitor's recently viewed or cart and must not be in discovery", id)
 			}
 		}
+	}
+}
+
+// fakeHomeCart answers only Get; the home reads the cart and never writes it.
+type fakeHomeCart struct {
+	port.CartClient
+	atins []string
+	err   error
+	gets  int
+}
+
+func (f *fakeHomeCart) Get(_ context.Context, o port.CartOwner) (port.UpstreamCart, error) {
+	f.gets++
+	if f.err != nil || o.BearerToken == "" {
+		return port.UpstreamCart{}, errors.New("cart unavailable")
+	}
+	var lines []port.UpstreamCartLine
+	for _, a := range f.atins {
+		lines = append(lines, port.UpstreamCartLine{ProductATIN: a, VariantATIN: a + "-V"})
+	}
+	return port.UpstreamCart{Packages: []port.UpstreamCartPackage{{Lines: lines}}}, nil
+}
+
+func TestSignedInCartProductsComeFromTheServerAndAreExcluded(t *testing.T) {
+	r := newHomeRig(t, 400, 40, "dev")
+	signed := &domain.Caller{Subject: "cust-1", BearerToken: "t"}
+	base := productIDs(r.compose(t, HomeRequest{Caller: signed, Locale: "en", Window: "w"}))
+	if len(base) < 6 {
+		t.Fatalf("need products to exclude: %d", len(base))
+	}
+	cart := &fakeHomeCart{atins: base[:6]}
+	r.svc.d.Cart = cart
+	for _, id := range productIDs(r.compose(t, HomeRequest{Caller: signed, Locale: "en", Window: "w"})) {
+		for _, e := range cart.atins {
+			if id == e {
+				t.Fatalf("%s is in the signed-in cart and must not be in discovery", id)
+			}
+		}
+	}
+	if cart.gets == 0 {
+		t.Fatal("the signed-in cart was never read")
+	}
+	// a guest never reads a cart here; a cart that cannot be read leaves the page as it was
+	before := cart.gets
+	r.compose(t, guest("v", "w"))
+	if cart.gets != before {
+		t.Error("a guest must not trigger a cart read")
+	}
+	cart.err = errors.New("down")
+	if got := productIDs(r.compose(t, HomeRequest{Caller: signed, Locale: "en", Window: "w"})); len(got) == 0 {
+		t.Error("an unreadable cart must not break the home")
 	}
 }
 
@@ -873,6 +942,7 @@ type recMetrics struct {
 	mu     sync.Mutex
 	elig   map[string]int
 	events int
+	orders []string
 }
 
 func (m *recMetrics) Eligibility(module string, shown bool, reason string) {
@@ -887,6 +957,9 @@ func (m *recMetrics) Mismatch(string)                            {}
 func (m *recMetrics) ComposeSeconds(string, float64)             {}
 func (m *recMetrics) SignalsAge(float64)                         {}
 func (m *recMetrics) ModuleEvent(string, string, string, string) { m.events++ }
+func (m *recMetrics) OrderPlaced(module, variant, locale string, totalMinor int64) {
+	m.orders = append(m.orders, fmt.Sprintf("%s|%s|%s|%d", module, variant, locale, totalMinor))
+}
 
 func TestEligibilityMetricsAreLowCardinalityAndEventsRejectUnknownModules(t *testing.T) {
 	r := newHomeRig(t, 100, 10, "dev")
@@ -906,6 +979,21 @@ func TestEligibilityMetricsAreLowCardinalityAndEventsRejectUnknownModules(t *tes
 		if err := r.svc.RecordModuleEvent(context.Background(), bad); err == nil {
 			t.Errorf("%+v must be rejected", bad)
 		}
+	}
+}
+
+func TestOrderAttributionCountsOncePerOrderAndFoldsLabels(t *testing.T) {
+	r := newHomeRig(t, 10, 3, "dev")
+	m := &recMetrics{}
+	r.svc.d.Metrics = m
+	ctx := context.Background()
+	in := domain.HomeOrderAttribution{Module: "deals", Variant: "B", Locale: "fr-FR,fr;q=0.9", TotalMinor: 4599}
+	r.svc.RecordHomeOrder(ctx, "AT-1", in)
+	r.svc.RecordHomeOrder(ctx, "AT-1", in) // an idempotent retry answers with the same order: not counted twice
+	r.svc.RecordHomeOrder(ctx, "AT-2", domain.HomeOrderAttribution{Module: "AT0000123", TotalMinor: 100})
+	r.svc.RecordHomeOrder(ctx, "AT-3", domain.HomeOrderAttribution{Module: "new-arrivals", TotalMinor: -5})
+	if got := m.orders; len(got) != 1 || got[0] != "deals|b|fr|4599" {
+		t.Fatalf("orders counted = %v, want one deals|b|fr|4599 (unknown module and negative total ignored)", got)
 	}
 }
 

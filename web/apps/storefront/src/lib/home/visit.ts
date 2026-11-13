@@ -1,4 +1,4 @@
-import { isCrawlerAgent, SEEN_COOKIE, seenKeysForRequest,VARIANT_COOKIE, VISIT_COOKIE, VISIT_WINDOW_MINUTES, type VisitHeaders, VISITOR_COOKIE } from '@afrotransact/api-client/home-visit';
+import { isCrawlerAgent, parseRecent, RECENT_COOKIE, SEEN_COOKIE, seenKeysForRequest,VARIANT_COOKIE, VISIT_COOKIE, VISIT_WINDOW_MINUTES, type VisitHeaders, VISITOR_COOKIE } from '@afrotransact/api-client/home-visit';
 
 import { CONSENT_COOKIE, parseConsent } from '@/lib/consent/consent';
 
@@ -43,7 +43,7 @@ export function planVisit(input: VisitInput): VisitCookiePlan {
   const none: VisitCookiePlan = { crawler: false, set: [], clear: [], values: {} };
   if (isCrawlerAgent(input.userAgent)) return { ...none, crawler: true };
   if (!input.document) return none;
-  if (!varietyAllowed(input.consentRaw)) return { ...none, clear: [VISITOR_COOKIE, VISIT_COOKIE, SEEN_COOKIE].filter(Boolean) };
+  if (!varietyAllowed(input.consentRaw)) return { ...none, clear: [VISITOR_COOKIE, VISIT_COOKIE, SEEN_COOKIE, RECENT_COOKIE] };
   const visitor = input.visitor || input.newId();
   const window = input.window || input.newId();
   return {
@@ -67,6 +67,7 @@ export function visitFromCookies(get: (name: string) => string | undefined, user
     visitor: get(VISITOR_COOKIE),
     window: get(VISIT_COOKIE),
     seen: seenKeysForRequest(get(SEEN_COOKIE)),
-    variant: get(VARIANT_COOKIE)
+    variant: get(VARIANT_COOKIE),
+    exclude: parseRecent(get(RECENT_COOKIE))
   };
 }

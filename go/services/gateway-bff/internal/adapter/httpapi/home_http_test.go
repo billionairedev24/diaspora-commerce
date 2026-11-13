@@ -72,7 +72,7 @@ func (f *fakeHomeContent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.Version, s.UpdatedBy = f.version, "stf-30"
 		writeJ(w, 200, s)
 	case p == "/v1/home-settings/versions":
-		writeJ(w, 200, []any{map[string]any{"version": 1, "reason": "launch", "changedBy": "stf-30", "changedAt": "2026-11-13T10:00:00Z", "changes": []any{}}})
+		writeJ(w, 200, []any{map[string]any{"version": 1, "reason": "Launch the new home", "changedBy": "stf-30", "changedAt": "2026-11-13T10:00:00Z", "changes": []any{}}})
 	case p == "/v1/community-registry" && r.Method == http.MethodGet:
 		writeJ(w, 200, []any{})
 	case strings.HasPrefix(p, "/v1/community-registry/") && r.Method == http.MethodPut:
@@ -241,6 +241,12 @@ func TestStaffHomeSettingsPermissionsReasonValidationAndAudit(t *testing.T) {
 	}
 	if rec := save(func(m map[string]any) { m["reason"] = "" }); rec.Code != 422 || !strings.Contains(rec.Body.String(), "reason") {
 		t.Errorf("a reason is mandatory: %d %s", rec.Code, rec.Body)
+	}
+	if rec := save(func(m map[string]any) { m["reason"] = "too short" }); rec.Code != 422 || !strings.Contains(rec.Body.String(), "10 to 300 characters") {
+		t.Errorf("a nine character reason is refused with the shared copy: %d %s", rec.Code, rec.Body)
+	}
+	if rec := save(func(m map[string]any) { m["reason"] = "          x          " }); rec.Code != 422 {
+		t.Errorf("spaces do not count towards the 10: %d %s", rec.Code, rec.Body)
 	}
 	if rec := save(func(m map[string]any) {
 		mods := domain.DefaultHomeRules()
