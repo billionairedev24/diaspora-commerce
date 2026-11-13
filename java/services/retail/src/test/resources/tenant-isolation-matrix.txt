@@ -1,0 +1,10 @@
+# retail is AfroTransact's first-party (1P) business: one tenant, no seller/provider/customer rows. Every use case calls PermissionChecker.require(retail:*); retail:* permissions are granted only to platform.* roles (identity V10__retail_permissions.sql). Residual: no principal-type check, so a non-staff token holding a retail:* permission would pass.
+@LedgerController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@PurchaseOrderController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@SupplierEdiController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@ReceiptController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@ItemController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@InvoiceController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@SupplierController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@ShipmentController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -
+@PoDispatchController | STAFF_ONLY | application services call permissions.require(retail:*), granted only to platform.* roles; 1P data only | -

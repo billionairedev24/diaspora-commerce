@@ -1,0 +1,38 @@
+# tax-returns tenant isolation matrix. OpenFGA off in prod: RBAC + org claim + owner checks (Access).
+GET /v1/returns/eligibility | CUSTOMER_SELF | ReturnServiceImpl.eligibility: Access.customerOrStaff(order.customerId); others need staff returns:manage | TaxReturnsTenantIsolationTest
+POST /v1/returns | CUSTOMER_SELF | ReturnServiceImpl.request: customerOrStaff(order.customerId); rma customer taken from the order, idempotency keyed by that customer | TaxReturnsTenantIsolationTest
+GET /v1/returns | ORG_SCOPED_LIST | ReturnServiceImpl.search: customer filter = token subject; seller filter = actor org claim (sellerOrgId param honoured for staff only); no org = 403 | TaxReturnsTenantIsolationTest
+GET /v1/returns/{id} | ORG_OWNED | ReturnServiceImpl.get: Access.viewer = rma.customerId == subject or requireForOrg(returns:manage, rma.sellerOrgId) | TaxReturnsTenantIsolationTest
+GET /v1/returns/number/{number} | ORG_OWNED | ReturnServiceImpl.getByNumber: Access.viewer = rma.customerId == subject or requireForOrg(returns:manage, rma.sellerOrgId) | TaxReturnsTenantIsolationTest
+GET /v1/returns/{id}/refund-quote | ORG_OWNED | ReturnServiceImpl.refundQuote via get: Access.viewer = rma.customerId == subject or requireForOrg(returns:manage, rma.sellerOrgId) | TaxReturnsTenantIsolationTest
+POST /v1/returns/{id}/cancel | CUSTOMER_SELF | ReturnServiceImpl.cancel: customerOrStaff(rma.customerId) | TaxReturnsTenantIsolationTest
+POST /v1/returns/{id}/approve | ORG_OWNED | ReturnServiceImpl.approve: decider/handler = requireForOrg(returns:manage, rma.sellerOrgId) for seller-fulfilled, staff otherwise | TaxReturnsTenantIsolationTest
+POST /v1/returns/{id}/reject | ORG_OWNED | ReturnServiceImpl.reject: decider/handler = requireForOrg(returns:manage, rma.sellerOrgId) for seller-fulfilled, staff otherwise | TaxReturnsTenantIsolationTest
+POST /v1/returns/{id}/receive | ORG_OWNED | ReturnServiceImpl.receive: decider/handler = requireForOrg(returns:manage, rma.sellerOrgId) for seller-fulfilled, staff otherwise | TaxReturnsTenantIsolationTest
+POST /v1/returns/{id}/inspect | ORG_OWNED | ReturnServiceImpl.inspect: decider/handler = requireForOrg(returns:manage, rma.sellerOrgId) for seller-fulfilled, staff otherwise | TaxReturnsTenantIsolationTest
+POST /v1/returns/{id}/label | STAFF_ONLY | ReturnServiceImpl.issueLabel: Access.staff(returns:manage) | -
+POST /v1/returns/{id}/pickup | TOKEN_LINK | DRIVER with delivery:operate must present the rma handover code (customer-held secret); staff otherwise. Not bound to an assigned driver (residual risk) | -
+GET /v1/return-policies/{orgId} | ORG_OWNED | ReturnPolicyServiceImpl.get: requireForOrg(returns:manage, orgId) | TaxReturnsTenantIsolationTest
+PUT /v1/return-policies/{orgId} | ORG_OWNED | ReturnPolicyServiceImpl.put: requireForOrg on the path org, which is the org written (body has no org) | TaxReturnsTenantIsolationTest
+POST /v1/refunds | ORG_OWNED | RefundServiceImpl.adjust: requireForOrg(refunds:issue) for the seller of EVERY line, derived from the order snapshot | TaxReturnsTenantIsolationTest
+GET /v1/refunds | STAFF_ONLY | RefundServiceImpl.reader/staff: STAFF or SERVICE principal with refunds:issue or returns:manage | -
+GET /v1/refunds/{id} | STAFF_ONLY | RefundServiceImpl.reader/staff: STAFF or SERVICE principal with refunds:issue or returns:manage | -
+POST /v1/refunds/{id}/retry | STAFF_ONLY | RefundServiceImpl.reader/staff: STAFF or SERVICE principal with refunds:issue or returns:manage | -
+GET /v1/tax/sellers/{orgId}/statement | ORG_OWNED | TaxLedgerServiceImpl.sellerStatement: staff tax:read or requireForOrg(payouts:read, orgId); SQL by seller org | TaxReturnsTenantIsolationTest
+GET /v1/tax/sellers/{orgId}/statement/export | ORG_OWNED | same service call as the JSON statement (CSV rendering only) | TaxReturnsTenantIsolationTest
+POST /v1/tax/quotes | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+GET /v1/tax/rates | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+PUT /v1/tax/rates/states/{state} | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+PUT /v1/tax/rates/local/{state}/{zipPrefix} | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+DELETE /v1/tax/rates/local/{state}/{zipPrefix} | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+POST /v1/tax/rates/import | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+GET /v1/tax/liability | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+GET /v1/tax/liability/export | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+GET /v1/tax/orders/{orderId}/transactions | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+POST /v1/tax/reversals | STAFF_ONLY | TaxServiceImpl/TaxLedgerServiceImpl: Access.staff (STAFF or SERVICE) with tax:* or refunds:issue | -
+@TaxSettingsController | STAFF_ONLY | every service method calls Access.staff/staffAny (STAFF or SERVICE principal) with tax:*; platform tax configuration, no tenant rows | -
+@TaxNexusController | STAFF_ONLY | every service method calls Access.staff/staffAny (STAFF or SERVICE principal) with tax:*; platform tax configuration, no tenant rows | -
+@TaxRemittanceController | STAFF_ONLY | every service method calls Access.staff/staffAny (STAFF or SERVICE principal) with tax:*; platform tax configuration, no tenant rows | -
+@TaxReviewSettingsController | STAFF_ONLY | every service method calls Access.staff/staffAny (STAFF or SERVICE principal) with tax:*; platform tax configuration, no tenant rows | -
+@TaxClassificationController | STAFF_ONLY | every service method calls Access.staff/staffAny (STAFF or SERVICE principal) with tax:*; platform tax configuration, no tenant rows | -
+@TaxClassificationApiController | STAFF_ONLY | every service method calls Access.staff/staffAny (STAFF or SERVICE principal) with tax:*; platform tax configuration, no tenant rows | -
