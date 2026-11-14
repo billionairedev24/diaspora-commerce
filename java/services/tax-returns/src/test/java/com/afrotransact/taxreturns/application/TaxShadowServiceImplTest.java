@@ -180,6 +180,28 @@ class TaxShadowServiceImplTest {
     }
 
     @Test
+    void everyRowRecordsHowExactlyTheShipToWasKnownSoAZipEstimateIsLabelledAsOne() {
+        Map<String, String> codes = Map.of("STRIPE", "txcd_1");
+        when(inHouse.quote(any(), anyString(), any())).thenReturn(new TaxQuote("USD", "US-TX", CollectedBy.MARKETPLACE,
+                List.of(tax("1", 825, "0.0825")), "rules"));
+        when(stripe.quoteStrict(any(), anyString(), any())).thenReturn(new TaxQuote("USD", "US-TX",
+                CollectedBy.MARKETPLACE, List.of(tax("1", 825, "0.0825")), "STRIPE_TAX"));
+
+        service.run(new Compare(TaxProviderId.STRIPE, new TaxAddress("US", "TX", "77002", null), "USD", "order-1",
+                List.of(decided("1", false, codes), blocked("2"))));
+
+        assertThat(saved()).extracting(ShadowRow::addressPrecision).containsOnly("ZIP");
+    }
+
+    @Test
+    void aStreetOnTheShipToIsRecordedAsAddressPrecision() {
+        service.run(new Compare(TaxProviderId.AVALARA, SHIP_TO.withLine1("1001 Main St"), "USD", "order-1",
+                List.of(blocked("1"))));
+
+        assertThat(saved()).extracting(ShadowRow::addressPrecision).containsOnly("ADDRESS");
+    }
+
+    @Test
     void theReportGroupsByCodeCategoryOutcomeStateAndKind() {
         when(repository.totals(any(), any(), any())).thenReturn(new ShadowQuoteRepository.Totals(10, 2, 300, -100));
 

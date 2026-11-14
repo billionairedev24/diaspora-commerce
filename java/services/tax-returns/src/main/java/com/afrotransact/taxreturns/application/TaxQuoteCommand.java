@@ -35,13 +35,21 @@ public record TaxQuoteCommand(String currency, TaxAddress shipTo, List<Line> lin
      * @param productType     catalog product type (no longer decides tax)
      * @param sellerBehaviour the seller's behaviour facts for this listing (sold_heated, utensils_provided,
      *                        seller_is_bakery ...); part of the decision beside the variant's facts
+     * @param shipFrom        where the line ships from, or null when the caller did not say
      */
     public record Line(String lineId, String atin, String sellerOrgId, String taxCategory, String productType,
                        int quantity, long unitPriceMinor, long discountMinor, long shippingMinor,
-                       Map<String, Object> sellerBehaviour) {
+                       Map<String, Object> sellerBehaviour, TaxAddress shipFrom) {
 
         public Line {
             sellerBehaviour = sellerBehaviour == null ? Map.of() : sellerBehaviour;
+        }
+
+        public Line(String lineId, String atin, String sellerOrgId, String taxCategory, String productType,
+                    int quantity, long unitPriceMinor, long discountMinor, long shippingMinor,
+                    Map<String, Object> sellerBehaviour) {
+            this(lineId, atin, sellerOrgId, taxCategory, productType, quantity, unitPriceMinor, discountMinor,
+                    shippingMinor, sellerBehaviour, null);
         }
 
         public Line(String lineId, String atin, String sellerOrgId, String taxCategory, String productType,

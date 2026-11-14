@@ -99,13 +99,14 @@ class TaxServiceImpl implements TaxService {
                 if (explicit(l)) {
                     telemetry.quoteLine("EXPLICIT", "CATEGORY");
                     items.add(new Item(new TaxLineInput(key, l.atin(), l.sellerOrgId(), TaxCategory.parse(l.taxCategory()),
-                            l.quantity(), l.unitPriceMinor(), l.discountMinor(), l.shippingMinor()), null));
+                            l.quantity(), l.unitPriceMinor(), l.discountMinor(), l.shippingMinor())
+                            .withShipFrom(l.shipFrom()), null));
                     continue;
                 }
                 LineDecision d = decisions.get(key);
                 TaxLineInput in = new TaxLineInput(key, l.atin(), l.sellerOrgId(), TaxCategory.GENERAL, l.quantity(),
                         l.unitPriceMinor(), l.discountMinor(), l.shippingMinor(), d.internalTaxCode(), null,
-                        d.providerCodes(), d.exempt());
+                        d.providerCodes(), d.exempt(), l.shipFrom());
                 items.add(new Item(in, d));
             } catch (IllegalArgumentException ex) {
                 errors.put("lines[" + i + "]", ex.getMessage());

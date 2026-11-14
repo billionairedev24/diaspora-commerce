@@ -340,7 +340,10 @@ final class TaxClassificationDtos {
                             String shipToState,
                             String internalTaxCode, String providerCode, String kind, ShadowSide inHouse,
                             ShadowSide provider, long differenceMinor, Instant quotedAt, String shadowProvider,
-                            String failure) {
+                            String failure,
+                            @Schema(description = "How exactly the ship-to was known when the provider was asked: ADDRESS, "
+                                    + "CITY or ZIP. ZIP and CITY mean the provider's answer is an estimate from a place, "
+                                    + "not from a street address.") String addressPrecision) {
 
         static ShadowDifference of(ShadowRow r) {
             return new ShadowDifference(uuid(r.orderRef()), r.orderRef(), r.lineId(), r.atin(), r.categoryCode(),
@@ -349,7 +352,7 @@ final class TaxClassificationDtos {
                             r.inHouseTaxMinor(), null),
                     new ShadowSide(r.providerOutcome() == null ? null : r.providerOutcome().name(), r.providerRate(),
                             r.providerTaxMinor(), r.providerError()), r.differenceMinor(), r.quotedAt(), r.provider().name(),
-                    r.failure() == null ? null : r.failure().name());
+                    r.failure() == null ? null : r.failure().name(), r.addressPrecision());
         }
 
         private static UUID uuid(String s) {

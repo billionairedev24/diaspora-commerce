@@ -103,6 +103,7 @@ class TaxShadowServiceImpl implements TaxShadowService, AutoCloseable {
         if (!decided.isEmpty()) {
             rows.addAll(compareDecided(c, decided, at, state));
         }
+        rows = rows.stream().map(r -> r.withAddressPrecision(c.shipTo().precision())).toList();
         repository.saveAll(rows);
         rows.forEach(r -> telemetry.shadow(c.provider(), r.kind()));
     }

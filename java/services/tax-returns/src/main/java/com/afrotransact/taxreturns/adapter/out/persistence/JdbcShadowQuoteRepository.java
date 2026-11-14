@@ -31,9 +31,9 @@ class JdbcShadowQuoteRepository implements ShadowQuoteRepository {
                     insert into tax_shadow_quote (quoted_at, order_ref, line_id, atin, provider, state, category_code,
                         internal_tax_code, provider_code, kind, in_house_outcome, in_house_rate, in_house_tax_minor,
                         provider_outcome, provider_rate, provider_tax_minor, provider_error, difference_minor, currency,
-                        failure)
+                        failure, address_precision)
                     values (:at, :order, :line, :atin, :provider, :state, :category, :code, :providerCode, :kind,
-                        :ho, :hr, :ht, :po, :pr, :pt, :error, :diff, :currency, :failure)
+                        :ho, :hr, :ht, :po, :pr, :pt, :error, :diff, :currency, :failure, :precision)
                     """)
                     .param("at", Sql.ts(r.quotedAt())).param("order", r.orderRef()).param("line", r.lineId())
                     .param("atin", r.atin()).param("provider", r.provider().name()).param("state", r.state())
@@ -44,6 +44,7 @@ class JdbcShadowQuoteRepository implements ShadowQuoteRepository {
                     .param("pt", r.providerTaxMinor())
                     .param("error", r.providerError() == null ? null : trim(r.providerError()))
                     .param("diff", r.differenceMinor()).param("currency", r.currency()).param("failure", name(r.failure()))
+                    .param("precision", r.addressPrecision())
                     .update();
         }
     }
@@ -94,7 +95,7 @@ class JdbcShadowQuoteRepository implements ShadowQuoteRepository {
                         (Long) rs.getObject("in_house_tax_minor"), outcome(rs.getString("provider_outcome")),
                         rs.getBigDecimal("provider_rate"), (Long) rs.getObject("provider_tax_minor"),
                         rs.getString("provider_error"), rs.getLong("difference_minor"), rs.getString("currency"),
-                        failure(rs.getString("failure"))))
+                        failure(rs.getString("failure")), rs.getString("address_precision")))
                 .list();
     }
 

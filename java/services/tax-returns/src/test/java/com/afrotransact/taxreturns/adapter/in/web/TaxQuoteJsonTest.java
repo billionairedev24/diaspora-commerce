@@ -54,9 +54,11 @@ class TaxQuoteJsonTest {
 
         mvc.perform(post("/v1/tax/quotes").contentType(MediaType.APPLICATION_JSON).content("""
                         {"currency":"USD","orderId":"order-1","saleDate":"2026-11-09",
-                         "shipTo":{"state":"TX","postalCode":"77002"},
+                         "shipTo":{"state":"TX","postalCode":"77002","city":"Houston","line1":"1001 Main St"},
                          "lines":[{"lineId":"1","atin":"AT1","sellerOrgId":"org","quantity":1,"unitPriceMinor":10000,
-                                   "discountMinor":0,"shippingMinor":0,"sellerBehaviour":{"sold_heated":false}},
+                                   "discountMinor":0,"shippingMinor":0,"sellerBehaviour":{"sold_heated":false},
+                                   "shipFrom":{"line1":"100 Commerce St","city":"Dallas","state":"TX","postalCode":"75201",
+                                               "country":"US","source":"SELLER_LOCATION"}},
                                   {"lineId":"2","atin":"AT2","sellerOrgId":"org","quantity":1,"unitPriceMinor":100,
                                    "discountMinor":0,"shippingMinor":0}]}"""))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.provider", is("STRIPE_TAX")))
@@ -77,6 +79,11 @@ class TaxQuoteJsonTest {
         assertThat(c.getValue().saleDate().toString()).isEqualTo("2026-11-09");
         assertThat(c.getValue().lines().getFirst().sellerBehaviour()).containsEntry("sold_heated", false);
         assertThat(c.getValue().lines().get(1).sellerBehaviour()).isEmpty();
+        assertThat(c.getValue().shipTo().line1()).isEqualTo("1001 Main St");
+        assertThat(c.getValue().shipTo().precision()).isEqualTo("ADDRESS");
+        assertThat(c.getValue().lines().getFirst().shipFrom().postalCode()).isEqualTo("75201");
+        assertThat(c.getValue().lines().getFirst().shipFrom().line1()).isEqualTo("100 Commerce St");
+        assertThat(c.getValue().lines().get(1).shipFrom()).as("a caller that sends no ship-from is not given one").isNull();
     }
 
     @Test

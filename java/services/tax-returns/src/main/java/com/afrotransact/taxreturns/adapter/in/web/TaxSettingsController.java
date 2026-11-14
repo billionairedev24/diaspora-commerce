@@ -3,8 +3,10 @@ package com.afrotransact.taxreturns.adapter.in.web;
 import java.time.Instant;
 import java.util.List;
 
+import com.afrotransact.taxreturns.application.TaxProviderConnectionService;
 import com.afrotransact.taxreturns.application.TaxSettingsService;
 import com.afrotransact.taxreturns.application.TaxSettingsService.TaxSettings;
+import com.afrotransact.taxreturns.domain.tax.ProviderConnection;
 import com.afrotransact.taxreturns.domain.tax.TaxMethod;
 import com.afrotransact.taxreturns.domain.tax.TaxMethodChange;
 import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
@@ -15,6 +17,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,9 +29,25 @@ import org.springframework.web.bind.annotation.RestController;
 class TaxSettingsController {
 
     private final TaxSettingsService settings;
+    private final TaxProviderConnectionService connections;
 
-    TaxSettingsController(TaxSettingsService settings) {
+    TaxSettingsController(TaxSettingsService settings, TaxProviderConnectionService connections) {
         this.settings = settings;
+        this.connections = connections;
+    }
+
+    @Schema(name = "TaxProviderConnection", description = "What a connection test found out; never a credential")
+    record ConnectionDto(String provider, @Schema(description = "The credentials are set (false: nothing was asked)")
+                         boolean configured,
+                         @Schema(description = "The provider accepted the credentials") boolean authenticated,
+                         @Schema(description = "Account or user name the provider reported, when it did") String accountName,
+                         @Schema(description = "sandbox or production") String environment,
+                         @Schema(description = "Plain words: what worked or what to fix") String message) {
+
+        static ConnectionDto of(ProviderConnection c) {
+            return new ConnectionDto(c.provider().name(), c.configured(), c.authenticated(), c.accountName(),
+                    c.environment(), c.message());
+        }
     }
 
     @Schema(name = "TaxMethodChange")
@@ -78,5 +98,14 @@ class TaxSettingsController {
     @PutMapping("/v1/tax/settings")
     SettingsDto change(@Valid @RequestBody ChangeRequest body) {
         return SettingsDto.of(settings.change(body.method(), body.shadowProvider(), body.reason()));
+    }
+
+    @Operation(summary = "Test the connection to a tax provider (tax:configure)",
+            description = "Asks the provider whether the configured credentials work (Avalara: AvaTax Ping). Calculates "
+                    + "nothing and records nothing. Reports authenticated yes/no, the account name and the environment, "
+                    + "never the license key.")
+    @PostMapping("/v1/tax/providers/{provider}/connection-test")
+    ConnectionDto testConnection(@PathVariable TaxProviderId provider) {
+        return ConnectionDto.of(connections.test(provider));
     }
 }

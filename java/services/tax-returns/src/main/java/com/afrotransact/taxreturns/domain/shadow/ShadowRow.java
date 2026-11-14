@@ -29,10 +29,28 @@ import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
  * @param differenceMinor  provider minus in-house tax
  * @param currency         currency
  * @param failure          why the provider gave no quote (null when it answered or no code was mapped)
+ * @param addressPrecision how exactly the ship-to was known (ADDRESS, CITY, ZIP), or null for rows from before it was kept
  */
 public record ShadowRow(Instant quotedAt, String orderRef, String lineId, String atin, TaxProviderId provider,
                         String state, String categoryCode, String internalTaxCode, String providerCode,
                         ShadowKind kind, Outcome inHouseOutcome, BigDecimal inHouseRate, Long inHouseTaxMinor,
                         Outcome providerOutcome, BigDecimal providerRate, Long providerTaxMinor, String providerError,
-                        long differenceMinor, String currency, ShadowFailure failure) {
+                        long differenceMinor, String currency, ShadowFailure failure,
+                        String addressPrecision) {
+
+    public ShadowRow(Instant quotedAt, String orderRef, String lineId, String atin, TaxProviderId provider,
+                     String state, String categoryCode, String internalTaxCode, String providerCode,
+                     ShadowKind kind, Outcome inHouseOutcome, BigDecimal inHouseRate, Long inHouseTaxMinor,
+                     Outcome providerOutcome, BigDecimal providerRate, Long providerTaxMinor, String providerError,
+                     long differenceMinor, String currency, ShadowFailure failure) {
+        this(quotedAt, orderRef, lineId, atin, provider, state, categoryCode, internalTaxCode, providerCode, kind,
+                inHouseOutcome, inHouseRate, inHouseTaxMinor, providerOutcome, providerRate, providerTaxMinor,
+                providerError, differenceMinor, currency, failure, null);
+    }
+
+    public ShadowRow withAddressPrecision(String precision) {
+        return new ShadowRow(quotedAt, orderRef, lineId, atin, provider, state, categoryCode, internalTaxCode,
+                providerCode, kind, inHouseOutcome, inHouseRate, inHouseTaxMinor, providerOutcome, providerRate,
+                providerTaxMinor, providerError, differenceMinor, currency, failure, precision);
+    }
 }

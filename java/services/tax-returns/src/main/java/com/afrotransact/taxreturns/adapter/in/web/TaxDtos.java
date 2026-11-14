@@ -38,17 +38,37 @@ final class TaxDtos {
     @Schema(name = "TaxShipTo")
     record ShipTo(@Size(max = 2) String country, @NotBlank @Size(max = 10) String state,
                   @NotBlank @Size(max = 10) String postalCode, @Size(max = 120) String city,
+                  @Schema(description = "Street line of the delivery address, when the caller has it. Sent to a provider "
+                          + "that prices by address (Avalara); never required and never made up.")
+                  @Size(max = 200) String line1,
                   @Schema(description = "How exactly the place was known by the caller: ZIP (default; a typed or saved ZIP) or "
                           + "CITY (a ZIP resolved from a city name, so the rate is the city's representative one). "
                           + "Reported back as addressPrecision CITY; it never changes the rate looked up.")
                   @Pattern(regexp = "ZIP|CITY") String precision) {
 
         ShipTo(String country, String state, String postalCode, String city) {
-            this(country, state, postalCode, city, null);
+            this(country, state, postalCode, city, null, null);
+        }
+
+        TaxAddress toAddress() {
+            return new TaxAddress(country, state, postalCode, city, line1, precision);
         }
 
         boolean cityPrecision() {
             return "CITY".equals(precision);
+        }
+    }
+
+    @Schema(name = "TaxShipFrom", description = "Where a line ships from: the seller's ship-from location or the AfroTransact "
+            + "fulfilment centre that holds the stock. Providers that price by origin (Avalara) need it; a line without one "
+            + "is not sent to them.")
+    record ShipFrom(@Size(max = 200) String line1, @Size(max = 120) String city, @NotBlank @Size(max = 10) String state,
+                    @NotBlank @Size(max = 10) String postalCode, @Size(max = 2) String country,
+                    @Schema(description = "SELLER_LOCATION or FULFILMENT_CENTRE") @Pattern(regexp = "SELLER_LOCATION|FULFILMENT_CENTRE")
+                    String source) {
+
+        TaxAddress toAddress() {
+            return new TaxAddress(country, state, postalCode, city, line1, null);
         }
     }
 
@@ -64,7 +84,8 @@ final class TaxDtos {
                      @Min(0) long discountMinor, @Min(0) long shippingMinor,
                      @Schema(description = "The seller's behaviour facts for this listing (sold_heated, utensils_provided, "
                              + "seller_is_bakery ...); part of the decision beside the variant's facts")
-                     Map<String, Object> sellerBehaviour) {
+                     Map<String, Object> sellerBehaviour,
+                     @Valid ShipFrom shipFrom) {
     }
 
     @Schema(name = "TaxQuoteRequest", description = "Cart or order lines shipped to one address")
@@ -76,10 +97,10 @@ final class TaxDtos {
                         @Size(max = 80) String orderId) {
 
         TaxQuoteCommand toCommand() {
-            return new TaxQuoteCommand(currency, new TaxAddress(shipTo.country(), shipTo.state(), shipTo.postalCode(),
-                    shipTo.city()), lines.stream().map(l -> new TaxQuoteCommand.Line(l.lineId(), l.atin(),
+            return new TaxQuoteCommand(currency, shipTo.toAddress(), lines.stream().map(l -> new TaxQuoteCommand.Line(l.lineId(), l.atin(),
                     l.sellerOrgId(), l.taxCategory(), l.productType(), l.quantity(), l.unitPriceMinor(),
-                    l.discountMinor(), l.shippingMinor(), l.sellerBehaviour())).toList(), saleDate, orderId);
+                    l.discountMinor(), l.shippingMinor(), l.sellerBehaviour(),
+                    l.shipFrom() == null ? null : l.shipFrom().toAddress())).toList(), saleDate, orderId);
         }
     }
 
