@@ -17,16 +17,26 @@ import java.util.Map;
  * @param providerTaxCode the external provider's code for it, or null
  * @param providerCodes   the code of every provider for the line's outcome (a provider without a code is absent)
  * @param exempt          the stored decision says EXEMPT: sent only to a shadow provider, never to the charging one
+ * @param shipFrom        where the line ships from (seller location or fulfilment centre), or null when the caller did not
+ *                        say; a provider that prices by origin refuses the line rather than guess one
  */
 public record TaxLineInput(String lineId, String atin, String sellerOrgId, TaxCategory category, int quantity,
                            long unitPriceMinor, long discountMinor, long shippingMinor, String taxCode,
-                           String providerTaxCode, Map<String, String> providerCodes, boolean exempt) {
+                           String providerTaxCode, Map<String, String> providerCodes, boolean exempt,
+                           TaxAddress shipFrom) {
+
+    public TaxLineInput(String lineId, String atin, String sellerOrgId, TaxCategory category, int quantity,
+                        long unitPriceMinor, long discountMinor, long shippingMinor, String taxCode,
+                        String providerTaxCode, Map<String, String> providerCodes, boolean exempt) {
+        this(lineId, atin, sellerOrgId, category, quantity, unitPriceMinor, discountMinor, shippingMinor, taxCode,
+                providerTaxCode, providerCodes, exempt, null);
+    }
 
     public TaxLineInput(String lineId, String atin, String sellerOrgId, TaxCategory category, int quantity,
                         long unitPriceMinor, long discountMinor, long shippingMinor, String taxCode,
                         String providerTaxCode) {
         this(lineId, atin, sellerOrgId, category, quantity, unitPriceMinor, discountMinor, shippingMinor, taxCode,
-                providerTaxCode, Map.of(), false);
+                providerTaxCode, Map.of(), false, null);
     }
 
     public TaxLineInput(String lineId, String atin, String sellerOrgId, TaxCategory category, int quantity,
@@ -56,7 +66,12 @@ public record TaxLineInput(String lineId, String atin, String sellerOrgId, TaxCa
 
     public TaxLineInput withProviderCodes(Map<String, String> codes, boolean isExempt) {
         return new TaxLineInput(lineId, atin, sellerOrgId, category, quantity, unitPriceMinor, discountMinor,
-                shippingMinor, taxCode, providerTaxCode, codes, isExempt);
+                shippingMinor, taxCode, providerTaxCode, codes, isExempt, shipFrom);
+    }
+
+    public TaxLineInput withShipFrom(TaxAddress origin) {
+        return new TaxLineInput(lineId, atin, sellerOrgId, category, quantity, unitPriceMinor, discountMinor,
+                shippingMinor, taxCode, providerTaxCode, providerCodes, exempt, origin);
     }
 
     /** Price × quantity − discount, never below zero. */

@@ -15,12 +15,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.tax.CollectedBy;
+import com.afrotransact.taxreturns.domain.tax.ProviderConnection;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxCategory;
 import com.afrotransact.taxreturns.domain.tax.TaxLineInput;
@@ -32,7 +34,6 @@ import com.afrotransact.taxreturns.port.TaxTelemetry;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -51,12 +52,17 @@ class AvalaraTaxCalculatorTest {
     private final AtomicReference<String> path = new AtomicReference<>();
     private final AtomicReference<String> auth = new AtomicReference<>();
     private final AtomicReference<String> body = new AtomicReference<>();
+    private final AtomicReference<String> clientHeader = new AtomicReference<>();
+    private final List<AutoCloseable> open = new ArrayList<>();
     private HttpServer server;
 
     @AfterEach
-    void stop() {
+    void stop() throws Exception {
         if (server != null) {
             server.stop(0);
+        }
+        for (AutoCloseable c : open) {
+            c.close();
         }
     }
 
@@ -66,6 +72,7 @@ class AvalaraTaxCalculatorTest {
         server.createContext("/", ex -> {
             path.set(ex.getRequestMethod() + " " + ex.getRequestURI().getPath());
             auth.set(ex.getRequestHeaders().getFirst("Authorization"));
+            clientHeader.set(ex.getRequestHeaders().getFirst("X-Avalara-Client"));
             body.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             try {
                 Thread.sleep(delayMs);
@@ -83,29 +90,35 @@ class AvalaraTaxCalculatorTest {
     }
 
     private AvalaraTaxCalculator calculator(boolean configured) {
-        return calculator(configured ? new TaxReturnsProperties.AvalaraTax("123", "secret-license", "AFROTRANSACT", null,
-                null, null, null) : new TaxReturnsProperties.AvalaraTax(null, null, null, null, null, null, null));
-    }
-
-    private AvalaraTaxCalculator calculator(TaxReturnsProperties.AvalaraTax cfg) {
-        return new AvalaraTaxCalculator(RestClient.builder(), new TaxReturnsProperties(
-                new TaxReturnsProperties.Tax(null, null, cfg, null, null), null, null, null, null), rules, telemetry,
-                CLOCK);
+        if (!configured) {
+            return new AvalaraTaxCalculator(new TaxReturnsProperties.AvalaraTax(null, null, null, null, null, null, null),
+                    null, rules, telemetry, CLOCK);
+        }
+        return against("http://127.0.0.1:9", Duration.ofSeconds(1));
     }
 
     private AvalaraTaxCalculator against(String baseUrl, Duration timeout) {
-        return calculator(new TaxReturnsProperties.AvalaraTax("123", "secret-license", "AFROTRANSACT", "sandbox", baseUrl,
-                timeout, null));
+        TaxReturnsProperties.AvalaraTax cfg = new TaxReturnsProperties.AvalaraTax("123", "secret-license",
+                "AFROTRANSACT", "sandbox", baseUrl, timeout, null);
+        SdkAvaTaxGateway gateway = new SdkAvaTaxGateway(cfg);
+        open.add(gateway);
+        return new AvalaraTaxCalculator(cfg, gateway, rules, telemetry, CLOCK);
     }
 
+    private static final TaxAddress ORIGIN = new TaxAddress("US", "TX", "75201", "Dallas", "100 Commerce St", null);
+
     private static TaxLineInput line(String id, String code) {
+        return line(id, code, ORIGIN);
+    }
+
+    private static TaxLineInput line(String id, String code, TaxAddress origin) {
         return new TaxLineInput(id, "AT" + id, "org", TaxCategory.GENERAL, 2, 1_000, 200, 0, "AT.X.Y", null,
-                code == null ? Map.of() : Map.of("AVALARA", code), false);
+                code == null ? Map.of() : Map.of("AVALARA", code), false, origin);
     }
 
     private static TaxLineInput lineWithShipping(String id, String code, long shipping) {
         return new TaxLineInput(id, "AT" + id, "org", TaxCategory.GENERAL, 1, 1_000, 0, shipping, "AT.X.Y", null,
-                Map.of("AVALARA", code), false);
+                Map.of("AVALARA", code), false, ORIGIN);
     }
 
     @Test
@@ -116,6 +129,8 @@ class AvalaraTaxCalculatorTest {
         assertThat(new TaxReturnsProperties.AvalaraTax("1", "k", " ", null, null, null, null).configured()).isFalse();
         assertThat(new TaxReturnsProperties.AvalaraTax(null, null, null, null, null, null, null).baseUrl())
                 .isEqualTo("https://sandbox-rest.avatax.com");
+        assertThat(new TaxReturnsProperties.AvalaraTax(null, null, null, null, null, null, null).appName())
+                .isEqualTo("AfroTransact");
     }
 
     @Test
@@ -149,7 +164,20 @@ class AvalaraTaxCalculatorTest {
     }
 
     @Test
-    void aStrictQuoteCreatesAnUncommittedSalesOrderAndReadsTaxAndRatePerLine() throws IOException {
+    void aLineWithoutAShipFromAddressIsRefusedAndNothingIsSent() throws IOException {
+        String url = fakeAvaTax(200, "{}", 0);
+
+        assertThatThrownBy(() -> against(url, null).quoteStrict(SHIP_TO, "USD",
+                List.of(line("1", "PF050000"), line("2", "PF050000", null)))).isInstanceOf(TaxProviderException.class)
+                .hasMessageContaining("no ship-from address was given for lines [2]");
+        assertThat(path.get()).as("no call is made without an origin").isNull();
+        assertThatThrownBy(() -> against(url, null).quoteStrict(SHIP_TO, "USD",
+                List.of(line("3", "PF050000", new TaxAddress("US", "", "", "Dallas")))))
+                .isInstanceOf(TaxProviderException.class).hasMessageContaining("no ship-from address");
+    }
+
+    @Test
+    void aStrictQuoteCreatesAnUncommittedSalesOrderWithBothAddressesAndReadsTaxAndRatePerLine() throws IOException {
         String url = fakeAvaTax(200, """
                 {"id":0,"code":"x","status":"Temporary","totalTax":2.50,"lines":[
                  {"lineNumber":"1","tax":1.49,"details":[{"rate":0.0625,"tax":1.12},{"rate":0.02,"tax":0.37}]},
@@ -157,20 +185,43 @@ class AvalaraTaxCalculatorTest {
                  {"lineNumber":"3","tax":1.01,"details":[{"rate":0.0825,"tax":0.82}]},
                  {"lineNumber":"4","tax":0.19,"details":[{"rate":0.0825,"tax":0.19}]}]}
                 """, 0);
+        TaxAddress street = new TaxAddress("US", "TX", "77002", "Houston", "1001 Main St", null);
 
-        TaxQuote q = against(url, null).quoteStrict(SHIP_TO, "USD", List.of(line("a", "PF050000"),
+        TaxQuote q = against(url, null).quoteStrict(street, "USD", List.of(line("a", "PF050000"),
                 line("b", "NT"), lineWithShipping("c", "PC040100", 250)));
 
         assertThat(path.get()).isEqualTo("POST /api/v2/transactions/create");
         assertThat(auth.get()).isEqualTo("Basic MTIzOnNlY3JldC1saWNlbnNl");
+        assertThat(clientHeader.get()).contains("AfroTransact");
         JsonNode sent = JSON.readTree(body.get());
         assertThat(sent.path("type").asString()).isEqualTo("SalesOrder");
         assertThat(sent.path("commit").asBoolean(true)).isFalse();
         assertThat(sent.path("companyCode").asString()).isEqualTo("AFROTRANSACT");
+        assertThat(sent.path("currencyCode").asString()).isEqualTo("USD");
+        assertThat(sent.path("date").asString()).isEqualTo("2026-11-09T00:00:00");
+        assertThat(sent.path("customerCode").asString()).isNotBlank();
+        JsonNode to = sent.path("addresses").path("shipTo");
+        assertThat(to.path("line1").asString()).isEqualTo("1001 Main St");
+        assertThat(to.path("city").asString()).isEqualTo("Houston");
+        assertThat(to.path("region").asString()).isEqualTo("TX");
+        assertThat(to.path("country").asString()).isEqualTo("US");
+        assertThat(to.path("postalCode").asString()).isEqualTo("77002");
+        JsonNode from = sent.path("addresses").path("shipFrom");
+        assertThat(from.path("line1").asString()).isEqualTo("100 Commerce St");
+        assertThat(from.path("city").asString()).isEqualTo("Dallas");
+        assertThat(from.path("region").asString()).isEqualTo("TX");
+        assertThat(from.path("postalCode").asString()).isEqualTo("75201");
         assertThat(sent.path("lines")).hasSize(4);
-        assertThat(sent.path("lines").get(0).path("taxCode").asString()).isEqualTo("PF050000");
+        JsonNode first = sent.path("lines").get(0);
+        assertThat(first.path("number").asString()).isEqualTo("1");
+        assertThat(first.path("taxCode").asString()).isEqualTo("PF050000");
+        assertThat(first.path("itemCode").asString()).isEqualTo("ATa");
+        assertThat(first.path("description").asString()).isNotBlank();
+        assertThat(first.path("quantity").asDouble()).isEqualTo(2.0);
+        assertThat(first.path("amount").asDouble()).isEqualTo(18.0);
+        assertThat(first.path("taxIncluded").asBoolean(true)).isFalse();
         assertThat(sent.path("lines").get(3).path("taxCode").asString()).isEqualTo("FR020100");
-        assertThat(sent.path("lines").get(3).path("amount").asString()).isEqualTo("2.50");
+        assertThat(sent.path("lines").get(3).path("amount").asDouble()).isEqualTo(2.5);
 
         assertThat(q.provider()).isEqualTo("AVALARA");
         assertThat(q.lines()).extracting(l -> l.lineId(), l -> l.taxMinor()).containsExactly(
@@ -182,27 +233,62 @@ class AvalaraTaxCalculatorTest {
     }
 
     @Test
-    void aRefusalNamesTheHttpStatusAndAvalarasMessageButNeverTheLicenseKey() throws IOException {
+    void whenLinesShipFromDifferentPlacesEachLineCarriesBothEnds() throws IOException {
+        String url = fakeAvaTax(200, """
+                {"lines":[{"lineNumber":"1","tax":1.00,"details":[]},{"lineNumber":"2","tax":2.00,"details":[]}]}
+                """, 0);
+        TaxAddress houston = new TaxAddress("US", "TX", "77001", "Houston", "5 Dock Rd", null);
+
+        against(url, null).quoteStrict(SHIP_TO, "USD", List.of(line("a", "PF050000"), line("b", "PF050000", houston)));
+
+        JsonNode sent = JSON.readTree(body.get());
+        assertThat(sent.path("addresses").path("shipFrom").isMissingNode()).isTrue();
+        assertThat(sent.path("addresses").path("shipTo").path("postalCode").asString()).isEqualTo("77002");
+        assertThat(sent.path("lines").get(0).path("addresses").path("shipFrom").path("postalCode").asString())
+                .isEqualTo("75201");
+        assertThat(sent.path("lines").get(1).path("addresses").path("shipFrom").path("line1").asString())
+                .isEqualTo("5 Dock Rd");
+        assertThat(sent.path("lines").get(1).path("addresses").path("shipTo").path("postalCode").asString())
+                .isEqualTo("77002");
+    }
+
+    @Test
+    void aShipToKnownOnlyByZipSendsNoStreetAndNoMadeUpCity() throws IOException {
+        String url = fakeAvaTax(200, "{\"lines\":[{\"lineNumber\":\"1\",\"tax\":1.00,\"details\":[]}]}", 0);
+
+        against(url, null).quoteStrict(new TaxAddress("US", "TX", "77002", null), "USD", List.of(line("a", "PF050000")));
+
+        JsonNode to = JSON.readTree(body.get()).path("addresses").path("shipTo");
+        assertThat(to.has("line1")).isFalse();
+        assertThat(to.has("city")).isFalse();
+        assertThat(to.path("postalCode").asString()).isEqualTo("77002");
+        assertThat(new TaxAddress("US", "TX", "77002", null).precision()).isEqualTo("ZIP");
+        assertThat(new TaxAddress("US", "TX", "77002", "Houston").withCityPrecision().precision()).isEqualTo("CITY");
+        assertThat(new TaxAddress("US", "TX", "77002", "Houston", "1 Main St", "CITY").precision()).isEqualTo("ADDRESS");
+    }
+
+    @Test
+    void aRefusalNamesAvalarasMessageButNeverTheLicenseKey() throws IOException {
         String url = fakeAvaTax(401, "{\"error\":{\"code\":\"AuthenticationException\",\"message\":\"Invalid credentials\"}}",
                 0);
 
         assertThatThrownBy(() -> against(url, null).quoteStrict(SHIP_TO, "USD", List.of(line("1", "PF050000"))))
-                .isInstanceOf(TaxProviderException.class).hasMessageContaining("HTTP 401")
+                .isInstanceOf(TaxProviderException.class).hasMessageContaining("AuthenticationException")
                 .hasMessageContaining("Invalid credentials").satisfies(ex -> assertThat(ex.getMessage())
-                        .doesNotContain("secret-license"));
+                        .doesNotContain("secret-license").doesNotContain("123"));
     }
 
     @Test
     void aServerErrorAndASlowServerAreProviderErrorsNotZeroQuotes() throws IOException {
         String broken = fakeAvaTax(500, "oops", 0);
         assertThatThrownBy(() -> against(broken, null).quoteStrict(SHIP_TO, "USD", List.of(line("1", "PF050000"))))
-                .isInstanceOf(TaxProviderException.class).hasMessageContaining("HTTP 500");
+                .isInstanceOf(TaxProviderException.class).hasMessageContaining("not a readable AvaTax response");
         server.stop(0);
 
         String slow = fakeAvaTax(200, "{\"lines\":[]}", 1_500);
         assertThatThrownBy(() -> against(slow, Duration.ofMillis(200)).quoteStrict(SHIP_TO, "USD",
                 List.of(line("1", "PF050000")))).isInstanceOf(TaxProviderException.class)
-                .hasMessageContaining("Avalara AvaTax failed");
+                .hasMessageContaining("did not answer in time");
     }
 
     @Test
@@ -228,24 +314,48 @@ class AvalaraTaxCalculatorTest {
         TaxQuote uncoded = calculator(true).quote(SHIP_TO, "USD", lines);
         assertThat(uncoded.fallbackLines()).containsExactly("2");
         verify(telemetry).providerFallback("AVALARA", "no-code", 1);
+        TaxQuote noOrigin = calculator(true).quote(SHIP_TO, "USD", List.of(line("3", "PF050000", null)));
+        assertThat(noOrigin.fallbackLines()).containsExactly("3");
+        verify(telemetry).providerFallback("AVALARA", "no-ship-from", 1);
     }
 
     @Test
-    void theRequestMapsLinesToAvaTaxTransactionLinesWithTheMappedCode() {
-        Map<String, Object> body = calculator(true).request(SHIP_TO, "USD", List.of(line("1", "PF050000"), line("2", null)),
-                "order-1");
+    void testConnectionReportsAuthenticatedAndTheAccountNameNeverTheKey() throws IOException {
+        String url = fakeAvaTax(200, "{\"version\":\"26.9.0\",\"authenticated\":true,"
+                + "\"authenticationType\":\"UsernamePassword\",\"authenticatedUserName\":\"afro-sandbox\","
+                + "\"authenticatedUserId\":5,\"authenticatedAccountId\":123}", 0);
 
-        assertThat(body).containsEntry("type", "SalesOrder").containsEntry("companyCode", "AFROTRANSACT")
-                .containsEntry("currencyCode", "USD").containsEntry("commit", false).containsEntry("customerCode", "order-1")
-                .containsEntry("date", "2026-11-09");
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> lines = (List<Map<String, Object>>) body.get("lines");
-        assertThat(lines).as("the line without an Avalara code is left out").singleElement().satisfies(l -> {
-            assertThat(l).containsEntry("taxCode", "PF050000").containsEntry("amount", "18.00")
-                    .containsEntry("quantity", 2).containsEntry("ref1", "1").containsEntry("itemCode", "AT1");
-        });
-        @SuppressWarnings("unchecked")
-        Map<String, Object> ship = (Map<String, Object>) ((Map<String, Object>) body.get("addresses")).get("shipTo");
-        assertThat(ship).containsEntry("region", "TX").containsEntry("postalCode", "77002").containsEntry("country", "US");
+        ProviderConnection c = against(url, null).testConnection();
+
+        assertThat(path.get()).isEqualTo("GET /api/v2/utilities/ping");
+        assertThat(c.configured()).isTrue();
+        assertThat(c.authenticated()).isTrue();
+        assertThat(c.accountName()).isEqualTo("afro-sandbox");
+        assertThat(c.environment()).isEqualTo("sandbox");
+        assertThat(c.toString()).doesNotContain("secret-license");
+    }
+
+    @Test
+    void testConnectionSaysWhenAvalaraDoesNotAcceptTheCredentials() throws IOException {
+        String unauthenticated = fakeAvaTax(200, "{\"version\":\"26.9.0\",\"authenticated\":false}", 0);
+        ProviderConnection c = against(unauthenticated, null).testConnection();
+        assertThat(c.authenticated()).isFalse();
+        assertThat(c.message()).contains("AVALARA_LICENSE_KEY");
+        server.stop(0);
+
+        String refused = fakeAvaTax(401, "{\"error\":{\"code\":\"AuthenticationException\",\"message\":\"Bad\"}}", 0);
+        ProviderConnection r = against(refused, null).testConnection();
+        assertThat(r.configured()).isTrue();
+        assertThat(r.authenticated()).isFalse();
+        assertThat(r.message()).contains("AuthenticationException").doesNotContain("secret-license");
+    }
+
+    @Test
+    void testConnectionWithoutCredentialsMakesNoCall() {
+        ProviderConnection c = calculator(false).testConnection();
+
+        assertThat(c.configured()).isFalse();
+        assertThat(c.authenticated()).isFalse();
+        assertThat(c.message()).contains("AVALARA_ACCOUNT_ID");
     }
 }

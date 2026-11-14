@@ -48,7 +48,7 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
         public Tax {
             provider = provider == null ? TaxProvider.RULES : provider;
             stripe = stripe == null ? new StripeTax(null, null, null) : stripe;
-            avalara = avalara == null ? new AvalaraTax(null, null, null, null, null, null, null) : avalara;
+            avalara = avalara == null ? new AvalaraTax(null, null, null, null, null, null, null, null, null) : avalara;
             classification = classification == null ? new Classification(null, null, false, null) : classification;
             shadow = shadow == null ? new Shadow(null, null, false, null) : shadow;
         }
@@ -64,9 +64,11 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
      * @param baseUrl         explicit host override (env AVALARA_BASE_URL), normally unset
      * @param timeout         per-request timeout
      * @param shippingTaxCode AvaTax tax code of a separately stated delivery charge (env AVALARA_SHIPPING_TAX_CODE)
+     * @param appName         application name the AvaTax SDK sends in its client header (env AVALARA_APP_NAME)
+     * @param appVersion      application version for the same header (env AVALARA_APP_VERSION)
      */
     public record AvalaraTax(String accountId, String licenseKey, String companyCode, String environment, String baseUrl,
-                             Duration timeout, String shippingTaxCode) {
+                             Duration timeout, String shippingTaxCode, String appName, String appVersion) {
 
         static final String SANDBOX = "https://sandbox-rest.avatax.com";
         static final String PRODUCTION = "https://rest.avatax.com";
@@ -80,6 +82,13 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
                     : baseUrl;
             timeout = timeout == null ? Duration.ofSeconds(5) : timeout;
             shippingTaxCode = shippingTaxCode == null || shippingTaxCode.isBlank() ? "FR020100" : shippingTaxCode;
+            appName = appName == null || appName.isBlank() ? "AfroTransact" : appName.trim();
+            appVersion = appVersion == null || appVersion.isBlank() ? "2.0" : appVersion.trim();
+        }
+
+        public AvalaraTax(String accountId, String licenseKey, String companyCode, String environment, String baseUrl,
+                          Duration timeout, String shippingTaxCode) {
+            this(accountId, licenseKey, companyCode, environment, baseUrl, timeout, shippingTaxCode, null, null);
         }
 
         /** The three credentials are set. */

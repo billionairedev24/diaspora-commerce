@@ -2,6 +2,7 @@ package com.afrotransact.taxreturns.port;
 
 import java.util.List;
 
+import com.afrotransact.taxreturns.domain.tax.ProviderConnection;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxLineInput;
 import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
@@ -21,4 +22,12 @@ public interface ProviderTaxCalculator extends TaxCalculator {
      * @throws TaxProviderException when the provider cannot answer
      */
     TaxQuote quoteStrict(TaxAddress shipTo, String currency, List<TaxLineInput> lines);
+
+    /**
+     * Asks the provider whether its credentials work (no tax is calculated, nothing is recorded). Never throws and
+     * never returns a credential. Providers without such a call report that it is not available.
+     */
+    default ProviderConnection testConnection() {
+        return ProviderConnection.unsupported(provider());
+    }
 }

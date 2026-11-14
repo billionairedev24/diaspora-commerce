@@ -36,6 +36,11 @@
         <temporal.version>1.40.0</temporal.version>
         <logstash-encoder.version>9.0</logstash-encoder.version>
         <resend.version>4.29.0</resend.version>
+        <!-- Avalara's official AvaTax REST v2 Java SDK (Apache-2.0). Gson-based, no Jackson, no Scala classes. 26.9.0 = 2026-09-16
+             (newer 26.10.x are < 4 weeks old). The Scala 2.11 library it lists as a compile dependency is never referenced by
+             its classes and is excluded; httpclient 4.5.14 is the last 4.5 release. See docs/engineering/tax-shadow-mode.md. -->
+        <avatax-sdk.version>26.9.0</avatax-sdk.version>
+        <httpclient4.version>4.5.14</httpclient4.version>
         <!-- Security: Jackson 3.1.5 (Boot 4.1.1 BOM) has 5 CVEs; lz4-java 1.10.1 (via kafka-clients) has CVE-2026-106451. -->
         <jackson-bom.version>3.1.8</jackson-bom.version>
         <jackson-2-bom.version>2.21.8</jackson-2-bom.version>
@@ -60,6 +65,22 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>net.avalara.avatax</groupId>
+                <artifactId>avatax-rest-v2-api-java_2.11</artifactId>
+                <version>${avatax-sdk.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.scala-lang</groupId>
+                        <artifactId>scala-library</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpclient</artifactId>
+                <version>${httpclient4.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>

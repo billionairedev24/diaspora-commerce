@@ -83,7 +83,7 @@ at:
     tax:
       # RULES = built-in rules engine over the tax_state_rule / tax_local_rate tables (no external calls).
       # STRIPE_TAX also needs STRIPE_SECRET_KEY and Stripe Tax set up (registrations) in the Stripe dashboard.
-      # AVALARA calls AvaTax REST v2 (CreateTransaction, type SalesOrder, never committed); needs the AVALARA_* variables below.
+      # AVALARA calls AvaTax REST v2 through Avalara's Java SDK (CreateTransaction, type SalesOrder, never committed); needs the AVALARA_* variables below.
       # TAXJAR would need an adapter of the TaxCalculator port (not installed).
       # This is only the default until staff choose in Settings (PUT /v1/tax/settings).
       provider: ${TAX_PROVIDER:RULES}
@@ -124,6 +124,9 @@ at:
         base-url: ${AVALARA_BASE_URL:}
         # AvaTax tax code of a separately stated delivery charge; verify against Avalara's tax code list.
         shipping-tax-code: ${AVALARA_SHIPPING_TAX_CODE:}
+        # Sent by the AvaTax SDK in its client header (X-Avalara-Client): application name and version.
+        app-name: ${AVALARA_APP_NAME:AfroTransact}
+        app-version: ${AVALARA_APP_VERSION:2.0}
     returns:
       default-window-days: ${RETURN_WINDOW_DAYS:30}
       window-days-by-product-type:
