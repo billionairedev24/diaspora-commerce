@@ -197,9 +197,17 @@ class LineDecisionServiceImpl implements LineDecisionService {
 
     private LineDecision early(Request r, VariantClassification rec, String rules, boolean count) {
         if (r.atin() == null || r.atin().isBlank()) {
+            if (count) {
+                LOG.warn("Tax quote line {} has no variant ATIN; it is blocked", r.key());
+            }
             return blocked(ResolveStatus.MISSING_FACTS, rules, null, "The line has no variant ATIN", count);
         }
         if (rec == null) {
+            if (count) {
+                // Records are keyed by VARIANT ATIN: a caller sending a product ATIN lands here although the variant is approved.
+                LOG.warn("Tax quote line {} was looked up by ATIN {} and no classification record exists for it "
+                        + "(records are keyed by variant ATIN; is this a product ATIN?)", r.key(), r.atin());
+            }
             return blocked(ResolveStatus.MISSING_FACTS, rules, null, "No tax classification record for " + r.atin(), count);
         }
         if (rec.status() == RecordStatus.APPROVED) {
@@ -253,6 +261,8 @@ class LineDecisionServiceImpl implements LineDecisionService {
             String owner = f.ownerOrgId() != null ? f.ownerOrgId() : line.sellerOrgId();
             Map<String, Object> behaviour = f.ownerOrgId() == null && f.sellerBehaviour().isEmpty()
                     ? line.sellerBehaviour() : f.sellerBehaviour();
+            LOG.warn("No classification record for {}: ingesting one from catalog facts (category {}) and holding it for review. "
+                    + "If this is a product ATIN rather than a variant ATIN the caller sent the wrong id.", atin, f.categoryCode());
             classifications.onCatalogFactsChanged(new VariantClassificationService.CatalogFactsChanged(null,
                     owner, f.categoryCode(), f.productType(), behaviour,
                     List.of(new VariantClassificationService.Variant(atin, null, f.taxFacts(), false)),

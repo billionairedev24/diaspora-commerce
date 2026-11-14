@@ -36,6 +36,13 @@ catalog reporting it. If it is not:
    listings that were held (`TAX_RETURNS_*` holds) without waiting for its own schedule.
 4. Approved by `auto` but still blocked: the category is not `RESOLVED` for the line's facts (see the quote's `decisionStatus`), which
    is a data problem for the seller or a rule for the tax professional, never something to approve around.
+5. Staff console says the variant is *Approved* and *Exempt*, yet checkout blocks it: the quote was asked about a different id. Records are
+   keyed by **variant ATIN** (`lineId` in the summary JSON); the product ATIN (`atin`) is only for product-page links. Look for these `WARN`
+   logs: gateway-bff `checkout tax line blocked` (per line: `lineId`, `variantAtin` sent, `productAtin`, `decisionStatus`, `blockedReason`;
+   `variantAtin` must equal `lineId`) and tax-returns `Tax quote line ... was looked up by ATIN X and no classification record exists for it`
+   (X is the id it looked up) or `No classification record for X: ingesting one from catalog facts`. If X is a product ATIN the caller is
+   wrong (fixed in gateway-bff by story S442: the quote line carries `CartLine.VariantATIN`); the stray product-level record it
+   ingested sits in Tax review as a never-sold item and can be rejected. The shopper still only sees the generic message.
 
 ## CheckoutTaxEstimateMismatch (more than 1% of orders charged a different tax than the estimate)
 
