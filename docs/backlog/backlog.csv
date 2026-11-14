@@ -1820,3 +1820,12 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Delivery shows a date range from real inputs or no date; never a constant
 - Package n of m only with several packages; copy never says AfroTransact collects or delivers
 - Go, vitest tests and 1280/390 screenshots; docs updated; promise service, FC choice and seller cut-off decisions open","E23","","High","5","storefront cart tax delivery gateway","storefront-web","To Do"
+"S446","Story","Staff console: Tax review detail sheet, row alignment, item names and who decided","Owner feedback on Sales tax > Tax review: with the detail sheet open a click on another menu item did not leave the page (the sheet closed on pointer-down and the page rewrote its own address, which won the race against the link), the sheet reopened stale; rows were misaligned and the Item column and sheet title were blank; staff showed as Unknown user; approved items said Why it needs review. Fixed in the shared Sheet, a useSheetUrl hook (Tax review, profiles, every ResourceTable, department requests), DataTable (fixed row height, centred cells, plain-percentage column widths, CellText/ItemCell) and the BFF (catalog lookup by VARIANT ATIN, staff names). docs/engineering/detail-sheets.md.","- A menu click with a sheet open leaves the page and the sheet is gone; coming back shows the plain list (Playwright, fails on the old Sheet)
+- Back closes the sheet first; Escape and the close button drop the item from the address; the same on Orders and Payouts (Playwright)
+- Tax review rows have one fixed height with every cell centred, the item as photo or flat box plus bold name and muted variant line, ATIN in a monospace muted cell, ellipsis with tooltip and no sideways scroll at 1280 (Playwright)
+- The BFF names the item, variant and photo from catalog by the variant ATIN, tested with distinct product and variant ATINs; fails on the old lookup (go test)
+- Decided by, Changed by and staff history moves show names, Former staff member when unresolvable, never Unknown user (go test)
+- Approved items say Status; waiting items say Why it needs review; the audit sample keeps its wording (vitest)
+- Profiles and Provider codes use the same fixed rows; switching tab drops the sheet parameters
+- Screenshots at 1280 and 390 in docs/engineering/img; docs/engineering/detail-sheets.md
+- Owner confirms the item name, photo and staff names on the live stack (not verified in this session)","E06","","High","5","staff-console tax tables","checkout","In Progress"
