@@ -46,7 +46,7 @@ public final class DefaultShippingPolicy implements ShippingPolicy {
     public long fee(DeliveryMethod method, String serviceLevel, long itemsMinor) {
         return switch (method) {
             case PICKUP -> 0;
-            case AFROTRANSACT_DELIVERY -> settings.get().deliveryFee(itemsMinor);
+            case AFROTRANSACT_DELIVERY, SELLER_SHIPS -> settings.get().deliveryFee(itemsMinor);
             case CARRIER -> itemsMinor >= rates.freeCarrierAboveMinor() ? 0 : rates.carrierStandardMinor();
         };
     }
@@ -55,7 +55,7 @@ public final class DefaultShippingPolicy implements ShippingPolicy {
     public int estimatedDays(DeliveryMethod method, String serviceLevel) {
         return switch (method) {
             case PICKUP -> rates.pickupDays();
-            case AFROTRANSACT_DELIVERY -> rates.deliveryDays();
+            case AFROTRANSACT_DELIVERY, SELLER_SHIPS -> rates.deliveryDays();
             case CARRIER -> rates.standardDays();
         };
     }
@@ -64,7 +64,7 @@ public final class DefaultShippingPolicy implements ShippingPolicy {
     public String defaultServiceLevel(DeliveryMethod method) {
         return switch (method) {
             case PICKUP -> PICKUP;
-            case AFROTRANSACT_DELIVERY -> LOCAL;
+            case AFROTRANSACT_DELIVERY, SELLER_SHIPS -> LOCAL;
             case CARRIER -> STANDARD;
         };
     }

@@ -22,7 +22,7 @@ public final class DefaultHandoverPolicy implements HandoverPolicy {
 
     @Override
     public boolean required(boolean perishable, DeliveryMethod method, DeliveryPreferences preferences) {
-        if (method == DeliveryMethod.CARRIER) {
+        if (method == DeliveryMethod.CARRIER || method == DeliveryMethod.SELLER_SHIPS) {
             return false;
         }
         if (method == DeliveryMethod.PICKUP) {

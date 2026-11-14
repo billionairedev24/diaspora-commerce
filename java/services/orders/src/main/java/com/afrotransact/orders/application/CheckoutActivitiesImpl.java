@@ -227,6 +227,13 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 method = method == DeliveryMethod.PICKUP ? DeliveryMethod.PICKUP
                         : DeliveryMethod.AFROTRANSACT_DELIVERY;
             }
+            if (!sellerStore && method == DeliveryMethod.AFROTRANSACT_DELIVERY
+                    && fulfilmentType(first) == FulfilmentType.SELLER_FULFILLED) {
+                // The seller did not opt into delivery by AfroTransact and AfroTransact does not hold the stock: the
+                // seller ships it. The shopper still sees "Delivery" at the flat fee; no driver or staff queue is
+                // involved (docs/engineering/delivery-fulfilment.md).
+                method = DeliveryMethod.SELLER_SHIPS;
+            }
             String level = sel != null && sel.serviceLevel() != null && !sel.serviceLevel().isBlank()
                     ? sel.serviceLevel().trim().toLowerCase(Locale.ROOT)
                     : shipping.defaultServiceLevel(method);
@@ -609,7 +616,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         }
         return switch (s.method()) {
             case PICKUP -> MemberBenefits.FeeKind.PICKUP;
-            case AFROTRANSACT_DELIVERY -> MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
+            case AFROTRANSACT_DELIVERY, SELLER_SHIPS -> MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
             case CARRIER -> MemberBenefits.FeeKind.CARRIER;
         };
     }

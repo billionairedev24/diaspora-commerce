@@ -12,6 +12,11 @@ public enum ActorKind {
     FULFILMENT_OPS,
     /** Carrier tracking webhooks relayed by carrier-gateway. */
     CARRIER,
+    /**
+     * AfroTransact staff running a delivery in the staff console Delivery module (delivery:manage). Moves only
+     * AFROTRANSACT_DELIVERY shipments, through pickup, out for delivery, delivered (with proof) and failed.
+     */
+    DELIVERY_STAFF,
     /** AfroTransact Delivery driver (driver app, delivery:operate). */
     COURIER,
     /**

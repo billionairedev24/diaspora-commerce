@@ -146,6 +146,27 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         }
     }
 
+    /**
+     * The fulfilment mode of this shipment. A seller-packed shipment sent to AfroTransact Delivery without the
+     * seller-store snapshot is one the old checkout mislabelled (the seller never opted in); it is treated as
+     * seller-ships, which is also what the data fix migration makes of it.
+     */
+    public FulfilmentMode fulfilmentMode() {
+        if (fulfilmentType == FulfilmentType.PREORDER) {
+            return FulfilmentMode.PREORDER_RUN;
+        }
+        if (deliveryMethod == DeliveryMethod.PICKUP) {
+            return FulfilmentMode.PICKUP;
+        }
+        if (deliveryMethod == DeliveryMethod.SELLER_SHIPS || deliveryMethod == DeliveryMethod.CARRIER) {
+            return FulfilmentMode.SELLER_SHIPS;
+        }
+        if (fulfilmentType.afrotransactFulfilled()) {
+            return FulfilmentMode.FULFILLED_BY_AFROTRANSACT;
+        }
+        return localDelivery != null ? FulfilmentMode.AFROTRANSACT_DELIVERY : FulfilmentMode.SELLER_SHIPS;
+    }
+
     /** A community pre-order shipment (S272). */
     public boolean preorderShipment() {
         return preorder != null;
@@ -232,7 +253,8 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
             throw new OrdersRuleViolation("orders.reason-required", "A reason is required to set " + to.wire());
         }
         if (to == ShipmentStatus.DELIVERED && source == TransitionSource.API
-                && deliveryMethod == DeliveryMethod.AFROTRANSACT_DELIVERY && (reason == null || reason.isBlank())) {
+                && deliveryMethod == DeliveryMethod.AFROTRANSACT_DELIVERY && actor.kind() != ActorKind.DELIVERY_STAFF
+                && (reason == null || reason.isBlank())) {
             // Our drivers prove a delivery with a photo and a handover; staff confirming it without them say why.
             throw new OrdersRuleViolation("orders.reason-required",
                     "Say why you are confirming this delivery without the driver's proof");
@@ -250,8 +272,9 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
 
     /** Records the carrier label so tracking webhooks can be matched to this shipment. */
     public Shipment withTracking(String newCarrier, String newTrackingNumber) {
-        if (deliveryMethod != DeliveryMethod.CARRIER) {
-            throw new OrdersRuleViolation("orders.not-carrier-shipment", "Only carrier shipments have tracking numbers");
+        if (deliveryMethod != DeliveryMethod.CARRIER && deliveryMethod != DeliveryMethod.SELLER_SHIPS) {
+            throw new OrdersRuleViolation("orders.not-carrier-shipment",
+                    "Only seller-shipped shipments have tracking numbers");
         }
         if (status.terminal()) {
             throw new OrdersStateConflict("orders.shipment-closed", "The shipment is already " + status.wire());

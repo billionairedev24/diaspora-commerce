@@ -55,8 +55,27 @@ class ShipmentServiceImpl implements ShipmentService {
         ShipmentStatus target = status(to);
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
                 (o, s) -> access.transitionActor(o, s), reason, TransitionSource.API, idempotencyKey, null, null,
-                s -> checkPickupHandover(s, target, handoverCode, reason)));
+                s -> {
+                    checkSellerShipDetails(s, target, reason);
+                    checkPickupHandover(s, target, handoverCode, reason);
+                }));
         return result(outcome);
+    }
+
+    /**
+     * A seller who ships it themselves says how it left: a tracking number recorded on the shipment, or handover
+     * details in the note (who took it, when, a courier's name or a local delivery). Nothing is invented for them.
+     */
+    private static void checkSellerShipDetails(Shipment s, ShipmentStatus target, String reason) {
+        if (target != ShipmentStatus.PICKED_UP || s.deliveryMethod() != DeliveryMethod.SELLER_SHIPS
+                || s.status() == ShipmentStatus.PICKED_UP) {
+            return;
+        }
+        boolean tracked = s.trackingNumber() != null && !s.trackingNumber().isBlank();
+        if (!tracked && (reason == null || reason.isBlank())) {
+            throw new OrdersRuleViolation("orders.ship-details-required",
+                    "Add a tracking number, or say how you sent it (for example who took it)");
+        }
     }
 
     /**

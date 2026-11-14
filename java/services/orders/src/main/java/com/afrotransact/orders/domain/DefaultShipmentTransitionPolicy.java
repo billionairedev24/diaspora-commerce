@@ -43,6 +43,10 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         if (actor == ActorKind.PICKUP_POINT) {
             return pickupReady(shipment, to);
         }
+        if (actor == ActorKind.DELIVERY_STAFF && !shipment.fulfilmentMode().staffDelivers()) {
+            throw TransitionRefused.forbidden("AfroTransact only delivers shipments fulfilled by AfroTransact or "
+                    + "sent to AfroTransact Delivery by their seller; the seller ships this one");
+        }
         Map<ShipmentStatus, Set<ShipmentStatus>> rules = rules(actor, shipment.fulfilmentType(),
                 shipment.deliveryMethod());
         Set<ShipmentStatus> from = rules.get(to);
@@ -50,6 +54,7 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
             throw TransitionRefused.forbidden(actor, to, shipment.fulfilmentType());
         }
         if (actor == ActorKind.SELLER && to == ShipmentStatus.PICKED_UP && shipment.status() != to
+                && shipment.deliveryMethod() == DeliveryMethod.CARRIER
                 && (shipment.trackingNumber() == null || shipment.trackingNumber().isBlank())) {
             throw TransitionRefused.forbidden("Buy a shipping label before marking the order shipped");
         }
@@ -144,6 +149,7 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
             case SELLER -> type == FulfilmentType.SELLER_FULFILLED ? sellerSteps(method) : Map.of();
             case PLATFORM_ADMIN -> type == FulfilmentType.SELLER_FULFILLED ? oversight(method) : everyStep(method);
             case FULFILMENT_OPS -> type == FulfilmentType.SELLER_FULFILLED ? Map.of() : everyStep(method);
+            case DELIVERY_STAFF -> deliveryStaffSteps();
             case CARRIER, COURIER, PICKUP_POINT -> Map.of();
         };
     }
@@ -156,6 +162,13 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         m.put(ShipmentStatus.READY, EnumSet.of(ShipmentStatus.PACKED));
         if (method == DeliveryMethod.PICKUP) {
             m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.READY));
+        }
+        if (method == DeliveryMethod.SELLER_SHIPS) {
+            // "Shipped": the seller sends it (tracking or handover details are checked by the use case); "Delivered":
+            // the seller confirms it. Nothing here ever reaches an AfroTransact driver or staff queue.
+            m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.PACKED, ShipmentStatus.READY));
+            m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
+                    ShipmentStatus.OUT_FOR_DELIVERY));
         }
         if (method == DeliveryMethod.CARRIER) {
             // "Shipped": the parcel with its label is handed to the carrier; the carrier's tracking moves it on.
@@ -182,6 +195,21 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         m.put(ShipmentStatus.RETURNED, EnumSet.of(ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY,
                 ShipmentStatus.DELIVERY_FAILED, ShipmentStatus.DELIVERED));
         m.put(ShipmentStatus.CANCELLED, EnumSet.copyOf(BEFORE_PICKUP));
+        return m;
+    }
+
+    /**
+     * Delivery staff (Delivery module): the steps after the package is ready. A failed attempt may be tried again
+     * (out for delivery from delivery failed). Returns and cancellations stay with orders:manage.
+     */
+    private static Map<ShipmentStatus, Set<ShipmentStatus>> deliveryStaffSteps() {
+        Map<ShipmentStatus, Set<ShipmentStatus>> m = new EnumMap<>(ShipmentStatus.class);
+        m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.READY));
+        m.put(ShipmentStatus.OUT_FOR_DELIVERY, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
+                ShipmentStatus.DELIVERY_FAILED));
+        m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.OUT_FOR_DELIVERY));
+        m.put(ShipmentStatus.DELIVERY_FAILED, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
+                ShipmentStatus.OUT_FOR_DELIVERY));
         return m;
     }
 
