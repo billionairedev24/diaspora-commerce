@@ -67,8 +67,10 @@ describe('checkout tax', () => {
 
   describe('guard: no $0.00, 0% or "no tax" unless the decision is resolved (owner principle: never wrong tax information)', () => {
     let okSummary: CheckoutSummary;
-    const overridden = async (patch: (s: CheckoutSummary) => Partial<CheckoutSummary>) => {
+    const overridden = async (patch: (s: CheckoutSummary) => Partial<CheckoutSummary>, opts: { noAddress?: boolean } = {}) => {
       const api = await signInDemo();
+      // A shopper whose address book is empty (the only case where checkout asks for a ZIP code).
+      if (opts.noAddress) for (const a of await api.getAddresses()) await api.deleteAddress(a.id);
       const jollof = await api.getProduct('AT000000P2');
       await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
       const real = await api.getCheckoutSummary();
@@ -101,16 +103,16 @@ describe('checkout tax', () => {
       // Retry asks the BFF again (and, once tax is worked out, the order can be placed)
       let calls = 0;
       mockServer.use(http.get('*/v1/checkout/summary', () => (calls++, HttpResponse.json({ ...okSummary }))));
-      await userEvent.setup().click(within(state).getByTestId('checkout-tax-retry'));
+      await userEvent.setup().click(within(state).getByTestId('tax-zip-retry-button'));
       await waitFor(() => expect(calls).toBeGreaterThan(0));
-      await waitFor(() => expect(screen.queryByTestId('checkout-tax-retry')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('tax-zip-retry-button')).not.toBeInTheDocument());
       expect(screen.getByTestId('checkout-tax-amount').textContent).toMatch(/^\$\d+\.\d{2}$/);
     });
 
     it('no address and no ZIP code yet: an input for a ZIP code, never an amount; typing one shows the estimate for that place', async () => {
-      const summary = await overridden(() => ({ taxMinor: 0, taxRateLabel: 'Enter your ZIP code to see tax', taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }));
+      const summary = await overridden(() => ({ taxMinor: 0, taxRateLabel: 'Enter your ZIP code to see tax', taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }), { noAddress: true });
       expect(summary.getByTestId('checkout-tax-amount')).toHaveTextContent('—');
-      expect(summary.getByText('Enter your ZIP code to see tax')).toBeInTheDocument();
+      expect(await summary.findByText('Enter your ZIP code to see tax')).toBeInTheDocument();
       const user = userEvent.setup();
       await user.type(summary.getByLabelText('Enter your ZIP code to see tax'), '77002');
       await user.click(summary.getByRole('button', { name: 'See tax' }));
@@ -119,13 +121,23 @@ describe('checkout tax', () => {
       expect(sent.some((r) => r.method === 'GET' && r.url.includes('/v1/checkout/tax-estimate') && r.url.includes('zip=77002'))).toBe(true);
     });
 
-    it('a ZIP code that is not 5 digits is refused before asking', async () => {
+    it('a delivery address is chosen: the ZIP box is never shown, even if the estimate is missing; the row says it could not be worked out, with Retry', async () => {
       const summary = await overridden(() => ({ taxMinor: 0, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }));
+      expect(screen.getByTestId('checkout-address')).toHaveTextContent('Houston, TX 77042');
+      expect(summary.getByTestId('tax-zip-retry')).toBeInTheDocument();
+      expect(summary.queryByTestId('tax-zip-form')).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/Enter your ZIP code/);
+      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+    });
+
+    it('a ZIP code that is not 5 digits is refused before asking', async () => {
+      const summary = await overridden(() => ({ taxMinor: 0, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }), { noAddress: true });
       const user = userEvent.setup();
-      await user.type(summary.getByLabelText('Enter your ZIP code to see tax'), '770');
+      await user.type(await summary.findByLabelText('Enter your ZIP code to see tax'), '770');
       await user.click(summary.getByRole('button', { name: 'See tax' }));
       expect(await summary.findByText('Enter a 5-digit ZIP code.')).toBeInTheDocument();
-      expect(sent.some((r) => r.url.includes('/v1/checkout/tax-estimate'))).toBe(false);
+      // the only estimate asked for is the automatic one (no typed ZIP code)
+      expect(sent.some((r) => r.url.includes('/v1/checkout/tax-estimate') && /zip=\d/.test(r.url))).toBe(false);
     });
 
     it('an address without a state or ZIP code says what to add and offers Edit address', async () => {
