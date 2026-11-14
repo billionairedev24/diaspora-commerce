@@ -229,7 +229,18 @@ describe('method and shadow mock', () => {
     const r = await api.shadow({ size: 2 });
     expect(r).toMatchObject({ provider: 'STRIPE', shadowOff: false, linesCompared: 117 });
     expect(r.items).toHaveLength(2);
-    expect(r.items[0]).toMatchObject({ orderNumber: expect.stringMatching(/^AT-/), inHouseText: expect.any(String), providerText: expect.any(String) });
+    expect(r.items[0]).toMatchObject({ orderNumber: expect.stringMatching(/^AT-/), inHouse: { text: expect.any(String) } });
+    // Every provider has its own cell with its own state; Avalara is not configured in this environment and says so, never $0.00.
+    expect(r.providers.map((p) => [p.provider, p.state])).toEqual([['STRIPE', 'ASKING'], ['AVALARA', 'NOT_CONFIGURED']]);
+    expect(r.items[0]?.quotes.map((q) => q.provider)).toEqual(['STRIPE', 'AVALARA']);
+    const avalara = r.items[0]!.quotes[1]!;
+    expect(avalara).toMatchObject({ state: 'NOT_CONFIGURED', taxMinor: null, taxText: '' });
+    expect(avalara.reason).toMatch(/Avalara is not configured.*AVALARA_ACCOUNT_ID/);
+    const none = await api.shadow({ search: 'zzz' });
+    expect(none.total).toBe(0);
+    const noAnswer = await api.shadow({ status: 'noanswer', size: 50 });
+    expect(noAnswer.items.length).toBeGreaterThan(0);
+    expect(noAnswer.items.every((l) => l.status === 'noanswer')).toBe(true);
     expect(r.byCategory.length).toBeGreaterThan(1);
     expect(r.byState[0]?.key).toBe('TX');
     expect(r.readiness).toMatchObject({ ready: false, thresholdSource: 'DEFAULT' });
