@@ -107,12 +107,12 @@ func ordersResource() *staffResource {
 		},
 		links: func(o jobj) []domain.RecordLink {
 			links := []domain.RecordLink{{Label: "Open in customer support", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId"))}}
-			// An AfroTransact driver takes it from the dock: assign one in Delivery dispatch, then the driver app does the rest
-			// (scan at pickup, the route, proof of delivery).
+			// AfroTransact delivers it: staff run it end to end in the Delivery module (take it, pick it up, deliver it with a
+			// photo as proof). Seller-shipped orders are not there; the seller ships them.
 			for _, sh := range objs(o, "shipments") {
 				st := strings.ToUpper(jstr(sh, "status"))
-				if strings.EqualFold(jstr(sh, "deliveryMethod"), domain.AfroTransactDelivery) && (st == "READY" || st == "PACKED") {
-					links = append(links, domain.RecordLink{Label: "Assign a driver", Href: "/dispatch?tab=pickups"})
+				if strings.EqualFold(jstr(sh, "deliveryMethod"), domain.AfroTransactDelivery) && deliveryQueueStatus[st] {
+					links = append(links, domain.RecordLink{Label: "Open in Delivery", Href: "/delivery?q=" + url.QueryEscape(jstr(o, "orderNumber"))})
 					break
 				}
 			}
@@ -156,8 +156,11 @@ func ordersResource() *staffResource {
 	}
 }
 
-// driverSteps are the steps an AfroTransact driver takes in the driver app (scan at pickup, route, proof of delivery), so
-// staff do not tap them for an AfroTransact Delivery shipment.
+// deliveryQueueStatus are the statuses at which an AfroTransact-delivered shipment is in the Delivery module's queue.
+var deliveryQueueStatus = map[string]bool{"READY": true, "PICKED_UP": true, "IN_TRANSIT": true, "OUT_FOR_DELIVERY": true, "DELIVERY_FAILED": true}
+
+// driverSteps are the transit steps of an AfroTransact-delivered shipment. They are taken in the Delivery module (with
+// the proof of delivery), so the order sheet does not offer them as one-tap buttons.
 var driverSteps = map[string]bool{"PICKED_UP": true, "IN_TRANSIT": true, "OUT_FOR_DELIVERY": true, "DELIVERED": true}
 
 // shipmentNextStepActions gives each shipment its one next step as a single button, with no form. A step that needs a
@@ -189,11 +192,11 @@ func shipmentNextStepActions(o jobj) []staffAction {
 			break // one next step per shipment
 		}
 		if hint := driverHint(jstr(s, "status"), driverOwned); hint != "" {
-			label := "Waiting for the driver"
+			label := "In the Delivery queue"
 			if len(ships) > 1 {
 				label += " · " + jstr(s, "label")
 			}
-			// A button that cannot be pressed: it says who moves this shipment next and where.
+			// A button that cannot be pressed: it says where this shipment moves next.
 			out = append(out, staffAction{key: "driver:" + id, label: label, tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
 				when: func(staffCtx, jobj) string { return hint },
 				run:  func(context.Context, staffCtx, jobj, jobj) error { return nil }})
@@ -202,18 +205,20 @@ func shipmentNextStepActions(o jobj) []staffAction {
 	return out
 }
 
-// driverHint says what happens next to an AfroTransact Delivery shipment that is with the driver side of the flow.
+// driverHint says what happens next to a shipment AfroTransact delivers (the name is historical: no driver app is involved).
 func driverHint(status string, driverOwned bool) string {
 	if !driverOwned {
 		return ""
 	}
 	switch strings.ToUpper(status) {
 	case "READY":
-		return "Assign a driver in Delivery dispatch. The driver scans the packages at pickup in the driver app, which marks it picked up."
+		return "Run it in Delivery: take it, pick it up from the seller or the warehouse and deliver it with a photo as proof."
 	case "PICKED_UP", "IN_TRANSIT":
-		return "With the driver. It becomes out for delivery when the driver starts the route in the driver app."
+		return "Picked up. Mark it out for delivery in Delivery."
 	case "OUT_FOR_DELIVERY":
-		return "Out with the driver. It becomes delivered when the driver records proof in the driver app (the customer's code, a signature or a photo). To confirm it yourself, use More options and give a reason."
+		return "Out for delivery. Mark it delivered in Delivery with a photo as proof, or record why it failed."
+	case "DELIVERY_FAILED":
+		return "A delivery attempt failed. Try again from Delivery, or return it with More options."
 	}
 	return ""
 }

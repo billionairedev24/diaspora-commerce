@@ -21,7 +21,8 @@ insert into role_permission (role_key, permission_key) values
     ('platform.dispatcher', 'delivery:manage'),
     ('platform.customer_support', 'delivery:read'),
     ('platform.product_owner', 'delivery:read'),
-    ('platform.auditor', 'delivery:read')
+    ('platform.auditor', 'delivery:read'),
+    ('platform.developer', 'delivery:read')
 on conflict do nothing;
 
 -- The sidebar module (Commerce > Delivery). Level per platform role; the permission above is checked as well.
@@ -42,7 +43,7 @@ insert into module_access (portal, module_key, role_key, level) values
     ('PLATFORM', 'delivery', 'platform.inventory_manager', 'NONE'),
     ('PLATFORM', 'delivery', 'platform.dispatcher', 'FULL'),
     ('PLATFORM', 'delivery', 'platform.product_owner', 'VIEW'),
-    ('PLATFORM', 'delivery', 'platform.developer', 'NONE'),
+    ('PLATFORM', 'delivery', 'platform.developer', 'VIEW'),
     ('PLATFORM', 'delivery', 'platform.auditor', 'VIEW'),
     ('PLATFORM', 'delivery', 'platform.driver', 'NONE')
 on conflict (portal, module_key, role_key) do nothing;

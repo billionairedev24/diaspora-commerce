@@ -29,6 +29,8 @@ type StaffServices struct {
 	Fees      app.StaffFeesService
 	// Dispatch serves the seller pickups of AfroTransact Delivery (S255); routes are registered when it is set.
 	Dispatch app.StaffDispatchService
+	// Delivery serves the Delivery module: AfroTransact staff run AfroTransact-delivered orders end to end; registered when set.
+	Delivery app.StaffDeliveryService
 	// Notifications serves Notifications → Templates (S268); routes are registered when it is set.
 	Notifications app.StaffNotificationsService
 	// Preorders serves the Pre-orders module (S270–S275); routes are registered when it is set.
@@ -115,6 +117,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/dispatch/pickups/{shipmentId}/assign", h.staffAssignPickup)
 		route("GET /v1/staff/dispatch/pickups/{shipmentId}/assignments", h.staffPickupAssignments)
 		route("GET /v1/staff/ship-from-locations/{locationId}", h.staffShipFromLocation)
+	}
+	if s.Delivery != nil {
+		h.registerStaffDelivery(route)
 	}
 	if s.Notifications != nil {
 		route("GET /v1/staff/notifications/templates", h.staffTemplates)

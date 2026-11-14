@@ -52,6 +52,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"inventory", "inventory", "Inventory", "AfroTransact-owned and FBA stock by fulfilment centre, lot by lot."},
 		{"retail", "retail", "AfroTransact Retail (1P)", "Purchase orders for AfroTransact-owned and AfroTransact Brand inventory."},
 		{"dispatch", "dispatch", "Delivery dispatch", "AfroTransact Delivery routes, drivers and internal delivery."},
+		{DeliveryModule, DeliveryModule, "Delivery", "Orders AfroTransact delivers: take a job, assign a courier, pick up, deliver with a photo as proof, or record a failed attempt. Seller-shipped orders and pickups are not here."},
 		{DeliveryQuotesModule, "", "Delivery quotes", "Shoppers outside the delivery zones ask for a delivery price. Customer care agrees an amount, with a reason, and the shopper pays it at checkout."},
 		{"preorders", "preorders", "Pre-orders", "Open pre-order windows by city with opening, closing and delivery dates. Upload advertorials, watch every pre-order live, export and add late orders."},
 	}},

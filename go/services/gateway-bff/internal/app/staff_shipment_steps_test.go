@@ -36,12 +36,12 @@ func TestShipmentNextStepNamesTheShipmentWhenThereAreSeveral(t *testing.T) {
 }
 
 func TestDriverAndExceptionStepsAreNotStaffButtons(t *testing.T) {
-	// The driver scans pickup and records proof of delivery in the app; delivered by hand, failed and cancelled keep the form.
+	// AfroTransact-delivered steps are taken in the Delivery module (with the proof); delivered by hand, failed and cancelled keep the form.
 	o := jobj{"shipments": []any{
 		ship("s1", "Local", "READY", "AFROTRANSACT_DELIVERY", "picked_up", "cancelled"),
 		ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered", "delivery_failed")}}
-	// No buttons; the driver shipment only carries the "waiting for the driver" note.
-	if got := keysOf(shipmentNextStepActions(o)); got != "driver:s1=Waiting for the driver · Local" {
+	// No buttons; the AfroTransact-delivered shipment only carries the "in the Delivery queue" note.
+	if got := keysOf(shipmentNextStepActions(o)); got != "driver:s1=In the Delivery queue · Local" {
 		t.Fatalf("got %s", got)
 	}
 }
@@ -49,13 +49,26 @@ func TestDriverAndExceptionStepsAreNotStaffButtons(t *testing.T) {
 func TestDriverShipmentsShowWhoMovesThemNext(t *testing.T) {
 	o := jobj{"shipments": []any{ship("s1", "Local", "OUT_FOR_DELIVERY", "AFROTRANSACT_DELIVERY", "delivered", "delivery_failed")}}
 	got := shipmentNextStepActions(o)
-	if len(got) != 1 || got[0].key != "driver:s1" || got[0].label != "Waiting for the driver" {
+	if len(got) != 1 || got[0].key != "driver:s1" || got[0].label != "In the Delivery queue" {
 		t.Fatalf("got %s", keysOf(got))
 	}
-	if why := got[0].when(staffCtx{}, o); !strings.Contains(why, "proof in the driver app") || !strings.Contains(why, "More options") {
+	if why := got[0].when(staffCtx{}, o); !strings.Contains(why, "Mark it delivered in Delivery") || !strings.Contains(why, "photo as proof") {
 		t.Fatalf("reason %q", why)
 	}
 	if shipmentNextStepActions(jobj{"shipments": []any{ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered")}}) != nil && len(shipmentNextStepActions(jobj{"shipments": []any{ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered")}})) != 0 {
 		t.Fatal("carrier shipments are not driver-owned")
+	}
+}
+
+// The regression behind "waiting for admin to assign a driver": a seller-shipped order never shows the Delivery queue note,
+// whatever its status, and the sheet never talks about a driver.
+func TestSellerShippedOrdersNeverWaitForADriver(t *testing.T) {
+	for _, st := range []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP", "OUT_FOR_DELIVERY"} {
+		o := jobj{"shipments": []any{ship("s1", "Mama Put", st, "SELLER_SHIPS", "delivered")}}
+		for _, a := range shipmentNextStepActions(o) {
+			if strings.HasPrefix(a.key, "driver:") || strings.Contains(strings.ToLower(a.label), "driver") || strings.Contains(a.label, "Delivery queue") {
+				t.Fatalf("%s: seller-shipped shipment shows %q", st, a.label)
+			}
+		}
 	}
 }

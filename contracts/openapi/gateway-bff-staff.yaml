@@ -77,6 +77,8 @@ tags:
       Live links are absolute storefront URLs (`PUBLIC_WEB_URL`); the console opens them in a new tab.
   - name: Fees
     description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees, AfroTransact Delivery pricing) over payments' immutable versions
+  - name: Delivery
+    description: AfroTransact staff run AfroTransact-delivered orders end to end without the driver app - queue, take or assign, pickup, out for delivery, delivered with proof, failed and reattempt
   - name: Dispatch
     description: Seller pickups of AfroTransact Delivery from the seller's store (S255) — nearest-driver suggestions, overrides and their history
   - name: Notifications
@@ -1687,6 +1689,222 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── Delivery module (docs/engineering/delivery-fulfilment.md)
+  /v1/staff/deliveries:
+    get:
+      tags: [Delivery]
+      operationId: listStaffDeliveries
+      security: [{sessionCookie: []}]
+      summary: The delivery queue (AfroTransact-delivered shipments)
+      description: |
+        orders `GET /v1/deliveries`. Only shipments AfroTransact delivers (Fulfilled by AfroTransact, or sellers who opted
+        into delivery by AfroTransact); seller-shipped orders and pickups are never listed. Server-driven table: filters,
+        search, sort and page are sent here. Default statuses: ready, picked_up, in_transit, out_for_delivery,
+        delivery_failed. Needs VIEW on the Delivery module and delivery:read (or delivery:manage).
+      parameters:
+        - {name: status, in: query, schema: {type: string, maxLength: 200}, description: 'Comma separated: ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered, placed, confirmed, packed'}
+        - {name: mode, in: query, schema: {type: string, enum: [AFROTRANSACT_DELIVERY, FULFILLED_BY_AFROTRANSACT]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: 'Order number, seller, customer, city or assignee'}
+        - {name: assignee, in: query, schema: {type: string, maxLength: 120}, description: '`me`, `unassigned` or a staff id'}
+        - {name: city, in: query, schema: {type: string, maxLength: 80}, description: Customer city}
+        - {name: seller, in: query, schema: {type: string, maxLength: 120}}
+        - {name: sort, in: query, schema: {type: string, enum: [promised, order, seller, city, status, updated]}}
+        - {name: desc, in: query, schema: {type: boolean}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        '200': {description: A page of the queue, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/couriers:
+    get:
+      tags: [Delivery]
+      operationId: listStaffDeliveryCouriers
+      security: [{sessionCookie: []}]
+      summary: Who can be assigned a delivery, by name
+      description: orders `GET /v1/deliveries/couriers`. Enabled staff holding delivery:manage. Needs VIEW and delivery:read.
+      responses:
+        '200': {description: Staff, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/DeliveryCourier'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/uploads:
+    post:
+      tags: [Delivery]
+      operationId: requestStaffDeliveryPhotoUpload
+      security: [{sessionCookie: []}]
+      summary: Sign a direct upload of a proof-of-delivery photo
+      description: |
+        media `POST /v1/uploads` with purpose `proof-photo`: a private bucket, JPEG, PNG or WebP up to 10 MB, served only
+        through short-lived signed links. The console PUTs the file to `upload.url`, then sends `assetId` in
+        `photoAssetIds` when it marks the delivery delivered. Needs EDIT and delivery:manage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeliveryUploadRequest'}
+      responses:
+        '201': {description: Upload ticket, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryUploadTicket'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}:
+    get:
+      tags: [Delivery]
+      operationId: getStaffDelivery
+      security: [{sessionCookie: []}]
+      summary: One delivery with its job, proof and audit trail
+      description: |
+        orders `GET /v1/deliveries/{id}`. The street address, phone, delivery instructions, coordinates and audit notes
+        come only with delivery:manage; readers see the name and city. Proof photos are short-lived signed links.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}]
+      responses:
+        '200': {description: The delivery, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}/take:
+    post:
+      tags: [Delivery]
+      operationId: takeStaffDelivery
+      security: [{sessionCookie: []}]
+      summary: Take the delivery (assign it to yourself)
+      description: Needs EDIT and delivery:manage. Idempotent per `Idempotency-Key`; 409 when someone else has it or `version` is stale.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryActionRequest'}}}
+      responses:
+        '200': {description: The delivery now, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}/assign:
+    post:
+      tags: [Delivery]
+      operationId: assignStaffDelivery
+      security: [{sessionCookie: []}]
+      summary: Assign the delivery to a named staff member or courier
+      description: The assignee must hold delivery:manage (orders reads their name from identity). Needs EDIT and delivery:manage.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryAssignRequest'}}}
+      responses:
+        '200': {description: The delivery now, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}/picked-up:
+    post:
+      tags: [Delivery]
+      operationId: markStaffDeliveryPickedUp
+      security: [{sessionCookie: []}]
+      summary: Mark picked up from the seller or the warehouse
+      description: Needs EDIT and delivery:manage, and the delivery taken or assigned first (409 otherwise). Idempotent.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryActionRequest'}}}
+      responses:
+        '200': {description: The delivery now, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}/out-for-delivery:
+    post:
+      tags: [Delivery]
+      operationId: markStaffDeliveryOutForDelivery
+      security: [{sessionCookie: []}]
+      summary: Mark out for delivery (also the reattempt after a failed delivery)
+      description: Notifies the customer. Needs EDIT and delivery:manage. Idempotent.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryActionRequest'}}}
+      responses:
+        '200': {description: The delivery now, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}/delivered:
+    post:
+      tags: [Delivery]
+      operationId: markStaffDeliveryDelivered
+      security: [{sessionCookie: []}]
+      summary: Mark delivered with proof (at least one photo)
+      description: |
+        The BFF checks each photo with media (purpose proof-photo, JPEG/PNG/WebP, at most 10 MB, uploaded) before orders
+        saves the proof once: photos, optional recipient name and note, the time and the staff member's name;
+        coordinates only when sent. A second call changes nothing. Notifies the customer. 422 without a photo.
+        Needs EDIT and delivery:manage.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryProofRequest'}}}
+      responses:
+        '200': {description: The delivery now, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}/failed:
+    post:
+      tags: [Delivery]
+      operationId: markStaffDeliveryFailed
+      security: [{sessionCookie: []}]
+      summary: Record a failed delivery attempt with a reason
+      description: The attempt is counted; it can be tried again with out-for-delivery. Needs EDIT and delivery:manage.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryFailedRequest'}}}
+      responses:
+        '200': {description: The delivery now, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/deliveries/{shipmentId}/proof:
+    put:
+      tags: [Delivery]
+      operationId: correctStaffDeliveryProof
+      security: [{sessionCookie: []}]
+      summary: Correct a saved proof of delivery (reason required, audited)
+      description: The only way a saved proof changes; the old values stay in the audit trail. Needs EDIT and delivery:manage.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryProofRequest'}}}
+      responses:
+        '200': {description: The delivery now, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── dispatch: seller pickups (S255)
   /v1/staff/dispatch/pickups:
@@ -6750,6 +6968,164 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    DeliveryRow:
+      type: object
+      description: One line of the delivery queue. Names and cities, never ids (shipmentId is the handle for actions).
+      required: [shipmentId, orderNumber, shipmentLabel, mode, status, sellerName, originCity, customerName, customerCity, customerState, customerPostalCode, units, perishable, promisedBy, assigneeName, assigneeMe, attempts, version, proofAttached, updatedAt, deliveredAt]
+      properties:
+        shipmentId: {type: string}
+        orderNumber: {type: string}
+        shipmentLabel: {type: string}
+        mode: {type: string, enum: [AFROTRANSACT_DELIVERY, FULFILLED_BY_AFROTRANSACT], description: AFROTRANSACT_DELIVERY = the seller opted in; FULFILLED_BY_AFROTRANSACT = FBA or Retail}
+        status: {type: string, enum: [placed, confirmed, packed, ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered]}
+        sellerName: {type: string}
+        originCity: {type: string, description: The seller's city or the fulfilment centre's; empty when it cannot be read}
+        customerName: {type: string}
+        customerCity: {type: string}
+        customerState: {type: string}
+        customerPostalCode: {type: string}
+        units: {type: integer}
+        perishable: {type: boolean}
+        promisedBy: {type: [string, 'null'], format: date}
+        assigneeName: {type: [string, 'null']}
+        assigneeMe: {type: boolean}
+        attempts: {type: integer}
+        version: {type: integer, format: int64}
+        proofAttached: {type: boolean}
+        updatedAt: {type: [string, 'null'], format: date-time}
+        deliveredAt: {type: [string, 'null'], format: date-time}
+    DeliveryList:
+      type: object
+      required: [items, page, size, total, counts, canManage]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/DeliveryRow'}}
+        page: {type: integer}
+        size: {type: integer}
+        total: {type: integer, format: int64}
+        counts: {type: object, additionalProperties: {type: integer, format: int64}, description: Shipments per status over the whole queue}
+        canManage: {type: boolean}
+    DeliveryCourier:
+      type: object
+      required: [id, name, me]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        me: {type: boolean}
+    DeliveryDestination:
+      type: object
+      required: [name, line1, line2, city, state, postalCode, phone, instructions, handToCustomer]
+      properties:
+        name: {type: string}
+        line1: {type: [string, 'null']}
+        line2: {type: [string, 'null']}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: [string, 'null']}
+        phone: {type: [string, 'null']}
+        instructions: {type: [string, 'null']}
+        handToCustomer: {type: boolean}
+    DeliveryItem:
+      type: object
+      required: [title, quantity]
+      properties:
+        title: {type: string}
+        quantity: {type: integer}
+    DeliveryJob:
+      type: object
+      required: [assigneeName, assignedAt, assignedBy, attempts, lastFailure, version]
+      properties:
+        assigneeName: {type: [string, 'null']}
+        assignedAt: {type: [string, 'null'], format: date-time}
+        assignedBy: {type: [string, 'null']}
+        attempts: {type: integer}
+        lastFailure: {type: [string, 'null']}
+        version: {type: integer, format: int64, description: Send back with the next action; 409 when stale}
+    DeliveryProofView:
+      type: object
+      required: [photoAssetIds, photoUrls, recipientName, note, latitude, longitude, deliveredAt, recordedByName, correctedAt, correctedByName, corrections, version]
+      properties:
+        photoAssetIds: {type: array, items: {type: string}}
+        photoUrls: {type: array, items: {type: string}, description: Signed links (about 5 minutes) in the same order; empty string when one could not be signed}
+        recipientName: {type: [string, 'null']}
+        note: {type: [string, 'null']}
+        latitude: {type: [number, 'null']}
+        longitude: {type: [number, 'null']}
+        deliveredAt: {type: string, format: date-time}
+        recordedByName: {type: string}
+        correctedAt: {type: [string, 'null'], format: date-time}
+        correctedByName: {type: [string, 'null']}
+        corrections: {type: integer}
+        version: {type: integer, format: int64}
+    DeliveryAuditLine:
+      type: object
+      required: [action, fromStatus, toStatus, actorName, note, at]
+      properties:
+        action: {type: string, enum: [TAKE, ASSIGN, REASSIGN, PICKED_UP, OUT_FOR_DELIVERY, DELIVERED, FAILED, REATTEMPT, PROOF_CORRECTED, DATA_FIX]}
+        fromStatus: {type: string}
+        toStatus: {type: string}
+        actorName: {type: string}
+        note: {type: string}
+        at: {type: string, format: date-time}
+    DeliveryDetail:
+      type: object
+      required: [row, destination, items, job, proof, audit, nextStatuses, canManage]
+      properties:
+        row: {$ref: '#/components/schemas/DeliveryRow'}
+        destination: {$ref: '#/components/schemas/DeliveryDestination'}
+        items: {type: array, items: {$ref: '#/components/schemas/DeliveryItem'}}
+        job: {$ref: '#/components/schemas/DeliveryJob'}
+        proof: {oneOf: [{$ref: '#/components/schemas/DeliveryProofView'}, {type: 'null'}]}
+        audit: {type: array, items: {$ref: '#/components/schemas/DeliveryAuditLine'}}
+        nextStatuses: {type: array, items: {type: string}, description: The statuses the signed-in staff member may move it to now}
+        canManage: {type: boolean}
+    DeliveryActionRequest:
+      type: object
+      properties:
+        version: {type: [integer, 'null'], format: int64}
+        note: {type: string, maxLength: 500}
+    DeliveryAssignRequest:
+      type: object
+      required: [assigneeId]
+      properties:
+        assigneeId: {type: string, maxLength: 120}
+        version: {type: [integer, 'null'], format: int64}
+        note: {type: string, maxLength: 500}
+    DeliveryFailedRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 3, maxLength: 500}
+        version: {type: [integer, 'null'], format: int64}
+    DeliveryProofRequest:
+      type: object
+      required: [photoAssetIds]
+      properties:
+        photoAssetIds: {type: array, minItems: 1, maxItems: 5, items: {type: string, format: uuid}}
+        recipientName: {type: string, maxLength: 120}
+        note: {type: string, maxLength: 500}
+        latitude: {type: [number, 'null'], minimum: -90, maximum: 90, description: 'Only when the device had a position; never required, and only together with longitude'}
+        longitude: {type: [number, 'null'], minimum: -180, maximum: 180}
+        reason: {type: string, minLength: 3, maxLength: 500, description: Required to correct a saved proof}
+        version: {type: [integer, 'null'], format: int64}
+    DeliveryUploadRequest:
+      type: object
+      required: [fileName, contentType, size]
+      properties:
+        fileName: {type: string, maxLength: 200}
+        contentType: {type: string, enum: [image/jpeg, image/png, image/webp]}
+        size: {type: integer, minimum: 1, maximum: 10485760}
+    DeliveryUploadTicket:
+      type: object
+      required: [assetId, upload]
+      properties:
+        assetId: {type: string}
+        upload:
+          type: object
+          required: [method, url, headers]
+          properties:
+            method: {type: string, enum: [PUT, POST]}
+            url: {type: string}
+            headers: {type: object, additionalProperties: {type: string}}
     StaffLocaleLabels:
       type: object
       required: [en]
@@ -8156,8 +8532,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes, tax and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; tax is the Sales tax module, derived from tax-returns' tax:read (view) and tax:classify-admin (edit); preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, deptRequests, deliveryQuotes, support, rbac, payouts, fees, tax, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes, tax and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; tax is the Sales tax module, derived from tax-returns' tax:read (view) and tax:classify-admin (edit); preorders follows the Pre-orders matrix column; delivery follows the Delivery matrix column and delivery:read / delivery:manage).
+      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, deptRequests, deliveryQuotes, support, rbac, payouts, fees, tax, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans, delivery]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
