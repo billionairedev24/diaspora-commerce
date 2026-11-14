@@ -150,7 +150,15 @@ export function Header() {
         </div>
         <nav className={styles.nav} aria-label={t('nav.primary')}>
           <ul className={styles.navList}>
-            <AllMenu navigation={nav} locale={locale} />
+            <AllMenu
+              navigation={nav}
+              locale={locale}
+              me={me}
+              preorder={showPreorderNav ? { code: preorder?.window?.code } : null}
+              deliverLabel={label}
+              onAskLola={() => lola.open()}
+              onDeliverTo={() => setLocOpen(true)}
+            />
             {showPreorderNav && (
               <li>
                 <Link
