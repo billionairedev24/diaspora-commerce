@@ -1,6 +1,6 @@
 'use client';
 
-import { sellerKeys, sellerQueries, type SellerStatusAction } from '@afrotransact/api-client';
+import { deliveredByAfroTransact, type SellerShipDetails, sellerKeys, sellerQueries, type SellerStatusAction } from '@afrotransact/api-client';
 import { Button, Sheet, useToast } from '@afrotransact/ui';
 import { DownloadSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -29,7 +29,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
   const editable = can('orders');
   const q = useQuery({ ...sellerQueries.order(api, orgId, orderNumber ?? ''), enabled: orderNumber !== null });
   const status = useMutation({
-    mutationFn: ({ shipmentId, to, code }: { shipmentId: string; to: SellerStatusAction; code?: string }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey(), code),
+    mutationFn: ({ shipmentId, to, code, ship }: { shipmentId: string; to: SellerStatusAction; code?: string; ship?: SellerShipDetails }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey(), code, ship),
     onSuccess: (o, v) => {
       qc.setQueryData(sellerKeys.order(orgId, o.orderNumber), o);
       void qc.invalidateQueries({ queryKey: sellerKeys.orders(orgId) });
@@ -116,8 +116,8 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   </span>
                 </div>
               ) : null}
-              <ShipmentProgress shipment={s} editable={editable} loading={status.isPending} onMove={(to, code) => status.mutate({ shipmentId: s.shipmentId, to, code })} />
-              {s.proof ? <ProofOfDelivery proof={s.proof} /> : null}
+              <ShipmentProgress shipment={s} editable={editable} loading={status.isPending} onMove={(to, code, ship) => status.mutate({ shipmentId: s.shipmentId, to, code, ship })} />
+              {s.proof && deliveredByAfroTransact(s.fulfilmentMode) ? <ProofOfDelivery proof={s.proof} /> : null}
               {editable && s.canBuyLabel ? <LabelForm order={o} shipmentId={s.shipmentId} suggested={s.suggestedParcel} /> : null}
               <details className="text-xs text-muted">
                 <summary className="cursor-pointer">Timeline</summary>

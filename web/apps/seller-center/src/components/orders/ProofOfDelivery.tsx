@@ -6,11 +6,16 @@ import { ImagePlaceholder } from '@afrotransact/ui';
 import { useT } from '@/i18n/t';
 import { dateTime } from '@/lib/format';
 
-/** How our driver handed a parcel over: to the buyer, to someone else, or left in a safe place, with the photo and signature. */
+/** How AfroTransact handed a parcel over (read-only; only for orders AfroTransact delivered): to the buyer, to someone else, left in a safe place, or by staff with a photo. */
 export function ProofOfDelivery({ proof }: { proof: DeliveryProof }) {
   const t = useT();
+  const photos = proof.photoUrls.length > 0 ? proof.photoUrls : proof.photoUrl ? [proof.photoUrl] : [];
   const how =
-    proof.method === 'CUSTOMER'
+    proof.method === 'PHOTO'
+      ? proof.recipientName
+        ? t('sc.proof.receivedBy', { name: proof.recipientName })
+        : t('sc.proof.byAfroTransact')
+      : proof.method === 'CUSTOMER'
       ? t('sc.proof.customer')
       : proof.method === 'SOMEONE_ELSE'
         ? t('sc.proof.someoneElse', { name: [proof.recipientName, proof.relationship ? `(${proof.relationship.toLowerCase()})` : ''].filter(Boolean).join(' ') || t('sc.proof.someone') })
@@ -21,14 +26,14 @@ export function ProofOfDelivery({ proof }: { proof: DeliveryProof }) {
       <span>
         {how} <span className="text-xs text-muted">· {dateTime(proof.at)}</span>
       </span>
-      {proof.photoUrl || proof.signatureUrl ? (
+      {photos.length > 0 || proof.signatureUrl ? (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,180px))] gap-3">
-          {proof.photoUrl ? (
-            <figure className="m-0 flex flex-col gap-1 text-xs text-muted">
-              <ImagePlaceholder src={proof.photoUrl} alt={t('sc.proof.photoAlt')} ratio="4 / 3" />
-              <figcaption>{t('sc.proof.photo')}</figcaption>
+          {photos.map((url, i) => (
+            <figure className="m-0 flex flex-col gap-1 text-xs text-muted" key={url}>
+              <ImagePlaceholder src={url} alt={photos.length > 1 ? t('sc.proof.photoAltN', { n: i + 1 }) : t('sc.proof.photoAlt')} ratio="4 / 3" />
+              <figcaption>{photos.length > 1 ? t('sc.proof.photoN', { n: i + 1 }) : t('sc.proof.photo')}</figcaption>
             </figure>
-          ) : null}
+          ))}
           {proof.signatureUrl ? (
             <figure className="m-0 flex flex-col gap-1 text-xs text-muted">
               <ImagePlaceholder src={proof.signatureUrl} alt={t('sc.proof.signatureAlt')} ratio="4 / 3" />
