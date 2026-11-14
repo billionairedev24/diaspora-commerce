@@ -1815,3 +1815,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Five locales, plain wording without the word offer, tours and docs updated, screenshots at 1280 and 390
 - Arabic (right to left) layout checked in a browser
 - Owner approves the proposed section list","E12","","High","8","seller-center pickup settings i18n a11y","delivery","In Progress"
+"S445","Story","Estimated tax uses the known place; delivery dates only from real data","Owner: the cart still asked for a ZIP although the header showed Houston, and 'Arriving Wednesday, Nov 18 / Package 1 of 1' was today plus a constant. The tax estimate now uses saved address, chosen, detected (edge headers, city-only resolved to a real ZIP at CITY precision) then default place; delivery windows come from the promise service for the seller's handling time, ship-from ZIP and the shopper's place, or no date.","- Signed-out with a detected place gets a tax amount labelled 'Estimated for Houston, TX based on your location' with Change; saved default address wins; no place at all asks for a ZIP
+- City-only detection resolves a ZIP from geo's ZIP table and tells tax-returns precision CITY
+- Delivery shows a date range from real inputs or no date; never a constant
+- Package n of m only with several packages; copy never says AfroTransact collects or delivers
+- Go, vitest tests and 1280/390 screenshots; docs updated; promise service, FC choice and seller cut-off decisions open","E23","","High","5","storefront cart tax delivery gateway","storefront-web","To Do"

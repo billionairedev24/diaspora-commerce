@@ -137,11 +137,15 @@ The estimate needs a destination (state and ZIP code). The checkout puts the **a
 
 ### The cart page never asks for what it already knows
 
-The cart's tax row (`TaxZipEstimate`, `useSavedAddress`) works the place out in this order, and **asks for a ZIP code only when there is no usable place**:
+The cart's tax row (`TaxZipEstimate`) asks the BFF with no `zip`; the BFF (`PlaceResolver`, `go/services/gateway-bff/internal/app/place.go`) works the place out in one priority order and **asks for a ZIP code only when none of these has a real ZIP and state** (rare):
 
-1. **The saved address** (called with no `zip`; the BFF reads the address book with the shopper's token): the default address, or, when none is marked default, the first saved address with a state and ZIP. The response says `taxPlaceSource: SAVED_ADDRESS`.
-2. **The delivery place chosen in the header** ("Deliver to"), when its `source` is `chosen` and it has a ZIP (also for a guest). A place only *detected* from edge headers is an approximation and is not used for tax.
-3. **The ZIP prompt**: a guest, or a signed-in shopper with no saved address and no chosen place (`NEEDS_ADDRESS` / `NEEDS_ZIP`).
+1. **The saved address** (the shopper's token): the default address, else the first saved one with a state and ZIP. `taxPlaceSource: SAVED_ADDRESS`. A saved address that cannot be taxed does not block the estimate: the next sources are tried, and only with none of them is it `ADDRESS_INCOMPLETE`. An address book that cannot be read is `SERVICE_UNAVAILABLE` (Retry).
+2. **The delivery place chosen under "Deliver to"** (session location, source `chosen`): `CHOSEN_PLACE`.
+3. **The place detected from Cloudflare's visitor-location headers** (source `detected`; the storefront forwards `CF-IPPostalCode`, `CF-IPCity`, `CF-Region-Code`, `CF-IPLatitude/Longitude`; the first estimate call detects it when the header never did): `DETECTED_PLACE`. Detection order: edge ZIP, edge coordinates (reverse geocode), then **city + two-letter state with no ZIP**: the ZIP is the city's representative ZIP from geo's embedded US ZIP table (`GET /v1/zips/by-city`: the ZIP nearest the centre of the city's ZIPs, never outside the table) and the place is marked **CITY precision**. A region that is not a state code, or a city the table lacks, detects nothing.
+4. **The market's default place** (`commerce.defaultZip`, the place the header shows when nothing else is known): `DEFAULT_PLACE`. Owner decision: it is a real ZIP, shown as "based on your delivery area".
+5. **The ZIP prompt**: nothing above gave a place.
+
+The response carries `taxPlaceSource` and `taxPlacePrecision` (`ZIP` or `CITY`). For CITY precision the BFF sends tax-returns `shipTo.precision = CITY`; the rate looked up is still the ZIP's (tax-returns has no city table), and the quote lines report `addressPrecision: CITY`. The row reads "$x.xx · Estimated for Houston, TX · based on your location" (detected) or "based on your delivery area" (default) with a small **Change** link that opens the ZIP input. The checkout recomputes from the real chosen address. Tests: `checkout_tax_known_place_test.go`, `location_detect_test.go`, `web/apps/storefront/test/cart-tax.test.tsx`.
 
 What the row then shows comes from `taxEstimateStatus` / `taxUnavailableReason` and is **never replaced by the ZIP prompt** because something failed:
 
@@ -151,7 +155,7 @@ What the row then shows comes from `taxEstimateStatus` / `taxUnavailableReason` 
 | `UNAVAILABLE` / `BLOCKED_ITEMS` | "We can't sell {names} yet. Remove it to see your tax." (the item names from `blockedLines`, never ids; plural-aware) with one **Remove** button per item (removes the line from the cart; same keys as the checkout's blocked-items panel) |
 | `UNAVAILABLE` / `ADDRESS_INCOMPLETE` | the saved address has no state or ZIP: "Add your state and ZIP code to this address to see your tax." with **Edit address** (`/account/addresses`) |
 | `UNAVAILABLE` / `SERVICE_UNAVAILABLE`, `FACTS_UNAVAILABLE`, or the request itself failing | "We couldn't work out your tax right now. Try again." with **Retry** |
-| `NEEDS_ADDRESS` / `NEEDS_ZIP`, `NO_ITEMS` | the ZIP prompt |
+| `NEEDS_ADDRESS` / `NEEDS_ZIP`, `NO_ITEMS` | the ZIP prompt (only with no saved, chosen, detected or default place) |
 
 The BFF no longer hides failures behind `NEEDS_ZIP`: a saved address that cannot be taxed answers `ADDRESS_INCOMPLETE`, and an address book that could not be read answers `SERVICE_UNAVAILABLE` (both counted in `tax_estimate_unavailable_total`). The row reads again when the cart changes and when the signed-in state or the address book changes. Nothing here weakens a gate: the cart's Proceed to checkout is unchanged, and Pay stays blocked in the checkout while there is no estimate.
 
