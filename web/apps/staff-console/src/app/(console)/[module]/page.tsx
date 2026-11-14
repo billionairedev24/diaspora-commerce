@@ -7,7 +7,7 @@ import { Spinner } from '@/components/ui/States';
 import { moduleOf } from '@/lib/modules';
 
 const TITLES: Record<string, string> = {
-  exports: 'Exports', orders: 'Orders', moderation: 'Catalog', inventory: 'Inventory', retail: 'Retail purchase orders', dispatch: 'Delivery dispatch',
+  exports: 'Exports', orders: 'Orders', moderation: 'Catalog', inventory: 'Inventory', retail: 'Retail purchase orders', dispatch: 'Delivery dispatch', delivery: 'Delivery',
   applications: 'Applications', 'department-requests': 'Department requests', 'delivery-quotes': 'Delivery quotes', support: 'Customer support', users: 'Users & roles', payouts: 'Payouts', fees: 'Fees & commissions', tax: 'Sales tax', marketing: 'Marketing',
   disputes: 'Disputes & returns', audit: 'Audit log', markets: 'Markets', 'site-content': 'Site content & legal', developers: 'Developers', identity: 'Identity & access',
   notifications: 'Notification templates', preorders: 'Pre-orders', plans: 'Plans & billing'

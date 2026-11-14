@@ -17,6 +17,7 @@ import {
   Megaphone,
   Package,
   Path,
+  Truck,
   Percent,
   Receipt,
   Scales,
@@ -31,7 +32,7 @@ import { type MessageKey } from '@/i18n/t';
 
 /** Sidebar icon of each module (the Backoffice prototype's Phosphor icons). */
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
-  dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
+  dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path, delivery: Truck,
   orgs: UsersThree, apps: IdentificationCard, deptRequests: Storefront, deliveryQuotes: Handshake, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, tax: Calculator, marketing: Megaphone, disputes: Scales,
   audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, identity: Key, notifications: BellRinging, preorders: CalendarCheck,
   plans: CreditCard
@@ -39,7 +40,7 @@ export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
 
 /** URL path of each module. */
 export const MODULE_PATHS: Record<StaffModuleKey, string> = {
-  dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
+  dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch', delivery: '/delivery',
   orgs: '/organisations', apps: '/applications', deptRequests: '/department-requests', deliveryQuotes: '/delivery-quotes', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', tax: '/tax', marketing: '/marketing', disputes: '/disputes',
   audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', identity: '/identity', notifications: '/notifications', preorders: '/preorders',
   plans: '/plans'

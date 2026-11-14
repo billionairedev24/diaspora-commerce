@@ -284,7 +284,7 @@ func (s *staffDeliveryImpl) detail(ctx context.Context, sc staffCtx, up jobj) do
 		d.Proof = pv
 	}
 	for _, a := range objs(up, "audit") {
-		note := firstNonEmpty(jstr(a, "detail.reason"), jstr(a, "detail.note"))
+		note := firstNonEmpty(jstr(a, "detail.reason"), jstr(a, "detail.note"), jstr(a, "detail.assignee"))
 		d.Audit = append(d.Audit, domain.DeliveryAuditLine{Action: jstr(a, "action"), FromStatus: strings.ToLower(jstr(a, "fromStatus")),
 			ToStatus: strings.ToLower(jstr(a, "toStatus")), ActorName: firstNonEmpty(jstr(a, "actorName"), "Staff member"), Note: note, At: jstr(a, "at")})
 	}
