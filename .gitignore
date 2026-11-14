@@ -60,3 +60,4 @@ mobile/apps/*/assets/hero/
 infra/ovh-vps/config.env
 infra/ovh-vps/secrets.local.env
 .ovh/
+docs/backlog/jira-preview.md
