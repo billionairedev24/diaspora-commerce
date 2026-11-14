@@ -45,18 +45,25 @@ const SELLER_ROUTES: AuditRoute[] = [
   { label: 'import size charts', path: '/listings/size-charts/import' },
   { label: 'inventory', path: '/inventory' },
   { label: 'orders', path: '/orders', open: { label: 'order sheet', run: (p) => p.getByTestId('order-row').first().click() } },
-  { label: 'ship from', path: '/orders/ship-from' },
+  { label: 'settings', path: '/settings' },
+  { label: 'settings locations', path: '/settings/locations' },
+  { label: 'settings shipping', path: '/settings/shipping' },
+  { label: 'settings pickup', path: '/settings/pickup' },
+  { label: 'settings payouts', path: '/settings/payouts' },
+  { label: 'settings tax', path: '/settings/tax' },
+  { label: 'settings documents', path: '/settings/documents' },
   { label: 'payouts', path: '/payouts' },
   { label: 'billing', path: '/billing' },
   { label: 'fees', path: '/fees' },
   { label: 'account health', path: '/account-health' },
   { label: 'storefront', path: '/storefront' },
-  { label: 'team', path: '/team' },
+  { label: 'team', path: '/settings/team' },
+  { label: 'business profile', path: '/settings/business' },
   { label: 'onboarding', path: '/onboarding' },
   { label: 'account', path: '/account' },
   { label: 'account security', path: '/account/security' },
-  { label: 'account notifications', path: '/account/notifications' },
-  { label: 'account preferences', path: '/account/preferences' }
+  { label: 'settings notifications', path: '/settings/notifications' },
+  { label: 'settings language', path: '/settings/language' }
 ];
 
 const PROVIDER_ROUTES: AuditRoute[] = [

@@ -45,7 +45,7 @@ test.describe('seller center · my account', () => {
   });
 
   test('saves alert topics with quiet hours, and compact tables as the default', async ({ page }) => {
-    await page.goto('/account/notifications');
+    await page.goto('/settings/notifications');
     await expect(page.getByTestId('alert-seller.compliance')).toContainText('Always on');
     const sms = page.getByRole('switch', { name: 'Low stock by Text' });
     const was = await sms.isChecked();
@@ -55,7 +55,7 @@ test.describe('seller center · my account', () => {
     await page.reload();
     await expect(page.getByRole('switch', { name: 'Low stock by Text' })).toBeChecked({ checked: !was });
 
-    await page.goto('/account/preferences');
+    await page.goto('/settings/language');
     await page.getByRole('radio', { name: /Compact/ }).check();
     await page.getByRole('radio', { name: /Day, month, year/ }).check();
     await page.getByRole('button', { name: 'Save changes' }).click();

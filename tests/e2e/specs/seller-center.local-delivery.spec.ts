@@ -3,7 +3,7 @@ import { expect, type Locator, test } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from '../support/a11y';
 import { SELLER_ORG, setActiveOrg } from '../support/seller';
 
-/* AfroTransact pickup at a ship-from address (S255). Mock org state is process-wide, so the journey starts from
+/* AfroTransact pickup at a location (S255), now under Settings. Mock org state is process-wide, so the journey starts from
    whatever an earlier run left: it turns pickup off first when needed. */
 test.describe.configure({ mode: 'default' });
 
@@ -16,17 +16,19 @@ test.describe('seller center · AfroTransact pickup (S255)', () => {
   });
 
   test('turns AfroTransact pickup on at an address with pickup hours', async ({ page }, testInfo) => {
-    await page.goto('/orders/ship-from');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Ship-from addresses/);
-    const katy = page.getByTestId('ship-from-address').filter({ hasText: 'Cinco Ranch' });
-    await expect(katy.getByTestId('ship-from-position')).toContainText('29.7355, -95.7739');
+    // Where geo placed the address is on Settings > Locations; the driver pickup hours are on Settings > Shipping & delivery.
+    await page.goto('/settings/locations');
+    await expect(page.getByTestId('ship-from-address').filter({ hasText: 'Cinco Ranch' }).getByTestId('ship-from-position')).toContainText('29.7355, -95.7739');
+    await page.goto('/settings/shipping');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Shipping & delivery/);
+    const katy = page.getByTestId('shipping-location').filter({ hasText: 'Cinco Ranch' });
     const toggle = atp(katy).getByLabel(/AfroTransact picks up here/);
     if (await toggle.isChecked()) {
       await toggle.uncheck();
       await atp(katy).getByRole('button', { name: 'Save pickup settings' }).click();
       await expect(page.getByText('AfroTransact pickup updated').first()).toBeVisible();
     }
-    await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller ship-from' });
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller shipping settings' });
 
     await atp(katy).getByLabel(/AfroTransact picks up here/).check();
     await expect(atp(katy).getByTestId('pickup-window').first()).toBeVisible();
@@ -36,9 +38,9 @@ test.describe('seller center · AfroTransact pickup (S255)', () => {
     await expect(page.getByText('AfroTransact pickup updated').first()).toBeVisible();
 
     await page.reload();
-    const after = page.getByTestId('ship-from-address').filter({ hasText: 'Cinco Ranch' });
+    const after = page.getByTestId('shipping-location').filter({ hasText: 'Cinco Ranch' });
     await expect(atp(after).getByLabel(/AfroTransact picks up here/)).toBeChecked();
     await expect(atp(after).getByLabel('Opens, window 1')).toHaveValue('10:00');
-    await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller ship-from' });
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller shipping settings' });
   });
 });

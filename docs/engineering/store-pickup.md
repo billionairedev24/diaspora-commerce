@@ -1,13 +1,13 @@
 # Store pickup at checkout ("Collect from the store")
 
 Plain answer to "why is Pickup not offered for this seller?". Nobody has to enable it in the staff console. It is **the seller's
-switch**, per ship-from address, in Seller Center, and it needs a delivery address on the shopper's side. Nothing is defaulted:
+switch**, per location, in Seller Center **Settings > Pickup**, and it needs a delivery address on the shopper's side. Nothing is defaulted:
 the seed only creates one seller pickup place (Mama Put's kitchen, `tools/seed/seedlib/ops.py` `_seller_customer_pickup`).
 
 ## What must be true for a seller's package to offer Pickup
 
-1. **The seller turned it on**: Seller Center > Orders > Ship-from & pickup > the address > "Customers can pick up their orders
-   here", with at least one opening window. That saves an **active** carrier-gateway pickup location of kind `SELLER`, id =
+1. **The seller turned it on**: Seller Center > Settings > Pickup > the location > "Customers can collect orders from this
+   location", with at least one opening window, a ready time and "Someone will be at this address during these hours". That saves an **active** carrier-gateway pickup location of kind `SELLER`, id =
    the ship-from address id, owner = the seller's organisation (`gateway-bff` `SetCustomerPickup`).
 2. **The shopper has a delivery address with a 5 digit ZIP** (the summary has no pickup before that).
 3. **The place is near the address**: within 60 miles (`pickupRadiusMiles`) when both the place and the address have coordinates,
@@ -37,12 +37,18 @@ store** ("AfroTransact picks up from my store"), a different feature with its ow
 Sellers are **prompted** to enable store pickup; it is never on by default and nothing switches it on except the seller's own
 explicit confirmation.
 
-- **The card** ("Let customers collect orders from your address") shows on Seller Center home and on Orders > Ship-from & pickup
-  to an approved seller organisation that has a ship-from address and **no active pickup place**. It is pre-filled from the default
-  address (name, address, ZIP, phone if present). Opening hours and the ready time start **empty and required**; nothing is invented.
-  It says in plain words: "Customers will be able to collect orders from this address during these hours. Only switch this on if
-  someone will be there." and previews "Shoppers near ZIP 77002 will see Pickup". "Turn on pickup" stays disabled until the hours
-  are valid, a ready time is typed and the seller ticks "Someone will be at this address during these hours."
+- **Where it is turned on**: Settings > Pickup (its own page, see `docs/engineering/seller-settings.md`). The location's address is
+  **already there** and shown read-only, with a link to change it under Settings > Locations. A seller with no location yet
+  gets one click, "Use my business address" (Settings > Locations and Settings > Pickup), which saves the address from sign-up as
+  the default location; nothing creates a location, and nothing turns pickup on, without the seller's click. The seller only enables pickup and confirms the opening hours, the ready time and
+  "Someone will be at this address during these hours." Opening hours and the ready time start **empty and required**; nothing
+  is invented. It says in plain words: "Customers will be able to collect orders from this address during these hours. Only
+  switch this on if someone will be there." and previews "Shoppers near ZIP 77002 will see Pickup". "Turn on pickup" stays
+  disabled until the hours are valid, a ready time is typed and the box is ticked.
+- **The prompt**: Seller Center home shows a small card ("Let customers collect orders from your address") to an approved seller
+  organisation that has a ship-from address and **no active pickup place**. It only links to Settings > Pickup ("Set up
+  pickup") with **Not now / Don't ask again**; it never switches anything on and has no form. Orders shows a one-line nudge
+  with the same link and nothing else: Orders is for orders.
 - **Not now / Don't ask again** are saved **server side per seller organisation** (carrier-gateway `pickup_prompt`, `GET/PUT
   /v1/pickup-prompt`, via gateway-bff `GET/PUT /v1/seller/pickup-prompt`), so every member and every browser sees the same.
   "Not now" asks again after **30 days** (the staff setting `pickupPrompt.reappearDays`, `GET/PUT /v1/pickup-prompt/settings`,

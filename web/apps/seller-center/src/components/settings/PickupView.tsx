@@ -17,6 +17,7 @@ import { blankWindow, previewZip } from '@/lib/pickup-prompt';
 import { draftOf, type PickupDraft, pickupHint, pickupSave } from '@/lib/pickup-settings';
 import { useSeller } from '@/lib/session';
 
+import { BusinessAddressStart } from './BusinessAddressStart';
 import { SettingsPage, useSectionAccess } from './SettingsShell';
 
 /**
@@ -235,6 +236,7 @@ export function PickupView() {
           </Link>
         </p>
       ) : null}
+      {q.data && q.data.length === 0 && canEdit ? <div><BusinessAddressStart /></div> : null}
       <ul className="m-0 flex list-none flex-col p-0">
         {q.data?.map((a) => (
           <li key={a.id} className="border-b border-border py-4 first:border-t" data-tour="settings-pickup-location">

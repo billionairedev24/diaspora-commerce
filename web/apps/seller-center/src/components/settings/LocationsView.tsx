@@ -22,8 +22,8 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { useSeller } from '@/lib/session';
-import { addressFromBusiness } from '@/lib/settings-sections';
 
+import { BusinessAddressStart } from './BusinessAddressStart';
 import { SettingsPage, useSectionAccess } from './SettingsShell';
 
 type AddressForm = ShipFromForm & { label: string; company: string };
@@ -144,27 +144,10 @@ export function LocationsView() {
   const { orgId } = useSeller();
   const { canEdit } = useSectionAccess('locations');
   const q = useQuery(sellerQueries.shipFrom(sellerApi(), orgId));
-  const onboarding = useQuery({ ...sellerQueries.onboarding(sellerApi(), orgId), retry: false });
-  const business = addressFromBusiness(onboarding.data?.form.details.address);
   const [dialog, setDialog] = useState<{ open: boolean; address: ShipFromAddress | null }>({ open: false, address: null });
   const makeDefault = useMutation({
     mutationFn: (id: string) => sellerApi().defaultShipFrom(id),
     onSuccess: (list) => qc.setQueryData(sellerKeys.shipFrom(orgId), list),
-    onError: (e) => toast.show(problemMessage(e), 'error')
-  });
-  const fromBusiness = useMutation({
-    mutationFn: () => {
-      const d = onboarding.data?.form.details;
-      const b = business;
-      if (!b) throw new Error('no business address');
-      const name = [d?.legalFirstName, d?.legalLastName].filter(Boolean).join(' ') || d?.legalName || onboarding.data?.form.business.storeName || '';
-      return sellerApi().createShipFrom({ ...b, name, phone: onboarding.data?.form.business.phone ?? '', label: onboarding.data?.form.business.storeName ?? '', makeDefault: true });
-    },
-    onSuccess: () => {
-      toast.show(t('sc.shipFrom.saved'));
-      void qc.invalidateQueries({ queryKey: sellerKeys.shipFrom(orgId) });
-      void qc.invalidateQueries({ queryKey: sellerKeys.pickupPrompt(orgId) });
-    },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
   return (
@@ -181,11 +164,7 @@ export function LocationsView() {
       {q.data && q.data.length === 0 ? (
         <div className="flex flex-col items-start gap-3" data-testid="locations-empty">
           <p className="m-0 text-sm text-muted">{t('sc.shipFrom.none')}</p>
-          {canEdit && business ? (
-            <Button loading={fromBusiness.isPending} onClick={() => fromBusiness.mutate()}>
-              {t('sc.settings.locations.useBusiness', { address: `${business.line1}, ${business.city}, ${business.state} ${business.postalCode}` })}
-            </Button>
-          ) : null}
+          {canEdit ? <BusinessAddressStart /> : null}
         </div>
       ) : null}
       <ul className="m-0 flex list-none flex-col p-0" data-testid="locations-list">

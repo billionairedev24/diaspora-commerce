@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { BusinessAddressStart } from '@/components/settings/BusinessAddressStart';
 import { LocationsView } from '@/components/settings/LocationsView';
 import { PickupView } from '@/components/settings/PickupView';
 import { SettingsLanding } from '@/components/settings/SettingsLanding';
@@ -140,6 +141,26 @@ describe('Settings > Locations', () => {
     expect(rows).toHaveLength(2);
     expect(screen.queryByTestId('pickup-location')).toBeNull();
     expect(await a11y()).toEqual([]);
+  });
+});
+
+describe('Preloaded location', () => {
+  beforeEach(() => {
+    resetSellerDb(new Date());
+    asRole(null);
+  });
+
+  it('starts a location from the business address with one click, as the default, and never by itself', async () => {
+    const user = userEvent.setup();
+    const before = (await mockApi().listShipFrom()).length;
+    await renderScreen(<BusinessAddressStart />);
+    const button = await screen.findByRole('button', { name: /Use my business address/ });
+    // Nothing is created until the click.
+    expect((await mockApi().listShipFrom()).length).toBe(before);
+    await user.click(button);
+    await waitFor(async () => expect((await mockApi().listShipFrom()).length).toBe(before + 1));
+    const all = await mockApi().listShipFrom();
+    expect(all.filter((a) => a.isDefault)).toHaveLength(1);
   });
 });
 

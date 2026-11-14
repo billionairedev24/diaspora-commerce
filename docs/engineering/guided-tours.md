@@ -169,15 +169,16 @@ A chapter breaks silently when a screen changes and the `data-tour` attribute di
 Audit of every route against the chapters. **Steps** is the number of steps defined / shown in the mock for a full-access person. "Gap" rows are
 screens with no chapter, or things the brief named that the product does not have.
 
-### Seller Center and Provider Hub (26 chapters in 5 journeys)
+### Seller Center and Provider Hub (28 chapters in 5 journeys)
 
 | Screen (route) | Chapter (journey) | Steps | Status |
 |---|---|---|---|
 | Home `/` | welcome, dashboard (setup, money) | 7/5, 4/4 | covered |
 | Application `/onboarding`, `/onboarding/[step]` | application (setup); wizard steps are described by the step list | 4/n.a. | covered; browser pass needs an applying account |
 | Account health and Stripe `/account-health` | account-health (setup) | 4/4 | covered (verification and bank account are Stripe's secure forms) |
-| Team `/team`, business page `/team/business-page` | team (setup) | 5/5 | covered |
-| My account `/account`, `/account/security`, `/account/notifications`, `/account/preferences` | account-settings (setup) | 6/6 | covered |
+| Team `/settings/team`, business profile `/settings/business` | team (setup) | 5/5 | covered (`/team` and `/team/business-page` redirect) |
+| My account `/account`, `/account/security`; alerts `/settings/notifications`, language `/settings/language` | account-settings (setup) | 6/6 | covered (alerts and language moved to Settings; the old `/account/…` URLs redirect) |
+| Settings home `/settings` | settings (setup) | 3/3 | covered (approved organisations only; the payouts, tax and documents pages are described by the list, not toured) |
 | Help, Lola assistant | help-support (setup) | 4/4 | covered |
 | Listings `/listings` (tabs Listings, Drafts) | listings-overview (catalogue) | 4/4 | covered |
 | New product `/listings/new` (barcode step, offer-only form, full form), edit `/listings/[id]/edit` | first-product, product-sections (catalogue) | 8/4, 8/1 | covered. Add a product opens on the barcode step (S382): the chapters start there (`barcode-input`, `barcode-step`), describe the offer-only path in plain words (a page that exists is sold with price, quantity and condition only; no step points into that form, it appears only after a match) and carry on to the full form (category, photos, what is missing, submit; sections) with **optional** steps that are found once the person has opened the form. The drift guard runs both chapters twice: as they stand (4 and 1 steps) and with the person's own clicks past the barcode step (8 and 3 steps). Sections that depend on the category stay optional (see gaps) |
@@ -186,7 +187,8 @@ screens with no chapter, or things the brief named that the product does not hav
 | Bulk upload `/listings/bulk`, history, `[importId]` | bulk-upload (catalogue) | 5/5 | covered (an individual report is described in the last step, not toured) |
 | Inventory & FBA `/inventory` | inventory (catalogue) | 4/4 | covered (the FBA tab is not toured step by step) |
 | Orders `/orders` (order sheet) | orders (fulfilment) | 5/5 | covered (the order sheet is a dialog: not pointed at) |
-| Ship-from `/orders/ship-from` | shipping-setup (fulfilment) | 4/4 | covered |
+| Locations `/settings/locations`, shipping `/settings/shipping` | shipping-setup (fulfilment) | 4/4 | covered (`/orders/ship-from` redirects to Locations) |
+| Pickup `/settings/pickup` | pickup-setup (fulfilment) | 3/3 | covered |
 | Run pick lists `/orders/run-pickups`, `[runId]` | run-pickups (fulfilment) | 3/3 | covered (a run's detail page is not toured) |
 | Returns `/returns`, disputes `/disputes` | returns-disputes (fulfilment) | 5/5 | covered |
 | Payouts `/payouts`, sales tax statement `/payouts/tax` | payouts (money) | 5/5 | covered |
