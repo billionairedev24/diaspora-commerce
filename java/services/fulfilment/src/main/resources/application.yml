@@ -86,6 +86,10 @@ at:
   fulfilment:
     # Node used for FC tasks when inventory has no reservation for the order (empty = assign by hand).
     default-node: ${FULFILMENT_DEFAULT_NODE:}
+    # The driver app is dormant: AfroTransact-delivered orders are run by staff in the console Delivery module
+    # (docs/engineering/delivery-fulfilment.md). Set true to re-enable driver queues, routes and the /v1/driver API.
+    driver-app:
+      enabled: ${DRIVER_APP_ENABLED:false}
     pod:
       max-distance-meters: ${POD_MAX_DISTANCE_METERS:150}
     # S255: nearest available driver for seller pickups (AfroTransact Delivery from the seller's store).

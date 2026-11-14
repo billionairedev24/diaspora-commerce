@@ -58,11 +58,13 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
     private final PickupAssignmentService pickups;
     private final Clock clock;
     private final String defaultNode;
+    private final boolean driverApp;
 
     ShipmentIntakeServiceImpl(InboxDeduplicator inbox, TaskRepository tasks, DeliveryShipmentRepository shipments,
                               RunDispatchRepository runs, RouteRepository routes, InventoryClient inventory, IdIssuer ids,
                               DomainEventPublisher events, DispatchFeed feed, PickupAssignmentService pickups,
-                              Clock clock, @Value("${at.fulfilment.default-node:}") String defaultNode) {
+                              Clock clock, @Value("${at.fulfilment.default-node:}") String defaultNode,
+                              @Value("${at.fulfilment.driver-app.enabled:false}") boolean driverApp) {
         this.inbox = inbox;
         this.tasks = tasks;
         this.shipments = shipments;
@@ -75,6 +77,7 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
         this.pickups = pickups;
         this.clock = clock;
         this.defaultNode = defaultNode == null || defaultNode.isBlank() ? null : defaultNode;
+        this.driverApp = driverApp;
     }
 
     @Override
@@ -111,7 +114,12 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
                                     order.orderNumber(), node, task.status().name(), label, null, now));
                 }
             }
-            if (s.afrotransactDelivery()) {
+            // The driver app is dormant (at.fulfilment.driver-app.enabled=false): AfroTransact-delivered shipments are
+            // run by staff in the console Delivery module (orders-service), so no driver queue, route or auto
+            // assignment is created. A seller-packed shipment without the seller-store pickup is a package the old
+            // checkout mislabelled; the seller ships it, so it never enters a driver queue even when the app is on.
+            boolean sellerShipped = !fc && s.pickup() == null;
+            if (s.afrotransactDelivery() && driverApp && !sellerShipped) {
                 int units = s.lines().stream().mapToInt(PlacedOrder.PlacedLine::quantity).sum();
                 PlacedOrder.SellerPickup pickup = fc ? null : s.pickup();
                 DeliveryShipment ds = new DeliveryShipment(s.shipmentId(), order.orderId(), order.orderNumber(),

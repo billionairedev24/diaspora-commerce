@@ -58,6 +58,7 @@ import tools.jackson.databind.json.JsonMapper;
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.consumers.enabled=false",
     "at.fulfilment.jobs.enabled=false",
+    "at.fulfilment.driver-app.enabled=true",
     "at.fulfilment.oauth.client-secret=test-fulfilment-secret",
     "at.fulfilment.upstreams.timeout=3s"
 })
