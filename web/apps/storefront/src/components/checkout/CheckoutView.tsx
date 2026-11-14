@@ -27,8 +27,8 @@ import { type PaymentElementChange, type PaymentElementHandle, type PaymentEleme
 import { useCartPreorderCopy } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
-import { useCart } from '@/lib/cart/useCart';
 import { shopperQueries } from '@/lib/api/queries';
+import { useCart } from '@/lib/cart/useCart';
 import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
 
@@ -434,14 +434,16 @@ export function CheckoutView() {
 
   // Never an order for a cart that was not read: a skeleton while it loads, a plain error with Try again when it failed.
   if (summary.isPending) return <div aria-busy="true" data-testid="checkout-loading"><Skeleton height={420} /></div>;
-  if (summary.isError) return <CheckoutState kind="error" retrying={summary.isFetching} onRetry={() => void summary.refetch()} />;
-  if (!s) return null;
+  // 409: the cart has nothing selected to check out (the BFF's answer for an empty order); any other failure is a real error.
+  const nothingToBuy = summary.isError && isApiError(summary.error) && summary.error.status === 409;
+  if (summary.isError && !nothingToBuy) return <CheckoutState kind="error" retrying={summary.isFetching} onRetry={() => void summary.refetch()} />;
   // A cart with nothing ticked (or nothing in it) has no order: no "0 items", no total, no payment or tax.
-  if (s.packages.length === 0 && !busy) {
+  if (nothingToBuy || (s && s.packages.length === 0 && !busy)) {
     if (cart.isPending) return <div aria-busy="true" data-testid="checkout-loading"><Skeleton height={420} /></div>;
     if (cart.isError) return <CheckoutState kind="error" retrying={cart.isFetching} onRetry={() => void cart.refetch()} />;
     return <CheckoutState kind={cart.data.itemCount > 0 ? 'none-selected' : 'empty'} />;
   }
+  if (!s) return null;
 
   const addressList = addressOpen || !address;
   // The tax row is worded from the BFF's taxEstimateStatus and taxUnavailableReason, never from its label text: a known estimate

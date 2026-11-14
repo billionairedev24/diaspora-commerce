@@ -98,10 +98,11 @@ function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save
   useEffect(() => {
     let disposed = false;
     let el: StripeElement | null = null;
-    let settled = false;
+    let failed = false;
     const settle = (status: PaymentElementStatus) => {
-      if (disposed || settled) return;
-      settled = status.state !== 'loading';
+      // A failure always counts (the timeout may fire after a slow ready, loaderror after a partial mount); nothing undoes it but a new mount.
+      if (disposed || failed) return;
+      failed = status.state === 'failed';
       setLoadFailed(status.state === 'failed');
       latest.current.onStatus?.(status);
     };
@@ -117,6 +118,7 @@ function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save
         const e = s.elements(deferredIntentOptions({ amountMinor: amount, currency, save: keep, customer, paymentMethodTypes: types ? types.split(',') : undefined }));
         const payment = e.create('payment', PAYMENT_ELEMENT_OPTIONS);
         payment.on('ready', () => {
+          clearTimeout(timer);
           setReady(true);
           settle({ state: 'ready' });
         });
