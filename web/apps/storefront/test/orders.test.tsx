@@ -141,22 +141,79 @@ describe('pieces of a shipment', () => {
       </>
     );
     const [delivery, pickup] = screen.getAllByTestId('shipment-code');
-    expect(delivery).toHaveTextContent('Delivery code4821give it to the driver at the door');
+    expect(delivery).toHaveTextContent('Delivery code4821give it to the person delivering your order at the door');
     expect(pickup).toHaveTextContent('Pickup code7733show it when you collect your order');
   });
 
   it('opens the delivery proof from a plain link', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<DeliveryProofLink proof={{ method: 'CUSTOMER', recipientName: null, relationship: null, safePlace: null, photoUrl: null, signatureUrl: null, at: '2026-10-25T15:00:00Z' }} />);
+    renderWithProviders(<DeliveryProofLink proof={{ method: 'CUSTOMER', recipientName: null, relationship: null, safePlace: null, photoUrl: null, photoUrls: [], signatureUrl: null, at: '2026-10-25T15:00:00Z' }} />);
     await user.click(screen.getByRole('button', { name: 'View delivery proof' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('heading', { name: 'Proof of delivery' })).toBeInTheDocument();
     expect(within(dialog).getByText(/Handed to you/)).toBeInTheDocument();
   });
 
+  it('shows a proof by AfroTransact staff: every photo, who received it, and when', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DeliveryProofLink
+        proof={{ method: 'PHOTO', recipientName: 'Ada Obi', relationship: null, safePlace: null, photoUrl: 'https://media.example/p1', photoUrls: ['https://media.example/p1', 'https://media.example/p2'], signatureUrl: null, at: '2026-11-14T16:00:00Z' }}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'View delivery proof' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Received by Ada Obi/)).toBeInTheDocument();
+    expect(within(dialog).getAllByRole('img')).toHaveLength(2);
+    expect(within(dialog).getByText('Photo 1')).toBeInTheDocument();
+    expect(within(dialog).getByText('Photo 2')).toBeInTheDocument();
+  });
+
+  it('says only that AfroTransact delivered it when nobody was named', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <DeliveryProofLink proof={{ method: 'PHOTO', recipientName: null, relationship: null, safePlace: null, photoUrl: 'https://media.example/p1', photoUrls: ['https://media.example/p1'], signatureUrl: null, at: '2026-11-14T16:00:00Z' }} />
+    );
+    await user.click(screen.getByRole('button', { name: 'View delivery proof' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Delivered by AfroTransact/)).toBeInTheDocument();
+    expect(within(dialog).getByText('Photo from the door')).toBeInTheDocument();
+  });
+
   it('names the pickup point, its address and hours', () => {
     renderWithProviders(<PickupDetails pickup={{ id: 'pp1', name: 'Houston FC', address: '4410 Richmond Ave', hours: 'Mon–Sat 9–7', ready: 'Ready today', setBy: 'platform' }} />);
     expect(screen.getByTestId('order-pickup')).toHaveTextContent('Pick up at Houston FC');
     expect(screen.getByTestId('order-pickup')).toHaveTextContent('4410 Richmond Ave');
+  });
+});
+
+describe('honest wording per fulfilment mode (mock BFF)', () => {
+  it('says AfroTransact delivered it, with a proof link, only for an order AfroTransact delivered', async () => {
+    await signInDemo();
+    renderWithProviders(<OrderDetailView orderNumber="AT-2026-104221" />);
+    const shipment = await screen.findByTestId('shipment');
+    expect(within(shipment).getByText('Delivered by AfroTransact')).toBeInTheDocument();
+    expect(within(shipment).queryByText('Shipped by the seller')).not.toBeInTheDocument();
+  });
+
+  it('a seller-shipped order says the seller ships it, names no carrier and never shows delivery proof', async () => {
+    const api = await signInDemo();
+    const seller = await api.getProduct('AT000000P6');
+    await api.addToCart({ offerId: seller.buyBox?.offerId ?? '', quantity: 1 });
+    const sum = await api.getCheckoutSummary();
+    const conf = await api.placeOrder(
+      { addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: sum.packages[0]?.packageId ?? '', option: 'afrotransact_delivery' }] },
+      'checkout-modes-ui-1'
+    );
+    await api.confirmCheckoutPayment(conf.orderNumber);
+    const order = await api.getOrder(conf.orderNumber);
+    expect(order.shipments[0]?.fulfilmentMode).toBe('seller_ships');
+    renderWithProviders(<OrderDetailView orderNumber={conf.orderNumber} />);
+    const shipment = await screen.findByTestId('shipment');
+    expect(within(shipment).getByText('Shipped by the seller')).toBeInTheDocument();
+    expect(within(shipment).queryByText(/AfroTransact/)).not.toBeInTheDocument();
+    expect(within(shipment).queryByTestId('order-view-proof')).not.toBeInTheDocument();
+    expect(within(shipment).queryByTestId('order-tracking')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b(usps|ups|fedex|dhl)\b/i);
   });
 });

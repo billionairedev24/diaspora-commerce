@@ -529,8 +529,7 @@
   "ord.placedOn": "Placed {date}",
   "ord.soldBy": "Sold by {seller}",
   "ord.arriving": "Arriving by {date}",
-  "ord.trackingNo": "{carrier} tracking {number}",
-  "ord.codeHint": "give it to the driver at the door",
+  "ord.codeHint": "give it to the person delivering your order at the door",
   "ord.pickupCode": "Pickup code",
   "ord.codeHintPickup": "show it when you collect your order",
   "ord.summary": "Order summary",
@@ -1971,5 +1970,13 @@
   "nav.giftCards": "Gift cards",
   "nav.customerService": "Customer service",
   "nav.language": "Language",
-  "nav.deliverTo": "Deliver to {label}"
+  "nav.deliverTo": "Deliver to {label}",
+  "ord.mode.seller_ships": "Shipped by the seller",
+  "ord.mode.afrotransact": "Delivered by AfroTransact",
+  "ord.trackingNumber": "Tracking number {number}",
+  "ord.proofReceivedBy": "Received by {name}",
+  "ord.proofDeliveredByUs": "Delivered by AfroTransact",
+  "ord.proofPhotoN": "Photo {n}",
+  "ord.proofPhotoAltN": "Photo {n} taken when your order was delivered",
+  "co.prefsHint": "Where to leave it, how to hand it over and how to reach you"
 }

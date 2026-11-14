@@ -535,8 +535,7 @@
   "ord.placedOn": "تم في {date}",
   "ord.soldBy": "Sold by {seller}",
   "ord.arriving": "يصل بحلول {date}",
-  "ord.trackingNo": "تتبع {carrier} {number}",
-  "ord.codeHint": "أعطه للسائق عند الباب",
+  "ord.codeHint": "أعطه للشخص الذي يوصل طلبك عند الباب",
   "ord.pickupCode": "رمز الاستلام",
   "ord.codeHintPickup": "أظهره عند استلام طلبك",
   "ord.summary": "ملخص الطلب",
@@ -1978,5 +1977,13 @@
   "nav.giftCards": "بطاقات الهدايا",
   "nav.customerService": "خدمة العملاء",
   "nav.language": "اللغة",
-  "nav.deliverTo": "التوصيل إلى {label}"
+  "nav.deliverTo": "التوصيل إلى {label}",
+  "ord.mode.seller_ships": "يشحنه البائع",
+  "ord.mode.afrotransact": "توصيل AfroTransact",
+  "ord.trackingNumber": "رقم التتبع {number}",
+  "ord.proofReceivedBy": "استلمها {name}",
+  "ord.proofDeliveredByUs": "سلّمتها AfroTransact",
+  "ord.proofPhotoN": "الصورة {n}",
+  "ord.proofPhotoAltN": "الصورة {n} الملتقطة عند تسليم طلبك",
+  "co.prefsHint": "أين يُترك الطلب وكيف يُسلَّم وكيف يمكن الوصول إليك"
 }

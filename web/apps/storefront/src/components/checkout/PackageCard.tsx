@@ -295,7 +295,7 @@ export function PackageCard({
           <fieldset className={styles.prefsBox}>
             <legend className={styles.prefsLegend}>
               <span className={styles.prefsTitle}>{t('co.prefs')}</span>
-              <span className={styles.prefsSubtitle}>Safe place, handover instructions & driver contact</span>
+              <span className={styles.prefsSubtitle}>{t('co.prefsHint')}</span>
             </legend>
             <div className={styles.prefGrid}>
               <label className={styles.prefField}>

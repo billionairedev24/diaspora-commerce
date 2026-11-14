@@ -9,30 +9,35 @@ import { useT } from '@/i18n/t';
 
 import styles from './Orders.module.css';
 
-/** Proof of delivery: how our driver handed the parcel over, to whom, and the pictures taken at the door. */
+/** Proof of delivery, only for an order AfroTransact delivered: how it was handed over, to whom, when, and the photos taken at the door. */
 export function DeliveryProofCard({ proof }: { proof: DeliveryProof }) {
   const t = useT();
   const fmt = useFormatters();
   const how =
-    proof.method === 'CUSTOMER'
+    proof.method === 'PHOTO'
+      ? proof.recipientName
+        ? t('ord.proofReceivedBy', { name: proof.recipientName })
+        : t('ord.proofDeliveredByUs')
+      : proof.method === 'CUSTOMER'
       ? t('ord.proofCustomer')
       : proof.method === 'SOMEONE_ELSE'
         ? t('ord.proofSomeoneElse', { name: [proof.recipientName, proof.relationship ? `(${proof.relationship.toLowerCase()})` : ''].filter(Boolean).join(' ') || t('ord.proofSomeone') })
         : t('ord.proofSafePlace', { place: (proof.safePlace ?? t('ord.proofSafeDefault')).toLowerCase() });
+  const photos = proof.photoUrls.length > 0 ? proof.photoUrls : proof.photoUrl ? [proof.photoUrl] : [];
   const when = new Date(proof.at).toLocaleString(fmt.tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   return (
     <div className={styles.proof} data-testid="delivery-proof">
       <p className={styles.proofHow}>
         {how} <span className={styles.muted}>· {when}</span>
       </p>
-      {(proof.photoUrl || proof.signatureUrl) && (
+      {(photos.length > 0 || proof.signatureUrl) && (
         <div className={styles.proofPictures}>
-          {proof.photoUrl && (
-            <figure className={styles.proofFigure}>
-              <ImagePlaceholder src={proof.photoUrl} alt={t('ord.proofPhotoAlt')} ratio="4 / 3" />
-              <figcaption>{t('ord.proofPhoto')}</figcaption>
+          {photos.map((url, i) => (
+            <figure className={styles.proofFigure} key={url}>
+              <ImagePlaceholder src={url} alt={photos.length > 1 ? t('ord.proofPhotoAltN', { n: i + 1 }) : t('ord.proofPhotoAlt')} ratio="4 / 3" />
+              <figcaption>{photos.length > 1 ? t('ord.proofPhotoN', { n: i + 1 }) : t('ord.proofPhoto')}</figcaption>
             </figure>
-          )}
+          ))}
           {proof.signatureUrl && (
             <figure className={styles.proofFigure}>
               <ImagePlaceholder src={proof.signatureUrl} alt={t('ord.proofSignatureAlt')} ratio="4 / 3" />

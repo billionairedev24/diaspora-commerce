@@ -535,8 +535,7 @@
   "ord.placedOn": "A fi sílẹ̀ ní {date}",
   "ord.soldBy": "Sold by {seller}",
   "ord.arriving": "Yóò dé ní {date}",
-  "ord.trackingNo": "Ìtọpinpin {carrier} {number}",
-  "ord.codeHint": "fún awakọ̀ ní ẹnu ọ̀nà",
+  "ord.codeHint": "fi lé ẹni tó ń gbé ìbéèrè rẹ wá fún ọ ní ẹnu ọ̀nà",
   "ord.pickupCode": "Kóòdù gbígbà",
   "ord.codeHintPickup": "fi hàn nígbà tí o bá ń gba àṣẹ rẹ",
   "ord.summary": "Àkópọ̀ ìbéèrè",
@@ -1978,5 +1977,13 @@
   "nav.giftCards": "Káàdì ẹ̀bùn",
   "nav.customerService": "Iṣẹ́ oníbàárà",
   "nav.language": "Èdè",
-  "nav.deliverTo": "Fi ranṣẹ́ sí {label}"
+  "nav.deliverTo": "Fi ranṣẹ́ sí {label}",
+  "ord.mode.seller_ships": "Olùtà ló ń fi ránṣẹ́",
+  "ord.mode.afrotransact": "AfroTransact ló ń fi jíṣẹ́",
+  "ord.trackingNumber": "Nọ́mbà ìtọpinpin {number}",
+  "ord.proofReceivedBy": "{name} ló gbà á",
+  "ord.proofDeliveredByUs": "AfroTransact ló fi jíṣẹ́",
+  "ord.proofPhotoN": "Fọ́tò {n}",
+  "ord.proofPhotoAltN": "Fọ́tò {n} tí a yà nígbà tí a fi ìbéèrè rẹ jíṣẹ́",
+  "co.prefsHint": "Ibi tí a ó fi sílẹ̀, bí a ó ṣe fi lé ọ lọ́wọ́ àti bí a ṣe lè kàn sí ọ"
 }

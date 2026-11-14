@@ -1,6 +1,6 @@
 'use client';
 
-import { isApiError, type OrderDetail } from '@afrotransact/api-client';
+import { deliveredByAfroTransact, isApiError, type OrderDetail } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { DataTable, DefinitionList, FlatPage, Message, Section, Skeleton, StatusText, Truck } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AccountHeader } from '@/components/account/AccountHeader';
 import { benefitName } from '@/components/membership/memberText';
 import { RateItemButton } from '@/components/reviews/ReviewSheet';
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
@@ -18,6 +18,23 @@ import styles from './Orders.module.css';
 import { PickupDetails } from './PickupDetails';
 
 type Shipment = OrderDetail['shipments'][number];
+
+/**
+ * What the badge says. AfroTransact is named only when AfroTransact delivers it (Fulfilled by AfroTransact, or the seller opted
+ * into delivery by AfroTransact); a seller-shipped order says the seller ships it. Never a carrier's name.
+ */
+function modeKey(s: Shipment): MessageKey {
+  switch (s.fulfilmentMode) {
+    case 'seller_ships':
+      return 'ord.mode.seller_ships';
+    case 'afrotransact_delivery':
+    case 'fulfilled_by_afrotransact':
+    case 'preorder_run':
+      return 'ord.mode.afrotransact';
+    case 'pickup':
+      return 'ord.method.pickup';
+  }
+}
 
 /** One delivery: where it stands, who sells it, how to follow it and the code to give, what is in it, and the actions. */
 function ShipmentSection({ order, shipment: s, cancel }: { order: OrderDetail; shipment: Shipment; cancel: ReturnType<typeof useCancelShipment> }) {
@@ -33,7 +50,7 @@ function ShipmentSection({ order, shipment: s, cancel }: { order: OrderDetail; s
       id={s.shipmentId}
       testId="shipment"
       title={s.label}
-      action={<StatusText tone="neutral">{t(`ord.method.${s.deliveryMethod}`)}</StatusText>}
+      action={<StatusText tone="neutral">{t(modeKey(s))}</StatusText>}
     >
       <div className={styles.shipment}>
         <div className={styles.shipMain}>
@@ -52,13 +69,13 @@ function ShipmentSection({ order, shipment: s, cancel }: { order: OrderDetail; s
             </p>
           )}
           {s.pickup && <PickupDetails pickup={s.pickup} />}
-          {!cancelled && s.carrier && s.trackingNumber && (
+          {!cancelled && s.trackingNumber && (
             <p className={styles.tracking} data-testid="order-tracking">
-              <Truck aria-hidden /> {t('ord.trackingNo', { carrier: s.carrier.toUpperCase(), number: s.trackingNumber })}
+              <Truck aria-hidden /> {t('ord.trackingNumber', { number: s.trackingNumber })}
             </p>
           )}
           {!cancelled && s.deliveryCode && <ShipmentCode code={s.deliveryCode} pickup={pickup} />}
-          {s.proof && (
+          {s.proof && deliveredByAfroTransact(s.fulfilmentMode) && (
             <p>
               <DeliveryProofLink proof={s.proof} />
             </p>
