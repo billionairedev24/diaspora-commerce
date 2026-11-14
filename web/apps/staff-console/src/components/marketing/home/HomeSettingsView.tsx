@@ -145,7 +145,10 @@ function SettingsForm({ settings, departments, departmentNames }: { settings: Ho
           <span className="text-muted">{t('st.home.status.version', { n: settings.version })}</span>
         </div>
         <fieldset disabled={!canEdit} className="m-0 max-w-md border-0 p-0">
-          <Select label={t('st.home.mode.label')} help={t('st.home.mode.help')} options={modeOptions} value={draft.dynamic ?? ''} onChange={(e) => setDraft((d) => ({ ...d, dynamic: (e.currentTarget.value || null) as HomeDynamicMode | null }))} />
+          <Select label={t('st.home.mode.label')} help={t('st.home.mode.help')} options={modeOptions} value={draft.dynamic ?? ''} onChange={(e) => {
+            const dynamic = (e.currentTarget.value || null) as HomeDynamicMode | null;
+            setDraft((d) => ({ ...d, dynamic }));
+          }} />
         </fieldset>
       </Card>
 

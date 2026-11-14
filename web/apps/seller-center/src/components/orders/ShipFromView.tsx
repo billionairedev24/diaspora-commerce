@@ -218,7 +218,10 @@ function AddressDialog({ open, address, onClose }: { open: boolean; address: Shi
     save.mutate({ ...form, ...parsed.data });
   };
   const field = (k: keyof AddressForm, label: string, extra: { autoComplete?: string; inputMode?: 'numeric' } = {}) => (
-    <TextField id={`sfa-${k}`} label={label} value={form[k]} error={errors[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.currentTarget.value }))} {...extra} />
+    <TextField id={`sfa-${k}`} label={label} value={form[k]} error={errors[k]} onChange={(e) => {
+        const value = e.currentTarget.value; // read now: React clears currentTarget before a state updater runs
+        setForm((f) => ({ ...f, [k]: value }));
+      }} {...extra} />
   );
   return (
     <Sheet width={520} open={open} onOpenChange={(o) => (o ? undefined : onClose())} title={address ? t('sc.shipFrom.editTitle', { label: address.label }) : t('sc.shipFrom.addTitle')}>

@@ -348,7 +348,10 @@ export function TypeEditor({ type, canEdit, onSaved }: { type: TaxonomyProductTy
           maxLength={80}
           disabled={disabled}
           error={changes.includes('label') ? labelError : undefined}
-          onChange={(e) => setDraft((d) => ({ ...d, label: e.currentTarget.value }))}
+          onChange={(e) => {
+            const label = e.currentTarget.value;
+            setDraft((d) => ({ ...d, label }));
+          }}
         />
         <Select
           id="type-identifier"
@@ -359,7 +362,10 @@ export function TypeEditor({ type, canEdit, onSaved }: { type: TaxonomyProductTy
           ]}
           value={draft.identifierRule}
           disabled={disabled}
-          onChange={(e) => setDraft((d) => ({ ...d, identifierRule: e.currentTarget.value as TypeDraft['identifierRule'] }))}
+          onChange={(e) => {
+            const identifierRule = e.currentTarget.value as TypeDraft['identifierRule'];
+            setDraft((d) => ({ ...d, identifierRule }));
+          }}
         />
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
           <legend className="mb-1 text-sm font-semibold">{t('st.catalog.type.traits')}</legend>
@@ -370,7 +376,10 @@ export function TypeEditor({ type, canEdit, onSaved }: { type: TaxonomyProductTy
               description={t(tr.help)}
               checked={draft.traits[tr.key]}
               disabled={disabled}
-              onChange={(e) => setDraft((d) => ({ ...d, traits: withTrait(d.traits, tr.key, e.currentTarget.checked) }))}
+              onChange={(e) => {
+                const on = e.currentTarget.checked;
+                setDraft((d) => ({ ...d, traits: withTrait(d.traits, tr.key, on) }));
+              }}
             />
           ))}
           {serverErrors.traits ? <span className="text-xs text-danger">{serverErrors.traits}</span> : null}

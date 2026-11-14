@@ -4,6 +4,7 @@ import { getTelemetry, noopTelemetry, resolveTelemetryConfig, scrubEvent, scrubS
 import { initNativeTelemetry, type NativeSentryLike } from '../src/native';
 import { sourceMapUploadEnabled } from '../src/next/config';
 import { createOtlpWebExporter } from '../src/otlp';
+import { componentFromStack } from '../src/react';
 import { sentryTelemetry } from '../src/sdk';
 
 describe('resolveTelemetryConfig', () => {
@@ -135,5 +136,14 @@ describe('OTLP web exporter', () => {
     expect(span?.traceId).toMatch(/^[0-9a-f]{32}$/);
     expect(span?.attributes.find((a) => a.key === 'web_vital.lcp')?.value).toEqual({ intValue: 1300 });
     expect(body.resourceSpans[0]?.resource.attributes.map((a) => a.key)).toContain('service.version');
+  });
+});
+
+describe('componentFromStack', () => {
+  it('names the component that threw, skipping React internals', () => {
+    const stack = "TypeError: Cannot read properties of null (reading 'value')\n    at basicStateReducer (react-dom.js:1:1)\n    at Object.useState (react-dom.js:2:2)\n    at AddressDialog (ShipFromView.tsx:198:27)\n    at renderWithHooks (x.js:1:1)";
+    expect(componentFromStack(stack)).toBe('AddressDialog');
+    expect(componentFromStack(undefined)).toBeUndefined();
+    expect(componentFromStack('Error: x')).toBeUndefined();
   });
 });

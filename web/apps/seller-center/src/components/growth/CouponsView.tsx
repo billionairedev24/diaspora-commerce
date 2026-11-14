@@ -203,7 +203,10 @@ export function CouponsView() {
               label={t('sc.coupons.code')}
               placeholder="SUMMER20, AFRO10, FREESHIP"
               value={draft.code}
-              onChange={(e) => setDraft((d) => ({ ...d, code: e.target.value }))}
+              onChange={(e) => {
+                const code = e.target.value;
+                setDraft((d) => ({ ...d, code }));
+              }}
               required
               autoComplete="off"
             />
@@ -211,12 +214,18 @@ export function CouponsView() {
               label={t('sc.coupons.description')}
               placeholder="e.g. 10% off storewide for the festive season"
               value={draft.description ?? ''}
-              onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+              onChange={(e) => {
+                const description = e.target.value;
+                setDraft((d) => ({ ...d, description }));
+              }}
             />
             <Select
               label={t('sc.coupons.type')}
               value={draft.type}
-              onChange={(e) => setDraft((d) => ({ ...d, type: e.target.value as CreateSellerCoupon['type'] }))}
+              onChange={(e) => {
+                const type = e.target.value as CreateSellerCoupon['type'];
+                setDraft((d) => ({ ...d, type }));
+              }}
               options={[
                 { value: 'PERCENT', label: t('sc.coupons.typePercent') },
                 { value: 'FIXED', label: t('sc.coupons.typeFixed') },
@@ -228,7 +237,10 @@ export function CouponsView() {
                 label={draft.type === 'PERCENT' ? t('sc.coupons.percent') : t('sc.coupons.amountCents')}
                 type="number"
                 value={String(draft.value)}
-                onChange={(e) => setDraft((d) => ({ ...d, value: Number(e.target.value) }))}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  setDraft((d) => ({ ...d, value }));
+                }}
                 required
               />
             ) : null}

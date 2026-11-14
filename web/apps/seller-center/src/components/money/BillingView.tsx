@@ -428,7 +428,10 @@ function AddPaymentMethodDialog({ open, onClose, t }: { open: boolean; onClose: 
             </p>
             <div className="grid grid-cols-1 gap-x-4 md:grid-cols-3">
               <TextField className="md:col-span-2" label={t('sc.billing.add.cardNumber')} inputMode="numeric" autoComplete="cc-number" maxLength={23} value={local.number}
-                onChange={(e) => setLocal((l) => ({ ...l, number: e.target.value.replace(/[^\d ]/g, '') }))} />
+                onChange={(e) => {
+                  const number = e.target.value.replace(/[^\d ]/g, '');
+                  setLocal((l) => ({ ...l, number }));
+                }} />
               <TextField label={t('sc.billing.add.expiry')} placeholder="MM/YY" autoComplete="cc-exp" maxLength={5} value={local.exp}
                 onChange={(e) => {
                   const d = e.target.value.replace(/\D/g, '').slice(0, 4);
