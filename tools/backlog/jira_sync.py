@@ -8,7 +8,7 @@ Credentials come only from a file (default ~/.jira.env, never committed, never p
     JIRA_BASE_URL=https://your-site.atlassian.net
     JIRA_EMAIL=you@example.com
     JIRA_API_TOKEN=...            (https://id.atlassian.com/manage-profile/security/api-tokens)
-    JIRA_PROJECT_KEY=AT
+    JIRA_PROJECT_KEY=AT            (created as a company-managed Scrum project if it does not exist)
 
 Usage:
     python3 tools/backlog/jira_sync.py --dry-run            # no network; writes a preview next to the map
@@ -269,11 +269,33 @@ def load_env(path):
     return env
 
 
+PROJECT_NAME = "AfroTransact"
+# Company-managed Scrum: custom fields (story points, acceptance criteria) and workflows behave predictably.
+SCRUM_TEMPLATE = "com.pyxis.greenhopper.jira:gh-simplified-scrum-classic"
+
+
+def ensure_project(jira, key, name=None):
+    """Return the project, creating a company-managed Scrum project led by the token's owner if it does not exist.
+    Creating needs the Jira 'Administer Jira' global permission (site admins have it)."""
+    try:
+        return jira.call("GET", "/rest/api/3/project/" + key)
+    except RuntimeError as e:
+        if "-> 404" not in str(e):
+            raise
+    me = jira.call("GET", "/rest/api/3/myself")
+    print("project %s not found; creating '%s' (company-managed Scrum, lead: the token owner)" % (key, name or PROJECT_NAME))
+    jira.call("POST", "/rest/api/3/project", {
+        "key": key, "name": name or PROJECT_NAME, "projectTypeKey": "software",
+        "projectTemplateKey": SCRUM_TEMPLATE, "leadAccountId": me["accountId"], "assigneeType": "UNASSIGNED",
+        "description": "AfroTransact v2 marketplace backlog, synced from docs/backlog/backlog.csv"})
+    return jira.call("GET", "/rest/api/3/project/" + key)
+
+
 class Sync:
     def __init__(self, jira, key):
         self.j, self.key = jira, key
         self.map = json.load(open(MAP_PATH)) if os.path.exists(MAP_PATH) else {}
-        project = jira.call("GET", "/rest/api/3/project/" + key)
+        project = ensure_project(jira, key)
         self.project_id = project["id"]
         self.types = {t["name"].lower(): t for t in
                       jira.call("GET", "/rest/api/3/issue/createmeta/%s/issuetypes?maxResults=50" % key).get("issueTypes", [])}
