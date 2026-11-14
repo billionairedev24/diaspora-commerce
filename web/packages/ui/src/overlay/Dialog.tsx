@@ -66,7 +66,8 @@ export interface SheetProps extends Omit<DialogProps, 'width'> {
    * Modal sheets dim and block the page (focus trap, outside click closes). Default: only left sheets (the mobile
    * navigation menu) are modal. Right sheets (record details, forms) sit below the sticky header without an overlay and
    * leave the page usable, but a click anywhere outside them closes them, so a sheet is never left open behind
-   * another action. Esc or the close button closes them too.
+   * another action. A click on a link (the sidebar) navigates instead and the new page unmounts the sheet. Esc or the
+   * close button closes them too.
    */
   modal?: boolean;
   /** An assistant that stays beside the page while it is used (Lola): a click outside does not close it. */
@@ -82,8 +83,15 @@ const keepOpen = (e: Event) => e.preventDefault();
  * of the sheet: that is not "outside" for the sheet, so clicking in it must not close the sheet behind it.
  */
 const inAnotherLayer = (e: Event) => e.target instanceof Element && e.target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]') !== null;
+/**
+ * Whether an interaction landed on a link (the sidebar, the header, a link in the page): that click is about to navigate.
+ * The sheet must not close itself on the pointer-down of it: closing writes the page's URL (`router.replace`), and that
+ * write raced the link's own navigation and won, so the click did nothing and the sheet seemed to block the menu. The
+ * navigation unmounts the sheet (or, on the same page, drops the sheet's query parameter), which is the close.
+ */
+const onNavigation = (e: Event) => e.target instanceof Element && e.target.closest('a[href], [data-sheet-keep-open]') !== null;
 const closeOnOutsideClick = (e: Event) => {
-  if (inAnotherLayer(e)) e.preventDefault();
+  if (inAnotherLayer(e) || onNavigation(e)) e.preventDefault();
 };
 
 /** Side sheet / drawer (record details, Lola, mobile navigation). */

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef } from 'react';
 
 import { ErrorState } from '@/components/ui/States';
 import { staffApi } from '@/lib/api';
+import { useSheetUrl } from '@/lib/use-sheet-url';
 
 import { GatePill, mono } from './shared';
 import { TaxProfileSheet } from './TaxProfileSheet';
@@ -28,11 +29,13 @@ export function TaxProfilesPanel() {
   const state = useTableState({ searchParams: params, prefix: PREFIX });
   const department = params.get(`${PREFIX}.department`) ?? '';
   const status = params.get(`${PREFIX}.status`) ?? '';
-  const openCode = params.get('profile');
+  const sheet = useSheetUrl('profile', ['do']);
+  const openCode = sheet.value;
   const action = params.get('do');
 
   const go = (change: (p: URLSearchParams) => void) => {
-    const next = new URLSearchParams(params.toString());
+    if (window.location.pathname !== pathname) return;
+    const next = new URLSearchParams(window.location.search);
     change(next);
     const qs = next.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -62,12 +65,7 @@ export function TaxProfilesPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- resetPaging is recreated each render; only the search matters
   }, [state.q]);
 
-  const open = (code: string, doAction?: string) =>
-    go((p) => {
-      p.set('profile', code);
-      if (doAction) p.set('do', doAction);
-      else p.delete('do');
-    });
+  const open = (code: string, doAction?: string) => sheet.open(code, { do: doAction ?? null });
 
   const columns = useMemo<ColumnDef<TaxProfileRow>[]>(
     () => [
@@ -151,7 +149,7 @@ export function TaxProfilesPanel() {
         activeRowId={openCode}
         empty="No category matches these filters."
       />
-      <TaxProfileSheet code={openCode} action={action} onClose={() => go((p) => (p.delete('profile'), p.delete('do')))} onAction={(a) => go((p) => (a ? p.set('do', a) : p.delete('do')))} />
+      <TaxProfileSheet code={openCode} action={action} onClose={sheet.close} onAction={(a) => sheet.update({ do: a })} />
     </div>
   );
 }

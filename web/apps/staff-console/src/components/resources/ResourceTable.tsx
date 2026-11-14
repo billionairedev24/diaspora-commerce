@@ -16,6 +16,7 @@ import { ErrorState, problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
+import { useSheetUrl } from '@/lib/use-sheet-url';
 
 import { BulkActions } from './BulkActions';
 import { Cell, columnLabel, DeviceCell } from './cells';
@@ -38,7 +39,8 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false, defau
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const openId = params.get('open');
+  const sheet = useSheetUrl('open', ['do']);
+  const openId = sheet.value;
   const state = useTableState({ searchParams: params, prefix: urlPrefix });
   const [creating, setCreating] = useState(false);
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
@@ -65,13 +67,7 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false, defau
   });
   const data = query.data;
 
-  const setOpen = (id: string | null) => {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set('open', id);
-    else next.delete('open');
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  };
+  const setOpen = (id: string | null) => (id ? sheet.open(id) : sheet.close());
 
   const create = useMutation({
     mutationFn: (values: Record<string, FieldValue>) => api.createRecord(resource, values, idempotencyKey()),
@@ -91,18 +87,9 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false, defau
   });
 
   /** Opens the record's sheet with one of its actions already started (the row menu's entry): ?open=<id>&do=<action>. */
-  const openWithAction = (id: string, action: string) => {
-    const next = new URLSearchParams(params.toString());
-    next.set('open', id);
-    next.set('do', action);
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
-  };
+  const openWithAction = (id: string, action: string) => sheet.open(id, { do: action });
   const clearAction = () => {
-    if (!params.has('do')) return;
-    const next = new URLSearchParams(params.toString());
-    next.delete('do');
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    if (params.has('do')) sheet.update({ do: null });
   };
   const hasRowActions = (data?.rows ?? []).some((r) => (r.actions?.length ?? 0) > 0);
 

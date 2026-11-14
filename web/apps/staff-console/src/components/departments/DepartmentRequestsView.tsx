@@ -13,6 +13,7 @@ import { ErrorState, NoAccess } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { type MessageKey, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
+import { useSheetUrl } from '@/lib/use-sheet-url';
 import { shortDate } from '@/lib/format';
 import { useStaff } from '@/lib/session';
 import { useDebounced } from '@/lib/use-debounced';
@@ -39,10 +40,12 @@ function Loaded() {
   const pathname = usePathname();
   const params = useSearchParams();
   const tab: Tab = params.get('tab') === 'decided' ? 'decided' : 'pending';
-  const openId = params.get('open');
+  const sheet = useSheetUrl('open');
+  const openId = sheet.value;
   const count = useQuery(staffDepartmentQueries.requests(api.departments, { status: 'PENDING', size: 1 }));
   const go = (change: (p: URLSearchParams) => void) => {
-    const next = new URLSearchParams(params.toString());
+    if (window.location.pathname !== pathname) return;
+    const next = new URLSearchParams(window.location.search);
     change(next);
     const qs = next.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -60,11 +63,11 @@ function Loaded() {
           })
         }
         items={[
-          { value: 'pending', label: pending ? t('st.depts.tab.pendingCount', { count: String(pending) }) : t('st.depts.tab.pending'), content: <RequestsTable tab="pending" openId={openId} onOpen={(id) => go((p) => (id ? p.set('open', id) : p.delete('open')))} /> },
-          { value: 'decided', label: t('st.depts.tab.decided'), content: <RequestsTable tab="decided" openId={openId} onOpen={(id) => go((p) => (id ? p.set('open', id) : p.delete('open')))} /> }
+          { value: 'pending', label: pending ? t('st.depts.tab.pendingCount', { count: String(pending) }) : t('st.depts.tab.pending'), content: <RequestsTable tab="pending" openId={openId} onOpen={(id) => (id ? sheet.open(id) : sheet.close())} /> },
+          { value: 'decided', label: t('st.depts.tab.decided'), content: <RequestsTable tab="decided" openId={openId} onOpen={(id) => (id ? sheet.open(id) : sheet.close())} /> }
         ]}
       />
-      <DepartmentRequestSheet id={openId} onClose={() => go((p) => p.delete('open'))} />
+      <DepartmentRequestSheet id={openId} onClose={sheet.close} />
     </ModulePage>
   );
 }

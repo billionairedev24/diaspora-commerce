@@ -60,11 +60,11 @@
 }
 
 .sheet:focus { outline: none; }
-.right { right: 0; width: min(820px, 100%); }
+.right { inset-inline-end: 0; width: min(820px, max(560px, 52vw), 100%); }
 /* Non-modal sheets start below the app's sticky header (each shell publishes --at-sticky-header-h) and use a border
    instead of the overlay to separate them from the page. */
 .docked { top: var(--at-sticky-header-h, 0px); border-inline-start: 1px solid var(--at-color-border); }
-.left { left: 0; }
+.left { inset-inline-start: 0; }
 .sheetHead { display: flex; align-items: center; gap: var(--at-space-3); padding: var(--at-space-3) var(--at-space-4); background: var(--at-color-header-bg); color: var(--at-color-header-text); }
 @media (hover: hover) {
   .sheetHead .close:hover { background: var(--at-color-header-hover-bg); }

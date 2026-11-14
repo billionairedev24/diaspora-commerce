@@ -12,6 +12,7 @@ import { ErrorState } from '@/components/ui/States';
 import { EN_MESSAGES, type MessageKey, type Translator, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { shortDate } from '@/lib/format';
+import { useSheetUrl } from '@/lib/use-sheet-url';
 
 import { SellerFilter } from './SellerFilter';
 import { RecordPill } from './shared';
@@ -59,13 +60,16 @@ export function TaxReviewPanel() {
   const sellerName = params.get('review.sellerName') ?? ANY;
   // Asking for a reason looks in every state (a missing answer or an audit sample is not "pending review"), unless a state was chosen.
   const status = decided ? (params.get('review.status') ?? 'APPROVED') : audit ? TAX_AUDIT_SAMPLE : (params.get('review.status') ?? (reason ? 'ALL' : 'PENDING_REVIEW'));
-  const openAtin = params.get('variant');
+  const sheet = useSheetUrl('variant', ['do']);
+  const openAtin = sheet.value;
   const action = params.get('do');
   const state = useTableState({ searchParams: params, prefix: `review-${view}` });
   const filtered = Boolean(state.q || reason || category || sellerId || (!audit && status !== (decided ? 'APPROVED' : 'PENDING_REVIEW')));
 
   const go = (change: (p: URLSearchParams) => void) => {
-    const next = new URLSearchParams(params.toString());
+    // The address as it is now (not the render's copy), and never after the page was left.
+    if (window.location.pathname !== pathname) return;
+    const next = new URLSearchParams(window.location.search);
     change(next);
     const qs = next.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -76,12 +80,7 @@ export function TaxReviewPanel() {
       change(p);
       p.delete(`review-${view}.page`);
     });
-  const open = (atin: string, doAction?: string) =>
-    go((p) => {
-      p.set('variant', atin);
-      if (doAction) p.set('do', doAction);
-      else p.delete('do');
-    });
+  const open = (atin: string, doAction?: string) => sheet.open(atin, { do: doAction ?? null });
   const setParam = (name: string, value: string) => (p: URLSearchParams) => (value ? p.set(name, value) : p.delete(name));
 
   const query = useQuery({
@@ -365,7 +364,7 @@ export function TaxReviewPanel() {
           empty={filtered ? t('st.tax.review.noMatches') : t(decided ? 'st.tax.review.empty.decisions' : audit ? 'st.tax.review.empty.audit' : 'st.tax.review.empty.queue')}
         />
       )}
-      <TaxReviewSheet atin={openAtin} action={action} onClose={() => go((p) => (p.delete('variant'), p.delete('do')))} onAction={(a) => go((p) => (a ? p.set('do', a) : p.delete('do')))} />
+      <TaxReviewSheet atin={openAtin} action={action} onClose={sheet.close} onAction={(a) => sheet.update({ do: a })} />
     </div>
   );
 }
