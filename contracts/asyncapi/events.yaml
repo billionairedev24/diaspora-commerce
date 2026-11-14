@@ -657,6 +657,12 @@ channels:
         $ref: '#/components/messages/ordersShipmentDelivered'
       ordersShipmentCancelled:
         $ref: '#/components/messages/ordersShipmentCancelled'
+      ordersDeliveryAssigned:
+        $ref: '#/components/messages/ordersDeliveryAssigned'
+      ordersDeliveryProofAttached:
+        $ref: '#/components/messages/ordersDeliveryProofAttached'
+      ordersDeliveryProofCorrected:
+        $ref: '#/components/messages/ordersDeliveryProofCorrected'
       ordersPreorderDeliveryMissed:
         $ref: '#/components/messages/ordersPreorderDeliveryMissed'
       ordersPreorderMissedDeliveryAnswered:
@@ -2328,6 +2334,28 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/OrdersShipmentCancelled'
+    ordersDeliveryAssigned:
+      name: orders.delivery.assigned
+      title: Staff took an AfroTransact delivery or assigned it to a named staff courier (Delivery desk)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryAssigned'
+    ordersDeliveryProofAttached:
+      name: orders.delivery.proof_attached
+      title: Delivery proof (photos in the private media bucket, optional recipient and note) was recorded; the status change
+        to delivered follows as orders.shipment.delivered
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryProof'
+    ordersDeliveryProofCorrected:
+      name: orders.delivery.proof_corrected
+      title: An admin corrected the delivery proof (audited; the original stays in the delivery audit trail)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersDeliveryProof'
     ordersPreorderDeliveryMissed:
       name: orders.preorder.delivery_missed
       title: 'A pre-order package was not delivered on the window''s date; the customer chooses a refund or the new date (the
@@ -9059,6 +9087,7 @@ components:
                 type: string
                 enum:
                 - CARRIER
+                - SELLER_SHIPS
                 - AFROTRANSACT_DELIVERY
                 - PICKUP
               serviceLevel:
@@ -9368,6 +9397,7 @@ components:
           type: string
           enum:
           - CARRIER
+          - SELLER_SHIPS
           - AFROTRANSACT_DELIVERY
           - PICKUP
         from:
@@ -9383,6 +9413,7 @@ components:
           - FULFILMENT_OPS
           - CARRIER
           - COURIER
+          - DELIVERY_STAFF
           - PICKUP_POINT
           - SYSTEM
         actorId:
@@ -9428,6 +9459,84 @@ components:
           description: 'S279: the shipment''s items (emails)'
           items:
             $ref: '#/components/schemas/OrdersShipmentItem'
+    OrdersDeliveryAssigned:
+      type: object
+      required:
+      - orderId
+      - orderNumber
+      - shipmentId
+      - assigneeId
+      - assigneeName
+      - assignedById
+      - at
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+        assigneeName:
+          type: string
+        assignedById:
+          type: string
+        at:
+          type: string
+          format: date-time
+    OrdersDeliveryProof:
+      type: object
+      description: Counts and flags only; the photos, the recipient's name and the note are never put on the bus (read them
+        from orders-service with the delivery:read permission).
+      required:
+      - orderId
+      - orderNumber
+      - customerId
+      - shipmentId
+      - sellerOrgId
+      - photoCount
+      - recipientNamed
+      - hasPosition
+      - deliveredAt
+      - corrections
+      - recordedById
+      - at
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        sellerOrgId:
+          type: string
+        photoCount:
+          type: integer
+          minimum: 1
+          maximum: 5
+        recipientNamed:
+          type: boolean
+        hasPosition:
+          type: boolean
+          description: true only when the device supplied coordinates
+        deliveredAt:
+          type: string
+          format: date-time
+        corrections:
+          type: integer
+          minimum: 0
+        recordedById:
+          type: string
+        at:
+          type: string
+          format: date-time
     OrdersShipmentDelivered:
       type: object
       required:
@@ -13321,7 +13430,10 @@ operations:
       map them to templates (order confirmation, shipped, out for delivery, delivered, cancelled), payments and finance follow
       deliveries and cancellations, the indexer keeps sales stats, tax-returns reads delivered lines for RMAs. Pre-orders
       (S270–S275): an orders.order.placed with a PREORDER shipment sends preorder.confirmed ("You''re in"); orders.preorder.delivery_missed
-      sends preorder.delivery_missed (refund / new date links). S272 pre-orders: orders.order.placed carries the attribution
+      sends preorder.delivery_missed (refund / new date links). Delivery desk: orders.delivery.assigned / proof_attached /
+      proof_corrected carry the AfroTransact-delivered (staff) flow; customer notifications still come from orders.shipment.status_changed
+      (out_for_delivery) and orders.shipment.delivered, and are only sent for the mode that really applies (seller-shipped
+      packages say who shipped them, never that AfroTransact delivers). S272 pre-orders: orders.order.placed carries the attribution
       {src, cr, po}, channel, tags and per shipment the pre-order window and fulfilment (delivery-runs projects window orders
       from it); a scheduler publishes orders.preorder.delivery_missed when a PREORDER shipment passes its delivery date undelivered
       (notifications sends preorder.delivery_missed with refund / new-date links) and the customer''s answer as orders.preorder.missed_delivery_answered;
