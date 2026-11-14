@@ -31,7 +31,8 @@ func TestAccentContrastIsEnforcedPerPreset(t *testing.T) {
 		{PresetClean, "#777777", false}, // 4.48:1
 		{PresetMidnight, "#ffd400", true},
 		{PresetMidnight, "#1a7f4b", false}, // dark green on near-black
-		{PresetWarmMarket, "#b45309", true},
+		{PresetWarmMarket, "#aa4f09", true},
+		{PresetWarmMarket, "#c2610f", false}, // fine on the canvas, too light on the raised surface
 	}
 	for _, c := range cases {
 		cfg := validConfig()

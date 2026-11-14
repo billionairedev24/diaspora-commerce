@@ -24,8 +24,9 @@ const (
 	PresetFresh      = "fresh"
 )
 
-// presetCanvas is the page background of each preset (the colour an accent is read against). It mirrors the palettes in
-// web/packages/tokens/src/storefront-theme.ts; a test in the tokens package fails when the two drift apart.
+// presetCanvas and presetSurface are the backgrounds of each preset (what an accent is read against: the page, and the
+// raised areas). They mirror the palettes in web/packages/tokens/src/storefront-theme.ts; a test in the tokens package
+// fails when the two drift apart.
 var presetCanvas = map[string]string{
 	PresetClean:      "#ffffff",
 	PresetWarmMarket: "#fffaf2",
@@ -33,6 +34,15 @@ var presetCanvas = map[string]string{
 	PresetMidnight:   "#0f1115",
 	PresetHeritage:   "#fbf7ef",
 	PresetFresh:      "#f6faf7",
+}
+
+var presetSurface = map[string]string{
+	PresetClean:      "#f6f4ef",
+	PresetWarmMarket: "#f7ecda",
+	PresetBold:       "#f0f0f0",
+	PresetMidnight:   "#1a1e26",
+	PresetHeritage:   "#f1e8d6",
+	PresetFresh:      "#e6f1ea",
 }
 
 // Sections a seller can order and switch (the header, hero and All products are always there).
@@ -295,10 +305,10 @@ func Contrast(a, b string) float64 {
 }
 
 // AccentOK reports whether an accent can be used on the preset: it must read as text at WCAG AA (4.5:1) on the preset's
-// canvas. The text on top of it (buttons) is computed by the page, so that side can never fail.
+// canvas and on its raised surface. The text on top of it (buttons) is computed by the page, so that side can never fail.
 func AccentOK(preset, accent string) bool {
 	canvas, ok := presetCanvas[preset]
-	return ok && hexColour.MatchString(accent) && Contrast(accent, canvas) >= 4.5
+	return ok && hexColour.MatchString(accent) && Contrast(accent, canvas) >= 4.5 && Contrast(accent, presetSurface[preset]) >= 4.5
 }
 
 // ValidateStoreConfig checks and cleans a config a seller sent. The returned map is empty when it is valid; keys are

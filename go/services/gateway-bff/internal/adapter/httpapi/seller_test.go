@@ -448,7 +448,7 @@ func TestSellerContractConformance(t *testing.T) {
 	cfg := sp.json(t)["draft"].(map[string]any)
 	cfg["hero"].(map[string]any)["tagline"] = "Jollof and more"
 	cfg["hero"].(map[string]any)["bannerUrl"] = "https://img.afrotransact.dev/storefront/banner.webp"
-	cfg["theme"] = map[string]any{"preset": "warm-market", "accent": "#b45309"}
+	cfg["theme"] = map[string]any{"preset": "warm-market", "accent": "#aa4f09"}
 	bad := b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": withAccent(cfg, "#ffd400")})
 	if bad.status != 422 || bad.json(t)["code"] != "STORE_ACCENT_LOW_CONTRAST" || bad.json(t)["errors"].(map[string]any)["theme.accent"] == nil {
 		t.Fatalf("low contrast accent = %d %s", bad.status, bad.body)
