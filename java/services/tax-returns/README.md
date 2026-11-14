@@ -86,7 +86,7 @@ amount of a line's items and / or shipping; tax follows proportionally.
 
 `TaxCalculator` port; the default adapter `RulesTaxCalculator` runs the domain `DefaultTaxRules` over the rate table
 (no external calls). `at.taxreturns.tax.provider` is the default method until staff choose in Settings: `RULES`, `STRIPE_TAX`
-or `AVALARA` (a skeleton adapter); `TAXJAR` is reserved (startup fails if selected without its adapter). **What is taxed is decided
+or `AVALARA` (AvaTax REST v2; see docs/engineering/tax-shadow-mode.md); `TAXJAR` is reserved (startup fails if selected without its adapter). **What is taxed is decided
 by the stored classification decision of the variant ATIN, see "Category tax engine" below**; this section is about the rate.
 
 - **Rate** = state rate for the line's category (`GENERAL`, `GROCERY` — reduced or exempt, `PREPARED_FOOD`) + local

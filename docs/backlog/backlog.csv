@@ -1837,3 +1837,10 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Every control in a row shares height and vertical centre within 1px at 1280 and 390 (Playwright measurement); Locations and Shipping & delivery checked
 - Driver pickup uses the same weekly list
 - Unit and Playwright tests, before/after screenshots, docs and five locales (fr, es, ar, yo machine drafts marked for review)","E24","","High","5","seller-center settings pickup a11y i18n","seller-center","Done"
+"S448","Story","Shadow mode compares every configured tax provider with our rules, with a real AvaTax adapter","Shadow mode used to ask one provider and the Avalara adapter was a skeleton, so the Shadow report showed 'The provider did not answer' with no provider or cause. Shadow now asks every configured non-charging provider (Stripe Tax and Avalara) per line, records one row per provider, and the staff report shows our quote next to each provider with provider-specific states. Also fixes the misaligned Show filter on Provider codes (shared Toolbar).","- Shadow mode asks every configured provider other than the charging one and stores one row per provider per line (unit tested)
+- Avalara adapter creates an uncommitted AvaTax SalesOrder with the mapped code and reads tax and rate per line (tested against a fake AvaTax server)
+- A line without a mapped code is reported as no code, never as a zero quote
+- Report distinguishes not configured, timed out, provider error, no code mapped and answered, and names the provider and the cause
+- Staff report lists our quote, Stripe Tax and Avalara per order line with search and a status filter, in 5 locales
+- Filter rows on the Sales tax tabs share one centre line and control height, measured at 1280 and 390 px
+- Adapter verified against a real Avalara sandbox company","E17","","High","8","tax shadow avalara","returns","In Progress"

@@ -14,8 +14,8 @@ before any shopper is charged by the provider.
 
 1. The profiles you cut over are `ACTIVE` with the tax professional's written sign-off on this dataset (`ruleVersion`), or the quotes are blocked anyway.
 2. Provider credentials are in the secret store, never in the repo: Stripe `STRIPE_SECRET_KEY` (Stripe Tax set up, registrations done); Avalara
-   `AVALARA_ACCOUNT_ID`, `AVALARA_LICENSE_KEY`, `AVALARA_COMPANY_CODE` (and `AVALARA_BASE_URL` for production). **Avalara is a skeleton**: the AvaTax call is not written yet, so
-   it can be configured and mapped but not used until it is (see "Avalara status" below).
+   `AVALARA_ACCOUNT_ID`, `AVALARA_LICENSE_KEY`, `AVALARA_COMPANY_CODE`, and `AVALARA_ENVIRONMENT` (`sandbox` or `production`). The AvaTax adapter is written but has only been
+   run against a fake AvaTax; run it against the Avalara sandbox before relying on it (see "Avalara status" below).
 3. In production set `TAX_REQUIRE_VERIFIED_CODES=true` so a provider only ever receives codes a person verified.
 4. Staff with `tax:classify-admin` (code map) and `tax:configure` (settings) exist; the tax professional can read `tax:read` screens.
 5. The orders service sends `orderId` and each line's `sellerBehaviour` on checkout quotes (SHADOW compares only quotes that carry an order id).
@@ -33,7 +33,7 @@ specific code is recorded per variant at review (`refinedProviderCodes` on appro
 
 ### 2. Run SHADOW
 
-`PUT /v1/tax/settings {"method":"RULES","shadowProvider":"STRIPE","reason":"..."}`. The method keeps charging; for each real order quote the shadow provider is asked the same
+`PUT /v1/tax/settings {"method":"RULES","shadowProvider":"STRIPE","reason":"..."}`. The method keeps charging; for each real order quote **every configured provider that is not charging** (Stripe Tax and Avalara side by side) is asked the same
 lines (including lines we call exempt, which is where an outcome disagreement shows) in the background with a short timeout, and both answers are stored in `tax_shadow_quote`.
 Nothing the provider says is charged, and a provider error, timeout or overload only produces a stored `PROVIDER_ERROR` row and a counter (`tax_shadow_lines_total`, `tax_shadow_failures_total`).
 Let it run for **at least one full filing month** and a minimum number of orders **per internal code** agreed with the tax professional (suggested floor: 30 lines per code, or every code
@@ -47,7 +47,8 @@ that sold at all plus a hand-made test order for the rest, because a code that n
 |---|---|---|
 | `OUTCOME` | one engine taxes the line, the other does not | resolve every one: re-map to another provider code, ask the provider for a custom or refined code, accept with the tax professional's written note, or keep the in-house engine for that outcome |
 | `RATE` | both tax it at a different rate or amount | ZIP versus exact address is expected and is the reason to cut over; explain every other one |
-| `PROVIDER_ERROR` | no answer (timeout, error, no mapped code, not configured) | fix the cause; a code with only errors is unproven |
+| `PROVIDER_ERROR` | asked or due to be asked, no answer: failure `NOT_CONFIGURED`, `TIMEOUT` or `ERROR` (see "A provider did not answer" below) | fix the cause; a code with only errors is unproven |
+| `NO_CODE` | no (verified) code of that provider is mapped for the outcome, so it was not asked | fill and verify the code map entry; never read as a zero quote |
 | `NO_DECISION` | we had no decision (blocked line) | nothing to compare; fix the facts or approval |
 
 ### 4. Verify each mapping
@@ -100,11 +101,23 @@ back to `RISK_BASED` approves the waiting items the rules decide.
 | `tax_shadow_failures_total{why}` | Prometheus | `timeout`, `error`, `overloaded`, `rejected` |
 | `tax_classification_changes_total{kind}` | Prometheus | profile, code map and variant changes |
 
+## A provider did not answer: causes
+
+The report names the provider and the reason on every line (Sales tax, Shadow report, the provider's column, or `provider_error` in `tax_shadow_quote.provider_error`). Find the cause by the state:
+
+| State in the report | Cause | Fix |
+|---|---|---|
+| Not configured | credentials are not set in this environment | set `STRIPE_SECRET_KEY`, or `AVALARA_ACCOUNT_ID`, `AVALARA_LICENSE_KEY`, `AVALARA_COMPANY_CODE`, `AVALARA_ENVIRONMENT` (names only here; values come from the secret store) and restart |
+| Timed out | no answer within `TAX_SHADOW_TIMEOUT` (default 4s); `tax_shadow_failures_total{why="timeout"}` | check the provider's status page and network egress; raise the timeout only for shadow; a few are normal, a pattern is not |
+| Provider error | refused or failed: the text carries the HTTP status and the provider's message (for Avalara a 401 means wrong account id or license key or the wrong environment; a message about addresses means AvaTax wants a ship-from or company location) | fix per the message; `tax_shadow_failures_total{why="error"}` |
+| No code mapped | the provider was not asked: the outcome has no (verified) code | Provider codes tab: map and verify it; with `TAX_REQUIRE_VERIFIED_CODES=true` an unverified code counts as no code |
+| Rows missing for one provider | it is the charging method, not configured, or shadow mode is off | Who calculates tax: shadow mode on; the provider card at the top of the report says which |
+
 ## Avalara status
 
-`AvalaraTaxCalculator` is a skeleton: config keys, `configured()`, the request mapping to an AvaTax `SalesOrder` (`request(...)`), and a clear answer when asked
-(strict quote: "not configured" or "not implemented"; charging quote: visible fallback). To finish it: implement the `POST /api/v2/transactions/create` call and response parsing in
-`quoteStrict`, keep `quote` as strict-then-visible-fallback like Stripe, add a contract test against the Avalara sandbox, then run steps 1 to 8 for AVALARA.
+`AvalaraTaxCalculator` calls AvaTax REST v2 (`POST /api/v2/transactions/create`, type `SalesOrder`, `commit=false`, so nothing is recorded in AvaTax) for both shadow quotes and, when it is the method, charging quotes
+(visible fallback to the rules on any failure). Details, settings and limits: [tax-shadow-mode.md](../engineering/tax-shadow-mode.md). **Not yet run against a real Avalara sandbox**: before step 2, point
+`AVALARA_ENVIRONMENT=sandbox` at a sandbox company, map a few codes, place a test order and read the Avalara column of the report; an error there carries AvaTax's own message.
 
 ## Identity setup
 

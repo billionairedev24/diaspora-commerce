@@ -6,7 +6,7 @@ public enum TaxMethod {
     RULES,
     /** Stripe Tax, with our own rules as a visible fallback (provider RULES-FALLBACK) when Stripe cannot answer. */
     STRIPE_TAX,
-    /** Avalara AvaTax (skeleton adapter: selectable only once it is configured). */
+    /** Avalara AvaTax (selectable only once it is configured). */
     AVALARA;
 
     /** The provider this method asks, or null for RULES. */
