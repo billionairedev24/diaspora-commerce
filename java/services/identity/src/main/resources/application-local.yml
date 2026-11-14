@@ -9,6 +9,10 @@ at:
     issuer: ${AUTH_ISSUER_URL:http://localhost:8100}
     signing:
       generate-if-missing: true
+    provisioning:
+      # Local data outlives code changes: add scopes the YAML lists to clients already stored in the local database,
+      # otherwise a service whose scopes grew gets invalid_scope until someone edits the client by hand.
+      reconcile: ${IDENTITY_CLIENT_RECONCILE:additive}
     verification:
       # mailpit: the log line plus a message in Mailpit (texted codes too, tagged sms); log: the log only. Both are
       # refused at start-up on any other profile.
