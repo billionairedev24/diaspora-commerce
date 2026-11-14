@@ -48,6 +48,23 @@ export function indexingPolicy(env: SeoEnv, requestHost: string | null | undefin
   return { indexable: true, reason: 'prod', origin };
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The origin a sitemap is served from, or undefined when this request gets none. Prod on its own host: PUBLIC_WEB_URL. A local
+ * run (non-prod AND a loopback host: a developer opening http://localhost:3000/sitemap.xml to inspect it): that loopback origin,
+ * so the links work in the browser; the response still carries noindex and robots.txt still says Disallow: / with no Sitemap line.
+ * Every deployed non-prod host (dev, uat, trial, workers.dev, previews) and a prod Worker on a foreign host answer nothing.
+ */
+export function sitemapOrigin(env: SeoEnv, requestHost: string | null | undefined, protocol = 'http:'): string | undefined {
+  const policy = indexingPolicy(env, requestHost);
+  if (policy.indexable) return policy.origin;
+  if (isProdEnv(env) || !requestHost) return undefined;
+  const host = hostOf(requestHost);
+  const name = host?.replace(/:\d+$/, '');
+  return host && name && LOOPBACK_HOSTS.has(name) ? `${protocol}//${host}` : undefined;
+}
+
 /** The X-Robots-Tag value of a response that must not be indexed. */
 export const NOINDEX_HEADER = 'noindex, nofollow, noarchive';
 

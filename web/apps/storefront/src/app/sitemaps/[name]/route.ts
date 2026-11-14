@@ -1,5 +1,5 @@
 import { NOINDEX_HEADER } from '@/lib/seo/policy';
-import { policyForRequest, sitemapCache } from '@/lib/seo/server';
+import { sitemapCache, sitemapOriginForRequest } from '@/lib/seo/server';
 import { parseChildName } from '@/lib/seo/sitemap';
 
 export const dynamic = 'force-dynamic';
@@ -8,12 +8,12 @@ const notFound = () => new Response('Not found', { status: 404, headers: { 'Cach
 
 /** One child sitemap (/sitemaps/products-1.xml): at most 50,000 URLs and 50 MB, generated from live data and cached. */
 export async function GET(request: Request, { params }: { params: Promise<{ name: string }> }): Promise<Response> {
-  const policy = policyForRequest(request);
-  if (!policy.indexable || !policy.origin) return notFound();
+  const origin = sitemapOriginForRequest(request);
+  if (!origin) return notFound();
   const child = parseChildName((await params).name);
   if (!child) return notFound();
   try {
-    const set = await sitemapCache(policy.origin).get();
+    const set = await sitemapCache(origin).get();
     const chunk = set.kinds[child.kind]?.[child.n - 1];
     if (!chunk) return notFound();
     return new Response(chunk.xml, {

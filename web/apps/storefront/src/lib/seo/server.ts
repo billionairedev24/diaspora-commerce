@@ -4,7 +4,7 @@ import { getTelemetry } from '@afrotransact/telemetry';
 import { headers } from 'next/headers';
 
 import { bffOrigin, mocksEnabled } from '../config';
-import { type IndexingPolicy, indexingPolicy, seoEnvFromProcess } from './policy';
+import { type IndexingPolicy, indexingPolicy, seoEnvFromProcess, sitemapOrigin } from './policy';
 import { createSitemapCache, type SeoEvent, type SitemapCache } from './sitemap-cache';
 import { buildSitemapSet, type SeoApi } from './sitemap-source';
 
@@ -17,6 +17,12 @@ export async function getIndexingPolicy(): Promise<IndexingPolicy> {
 /** The decision for a Request (route handlers). */
 export function policyForRequest(req: Request): IndexingPolicy {
   return indexingPolicy(seoEnvFromProcess(), req.headers.get('host') ?? new URL(req.url).host);
+}
+
+/** The origin the sitemap routes serve for this request (prod host, or a local run's loopback origin); undefined means 404. */
+export function sitemapOriginForRequest(req: Request): string | undefined {
+  const url = new URL(req.url);
+  return sitemapOrigin(seoEnvFromProcess(), req.headers.get('host') ?? url.host, url.protocol);
 }
 
 /** An anonymous gateway client: crawler-facing generation never forwards a shopper's cookies or location. */
