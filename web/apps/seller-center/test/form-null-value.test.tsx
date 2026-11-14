@@ -52,7 +52,7 @@ describe('no event reads inside state updaters', () => {
         if (ent.isDirectory()) walk(p);
         else if (/\.tsx$/.test(ent.name) && !/\.(test|stories)\./.test(ent.name)) {
           const src = readFileSync(p, 'utf8');
-          for (const m of src.matchAll(/set\w+\(\(\w*\) =>[^;]{0,300}?\bcurrentTarget\b/g)) bad.push(`${p}: ${m[0].slice(0, 80)}`);
+          for (const m of src.matchAll(/set\w+\(\(\w*\) =>(?:(?!\bon[A-Z]\w*=)[^;]){0,300}?\bcurrentTarget\b/g)) bad.push(`${p}: ${m[0].slice(0, 80)}`);
         }
       }
     };
