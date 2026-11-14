@@ -23,6 +23,7 @@ func TestStaffGate(t *testing.T) {
 		staff.Tax = app.NewStaffTaxService(d)
 		staff.Inventory = app.NewStaffInventoryService(d)
 		staff.Identity = app.NewStaffIdentityService(d)
+		staff.Access = app.NewStaffAccessService(d)
 		staff.ContentPages = app.NewStaffContentPagesService(d)
 		staff.Departments = app.NewStaffDepartmentsService(d)
 	})
