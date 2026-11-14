@@ -41,7 +41,7 @@ OKRS = [
       ("At least 95% of packages arrive inside the window shown at checkout", "promise service vs delivered events"),
       ("Claims audit stays green: no banned phrase, no unearned social proof", "storefront banned-phrase test in CI"),
       ("Checkout conversion baseline measured, then improved (owner sets target after 30 days)", "storefront analytics")]),
-    ("O5", "Ship with quality, observability and cost under control", "Quality and cost", "Next", ["E33", "E28", "E21", "E31"],
+    ("O5", "Ship with quality, observability and cost under control", "Quality and cost", "Next", ["E36", "E33", "E28", "E21", "E31"],
      "Main stays green, stories are verified before Done, and AI spend stays inside budget.",
      [("CI green on main on at least 95% of days", "GitHub Actions"),
       ("No story In Review for more than 7 days", "Jira filter ATV2 in review"),
@@ -51,11 +51,28 @@ OKRS = [
 
 
 def adf(okr):
-    _, title, _, _, epics, why, krs = okr
+    _, title, theme, roadmap, epics, why, krs = okr
+    base = js.BASE
+    keys = json.load(open(js.MAP_PATH))
+    rows = [{"type": "tableRow", "content": [js.cell(*js.text(h), header=True, width=w) for h, w in
+                                             zip(("#", "Key result", "Measured in", "Target"), (50, 430, 230, 110))]}]
+    for i, (kr, where) in enumerate(krs, 1):
+        rows.append({"type": "tableRow", "content": [js.cell(*js.text("KR%d" % i), width=50), js.cell(*js.text(kr), width=430),
+                                                    js.cell(*js.text(where), width=230),
+                                                    js.cell(js.lozenge("draft", "yellow"), width=110)]})
+    links = []
+    for e in epics:
+        k = keys.get(e)
+        if k:
+            links += [{"type": "text", "text": k, "marks": [{"type": "link", "attrs": {"href": "%s/browse/%s" % (base, k)}}]},
+                      {"type": "text", "text": "  "}]
     return {"type": "doc", "version": 1, "content": [
-        js.para(why), js.heading("Key results"),
-        {"type": "orderedList", "content": [{"type": "listItem", "content": [js.para("%s (measured in: %s)" % kr)]} for kr in krs]},
-        js.para("Targets are drafts for the product owner to confirm. Delivered by: " + ", ".join(epics) + " in ATV2."),
+        {"type": "paragraph", "content": [js.lozenge(theme, "purple"), {"type": "text", "text": "  "}, js.lozenge(roadmap, "blue")]},
+        js.panel("note", js.para(why)),
+        js.heading("Key results", 2),
+        {"type": "table", "attrs": {"isNumberColumnEnabled": False, "layout": "wide"}, "content": rows},
+        js.heading("Delivered by", 3), {"type": "paragraph", "content": links or js.text("-")},
+        js.panel("warning", js.para("Targets are drafts for the product owner to confirm.")),
     ]}
 
 
@@ -77,6 +94,7 @@ def ensure_themes(c):
 def main():
     env = js.load_env("~/.jira.env")
     c = js.Jira(env["JIRA_BASE_URL"], env["JIRA_EMAIL"], env["JIRA_API_TOKEN"])
+    js.BASE = env["JIRA_BASE_URL"].rstrip("/")
     epic_keys = json.load(open(js.MAP_PATH))
     itype = c.call("GET", "/rest/api/3/project/%s?expand=issueTypes" % KEY)["issueTypes"][0]["id"]
     for okr in OKRS:

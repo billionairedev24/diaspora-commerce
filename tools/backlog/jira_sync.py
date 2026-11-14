@@ -62,7 +62,7 @@ STREAM = {
     "mobile": ([], ["gateway-bff"], []), "docs": ([], [], []), "observability": ([], [], []), "infra": ([], [], []),
     "cicd": ([], [], []), "legal": ([], [], ["storefront"]), "exports": ([], ["gateway-bff"], ["staff-console"]),
     "quality": ([], [], []), "delivery-runs": (["delivery-runs"], [], ["storefront", "staff-console"]),
-    "seller": (["seller"], [], ["seller-center"]), "gateway-bff": ([], ["gateway-bff"], []), "tools": ([], [], []),
+    "seller": (["seller"], [], ["seller-center"]), "qa": ([], [], []), "gateway-bff": ([], ["gateway-bff"], []), "tools": ([], [], []),
 }
 STATUS_ALIASES = {"to do": ["to do", "backlog", "open", "selected for development"],
                   "in progress": ["in progress", "doing"],
@@ -174,55 +174,140 @@ def items(xs, ordered=False):
             "content": [{"type": "listItem", "content": [para(x)]} for x in xs]}
 
 
+BASE = ""      # Jira site, set at run time (links in epic tables)
+KEYS = {}      # backlog id -> Jira key, set at run time
+STATUS_COLOR = {"done": "green", "in progress": "blue", "in review": "purple", "to do": "neutral"}
+_ids = iter(range(1, 10 ** 9))
+
+
+def lid(prefix="n"):
+    return "%s-%d" % (prefix, next(_ids))
+
+
+def lozenge(t, color):
+    return {"type": "status", "attrs": {"text": t.upper(), "color": color, "localId": lid("s")}}
+
+
+def panel(kind, *nodes):
+    return {"type": "panel", "attrs": {"panelType": kind}, "content": list(nodes)}
+
+
+def tasks(xs, done):
+    return {"type": "taskList", "attrs": {"localId": lid("tl")},
+            "content": [{"type": "taskItem", "attrs": {"localId": lid("ti"), "state": "DONE" if done else "TODO"},
+                         "content": text(x)} for x in xs]}
+
+
+def link_text(t):
+    """Text with backlog ids (S123, E05) turned into links to their Jira issues."""
+    out = []
+    for part in re.split(r"\b([SE]\d{3})\b", t):
+        if re.fullmatch(r"[SE]\d{3}", part) and part in KEYS and BASE:
+            out.append({"type": "text", "text": KEYS[part], "marks": [{"type": "link", "attrs": {"href": "%s/browse/%s" % (BASE, KEYS[part])}}]})
+        elif part:
+            out += text(part)
+    return out
+
+
+def meta_line(row):
+    st = row["Status"]
+    nodes = [lozenge(st, STATUS_COLOR.get(st.lower(), "neutral")), {"type": "text", "text": "  "}]
+    if row.get("Story Points"):
+        nodes += [lozenge("%s pts" % row["Story Points"], "neutral"), {"type": "text", "text": "  "}]
+    nodes += [lozenge(row["Priority"] or "-", "red" if row["Priority"] == "Highest" else "yellow" if row["Priority"] == "High" else "neutral"),
+              {"type": "text", "text": "  stream: %s · backlog %s" % (row["Component"] or "-", row["Issue Id"]),
+               "marks": [{"type": "textColor", "attrs": {"color": "#6b778c"}}]}]
+    return {"type": "paragraph", "content": nodes}
+
+
 def adf_story(row):
     setup, auto, manual = testing(row)
-    content = [para(row["Description"] or row["Summary"])]
+    done = row["Status"] == "Done"
     acs = criteria(row["Acceptance Criteria"])
+    content = [meta_line(row), {"type": "paragraph", "content": link_text(row["Description"] or row["Summary"])}]
     if acs:
-        content += [heading("Acceptance criteria"), items(acs)]
-    content.append(heading("Testing instructions"))
+        content += [heading("Acceptance criteria", 2),
+                    panel("note", {"type": "taskList", "attrs": {"localId": lid("tl")},
+                                   "content": [{"type": "taskItem", "attrs": {"localId": lid("ti"), "state": "DONE" if done else "TODO"},
+                                                "content": link_text(a)} for a in acs]})]
+    content.append(heading("Testing instructions", 2))
+    inner = []
     if setup:
-        content += [para("Setup"), items(setup)]
+        inner += [heading("Setup", 4), items(setup)]
     if auto:
-        content += [para("Automated"), items(auto)]
+        inner += [heading("Automated", 4), items(auto)]
     if manual:
-        content += [para("Manual checks"), items(manual, ordered=True)]
-    content += [heading("Definition of done"), items(DOD),
-                para("Backlog id %s · source docs/backlog/backlog.csv · stream: %s" % (row["Issue Id"], row["Component"] or "-"))]
+        inner += [heading("Manual checks", 4), items(manual, ordered=True)]
+    content.append(panel("info", *inner))
+    content += [heading("Definition of done", 2), panel("success", tasks(DOD, done))]
     return {"type": "doc", "version": 1, "content": content}
 
 
+def cell(*nodes, header=False, width=None):
+    c = {"type": "tableHeader" if header else "tableCell", "content": [{"type": "paragraph", "content": list(nodes)}]}
+    if width:
+        c["attrs"] = {"colwidth": [width]}
+    return c
+
+
+WIDTHS = [110, 470, 150, 80]
+
+
 def adf_epic(row, stories):
-    open_ = [s for s in stories if s["Status"] != "Done"]
-    content = [para(row["Description"] or row["Summary"]),
-               para("Work stream %s: %d stories, %d open." % (row["Issue Id"], len(stories), len(open_))),
-               para("Backlog id %s · source docs/backlog/backlog.csv" % row["Issue Id"])]
+    total = len(stories)
+    done = sum(1 for s in stories if s["Status"] == "Done")
+    pts = sum(float(s["Story Points"] or 0) for s in stories)
+    pts_done = sum(float(s["Story Points"] or 0) for s in stories if s["Status"] == "Done")
+    pct = round(100 * done / total) if total else 0
+    bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+    content = [{"type": "paragraph", "content": link_text(row["Description"] or row["Summary"])},
+               panel("info" if pct < 100 else "success",
+                     {"type": "paragraph", "content": [{"type": "text", "text": "Progress  ", "marks": [{"type": "strong"}]},
+                                                       {"type": "text", "text": bar, "marks": [{"type": "code"}]},
+                                                       {"type": "text", "text": "  %d%%" % pct, "marks": [{"type": "strong"}]}]},
+                     para("%d of %d stories done · %g of %g points · %d open" % (done, total, pts_done, pts, total - done)))]
+    order = {"in review": 0, "in progress": 1, "to do": 2, "done": 3}
+    rows_ = [{"type": "tableRow", "content": [cell(*text(h), header=True, width=w) for h, w in
+                                              zip(("Story", "Summary", "Status", "Points"), WIDTHS)]}]
+    for s in sorted(stories, key=lambda s: (order.get(s["Status"].lower(), 9), s["Issue Id"])):
+        k = KEYS.get(s["Issue Id"])
+        keynode = ({"type": "text", "text": k, "marks": [{"type": "link", "attrs": {"href": "%s/browse/%s" % (BASE, k)}}]}
+                   if k and BASE else {"type": "text", "text": s["Issue Id"]})
+        rows_.append({"type": "tableRow", "content": [cell(keynode, width=WIDTHS[0]), cell(*text(s["Summary"]), width=WIDTHS[1]),
+                                                     cell(lozenge(s["Status"], STATUS_COLOR.get(s["Status"].lower(), "neutral")), width=WIDTHS[2]),
+                                                     cell(*text(s["Story Points"] or "-"), width=WIDTHS[3])]})
+    if total:
+        content += [heading("What's left first, then what's done", 3),
+                    {"type": "table", "attrs": {"isNumberColumnEnabled": False, "layout": "wide"}, "content": rows_}]
+    content.append({"type": "paragraph", "content": [{"type": "text", "text": "Work stream %s · source docs/backlog/backlog.csv" % row["Issue Id"],
+                                                      "marks": [{"type": "textColor", "attrs": {"color": "#6b778c"}}]}]})
     return {"type": "doc", "version": 1, "content": content}
 
 
 def adf_programme(epics):
     return {"type": "doc", "version": 1, "content": [
-        para("AfroTransact v2 marketplace: products and services for diaspora shoppers, AfroTransact Retail, seller and "
-             "provider back offices, staff console, customer and driver apps."),
-        heading("Work streams"), items(["%s %s" % (e["Issue Id"], e["Summary"]) for e in epics]),
-        para("Source of truth: docs/backlog/backlog.csv; synced by tools/backlog/jira_sync.py.")]}
+        para("AfroTransact v2 marketplace."), heading("Work streams"),
+        items(["%s %s" % (e["Issue Id"], e["Summary"]) for e in epics])]}
 
 
 def plain(adf):
-    """Markdown rendering of an ADF doc, for the dry-run preview."""
+    """Rough text rendering of an ADF doc, for the dry-run preview."""
     out = []
-    for n in adf["content"]:
-        t = n["type"]
-        if t == "paragraph":
-            out.append("".join(c["text"] if not c.get("marks") else "`%s`" % c["text"] for c in n["content"]))
-        elif t == "heading":
-            out.append("#### " + n["content"][0]["text"])
-        else:
-            for i, li in enumerate(n["content"], 1):
-                p = li["content"][0]
-                line = "".join(c["text"] if not c.get("marks") else "`%s`" % c["text"] for c in p["content"])
-                out.append(("%d. " % i if t == "orderedList" else "- ") + line)
-    return "\n".join(out)
+
+    def walk(n, depth=0):
+        t = n.get("type")
+        if t == "text":
+            return n["text"]
+        if t == "status":
+            return "[%s]" % n["attrs"]["text"]
+        inner = "".join(walk(c, depth + 1) or "" for c in n.get("content", []))
+        if t in ("paragraph", "heading", "taskItem", "listItem", "tableRow"):
+            prefix = {"heading": "#### ", "taskItem": "- [ ] ", "listItem": "- ", "tableRow": "| "}.get(t, "")
+            out.append(prefix + inner)
+            return ""
+        return inner
+    walk(adf)
+    return "\n".join(x for x in out if x.strip())
 
 
 # ---------------------------------------------------------------- Jira client
@@ -248,6 +333,10 @@ class Jira:
                     continue
                 detail = e.read().decode(errors="replace")[:800]
                 raise RuntimeError("%s %s -> %d %s" % (method, path, e.code, detail))
+            except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+                time.sleep(2 ** attempt)  # dropped connection: retry
+                last = e
+                continue
         raise RuntimeError("%s %s: gave up after retries" % (method, path))
 
     def search(self, jql, fields="summary,status,issuetype"):
@@ -377,6 +466,29 @@ class Sync:
                 return name
         return cur + " (no transition to %s)" % target
 
+    def ensure_versions(self):
+        have = {v["name"]: v for v in self.j.call("GET", "/rest/api/3/project/%s/versions" % self.key)}
+        for name, desc, released in VERSIONS:
+            if name not in have:
+                have[name] = self.j.call("POST", "/rest/api/3/version", {"name": name, "description": desc,
+                                                                       "projectId": int(self.project_id), "released": released})
+        return have
+
+    def ensure_tests_link(self):
+        types = {t["name"] for t in self.j.call("GET", "/rest/api/3/issueLinkType")["issueLinkTypes"]}
+        if "Tests" not in types:
+            self.j.call("POST", "/rest/api/3/issueLinkType", {"name": "Tests", "inward": "is tested by", "outward": "tests"})
+
+    def link_tests(self, qa_key, target_keys):
+        have = set()
+        for l in self.j.call("GET", "/rest/api/3/issue/%s?fields=issuelinks" % qa_key)["fields"]["issuelinks"]:
+            if l["type"]["name"] == "Tests" and "outwardIssue" in l:
+                have.add(l["outwardIssue"]["key"])
+        for k in target_keys:
+            if k not in have and k != qa_key:
+                self.j.call("POST", "/rest/api/3/issueLink", {"type": {"name": "Tests"}, "inwardIssue": {"key": qa_key},
+                                                              "outwardIssue": {"key": k}})
+
     def save(self):
         with open(MAP_PATH, "w") as f:
             json.dump(dict(sorted(self.map.items())), f, indent=1)
@@ -399,6 +511,17 @@ def story_extra(sync, row, itype):
     if comps and "components" in sync.fields.get(itype, {}):
         extra["components"] = [{"name": c} for c in comps]
     return extra
+
+
+VERSIONS = [("Built", "Stories delivered before the backlog moved to Jira", True),
+            ("Launch", "Open Highest and High priority work plus QA: what must be true to go live", False),
+            ("After launch", "Open Medium and Low priority work", False)]
+
+
+def version_for(row):
+    if row["Status"] == "Done":
+        return "Built"
+    return "Launch" if row["Priority"] in ("Highest", "High") or row["Parent Id"] == "E36" else "After launch"
 
 
 # ---------------------------------------------------------------- main
@@ -442,6 +565,11 @@ def main():
     for need in ("epic", "story"):
         if need not in sync.types:
             raise SystemExit("project %s has no '%s' issue type" % (sync.key, need))
+    global BASE, KEYS
+    BASE = env["JIRA_BASE_URL"].rstrip("/")
+    KEYS = sync.map
+    sync.ensure_versions()
+    sync.ensure_tests_link()
 
     programme_key = None
     if sync.parent_type and (not only):
@@ -457,6 +585,8 @@ def main():
         fid, _ = sync.field("epic", "epic name")
         if fid:
             extra[fid] = e["Summary"][:254]
+        if e["Priority"]:
+            extra["priority"] = {"name": e["Priority"]}
         try:
             ekey, act = sync.upsert(e["Issue Id"], "epic", e["Summary"], adf_epic(e, by_epic[e["Issue Id"]]),
                                     [PROGRAMME_LABEL, "bk-" + e["Issue Id"], "stream"], parent=programme_key, extra=extra)
@@ -472,14 +602,28 @@ def main():
             labels = [PROGRAMME_LABEL, "bk-" + s["Issue Id"]] + [re.sub(r"[^\w.-]", "-", l) for l in s["Labels"].split()]
             if s["Status"].lower() == "in review":
                 labels.append("in-review")  # the default Scrum workflow has no In Review column
+            extra = story_extra(sync, s, "story")
+            if "fixVersions" in sync.fields.get("story", {}):
+                extra["fixVersions"] = [{"name": version_for(s)}]
             try:
                 skey, act = sync.upsert(s["Issue Id"], "story", s["Summary"], adf_story(s), sorted(set(labels)),
-                                        parent=ekey, extra=story_extra(sync, s, "story"))
+                                        parent=ekey, extra=extra)
+                if s["Parent Id"] == "E36":
+                    ids = re.findall(r"\b(S\d{3})\b", s["Acceptance Criteria"] + " " + s["Description"])
+                    sync.link_tests(skey, [sync.map[i] for i in ids if i in sync.map])
                 st = "" if a.no_status else sync.transition(skey, s["Status"])
                 print("  ", act, skey, s["Issue Id"], s["Summary"][:60], st)
             except RuntimeError as err:
                 failures.append((s["Issue Id"], str(err)))
                 print("  FAILED", s["Issue Id"], str(err)[:300])
+    # second pass: epic descriptions list every story by its Jira key, so they need the whole map
+    for e in epics:
+        if e["Issue Id"] in sync.map and (not only or e["Issue Id"] in only):
+            try:
+                sync.j.call("PUT", "/rest/api/3/issue/" + sync.map[e["Issue Id"]],
+                            {"fields": {"description": adf_epic(e, by_epic[e["Issue Id"]])}})
+            except RuntimeError as err:
+                failures.append((e["Issue Id"], str(err)))
     sync.save()
     print("done; %d mapped in %s; %d failures" % (len(sync.map), os.path.relpath(MAP_PATH, ROOT), len(failures)))
     if failures:

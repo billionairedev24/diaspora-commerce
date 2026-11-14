@@ -1844,3 +1844,168 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Staff report lists our quote, Stripe Tax and Avalara per order line with search and a status filter, in 5 locales
 - Filter rows on the Sales tax tabs share one centre line and control height, measured at 1280 and 390 px
 - Adapter verified against a real Avalara sandbox company","E17","","High","8","tax shadow avalara","returns","In Progress"
+"E36","Epic","QA & launch verification","Independent verification of every open story and the cross-cutting checks that agents could not run (real stack, Docker ITs, sandboxes, browsers, translations). A story is Done only when its QA pass has evidence.","","","QA & launch verification","Highest","","qa","qa","To Do"
+"S449","Story","QA: real-stack regression of the Nov 13-14 fixes","Run the fixes from Nov 13-14 on the owner's local stack and record what works.","- Identity adds new client scopes on local start (identity.client.reconciled logged for catalog-service and offers-service); no invalid_scope in catalog or offers logs
+- Catalog tax gate sweep succeeds every minute; make tax-gate-sweep returns 200
+- Checkout tax: Basmati Rice and Oloyin Beans quote tax and can be bought (variant ATIN fix)
+- Add a product: selling check answers; Chin Chin can be sold; Not here, add it as new works
+- Cart: no ZIP prompt when a place is known; arrival shows a real window or no date
+- Seller Settings > Pickup: weekly hours save, switch turns pickup on, checkout offers pickup near the address
+- Staff Tax review: menu click leaves the sheet; names and photos shown","E36","","Highest","5","qa regression local","qa","To Do"
+"S450","Story","QA: Java Testcontainers ITs green in CI","Docker-backed integration tests never ran in the agent sandboxes.","- CI runs every Java service's ITs with Docker (TaxSettingsIT, RiskBasedReviewIT and the rest)
+- RiskBasedReviewIT's 2 known failures fixed or explained
+- S381 S383 S384 S385 S386 S387 marked Done once their ITs pass","E36","","Highest","5","qa ci java","qa","To Do"
+"S451","Story","QA: Avalara sandbox run for shadow mode","Avalara adapter is only tested against a fake server (S448).","- AVALARA_* env vars set locally for a sandbox company (names only, never values in chat or code)
+- A real order produces an Avalara shadow row per line; ship-from and shipping tax code confirmed
+- Shadow report shows Answered for Avalara lines with mapped codes","E36","","High","3","qa tax avalara","qa","To Do"
+"S452","Story","QA: browser pass of all three web apps at 1280 and 390","Owner's browser pass, including right-to-left Arabic.","- Storefront, Seller Center and Staff console core journeys pass at 1280 and 390 with no console errors
+- Arabic right-to-left layout checked on the weekly hours list, sheets and tables
+- Findings filed as bugs in ATV2","E36","","High","5","qa browser","qa","To Do"
+"S453","Story","QA: native review of fr, es, ar and yo strings","Machine-drafted translations need a native reader before launch.","- Each locale reviewed by a native speaker; corrections merged
+- No banned words (offer in Seller Center English) and no claims AfroTransact delivers or collects where it does not","E36","","High","3","qa i18n","qa","To Do"
+"S454","Story","QA: delivery modes and delivery proof","Verifies the admin-run delivery work: seller-shipped orders never wait for an AfroTransact driver.","- A seller-shipped order goes from paid to shipped without any admin assignment
+- An AfroTransact-delivered order is run end to end in the staff Delivery module with delivery:manage
+- Marking delivered requires a photo; the customer order and Seller Center show the proof
+- Stuck seller-shipped orders fixed by the data fix","E36","","Highest","5","qa delivery","qa","To Do"
+"S455","Story","QA: production smoke on OVH","After the launch set is deployed to production.","- Every launch-set service healthy; storefront, checkout and seller sign-in work on the prod domain
+- No demo data in prod; sitemap and robots correct for prod only
+- Rollback rehearsed once","E36","","Highest","3","qa prod","qa","To Do"
+"S456","Story","QA pass: Platform foundation & engineering standards","Verify the open stories of the Platform foundation & engineering standards work stream (E01) on the local stack; file a bug for every failure.","- S250 Media long-lived links and BFF-forwarded tokens: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e01","qa","To Do"
+"S457","Story","QA pass: Identity, accounts & access control","Verify the open stories of the Identity, accounts & access control work stream (E02) on the local stack; file a bug for every failure.","- S016 Passkeys (WebAuthn) and biometrics: every acceptance criterion verified with evidence
+- S248 Relationship checks in catalog, orders, payments; market on role events: every acceptance criterion verified with evidence
+- S266 Seed service-client relationship tuples: every acceptance criterion verified with evidence
+- S291 Identity admin console: OAuth clients, sessions and tokens, signing keys, token inspector, auth settings (Keycloak-style): every acceptance criterion verified with evidence
+- S329 Idle and absolute session timeouts per audience, with a warning: every acceptance criterion verified with evidence
+- S336 Identity sign-up: standard phone field and favicon: every acceptance criterion verified with evidence
+- S351 Every signed-in person can shop whatever their role: every acceptance criterion verified with evidence
+- S355 Open sign-up at cutover: no gate, migrated users sign in: every acceptance criterion verified with evidence
+- S359 Verify sign-up MFA: every acceptance criterion verified with evidence","E36","","High","3","qa stream-e02","qa","To Do"
+"S458","Story","QA pass: Catalog & product builder","Verify the open stories of the Catalog & product builder work stream (E03) on the local stack; file a bug for every failure.","- S030 Image upload via UploadThing with moderation checks: every acceptance criterion verified with evidence
+- S310 Image library and Amazon-style image matching for bulk upload: every acceptance criterion verified with evidence
+- S326 Size charts are a reusable library chosen inside the product form: every acceptance criterion verified with evidence
+- S339 Category tax tree: 13 departments, 73 categories, typed tax facts and importer: every acceptance criterion verified with evidence
+- S340 Never-guess publish gate and optional auto seller SKU: every acceptance criterion verified with evidence
+- S361 Verify the image rule: every acceptance criterion verified with evidence
+- S362 Verify listing rules and the rule-driven form: every acceptance criterion verified with evidence
+- S381 Catalog match service: normalised GTIN key, brand+MPN, unique index: every acceptance criterion verified with evidence
+- S385 Suggest an edit, wrong match and duplicate reports (change requests): every acceptance criterion verified with evidence
+- S387 GTIN exemption and brand+MPN ATIN assignment for items without a barcode: every acceptance criterion verified with evidence
+- S390 Enforce the main-image rule in catalog, bulk and library; restore the relaxed check: every acceptance criterion verified with evidence
+- S392 Existing and migrated listings: rescore main images and Improve your image task: every acceptance criterion verified with evidence
+- S393 Bulk upload: match-aware rows, offer-only template, held rows, file hash idempotency: every acceptance criterion verified with evidence
+- S394 Bulk upload: price and quantity feed: every acceptance criterion verified with evidence
+- S396 Bulk upload hardening: image fetch budget, port 443, report columns, audit: every acceptance criterion verified with evidence
+- S408 Catalog data for SEO: parent id, item condition, structured shipping and returns, slug history: every acceptance criterion verified with evidence
+- S437 Compact seller product form, no country of origin, optional grocery label photo: every acceptance criterion verified with evidence","E36","","High","6","qa stream-e03","qa","To Do"
+"S459","Story","QA pass: Search & discovery","Verify the open stories of the Search & discovery work stream (E04) on the local stack; file a bug for every failure.","- S330 Meilisearch is the default search provider, with a reindex command and embeddings switch: every acceptance criterion verified with evidence
+- S407 Sitemap feed with real update times (lastmod) and keyset paging: every acceptance criterion verified with evidence
+- S415 Index photo_ok and expose eligible-only facet counts: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e04","qa","To Do"
+"S460","Story","QA pass: Offers, pricing & buy box","Verify the open stories of the Offers, pricing & buy box work stream (E05) on the local stack; file a bug for every failure.","- S324 Verified-purchase product ratings and reviews: every acceptance criterion verified with evidence
+- S383 Matched offer guards: page content locked, allowed offer fields, selling approval: every acceptance criterion verified with evidence
+- S384 Close the second-seller tax gap: offers wait for their own tax decision: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e05","qa","To Do"
+"S461","Story","QA pass: Cart & checkout","Verify the open stories of the Cart & checkout work stream (E06) on the local stack; file a bug for every failure.","- S343 Checkout taxes from the stored decision and blocks undecided lines: every acceptance criterion verified with evidence
+- S369 Checkout UX fixes from the owner walkthrough: every acceptance criterion verified with evidence
+- S442 Checkout quotes the variant ATIN, not the product ATIN: every acceptance criterion verified with evidence
+- S446 Staff console: Tax review detail sheet, row alignment, item names and who decided: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e06","qa","To Do"
+"S462","Story","QA pass: Payments, ledger & settlement","Verify the open stories of the Payments, ledger & settlement work stream (E07) on the local stack; file a bug for every failure.","- S354 Authorisation expiry guard for manual capture: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e07","qa","To Do"
+"S463","Story","QA pass: Orders, shipments & status state machine","Verify the open stories of the Orders, shipments & status state machine work stream (E08) on the local stack; file a bug for every failure.","- S353 Manual status changes: reason, capture warning and audit entry: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e08","qa","To Do"
+"S464","Story","QA pass: Inventory: platform & FBA stock, lots and concurrency","Verify the open stories of the Inventory: platform & FBA stock, lots and concurrency work stream (E09) on the local stack; file a bug for every failure.","- S375 Build the inventory rules (blocked on owner decisions): every acceptance criterion verified with evidence","E36","","High","1","qa stream-e09","qa","To Do"
+"S465","Story","QA pass: Carriers & shipping (USPS, UPS, FedEx, DHL)","Verify the open stories of the Carriers & shipping (USPS, UPS, FedEx, DHL) work stream (E11) on the local stack; file a bug for every failure.","- S204 Confirm carrier sandbox integrations (USPS, UPS, FedEx, DHL): every acceptance criterion verified with evidence
+- S365 Verify launch shipping and delivery quotes: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e11","qa","To Do"
+"S466","Story","QA pass: AfroTransact Delivery & driver app","Verify the open stories of the AfroTransact Delivery & driver app work stream (E12) on the local stack; file a bug for every failure.","- S444 Seller Center Settings area: one page per section; pickup moves out of Orders; fix address form crash: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e12","qa","To Do"
+"S467","Story","QA pass: Seller & provider onboarding with two-step review","Verify the open stories of the Seller & provider onboarding with two-step review work stream (E13) on the local stack; file a bug for every failure.","- S327 Sellers sell only in approved departments, with a request flow: every acceptance criterion verified with evidence
+- S356 Verify application review workflow: every acceptance criterion verified with evidence
+- S363 Verify selling approvals: every acceptance criterion verified with evidence
+- S432 Sellers sell in any department; only services need a separate application: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e13","qa","To Do"
+"S468","Story","QA pass: Stripe compliance sync, plans & billing","Verify the open stories of the Stripe compliance sync, plans & billing work stream (E14) on the local stack; file a bug for every failure.","- S103 Plans & subscriptions with our own billing: every acceptance criterion verified with evidence
+- S311 Finance: reconciliation workflow, Stripe lookup and four-eyes ledger adjustments: every acceptance criterion verified with evidence
+- S312 Staff: payout request sheet shows the seller, the checks before approving and Stripe's live status: every acceptance criterion verified with evidence
+- S313 Seller payouts: connected account kept in sync with payments, history readable by the seller, clear message when no Stripe account is linked: every acceptance criterion verified with evidence
+- S314 Staff console: one Settings area for every platform setting: every acceptance criterion verified with evidence
+- S315 Tax: who calculates sales tax is a switch (our own rules by default, Stripe Tax when set up): every acceptance criterion verified with evidence
+- S316 Payouts: show Stripe transfer ids and link to the Stripe dashboard: every acceptance criterion verified with evidence
+- S317 Maintenance mode with a public maintenance page: every acceptance criterion verified with evidence
+- S318 Tax remittance record: what was filed and paid to each state: every acceptance criterion verified with evidence
+- S319 Nexus tracker and the seller's sales tax statement: every acceptance criterion verified with evidence
+- S368 Verify the website given to Stripe: every acceptance criterion verified with evidence
+- S378 Tolerate full-dashboard connected accounts: every acceptance criterion verified with evidence
+- S379 Test v2 flows on a full-dashboard connected account: every acceptance criterion verified with evidence","E36","","High","4","qa stream-e14","qa","To Do"
+"S469","Story","QA pass: Services marketplace & bookings","Verify the open stories of the Services marketplace & bookings work stream (E15) on the local stack; file a bug for every failure.","- S357 Verify services zones and in-person-only: every acceptance criterion verified with evidence
+- S366 Verify the service search radius: every acceptance criterion verified with evidence
+- S421 Services as a first-class home module and nav entry: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e15","qa","To Do"
+"S470","Story","QA pass: Storefront builder & provider public pages","Verify the open stories of the Storefront builder & provider public pages work stream (E16) on the local stack; file a bug for every failure.","- S409 Store and provider listings for sitemaps; LocalBusiness for physical stores: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e16","qa","To Do"
+"S471","Story","QA pass: Returns, refunds & tax","Verify the open stories of the Returns, refunds & tax work stream (E17) on the local stack; file a bug for every failure.","- S235 Returns and tax integration across services: every acceptance criterion verified with evidence
+- S341 Provider-neutral tax engine: profiles, decision tables, decision records and shadow mode: every acceptance criterion verified with evidence
+- S345 Stripe tax transactions and refund reversal with Stripe Tax: every acceptance criterion verified with evidence
+- S346 Avalara adapter (AvaTax) behind the tax calculator port: every acceptance criterion verified with evidence
+- S347 Tax accuracy gaps: exact-address jurisdiction, tax holidays, platform fee classification: every acceptance criterion verified with evidence
+- S348 Bundles, digital products and services tax rules (approval-gated): every acceptance criterion verified with evidence
+- S364 Risk-based tax review: keep ALL until sign-off: every acceptance criterion verified with evidence
+- S439 Tax is automatic from the rules; people review only exceptions: every acceptance criterion verified with evidence
+- S448 Shadow mode compares every configured tax provider with our rules, with a real AvaTax adapter: every acceptance criterion verified with evidence","E36","","High","3","qa stream-e17","qa","To Do"
+"S472","Story","QA pass: Trust & safety, moderation, disputes & audit","Verify the open stories of the Trust & safety, moderation, disputes & audit work stream (E18) on the local stack; file a bug for every failure.","- S389 Image moderation labels for text, watermark, props and mismatch: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e18","qa","To Do"
+"S473","Story","QA pass: Notifications: email, SMS, push, WhatsApp","Verify the open stories of the Notifications: email, SMS, push, WhatsApp work stream (E19) on the local stack; file a bug for every failure.","- S328 Guests can ask for back-in-stock alerts without signing in: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e19","qa","To Do"
+"S474","Story","QA pass: Content, ads, announcements, markets & site config","Verify the open stories of the Content, ads, announcements, markets & site config work stream (E20) on the local stack; file a bug for every failure.","- S333 Home page: rule-based tiles, scheduled hero slides and personal rails: every acceptance criterion verified with evidence
+- S334 Home page follows the shopper's deliver-to location: every acceptance criterion verified with evidence
+- S358 Verify home page ads and blocks: every acceptance criterion verified with evidence
+- S420 Data-driven communities facet with threshold, registry and clean routes: every acceptance criterion verified with evidence
+- S422 Automatic modules: new arrivals, top sellers, groceries, deals, generated department rails: every acceptance criterion verified with evidence
+- S423 Remove seeded demo content from production and gate fixed cells: every acceptance criterion verified with evidence
+- S424 Seasonal calendar and relevance boosts: every acceptance criterion verified with evidence
+- S430 Schedule and preview as-of date for every home module: every acceptance criterion verified with evidence","E36","","High","3","qa stream-e20","qa","To Do"
+"S475","Story","QA pass: Lola AI (Spring AI + OpenRouter) & MCP server","Verify the open stories of the Lola AI (Spring AI + OpenRouter) & MCP server work stream (E21) on the local stack; file a bug for every failure.","- S376 ai-gateway spend cap: 2 USD a day: every acceptance criterion verified with evidence
+- S377 MCP server private: authenticated tools check: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e21","qa","To Do"
+"S476","Story","QA pass: Geo & address autocomplete","Verify the open stories of the Geo & address autocomplete work stream (E22) on the local stack; file a bug for every failure.","- S335 Deliver-to shows the city, is detected silently and is changed in a popover: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e22","qa","To Do"
+"S477","Story","QA pass: Storefront web (Next.js)","Verify the open stories of the Storefront web (Next.js) work stream (E23) on the local stack; file a bug for every failure.","- S373 Installable web app (PWA) for the three web apps: every acceptance criterion verified with evidence
+- S403 Storefront: only prod is indexable (noindex everywhere else): every acceptance criterion verified with evidence
+- S405 Storefront: page SEO metadata and structured data: every acceptance criterion verified with evidence
+- S406 SEO operations: runbook, Search Console DNS variable, daily probe: every acceptance criterion verified with evidence
+- S419 Departments from the live taxonomy: nav, tiles, footer, tile-rule picker: every acceptance criterion verified with evidence
+- S425 Personalisation and cold start with consent: every acceptance criterion verified with evidence
+- S428 Home caching split, performance budget and A/B variants: every acceptance criterion verified with evidence
+- S441 Flat /pre-orders page (theme standards): every acceptance criterion verified with evidence
+- S445 Estimated tax uses the known place; delivery dates only from real data: every acceptance criterion verified with evidence","E36","","High","3","qa stream-e23","qa","To Do"
+"S478","Story","QA pass: Seller Center & Provider Hub (web)","Verify the open stories of the Seller Center & Provider Hub (web) work stream (E24) on the local stack; file a bug for every failure.","- S245 BOTH orgs, billing usage and payment sheet in the apps: every acceptance criterion verified with evidence
+- S331 Table and layout standards: row actions menu, Drafts tab, alerts and stat strips: every acceptance criterion verified with evidence
+- S382 Seller Center: barcode first, offer-only flow when the page exists: every acceptance criterion verified with evidence
+- S391 Seller Center image cards: rule hints, per-code messages, quality meter, five locales: every acceptance criterion verified with evidence
+- S398 Guided tours for sellers and service providers: every acceptance criterion verified with evidence
+- S411 Comprehensive seller and provider tour chapters with a Tour hub: every acceptance criterion verified with evidence
+- S413 Keep guided-tour progress on the server, per user: every acceptance criterion verified with evidence
+- S436 Seller Center: search-first Add a product (name and category, no barcode or part number): every acceptance criterion verified with evidence","E36","","High","3","qa stream-e24","qa","To Do"
+"S479","Story","QA pass: Staff console (platform back office)","Verify the open stories of the Staff console (platform back office) work stream (E25) on the local stack; file a bug for every failure.","- S239 Staff console upstream gaps: every acceptance criterion verified with evidence
+- S332 Staff can suspend and reinstate a seller or provider, and reason fields say what is missing: every acceptance criterion verified with evidence
+- S342 Staff tax tools: profiles, review queue, provider codes, method and shadow report: every acceptance criterion verified with evidence
+- S386 Staff console: change request, exemption and held image queues: every acceptance criterion verified with evidence
+- S399 Guided tours for staff: every acceptance criterion verified with evidence
+- S402 Warn before Picked up in the staff order dialog: every acceptance criterion verified with evidence
+- S412 Comprehensive staff tour chapters with a Tour hub: every acceptance criterion verified with evidence
+- S414 Staff setting to turn automatic tours off for everyone: every acceptance criterion verified with evidence
+- S440 Sales tax in the sidebar; Tax review as a server-driven table with names, filters and sort: every acceptance criterion verified with evidence","E36","","High","3","qa stream-e25","qa","To Do"
+"S480","Story","QA pass: Observability & monitoring","Verify the open stories of the Observability & monitoring work stream (E28) on the local stack; file a bug for every failure.","- S178 Front-end and mobile error tracking: every acceptance criterion verified with evidence
+- S427 Home module analytics, conversion and eligibility metrics: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e28","qa","To Do"
+"S481","Story","QA pass: Infrastructure & multi-cloud","Verify the open stories of the Infrastructure & multi-cloud work stream (E29) on the local stack; file a bug for every failure.","- S249 First real plan and apply per cloud: every acceptance criterion verified with evidence
+- S371 Postgres restore drill on Layerbase: every acceptance criterion verified with evidence
+- S380 Nightly copy of the two R2 buckets to Backblaze B2: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e29","qa","To Do"
+"S482","Story","QA pass: CI/CD, environments & Kubernetes deployment","Verify the open stories of the CI/CD, environments & Kubernetes deployment work stream (E30) on the local stack; file a bug for every failure.","- S337 Content-Security-Policy and security headers across identity, web apps and edge: every acceptance criterion verified with evidence
+- S338 Guided deploy wizard for the OVHcloud and Cloudflare test environment: every acceptance criterion verified with evidence
+- S349 Flat web hosts for the free Cloudflare certificate: every acceptance criterion verified with evidence
+- S350 Stripe webhooks routable and documented: every acceptance criterion verified with evidence
+- S370 OVH production path (Managed Kubernetes, Layerbase Postgres): every acceptance criterion verified with evidence
+- S372 v1 to v2 production cutover (same Stripe account): every acceptance criterion verified with evidence","E36","","High","2","qa stream-e30","qa","To Do"
+"S483","Story","QA pass: Legal, privacy, i18n & accessibility","Verify the open stories of the Legal, privacy, i18n & accessibility work stream (E31) on the local stack; file a bug for every failure.","- S193 Internationalisation: every acceptance criterion verified with evidence
+- S253 Finish translations and native review: every acceptance criterion verified with evidence
+- S360 Verify the language switch stays hidden at launch: every acceptance criterion verified with evidence
+- S400 Native review of guided-tour translations (fr, es, ar, yo): every acceptance criterion verified with evidence
+- S410 Localised URLs and hreflang for en, fr, es, ar, yo: every acceptance criterion verified with evidence","E36","","High","2","qa stream-e31","qa","To Do"
+"S484","Story","QA pass: Dashboards, charts & exports","Verify the open stories of the Dashboards, charts & exports work stream (E32) on the local stack; file a bug for every failure.","- S352 Dashboard gaps with no upstream data yet: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e32","qa","To Do"
+"S485","Story","QA pass: Testing & quality","Verify the open stories of the Testing & quality work stream (E33) on the local stack; file a bug for every failure.","- S246 Remediate security scan findings: every acceptance criterion verified with evidence
+- S268 Remaining Java HIGH findings and Semgrep registry triage: every acceptance criterion verified with evidence
+- S344 End-to-end category tax verification matrix across 74 categories: every acceptance criterion verified with evidence
+- S367 Verify make db-reset: every acceptance criterion verified with evidence
+- S374 Host Storybook: every acceptance criterion verified with evidence
+- S397 Test and rollout plan for matching, bulk and image enforcement: every acceptance criterion verified with evidence
+- S429 Home fixture e2e: 0, 10, 100, 10000 products: every acceptance criterion verified with evidence","E36","","High","2","qa stream-e33","qa","To Do"
+"S486","Story","QA pass: Community delivery runs (preorders)","Verify the open stories of the Community delivery runs (preorders) work stream (E34) on the local stack; file a bug for every failure.","- S262 Location subscriptions and run announcements: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e34","qa","To Do"
+"S487","Story","QA pass: Shopper wallet, gift cards, referrals and membership","Verify the open stories of the Shopper wallet, gift cards, referrals and membership work stream (E35) on the local stack; file a bug for every failure.","- S322 Referral program: share a code, both sides earn credit: every acceptance criterion verified with evidence
+- S323 Membership tiers: Prime-style benefits with configurable tiers: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e35","qa","To Do"

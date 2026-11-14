@@ -19,6 +19,11 @@ FILTERS = {
     "ATV2 · Tax": 'project = %s AND (component in (\"returns\", \"tax-returns\") OR labels = tax) ORDER BY statusCategory ASC, Rank ASC' % P,
     "ATV2 · Work streams (epics)": 'project = %s AND issuetype = Epic ORDER BY key ASC' % P,
     "ATV2 · Done": 'project = %s AND issuetype = Story AND statusCategory = Done ORDER BY resolved DESC' % P,
+    "ATV2 · Launch: what's left": 'project = %s AND fixVersion = "Launch" AND statusCategory != Done ORDER BY priority DESC, Rank ASC' % P,
+    "ATV2 · Launch: all": 'project = %s AND fixVersion = "Launch" ORDER BY Rank ASC' % P,
+    "ATV2 · After launch": 'project = %s AND fixVersion = "After launch" ORDER BY priority DESC, Rank ASC' % P,
+    "ATV2 · QA": 'project = %s AND labels = qa ORDER BY priority DESC, Rank ASC' % P,
+    "ATV2 · Open stories (all releases)": 'project = %s AND issuetype = Story AND statusCategory != Done ORDER BY Rank ASC' % P,
     "OKRs · Objectives": 'project = OKR AND labels = okr ORDER BY key ASC',
 }
 G = "rest/gadgets/1.0/g/com.atlassian.jira.gadgets:"
@@ -40,6 +45,45 @@ GADGETS = [  # (title, uri, column, filter, config)
 ]
 
 
+LEFT = [
+    ("Launch: open stories by work stream", G + "pie-chart-gadget/gadgets/piechart-gadget.xml", 0, "ATV2 · Launch: what's left", {"statType": "components"}),
+    ("Open work by release", G + "pie-chart-gadget/gadgets/piechart-gadget.xml", 1, "ATV2 · Open stories (all releases)", {"statType": "fixfor"}),
+    ("Launch: work stream × status", G + "two-dimensional-stats-gadget/gadgets/two-dimensional-stats-gadget.xml", 0,
+     "ATV2 · Launch: all", {"xstattype": "statuses", "ystattype": "components", "sortBy": "natural", "sortDirection": "asc",
+                            "showTotals": "true", "numberToShow": "50"}),
+    ("QA & launch verification", G + "two-dimensional-stats-gadget/gadgets/two-dimensional-stats-gadget.xml", 1,
+     "ATV2 · QA", {"xstattype": "statuses", "ystattype": "priorities", "sortBy": "natural", "sortDirection": "asc",
+                   "showTotals": "true", "numberToShow": "10"}),
+    ("Launch: what's left, highest first", G + "filter-results-gadget/gadgets/filter-results-gadget.xml", 1, "ATV2 · Launch: what's left",
+     {"num": "50", "columnNames": "issuetype|issuekey|summary|status|priority|components"}),
+    ("QA checks", G + "filter-results-gadget/gadgets/filter-results-gadget.xml", 0, "ATV2 · QA",
+     {"num": "50", "columnNames": "issuekey|summary|status|priority"}),
+]
+
+
+def build(c, share, ids, title, desc, gadgets):
+    dash = next((d for d in c.call("GET", "/rest/api/3/dashboard/search?" + urllib.parse.urlencode({"dashboardName": title}))["values"]
+                 if d["name"] == title), None)
+    if dash:
+        for g in c.call("GET", "/rest/api/3/dashboard/%s/gadget" % dash["id"])["gadgets"]:
+            c.call("DELETE", "/rest/api/3/dashboard/%s/gadget/%s" % (dash["id"], g["id"]))
+    else:
+        dash = c.call("POST", "/rest/api/3/dashboard", {"name": title, "description": desc, "sharePermissions": share,
+                                                        "editPermissions": []})
+    did = dash["id"]
+    colors = ["blue", "green", "purple", "yellow", "cyan", "red", "gray", "white"]
+    rows = {0: 0, 1: 0}
+    for i, (gtitle, uri, col, fname, cfg) in enumerate(gadgets):
+        row = rows[col]
+        rows[col] += 1
+        g = c.call("POST", "/rest/api/3/dashboard/%s/gadget" % did,
+                   {"uri": uri, "title": gtitle, "color": colors[i % len(colors)], "position": {"column": col, "row": row}})
+        conf = dict(cfg, filterId="filter-" + ids[fname], projectOrFilterId="filter-" + ids[fname], isConfigured="true",
+                    refresh="15")
+        c.call("PUT", "/rest/api/3/dashboard/%s/items/%s/properties/config" % (did, g["id"]), conf)
+    return did
+
+
 def main():
     env = js.load_env("~/.jira.env")
     c = js.Jira(env["JIRA_BASE_URL"], env["JIRA_EMAIL"], env["JIRA_API_TOKEN"])
@@ -56,31 +100,13 @@ def main():
             ids[name] = c.call("POST", "/rest/api/3/filter", body)["id"]
         print("filter", ids[name], name)
 
-    title = "AfroTransact v2 · Delivery"
-    dash = next((d for d in c.call("GET", "/rest/api/3/dashboard/search?dashboardName=" + "AfroTransact%20v2")["values"]
-                 if d["name"] == title), None)
-    if dash:
-        for g in c.call("GET", "/rest/api/3/dashboard/%s/gadget" % dash["id"])["gadgets"]:
-            c.call("DELETE", "/rest/api/3/dashboard/%s/gadget/%s" % (dash["id"], g["id"]))
-    else:
-        dash = c.call("POST", "/rest/api/3/dashboard", {
-            "name": title, "description": "Work streams, open work, launch blockers, verification queue and OKRs for AfroTransact v2.",
-            "sharePermissions": share, "editPermissions": []})
-    did = dash["id"]
-    c.call("PUT", "/rest/api/3/dashboard/%s" % did, {"name": title, "sharePermissions": share, "editPermissions": [],
-                                                    "description": "Work streams, open work, launch blockers, verification queue and OKRs."})
-    colors = ["blue", "green", "purple", "yellow", "cyan", "red", "gray", "white"]
-    rows = {0: 0, 1: 0}
-    for i, (gtitle, uri, col, fname, cfg) in enumerate(GADGETS):
-        row = rows[col]
-        rows[col] += 1
-        g = c.call("POST", "/rest/api/3/dashboard/%s/gadget" % did,
-                   {"uri": uri, "title": gtitle, "color": colors[i % len(colors)], "position": {"column": col, "row": row}})
-        conf = dict(cfg, filterId="filter-" + ids[fname], projectOrFilterId="filter-" + ids[fname], isConfigured="true",
-                    refresh="15")
-        c.call("PUT", "/rest/api/3/dashboard/%s/items/%s/properties/config" % (did, g["id"]), conf)
-        print("gadget", g["id"], gtitle)
-    print("dashboard", env["JIRA_BASE_URL"].rstrip("/") + "/jira/dashboards/" + str(did))
+    base = env["JIRA_BASE_URL"].rstrip("/")
+    d1 = build(c, share, ids, "AfroTransact v2 · Delivery",
+               "Work streams, open work, launch blockers, verification queue and OKRs for AfroTransact v2.", GADGETS)
+    d2 = build(c, share, ids, "AfroTransact v2 · What's left to launch",
+               "Everything in the Launch release that is not done yet, by work stream and status, plus QA.", LEFT)
+    print("dashboard", base + "/jira/dashboards/" + str(d1))
+    print("dashboard", base + "/jira/dashboards/" + str(d2))
 
 
 if __name__ == "__main__":
