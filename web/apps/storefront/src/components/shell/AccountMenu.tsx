@@ -1,8 +1,7 @@
 'use client';
 
-import { accountKeys, cartKeys, type Me } from '@afrotransact/api-client';
+import { type Me } from '@afrotransact/api-client';
 import {
-  announceSignOut,
   CalendarCheck,
   CaretDown,
   CreditCard,
@@ -22,18 +21,16 @@ import {
   Storefront,
   User,
   UserCircle,
-  UserPlus,
-  useToast
+  UserPlus
 } from '@afrotransact/ui';
-import { useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode } from 'react';
 
 import { type MessageKey, useT } from '@/i18n/t';
-import { browserApi } from '@/lib/api/browser';
 
 import styles from './AccountMenu.module.css';
-import { type AccountMenuIcon, accountMenuModel, signOutReturnTo } from './accountMenuItems';
+import { type AccountMenuIcon, accountMenuModel } from './accountMenuItems';
+import { useSignOut } from './useSignOut';
 
 const ICONS: Record<AccountMenuIcon, ReactNode> = {
   user: <UserCircle aria-hidden />,
@@ -66,33 +63,11 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen, memberTier }: 
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
-  const qc = useQueryClient();
-  const toast = useToast();
+  const signOut = useSignOut();
   const model = accountMenuModel(me, pathname ?? '/');
   const isUser = model.variant === 'user';
   const title = isUser ? model.title : t(model.title as MessageKey);
   const subtitle = isUser ? model.subtitle : t(model.subtitle as MessageKey);
-
-  const signOut = async () => {
-    let redirectTo: string | null = null;
-    try {
-      ({ redirectTo } = await browserApi().signOut({ returnTo: signOutReturnTo(window.location.pathname, window.location.search) }));
-    } catch {
-      /* signed out locally anyway: the session cookie is gone or was never there */
-    }
-    // The other tabs of this browser leave too (session timer).
-    announceSignOut();
-    if (redirectTo) {
-      // Ends the identity session too (single sign-out); identity then returns the browser to this page (or the home
-      // page) with signedOut=1, where SignedOutNotice says so. No sign-in wall.
-      window.location.assign(redirectTo);
-      return;
-    }
-    await Promise.all([qc.invalidateQueries({ queryKey: accountKeys.all }), qc.invalidateQueries({ queryKey: cartKeys.all })]);
-    toast.show(t('account.signedOut'));
-    router.push('/');
-    router.refresh();
-  };
 
   const trigger = (
     <button type="button" className={styles.trigger} aria-label={`${t('header.accountMenu')}: ${title}`}>

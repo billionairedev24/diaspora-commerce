@@ -1,12 +1,11 @@
 'use client';
 
 import { EMPTY_NAVIGATION, type LegalDocumentKey, legalDocumentKeyOf, legalHref, NewsletterRequestSchema, type SiteConfig, type SiteNavigation } from '@afrotransact/api-client';
-import { isLocale, localeCookie, LOCALES } from '@afrotransact/i18n';
+import { LOCALES } from '@afrotransact/i18n';
 import { LANGUAGE_SWITCH_ENABLED, useLocale } from '@afrotransact/i18n/react';
 import { AppleGlyph, CaretDown, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
@@ -16,6 +15,7 @@ import { useMediaQuery } from '@/lib/ui/useMediaQuery';
 
 import styles from './Footer.module.css';
 import { InstallApp } from './InstallApp';
+import { useChangeLocale } from './useChangeLocale';
 
 type FooterLink = { label: MessageKey | string; href: string; external?: boolean };
 
@@ -170,7 +170,7 @@ export interface FooterViewProps {
 export function FooterView({ config, navigation = EMPTY_NAVIGATION, locale, year = new Date().getFullYear() }: FooterViewProps) {
   const active = useLocale();
   const t = useT();
-  const router = useRouter();
+  const changeLocale = useChangeLocale();
   const phone = config?.contacts.phone ?? '';
   // Phones: the link columns fold into accordions (one heading button each) so the footer stays short.
   const narrow = useMediaQuery('(max-width: 640px)');
@@ -258,11 +258,7 @@ export function FooterView({ config, navigation = EMPTY_NAVIGATION, locale, year
               <select
                 className={styles.langSelect}
                 value={locale ?? active}
-                onChange={(e) => {
-                  if (!isLocale(e.target.value)) return;
-                  document.cookie = localeCookie(e.target.value);
-                  router.refresh();
-                }}
+                onChange={(e) => changeLocale(e.target.value)}
               >
                 {LOCALES.map((l) => (
                   <option key={l.code} value={l.code} lang={l.code} dir={l.dir}>
