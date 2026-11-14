@@ -109,8 +109,8 @@ export function DriverPickupForm({ a, editable }: { a: ShipFromAddress; editable
         {errors.hours ? <p className="m-0 text-sm text-danger">{errors.hours}</p> : null}
         {hours.length === 0 ? <p className="m-0 text-sm text-muted">{t('sc.pickup.noWindows')}</p> : null}
         {hours.map((h, i) => (
-          <div key={`${a.id}-${i}`} className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2" data-testid="pickup-window">
-            <Select id={id(`day-${i}`)} label={<span className="at-visually-hidden">{t('sc.pickup.dayN', { n: i + 1 })}</span>} value={h.day} options={dayOptions} error={errors[`hours.${i}.day`]} onChange={(e) => setWindow(i, { day: e.currentTarget.value as PickupDay })} />
+          <div key={`${a.id}-${i}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" data-testid="pickup-window">
+            <Select className="col-span-3 sm:col-span-1" id={id(`day-${i}`)} label={<span className="at-visually-hidden">{t('sc.pickup.dayN', { n: i + 1 })}</span>} value={h.day} options={dayOptions} error={errors[`hours.${i}.day`]} onChange={(e) => setWindow(i, { day: e.currentTarget.value as PickupDay })} />
             <TextField id={id(`opens-${i}`)} type="time" label={<span className="at-visually-hidden">{t('sc.pickup.opensN', { n: i + 1 })}</span>} value={h.opens} error={errors[`hours.${i}.opens`]} onChange={(e) => setWindow(i, { opens: e.currentTarget.value })} />
             <TextField id={id(`closes-${i}`)} type="time" label={<span className="at-visually-hidden">{t('sc.pickup.closesN', { n: i + 1 })}</span>} value={h.closes} error={errors[`hours.${i}.closes`]} onChange={(e) => setWindow(i, { closes: e.currentTarget.value })} />
             <Button size="sm" variant="neutral" aria-label={t('sc.pickup.removeN', { n: i + 1 })} onClick={() => setHours((hs) => hs.filter((_, j) => j !== i))}>

@@ -116,8 +116,9 @@ function PickupLocationForm({ a, editable }: { a: ShipFromAddress; editable: boo
           <p className="m-0 text-sm text-muted">{draft.hours.length === 0 ? t('sc.pickupCard.hoursNone') : t('sc.pickupCard.hoursHelp')}</p>
           {errors.hours ? <p className="m-0 text-sm text-danger">{errors.hours}</p> : null}
           {draft.hours.map((h, i) => (
-            <div key={`${a.id}-pk-${i}`} className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2" data-testid="customer-pickup-window">
+            <div key={`${a.id}-pk-${i}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" data-testid="customer-pickup-window">
               <Select
+                className="col-span-3 sm:col-span-1"
                 id={id(`day-${i}`)}
                 label={<span className="at-visually-hidden">{t('sc.pickup.dayN', { n: i + 1 })}</span>}
                 value={h.day}
