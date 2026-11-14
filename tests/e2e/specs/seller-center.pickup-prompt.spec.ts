@@ -14,7 +14,7 @@ test.describe('seller center · pickup prompt', () => {
     expect(off.status(), await off.text()).toBe(200);
   });
 
-  test('home points to Settings > Pickup, which is pre-filled, stays off until confirmed, and turns pickup on only then', async ({ page, request, baseURL }, testInfo) => {
+  test('home points to Settings > Pickup, stays off until the seller switches it on and saves valid hours', async ({ page, request, baseURL }, testInfo) => {
     await page.goto('/');
     const card = page.getByTestId('pickup-prompt');
     await expect(card).toBeVisible();
@@ -26,25 +26,26 @@ test.describe('seller center · pickup prompt', () => {
 
     const form = page.getByTestId('pickup-location').first();
     await expect(form.getByTestId('pickup-address')).toContainText('9800 Bissonnet St');
-    await form.getByLabel(/Customers can collect orders from this location/).check();
-    await expect(form.getByTestId('pickup-preview')).toContainText('Shoppers near ZIP 77036 will see Pickup');
+    // One switch is the only on/off, and it is off: nothing is on or filled in until the seller says so.
+    const sw = form.getByRole('switch', { name: 'Let customers collect orders' });
+    await expect(sw).toHaveAttribute('aria-checked', 'false');
+    await expect(form.getByRole('button', { name: 'Save customer pickup' })).toBeDisabled();
+    await sw.click();
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller settings pickup' });
-    const turnOn = form.getByRole('button', { name: 'Turn on pickup' });
-    await expect(turnOn).toBeDisabled();
-    await form.getByRole('button', { name: 'Add a pickup window' }).click();
-    await form.getByLabel('Opens, window 1').fill('10:00');
-    await form.getByLabel('Closes, window 1').fill('16:00');
-    await form.getByLabel('Ready after (hours)').fill('3');
-    await expect(turnOn).toBeDisabled();
-    await form.getByLabel('Someone will be at this address during these hours.').check();
-    await expect(turnOn).toBeEnabled();
-    // Still off on the server until the button is pressed.
+    const save = form.getByRole('button', { name: 'Save customer pickup' });
+    await expect(save).toBeDisabled();
+    await form.getByRole('switch', { name: 'Monday' }).click();
+    await form.getByLabel('From, Monday').selectOption('10:00');
+    await form.getByLabel('To, Monday').selectOption('16:00');
+    await form.getByLabel('Ready to collect').selectOption('4');
+    await expect(save).toBeEnabled();
+    // Still off on the server until Save is pressed.
     const before = await (await request.get(`${baseURL}/api/bff/v1/seller/ship-from-addresses`)).json();
     expect(before.items[0].customerPickup.enabled).toBe(false);
-    await turnOn.click();
+    await save.click();
     await expect(page.getByText('Customer pickup saved').first()).toBeVisible();
     const after = await (await request.get(`${baseURL}/api/bff/v1/seller/ship-from-addresses`)).json();
-    expect(after.items[0].customerPickup).toMatchObject({ enabled: true, readyHours: 3 });
+    expect(after.items[0].customerPickup).toMatchObject({ enabled: true, readyHours: 4, hours: [{ day: 'MONDAY', opens: '10:00', closes: '16:00' }] });
     await page.goto('/');
     await expect(page.getByTestId('pickup-prompt')).toHaveCount(0);
   });

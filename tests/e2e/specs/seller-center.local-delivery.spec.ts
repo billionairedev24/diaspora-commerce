@@ -22,25 +22,26 @@ test.describe('seller center · AfroTransact pickup (S255)', () => {
     await page.goto('/settings/shipping');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Shipping & delivery/);
     const katy = page.getByTestId('shipping-location').filter({ hasText: 'Cinco Ranch' });
-    const toggle = atp(katy).getByLabel(/AfroTransact picks up here/);
-    if (await toggle.isChecked()) {
-      await toggle.uncheck();
+    const toggle = atp(katy).getByRole('switch', { name: /AfroTransact picks up here/ });
+    if ((await toggle.getAttribute('aria-checked')) === 'true') {
+      await toggle.click();
       await atp(katy).getByRole('button', { name: 'Save pickup settings' }).click();
       await expect(page.getByText('AfroTransact pickup updated').first()).toBeVisible();
     }
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller shipping settings' });
 
-    await atp(katy).getByLabel(/AfroTransact picks up here/).check();
-    await expect(atp(katy).getByTestId('pickup-window').first()).toBeVisible();
-    await atp(katy).getByLabel('Opens, window 1').fill('10:00');
-    await atp(katy).getByLabel('Closes, window 1').fill('16:00');
+    await toggle.click();
+    await expect(atp(katy).getByTestId('weekly-row')).toHaveCount(7);
+    await atp(katy).getByRole('switch', { name: 'Monday' }).click();
+    await atp(katy).getByLabel('From, Monday').selectOption('10:00');
+    await atp(katy).getByLabel('To, Monday').selectOption('16:00');
     await atp(katy).getByRole('button', { name: 'Save pickup settings' }).click();
     await expect(page.getByText('AfroTransact pickup updated').first()).toBeVisible();
 
     await page.reload();
     const after = page.getByTestId('shipping-location').filter({ hasText: 'Cinco Ranch' });
-    await expect(atp(after).getByLabel(/AfroTransact picks up here/)).toBeChecked();
-    await expect(atp(after).getByLabel('Opens, window 1')).toHaveValue('10:00');
+    await expect(atp(after).getByRole('switch', { name: /AfroTransact picks up here/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(atp(after).getByLabel('From, Monday')).toHaveValue('10:00');
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller shipping settings' });
   });
 });

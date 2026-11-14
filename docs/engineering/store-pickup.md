@@ -6,8 +6,9 @@ the seed only creates one seller pickup place (Mama Put's kitchen, `tools/seed/s
 
 ## What must be true for a seller's package to offer Pickup
 
-1. **The seller turned it on**: Seller Center > Settings > Pickup > the location > "Customers can collect orders from this
-   location", with at least one opening window, a ready time and "Someone will be at this address during these hours". That saves an **active** carrier-gateway pickup location of kind `SELLER`, id =
+1. **The seller turned it on**: Seller Center > Settings > Pickup > the location > the switch "Let customers collect orders",
+   with at least one open day (from and to), a ready time and Save. Turning the switch on is the confirmation that someone will be
+   at the address during the open hours. That saves an **active** carrier-gateway pickup location of kind `SELLER`, id =
    the ship-from address id, owner = the seller's organisation (`gateway-bff` `SetCustomerPickup`).
 2. **The shopper has a delivery address with a 5 digit ZIP** (the summary has no pickup before that).
 3. **The place is near the address**: within 60 miles (`pickupRadiusMiles`) when both the place and the address have coordinates,
@@ -38,13 +39,14 @@ Sellers are **prompted** to enable store pickup; it is never on by default and n
 explicit confirmation.
 
 - **Where it is turned on**: Settings > Pickup (its own page, see `docs/engineering/seller-settings.md`). The location's address is
-  **already there** and shown read-only, with a link to change it under Settings > Locations. A seller with no location yet
+  **already there** and shown read-only as one line, with a link to change it under Settings > Locations. A seller with no location yet
   gets one click, "Use my business address" (Settings > Locations and Settings > Pickup), which saves the address from sign-up as
-  the default location; nothing creates a location, and nothing turns pickup on, without the seller's click. The seller only enables pickup and confirms the opening hours, the ready time and
-  "Someone will be at this address during these hours." Opening hours and the ready time start **empty and required**; nothing
-  is invented. It says in plain words: "Customers will be able to collect orders from this address during these hours. Only
-  switch this on if someone will be there." and previews "Shoppers near ZIP 77002 will see Pickup". "Turn on pickup" stays
-  disabled until the hours are valid, a ready time is typed and the box is ticked.
+  the default location; nothing creates a location, and nothing turns pickup on, without the seller's click. The seller switches
+  pickup on, opens the days they will be there (Mon to Sun rows with one from and one to each, "Copy to weekdays" / "Same every
+  day" to set them fast), picks the ready time (Same day, 1 hour, 2 hours, 4 hours, Next day) and saves. All seven days start
+  **closed** and the ready time starts **empty and required**; nothing is invented. The one line under the switch says "Turning this
+  on confirms someone will be at this address during your open hours." Save stays disabled until at least one day is open with
+  a to later than its from and a ready time is chosen. One window is saved per open day; closed days send none.
 - **The prompt**: Seller Center home shows a small card ("Let customers collect orders from your address") to an approved seller
   organisation that has a ship-from address and **no active pickup place**. It only links to Settings > Pickup ("Set up
   pickup") with **Not now / Don't ask again**; it never switches anything on and has no form. Orders shows a one-line nudge
