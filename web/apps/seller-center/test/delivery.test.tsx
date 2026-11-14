@@ -13,6 +13,14 @@ import { asRole, mockApi } from './mock-api';
 import { renderScreen } from './render';
 
 /* AfroTransact Delivery from the seller's store (S255) in the Seller Center, against the seller mocks. */
+/** Turns driver pickup on for a card and opens Monday 9 to 5 (nothing is prefilled). */
+async function turnOnWithMonday(user: ReturnType<typeof userEvent.setup>, card: HTMLElement) {
+  await user.click(within(card).getByRole('switch', { name: /AfroTransact picks up here/ }));
+  await user.click(within(card).getByRole('switch', { name: 'Monday' }));
+  await user.selectOptions(within(card).getByLabelText('From, Monday'), '09:00');
+  await user.selectOptions(within(card).getByLabelText('To, Monday'), '17:00');
+}
+
 describe('AfroTransact pickup and delivery fee', () => {
   beforeEach(() => {
     resetSellerDb(new Date());
@@ -29,24 +37,30 @@ describe('AfroTransact pickup and delivery fee', () => {
     expect(within(rows[0] as HTMLElement).getByRole('link', { name: 'Pickup settings' })).toHaveAttribute('href', '/settings/pickup');
   });
 
-  it('turns AfroTransact driver pickup on with hours (Settings > Shipping & delivery)', async () => {
+  it('turns AfroTransact driver pickup on with hours (Settings > Shipping & delivery): one switch, the week, one Save', async () => {
     const user = userEvent.setup();
     await renderScreen(<ShippingView />);
     const cards = await screen.findAllByTestId('shipping-location');
     const katy = within(cards[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
-    const toggle = within(katy).getByLabelText(/AfroTransact picks up here/);
-    expect(toggle).not.toBeChecked();
+    const toggle = within(katy).getByRole('switch', { name: /AfroTransact picks up here/ });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
     await user.click(toggle);
-    expect(within(katy).getAllByTestId('pickup-window')).toHaveLength(1);
-    await user.click(within(katy).getByRole('button', { name: 'Add a pickup window' }));
-    const closes = within(katy).getByLabelText('Closes, window 2');
-    await user.clear(closes);
-    await user.type(closes, '09:00');
-    await user.click(within(katy).getByRole('button', { name: 'Save pickup settings' }));
-    expect(await within(katy).findByText('Closes after it opens')).toBeInTheDocument();
-    await user.click(within(katy).getByRole('button', { name: 'Remove window 2' }));
-    await user.click(within(katy).getByRole('button', { name: 'Save pickup settings' }));
+    // Nothing is prefilled: seven closed days, and Save waits for a valid day.
+    expect(within(katy).getAllByTestId('weekly-row')).toHaveLength(7);
+    expect(within(katy).queryAllByRole('combobox')).toHaveLength(0);
+    const save = within(katy).getByRole('button', { name: 'Save pickup settings' });
+    expect(save).toBeDisabled();
+    await user.click(within(katy).getByRole('switch', { name: 'Monday' }));
+    await user.selectOptions(within(katy).getByLabelText('From, Monday'), '10:00');
+    await user.selectOptions(within(katy).getByLabelText('To, Monday'), '09:00');
+    expect(within(katy).getByTestId('driver-validation')).toHaveTextContent('To must be later than from.');
+    expect(save).toBeDisabled();
+    await user.selectOptions(within(katy).getByLabelText('To, Monday'), '15:00');
+    await user.click(within(katy).getByRole('button', { name: 'Copy to weekdays' }));
+    expect(save).toBeEnabled();
+    await user.click(save);
     await waitFor(async () => expect((await mockApi().listShipFrom())[1]?.afrotransactPickup.enabled).toBe(true));
+    expect((await mockApi().listShipFrom())[1]?.afrotransactPickup.hours).toHaveLength(5);
   });
 
   it('explains why driver pickup can’t be turned on: outside the area, not geocoded', async () => {
@@ -57,11 +71,11 @@ describe('AfroTransact pickup and delivery fee', () => {
     await renderScreen(<ShippingView />);
     const cards = await screen.findAllByTestId('shipping-location');
     const austin = cards[2] as HTMLElement;
-    await user.click(within(austin).getByLabelText(/AfroTransact picks up here/));
+    await turnOnWithMonday(user, austin);
     await user.click(within(austin).getByRole('button', { name: 'Save pickup settings' }));
     expect(await within(austin).findByRole('alert')).toHaveTextContent('outside the AfroTransact delivery area');
     const nowhere = cards[3] as HTMLElement;
-    await user.click(within(nowhere).getByLabelText(/AfroTransact picks up here/));
+    await turnOnWithMonday(user, nowhere);
     await user.click(within(nowhere).getByRole('button', { name: 'Save pickup settings' }));
     expect(await within(nowhere).findByRole('alert')).toHaveTextContent('couldn’t locate this address at street level');
   });

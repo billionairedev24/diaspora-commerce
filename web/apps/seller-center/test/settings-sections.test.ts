@@ -1,7 +1,7 @@
 import { type ShipFromAddress } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { draftOf, pickupHint, pickupSave } from '@/lib/pickup-settings';
+import { draftOf, pickupCanSave, pickupProblem, pickupSave } from '@/lib/pickup-settings';
 import {
   addressFromBusiness,
   canEditSection,
@@ -14,6 +14,7 @@ import {
   shippingStatus,
   visibleSections
 } from '@/lib/settings-sections';
+import { closedWeek, type DayRow, weekOf, windowsOf } from '@/lib/weekly-hours';
 
 const level = (m: Record<string, 'VIEW' | 'EDIT' | 'FULL'>) => (key: string) => m[key] ?? null;
 const addr = (over: Partial<ShipFromAddress> & { pickup?: boolean; driver?: boolean }): ShipFromAddress =>
@@ -25,7 +26,7 @@ const addr = (over: Partial<ShipFromAddress> & { pickup?: boolean; driver?: bool
     ...over
   }) as unknown as ShipFromAddress;
 const monday = { day: 'MONDAY' as const, opens: '10:00', closes: '16:00' };
-const MSG = { ready: 'ready', confirm: 'confirm' };
+const MSG = { none: 'none', missing: 'missing', order: 'order', ready: 'ready' };
 
 describe('settings sections', () => {
   it('has one page per section, each under /settings, with a unique key and path', () => {
@@ -75,31 +76,44 @@ describe('settings sections', () => {
 });
 
 describe('pickup form rules', () => {
-  it('starts empty and unconfirmed while pickup is off; shows saved hours when it is on', () => {
-    expect(draftOf(undefined)).toEqual({ enabled: false, hours: [], ready: '', confirmed: false });
-    expect(draftOf({ enabled: true, hours: [monday], readyHours: 3 })).toEqual({ enabled: true, hours: [monday], ready: '3', confirmed: true });
+  const open = (week: ReturnType<typeof weekOf>, day: DayRow['day'], from: string, to: string) => week.map((r) => (r.day === day ? { ...r, open: true, from, to } : r));
+
+  it('starts all closed and empty while pickup is off; shows the saved week when it is on', () => {
+    expect(draftOf(undefined)).toEqual({ enabled: false, week: closedWeek(), ready: '' });
+    expect(draftOf(undefined).week.every((r) => !r.open && r.from === '' && r.to === '')).toBe(true);
+    const on = draftOf({ enabled: true, hours: [monday], readyHours: 3 });
+    expect(on).toMatchObject({ enabled: true, ready: '3' });
+    expect(windowsOf(on.week)).toEqual([monday]);
   });
 
-  it('never sends an unconfirmed turn-on, and always sends hoursConfirmed with a turn-on', () => {
-    const off = undefined;
-    const draft = { enabled: true, hours: [monday], ready: '2', confirmed: false };
-    expect(pickupSave(off, draft, MSG)).toEqual({ ok: false, errors: { confirmed: 'confirm' } });
-    expect(pickupSave(off, { ...draft, ready: '' }, MSG)).toMatchObject({ ok: false, errors: { readyHours: 'ready' } });
-    expect(pickupSave(off, { ...draft, hours: [] }, MSG)).toMatchObject({ ok: false });
-    expect(pickupSave(off, { ...draft, confirmed: true }, MSG)).toEqual({ ok: true, request: { enabled: true, hours: [monday], readyHours: 2, hoursConfirmed: true } });
+  it('never sends a turn-on without hours and a ready time, and a turn-on always carries the confirmation', () => {
+    const week = open(closedWeek(), 'MONDAY', '10:00', '16:00');
+    expect(pickupSave(undefined, { enabled: true, week: closedWeek(), ready: '2' }, MSG)).toMatchObject({ ok: false, message: 'none' });
+    expect(pickupSave(undefined, { enabled: true, week, ready: '' }, MSG)).toMatchObject({ ok: false, message: 'ready' });
+    expect(pickupSave(undefined, { enabled: true, week, ready: '2' }, MSG)).toEqual({ ok: true, request: { enabled: true, hours: [monday], readyHours: 2, hoursConfirmed: true } });
   });
 
   it('lets an edit of a place that stays on through, and switching off needs nothing', () => {
     const on = { enabled: true, hours: [monday], readyHours: 2 };
-    expect(pickupSave(on, { enabled: true, hours: [monday], ready: '5', confirmed: true }, MSG)).toMatchObject({ ok: true, request: { readyHours: 5, hoursConfirmed: true } });
-    expect(pickupSave(on, { enabled: false, hours: [], ready: '', confirmed: false }, MSG)).toEqual({ ok: true, request: { enabled: false, hours: [monday], readyHours: 2, hoursConfirmed: false } });
+    expect(pickupSave(on, { enabled: true, week: weekOf([monday]), ready: '24' }, MSG)).toMatchObject({ ok: true, request: { readyHours: 24, hoursConfirmed: true } });
+    expect(pickupSave(on, { enabled: false, week: closedWeek(), ready: '' }, MSG)).toEqual({ ok: true, request: { enabled: false, hours: [monday], readyHours: 2, hoursConfirmed: false } });
   });
 
-  it('names the first thing missing, in the order the form is filled', () => {
-    expect(pickupHint(undefined, { enabled: false, hours: [], ready: '', confirmed: false })).toBeNull();
-    expect(pickupHint(undefined, { enabled: true, hours: [], ready: '', confirmed: false })).toBe('hours');
-    expect(pickupHint(undefined, { enabled: true, hours: [monday], ready: '', confirmed: false })).toBe('ready');
-    expect(pickupHint(undefined, { enabled: true, hours: [monday], ready: '1', confirmed: false })).toBe('confirm');
-    expect(pickupHint(undefined, { enabled: true, hours: [monday], ready: '1', confirmed: true })).toBeNull();
+  it('can save only with a change that is valid', () => {
+    const on = { enabled: true, hours: [monday], readyHours: 2 };
+    const same = draftOf(on);
+    expect(pickupCanSave(on, same, MSG)).toBe(false);
+    expect(pickupCanSave(on, { ...same, ready: '4' }, MSG)).toBe(true);
+    expect(pickupCanSave(on, { ...same, week: open(same.week, 'TUESDAY', '10:00', '09:00') }, MSG)).toBe(false);
+    expect(pickupCanSave(undefined, { enabled: true, week: closedWeek(), ready: '' }, MSG)).toBe(false);
+    expect(pickupCanSave(on, { ...same, enabled: false }, MSG)).toBe(true);
+    expect(pickupCanSave(undefined, draftOf(undefined), MSG)).toBe(false);
+  });
+
+  it('names the first thing wrong', () => {
+    expect(pickupProblem({ enabled: false, week: closedWeek(), ready: '' }, MSG)).toBeNull();
+    expect(pickupProblem({ enabled: true, week: closedWeek(), ready: '' }, MSG)?.message).toBe('none');
+    expect(pickupProblem({ enabled: true, week: open(closedWeek(), 'MONDAY', '10:00', ''), ready: '' }, MSG)).toEqual({ message: 'missing', days: ['MONDAY'] });
+    expect(pickupProblem({ enabled: true, week: open(closedWeek(), 'MONDAY', '10:00', '16:00'), ready: '' }, MSG)?.message).toBe('ready');
   });
 });

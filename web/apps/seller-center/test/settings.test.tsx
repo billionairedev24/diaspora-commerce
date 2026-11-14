@@ -1,5 +1,5 @@
 import { resetSellerDb } from '@afrotransact/api-client/mocks/seller';
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -14,6 +14,7 @@ import { SETTINGS_SECTIONS } from '@/lib/settings-sections';
 import nextConfig from '../next.config';
 import { asRole, mockApi } from './mock-api';
 import { renderScreen } from './render';
+import { nav } from './setup';
 
 const a11y = async () => (await axe.run(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`);
 
@@ -56,16 +57,36 @@ describe('Settings landing', () => {
     expect(hrefs).not.toContain('/settings/team');
   });
 
-  it('has the sub-nav the shell shows on desktop, with the current section marked', async () => {
+  it('is one content column: no sub-nav, and a "Settings" link back above a section', async () => {
     await renderScreen(
       <SettingsShell>
         <p>body</p>
       </SettingsShell>
     );
-    const nav = await screen.findByRole('navigation', { name: 'Settings sections' });
-    expect(within(nav).getAllByRole('link').length).toBe(SETTINGS_SECTIONS.length + 1);
+    expect(await screen.findByText('body')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
+    // On the Settings home there is nothing to go back to.
+    expect(screen.queryByTestId('settings-back')).toBeNull();
+    cleanup();
+    nav.pathname = '/settings/pickup';
+    await renderScreen(
+      <SettingsShell>
+        <p>body</p>
+      </SettingsShell>
+    );
+    expect(await screen.findByTestId('settings-back')).toHaveAttribute('href', '/settings');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    nav.pathname = '/';
   });
 });
+
+const SWITCH = 'Let customers collect orders';
+/** Opens a day in the weekly list and picks its times (HH:MM values of the 30-minute selects). */
+async function openDay(user: ReturnType<typeof userEvent.setup>, scope: HTMLElement, day: string, from: string, to: string) {
+  await user.click(within(scope).getByRole('switch', { name: day }));
+  await user.selectOptions(within(scope).getByLabelText(`From, ${day}`), from);
+  await user.selectOptions(within(scope).getByLabelText(`To, ${day}`), to);
+}
 
 describe('Settings > Pickup', () => {
   beforeEach(async () => {
@@ -74,50 +95,135 @@ describe('Settings > Pickup', () => {
     await mockApi().setCustomerPickup('sfa-store', { enabled: false, hours: [], readyHours: 0 });
   });
 
-  it('shows the preloaded address read-only with a link to Locations, off, with nothing filled in', async () => {
+  it('is one switch, one address line and a Save: off, nothing filled in, no duplicated text', async () => {
     await renderScreen(<PickupView />);
-    const forms = await screen.findAllByTestId('pickup-location');
-    const form = forms[0] as HTMLElement;
+    const form = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
     expect(within(form).getByTestId('pickup-address')).toHaveTextContent('9800 Bissonnet St');
-    expect(within(form).getByRole('link', { name: 'Edit address in Locations' })).toHaveAttribute('href', '/settings/locations');
+    expect(within(form).getByRole('link', { name: 'Change in Locations' })).toHaveAttribute('href', '/settings/locations');
     // The address is text, not fields.
     expect(within(form).queryByLabelText(/Street address/)).toBeNull();
-    expect(within(form).getByLabelText(/Customers can collect orders from this location/)).not.toBeChecked();
-    expect(within(form).queryByLabelText('Ready after (hours)')).toBeNull();
-    expect(within(form).getByText('Pickup is off')).toBeInTheDocument();
+    const sw = within(form).getByRole('switch', { name: SWITCH });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    // The switch is the only on/off and the confirmation, said once.
+    expect(within(form).queryAllByRole('checkbox')).toHaveLength(0);
+    expect(within(form).getByTestId('pickup-confirm-line')).toHaveTextContent('Turning this on confirms someone will be at this address');
+    expect(within(form).queryByTestId('weekly-hours')).toBeNull();
+    expect(within(form).queryByText(/Shoppers near/)).toBeNull();
+    expect(within(form).queryByRole('button', { name: 'Turn on pickup' })).toBeNull();
+    expect(within(form).getByRole('button', { name: 'Save customer pickup' })).toBeDisabled();
+    expect(document.body.textContent).not.toMatch(/\boffer/i);
     expect(await a11y()).toEqual([]);
   });
 
-  it('turns on only with typed hours, a ready time and the confirmation, then says it is on', async () => {
+  it('shows seven closed rows, Monday to Sunday, with the times on the same row once a day is opened', async () => {
     const user = userEvent.setup();
     await renderScreen(<PickupView />);
     const form = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
-    await user.click(within(form).getByLabelText(/Customers can collect orders from this location/));
-    const turnOn = within(form).getByRole('button', { name: 'Turn on pickup' });
-    expect(turnOn).toBeDisabled();
-    expect(within(form).queryAllByTestId('customer-pickup-window')).toHaveLength(0);
-    expect(within(form).getByTestId('pickup-preview')).toHaveTextContent('Shoppers near ZIP 77036 will see Pickup');
-    await user.click(within(form).getByRole('button', { name: 'Add a pickup window' }));
-    await user.type(within(form).getByLabelText('Opens, window 1'), '10:00');
-    await user.type(within(form).getByLabelText('Closes, window 1'), '16:00');
-    await user.type(within(form).getByLabelText('Ready after (hours)'), '3');
-    expect(turnOn).toBeDisabled();
+    await user.click(within(form).getByRole('switch', { name: SWITCH }));
+    const rows = within(form).getAllByTestId('weekly-row');
+    expect(rows.map((r) => r.getAttribute('data-day'))).toEqual(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']);
+    // Default: every day closed, nothing prefilled, no time pickers yet.
+    for (const r of rows) {
+      expect(within(r).getByText('Closed')).toBeInTheDocument();
+      expect(within(r).queryAllByRole('combobox')).toHaveLength(0);
+    }
+    await user.click(within(rows[0] as HTMLElement).getByRole('switch', { name: 'Monday' }));
+    const mon = within(rows[0] as HTMLElement);
+    expect(mon.getByLabelText('From, Monday')).toHaveValue('');
+    expect(mon.getByLabelText('To, Monday')).toHaveValue('');
+    // 30-minute steps, written like 9:00 AM, in a select (no native clock input).
+    const fromOptions = within(mon.getByLabelText('From, Monday')).getAllByRole('option').map((o) => o.textContent);
+    expect(fromOptions).toHaveLength(49);
+    expect(fromOptions.slice(0, 4)).toEqual(['From', '12:00 AM', '12:30 AM', '1:00 AM']);
+    expect(fromOptions).toContain('9:00 AM');
+    expect(fromOptions).toContain('9:30 AM');
+    expect(fromOptions).not.toContain('9:15 AM');
+    expect(document.querySelector('input[type="time"]')).toBeNull();
+    expect(await a11y()).toEqual([]);
+  });
+
+  it('turns on only with an open day, valid times and a ready time; Save stays disabled with the reason beside it', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<PickupView />);
+    const form = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
+    const save = within(form).getByRole('button', { name: 'Save customer pickup' });
+    await user.click(within(form).getByRole('switch', { name: SWITCH }));
+    expect(save).toBeDisabled();
+    expect(within(form).getByTestId('pickup-validation')).toHaveTextContent('Open at least one day.');
+    await user.click(within(form).getByRole('switch', { name: 'Monday' }));
+    expect(within(form).getByTestId('pickup-validation')).toHaveTextContent('Choose from and to for each open day.');
+    await user.selectOptions(within(form).getByLabelText('From, Monday'), '16:00');
+    await user.selectOptions(within(form).getByLabelText('To, Monday'), '10:00');
+    expect(within(form).getByTestId('pickup-validation')).toHaveTextContent('To must be later than from.');
+    expect(within(form).getByLabelText('To, Monday')).toHaveAttribute('aria-invalid', 'true');
+    await user.selectOptions(within(form).getByLabelText('From, Monday'), '10:00');
+    await user.selectOptions(within(form).getByLabelText('To, Monday'), '16:00');
+    expect(within(form).getByTestId('pickup-validation')).toHaveTextContent('Choose when orders are ready to collect.');
+    expect(save).toBeDisabled();
     expect((await mockApi().listShipFrom())[0]?.customerPickup?.enabled).toBe(false);
+    await user.selectOptions(within(form).getByLabelText('Ready to collect'), '24');
+    expect(within(form).queryByTestId('pickup-validation')).toBeNull();
+    expect(save).toBeEnabled();
     expect(await a11y()).toEqual([]);
-    await user.click(within(form).getByLabelText('Someone will be at this address during these hours.'));
-    expect(turnOn).toBeEnabled();
-    await user.click(turnOn);
-    await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.customerPickup).toMatchObject({ enabled: true, readyHours: 3 }));
-    expect(await within((await screen.findAllByTestId('pickup-location'))[0] as HTMLElement).findByText('Pickup is on')).toBeInTheDocument();
-    expect(await a11y()).toEqual([]);
+    await user.click(save);
+    await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.customerPickup).toMatchObject({ enabled: true, readyHours: 24, hours: [{ day: 'MONDAY', opens: '10:00', closes: '16:00' }] }));
+    const again = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
+    expect(within(again).getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'true');
+    expect(await within(again).findByTestId('pickup-confirm-line')).toHaveTextContent('On since');
+  });
+
+  it('copies one day to the weekdays and to every day, and a closed day sends no window', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<PickupView />);
+    const form = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
+    await user.click(within(form).getByRole('switch', { name: SWITCH }));
+    const copyWeekdays = within(form).getByRole('button', { name: 'Copy to weekdays' });
+    const same = within(form).getByRole('button', { name: 'Same every day' });
+    expect(copyWeekdays).toBeDisabled();
+    expect(same).toBeDisabled();
+    await openDay(user, form, 'Monday', '09:00', '17:00');
+    await user.click(copyWeekdays);
+    const open = () => within(form).getAllByTestId('weekly-row').filter((r) => within(r).queryAllByRole('combobox').length > 0).map((r) => r.getAttribute('data-day'));
+    expect(open()).toEqual(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']);
+    expect(within(form).getByLabelText('From, Friday')).toHaveValue('09:00');
+    expect(within(form).getByLabelText('To, Friday')).toHaveValue('17:00');
+    await user.click(same);
+    expect(open()).toHaveLength(7);
+    // Close Wednesday and Sunday: they send nothing.
+    await user.click(within(form).getByRole('switch', { name: 'Wednesday' }));
+    await user.click(within(form).getByRole('switch', { name: 'Sunday' }));
+    await user.selectOptions(within(form).getByLabelText('Ready to collect'), '2');
+    await user.click(within(form).getByRole('button', { name: 'Save customer pickup' }));
+    await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.customerPickup?.enabled).toBe(true));
+    const saved = (await mockApi().listShipFrom())[0]?.customerPickup;
+    expect(saved?.readyHours).toBe(2);
+    // One window per open day (per-day windows even when the hours are shared), none for the closed days.
+    expect(saved?.hours.map((h) => h.day)).toEqual(['MONDAY', 'TUESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']);
+    expect(saved?.hours.every((h) => h.opens === '09:00' && h.closes === '17:00')).toBe(true);
+  });
+
+  it('shows saved hours as the week, lets the seller change the ready time, and switching off keeps the saved hours', async () => {
+    const user = userEvent.setup();
+    await mockApi().setCustomerPickup('sfa-store', { enabled: true, hours: [{ day: 'TUESDAY', opens: '10:00', closes: '19:00' }, { day: 'SATURDAY', opens: '10:00', closes: '16:00' }], readyHours: 3, hoursConfirmed: true });
+    await renderScreen(<PickupView />);
+    const form = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
+    expect(within(form).getByLabelText('From, Tuesday')).toHaveValue('10:00');
+    expect(within(form).getByLabelText('To, Saturday')).toHaveValue('16:00');
+    // 3 hours is not one of the choices but it is what is saved, so it still shows.
+    expect(within(form).getByLabelText('Ready to collect')).toHaveValue('3');
+    expect(within(form).getByRole('button', { name: 'Save customer pickup' })).toBeDisabled();
+    await user.click(within(form).getByRole('switch', { name: SWITCH }));
+    await user.click(within(form).getByRole('button', { name: 'Save customer pickup' }));
+    await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.customerPickup?.enabled).toBe(false));
+    expect((await mockApi().listShipFrom())[0]?.customerPickup?.hours).toHaveLength(2);
   });
 
   it('is read-only for a member who may only view orders', async () => {
     asRole('seller.catalog');
     await renderScreen(<PickupView />);
     const form = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
-    expect(within(form).getByLabelText(/Customers can collect orders from this location/)).toBeDisabled();
-    expect(within(form).queryByRole('button', { name: /Turn on pickup|Save/ })).toBeNull();
+    expect(within(form).getByRole('switch', { name: SWITCH })).toBeDisabled();
+    expect(within(form).queryByRole('button', { name: /Save/ })).toBeNull();
     expect(screen.getByText('Read-only.')).toBeInTheDocument();
   });
 

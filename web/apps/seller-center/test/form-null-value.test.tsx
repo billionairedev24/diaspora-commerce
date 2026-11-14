@@ -61,7 +61,7 @@ describe('settings forms survive typing', () => {
     clean();
   });
 
-  it('types into every field of the pickup form (hours per day, ready time, confirmation) without a single error', async () => {
+  it('uses every control of the pickup form (switch, day toggles, time selects, ready time) without a single error', async () => {
     const user = userEvent.setup();
     await mockApi().setCustomerPickup('sfa-store', { enabled: false, hours: [], readyHours: 0 });
     await renderScreen(
@@ -70,27 +70,23 @@ describe('settings forms survive typing', () => {
       </Guarded>
     );
     const form = (await screen.findAllByTestId('pickup-location'))[0] as HTMLElement;
-    await user.click(within(form).getByLabelText(/Customers can collect orders from this location/));
+    await user.click(within(form).getByRole('switch', { name: 'Let customers collect orders' }));
     // Three days, each with its own hours.
-    const days = ['MONDAY', 'TUESDAY', 'WEDNESDAY'];
-    for (const [i, day] of days.entries()) {
-      await user.click(within(form).getByRole('button', { name: 'Add a pickup window' }));
-      await user.selectOptions(within(form).getByLabelText(`Day of window ${i + 1}`), day);
-      await user.type(within(form).getByLabelText(`Opens, window ${i + 1}`), '09:00');
-      await user.type(within(form).getByLabelText(`Closes, window ${i + 1}`), '17:30');
-      expect(within(form).getByLabelText(`Day of window ${i + 1}`)).toHaveValue(day);
-      expect(within(form).getByLabelText(`Opens, window ${i + 1}`)).toHaveValue('09:00');
+    for (const day of ['Monday', 'Tuesday', 'Wednesday']) {
+      await user.click(within(form).getByRole('switch', { name: day }));
+      await user.selectOptions(within(form).getByLabelText(`From, ${day}`), '09:00');
+      await user.selectOptions(within(form).getByLabelText(`To, ${day}`), '17:30');
+      expect(within(form).getByLabelText(`From, ${day}`)).toHaveValue('09:00');
+      expect(within(form).getByLabelText(`To, ${day}`)).toHaveValue('17:30');
     }
-    await user.type(within(form).getByLabelText('Ready after (hours)'), '24');
-    expect(within(form).getByLabelText('Ready after (hours)')).toHaveValue(24);
-    await user.click(within(form).getByLabelText('Someone will be at this address during these hours.'));
-    expect(within(form).getByLabelText('Someone will be at this address during these hours.')).toBeChecked();
-    await user.click(within(form).getByRole('button', { name: 'Turn on pickup' }));
+    await user.selectOptions(within(form).getByLabelText('Ready to collect'), '24');
+    expect(within(form).getByLabelText('Ready to collect')).toHaveValue('24');
+    await user.click(within(form).getByRole('button', { name: 'Save customer pickup' }));
     await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.customerPickup).toMatchObject({ enabled: true, readyHours: 24 }));
     clean();
   });
 
-  it('types into the driver pickup hours without a single error', async () => {
+  it('uses the driver pickup hours without a single error', async () => {
     const user = userEvent.setup();
     await renderScreen(
       <Guarded>
@@ -98,11 +94,10 @@ describe('settings forms survive typing', () => {
       </Guarded>
     );
     const katy = within((await screen.findAllByTestId('shipping-location'))[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
-    await user.click(within(katy).getByLabelText(/AfroTransact picks up here/));
-    const opens = within(katy).getByLabelText('Opens, window 1');
-    await user.clear(opens);
-    await user.type(opens, '08:15');
-    expect(opens).toHaveValue('08:15');
+    await user.click(within(katy).getByRole('switch', { name: /AfroTransact picks up here/ }));
+    await user.click(within(katy).getByRole('switch', { name: 'Monday' }));
+    await user.selectOptions(within(katy).getByLabelText('From, Monday'), '08:30');
+    expect(within(katy).getByLabelText('From, Monday')).toHaveValue('08:30');
     clean();
   });
 });
