@@ -509,8 +509,9 @@ func shipped(d map[string]any) bool {
 func enrichShipment(d map[string]any, l Links) {
 	enrichShipmentView(d, l)
 	d["trackingLine"] = ""
-	if c, n := str(d, "carrier"), str(d, "trackingNumber"); n != "" {
-		d["trackingLine"] = strings.TrimSpace(strings.ToUpper(c) + " tracking: " + n)
+	// The carrier's name is never shown to customers (owner rule), only the tracking number.
+	if n := str(d, "trackingNumber"); n != "" {
+		d["trackingLine"] = "Tracking number: " + n
 	}
 	d["eta"] = "today"
 	if f := friendlyDate(str(d, "promisedBy")); f != "" && str(d, "to") != "out_for_delivery" {

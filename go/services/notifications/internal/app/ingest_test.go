@@ -157,7 +157,7 @@ func TestShipmentStatusPicksTemplate(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s→%s (%s): got %q want %q", c.from, c.to, c.method, got, c.want)
 		}
-		if c.want == "shipment.shipped" && !strings.Contains(store.enqueued[0].BodyText, "trackingLine=UPS tracking: 1Z9") {
+		if c.want == "shipment.shipped" && !strings.Contains(store.enqueued[0].BodyText, "trackingLine=Tracking number: 1Z9") {
 			t.Errorf("tracking line: %q", store.enqueued[0].BodyText)
 		}
 	}
