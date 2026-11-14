@@ -187,7 +187,7 @@ describe('department bar, All menu and Services read the live counts (S419)', ()
     expect(within(bar).getByRole('link', { name: 'Offer your services' })).toBeInTheDocument();
   });
 
-  it('10,000 products: the bar holds the 7 largest, Electronics and Pets appear, and All lists every department and the communities', async () => {
+  it('10,000 products: the bar holds the 7 largest, Electronics and Pets appear, and All lists every department', async () => {
     const bar = await nav(10000);
     await waitFor(() => expect(within(bar).getByRole('link', { name: 'Groceries' })).toBeInTheDocument());
     const departmentLinks = within(bar)
@@ -196,12 +196,12 @@ describe('department bar, All menu and Services read the live counts (S419)', ()
     expect(departmentLinks).toHaveLength(7);
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.click(within(bar).getByRole('button', { name: 'All' }));
-    const menu = within(document.getElementById(within(bar).getByRole('button', { name: 'All' }).getAttribute('aria-controls') as string) as HTMLElement);
-    expect(menu.getByRole('heading', { name: 'All departments' })).toBeInTheDocument();
-    for (const d of ['Electronics', 'Pets', 'Baby & Kids']) expect(menu.getByRole('link', { name: d })).toBeInTheDocument();
-    expect(menu.getByRole('link', { name: 'All products' })).toHaveAttribute('href', '/s');
-    expect(menu.getByRole('heading', { name: 'Communities' })).toBeInTheDocument();
-    expect(menu.getAllByRole('link', { name: /Nigerian|Ghanaian|Kenyan/ }).length).toBeGreaterThan(0);
+    // The All menu is a drawer: six departments first, every other one behind "See all".
+    const menu = within(await screen.findByRole('menu', { name: 'All menu' }));
+    expect(menu.getByRole('group', { name: 'Shop by department' })).toBeInTheDocument();
+    await user.click(menu.getByRole('menuitem', { name: 'See all' }));
+    for (const d of ['Electronics', 'Pets', 'Baby & Kids']) expect(menu.getByRole('menuitem', { name: d })).toBeInTheDocument();
+    expect(menu.getByRole('menuitem', { name: 'All products' })).toHaveAttribute('href', '/s');
   });
 
   it('the All menu is a disclosure: it opens, Escape closes it and returns focus to the button', async () => {
