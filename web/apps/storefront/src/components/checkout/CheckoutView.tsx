@@ -16,17 +16,18 @@ type Cart,  cartKeys,
   orderKeys, randomUuid,
   type TotalChange,
   totalChangeOf } from '@afrotransact/api-client';
-import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
+import { getTelemetry } from '@afrotransact/telemetry';
+import { Button, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AddressDialog } from '@/components/account/AddressDialog';
-import { type PaymentElementChange, type PaymentElementHandle, REDIRECTED } from '@/components/payments/PaymentElementField';
+import { type PaymentElementChange, type PaymentElementHandle, type PaymentElementStatus, REDIRECTED, stripeJsDown } from '@/components/payments/PaymentElementField';
 import { useCartPreorderCopy } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
+import { useCart } from '@/lib/cart/useCart';
 import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
@@ -36,6 +37,7 @@ import { AskForQuote } from './AskForQuote';
 import { BlockedLines } from './BlockedLines';
 import styles from './Checkout.module.css';
 import { CheckoutOrderPanel } from './CheckoutOrderPanel';
+import { CheckoutState } from './CheckoutState';
 import { type Choice, feeOf, initialChoice, PackageCard, placeable } from './PackageCard';
 import { newMethodName, PaymentStep } from './PaymentStep';
 
@@ -93,6 +95,9 @@ export function CheckoutView() {
   const [save, setSave] = useState(false);
   const [newMethod, setNewMethod] = useState<PaymentElementChange>({ complete: false, empty: true, type: null });
   const payEl = useRef<PaymentElementHandle>(null);
+  /** Whether the Payment Element could load; a failure replaces the form with one line and Try again, and Place order waits. */
+  const [elementStatus, setElementStatus] = useState<PaymentElementStatus>({ state: 'loading' });
+  const [elementAttempt, setElementAttempt] = useState(0);
   /** Pay with AfroTransact credit first (S320); off until the shopper chooses it, so credit is never spent by surprise. */
   const [useCredit, setUseCredit] = useState(false);
   const [couponDraft, setCouponDraft] = useState('');
@@ -103,6 +108,8 @@ export function CheckoutView() {
   const applied = useAppliedQuote();
   const summary = useQuery(shopperQueries.checkoutSummary(api, addressId, packageDeliveryKey, appliedCoupon || undefined));
   const s = summary.data;
+  // The cart itself (the header's badge counts every item, the checkout only the ticked ones): tells "empty" from "none selected".
+  const cart = useCart();
   const [addrDialog, setAddrDialog] = useState<{ open: boolean; address: Address | null }>({ open: false, address: null });
   const [placing, setPlacing] = useState(-1);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +171,16 @@ export function CheckoutView() {
     return () => clearTimeout(timer);
   }, [lockExpiresAt, refetchSummary]);
 
+  // Why card payment is not offered is recorded (tag `reason`) so support can tell a blocked Stripe.js from a rejected key.
+  const failedReason = elementStatus.state === 'failed' ? elementStatus.reason : null;
+  useEffect(() => {
+    if (failedReason) getTelemetry().captureMessage('Checkout card payment unavailable', { level: 'warning', tags: { area: 'checkout-payment', reason: failedReason } });
+  }, [failedReason]);
+  const retryElement = () => {
+    setElementStatus({ state: 'loading' });
+    setElementAttempt((n) => n + 1);
+  };
+
   const address = s?.addresses.find((a) => a.id === addressId) ?? null;
   const pm = s?.paymentMethods.find((p) => p.id === pmId) ?? null;
   const selectedShipping = useMemo(() => {
@@ -193,7 +210,10 @@ export function CheckoutView() {
   // Pre-order windows may restrict payment methods; the PaymentIntent and the Elements must use the same list.
   const allowedByWindow = (s?.packages ?? []).flatMap((p) => (p.preorder ? [p.preorder.allowedMethods.join(',')] : [])).join('|');
   const methodTypes = useMemo(() => (allowedByWindow ? stripePaymentMethodTypes(allowedByWindow.split('|').map((w) => w.split(','))) : undefined), [allowedByWindow]);
-  const paymentChosen = creditPaysAll || payWith === 'new' || (payWith === 'saved' && !!pm);
+  const cardDown = elementStatus.state === 'failed';
+  const paymentChosen = creditPaysAll || (payWith === 'new' && !cardDown) || (payWith === 'saved' && !!pm && !stripeJsDown(elementStatus));
+  // Card payment is out and nothing else pays the order: Place order says why it is off.
+  const paymentReason = cardDown && !paymentChosen ? t('co.payDown.placeNote') : null;
   // AfroTransact Delivery the chosen address can't be served by blocks the order until removed or picked up instead (S255).
   const undeliverable = (s?.packages ?? []).some((p) => p.localDelivery?.available === false && (choices[p.packageId]?.option ?? initialChoice(p).option) !== 'pickup');
   // Lines without a definite tax decision can't be sold yet: the order can't be placed until the shopper removes them.
@@ -412,20 +432,16 @@ export function CheckoutView() {
     setNewMethod(c);
   };
 
-  if (summary.isPending) return <Skeleton height={420} />;
-  if (summary.isError) {
-    const empty = isApiError(summary.error) && summary.error.status === 409;
-    return (
-      <div className={styles.empty}>
-        <h1 className={styles.title}>{empty ? t('co.emptyTitle') : t('co.errorTitle')}</h1>
-        <p className={styles.muted}>{empty ? t('co.emptyBody') : t('acct.loadError')}</p>
-        <Link href="/cart" className={buttonClassName()}>
-          {t('common.goToCart')}
-        </Link>
-      </div>
-    );
-  }
+  // Never an order for a cart that was not read: a skeleton while it loads, a plain error with Try again when it failed.
+  if (summary.isPending) return <div aria-busy="true" data-testid="checkout-loading"><Skeleton height={420} /></div>;
+  if (summary.isError) return <CheckoutState kind="error" retrying={summary.isFetching} onRetry={() => void summary.refetch()} />;
   if (!s) return null;
+  // A cart with nothing ticked (or nothing in it) has no order: no "0 items", no total, no payment or tax.
+  if (s.packages.length === 0 && !busy) {
+    if (cart.isPending) return <div aria-busy="true" data-testid="checkout-loading"><Skeleton height={420} /></div>;
+    if (cart.isError) return <CheckoutState kind="error" retrying={cart.isFetching} onRetry={() => void cart.refetch()} />;
+    return <CheckoutState kind={cart.data.itemCount > 0 ? 'none-selected' : 'empty'} />;
+  }
 
   const addressList = addressOpen || !address;
   // The tax row is worded from the BFF's taxEstimateStatus and taxUnavailableReason, never from its label text: a known estimate
@@ -557,6 +573,10 @@ export function CheckoutView() {
             setSave={setSave}
             onNewMethod={onNewMethod}
             payEl={payEl}
+            elementStatus={elementStatus}
+            onElementStatus={setElementStatus}
+            elementAttempt={elementAttempt}
+            onRetryElement={retryElement}
             methodTypes={methodTypes}
             credit={s.credit && s.credit.availableMinor > 0 ? { ...s.credit, ...split, use: useCredit, setUse: setUseCredit } : null}
           />
@@ -600,6 +620,7 @@ export function CheckoutView() {
         undeliverable={undeliverable}
         taxBlocked={taxBlocked}
         deliveryReason={deliveryReason}
+        paymentReason={paymentReason}
         addressList={addressList}
         busy={busy}
         placing={placing}

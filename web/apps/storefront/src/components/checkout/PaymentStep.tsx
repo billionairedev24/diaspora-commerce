@@ -2,12 +2,12 @@
 
 import { type CheckoutSummary, type PaymentMethod } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { PoweredByStripe, ShieldCheck } from '@afrotransact/ui';
+import { Button, PoweredByStripe, ShieldCheck } from '@afrotransact/ui';
 import { type RefObject } from 'react';
 
 import { AcceptedPaymentsHint } from '@/components/payments/AcceptedPaymentsHint';
 import { PaymentChip } from '@/components/payments/PaymentChip';
-import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle } from '@/components/payments/PaymentElementField';
+import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle, type PaymentElementStatus, stripeJsDown } from '@/components/payments/PaymentElementField';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 
 import styles from './Checkout.module.css';
@@ -34,6 +34,12 @@ type Props = {
   newMethod: PaymentElementChange;
   onNewMethod: (c: PaymentElementChange) => void;
   payEl: RefObject<PaymentElementHandle | null>;
+  /** Whether the Payment Element could load; when it could not, the form, "save for later", brand icons and Stripe badge are not shown. */
+  elementStatus: PaymentElementStatus;
+  onElementStatus: (status: PaymentElementStatus) => void;
+  /** Tries to load the Payment Element again (a new mount). */
+  elementAttempt: number;
+  onRetryElement: () => void;
   methodTypes: string[] | undefined;
   /** The shopper's AfroTransact credit applied to this order (S320); absent without credit. */
   credit?: { availableMinor: number; appliedMinor: number; cardDueMinor: number; use: boolean; setUse: (v: boolean) => void } | null;
@@ -44,12 +50,15 @@ type Props = {
  * shopper picks "Use a different payment method"; with none on file the form is open. The Stripe Payment Element is
  * always mounted (deferred mode), only hidden while a saved method is chosen, so Place order can confirm it.
  */
-export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save, setSave, newMethod: _newMethod, onNewMethod, payEl, methodTypes, credit }: Props) {
+export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save, setSave, newMethod: _newMethod, onNewMethod, payEl, elementStatus, onElementStatus, elementAttempt, onRetryElement, methodTypes, credit }: Props) {
   const t = useT();
   const fmt = useFormatters();
   const saved = s.paymentMethods;
   const creditPaysAll = !!credit?.use && credit.appliedMinor > 0 && credit.cardDueMinor === 0;
-  const formOpen = !creditPaysAll && (saved.length === 0 || payWith === 'new');
+  const failed = elementStatus.state === 'failed';
+  // Without Stripe.js a saved method cannot be confirmed either; when only the form failed, saved methods still work.
+  const showSaved = saved.length > 0 && !creditPaysAll && !stripeJsDown(elementStatus);
+  const formOpen = !creditPaysAll && !failed && (saved.length === 0 || payWith === 'new');
   const cardTotal = credit?.use && credit.cardDueMinor > 0 ? credit.cardDueMinor : total;
 
   return (
@@ -71,7 +80,7 @@ export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save
           {credit.use && credit.appliedMinor === 0 && <p className={styles.creditSplit}>{t('co.credit.tiny')}</p>}
         </div>
       )}
-      {saved.length > 0 && !creditPaysAll && (
+      {showSaved && (
         <fieldset className={styles.saved}>
           <legend className={styles.legend}>{t('co.savedMethods')}</legend>
           {saved.map((p) => (
@@ -95,44 +104,65 @@ export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save
               </span>
             </label>
           ))}
-          <label className={styles.choiceCompact} data-testid="checkout-use-new">
-            <input type="radio" name="paym" checked={payWith === 'new'} onChange={() => setPayWith('new')} />
-            <strong>{t('co.useNewMethod')}</strong>
-          </label>
+          {!failed && (
+            <label className={styles.choiceCompact} data-testid="checkout-use-new">
+              <input type="radio" name="paym" checked={payWith === 'new'} onChange={() => setPayWith('new')} />
+              <strong>{t('co.useNewMethod')}</strong>
+            </label>
+          )}
         </fieldset>
       )}
 
-      <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method" hidden={!formOpen}>
-        {saved.length === 0 ? <span className={styles.legend}>{t('co.payWith')}</span> : null}
-        <PaymentElementField
-          ref={payEl}
-          publishableKey={s.publishableKey ?? ''}
-          amountMinor={cardTotal}
-          currency={s.currency}
-          save={save}
-          stripeCustomerId={s.stripeCustomerId}
-          paymentMethodTypes={methodTypes}
-          onChange={(c) => {
-            onNewMethod(c);
-            if (!c.empty) setPayWith('new');
-          }}
-        />
-        <label className={styles.save}>
-          <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-          <span>
-            {t('co.saveForLater')}
-            <small>{t('co.saveForLaterHint')}</small>
-          </span>
-        </label>
-      </div>
+      {failed && !creditPaysAll && (
+        <div className={styles.payDown} data-testid="payment-unavailable" data-reason={elementStatus.reason}>
+          <p className={styles.payDownText} role="alert">
+            {t('co.payDown.message')}
+          </p>
+          <Button size="sm" variant="secondary" onClick={onRetryElement} data-testid="payment-unavailable-retry">
+            {t('co.retry')}
+          </Button>
+        </div>
+      )}
 
-      <div className={styles.paymentFoot}>
-        {formOpen ? <AcceptedPaymentsHint /> : null}
-        <p className={styles.secureText}>
-          <ShieldCheck aria-hidden /> <span>{creditPaysAll ? t('co.credit.chargeNote') : `${t('pay.storedByStripe')} ${t('co.chargeNote')}`}</span>
-        </p>
-        {creditPaysAll ? null : <PoweredByStripe height={22} />}
-      </div>
+      {!failed && (
+        <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method" hidden={!formOpen}>
+          {saved.length === 0 ? <span className={styles.legend}>{t('co.payWith')}</span> : null}
+          <PaymentElementField
+            key={elementAttempt}
+            ref={payEl}
+            publishableKey={s.publishableKey ?? ''}
+            amountMinor={cardTotal}
+            currency={s.currency}
+            save={save}
+            stripeCustomerId={s.stripeCustomerId}
+            paymentMethodTypes={methodTypes}
+            onStatus={onElementStatus}
+            onChange={(c) => {
+              onNewMethod(c);
+              if (!c.empty) setPayWith('new');
+            }}
+          />
+          {elementStatus.state === 'ready' && (
+            <label className={styles.save}>
+              <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
+              <span>
+                {t('co.saveForLater')}
+                <small>{t('co.saveForLaterHint')}</small>
+              </span>
+            </label>
+          )}
+        </div>
+      )}
+
+      {(creditPaysAll || elementStatus.state === 'ready') && (
+        <div className={styles.paymentFoot}>
+          {formOpen ? <AcceptedPaymentsHint /> : null}
+          <p className={styles.secureText}>
+            <ShieldCheck aria-hidden /> <span>{creditPaysAll ? t('co.credit.chargeNote') : `${t('pay.storedByStripe')} ${t('co.chargeNote')}`}</span>
+          </p>
+          {creditPaysAll ? null : <PoweredByStripe height={22} />}
+        </div>
+      )}
     </div>
   );
 }

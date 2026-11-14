@@ -14,6 +14,7 @@ import { useT } from '@/i18n/t';
 
 import styles from './Checkout.module.css';
 import { CheckoutCrossSell } from './CheckoutCrossSell';
+import { TaxProblem } from './TaxProblem';
 import { TaxZipEstimate } from './TaxZipEstimate';
 
 const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', 'co.placing.split'] as const;
@@ -43,6 +44,8 @@ type Props = {
   taxBlocked?: boolean;
   /** Plain words for what delivery stops the order (a package to quote, or an unknown fee); null when nothing does. */
   deliveryReason?: string | null;
+  /** Plain words for why card payment stops the order (it could not load); null when it does not. */
+  paymentReason?: string | null;
   addressList: boolean;
   busy: boolean;
   placing: number;
@@ -90,6 +93,7 @@ export function CheckoutOrderPanel(props: Props) {
     undeliverable,
     taxBlocked = false,
     deliveryReason = null,
+    paymentReason = null,
     addressList,
     busy,
     placing,
@@ -188,6 +192,11 @@ export function CheckoutOrderPanel(props: Props) {
           {deliveryReason && (
             <p className={styles.fine} role="status" data-testid="delivery-blocked-note">
               {deliveryReason}
+            </p>
+          )}
+          {paymentReason && (
+            <p className={styles.fine} role="status" data-testid="payment-blocked-note">
+              {paymentReason}
             </p>
           )}
           {taxBlocked && (s.blockedLines ?? []).length > 0 && (
@@ -331,32 +340,15 @@ export function CheckoutOrderPanel(props: Props) {
             <dd data-testid="checkout-tax-amount">{estimated ? fmt.money(s.taxMinor) : '—'}</dd>
             {!estimated && (
               <dd className={styles.taxState} data-testid="checkout-tax-state" data-reason={reason ?? 'UNAVAILABLE'}>
-                {s.taxEstimateStatus === 'NEEDS_ADDRESS' || reason === 'NEEDS_ZIP' ? (
-                  <TaxZipEstimate />
+                {reason === 'BLOCKED_ITEMS' ? (
+                  <TaxProblem problem={{ kind: 'blocked', lines: s.blockedLines ?? [] }} />
                 ) : reason === 'ADDRESS_INCOMPLETE' ? (
-                  <>
-                    <p className={styles.taxStateText}>{t('co.taxAddress.incomplete')}</p>
-                    {onEditAddress && (
-                      <Button size="sm" variant="secondary" onClick={onEditAddress}>
-                        {t('co.taxAddress.edit')}
-                      </Button>
-                    )}
-                  </>
-                ) : reason === 'BLOCKED_ITEMS' ? (
-                  <p className={styles.taxStateText}>{t('co.taxBlocked')}</p>
-                ) : reason === 'NO_ITEMS' ? (
-                  <p className={styles.taxStateText}>{t('co.taxNoItems')}</p>
+                  <TaxProblem problem={{ kind: 'incomplete' }} onEditAddress={onEditAddress} />
+                ) : (s.taxEstimateStatus === 'NEEDS_ADDRESS' || reason === 'NEEDS_ZIP') && !addressOk ? (
+                  // No delivery address yet: the one place checkout asks for a ZIP code. With an address chosen the estimate is for it.
+                  <TaxZipEstimate useSavedAddress />
                 ) : (
-                  <>
-                    <p className={styles.taxStateText} role="alert">
-                      {t('co.taxRetry.message')}
-                    </p>
-                    {onRetryTax && (
-                      <Button size="sm" variant="secondary" loading={retryingTax} onClick={onRetryTax} data-testid="checkout-tax-retry">
-                        {t('co.taxRetry.button')}
-                      </Button>
-                    )}
-                  </>
+                  <TaxProblem problem={{ kind: 'retry' }} onRetry={onRetryTax} busy={retryingTax} />
                 )}
               </dd>
             )}

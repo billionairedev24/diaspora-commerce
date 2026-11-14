@@ -36,6 +36,18 @@ export interface PaymentElementChange {
   type: string | null;
 }
 
+/**
+ * Whether the form could be shown. `failed` carries why: `script` (Stripe.js could not be loaded), `timeout` (it did not
+ * answer in time) or `element` (Stripe.js loaded but refused to show the form, e.g. a key or customer it does not accept).
+ */
+export type PaymentElementStatus = { state: 'loading' | 'ready' } | { state: 'failed'; reason: 'script' | 'timeout' | 'element' };
+
+/** Stripe.js itself is out (not only the form): saved methods cannot be confirmed either. */
+export const stripeJsDown = (s: PaymentElementStatus): boolean => s.state === 'failed' && s.reason !== 'element';
+
+/** How long Stripe.js and its form get before the shopper is told card payment is not available. */
+const LOAD_TIMEOUT_MS = 15_000;
+
 export interface PaymentElementFieldProps {
   ref?: Ref<PaymentElementHandle>;
   publishableKey: string;
@@ -49,6 +61,8 @@ export interface PaymentElementFieldProps {
   /** Restricted types (pre-order windows); undefined = the payment methods enabled in Stripe. */
   paymentMethodTypes?: string[];
   onChange?: (change: PaymentElementChange) => void;
+  /** Reported on mount and when the form turns ready or fails to load (the checkout then replaces the form with a notice). */
+  onStatus?: (status: PaymentElementStatus) => void;
 }
 
 /** Confirmation status of the dev-only form when it sends the browser to the return page (the 3-D Secure test card). */
@@ -69,44 +83,60 @@ export function PaymentElementField(props: PaymentElementFieldProps) {
   return isMockKey(props.publishableKey) ? <MockPaymentElement {...props} /> : <StripePaymentElement {...props} />;
 }
 
-function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save, stripeCustomerId, paymentMethodTypes, onChange }: PaymentElementFieldProps) {
+function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save, stripeCustomerId, paymentMethodTypes, onChange, onStatus }: PaymentElementFieldProps) {
   const t = useT();
   const mountRef = useRef<HTMLDivElement>(null);
   const stripe = useRef<{ s: StripeInstance; e: StripeElements } | null>(null);
-  const latest = useRef({ amountMinor, save, stripeCustomerId, onChange });
-  latest.current = { amountMinor, save, stripeCustomerId, onChange };
+  const latest = useRef({ amountMinor, save, stripeCustomerId, onChange, onStatus });
+  latest.current = { amountMinor, save, stripeCustomerId, onChange, onStatus };
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The form could not load. A page that does not take `onStatus` (gift cards, Pay Now) shows the message here. */
+  const [loadFailed, setLoadFailed] = useState(false);
   const types = paymentMethodTypes?.join(',') ?? '';
 
   useEffect(() => {
     let disposed = false;
     let el: StripeElement | null = null;
+    let settled = false;
+    const settle = (status: PaymentElementStatus) => {
+      if (disposed || settled) return;
+      settled = status.state !== 'loading';
+      setLoadFailed(status.state === 'failed');
+      latest.current.onStatus?.(status);
+    };
     setReady(false);
     setError(null);
+    setLoadFailed(false);
+    latest.current.onStatus?.({ state: 'loading' });
+    const timer = setTimeout(() => settle({ state: 'failed', reason: 'timeout' }), LOAD_TIMEOUT_MS);
     getStripe(publishableKey)
       .then((s) => {
         if (disposed || !mountRef.current) return;
         const { amountMinor: amount, save: keep, stripeCustomerId: customer } = latest.current;
         const e = s.elements(deferredIntentOptions({ amountMinor: amount, currency, save: keep, customer, paymentMethodTypes: types ? types.split(',') : undefined }));
         const payment = e.create('payment', PAYMENT_ELEMENT_OPTIONS);
-        payment.on('ready', () => setReady(true));
+        payment.on('ready', () => {
+          setReady(true);
+          settle({ state: 'ready' });
+        });
         payment.on('change', (ev) => {
           setError(null);
           latest.current.onChange?.({ complete: !!ev.complete, empty: ev.empty ?? !ev.complete, type: ev.value?.type ?? null });
         });
-        payment.on('loaderror', (ev) => setError(ev.error?.message ?? t('pay.stripeUnavailable')));
+        payment.on('loaderror', () => settle({ state: 'failed', reason: 'element' }));
         payment.mount(mountRef.current);
         el = payment;
         stripe.current = { s, e };
       })
-      .catch(() => setError(t('pay.stripeUnavailable')));
+      .catch(() => settle({ state: 'failed', reason: 'script' }));
     return () => {
       disposed = true;
+      clearTimeout(timer);
       el?.unmount();
       stripe.current = null;
     };
-  }, [publishableKey, currency, types, t]);
+  }, [publishableKey, currency, types]);
 
   // Delivery choices change the total; saving changes setup_future_usage. Both update the same Elements instance.
   useEffect(() => {
@@ -143,7 +173,12 @@ function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save
   return (
     <div className={styles.paymentElement}>
       <div ref={mountRef} className={styles.element} aria-busy={!ready} data-testid="stripe-payment-element" />
-      {!ready && !error && <p className={styles.fine}>{t('pay.elementLoading')}</p>}
+      {!ready && !error && !loadFailed && <p className={styles.fine}>{t('pay.elementLoading')}</p>}
+      {loadFailed && !onStatus && (
+        <p className={styles.error} role="alert" data-testid="payment-element-error">
+          {t('pay.stripeUnavailable')}
+        </p>
+      )}
       {error && (
         <p className={styles.error} role="alert" data-testid="payment-element-error">
           {error}
@@ -155,7 +190,7 @@ function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save
 
 const EMPTY: MockCard = { number: '', exp: '', cvc: '', zip: '' };
 
-function MockPaymentElement({ ref, onChange }: PaymentElementFieldProps) {
+function MockPaymentElement({ ref, onChange, onStatus }: PaymentElementFieldProps) {
   const t = useT();
   const id = useId();
   const [tab, setTab] = useState<'card' | 'us_bank_account'>('card');
@@ -165,6 +200,9 @@ function MockPaymentElement({ ref, onChange }: PaymentElementFieldProps) {
   const [error, setError] = useState<string | null>(null);
   const latest = useRef({ card, bank, tab, onChange });
   latest.current = { card, bank, tab, onChange };
+  useEffect(() => {
+    onStatus?.({ state: 'ready' });
+  }, [onStatus]);
 
   const notify = () => {
     const { card: c, bank: b, tab: pm, onChange: cb } = latest.current;
