@@ -59,7 +59,7 @@ when, why, how many times) at the top.
 Roles: **Application Reviewer** (step 1), **Application Approver** (step 2), **Application Supervisor** (sees all,
 assigns, takes over, manages escalation; cannot decide unless also given a step role). One person may hold both
 reviewer and approver roles; the two-person rule still applies per application. See the
-[runbook](../../../runbooks/application-review-workflow.md).
+[runbook](../runbooks/application-review-workflow.md).
 
 :::tip Who sees what
 Notes on approve, flag and send-back are internal. Only the message on *Return to applicant* and on *Reject* is
@@ -89,7 +89,7 @@ it has `delivery-quotes:agree`; supervisors with `delivery-quotes:assign` assign
   a request is late, auto-assignment, the smallest and largest amount, how long a quote stays valid and the limit on how often a shopper
   can ask. Every change needs a reason and is kept with what it was before.
 
-See the [runbook](../../../runbooks/delivery-quotes.md).
+See the [runbook](../runbooks/delivery-quotes.md).
 ## Selling approvals
 
 Some categories and brands need approval before a seller's listings go live (supplements, food service, car seats,
@@ -116,7 +116,7 @@ additional insured); click **View** to open one (every opening is logged).
 - Sellers who said they were bakeries appear as cases "From bakery flag" with no permit on file. Ask for the food permit and the
   insurance; approving without them is refused.
 
-See the [runbook](../../../runbooks/selling-approvals.md).
+See the [runbook](../runbooks/selling-approvals.md).
 
 ## Department requests
 
