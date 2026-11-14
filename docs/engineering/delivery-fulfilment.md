@@ -100,7 +100,7 @@ Give someone the ability to deliver: add `delivery:manage` to their role (staff 
 ## Runbook: an order is stuck
 
 1. Find the shipment in the staff console: Orders, open the order. The sheet says the mode and, for AfroTransact delivery, links to Delivery.
-2. **Seller-shipped and stuck waiting**: this was the bug. Data fixes already shipped: orders `V11__seller_shipped_data_fix.sql` (relabels open
+2. **Seller-shipped and stuck waiting**: this was the bug. Data fixes already shipped: orders `V14__seller_shipped_data_fix.sql` (relabels open
    `SELLER_FULFILLED` + `AFROTRANSACT_DELIVERY` shipments with no local-delivery snapshot to `SELLER_SHIPS`, writes a `DATA_FIX` row in
    `delivery_audit`) and fulfilment `V6__seller_shipped_driver_queue_fix.sql` (cancels the orphan driver job). Both are idempotent: re-running
    changes nothing. The seller then marks it shipped with a tracking number or note.
@@ -109,7 +109,16 @@ Give someone the ability to deliver: add `delivery:manage` to their role (staff 
 5. **Wrong or missing proof**: Delivery sheet, Correct proof (reason required). Never edit the database; the audit is append-only.
 6. **409 on an action**: someone else changed the job. Refresh and retry.
 
-Check query (read-only): `select count(*) from shipment where fulfilment_type='SELLER_FULFILLED' and delivery_method='AFROTRANSACT_DELIVERY' and local_delivery is null and status in ('PLACED','CONFIRMED','PACKED','READY');` should be 0 after V11 (adjust column names to the orders schema).
+Check query (read-only): `select count(*) from shipment where fulfilment_type='SELLER_FULFILLED' and delivery_method='AFROTRANSACT_DELIVERY' and local_delivery is null and status in ('PLACED','CONFIRMED','PACKED','READY');` should be 0 after V14 (adjust column names to the orders schema).
+
+## Screenshots
+
+Delivery queue: ![queue 1280](img/delivery-desk-queue-1280.png) ![queue 390](img/delivery-desk-queue-390.png)
+Delivered with proof: ![delivered 1280](img/delivery-desk-delivered-1280.png) ![delivered 390](img/delivery-desk-delivered-390.png)
+Customer order, AfroTransact-delivered (proof): ![proof 1280](img/order-delivery-proof-1280.png) ![proof 390](img/order-delivery-proof-390.png)
+Customer order, seller-shipped (tracking number, no proof): ![seller 1280](img/order-seller-shipped-1280.png) ![seller 390](img/order-seller-shipped-390.png)
+
+Regenerate with `E2E_SHOTS=1 E2E_SERVER=dev npx playwright test specs/staff-console.delivery.spec.ts specs/storefront.delivery-proof.spec.ts` in `tests/e2e`.
 
 ## Not decided yet (owner)
 

@@ -215,7 +215,6 @@ export function DeliveryView() {
 
   return (
     <ModulePage module="delivery">
-      <p className="m-0 max-w-3xl text-sm text-muted">{t('st.dlv.intro')}</p>
       <Tabs
         label={t('st.dlv.tabs')}
         value={tab}

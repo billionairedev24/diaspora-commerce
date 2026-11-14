@@ -83,7 +83,7 @@ export const staffQueries = {
       staleTime: 30_000
     }),
   deliveries: (api: StaffApiClient, q: DeliveryQuery = {}) =>
-    queryOptions({ queryKey: staffKeys.deliveryList(q), queryFn: ({ signal }) => api.listDeliveries(q, signal), placeholderData: keepPreviousData, staleTime: 10_000, refetchInterval: 30_000 }),
+    queryOptions({ queryKey: staffKeys.deliveryList(q), queryFn: ({ signal }) => api.listDeliveries(q, signal, BACKGROUND), placeholderData: keepPreviousData, staleTime: 10_000, refetchInterval: 30_000 }),
   delivery: (api: StaffApiClient, shipmentId: string) =>
     queryOptions({ queryKey: staffKeys.delivery(shipmentId), queryFn: ({ signal }) => api.getDelivery(shipmentId, signal), staleTime: 5_000 }),
   deliveryCouriers: (api: StaffApiClient) =>

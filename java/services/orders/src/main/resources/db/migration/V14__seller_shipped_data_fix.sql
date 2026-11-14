@@ -23,7 +23,7 @@ with fixed as (
 )
 insert into delivery_audit (shipment_id, order_id, action, from_status, to_status, actor_id, actor_name, detail,
                             occurred_at)
-select f.id, f.order_id, 'DATA_FIX', f.status, f.status, 'migration:orders-V11', 'Data fix V11',
+select f.id, f.order_id, 'DATA_FIX', f.status, f.status, 'migration:orders-V14', 'Data fix V14',
        '{"was": "AFROTRANSACT_DELIVERY", "now": "SELLER_SHIPS", "why": "the seller did not opt into delivery by AfroTransact"}'::jsonb,
        now()
   from fixed f;

@@ -69,7 +69,12 @@ function product(id: string) {
   return { atin: atinOf(p.id), title: p.name, priceMinor: Math.round((o?.price ?? 0) * 100), seller: o?.seller ?? '', grocery: p.cat === 'Groceries' };
 }
 
-function deliveredOrder(orderNumber: string, placed: Date, items: Array<{ id: string; qty: number }>, label: string, seller: string): MockOrder {
+/** A tiny inline picture standing in for the photo staff took at the door (the real one is a short-lived signed media URL). */
+const PROOF_PHOTO =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="320" height="240" fill="#e8e2d4"/><rect x="110" y="70" width="100" height="130" fill="#8a6a3b"/><rect x="130" y="110" width="60" height="50" fill="#cdb98f"/></svg>');
+
+function deliveredOrder(orderNumber: string, placed: Date, items: Array<{ id: string; qty: number }>, label: string, seller: string, sellerShips = false): MockOrder {
   const lines = items.map((it, i) => {
     const p = product(it.id);
     return { lineId: `${orderNumber}-l${i + 1}`, atin: p.atin, productAtin: p.atin, title: p.title, imageUrl: null, quantity: it.qty, unitPriceMinor: p.priceMinor, itemsMinor: p.priceMinor * it.qty };
@@ -97,12 +102,15 @@ function deliveredOrder(orderNumber: string, placed: Date, items: Array<{ id: st
         statusLabel: 'Delivered',
         items: lines.map((l) => `${l.title} × ${l.quantity}`).join(' · '),
         sellerName: seller,
-        // A delivered order of the seed history: delivered by AfroTransact (no carrier is named to shoppers at launch).
-        deliveryMethod: 'afrotransact_delivery',
-        fulfilmentMode: 'fulfilled_by_afrotransact',
+        // Seed history: one order AfroTransact delivered (with photo proof), one the seller shipped (tracking number, no proof, no carrier named).
+        deliveryMethod: sellerShips ? 'seller_ships' : 'afrotransact_delivery',
+        fulfilmentMode: sellerShips ? 'seller_ships' : 'fulfilled_by_afrotransact',
         cancellable: false,
         carrier: null,
-        trackingNumber: null,
+        trackingNumber: sellerShips ? '9400 1118 9922 3344 5566 77' : null,
+        proof: sellerShips
+          ? null
+          : { method: 'PHOTO', recipientName: 'Adaeze Nwosu', relationship: null, safePlace: null, photoUrl: PROOF_PHOTO, photoUrls: [PROOF_PHOTO], signatureUrl: null, at: iso(delivered) },
         promisedFrom: null,
         promisedBy: iso(delivered).slice(0, 10),
         deliveredAt: iso(delivered),
@@ -274,7 +282,7 @@ function seed(userId: string): AccountState {
     ],
     orders: [
       deliveredOrder('AT-2026-104221', daysAgo(6), [{ id: 'p15', qty: 1 }, { id: 'p1', qty: 1 }], 'Shipped by AfroTransact from Houston FC', 'Tamale Shea Co-op'),
-      deliveredOrder('AT-2026-100873', daysAgo(19), [{ id: 'p17', qty: 1 }], 'Shipped by Diaspora Books from Atlanta, GA', 'Diaspora Books')
+      deliveredOrder('AT-2026-100873', daysAgo(19), [{ id: 'p17', qty: 1 }], 'Shipped by Diaspora Books from Atlanta, GA', 'Diaspora Books', true)
     ],
     helpRequests: [
       { id: 'help-9001', reference: 'CLM-9001', orderNumber: 'AT-2026-100873', type: 'DAMAGED_ITEM', status: 'RESOLVED', statusLabel: 'Resolved',

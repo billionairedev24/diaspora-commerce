@@ -190,7 +190,7 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request('/v1/staff/tax-rates/import', TaxRatesImportResultSchema, { method: 'POST', body: { csv } }),
 
     /* Delivery module: AfroTransact staff run AfroTransact-delivered orders end to end (docs/engineering/delivery-fulfilment.md) */
-    listDeliveries: (q: DeliveryQuery = {}, signal?: AbortSignal): Promise<DeliveryList> =>
+    listDeliveries: (q: DeliveryQuery = {}, signal?: AbortSignal, background?: boolean): Promise<DeliveryList> =>
       request('/v1/staff/deliveries', DeliveryListSchema, {
         query: {
           status: q.status?.join(',') || undefined,
@@ -204,7 +204,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
           page: q.page ? String(q.page) : undefined,
           size: q.size ? String(q.size) : undefined
         },
-        signal
+        signal,
+        background
       }),
     listDeliveryCouriers: (signal?: AbortSignal): Promise<DeliveryCourier[]> => request('/v1/staff/deliveries/couriers', DeliveryCourierListSchema, { signal }),
     getDelivery: (shipmentId: string, signal?: AbortSignal): Promise<DeliveryDetail> => request(`/v1/staff/deliveries/${enc(shipmentId)}`, DeliveryDetailSchema, { signal }),

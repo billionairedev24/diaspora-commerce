@@ -1,4 +1,4 @@
--- Data fix: driver-queue rows of seller-shipped orders (see orders V11). The driver app is dormant, and these shipments are
+-- Data fix: driver-queue rows of seller-shipped orders (see orders V14). The driver app is dormant, and these shipments are
 -- shipped by their seller, so a seller-origin delivery_shipment with no seller-store pickup location that is still waiting
 -- for a route is cancelled here. Pre-order packages (shipment_bag rows, delivered by their window's run) and anything
 -- already on a route are left alone. Idempotent.
