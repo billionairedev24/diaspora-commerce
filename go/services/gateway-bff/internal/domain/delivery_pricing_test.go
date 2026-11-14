@@ -2,7 +2,6 @@ package domain
 
 import (
 	"testing"
-	"time"
 )
 
 func TestQuoteTariffFollowsPayments(t *testing.T) {
@@ -123,25 +122,24 @@ func TestPickupHours(t *testing.T) {
 
 func TestEstimatorLocalDelivery(t *testing.T) {
 	e := NewEstimator(DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
-	now := time.Date(2026, 10, 9, 9, 0, 0, 0, time.UTC)
 	// Before the staff settings were ever read the fee is unknown: never shown as $0.
-	unknown := e.Options(AfroTransactDelivery, 0, 1000, now)
+	unknown := e.Options(AfroTransactDelivery, 1000)
 	if len(unknown) != 1 || !unknown[0].FeeUnknown || unknown[0].Free || unknown[0].Label != LabelFeeUnknown {
 		t.Fatalf("unknown fee must be flagged: %+v", unknown)
 	}
 	e.(ShippingSettingsSetter).SetShippingSettings(&ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599})
-	p := e.Promise(AfroTransactDelivery, 0, now)
-	if p.Days != 1 || p.Prefix != "Delivery" || p.FeeMinor != 599 || p.Free {
+	p := e.Promise(AfroTransactDelivery)
+	if p.Days != 0 || p.Label != "" || p.Basis != ArrivalNone || p.Prefix != "Delivery" || p.FeeMinor != 599 || p.Free {
 		t.Fatalf("promise = %+v", p)
 	}
-	opts := e.Options(AfroTransactDelivery, 0, 1000, now)
+	opts := e.Options(AfroTransactDelivery, 1000)
 	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].Label != LocalDeliveryOptionLabel || opts[0].FeeMinor != 599 || opts[0].FeeUnknown {
 		t.Fatalf("options = %+v", opts)
 	}
 	if e.Nudge(AfroTransactDelivery, 1000) != nil {
 		t.Fatal("no free-delivery nudge without a threshold")
 	}
-	if LocalDeliveryHeading("Houston, TX") != "AfroTransact Delivery from Houston, TX" {
+	if LocalDeliveryHeading("Houston, TX") != "Delivery from Houston, TX" || LocalDeliveryHeading("") != "Delivery" {
 		t.Fatal("heading")
 	}
 }

@@ -262,11 +262,11 @@ type promiseImpl struct{ c httpclient.Client }
 
 var _ port.PromiseClient = (*promiseImpl)(nil)
 
-// NewPromise returns the promise client (POST /v1/promises {zip, items} → {promises:[{atin, days}]}).
+// NewPromise returns the promise client (POST /v1/promises {destinationZip, offers} → {promises}).
 func NewPromise(c httpclient.Client) port.PromiseClient { return &promiseImpl{c: c} }
 
 // noPromiseImpl is the promise client of a deployment without the promise service: it makes no call and knows no
-// dates, so callers keep their own estimates (product pages, cart and checkout delivery dates).
+// dates, so every package is shown without one (never an invented date).
 type noPromiseImpl struct{}
 
 var _ port.PromiseClient = noPromiseImpl{}
@@ -274,26 +274,19 @@ var _ port.PromiseClient = noPromiseImpl{}
 // NewNoPromise returns the promise client used when upstreams.promise.disabled is set (PROMISE_DISABLED=true).
 func NewNoPromise() port.PromiseClient { return noPromiseImpl{} }
 
-func (noPromiseImpl) Promises(context.Context, string, []port.PromiseItem) (map[string]int, error) {
-	return map[string]int{}, nil
+func (noPromiseImpl) Promises(context.Context, string, []port.PromiseOffer) ([]port.PromiseQuote, error) {
+	return nil, nil
 }
 
-func (p *promiseImpl) Promises(ctx context.Context, zip string, items []port.PromiseItem) (map[string]int, error) {
+func (p *promiseImpl) Promises(ctx context.Context, zip string, offers []port.PromiseOffer) ([]port.PromiseQuote, error) {
 	var out struct {
-		Promises []struct {
-			ATIN string `json:"atin"`
-			Days int    `json:"days"`
-		} `json:"promises"`
+		Promises []port.PromiseQuote `json:"promises"`
 	}
 	if _, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/promises", RetryUnsafe: true,
-		JSON: map[string]any{"zip": zip, "items": items}}, &out); err != nil {
+		JSON: map[string]any{"destinationZip": zip, "offers": offers}}, &out); err != nil {
 		return nil, err
 	}
-	m := make(map[string]int, len(out.Promises))
-	for _, x := range out.Promises {
-		m[x.ATIN] = x.Days
-	}
-	return m, nil
+	return out.Promises, nil
 }
 
 // ---------------------------------------------------------------- orders (planned)

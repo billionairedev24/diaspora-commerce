@@ -226,8 +226,8 @@ export default function Checkout() {
               <Card key={o.key} selected={ch?.option === o.key} onPress={() => setChoice(p.packageId, { option: o.key, ...(o.key !== 'pickup' ? { pickupPointId: undefined } : {}) })} accessibilityLabel={`${o.label}, ${o.eta}`}>
                 <View style={styles.between}>
                   <View style={{ flex: 1 }}>
-                    <AppText variant="bodyStrong">{o.eta}</AppText>
-                    <AppText variant="small" color={c.textMuted}>{o.label} · {o.free ? 'Free' : formatMoney(o.feeMinor, s.currency)}</AppText>
+                    <AppText variant="bodyStrong">{o.eta || o.label}</AppText>
+                    <AppText variant="small" color={c.textMuted}>{o.eta ? `${o.label} · ` : ''}{o.free ? 'Free' : formatMoney(o.feeMinor, s.currency)}</AppText>
                   </View>
                   <Radio on={ch?.option === o.key} />
                 </View>

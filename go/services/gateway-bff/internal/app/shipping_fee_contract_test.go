@@ -50,7 +50,6 @@ func loadFeeVectors(t *testing.T) feeVectors {
 }
 
 func TestShippingFeeContractEstimateEqualsWhatOrdersCharges(t *testing.T) {
-	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 	for _, set := range loadFeeVectors(t).Settings {
 		e := domain.NewEstimator(domain.DeliveryPolicy{})
 		e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1,
@@ -59,7 +58,7 @@ func TestShippingFeeContractEstimateEqualsWhatOrdersCharges(t *testing.T) {
 			where := set.Name
 			// Every package kind the shopper can see offers the same flat delivery fee and a free pickup.
 			for _, kind := range []string{domain.FulfilledByAfroTransact, domain.AfroTransactDelivery, domain.ShipsFromSeller} {
-				opts := e.Options(kind, 0, c.ItemsMinor, now)
+				opts := e.Options(kind, c.ItemsMinor)
 				if len(opts) != 1 || opts[0].Key != domain.OptionDelivery || opts[0].FeeUnknown {
 					t.Fatalf("%s %s: options = %+v", where, kind, opts)
 				}
@@ -83,11 +82,10 @@ func TestShippingFeeContractEstimateEqualsWhatOrdersCharges(t *testing.T) {
 }
 
 func TestNoExpressNoCarrierOptionWhileTheStaffSwitchIsOff(t *testing.T) {
-	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 	e := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 3500})
 	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599})
 	for _, kind := range []string{domain.FulfilledByAfroTransact, domain.AfroTransactDelivery, domain.ShipsFromSeller} {
-		for _, o := range e.Options(kind, 0, 2000, now) {
+		for _, o := range e.Options(kind, 2000) {
 			if o.Key == "express" || o.Key == domain.OptionCarrier {
 				t.Errorf("%s offers %q with the seller carrier switch off", kind, o.Key)
 			}
@@ -95,23 +93,22 @@ func TestNoExpressNoCarrierOptionWhileTheStaffSwitchIsOff(t *testing.T) {
 	}
 	// On: only a seller-shipped package gets the carrier option, still with AfroTransact delivery beside it.
 	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 2, FlatFeeMinor: 599, SellerCarrierShippingEnabled: true})
-	seller := e.Options(domain.ShipsFromSeller, 0, 2000, now)
+	seller := e.Options(domain.ShipsFromSeller, 2000)
 	if len(seller) != 2 || seller[0].Key != domain.OptionCarrier || seller[1].Key != domain.OptionDelivery {
 		t.Fatalf("seller options with the switch on: %+v", seller)
 	}
-	if fc := e.Options(domain.FulfilledByAfroTransact, 0, 2000, now); len(fc) != 1 || fc[0].Key != domain.OptionDelivery {
+	if fc := e.Options(domain.FulfilledByAfroTransact, 2000); len(fc) != 1 || fc[0].Key != domain.OptionDelivery {
 		t.Fatalf("AfroTransact-fulfilled stays delivery only: %+v", fc)
 	}
 }
 
 func TestAnUnreadFeeIsNeverShownAsZeroAndBlocksTheOrder(t *testing.T) {
-	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 	e := domain.NewEstimator(domain.DeliveryPolicy{})
-	opts := e.Options(domain.FulfilledByAfroTransact, 0, 2000, now)
+	opts := e.Options(domain.FulfilledByAfroTransact, 2000)
 	if len(opts) != 1 || !opts[0].FeeUnknown || opts[0].Free || opts[0].Label != domain.LabelFeeUnknown {
 		t.Fatalf("an unread fee must be flagged, not $0: %+v", opts)
 	}
-	if p := e.Promise(domain.FulfilledByAfroTransact, 0, now); p.Free || p.FeeMinor != 0 {
+	if p := e.Promise(domain.FulfilledByAfroTransact); p.Free || p.FeeMinor != 0 {
 		t.Fatalf("the promise must not claim free delivery: %+v", p)
 	}
 	s := &checkoutPaymentServiceImpl{d: ShopperDeps{Estimator: e}}
@@ -157,10 +154,9 @@ func TestOutsideEveryDeliveryZoneTheOnlyDeliveryOptionIsQuoteRequired(t *testing
 		t.Fatal("an address with no position cannot be judged: the flat fee applies")
 	}
 
-	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 	e := domain.NewEstimator(domain.DeliveryPolicy{})
 	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", FlatFeeMinor: 599})
-	pkg := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "p1", Fulfilment: domain.FulfilledByAfroTransact, DeliveryOptions: e.Options(domain.FulfilledByAfroTransact, 0, 2000, now)}}
+	pkg := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "p1", Fulfilment: domain.FulfilledByAfroTransact, DeliveryOptions: e.Options(domain.FulfilledByAfroTransact, 2000)}}
 	addPickupOption(&pkg, []domain.PickupPoint{{ID: "pp-1", Ready: "Ready the same day"}})
 	got := quoteRequiredOptions(pkg)
 	if len(got) != 2 || got[0].Key != "quote_required" || got[0].Label != "Too far for standard delivery. Ask us for a quote" || got[0].FeeMinor != 0 || got[1].Key != "pickup" {
@@ -181,11 +177,10 @@ func TestOutsideEveryDeliveryZoneTheOnlyDeliveryOptionIsQuoteRequired(t *testing
 }
 
 func TestAPreorderPackagePaysItsOwnWindowFeeBesideTheFlatFee(t *testing.T) {
-	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 	e := domain.NewEstimator(domain.DeliveryPolicy{})
 	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", FlatFeeMinor: 599})
 	inStock := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_a:SELLER", Fulfilment: domain.ShipsFromSeller, SubtotalMinor: 2000,
-		DeliveryOptions: e.Options(domain.ShipsFromSeller, 0, 2000, now)}}
+		DeliveryOptions: e.Options(domain.ShipsFromSeller, 2000)}}
 	pre := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_b:SELLER:preorder", Fulfilment: domain.ShipsFromSeller, SubtotalMinor: 3000,
 		Preorder: json.RawMessage(`{"windowId":"win-1","fulfilment":"DOOR","feeMinor":899}`), DeliveryOptions: []domain.DeliveryOption{}}}
 	sum := domain.CheckoutSummary{Packages: []domain.CheckoutPackage{inStock, pre}}
@@ -266,7 +261,7 @@ func TestShippingSettingsSyncKeepsTheLastKnownFeeAndLogsWhenOrdersCannotBeRead(t
 	if !strings.Contains(logs.String(), "keeping the last known delivery fee") || !strings.Contains(logs.String(), "lastKnownFlatFeeMinor=699") {
 		t.Fatalf("the log must name the value in use: %s", logs.String())
 	}
-	opts := e.Options(domain.FulfilledByAfroTransact, 0, 2000, time.Now())
+	opts := e.Options(domain.FulfilledByAfroTransact, 2000)
 	if opts[0].FeeUnknown || opts[0].FeeMinor != 699 {
 		t.Fatalf("estimates keep using the last known fee: %+v", opts[0])
 	}

@@ -150,7 +150,7 @@ func TestCartPresentation(t *testing.T) {
 	if cart.Packages[1].FreeShippingNudge != nil {
 		t.Fatal("no nudge when nothing in the package is selected")
 	}
-	if cart.Packages[0].PackageID != "org_retail:AFROTRANSACT" || cart.Packages[0].Heading != "Shipped by AfroTransact" || cart.Packages[0].Delivery.Label == "" {
+	if cart.Packages[0].PackageID != "org_retail:AFROTRANSACT" || cart.Packages[0].Heading != "Sold by AfroTransact Retail" || cart.Packages[0].Delivery.Label != "" || cart.Packages[0].Delivery.Basis != domain.ArrivalNone {
 		t.Fatalf("package = %+v", cart.Packages[0])
 	}
 	if cart.Saved[0].Available || cart.Saved[0].ATIN != "ATD0000001" {

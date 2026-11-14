@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { ApiError, createApiClient } from '../src';
 import { resetDb, resetShippingSettings, setShippingSettings } from '../src/mocks';
-import { deliveryOptions, deliveryPromise } from '../src/mocks/delivery';
+import { arrivalWindow, deliveryOptions, deliveryPromise } from '../src/mocks/delivery';
 import { mockServer } from '../src/mocks/node';
 
 /* Launch shipping (listing rules D16, D21, D22): the shopper estimate in the web mock equals the amount orders charges
@@ -51,7 +51,7 @@ describe('the shopper estimate equals what orders charges (shared fee vectors)',
       setShippingSettings({ flatFeeMinor: set.flatFeeMinor, freeAboveMinor: set.freeAboveMinor });
       for (const c of set.carts) {
         for (const fulfilment of ['AFROTRANSACT', 'AFROTRANSACT_DELIVERY', 'SELLER'] as const) {
-          const opts = deliveryOptions({ from: { fulfilment, city: 'Houston, TX' }, sellerName: 'Seller', slowestDays: 2, subtotalMinor: c.itemsMinor }, 'Houston, TX', NOW);
+          const opts = deliveryOptions({ from: { fulfilment, city: 'Houston, TX' }, sellerName: 'Seller', arrival: arrivalWindow({ fulfilment, city: 'Houston, TX', handling: 2 }, 'Houston, TX', NOW), subtotalMinor: c.itemsMinor }, 'Houston, TX', NOW);
           expect(opts.map((o) => o.key), `${set.name} ${fulfilment}`).toEqual(['afrotransact_delivery']);
           expect(opts[0]?.feeMinor, `${set.name} ${fulfilment} items ${c.itemsMinor}`).toBe(c.afrotransactDeliveryMinor);
           expect(opts[0]?.free).toBe(c.afrotransactDeliveryMinor === 0);
@@ -79,7 +79,7 @@ describe('the shopper estimate equals what orders charges (shared fee vectors)',
 
 describe('no express and no carrier while the staff switch is off', () => {
   it('a seller package is delivered by AfroTransact; the carrier option appears only behind the switch', () => {
-    const seller = { from: { fulfilment: 'SELLER' as const, city: 'Houston, TX' }, sellerName: 'Seller', slowestDays: 3, subtotalMinor: 2000 };
+    const seller = { from: { fulfilment: 'SELLER' as const, city: 'Houston, TX' }, sellerName: 'Seller', arrival: arrivalWindow({ fulfilment: 'SELLER', city: 'Houston, TX', handling: 2 }, 'Houston, TX', NOW), subtotalMinor: 2000 };
     expect(deliveryOptions(seller, 'Houston, TX', NOW).map((o) => o.key)).toEqual(['afrotransact_delivery']);
     setShippingSettings({ sellerCarrierShippingEnabled: true });
     expect(deliveryOptions(seller, 'Houston, TX', NOW).map((o) => o.key)).toEqual(['carrier', 'afrotransact_delivery']);

@@ -1,4 +1,5 @@
 /* Cart grouped by who ships it (design: CART). Pinned title; lines scroll; checkout bar pinned above the tab bar. */
+import { hasDeliveryWindow } from '@afrotransact/api-client';
 import { useRouter } from 'expo-router';
 import { LockSimpleIcon as LockSimple, ShoppingCartIcon as ShoppingCart } from 'phosphor-react-native';
 import { StyleSheet, View } from 'react-native';
@@ -48,7 +49,7 @@ export default function CartScreen() {
                 <AppText variant="bodyStrong">{fmt.money(l.lineTotalMinor, data.currency)}</AppText>
                 <View style={styles.lineFoot}>
                   <QtyStepper qty={l.quantity} trashAtOne onChange={(n) => (n <= 0 ? remove.mutate(l.lineId) : update.mutate({ lineId: l.lineId, quantity: Math.min(n, l.maxQuantity) }))} />
-                  <AppText variant="caption" color={c.success}>{pkg.delivery.label}</AppText>
+                  {hasDeliveryWindow(pkg.delivery) ? <AppText variant="caption" color={c.success}>{pkg.delivery.label}</AppText> : null}
                 </View>
                 {l.stockStatus === 'LOW_STOCK' ? <AppText variant="caption" color={c.lowStock}>Only {l.availableQty} left — order soon</AppText> : null}
               </View>

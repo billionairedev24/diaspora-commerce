@@ -79,8 +79,9 @@ type SiteDeps struct {
 	Orders port.OrdersClient
 	// Services (optional) tells the "Services near you" module whether providers list for the shopper's ZIP.
 	Services port.CustomerBookingsClient
-	// Promise (optional) feeds the deliverable-fast rule: the delivery promise to the shopper's ZIP.
-	Promise   port.PromiseClient
+	// Arrival (optional) feeds the deliverable-fast rule: the real delivery window to the shopper's ZIP; without it nothing
+	// qualifies and no card carries a date.
+	Arrival   ArrivalService
 	Location  LocationService
 	Estimator domain.Estimator
 	Sellers   SellerDirectory
@@ -382,7 +383,7 @@ func (s *siteServiceImpl) byATIN(ctx context.Context, atins []string, limit int,
 				Unit: firstNonEmpty(attr(p.Attributes, "unit", "size", "netContent"), optionsLabel(v.Options)), Rating: 0, ReviewCount: 0,
 				ImageURL: img, OfferID: v.ATIN, PriceMinor: v.PriceMinor, ListPriceMinor: nil, Currency: firstNonEmpty(strings.ToUpper(v.Currency), domain.Currency),
 				SellerName: seller.Name, SellerKind: seller.Kind, SellerCity: "", Fulfilment: fulfilment, AvailableQty: qty,
-				InStock: qty > 0, LowStock: status == domain.LowStock, StockStatus: status, Delivery: s.d.Estimator.Promise(fulfilment, 0, now),
+				InStock: qty > 0, LowStock: status == domain.LowStock, StockStatus: status, Delivery: s.d.Estimator.Promise(fulfilment),
 				OfferCount: 1, MinOfferPriceMinor: minPrice, Sponsor: nil}
 		})
 	}

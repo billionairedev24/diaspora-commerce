@@ -504,16 +504,10 @@ type PaymentsClient interface {
 	DeletePaymentMethod(ctx context.Context, bearer, id string) error
 }
 
-// PromiseItem asks for a delivery promise for one offer.
-type PromiseItem struct {
-	ATIN        string `json:"atin"`
-	Fulfilment  string `json:"fulfilment"`
-	SellerOrgID string `json:"sellerOrgId,omitempty"`
-}
-
-// PromiseClient computes delivery promises per ZIP (POST /v1/promises). Result: business days per ATIN.
+// PromiseClient is the promise service (POST /v1/promises, contracts/openapi/promise.yaml): one promise per offer to a
+// destination ZIP, from the offer's origin and method. A deployment without the service answers nothing.
 type PromiseClient interface {
-	Promises(ctx context.Context, zip string, items []PromiseItem) (map[string]int, error)
+	Promises(ctx context.Context, zip string, offers []PromiseOffer) ([]PromiseQuote, error)
 }
 
 // PlaceOrderResult is the orders answer (201 placed, 202 requires_action).
@@ -603,6 +597,11 @@ type PublicOffer struct {
 	ShipsFrom      string      `json:"shipsFrom"`
 	SoldBy         string      `json:"soldBy"`
 	Badges         []string    `json:"badges"`
+	// HandlingDays is the seller's configured handling time (business days to hand the parcel to the carrier) and
+	// ShipFromZip the ZIP the offer ships from (offers' shipFrom.postalCode; only seller-shipped offers have one). They are
+	// the real inputs of a delivery window; the BFF never returns the ZIP to shoppers.
+	HandlingDays int    `json:"handlingDays"`
+	ShipFromZip  string `json:"shipFromZip"`
 	// ShipFromLocationID is the pickup location of AFROTRANSACT_DELIVERY offers (S255).
 	ShipFromLocationID string `json:"shipFromLocationId"`
 }

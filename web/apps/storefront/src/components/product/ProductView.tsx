@@ -1,6 +1,6 @@
 'use client';
 
-import { accountQueries, type Offer, pickerDimensions, productQueries, selectedSize } from '@afrotransact/api-client';
+import { accountQueries, hasDeliveryWindow, type Offer, pickerDimensions, productQueries, selectedSize } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, QuantityStepper, Sparkle, Stars } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -185,9 +185,10 @@ export function ProductView({ atin }: { atin: string }) {
                     <OfferCartControl offer={o} title={p.title} label={`${t('card.addToCart')}: ${o.seller.name}`} />
                   </span>
                   <span className={styles.offerMeta}>
-                    {t('pdp.offerMeta', {
+                    {t(hasDeliveryWindow(o.delivery) ? 'pdp.offerMeta' : 'pdp.offerMetaNoDate', {
                       seller: o.seller.name,
                       fulfilment: o.fulfilment === 'AFROTRANSACT' ? t('search.fulfilled') : o.fulfilment === 'AFROTRANSACT_DELIVERY' ? t('ld.offerFulfilment', { city: o.seller.city }) : 'Ships from seller',
+                      // A date only from a real window; without one the line carries no date at all.
                       eta: o.delivery.label
                     })}
                   </span>
@@ -213,12 +214,24 @@ export function ProductView({ atin }: { atin: string }) {
                   />
                   {bb.fulfilment === 'AFROTRANSACT_DELIVERY' ? (
                     <p className={styles.promise} data-testid="local-delivery-promise">
-                      <strong>{bb.delivery.label}</strong>. {t('ld.pdpPromise', { city: bb.seller.city })}
+                      {hasDeliveryWindow(bb.delivery) && (
+                        <>
+                          <strong>{bb.delivery.label}</strong>.{' '}
+                        </>
+                      )}
+                      {t('ld.pdpPromise', { city: bb.seller.city })}
                     </p>
                   ) : (
                     <p className={styles.promise}>
-                      {bb.delivery.prefix} · {bb.delivery.free ? t('co.free') : fmt.money(bb.delivery.feeMinor)} <strong>{bb.delivery.label}</strong>
-                      {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : '.'}
+                      {bb.delivery.prefix} · {bb.delivery.free ? t('co.free') : fmt.money(bb.delivery.feeMinor)}
+                      {hasDeliveryWindow(bb.delivery) && (
+                        <>
+                          {' '}
+                          <strong data-testid="pdp-arrival">{bb.delivery.label}</strong>
+                          {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : ''}
+                        </>
+                      )}
+                      .
                     </p>
                   )}
                 </>

@@ -1,4 +1,5 @@
 /* Home (design: HOME): pinned logo header; inner content scrolls. */
+import { hasDeliveryWindow } from '@afrotransact/api-client';
 import { useRouter } from 'expo-router';
 import { BarcodeIcon as Barcode, BasketIcon as Basket, BellIcon as Bell, CaretDownIcon as CaretDown, CaretRightIcon as CaretRight, DropHalfIcon as DropHalf, FireIcon as Fire, type Icon, MagnifyingGlassIcon as MagnifyingGlass, MapPinIcon as MapPin, ScissorsIcon as Scissors, SparkleIcon as Sparkle, TruckIcon as Truck, TShirtIcon as TShirt } from 'phosphor-react-native';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -36,7 +37,7 @@ export default function Home() {
   // "Buy again" is only ever products from the shopper's own orders (by ATIN), in stock, with a photo; there is no popularity data, so nothing else fills the shelf.
   const orderedAtins = new Set((orders.data ?? []).flatMap((o) => o.shipments.flatMap((s) => s.items.map((i) => i.atin))));
   const reorder = hits.filter((p) => orderedAtins.has(p.atin) && p.inStock && !!p.imageUrl).slice(0, 4);
-  const sameDay = hits.filter((p) => p.delivery.days === 0).slice(0, 4);
+  const sameDay = hits.filter((p) => hasDeliveryWindow(p.delivery) && p.delivery.days === 0).slice(0, 4);
   const refresh = useRefresh(products, orders, addresses);
 
   const header = (

@@ -28,17 +28,17 @@ export interface FulfilmentBadgeProps {
   shipsFrom?: string;
   fulfilledLabel?: string;
   shipsFromLabel?: (city: string) => string;
-  /** AfroTransact Delivery from the seller's store (S255): "AfroTransact Delivery from Houston, TX". */
+  /** Delivery from the seller's store (S255): "Delivery from Houston, TX". */
   localDeliveryLabel?: (city: string | undefined) => string;
 }
 
-/** "Fulfilled by AfroTransact" (green), "AfroTransact Delivery from <city>" (green, truck) or "Ships from seller" (grey). */
+/** "Fulfilled by AfroTransact" (green), "Delivery from <city>" (green, truck) or "Ships from seller" (grey). */
 export function FulfilmentBadge({
   fulfilment,
   shipsFrom,
   fulfilledLabel = 'Fulfilled by AfroTransact',
   shipsFromLabel = (c) => `Ships from ${c}`,
-  localDeliveryLabel = (c) => (c ? `AfroTransact Delivery from ${c}` : 'AfroTransact Delivery')
+  localDeliveryLabel = (c) => (c ? `Delivery from ${c}` : 'Delivery')
 }: FulfilmentBadgeProps) {
   if (fulfilment === 'AFROTRANSACT_DELIVERY') {
     return (

@@ -260,7 +260,7 @@ func summaryFromHit(h port.SearchHit, est domain.Estimator, now time.Time) domai
 		OfferID: h.ATIN, PriceMinor: h.PriceMinor, ListPriceMinor: nil, Currency: strings.ToUpper(currency),
 		SellerName: firstNonEmpty(h.SellerName, sellerFallback(kind)), SellerKind: kind, SellerCity: "",
 		Fulfilment: fulfilment, AvailableQty: qty, InStock: status != domain.OutOfStock, LowStock: status == domain.LowStock,
-		StockStatus: status, Delivery: est.Promise(fulfilment, h.DeliveryDays, now), OfferCount: max(1, h.OfferCount),
+		StockStatus: status, Delivery: est.Promise(fulfilment), OfferCount: max(1, h.OfferCount),
 		MinOfferPriceMinor: h.PriceMinor, Sponsor: sponsorOf(h.Sponsored),
 	}
 }

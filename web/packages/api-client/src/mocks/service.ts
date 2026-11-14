@@ -8,7 +8,7 @@ import { type Home, type Rail } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
 import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } from '../schemas/search';
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
-import { deliveryOptions, deliveryPromise, etaDays, locationForZip, metroOf, nearestFc } from './delivery';
+import { arrivalWindow, deliveryOptions, deliveryPromise, locationForZip, mergeWindows, metroOf, nearestFc } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
 import { PLACEMENTS, SPONSORED_SEARCH, type TileRule, ZIP_TARGETING } from './fixtures/content';
 import { composeBody } from './home-blocks';
@@ -100,8 +100,15 @@ function toOffer(o: MockOffer, metro: string, now: Date): Offer {
     fulfilment: o.fulfilment,
     availableQty: Math.max(0, o.stock),
     stockStatus: stockStatus(o.stock),
-    delivery: deliveryPromise({ fulfilment: o.fulfilment, city: o.city }, metro, now)
+    // The product page dates each offer from its own real inputs (the seller's handling time, where it ships from, the shopper's place).
+    delivery: deliveryPromise({ fulfilment: o.fulfilment, city: o.city, handling: o.handling }, metro, now, true)
   };
+}
+
+/** A card with the real window of its buy box offer (rails that need a promised date), or still undated when it has no basis. */
+export function datedCard(card: ProductSummary, metro: string, now: Date): ProductSummary {
+  const o = getDb().offers.get(card.offerId);
+  return o ? { ...card, delivery: deliveryPromise({ fulfilment: o.fulfilment, city: o.city, handling: o.handling }, metro, now, true) } : card;
 }
 
 export function summarize(p: FixtureProduct, metro: string, now: Date, sponsor: string | null = null): ProductSummary {
@@ -465,7 +472,8 @@ export function home(loc: DeliveryLocation, now: Date, userId: string | null = n
     if (r.source.kind === 'near-you') items = near(all.filter(eligibleForHome).sort((a, b) => b.rating - a.rating));
     else if (r.source.kind === 'deliverable-fast') {
       const maxDays = r.source.maxDays;
-      items = all.filter((x) => x.delivery.days <= maxDays);
+      // Cards carry no date; the rail keeps products whose real window (handling, ship-from, the shopper's place) is within maxDays.
+      items = all.map((x) => datedCard(x, metro, now)).filter((x) => x.delivery.basis === 'PROMISE' && x.delivery.days <= maxDays);
     } else if (r.source.kind === 'fulfilled-fastest') items = all.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days).slice(0, r.source.limit);
     else if (r.source.kind === 'department-bestsellers') {
       const dept = r.source.department;
@@ -475,8 +483,11 @@ export function home(loc: DeliveryLocation, now: Date, userId: string | null = n
       items = ids.map((id) => all.find((x) => x.atin === atinOf(id))).filter((x): x is ProductSummary => !!x);
     }
     const shown = rank(items.filter(eligibleForHome)).slice(0, r.source.kind === 'curated' ? undefined : r.source.limit);
-    const day = shown.reduce((d, x) => (x.delivery.days >= d.days ? x.delivery : d), shown[0]?.delivery ?? { days: 0, label: '' }).label;
-    return { id: r.id, title: r.title.replace('{city}', loc.city).replace('{state}', loc.state).replace('{day}', day), href: r.href, items: shown };
+    // "by {day}": the latest real window of the rail's cards; with none the " by {day}" is dropped, never invented.
+    const latest = shown.every((x) => x.delivery.basis === 'PROMISE') ? shown.reduce((d, x) => (x.delivery.latestDate && x.delivery.latestDate > d ? x.delivery.latestDate : d), '') : '';
+    const day = latest ? new Date(`${latest}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' }) : '';
+    const titled = day ? r.title.replace('{day}', day) : r.title.replace(' by {day}', '').replace('{day}', '').trim();
+    return { id: r.id, title: titled.replace('{city}', loc.city).replace('{state}', loc.state), href: r.href, items: shown };
   });
   const personal = userId ? basedOnOrders(all, userId) : null;
   const tiles = resolveTiles(all, rank, near).filter((t) => targeted(t.id, loc.zip));
@@ -602,16 +613,20 @@ export function buildCart(s: MockSession, now: Date): Cart {
     });
     const selected = lines.filter((l) => l.selected);
     const subtotalMinor = selected.reduce((a, l) => a + l.lineTotalMinor, 0);
-    const slowest = Math.max(...items.map(({ offer }) => etaDays({ fulfilment: offer.fulfilment, city: offer.city }, metro)));
+    // The package's window is known only when every line has a real basis; it covers the slowest line.
+    const arrival = mergeWindows(items.map(({ offer }) => arrivalWindow({ fulfilment: offer.fulfilment, city: offer.city, handling: offer.handling }, metro, now)));
     const promise = deliveryPromise({ fulfilment: o.fulfilment, city: o.city }, metro, now);
-    const options = deliveryOptions({ from: { fulfilment: o.fulfilment, city: o.city }, sellerName: o.sellerName, slowestDays: slowest, subtotalMinor }, metro, now);
+    const options = deliveryOptions({ from: { fulfilment: o.fulfilment, city: o.city }, sellerName: o.sellerName, arrival, subtotalMinor }, metro, now);
     return {
       packageId: key,
       seller: { id: o.sellerId, name: o.sellerName, kind: o.sellerName === PLATFORM_SELLER ? 'PLATFORM' : 'SELLER', city: o.city },
       fulfilment: o.fulfilment,
-      heading: isAT ? `Shipped by AfroTransact from ${nearestFc(metro)}` : local ? `AfroTransact Delivery from ${o.city}` : `Shipped by ${o.sellerName} from ${o.city}`,
+      // Plain wording: who sells it, who ships it (only when the seller does), or "Delivery from the store"; never "AfroTransact delivers".
+      heading: isAT ? `Sold by ${o.sellerName}` : local ? `Delivery from ${o.city}` : `Shipped by ${o.sellerName} from ${o.city}`,
       shipsFrom: isAT ? nearestFc(metro) : o.city,
-      delivery: { ...promise, days: slowest, label: options[0]?.eta ?? promise.label },
+      delivery: arrival.basis === 'PROMISE'
+        ? { ...promise, days: arrival.days, label: arrival.label, basis: 'PROMISE' as const, earliestDate: arrival.earliestDate, latestDate: arrival.latestDate }
+        : { ...promise, days: 0, label: '', basis: 'NONE' as const, reason: arrival.reason },
       deliveryOptions: options,
       lines,
       itemCount: lines.reduce((a, l) => a + l.quantity, 0),

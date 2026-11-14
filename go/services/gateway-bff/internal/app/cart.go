@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -55,6 +56,10 @@ type CartDeps struct {
 	Market   string
 	// ShippingSettings reads the staff delivery fee when none was ever read (optional).
 	ShippingSettings ShippingSettingsEnsurer
+	// Places (the shopper's place in the one priority order) and Arrival (real delivery windows) date each package; both
+	// optional: without either no package carries a date.
+	Places  PlaceResolver
+	Arrival ArrivalService
 }
 
 type cartServiceImpl struct{ d CartDeps }
@@ -548,15 +553,13 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 				allSelected = false
 			}
 		}
-		pkg.DeliveryOptions = s.d.Estimator.Options(fulfilment, 0, pkg.SubtotalMinor, now)
-		pkg.Delivery = s.d.Estimator.Promise(fulfilment, 0, now)
-		if len(pkg.DeliveryOptions) > 0 {
-			pkg.Delivery.Label = pkg.DeliveryOptions[0].ETA
-		}
+		pkg.DeliveryOptions = s.d.Estimator.Options(fulfilment, pkg.SubtotalMinor)
+		pkg.Delivery = s.d.Estimator.Promise(fulfilment)
 		pkg.FreeShippingNudge = s.d.Estimator.Nudge(fulfilment, pkg.SubtotalMinor)
 		switch fulfilment {
 		case domain.FulfilledByAfroTransact:
-			pkg.Heading, pkg.ShipsFrom = "Shipped by AfroTransact", "AfroTransact"
+			// Who sells it, not "shipped by AfroTransact": the heading never claims AfroTransact collects or delivers.
+			pkg.Heading, pkg.ShipsFrom = "Sold by "+seller.Name, seller.Name
 		case domain.AfroTransactDelivery:
 			city := s.storeCity(ctx, p.Lines[0].OfferID)
 			pkg.Seller.City = city
@@ -575,6 +578,7 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 		sellers[seller.ID] = true
 		cart.Packages = append(cart.Packages, pkg)
 	}
+	s.dateAndPlace(ctx, c, &cart, now)
 	for _, l := range up.Saved {
 		cart.Saved = append(cart.Saved, domain.SavedItem{SavedID: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN),
 			OfferID: firstNonEmpty(l.OfferID, l.VariantATIN), Title: l.Title, ImageURL: strPtr(l.ImageURL), PriceMinor: l.PriceMinor,
@@ -631,4 +635,40 @@ func (s *cartServiceImpl) storeCity(ctx context.Context, offerID string) string 
 		return ""
 	}
 	return o.Offer.Seller.City
+}
+
+// dateAndPlace gives every package that ships now its real delivery window, from the shopper's place (saved address, chosen,
+// detected, default) and, per line, the offer's own inputs: the seller's handling time and ship-from ZIP, or the
+// fulfilment centre of AfroTransact's own stock (datePackages). A package whose every line has a real basis gets a window
+// ("Nov 18 – 20"); any other gets none and keeps the method only. Pre-order packages keep their own window.
+func (s *cartServiceImpl) dateAndPlace(ctx context.Context, c *domain.Caller, cart *domain.Cart, now time.Time) {
+	windows := datePackages(ctx, s.d.Arrival, s.d.Offers, s.destinationZIP(ctx, c), cart.Packages,
+		func(domain.CartPackage) []string { return []string{domain.OptionDelivery} }, now, s.d.Log)
+	for i := range cart.Packages {
+		pkg := &cart.Packages[i]
+		if len(pkg.Preorder) > 0 {
+			continue
+		}
+		a, ok := windows[pkg.PackageID+"|"+domain.OptionDelivery]
+		if !ok {
+			a = domain.NoArrival(domain.ArrivalNoService)
+		}
+		pkg.Delivery = pkg.Delivery.WithArrival(a)
+		for k := range pkg.DeliveryOptions {
+			if o := pkg.DeliveryOptions[k]; o.Key != domain.OptionPickup && o.Key != domain.OptionQuoteRequired {
+				pkg.DeliveryOptions[k] = o.WithArrival(a)
+			}
+		}
+	}
+}
+
+// destinationZIP is the shopper's ZIP in the one priority order (saved address, chosen place, detected place, default).
+func (s *cartServiceImpl) destinationZIP(ctx context.Context, c *domain.Caller) string {
+	if s.d.Places != nil {
+		return s.d.Places.Destination(ctx, c).ZIP
+	}
+	if s.d.Location != nil && c != nil {
+		return firstFive(s.d.Location.Current(ctx, c).ZIP)
+	}
+	return ""
 }

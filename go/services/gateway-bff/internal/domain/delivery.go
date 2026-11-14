@@ -15,14 +15,6 @@ type DeliveryPolicy struct {
 	Location                   *time.Location
 }
 
-// Default business-day estimates when neither the promise service nor search carries one.
-const (
-	DefaultAfroTransactDays = 2
-	DefaultSellerDays       = 4
-	// DefaultLocalDeliveryDays is AfroTransact collecting from a seller's store and delivering (the buy box uses 1 day).
-	DefaultLocalDeliveryDays = 1
-)
-
 // Delivery option keys. Orders accepts exactly these (plus carrier only while the staff switch is on).
 const (
 	OptionDelivery      = "afrotransact_delivery"
@@ -33,8 +25,9 @@ const (
 
 // Shopper-facing option labels (launch shipping, listing rules section 3). No carrier is ever named.
 const (
-	LabelDeliveryByAfroTransact = "Delivery"
-	LabelStoreDelivery          = "Delivery"
+	LabelDelivery               = "Delivery"
+	LabelDeliveryByAfroTransact = LabelDelivery
+	LabelStoreDelivery          = LabelDelivery
 	LabelPickupPoint            = "Pickup"
 	LabelStorePickup            = "Pickup"
 	LabelSellerShipping         = "Standard shipping from the seller"
@@ -72,16 +65,17 @@ type ShippingSettingsSetter interface {
 	ShippingSettings() (ShippingSettings, bool)
 }
 
-// Estimator builds delivery promises and package delivery options from a business-day estimate.
+// Estimator builds the delivery method, fee and options of an offer or package. It NEVER produces a date: no constant, no
+// "today plus N business days". A promised window comes only from the promise service for real inputs (the seller's
+// handling time, the ship-from ZIP, the shopper's ZIP) through Arrival; until one is applied (DeliveryPromise.WithArrival,
+// DeliveryOption.WithArrival) the promise has basis NONE and an empty label, and nothing may show a date for it.
 type Estimator interface {
-	// Promise estimates delivery for an offer; days <= 0 means unknown (defaults apply).
-	Promise(fulfilment string, days int, now time.Time) DeliveryPromise
-	// Options lists the delivery options for a package with the given (selected) subtotal.
-	Options(fulfilment string, days int, subtotalMinor int64, now time.Time) []DeliveryOption
+	// Promise is the method and fee of delivering an offer, with no date (basis NONE).
+	Promise(fulfilment string) DeliveryPromise
+	// Options lists the delivery options for a package with the given (selected) subtotal, none of them dated.
+	Options(fulfilment string, subtotalMinor int64) []DeliveryOption
 	// Nudge returns the free-shipping nudge for seller-shipped packages under the threshold.
 	Nudge(fulfilment string, subtotalMinor int64) *ShippingNudge
-	// DayLabel renders "Today", "Tomorrow, Oct 11" or "Wednesday, Oct 14".
-	DayLabel(days int, now time.Time) string
 }
 
 // CarrierRule is the staff-configured carrier rate (ADR 0005 §3): what a package a carrier ships costs before any
@@ -156,19 +150,6 @@ func NewEstimator(p DeliveryPolicy) Estimator {
 	return &estimatorImpl{p: p}
 }
 
-func (e *estimatorImpl) days(fulfilment string, days int) int {
-	if days > 0 {
-		return days
-	}
-	switch fulfilment {
-	case FulfilledByAfroTransact:
-		return DefaultAfroTransactDays
-	case AfroTransactDelivery:
-		return DefaultLocalDeliveryDays
-	}
-	return DefaultSellerDays
-}
-
 // sellerCarrier is true for a seller-shipped package offered the carrier option (staff switch on).
 func (e *estimatorImpl) sellerCarrier(fulfilment string) bool {
 	return fulfilment != FulfilledByAfroTransact && fulfilment != AfroTransactDelivery && e.carrierOn()
@@ -181,17 +162,11 @@ func deliveryLabel(fulfilment string) string {
 	return LabelStoreDelivery
 }
 
-func (e *estimatorImpl) Promise(fulfilment string, days int, now time.Time) DeliveryPromise {
-	d := e.days(fulfilment, days)
+func (e *estimatorImpl) Promise(fulfilment string) DeliveryPromise {
 	if e.sellerCarrier(fulfilment) {
-		return DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: "Delivery", Free: false, FeeMinor: e.shipping()}
+		return DeliveryPromise{Prefix: LabelDelivery, Basis: ArrivalNone, Reason: ArrivalNoOrigin, Free: false, FeeMinor: e.shipping()}
 	}
-	prefix := deliveryLabel(fulfilment)
-	out := DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: prefix}
-	if fulfilment == FulfilledByAfroTransact {
-		cutoff := cutoffNote(now.In(e.p.Location))
-		out.Cutoff = &cutoff
-	}
+	out := DeliveryPromise{Prefix: deliveryLabel(fulfilment), Basis: ArrivalNone, Reason: ArrivalNoOrigin}
 	if s := e.settings.Load(); s != nil {
 		// One flat fee (free above the optional threshold, which a single item cannot know): the page shows the flat fee.
 		out.FeeMinor, out.Free = s.FlatFeeMinor, s.FlatFeeMinor == 0
@@ -199,11 +174,10 @@ func (e *estimatorImpl) Promise(fulfilment string, days int, now time.Time) Deli
 	return out
 }
 
-func (e *estimatorImpl) Options(fulfilment string, days int, subtotalMinor int64, now time.Time) []DeliveryOption {
-	d := e.days(fulfilment, days)
+func (e *estimatorImpl) Options(fulfilment string, subtotalMinor int64) []DeliveryOption {
 	if e.sellerCarrier(fulfilment) {
 		free := e.freeAbove() > 0 && subtotalMinor >= e.freeAbove()
-		carrier := DeliveryOption{Key: OptionCarrier, Label: LabelSellerShipping, ETA: e.DayLabel(d, now), Free: free}
+		carrier := DeliveryOption{Key: OptionCarrier, Label: LabelSellerShipping, Free: free}
 		if !free {
 			carrier.FeeMinor = e.shipping()
 		}
@@ -216,15 +190,15 @@ func (e *estimatorImpl) Options(fulfilment string, days int, subtotalMinor int64
 				AmountMinor: carrier.FeeMinor, Source: source}
 		}
 		// A seller package can still be delivered by AfroTransact, at the flat fee.
-		return []DeliveryOption{carrier, e.deliveryOption(fulfilment, d, subtotalMinor, now)}
+		return []DeliveryOption{carrier, e.deliveryOption(fulfilment, subtotalMinor)}
 	}
-	return []DeliveryOption{e.deliveryOption(fulfilment, d, subtotalMinor, now)}
+	return []DeliveryOption{e.deliveryOption(fulfilment, subtotalMinor)}
 }
 
-// deliveryOption is Delivery by AfroTransact (or AfroTransact collecting from the store and delivering): the one flat
-// fee. When the settings were never read the fee is flagged unknown instead of showing 0.
-func (e *estimatorImpl) deliveryOption(fulfilment string, days int, subtotalMinor int64, now time.Time) DeliveryOption {
-	o := DeliveryOption{Key: OptionDelivery, Label: deliveryLabel(fulfilment), ETA: e.DayLabel(days, now)}
+// deliveryOption is the Delivery option of a package (one flat fee). When the settings were never read the fee is flagged
+// unknown instead of showing 0. It carries no date.
+func (e *estimatorImpl) deliveryOption(fulfilment string, subtotalMinor int64) DeliveryOption {
+	o := DeliveryOption{Key: OptionDelivery, Label: deliveryLabel(fulfilment)}
 	s := e.settings.Load()
 	if s == nil {
 		o.FeeUnknown, o.Label = true, LabelFeeUnknown
@@ -251,40 +225,13 @@ func (e *estimatorImpl) Nudge(fulfilment string, subtotalMinor int64) *ShippingN
 	return &ShippingNudge{RemainingMinor: t - subtotalMinor, ThresholdMinor: t}
 }
 
-func (e *estimatorImpl) DayLabel(days int, now time.Time) string {
-	if days <= 0 {
-		return "Today"
-	}
-	d := AddBusinessDays(now.In(e.p.Location), days)
-	if days == 1 {
-		return "Tomorrow, " + d.Format("Jan 2")
-	}
-	return d.Format("Monday, Jan 2")
-}
-
-// AddBusinessDays adds n delivery days, skipping Sundays (carriers deliver Monday–Saturday).
-func AddBusinessDays(t time.Time, n int) time.Time {
-	for n > 0 {
-		t = t.AddDate(0, 0, 1)
-		if t.Weekday() != time.Sunday {
-			n--
-		}
-	}
-	return t
-}
-
-func cutoffNote(now time.Time) string {
-	end := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 0, 0, now.Location())
-	mins := max(1, int(end.Sub(now).Minutes()))
-	return fmt.Sprintf("Order within %d hrs %d mins.", mins/60, mins%60)
-}
-
-// LocalDeliveryHeading is the package heading of AfroTransact Delivery from the seller's store.
+// LocalDeliveryHeading is the package heading of a delivery from the seller's store: plain "Delivery", never wording that
+// says AfroTransact collects or delivers.
 func LocalDeliveryHeading(city string) string {
 	if city == "" {
-		return "AfroTransact Delivery from the seller's store"
+		return LabelDelivery
 	}
-	return "AfroTransact Delivery from " + city
+	return LabelDelivery + " from " + city
 }
 
 // Money renders minor units as dollars, e.g. 599 → "$5.99".

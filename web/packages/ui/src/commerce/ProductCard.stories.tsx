@@ -9,9 +9,9 @@ import { ProductCard, type ProductCardData } from './ProductCard';
 const jollof: ProductCardData = {
   atin: 'AT000000P2', title: 'AfroTransact Brand Jollof Seasoning, 6 oz', community: 'West African', unit: '6 oz', rating: 4.7, reviewCount: 3410, imageUrl: null,
   priceMinor: 649, listPriceMinor: 799, sellerName: 'AfroTransact', sellerKind: 'PLATFORM', sellerCity: 'Houston, TX', fulfilment: 'AFROTRANSACT', availableQty: 900, inStock: true,
-  lowStock: false, delivery: { prefix: 'FREE delivery', label: 'Tomorrow, Oct 11' }, offerCount: 1, minOfferPriceMinor: 649, sponsor: null
+  lowStock: false, delivery: { prefix: 'FREE delivery', label: 'Oct 12 – 14', basis: 'PROMISE' }, offerCount: 1, minOfferPriceMinor: 649, sponsor: null
 };
-const teff: ProductCardData = { ...jollof, atin: 'AT000000P5', title: 'Ivory Teff Flour, Stone-Milled, 4 lb', community: 'Ethiopian', unit: '4 lb', priceMinor: 1400, listPriceMinor: null, sellerName: 'Addis Spice House', sellerKind: 'SELLER', sellerCity: 'Silver Spring, MD', fulfilment: 'SELLER', delivery: { prefix: 'Delivery', label: 'Wednesday, Oct 14' } };
+const teff: ProductCardData = { ...jollof, atin: 'AT000000P5', title: 'Ivory Teff Flour, Stone-Milled, 4 lb', community: 'Ethiopian', unit: '4 lb', priceMinor: 1400, listPriceMinor: null, sellerName: 'Addis Spice House', sellerKind: 'SELLER', sellerCity: 'Silver Spring, MD', fulfilment: 'SELLER', delivery: { prefix: 'Delivery', label: '', basis: 'NONE' } };
 const gele: ProductCardData = { ...jollof, atin: 'AT00000P18', title: 'Ready-to-Wear Auto Gele Headwrap', sellerKind: 'SELLER', sellerName: 'Owambe Party Co.', availableQty: 3, lowStock: true, priceMinor: 3500, listPriceMinor: null };
 const kente: ProductCardData = { ...teff, atin: 'AT00000P14', title: 'Hand-Woven Kente Stole, 72 in', availableQty: 0, inStock: false, priceMinor: 6400 };
 

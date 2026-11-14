@@ -178,42 +178,6 @@ func strOf(v any) string {
 
 var zipOnly = regexp.MustCompile(`^\d{5}(-\d{4})?$`)
 
-// savedAddressForEstimate is the signed-in shopper's saved address the cart estimate is worked out for: the default
-// address, or, when none is marked default, the first saved one that can be taxed. It says why there is none, so the cart
-// never falls back to asking for a ZIP code it does not need: a saved address that lacks a state or ZIP code is
-// ADDRESS_INCOMPLETE (the shopper completes it), an address book that could not be read is SERVICE_UNAVAILABLE (Retry).
-// No address at all, or a guest, gives ("", nil): the client asks for a ZIP code.
-func (s *checkoutPaymentServiceImpl) savedAddressForEstimate(ctx context.Context, c *domain.Caller) (*port.IdentityAddress, string) {
-	if c == nil || c.BearerToken == "" || s.d.Identity == nil {
-		return nil, ""
-	}
-	addrs, err := s.d.Identity.Addresses(ctx, c.BearerToken)
-	if err != nil {
-		s.d.log().WarnContext(ctx, "address book unavailable for the cart tax estimate", "error", err)
-		return nil, domain.TaxReasonServiceUnavailable
-	}
-	taxable := func(a *port.IdentityAddress) bool {
-		return strings.TrimSpace(a.State) != "" && strings.TrimSpace(a.PostalCode) != ""
-	}
-	for i := range addrs {
-		if a := &addrs[i]; a.IsDefault {
-			if taxable(a) {
-				return a, ""
-			}
-			return nil, domain.TaxReasonAddressIncomplete
-		}
-	}
-	for i := range addrs {
-		if a := &addrs[i]; taxable(a) {
-			return a, ""
-		}
-	}
-	if len(addrs) > 0 {
-		return nil, domain.TaxReasonAddressIncomplete
-	}
-	return nil, ""
-}
-
 // TaxEstimate is the cart page's estimate before an address is chosen: the same tax-returns quote as the checkout, for the
 // selected cart lines at each package's first delivery option. The place is the ZIP code the shopper typed, or, with no ZIP
 // code, a signed-in shopper's saved default address. No coupon, membership or delivery choice is known yet, so the final tax
@@ -228,7 +192,7 @@ func (s *checkoutPaymentServiceImpl) TaxEstimate(ctx context.Context, c *domain.
 	switch {
 	case zip == "":
 		var why string
-		if dest, why = s.savedAddressForEstimate(ctx, c); dest != nil {
+		if dest, why = s.placeResolver().SavedAddress(ctx, c); dest != nil {
 			out.TaxPlaceSource = domain.TaxPlaceSavedAddress
 			break
 		}
@@ -241,7 +205,7 @@ func (s *checkoutPaymentServiceImpl) TaxEstimate(ctx context.Context, c *domain.
 		// already knows, in priority order: the place the shopper chose, then the one detected from the edge, then the
 		// market's default. A real ZIP comes with each of them; a place known only by city carries the CITY precision.
 		var placeSource string
-		if dest, placeSource, precision = s.knownPlace(ctx, c); dest == nil {
+		if dest, placeSource, precision = s.placeResolver().KnownPlace(ctx, c); dest == nil {
 			if why == domain.TaxReasonAddressIncomplete {
 				out.TaxEstimateStatus, out.TaxUnavailableReason, out.TaxRateLabel = domain.TaxUnavailable, why, taxLabelAddressIncomplete
 				s.d.taxMetrics().EstimateUnavailable(reasonAddressIncomplete)
@@ -291,40 +255,11 @@ func (s *checkoutPaymentServiceImpl) TaxEstimate(ctx context.Context, c *domain.
 		BlockedLines: sum.BlockedLines, TaxPlaceSource: out.TaxPlaceSource, TaxPlacePrecision: placePrecision, SubtotalMinor: sum.SubtotalMinor, ShippingMinor: sum.ShippingMinor, TotalMinor: sum.TotalMinor, Currency: firstNonEmpty(sum.Currency, domain.Currency)}, nil
 }
 
-// knownPlace is the place the storefront already has for this visitor when there is no usable saved address: the delivery
-// place the shopper chose, else the one detected from the edge's visitor-location headers, else the market's default (the
-// same place the header shows as "Deliver to"). It returns a destination with a real five-digit ZIP and a state, the source
-// and the precision (CITY when the ZIP was resolved from a detected city), or nil when there is none: the cart then asks
-// for a ZIP code. It never invents a ZIP: every one comes from the session, geo's ZIP table or the market configuration.
-func (s *checkoutPaymentServiceImpl) knownPlace(ctx context.Context, c *domain.Caller) (*port.IdentityAddress, string, string) {
-	if s.d.Location == nil || c == nil {
-		return nil, "", ""
+// placeResolver is the shopper's place in the one priority order every surface uses (the injected resolver, else one built
+// from this service's own address book, location and ZIP lookup).
+func (s *checkoutPaymentServiceImpl) placeResolver() PlaceResolver {
+	if s.d.Places != nil {
+		return s.d.Places
 	}
-	loc := s.d.Location.Current(ctx, c)
-	zip := firstFive(loc.ZIP)
-	if !zipOnly.MatchString(zip) {
-		return nil, "", ""
-	}
-	city, state := strings.TrimSpace(loc.City), strings.ToUpper(strings.TrimSpace(loc.State))
-	if state == "" && s.d.ZipLookup != nil {
-		// A stored place that lost its state (geo was down when it was saved): the ZIP table gives it back.
-		if lc, ls, err := s.d.ZipLookup(ctx, zip); err == nil && strings.TrimSpace(ls) != "" {
-			city, state = firstNonEmpty(city, lc), strings.ToUpper(strings.TrimSpace(ls))
-		}
-	}
-	if state == "" {
-		return nil, "", ""
-	}
-	source := domain.TaxPlaceDefault
-	switch loc.Source {
-	case domain.LocationChosen:
-		source = domain.TaxPlaceChosen
-	case domain.LocationDetected:
-		source = domain.TaxPlaceDetected
-	}
-	precision := ""
-	if loc.Precision == domain.PrecisionCity {
-		precision = domain.PrecisionCity
-	}
-	return &port.IdentityAddress{Country: "US", State: state, PostalCode: zip, City: city}, source, precision
+	return NewPlaceResolver(PlaceDeps{Identity: s.d.Identity, Location: s.d.Location, ZipLookup: s.d.ZipLookup, Log: s.d.log()})
 }

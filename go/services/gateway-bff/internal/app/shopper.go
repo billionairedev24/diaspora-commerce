@@ -47,6 +47,11 @@ type ShopperDeps struct {
 	Checkout         CheckoutService
 	Carts            CartService
 	Location         LocationService
+	// Places is the shopper's place in the one priority order (saved address, chosen, detected, default); when nil one is
+	// built from Identity, Location and ZipLookup.
+	Places PlaceResolver
+	// Arrival dates packages from real inputs (the promise service); without it no package carries a date.
+	Arrival ArrivalService
 	// ShippingAllocation spreads a package's delivery charge over its lines for the tax estimate (TX-05 to TX-07);
 	// blank means PROPORTIONAL. Must match orders' at.orders.tax.shipping-allocation. The mixed-basket method is an
 	// OPEN LEGAL DECISION (open decision 5) the tax adviser must approve before production.

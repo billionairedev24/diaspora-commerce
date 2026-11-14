@@ -10,7 +10,12 @@ export const DEFAULT_ZIP = '77042';
 export const SELLER_SHIPPING_MINOR = 599;
 export const FREE_SHIPPING_THRESHOLD_MINOR = 4900;
 
-export interface ShipFrom { fulfilment: 'AFROTRANSACT' | 'SELLER' | 'AFROTRANSACT_DELIVERY'; city: string }
+export interface ShipFrom {
+  fulfilment: 'AFROTRANSACT' | 'SELLER' | 'AFROTRANSACT_DELIVERY';
+  city: string;
+  /** The seller's configured handling days (seller-shipped offers); null/undefined = not configured. */
+  handling?: number | null;
+}
 
 /** AfroTransact Delivery from the seller's store (S255): payments' seed pricing (V9) and service radius. */
 export type PlatformDeliveryPricingMode = 'FLAT' | 'PER_WEIGHT' | 'DISTANCE';
@@ -97,7 +102,10 @@ export function nearestZip(lat: number, lon: number): string {
 
 export const metroOf = (loc: DeliveryLocation): string => `${loc.city}, ${loc.state}`;
 
-/** Business days (Sundays skipped) from the shopper's metro. */
+/**
+ * Ranking-only estimate of calendar closeness (the mock's search filters and sorts use it). It is NEVER shown as a date: a
+ * date comes from `arrivalWindow`, which needs a real basis, like the promise service behind the real BFF.
+ */
 export function etaDays(from: ShipFrom, metro: string, express = false): number {
   if (from.fulfilment === 'AFROTRANSACT_DELIVERY') return 1;
   const here = geoOf(metro);
@@ -109,21 +117,78 @@ export function etaDays(from: ShipFrom, metro: string, express = false): number 
   return d < 250 ? 2 : d < 900 ? 3 : 5;
 }
 
-export function addBusinessDays(now: Date, n: number): Date {
-  const d = new Date(now);
-  let k = n;
-  while (k > 0) {
-    d.setDate(d.getDate() + 1);
-    if (d.getDay() !== 0) k--;
+/* The business calendar of the promise service: weekends and the US federal holidays (observed rules). */
+const nthWeekday = (y: number, m: number, wd: number, n: number): number => 1 + ((7 + wd - new Date(Date.UTC(y, m, 1)).getUTCDay()) % 7) + (n - 1) * 7;
+const lastWeekday = (y: number, m: number, wd: number): number => {
+  const last = new Date(Date.UTC(y, m + 1, 0));
+  return last.getUTCDate() - ((7 + last.getUTCDay() - wd) % 7);
+};
+function federalHolidays(y: number): Set<string> {
+  const fixed: [number, number][] = [[0, 1], [5, 19], [6, 4], [10, 11], [11, 25]];
+  const days: Date[] = fixed.map(([m, d]) => {
+    const t = new Date(Date.UTC(y, m, d));
+    if (t.getUTCDay() === 6) t.setUTCDate(d - 1);
+    if (t.getUTCDay() === 0) t.setUTCDate(d + 1);
+    return t;
+  });
+  days.push(new Date(Date.UTC(y, 0, nthWeekday(y, 0, 1, 3))), new Date(Date.UTC(y, 1, nthWeekday(y, 1, 1, 3))), new Date(Date.UTC(y, 4, lastWeekday(y, 4, 1))),
+    new Date(Date.UTC(y, 8, nthWeekday(y, 8, 1, 1))), new Date(Date.UTC(y, 9, nthWeekday(y, 9, 1, 2))), new Date(Date.UTC(y, 10, nthWeekday(y, 10, 4, 4))));
+  return new Set(days.map((d) => d.toISOString().slice(0, 10)));
+}
+export const isBusinessDay = (d: Date): boolean => d.getUTCDay() !== 0 && d.getUTCDay() !== 6 && !federalHolidays(d.getUTCFullYear()).has(d.toISOString().slice(0, 10));
+
+/** n business days after d (weekends and federal holidays skipped), at UTC midnight. */
+export function addBusinessDays(d: Date, n: number): Date {
+  const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  for (let k = n; k > 0; ) {
+    out.setUTCDate(out.getUTCDate() + 1);
+    if (isBusinessDay(out)) k--;
   }
-  return d;
+  return out;
 }
 
-/** "Today", "Tomorrow, Oct 11" or "Wednesday, Oct 14". */
-export function dayLabel(n: number, now: Date): string {
-  if (n === 0) return 'Today';
-  const s = addBusinessDays(now, n).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-  return n === 1 ? 'Tomorrow, ' + s.split(', ').slice(1).join(', ') : s;
+const NO_DATE = { basis: 'NONE' as const, label: '' as const, earliestDate: undefined, latestDate: undefined, days: 0 as const, cutoff: null };
+type ArrivalReason = 'NO_PLACE' | 'NO_ORIGIN' | 'NO_SERVICE' | 'UNAVAILABLE';
+export type Arrival = { basis: 'PROMISE'; reason?: undefined; label: string; earliestDate: string; latestDate: string; days: number; cutoff: string | null }
+  | { basis: 'NONE'; reason: ArrivalReason; label: ''; earliestDate?: undefined; latestDate?: undefined; days: 0; cutoff: null };
+
+/** "Nov 18 – 20", "Nov 30 – Dec 2" or "Wed, Nov 18": the window as shoppers read it (same rule as the BFF's WindowLabel). */
+export function windowLabel(from: Date, to: Date): string {
+  const f = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleDateString('en-US', { ...o, timeZone: 'UTC' });
+  if (from.getTime() === to.getTime()) return f(from, { weekday: 'short', month: 'short', day: 'numeric' });
+  if (from.getUTCMonth() === to.getUTCMonth()) return `${f(from, { month: 'short', day: 'numeric' })} – ${f(to, { day: 'numeric' })}`;
+  return `${f(from, { month: 'short', day: 'numeric' })} – ${f(to, { month: 'short', day: 'numeric' })}`;
+}
+
+/**
+ * The delivery window of a package, only when there is a real basis (the promise service's rule): AfroTransact's own stock is
+ * dated from the nearest fulfilment centre; a seller-shipped offer needs the seller's configured handling time and where it
+ * ships from; AfroTransact Delivery from a store has no basis. Ship day = today before the 14:00 cut-off on a business day, else the next
+ * one, plus the handling days; transit is a distance band; weekends and federal holidays never count.
+ */
+export function arrivalWindow(from: ShipFrom, metro: string, now: Date): Arrival {
+  const none = (reason: ArrivalReason): Arrival => ({ ...NO_DATE, reason });
+  if (from.fulfilment === 'AFROTRANSACT_DELIVERY') return none('NO_ORIGIN');
+  const here = geoOf(metro);
+  let band: [number, number];
+  let handling = 0;
+  if (from.fulfilment === 'AFROTRANSACT') {
+    const d = Math.min(...FULFILMENT_CENTRES.map(([, c]) => miles(here, geoOf(c))));
+    band = d < 700 ? [1, 2] : [2, 3];
+  } else {
+    if (from.handling === null || from.handling === undefined || !GEO[from.city]) return none('NO_ORIGIN');
+    handling = from.handling;
+    const d = miles(here, GEO[from.city] ?? here);
+    band = d < 250 ? [1, 2] : d < 900 ? [2, 3] : [3, 5];
+  }
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const shipsToday = isBusinessDay(today) && now.getHours() < (from.fulfilment === 'AFROTRANSACT' ? 14 : 12);
+  const ship = shipsToday ? today : addBusinessDays(today, 1);
+  const base = addBusinessDays(ship, handling);
+  const earliest = addBusinessDays(base, band[0]);
+  const latest = addBusinessDays(base, band[1]);
+  const days = Math.max(0, Math.round((earliest.getTime() - today.getTime()) / 86_400_000));
+  return { basis: 'PROMISE', label: windowLabel(earliest, latest), earliestDate: earliest.toISOString().slice(0, 10), latestDate: latest.toISOString().slice(0, 10), days, cutoff: null };
 }
 
 export function nearestFc(metro: string): string {
@@ -132,27 +197,43 @@ export function nearestFc(metro: string): string {
   return best?.n ?? 'Houston FC';
 }
 
-function cutoffNote(now: Date): string {
-  const end = new Date(now);
-  end.setHours(23, 59, 0, 0);
-  const mins = Math.max(1, Math.round((end.getTime() - now.getTime()) / 60000));
-  return `Order within ${Math.floor(mins / 60)} hrs ${mins % 60} mins.`;
-}
-
-export function deliveryPromise(from: ShipFrom, metro: string, now: Date): DeliveryPromise {
-  const days = etaDays(from, metro);
+/**
+ * How an offer is delivered and what it costs; dated only when `dated` and there is a real basis (`arrivalWindow`). Cards and
+ * rails pass `dated: false`: like the real BFF they carry the method and the fee, no date; `days` stays as the ranking estimate
+ * the mock's own search filters use and is not a promise.
+ */
+export function deliveryPromise(from: ShipFrom, metro: string, now: Date, dated = false): DeliveryPromise {
   const isAT = from.fulfilment === 'AFROTRANSACT';
   const settings = getShippingSettings();
-  // Launch shipping: Delivery by AfroTransact (or AfroTransact collects from the store and delivers), one flat fee.
-  // No carrier is ever named and there is no express.
+  const window = dated ? arrivalWindow(from, metro, now) : ({ ...NO_DATE, reason: 'NO_ORIGIN' } as Arrival);
+  // Launch shipping: plain "Delivery", one flat fee. No carrier is ever named and there is no express.
   return {
-    days,
-    label: dayLabel(days, now),
+    days: window.basis === 'PROMISE' ? window.days : etaDays(from, metro),
+    label: window.label,
     prefix: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY,
     free: settings.flatFeeMinor === 0,
     feeMinor: settings.flatFeeMinor,
-    cutoff: isAT ? cutoffNote(now) : null
+    cutoff: null,
+    basis: window.basis,
+    ...(window.basis === 'NONE' ? { reason: window.reason } : { earliestDate: window.earliestDate, latestDate: window.latestDate })
   };
+}
+
+/** The window of a package: known only when every line's is; it covers the slowest line (like the BFF's mergeArrivals). */
+export function mergeWindows(list: Arrival[]): Arrival {
+  const first = list[0];
+  if (!first) return { ...NO_DATE, reason: 'NO_ORIGIN' };
+  let latest = first;
+  let earliest = first;
+  for (const a of list) {
+    if (a.basis === 'NONE') return a;
+    if (latest.basis === 'PROMISE' && a.latestDate > latest.latestDate) latest = a;
+    if (earliest.basis === 'PROMISE' && a.earliestDate > earliest.earliestDate) earliest = a;
+  }
+  if (earliest.basis !== 'PROMISE' || latest.basis !== 'PROMISE') return { ...NO_DATE, reason: 'NO_ORIGIN' };
+  const e = new Date(`${earliest.earliestDate}T00:00:00Z`);
+  const l = new Date(`${latest.latestDate}T00:00:00Z`);
+  return { basis: 'PROMISE', label: windowLabel(e, l), earliestDate: earliest.earliestDate, latestDate: latest.latestDate, days: earliest.days, cutoff: null };
 }
 
 /** Shopper-facing option labels (launch shipping). No carrier is ever named. */
@@ -163,17 +244,18 @@ export const LABEL_STORE_PICKUP = 'Pickup';
 export const LABEL_SELLER_SHIPPING = 'Standard shipping from the seller';
 export const LABEL_QUOTE_REQUIRED = 'Too far for standard delivery. Ask us for a quote';
 
-/** Delivery options for one package: AfroTransact delivers at the staff flat fee (free pickup is added at checkout). */
-export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; slowestDays: number; subtotalMinor: number }, _metro: string, now: Date): DeliveryOption[] {
+/** Delivery options for one package: plain "Delivery" at the staff flat fee (free pickup is added at checkout), dated only by a real window. */
+export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; arrival: Arrival; subtotalMinor: number }, _metro: string, _now: Date): DeliveryOption[] {
   const settings = getShippingSettings();
   const isAT = pkg.from.fulfilment === 'AFROTRANSACT';
-  const days = pkg.from.fulfilment === 'AFROTRANSACT_DELIVERY' ? 1 : pkg.slowestDays;
   const fee = deliveryFee(pkg.subtotalMinor, settings);
-  const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY, eta: dayLabel(days, now), feeMinor: fee, free: fee === 0 };
+  const a = pkg.arrival;
+  const dates = a.basis === 'PROMISE' ? { earliestDate: a.earliestDate, latestDate: a.latestDate } : {};
+  const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY, eta: a.label, feeMinor: fee, free: fee === 0, ...dates };
   const sellerShips = pkg.from.fulfilment === 'SELLER' && settings.sellerCarrierShippingEnabled;
   if (!sellerShips) return [delivery];
   const free = pkg.subtotalMinor >= FREE_SHIPPING_THRESHOLD_MINOR;
-  return [{ key: 'carrier', label: LABEL_SELLER_SHIPPING, eta: dayLabel(pkg.slowestDays, now), feeMinor: free ? 0 : SELLER_SHIPPING_MINOR, free }, delivery];
+  return [{ key: 'carrier', label: LABEL_SELLER_SHIPPING, eta: a.label, feeMinor: free ? 0 : SELLER_SHIPPING_MINOR, free, ...dates }, delivery];
 }
 
 /** Whether an address is inside a delivery zone (the mock's zones: the metros AfroTransact delivers in). */

@@ -1933,9 +1933,12 @@ components:
         deliveryDays:
           type: integer
           format: int32
-          description: Handling + transit estimate used by the buy box
+          description: Handling + transit estimate used only to rank offers in the buy box. It is NOT a delivery promise and must never be shown as a date; dates come from the promise service.
         shipsFrom:
           type: string
+        shipFromZip:
+          type: string
+          description: ZIP the offer ships from (seller-shipped offers only). With handlingDays it is the real input of a delivery window; the BFF passes both to the promise service and never returns the ZIP to shoppers.
         soldBy:
           type: string
         buyBoxRank:

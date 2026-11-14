@@ -26,7 +26,7 @@ import {
 import { mockCheckoutTax, TAX_LABELS } from './checkout-tax';
 import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
-import { addBusinessDays, insideDeliveryZone, LABEL_PICKUP_POINT, LABEL_QUOTE_REQUIRED, LABEL_STORE_DELIVERY, LABEL_STORE_PICKUP, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf, miles } from './delivery';
+import { insideDeliveryZone, LABEL_PICKUP_POINT, LABEL_QUOTE_REQUIRED, LABEL_STORE_DELIVERY, LABEL_STORE_PICKUP, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf, miles } from './delivery';
 import { redeemMockQuote } from './delivery-quotes';
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
@@ -97,13 +97,11 @@ function addMethod(a: AccountState, c: z.infer<typeof MockCardSchema>): PaymentM
 
 /* ── Checkout ──────────────────────────────────────────────────── */
 
-const fmtDate = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
-
-function withDates(o: DeliveryOption, now: Date, days: number): DeliveryOption {
-  const from = addBusinessDays(now, days);
-  const to = addBusinessDays(now, days + (o.key === 'carrier' ? 1 : 0));
-  return { ...o, earliestDate: iso(from).slice(0, 10), latestDate: iso(to).slice(0, 10), cutoffLabel: 'Order within 3 h 12 min',
-    eta: from.getTime() === to.getTime() ? fmtDate(from) : `${fmtDate(from)} – ${fmtDate(to)}` };
+/** An option dated by its package's real window (delivery, carrier); a pickup keeps its point's ready time; no window, no date. */
+function dated(o: DeliveryOption, p: CartPackage): DeliveryOption {
+  if (o.key === 'pickup') return o;
+  const d = p.delivery;
+  return d.basis === 'PROMISE' && d.earliestDate && d.latestDate ? { ...o, eta: d.label, earliestDate: d.earliestDate, latestDate: d.latestDate } : { ...o, eta: '' };
 }
 
 function perishableLine(atin: string): boolean {
@@ -133,8 +131,8 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
       kind: x.owner === 'AT' ? (x.id.includes('lock') ? 'LOCKER' : 'PLATFORM_COUNTER') : 'SELLER',
       distanceMiles: here(x.metro) ? Math.round((2.4 + i * 3.7) * 10) / 10 : null
     }));
-  const pickupOption = (points: PickupPoint[], now: Date, platform: boolean): DeliveryOption =>
-    withDates({ key: 'pickup', label: platform ? LABEL_PICKUP_POINT : LABEL_STORE_PICKUP, eta: points[0]?.ready ?? '', feeMinor: 0, free: true }, now, 0);
+  const pickupOption = (points: PickupPoint[], _now: Date, platform: boolean): DeliveryOption =>
+    ({ key: 'pickup', label: platform ? LABEL_PICKUP_POINT : LABEL_STORE_PICKUP, eta: points[0]?.ready ?? '', feeMinor: 0, free: true });
   const outside = !insideDeliveryZone(metro);
   return cart.packages
     .map((p): CartPackage => {
@@ -146,7 +144,6 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
       // Pre-order package (S273): delivered on the window's date, door or the window's pickup point.
       if (p.preorder) return preorderCheckoutPackage(p);
       const isAT = p.fulfilment === 'AFROTRANSACT';
-      const days = (o: DeliveryOption) => (o.key === 'afrotransact_delivery' ? 1 : o.key === 'pickup' ? 0 : Math.max(1, p.delivery.days));
       if (p.fulfilment === 'AFROTRANSACT_DELIVERY') {
         // AfroTransact Delivery from the seller's store (S255): road distance store → address and payments' pricing.
         const q = localDeliveryQuote(p.seller.city, metro);
@@ -159,7 +156,7 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
           : { available: false, chargeMinor: null, roadMiles: q.roadMiles, durationMinutes: q.durationMinutes, fromCity, unavailableReason: 'OUT_OF_RANGE',
               message: `${p.seller.name} is ${Math.round(q.roadMiles)} miles from ${metro}: too far for AfroTransact Delivery (up to ${LOCAL_DELIVERY.maxRadiusMiles} miles). Remove it or choose another address.`,
               maxRadiusMiles: LOCAL_DELIVERY.maxRadiusMiles, offerIds: p.lines.map((l) => l.offerId) };
-        const base = withDates({ key: 'afrotransact_delivery', label: '', eta: '', feeMinor: 0, free: false }, now, 1);
+        const base: DeliveryOption = { key: 'afrotransact_delivery', label: '', eta: '', feeMinor: 0, free: false };
         const option: DeliveryOption = q.available
           ? { ...base, feeMinor: flat, free: flat === 0, label: LABEL_STORE_DELIVERY }
           : { ...base, label: `${LABEL_STORE_DELIVERY} · not available to this address` };
@@ -170,7 +167,7 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
       // Like gateway-bff: platform-fulfilled packages list AfroTransact counters and lockers near the address, seller
       // packages the seller's own pickup locations; any package with points can be picked up (free).
       const points = pickupPointsOf(p.seller.name, isAT);
-      const options = p.deliveryOptions.filter((o) => o.key !== 'pickup' || points.length > 0).map((o) => withDates(o, now, days(o)));
+      const options = p.deliveryOptions.filter((o) => o.key !== 'pickup' || points.length > 0).map((o) => dated(o, p));
       if (points.length && !options.some((o) => o.key === 'pickup')) options.push(pickupOption(points, now, isAT));
       // Outside every delivery zone the only delivery option is quote_required (pickup stays): the shopper never dead-ends.
       if (outside) return outsideZonePackage(p, points.length ? pickupOption(points, now, isAT) : null, points);

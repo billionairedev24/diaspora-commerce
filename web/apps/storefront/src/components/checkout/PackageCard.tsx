@@ -1,6 +1,6 @@
 'use client';
 
-import { type CheckoutPackage, type DeliveryOptionKey, type DeliveryPreferences, type PlaceableOption } from '@afrotransact/api-client';
+import { type CheckoutPackage, type DeliveryOptionKey, type DeliveryPreferences, hasDeliveryWindow, type PlaceableOption } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, ImagePlaceholder, Key, Lightning, Truck, Warning } from '@afrotransact/ui';
 
@@ -131,7 +131,8 @@ export function PackageCard({
   const prefs = (p: Partial<DeliveryPreferences>) => onChoice({ ...choice, preferences: { ...choice.preferences, ...p } });
   const selected = pkg.deliveryOptions.find((o) => o.key === choice.option);
   const point = points.find((p) => p.id === choice.pickupPointId) ?? points[0];
-  const promise = pickup ? (point?.ready ?? selected?.eta ?? '') : (selected?.eta ?? pkg.delivery.label);
+  // A date only from a real window: an option with no eta (and a package with no window) shows none.
+  const promise = pickup ? (point?.ready ?? selected?.eta ?? '') : (selected?.eta ?? (hasDeliveryWindow(pkg.delivery) ? pkg.delivery.label : ''));
   const group = `pkg-${pkg.packageId}`;
 
   return (
@@ -140,15 +141,17 @@ export function PackageCard({
         <div className={styles.packageHeadMain}>
           <div className={styles.packageTitle}>
             <strong id={`${group}-title`} className={styles.sellerTitle}>{pkg.seller.name}</strong>
-            <span className={styles.muted}>
-              {pkg.heading} · {t('cart.package', { n, total })}
+            <span className={styles.muted} data-testid="package-meta">
+              {total > 1 ? `${pkg.heading} · ${t('cart.package', { n, total })}` : pkg.heading}
             </span>
           </div>
         </div>
-        <div className={styles.arrivingTag} data-testid="package-promise">
-          <Truck aria-hidden className={styles.arrivingIcon} />
-          <strong>{pickup ? t('co.pickupReady', { ready: promise }) : t('cart.arriving', { eta: promise })}</strong>
-        </div>
+        {promise && (
+          <div className={styles.arrivingTag} data-testid="package-promise">
+            <Truck aria-hidden className={styles.arrivingIcon} />
+            <strong>{pickup ? t('co.pickupReady', { ready: promise }) : t('cart.arrives', { eta: promise })}</strong>
+          </div>
+        )}
       </header>
 
       {/* Package Items */}
@@ -218,7 +221,7 @@ export function PackageCard({
                   checked={isSelected}
                   onChange={() => onChoice({ ...choice, option: o.key })}
                   disabled={undeliverable}
-                  aria-label={`${o.label} ${o.eta}`}
+                  aria-label={`${o.label} ${o.eta}`.trim()}
                 />
                 <div className={styles.flatText}>
                   <strong className={styles.optionTitle}>{undeliverable ? t('ld.notAvailableOption') : o.label}</strong>

@@ -59,16 +59,21 @@ func (o shipsFromOffers) ProductSummaries(_ context.Context, atins []string) (ma
 	return out, nil
 }
 
-type fakePromise struct{ days map[string]int }
+// fakeArrival answers real-looking windows by "zip|atin" -> calendar days from homeNow (the promise service's answer).
+type fakeArrival struct{ days map[string]int }
 
-func (f fakePromise) Promises(_ context.Context, zip string, items []port.PromiseItem) (map[string]int, error) {
-	out := map[string]int{}
-	for _, it := range items {
-		if d, ok := f.days[zip+"|"+it.ATIN]; ok {
-			out[it.ATIN] = d
+func (f fakeArrival) Windows(_ context.Context, zip string, reqs []ArrivalRequest, now time.Time) map[string]domain.Arrival {
+	out := map[string]domain.Arrival{}
+	for _, r := range reqs {
+		d, ok := f.days[zip+"|"+r.Key]
+		if !ok {
+			out[r.Key] = domain.NoArrival(domain.ArrivalUnavailable)
+			continue
 		}
+		day := now.AddDate(0, 0, d).Format(time.DateOnly)
+		out[r.Key] = domain.ArrivalOf(day, day, "", now)
 	}
-	return out, nil
+	return out
 }
 
 func localHits(n int) []port.SearchHit {
@@ -182,7 +187,7 @@ type localFixture struct {
 func (f *localFixture) service(pl domain.Placements, from map[string]string, days map[string]int) SiteService {
 	f.zips = nil
 	return NewSiteService(SiteDeps{Content: zipContent{pl: pl, zips: &f.zips}, Search: f.search, Catalog: homeCatalog{category: map[string]string{}},
-		Inventory: homeInventory{}, Offers: shipsFromOffers{from: from}, Promise: fakePromise{days: days}, Location: zipLocation{}, Estimator: est,
+		Inventory: homeInventory{}, Offers: shipsFromOffers{from: from}, Arrival: fakeArrival{days: days}, Location: zipLocation{}, Estimator: est,
 		Market: "us", Clock: func() time.Time { return homeNow }})
 }
 
@@ -267,11 +272,11 @@ func TestDeliverableFastKeepsPromisesWithinDaysAndNamesTheDay(t *testing.T) {
 	if len(items) != 2 || (items[0] != "ATLOC00000" && items[1] != "ATLOC00000") || strings.Contains(atinsOf(r.Items), "ATLOC00002") {
 		t.Errorf("only products promised within 2 days to the ZIP qualify, got %v", items)
 	}
-	if want := "Get it by " + est.DayLabel(2, homeNow); r.Title != want {
+	if want := "Get it by " + homeNow.AddDate(0, 0, 2).Format("Monday, Jan 2"); r.Title != want {
 		t.Errorf("title = %q, want %q (the day everything arrives by)", r.Title, want)
 	}
 	nj, _ := svc.Home(context.Background(), guestAt("08817"))
-	if r := railByID(nj, "fast"); r == nil || atinsOf(r.Items) != "ATLOC00002" || r.Title != "Get it by "+est.DayLabel(1, homeNow) {
+	if r := railByID(nj, "fast"); r == nil || atinsOf(r.Items) != "ATLOC00002" || r.Title != "Get it by "+homeNow.AddDate(0, 0, 1).Format("Monday, Jan 2") {
 		t.Errorf("a different ZIP gets different promises: %+v", r)
 	}
 	if none, _ := svc.Home(context.Background(), guestAt("80202")); railByID(none, "fast") != nil {

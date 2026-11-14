@@ -3,7 +3,7 @@ import { join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { deliveryOptions, deliveryPromise } from '../src/mocks/delivery';
+import { arrivalWindow, deliveryOptions, deliveryPromise } from '../src/mocks/delivery';
 import { resetShippingSettings, setShippingSettings } from '../src/mocks/shipping-settings';
 
 /* Listing rules section 3: AfroTransact sets all shipping at launch, so NO shopper-facing text may name a carrier or a
@@ -64,8 +64,8 @@ describe('no shopper-facing text names a carrier while the seller carrier switch
       for (const fulfilment of ['AFROTRANSACT', 'AFROTRANSACT_DELIVERY', 'SELLER'] as const) {
         for (const subtotalMinor of [0, 1000, 4999, 5000, 99_999]) {
           const from = { fulfilment, city: 'Houston, TX' };
-          for (const o of deliveryOptions({ from, sellerName: 'Seller', slowestDays: 3, subtotalMinor }, 'Houston, TX', now)) texts.push(o.label, o.eta);
-          const p = deliveryPromise(from, 'Houston, TX', now);
+          for (const o of deliveryOptions({ from, sellerName: 'Seller', arrival: arrivalWindow({ ...from, handling: 2 }, 'Houston, TX', now), subtotalMinor }, 'Houston, TX', now)) texts.push(o.label, o.eta);
+          const p = deliveryPromise({ ...from, handling: 2 }, 'Houston, TX', now, true);
           texts.push(p.prefix, p.label);
         }
       }

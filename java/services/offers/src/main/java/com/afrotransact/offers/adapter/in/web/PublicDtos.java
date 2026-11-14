@@ -38,7 +38,11 @@ final class PublicDtos {
                                int buyBoxRank, double score, List<OfferBadge> badges,
                                @Schema(description = "AFROTRANSACT_DELIVERY offers: the seller's pickup location id "
                                        + "(seller-service); checkout measures the delivery distance from it")
-                               String shipFromLocationId) {
+                               String shipFromLocationId,
+                               @Schema(description = "ZIP the offer ships from (seller-shipped offers; empty otherwise). With handlingDays "
+                                       + "it is the real input of a delivery window: the BFF passes both to the promise service and "
+                                       + "never returns the ZIP to shoppers")
+                               String shipFromZip) {
 
         static PublicOfferResponse of(ListedOffer l) {
             Offer o = l.view().offer();
@@ -51,7 +55,8 @@ final class PublicDtos {
                     o.listPriceMinor(), o.shippingMinor(), l.landedPriceMinor(), o.currency(), o.fulfilment(),
                     l.view().availableQty(), l.view().stockStatus(), o.handlingDays(), l.view().deliveryDays(),
                     shipsFrom, name, l.buyBoxRank(), l.score(), l.badges(),
-                    o.shipFrom() == null ? null : o.shipFrom().locationId());
+                    o.shipFrom() == null ? null : o.shipFrom().locationId(),
+                    o.shipFrom() == null || o.fulfilment() == Fulfilment.AFROTRANSACT ? null : o.shipFrom().postalCode());
         }
     }
 

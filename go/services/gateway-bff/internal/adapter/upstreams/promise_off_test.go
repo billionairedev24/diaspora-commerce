@@ -8,9 +8,9 @@ import (
 )
 
 func TestNoPromiseKnowsNoDatesAndNeverFails(t *testing.T) {
-	days, err := NewNoPromise().Promises(context.Background(), "77002", []port.PromiseItem{{ATIN: "B0001"}})
-	if err != nil || len(days) != 0 {
-		t.Fatalf("no promise service: want no dates and no error, got %v %v", days, err)
+	quotes, err := NewNoPromise().Promises(context.Background(), "77002", []port.PromiseOffer{{OfferID: "B0001"}})
+	if err != nil || len(quotes) != 0 {
+		t.Fatalf("no promise service: want no dates and no error, got %v %v", quotes, err)
 	}
 }
 

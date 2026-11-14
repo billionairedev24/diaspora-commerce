@@ -11,6 +11,12 @@ export interface FixtureOffer {
   ff: FixtureFulfilment;
   stock: number;
   list?: number;
+  /**
+   * The seller's configured handling time (business days to hand the parcel to the carrier) for a seller-shipped offer. Left
+   * out, the seed gives it the seller's usual 2 days; `null` is a seller who has not set one: such an offer has no basis for a
+   * delivery date and the mock shows none, like the real BFF.
+   */
+  handling?: number | null;
 }
 
 export interface FixtureProduct {

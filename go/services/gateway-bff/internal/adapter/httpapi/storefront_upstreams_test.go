@@ -11,9 +11,17 @@ import (
 // S222: the buy box and "Other sellers" come from the offers service; search cards carry offer counts and the lowest
 // price; add-to-cart validates offer ids (buyable) through offers and the cart line keeps the offer.
 func TestProductPageSearchAndCartUseOffers(t *testing.T) {
-	bff, b := setup(t, testkit.Options{Offers: true})
+	bff, b := setup(t, testkit.Options{Offers: true, Promise: true})
 	p := b.do("GET", "/v1/products/ATSHEAV001", nil).json(t)
 	bb := p["buyBox"].(map[string]any)
+	// Kente ships from a known ZIP with a handling time: the promise service dates it, as a window and never one invented day.
+	if d := bb["delivery"].(map[string]any); d["basis"] != "PROMISE" || d["label"] != "Oct 12 – 14" || d["earliestDate"] != "2026-10-12" || d["latestDate"] != "2026-10-14" {
+		t.Fatalf("a real window is shown: %v", d)
+	}
+	// Accra's offer has no ship-from ZIP: no date, and it says why.
+	if o := p["otherOffers"].([]any)[0].(map[string]any)["delivery"].(map[string]any); o["basis"] != "NONE" || o["label"] != "" || o["reason"] != "NO_ORIGIN" || o["earliestDate"] != nil {
+		t.Fatalf("no basis, no date: %v", o)
+	}
 	if bb["offerId"] != testkit.OfferKenteSheaID || bb["seller"].(map[string]any)["city"] != "Atlanta" || num(bb, "priceMinor") != 1250 {
 		t.Fatalf("buy box = %v", bb)
 	}

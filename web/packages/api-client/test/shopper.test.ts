@@ -139,7 +139,7 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     expect(product.buyBox).toMatchObject({ fulfilment: 'AFROTRANSACT_DELIVERY', seller: { name: "Ama's Market", city: 'Houston, TX' } });
     const cart = await api.addToCart({ offerId: product.buyBox?.offerId ?? '', quantity: 1 });
     const pkg = cart.packages.find((p) => p.fulfilment === 'AFROTRANSACT_DELIVERY');
-    expect(pkg?.heading).toBe('AfroTransact Delivery from Houston, TX');
+    expect(pkg?.heading).toBe('Delivery from Houston, TX');
     expect(pkg?.freeShippingNudge).toBeNull();
     const near = await api.getCheckoutSummary('ad1');
     const local = near.packages[0];

@@ -87,7 +87,9 @@ func TestAnIncompleteSavedAddressFallsBackToTheKnownPlaceAndNoPlaceStillAsksForA
 }
 
 func TestAPlaceWithBlockedItemsStillSaysWhy(t *testing.T) {
-	f := &fakeReturns{answer: func(port.UpTaxQuoteLine) port.UpTaxLineQuote { return port.UpTaxLineQuote{DecisionStatus: "NEEDS_APPROVAL"} }}
+	f := &fakeReturns{answer: func(port.UpTaxQuoteLine) port.UpTaxLineQuote {
+		return port.UpTaxLineQuote{DecisionStatus: "NEEDS_APPROVAL"}
+	}}
 	loc := houstonLoc
 	loc.Source = domain.LocationDetected
 	got, err := knownPlaceSvc(f, loc).TaxEstimate(context.Background(), &domain.Caller{}, "", nil)

@@ -34,7 +34,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
-	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
 const serviceName = "gateway-bff"
@@ -110,11 +109,13 @@ func run() error {
 	proofLinks := upstreams.NewProofLinks(mediaClient, serviceTokens)
 	payments := upstreams.NewPayments(paymentsClient)
 	// promise is optional: a deployment without it (upstreams.promise.disabled) keeps the estimated delivery dates.
-	promise, sitePromise := upstreams.NewNoPromise(), port.PromiseClient(nil)
+	promise := upstreams.NewNoPromise()
 	if !up.Promise.Disabled {
 		promise = upstreams.NewPromise(client("promise", up.Promise))
-		sitePromise = promise
 	}
+	// One place dates every package (cart, checkout, product page, rails): real windows from the promise service for the
+	// seller's handling time, the ship-from ZIP and the shopper's ZIP, or no date at all.
+	arrival := app.NewArrivalService(promise, log)
 	orders := upstreams.NewOrders(ordersClient)
 	notifications := upstreams.NewNotifications(client("notifications", up.Notifications))
 	sellerCases := upstreams.NewSellerCases(client("tax-returns", up.TaxReturns), client("trust-ops", up.TrustOps))
@@ -174,8 +175,16 @@ func run() error {
 		DetectOverrideZIP: cfg.Commerce.DetectOverrideZIP, TrustEdgeGeo: cfg.Commerce.TrustEdgeGeo,
 		Country: cfg.Market, // market codes are ISO countries (us): address suggestions are restricted to it
 		Log:     log})
+	zipLookup := func(ctx context.Context, zip string) (string, string, error) {
+		a, err := geo.Zip(ctx, zip)
+		return a.City, a.State, err
+	}
+	// The shopper's place in one priority order (saved address, chosen place, detected place, default) for the cart, the
+	// product page and the checkout (tax estimate and delivery windows).
+	places := app.NewPlaceResolver(app.PlaceDeps{Identity: identity, Location: location, ZipLookup: zipLookup, Log: log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
-		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market, ShippingSettings: shippingSync})
+		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market, ShippingSettings: shippingSync,
+		Places: places, Arrival: arrival})
 	maintenance := app.NewMaintenanceService(valkey.NewMaintenance(rdb), nil, log)
 	services := httpapi.Services{
 		Sessions: sessions, Maintenance: maintenance,
@@ -185,13 +194,13 @@ func run() error {
 			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Log: log}),
 		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, serviceTokens), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
-			Offers: storefrontOffers, Orders: orders, Services: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Promise: sitePromise,
+			Offers: storefrontOffers, Orders: orders, Services: upstreams.NewCustomerBookings(client("bookings", up.Bookings)), Arrival: arrival,
 			Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log,
 			Env: loader.Env(), HomeContent: upstreams.NewContentHome(client("content", up.Content)), Memory: valkey.NewHomeMemory(rdb), Metrics: homemetrics.New(reg), Cart: cart}),
 		Location: location,
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil,
 			app.WithServices(upstreams.NewCustomerBookings(client("bookings", up.Bookings)))),
-		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Offers: storefrontOffers,
+		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Places: places, Arrival: arrival, Offers: storefrontOffers,
 			Notifications: notifications, Tokens: serviceTokens, Limiter: store, Location: location, Estimator: estimator, Sellers: sellers, Log: log,
 			AlertLimits: app.StockAlertLimits{PerIPPerHour: cfg.RateLimit.StockAlertPerIPPerHour, PerEmailPerHour: cfg.RateLimit.StockAlertPerEmailPerHour,
 				PerATINPerHour: cfg.RateLimit.StockAlertPerATINPerHour}}),
@@ -235,10 +244,7 @@ func run() error {
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
 		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store, limiter: store, estimator: estimator, shippingSync: shippingSync,
-		taxMetrics: taxmetrics.New(reg), zipLookup: func(ctx context.Context, zip string) (string, string, error) {
-			a, err := geo.Zip(ctx, zip)
-			return a.City, a.State, err
-		}}, services, log)
+		taxMetrics: taxmetrics.New(reg), zipLookup: zipLookup, places: places, arrival: arrival}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,

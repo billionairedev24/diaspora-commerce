@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
@@ -48,7 +47,6 @@ func shopperText(t *testing.T, v any) []string {
 // the BFF can show a shopper is free of carrier names, for every package kind, fee setting and cart value, with the staff
 // switch off. (With it on the labels stay generic too: the carrier is never named.)
 func TestNoShopperFacingTextNamesACarrierWhileTheSellerCarrierSwitchIsOff(t *testing.T) {
-	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 	five := int64(5000)
 	for _, on := range []bool{false, true} {
 		for _, free := range []*int64{nil, &five} {
@@ -59,8 +57,8 @@ func TestNoShopperFacingTextNamesACarrierWhileTheSellerCarrierSwitchIsOff(t *tes
 			for _, kind := range []string{domain.FulfilledByAfroTransact, domain.AfroTransactDelivery, domain.ShipsFromSeller} {
 				for _, items := range []int64{0, 1000, 4999, 5000, 99999} {
 					var all []any
-					all = append(all, e.Options(kind, 0, items, now), e.Promise(kind, 0, now), e.Nudge(kind, items))
-					pkg := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "p", Fulfilment: kind, DeliveryOptions: e.Options(kind, 0, items, now)}}
+					all = append(all, e.Options(kind, items), e.Promise(kind), e.Nudge(kind, items))
+					pkg := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "p", Fulfilment: kind, DeliveryOptions: e.Options(kind, items)}}
 					addPickupOption(&pkg, []domain.PickupPoint{{ID: "pp", Ready: "Ready the same day"}})
 					all = append(all, pkg.DeliveryOptions, quoteRequiredOptions(pkg))
 					for _, text := range shopperText(t, all) {

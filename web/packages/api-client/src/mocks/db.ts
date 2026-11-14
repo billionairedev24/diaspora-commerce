@@ -16,6 +16,8 @@ export interface MockOffer {
   listPriceMinor: number | null;
   fulfilment: 'AFROTRANSACT' | 'SELLER' | 'AFROTRANSACT_DELIVERY';
   stock: number;
+  /** The seller's handling days for a seller-shipped offer; null = not configured (no basis for a date). */
+  handling: number | null;
 }
 
 export interface MockCartLine { lineId: string; offerId: string; quantity: number; selected: boolean }
@@ -88,7 +90,8 @@ function createDb(): MockDb {
         priceMinor: Math.round(o.price * 100),
         listPriceMinor: o.list ? Math.round(o.list * 100) : null,
         fulfilment: o.ff === 'AT' ? 'AFROTRANSACT' : o.ff === 'ATD' ? 'AFROTRANSACT_DELIVERY' : 'SELLER',
-        stock: o.stock
+        stock: o.stock,
+        handling: o.ff === 'S' ? (o.handling === undefined ? 2 : o.handling) : null
       };
       offers.set(offer.offerId, offer);
       return offer;

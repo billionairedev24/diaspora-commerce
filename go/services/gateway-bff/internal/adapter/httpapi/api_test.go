@@ -274,8 +274,9 @@ func TestProductDetail(t *testing.T) {
 		bb["seller"].(map[string]any)["name"] != "Kente Naturals" || bb["fulfilment"] != "SELLER" {
 		t.Fatalf("buy box = %v", bb)
 	}
-	if d := bb["delivery"].(map[string]any); num(d, "days") != 1 || !strings.HasPrefix(d["label"].(string), "Tomorrow, ") {
-		t.Fatalf("promise days not used: %v", d)
+	// Catalog's single seller (no offers service): where and when the seller ships from is not known, so no date is shown.
+	if d := bb["delivery"].(map[string]any); d["basis"] != "NONE" || d["label"] != "" || d["reason"] != "NO_ORIGIN" || d["earliestDate"] != nil || num(d, "feeMinor") != 599 {
+		t.Fatalf("no basis, no date: %v", d)
 	}
 	if pd["soldBy"] != "Kente Naturals" || pd["unitPriceLabel"] != "$12.50 / 8 oz" || pd["returnsPolicy"] != "Seller return policy, 14 days" {
 		t.Fatalf("detail = %v", pd)

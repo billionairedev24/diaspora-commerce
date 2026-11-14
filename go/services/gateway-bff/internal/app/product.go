@@ -29,7 +29,8 @@ type ProductService interface {
 type productServiceImpl struct {
 	catalog       port.CatalogClient
 	inventory     port.InventoryClient
-	promise       port.PromiseClient
+	places        PlaceResolver
+	arrival       ArrivalService
 	notifications port.NotificationsClient
 	tokens        port.ServiceTokens
 	limiter       port.RateLimiter
@@ -46,9 +47,12 @@ var _ ProductService = (*productServiceImpl)(nil)
 
 // ProductDeps are the ProductService's collaborators.
 type ProductDeps struct {
-	Catalog       port.CatalogClient
-	Inventory     port.InventoryClient
-	Promise       port.PromiseClient
+	Catalog   port.CatalogClient
+	Inventory port.InventoryClient
+	// Places and Arrival date the buy box and the other sellers from real inputs for the shopper's place; optional (without
+	// them no offer carries a date).
+	Places        PlaceResolver
+	Arrival       ArrivalService
 	Notifications port.NotificationsClient
 	// Tokens (the BFF's client credentials) subscribe guests to stock alerts; Limiter bounds "Email me when available".
 	Tokens      port.ServiceTokens
@@ -68,7 +72,7 @@ func NewProductService(d ProductDeps) ProductService {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
-	return &productServiceImpl{catalog: d.Catalog, inventory: d.Inventory, promise: d.Promise, notifications: d.Notifications, tokens: d.Tokens, limiter: d.Limiter, limits: d.AlertLimits.withDefaults(),
+	return &productServiceImpl{catalog: d.Catalog, inventory: d.Inventory, places: d.Places, arrival: d.Arrival, notifications: d.Notifications, tokens: d.Tokens, limiter: d.Limiter, limits: d.AlertLimits.withDefaults(),
 		offers: d.Offers, location: d.Location, estimator: d.Estimator, sellers: d.Sellers, clock: d.Clock, log: d.Log}
 }
 
@@ -184,7 +188,7 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	}
 	seller, fulfilment := s.sellers.Describe(p.OwnerKind, p.SellerOrgID)
 	now := s.clock.now()
-	zip := s.location.Current(ctx, c).ZIP
+	zip := s.destinationZIP(ctx, c)
 	qty := max(0, avail[sel.ATIN])
 	currency := firstNonEmpty(strings.ToUpper(sel.Currency), domain.Currency)
 	var buyBox *domain.Offer
@@ -195,27 +199,23 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	}
 	if bb, ok := s.offerBuyBox(ctx, sel.ATIN); ok {
 		// The offers service decides: winner (nil = currently unavailable) and the other listed sellers.
+		windows := s.windows(ctx, zip, bb, now)
 		if bb.BuyBox != nil {
-			o := s.offerOf(*bb.BuyBox, s.promiseDays(ctx, zip, *bb.BuyBox), now)
+			o := s.offerOf(*bb.BuyBox, windows[bb.BuyBox.OfferID])
 			buyBox = &o
 			shipsFrom = firstNonEmpty(bb.BuyBox.ShipsFrom, o.Seller.Name)
 			soldBy = firstNonEmpty(bb.BuyBox.SoldBy, o.Seller.Name)
 			seller, fulfilment = o.Seller, o.Fulfilment
 		}
 		for _, other := range bb.OtherOffers {
-			otherOffers = append(otherOffers, s.offerOf(other, other.DeliveryDays, now))
+			otherOffers = append(otherOffers, s.offerOf(other, windows[other.OfferID]))
 		}
 	} else if qty > 0 {
-		days := 0
-		if zip != "" {
-			if m, err := s.promise.Promises(ctx, zip, []port.PromiseItem{{ATIN: sel.ATIN, Fulfilment: fulfilment, SellerOrgID: p.SellerOrgID}}); err == nil {
-				days = m[sel.ATIN]
-			} else {
-				s.log.DebugContext(ctx, "promise unavailable; using the estimate", "error", err)
-			}
-		}
+		// No offers service: the catalog's single seller. Its origin (handling time, ship-from) is not known here, so only
+		// AfroTransact's own stock can be dated.
+		w := s.arrivalOf(ctx, zip, ArrivalRequest{Key: sel.ATIN, Fulfilment: fulfilment, SellerOrgID: p.SellerOrgID}, now)
 		buyBox = &domain.Offer{OfferID: sel.ATIN, Seller: seller, PriceMinor: sel.PriceMinor, ListPriceMinor: nil, Currency: currency,
-			Fulfilment: fulfilment, AvailableQty: qty, StockStatus: domain.StockStatusFor(qty), Delivery: s.estimator.Promise(fulfilment, days, now)}
+			Fulfilment: fulfilment, AvailableQty: qty, StockStatus: domain.StockStatusFor(qty), Delivery: s.estimator.Promise(fulfilment).WithArrival(w)}
 	}
 	variants := []domain.VariantOption{}
 	if len(p.Variants) > 1 {
@@ -315,25 +315,43 @@ func (s *productServiceImpl) offerBuyBox(ctx context.Context, variantATIN string
 	return bb, true
 }
 
-// promiseDays asks promise for the winning offer's delivery days (0 = use the estimate).
-func (s *productServiceImpl) promiseDays(ctx context.Context, zip string, o port.PublicOffer) int {
-	if zip == "" {
-		return o.DeliveryDays
+// destinationZIP is the shopper's ZIP in the one priority order (saved address, chosen place, detected place, default).
+func (s *productServiceImpl) destinationZIP(ctx context.Context, c *domain.Caller) string {
+	if s.places != nil {
+		return s.places.Destination(ctx, c).ZIP
 	}
-	m, err := s.promise.Promises(ctx, zip, []port.PromiseItem{{ATIN: o.ATIN, Fulfilment: o.Fulfilment, SellerOrgID: o.Seller.ID}})
-	if err != nil {
-		s.log.DebugContext(ctx, "promise unavailable; using the offer's estimate", "error", err)
-		return o.DeliveryDays
-	}
-	if d := m[o.ATIN]; d > 0 {
-		return d
-	}
-	return o.DeliveryDays
+	return firstFive(s.location.Current(ctx, c).ZIP)
 }
 
-// offerOf maps an offers-service offer onto the contract's Offer.
-func (s *productServiceImpl) offerOf(o port.PublicOffer, days int, now time.Time) domain.Offer {
-	return offerFromPublic(o, s.estimator.Promise(normFulfilment(o.Fulfilment), days, now))
+// arrivalOf is one offer's real window, or none when there is no arrival service.
+func (s *productServiceImpl) arrivalOf(ctx context.Context, zip string, r ArrivalRequest, now time.Time) domain.Arrival {
+	if s.arrival == nil {
+		return domain.NoArrival(domain.ArrivalNoService)
+	}
+	return s.arrival.Windows(ctx, zip, []ArrivalRequest{r}, now)[r.Key]
+}
+
+// windows dates the buy box and every other seller's offer in one batch, from each offer's own handling time and ship-from
+// ZIP (offers) and the shopper's ZIP. An offer the promise service cannot date has no entry's date, never a default.
+func (s *productServiceImpl) windows(ctx context.Context, zip string, bb port.OfferBuyBox, now time.Time) map[string]domain.Arrival {
+	if s.arrival == nil {
+		return map[string]domain.Arrival{}
+	}
+	offers := append([]port.PublicOffer{}, bb.OtherOffers...)
+	if bb.BuyBox != nil {
+		offers = append(offers, *bb.BuyBox)
+	}
+	reqs := make([]ArrivalRequest, 0, len(offers))
+	for _, o := range offers {
+		reqs = append(reqs, ArrivalRequest{Key: o.OfferID, Fulfilment: normFulfilment(o.Fulfilment), SellerOrgID: o.Seller.ID,
+			HandlingDays: o.HandlingDays, HandlingKnown: o.ShipFromZip != "", ShipFromZip: o.ShipFromZip})
+	}
+	return s.arrival.Windows(ctx, zip, reqs, now)
+}
+
+// offerOf maps an offers-service offer onto the contract's Offer with its real window (none when it has no basis).
+func (s *productServiceImpl) offerOf(o port.PublicOffer, a domain.Arrival) domain.Offer {
+	return offerFromPublic(o, s.estimator.Promise(normFulfilment(o.Fulfilment)).WithArrival(a))
 }
 
 func returnsPolicy(fulfilment, department string) string {

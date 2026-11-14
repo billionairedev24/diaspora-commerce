@@ -1,5 +1,5 @@
 /* Product page (design: PRODUCT): pinned back/share header; details scroll; add-to-cart bar pinned at the bottom. */
-import { formatMoney, pickerDimensions, selectedSize } from '@afrotransact/api-client';
+import { formatMoney, hasDeliveryWindow, pickerDimensions, selectedSize } from '@afrotransact/api-client';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowUUpLeftIcon as ArrowUUpLeft, CalendarCheckIcon as CalendarCheck, CaretLeftIcon as CaretLeft, ExportIcon as Export, LightningIcon as Lightning, PackageIcon as Package, PlusIcon as Plus, ShoppingCartIcon as ShoppingCart } from 'phosphor-react-native';
 import { useState } from 'react';
@@ -69,7 +69,7 @@ export default function ProductScreen() {
         </View>
       ) : null}
       <View style={styles.facts}>
-        {offer ? <Fact icon={Lightning} text={`${offer.delivery.label} to ${def ? `${def.city} ${def.zip}` : 'you'}`} strong /> : null}
+        {offer && hasDeliveryWindow(offer.delivery) ? <Fact icon={Lightning} text={`${offer.delivery.label} to ${def ? `${def.city} ${def.zip}` : 'you'}`} strong /> : null}
         <Fact icon={Package} text={d.shipsFrom} />
         {d.product.bullets[1] ? <Fact icon={CalendarCheck} text={d.product.bullets[1]} /> : null}
         <Fact icon={ArrowUUpLeft} text={d.returnsPolicy} />

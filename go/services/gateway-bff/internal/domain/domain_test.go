@@ -34,27 +34,28 @@ func TestEstimator(t *testing.T) {
 	loc, _ := time.LoadLocation("America/Chicago")
 	e := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900, Location: loc})
 	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599})
-	sat := time.Date(2026, 10, 10, 12, 0, 0, 0, loc) // Saturday
-	if got := e.DayLabel(1, sat); got != "Tomorrow, Oct 12" {
-		t.Fatalf("Sunday is skipped: %q", got)
-	}
-	if got := e.DayLabel(2, sat); got != "Tuesday, Oct 13" {
-		t.Fatalf("%q", got)
-	}
-	at := e.Promise(domain.FulfilledByAfroTransact, 0, sat)
-	if at.Days != 2 || at.Free || at.FeeMinor != 599 || at.Prefix != "Delivery" || at.Cutoff == nil || *at.Cutoff != "Order within 11 hrs 59 mins." {
+	// The estimator knows the method and the fee, never a date: no constant, no "today plus N", no invented cut-off.
+	at := e.Promise(domain.FulfilledByAfroTransact)
+	if at.Free || at.FeeMinor != 599 || at.Prefix != "Delivery" || at.Cutoff != nil || at.Basis != domain.ArrivalNone || at.Label != "" || at.Days != 0 {
 		t.Fatalf("%+v", at)
 	}
-	s := e.Promise(domain.ShipsFromSeller, 3, sat)
-	if s.Free || s.FeeMinor != 599 || s.Days != 3 || s.Cutoff != nil || s.Prefix != "Delivery" {
+	s := e.Promise(domain.ShipsFromSeller)
+	if s.Free || s.FeeMinor != 599 || s.Days != 0 || s.Label != "" || s.Cutoff != nil || s.Prefix != "Delivery" || s.Basis != domain.ArrivalNone {
 		t.Fatalf("%+v", s)
 	}
+	for _, f := range []string{domain.FulfilledByAfroTransact, domain.ShipsFromSeller, domain.AfroTransactDelivery} {
+		for _, o := range e.Options(f, 5000) {
+			if o.ETA != "" || o.EarliestDate != "" || o.LatestDate != "" {
+				t.Fatalf("an option from the estimator carries no date: %+v", o)
+			}
+		}
+	}
 	// Carrier off (launch): a seller's package is delivered by AfroTransact at the same flat fee; no express, no carrier.
-	opts := e.Options(domain.ShipsFromSeller, 0, 5000, sat)
+	opts := e.Options(domain.ShipsFromSeller, 5000)
 	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].FeeMinor != 599 || opts[0].Free || opts[0].Label != "Delivery" {
 		t.Fatalf("%+v", opts)
 	}
-	opts = e.Options(domain.FulfilledByAfroTransact, 0, 100, sat)
+	opts = e.Options(domain.FulfilledByAfroTransact, 100)
 	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].Label != "Delivery" || opts[0].FeeMinor != 599 {
 		t.Fatalf("%+v", opts)
 	}
@@ -68,7 +69,7 @@ func TestEstimator(t *testing.T) {
 	if e.Nudge(domain.FulfilledByAfroTransact, 5000) != nil || e.Nudge(domain.ShipsFromSeller, 0) != nil {
 		t.Fatal("no nudge at or over the threshold, or for empty packages")
 	}
-	if opts = e.Options(domain.FulfilledByAfroTransact, 0, 5000, sat); !opts[0].Free || opts[0].FeeMinor != 0 {
+	if opts = e.Options(domain.FulfilledByAfroTransact, 5000); !opts[0].Free || opts[0].FeeMinor != 0 {
 		t.Fatalf("free above the threshold: %+v", opts)
 	}
 }

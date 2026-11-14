@@ -53,7 +53,7 @@ func (f *fakeLocal) Quote(context.Context, string, float64, int) (port.LocalDeli
 func localSummary() domain.CheckoutSummary {
 	atd := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_ama:AFROTRANSACT_DELIVERY", Fulfilment: domain.AfroTransactDelivery,
 		Seller: domain.Seller{ID: "org_ama", Name: "Ama's Market", City: "Houston"}, SubtotalMinor: 3000,
-		DeliveryOptions: est.Options(domain.AfroTransactDelivery, 0, 3000, testNow),
+		DeliveryOptions: est.Options(domain.AfroTransactDelivery, 3000),
 		Lines:           []domain.CartLine{{OfferID: "of-1"}}}}
 	seller := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_b:SELLER", Fulfilment: domain.ShipsFromSeller, SubtotalMinor: 1500,
 		DeliveryOptions: []domain.DeliveryOption{{Key: "carrier", FeeMinor: 500}}}}

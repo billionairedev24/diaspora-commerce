@@ -205,7 +205,6 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		return sum, nil
 	}
 	zip := addr.PostalCode[:5]
-	fc := fcFor(zip)
 	log := s.d.log()
 
 	outside := outsideDeliveryArea(ctx, s.d.Delivery, addr, log)
@@ -214,7 +213,6 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		log.WarnContext(ctx, "pickup locations unavailable", "error", platformErr)
 	}
 
-	var offers []port.PromiseOffer
 	for i := range sum.Packages {
 		p := &sum.Packages[i]
 		if len(p.Preorder) > 0 {
@@ -244,45 +242,9 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 			p.LocalDelivery = nil
 			continue
 		}
-		if p.Fulfilment == domain.AfroTransactDelivery || !isFC {
-			continue // priced above (flat fee); the promise service only dates packages AfroTransact fulfils
-		}
-		origin := map[string]any{"type": "FC", "id": fc}
-		for _, o := range p.DeliveryOptions {
-			method := map[string]any{"type": "CARRIER", "serviceLevel": "GROUND"}
-			switch o.Key {
-			case domain.OptionDelivery:
-				method = map[string]any{"type": "AFROTRANSACT_DELIVERY"}
-			case domain.OptionPickup:
-				method = map[string]any{"type": "PICKUP"}
-			}
-			offers = append(offers, port.PromiseOffer{OfferID: p.PackageID + "|" + o.Key, Origin: origin, Method: method})
-		}
 	}
-	if len(offers) > 0 {
-		quotes, err := s.d.Delivery.Promises(ctx, zip, offers)
-		if err != nil {
-			log.WarnContext(ctx, "promise unavailable; keeping estimated delivery dates", "error", err)
-		}
-		byID := map[string]port.PromiseQuote{}
-		for _, q := range quotes {
-			byID[q.OfferID] = q
-		}
-		for i := range sum.Packages {
-			p := &sum.Packages[i]
-			for k := range p.DeliveryOptions {
-				o := &p.DeliveryOptions[k]
-				// The promise service only dates an option; it never removes one: the shopper always keeps delivery
-				// at the flat fee (and pickup), so there is no dead end.
-				if q, ok := byID[p.PackageID+"|"+o.Key]; ok && q.Available {
-					o.ETA = firstNonEmpty(q.Label, o.ETA)
-					o.EarliestDate, o.LatestDate, o.CutoffLabel = q.EarliestDate, q.LatestDate, q.CutoffLabel
-				}
-			}
-			if len(p.DeliveryOptions) > 0 && p.DeliveryOptions[0].EarliestDate != "" {
-				p.Delivery.Label = p.DeliveryOptions[0].ETA
-			}
-		}
+	if !outside {
+		s.dateCheckoutPackages(ctx, sum.Packages, zip)
 	}
 	if s.merch != nil {
 		if rail, err := s.merch.CheckoutCrossSell(ctx, c); err == nil && rail != nil {
@@ -377,7 +339,7 @@ func (s *checkoutPaymentServiceImpl) priceLocalDelivery(ctx context.Context, sum
 		changed = true
 		p.LocalDelivery = s.quotePackage(ctx, p, addr)
 		ld := p.LocalDelivery
-		opt := domain.DeliveryOption{Key: domain.OptionDelivery, Label: domain.LabelStoreDelivery, ETA: "Same or next day"}
+		opt := domain.DeliveryOption{Key: domain.OptionDelivery, Label: domain.LabelStoreDelivery}
 		if len(p.DeliveryOptions) > 0 {
 			opt = p.DeliveryOptions[0]
 		}
@@ -409,6 +371,51 @@ func (s *checkoutPaymentServiceImpl) priceLocalDelivery(ctx context.Context, sum
 		}
 	}
 	sum.TotalMinor = sum.SubtotalMinor + sum.ShippingMinor + sum.TaxMinor
+}
+
+// dateCheckoutPackages dates every package's options for the chosen address with the shared arrival service: the real window
+// from the promise service (the seller's handling time and ship-from ZIP, or AfroTransact's fulfilment centre), per option.
+// An option with no real basis keeps no date (the shopper still gets delivery at the flat fee, and pickup with the point's own
+// ready time): the promise service only dates an option, it never removes one.
+func (s *checkoutPaymentServiceImpl) dateCheckoutPackages(ctx context.Context, pkgs []domain.CheckoutPackage, zip string) {
+	cps := make([]domain.CartPackage, len(pkgs))
+	for i := range pkgs {
+		cps[i] = pkgs[i].CartPackage
+	}
+	windows := datePackages(ctx, s.d.Arrival, s.d.Offers, zip, cps, func(p domain.CartPackage) []string {
+		keys := make([]string, 0, len(p.DeliveryOptions))
+		for _, o := range p.DeliveryOptions {
+			keys = append(keys, o.Key)
+		}
+		return keys
+	}, s.d.Clock.now(), s.d.log())
+	for i := range pkgs {
+		p := &pkgs[i]
+		if len(p.Preorder) > 0 {
+			continue
+		}
+		var first *domain.Arrival
+		for k := range p.DeliveryOptions {
+			o := p.DeliveryOptions[k]
+			if o.Key == domain.OptionQuoteRequired {
+				continue
+			}
+			a, ok := windows[p.PackageID+"|"+o.Key]
+			if !ok {
+				a = domain.NoArrival(domain.ArrivalNoService)
+			}
+			if o.Key == domain.OptionPickup && !a.Known() {
+				continue // the pickup point's own ready time stays
+			}
+			p.DeliveryOptions[k] = o.WithArrival(a)
+			if o.Key != domain.OptionPickup && first == nil {
+				first = &a
+			}
+		}
+		if first != nil {
+			p.Delivery = p.Delivery.WithArrival(*first)
+		}
+	}
 }
 
 // shippingSettings is the staff shipping settings in force; false when none was ever read.

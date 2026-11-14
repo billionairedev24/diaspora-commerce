@@ -30,9 +30,8 @@ const TAX_RATE = 0.0825;
 /** Launch shipping: one flat delivery fee, no carrier named, no express (listing rules D16). */
 function promiseOf(p: FixtureProduct): DeliveryPromise {
   const fee = LAUNCH_SHIPPING.flatFeeMinor;
-  return p.sameDay
-    ? { days: 0, label: 'Today by 8 pm', prefix: 'Delivery', free: false, feeMinor: fee, cutoff: 'Order within 3 hrs' }
-    : { days: 1, label: 'Tomorrow', prefix: 'Delivery', free: false, feeMinor: fee, cutoff: null };
+  // The mock has no handling time or ship-from to date a package from, so (like the real BFF) it carries no date.
+  return { days: 0, label: '', prefix: 'Delivery', free: false, feeMinor: fee, cutoff: null, basis: 'NONE', reason: 'NO_ORIGIN' };
 }
 
 const stockStatus = (n: number) => (n === 0 ? 'OUT_OF_STOCK' : n <= 5 ? 'LOW_STOCK' : 'IN_STOCK') as 'OUT_OF_STOCK' | 'LOW_STOCK' | 'IN_STOCK';
@@ -134,7 +133,8 @@ function deliveryOptions(p: FixtureProduct, subtotal: number) {
   const fee = deliveryFee(subtotal);
   const fba = p.fulfilment === 'AFROTRANSACT';
   return [
-    { key: 'afrotransact_delivery' as const, label: fba ? 'Delivery' : 'Delivery', eta: p.sameDay ? 'Today 6–8 pm' : 'In 2 days', feeMinor: fee, free: fee === 0 },
+    // No real basis for a date in the mock (no handling time, no ship-from): the option carries the method and the fee only.
+    { key: 'afrotransact_delivery' as const, label: fba ? 'Delivery' : 'Delivery', eta: '', feeMinor: fee, free: fee === 0 },
     fba
       ? { key: 'pickup' as const, label: 'Pickup', eta: 'Ready today after 4 pm', feeMinor: 0, free: true }
       : { key: 'pickup' as const, label: 'Pickup', eta: 'Ready tomorrow', feeMinor: 0, free: true }

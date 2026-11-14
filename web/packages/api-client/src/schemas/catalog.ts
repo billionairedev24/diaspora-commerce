@@ -18,17 +18,30 @@ export const LOW_STOCK_THRESHOLD = 5;
 
 export const AtinSchema = z.string().regex(/^AT[0-9A-Z]{8}$/, 'Invalid ATIN');
 
+export const ArrivalReasonSchema = z.enum(['NO_PLACE', 'NO_ORIGIN', 'NO_SERVICE', 'UNAVAILABLE']);
+export type ArrivalReason = z.infer<typeof ArrivalReasonSchema>;
+
+/**
+ * How an offer or package is delivered and, only with a real basis, when. `basis` PROMISE: the promise service dated it from
+ * the seller's handling time, the ship-from ZIP and the shopper's place (`label` is a window, "Nov 18 – 20"). `basis` NONE: no
+ * real basis, `label` is empty, `reason` says what is missing; show the method, never a date.
+ */
 export const DeliveryPromiseSchema = z.object({
-  /** Business days until delivery for the shopper's deliver-to ZIP (0 = today). */
+  /** Calendar days to the earliest date; meaningless unless `basis` is PROMISE. */
   days: z.number().int().min(0),
-  /** Human label, e.g. "Tomorrow, Oct 11" or "Wednesday, Oct 14". */
+  /** Window label, e.g. "Nov 18 – 20" or "Wed, Nov 18"; EMPTY when `basis` is NONE. */
   label: z.string(),
-  /** "Delivery by AfroTransact" or "AfroTransact collects from the store and delivers". */
+  /** The method, plain "Delivery". */
   prefix: z.string(),
   free: z.boolean(),
   feeMinor: MinorSchema,
-  /** Order-by cut-off note, e.g. "Order within 4 hrs 12 mins." */
-  cutoff: z.string().nullable()
+  /** The promise service's order-by countdown, e.g. "Order within 4 hrs 12 mins". */
+  cutoff: z.string().nullable(),
+  /** Absent (an older server) means NONE: never a date. */
+  basis: z.enum(['PROMISE', 'NONE']).optional(),
+  reason: ArrivalReasonSchema.optional(),
+  earliestDate: z.string().optional(),
+  latestDate: z.string().optional()
 });
 export type DeliveryPromise = z.infer<typeof DeliveryPromiseSchema>;
 

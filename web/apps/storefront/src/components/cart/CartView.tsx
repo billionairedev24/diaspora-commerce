@@ -1,6 +1,6 @@
 'use client';
 
-import { type CartLine, type CartPackage, preorderFallback, type ProductSummary, SearchQuerySchema, siteQueries } from '@afrotransact/api-client';
+import { type CartLine, type CartPackage, deliveryWindowNeedsPlace, hasDeliveryWindow, preorderFallback, type ProductSummary, SearchQuerySchema, siteQueries } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, FulfilmentBadge, ImagePlaceholder, QuantityStepper, Skeleton, Stars } from '@afrotransact/ui';
 import { useQueries, useQuery } from '@tanstack/react-query';
@@ -45,9 +45,11 @@ function Line({ line, pkg }: { line: CartLine; pkg: CartPackage }) {
         <span className={styles.small}>
           {t('cart.soldBy')} <span style={{ color: 'var(--at-color-link)' }}>{pkg.seller.name}</span> · {line.unit}
         </span>
-        <span className={styles.eta}>
-          {pkg.delivery.prefix} <strong>{pkg.delivery.label}</strong>
-        </span>
+        {hasDeliveryWindow(pkg.delivery) && (
+          <span className={styles.eta}>
+            {pkg.delivery.prefix} <strong>{pkg.delivery.label}</strong>
+          </span>
+        )}
         <div className={styles.actions}>
           <QuantityStepper
             value={line.quantity}
@@ -111,18 +113,24 @@ function Package({ pkg, n, total }: { pkg: CartPackage; n: number; total: number
   return (
     <section className={styles.package} aria-labelledby={`pkg-${pkg.packageId}`} data-testid="cart-package">
       <div className={styles.packageHead}>
-        <h2 id={`pkg-${pkg.packageId}`} className={styles.packageTitle}>
-          {t('cart.arriving', { eta: pkg.delivery.label })}
+        {/* A date only from a real window (seller handling, ship-from, the shopper's place); otherwise the method alone. */}
+        <h2 id={`pkg-${pkg.packageId}`} className={styles.packageTitle} data-testid="cart-package-title">
+          {hasDeliveryWindow(pkg.delivery) ? t('cart.arrives', { eta: pkg.delivery.label }) : t('cart.deliveryTitle')}
         </h2>
-        <span className={styles.packageMeta}>
-          {pkg.heading} · {t('cart.package', { n, total })}
+        {deliveryWindowNeedsPlace(pkg.delivery) && (
+          <span className={styles.packageMeta} data-testid="cart-package-date-note">
+            {t('cart.deliveryDateAtCheckout')}
+          </span>
+        )}
+        <span className={styles.packageMeta} data-testid="cart-package-meta">
+          {total > 1 ? `${pkg.heading} · ${t('cart.package', { n, total })}` : pkg.heading}
         </span>
       </div>
       <ul className={styles.options} aria-label={t('cart.deliveryOptions')}>
         <li className={styles.optionsLabel}>{t('cart.deliveryOptions')}:</li>
         {pkg.deliveryOptions.map((o) => (
           <li key={o.key}>
-            {o.label} — {o.eta}
+            {o.eta ? `${o.label} — ${o.eta}` : o.label}
           </li>
         ))}
         <li>({t('cart.chooseAtCheckout')})</li>

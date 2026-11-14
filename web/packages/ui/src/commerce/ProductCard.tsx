@@ -29,7 +29,8 @@ export interface ProductCardData {
   availableQty: number;
   inStock: boolean;
   lowStock: boolean;
-  delivery: { prefix: string; label: string };
+  /** `basis` PROMISE means `label` is a real delivery window; anything else is undated and no date is shown. */
+  delivery: { prefix: string; label: string; basis?: 'PROMISE' | 'NONE' };
   offerCount: number;
   minOfferPriceMinor: number;
   /** Sponsored products carry the advertiser and, for search ads, why the ad was shown. */
@@ -126,9 +127,12 @@ export function ProductCard({ product: p, href, variant = 'grid', showDelivery =
       {av.tag}
     </span>
   ) : (
-    <span className={styles.eta}>
-      {p.delivery.prefix} <strong>{p.delivery.label}</strong>
-    </span>
+    // A date only from a real window the server made (basis PROMISE); an undated card shows no delivery line at all.
+    p.delivery.basis === 'PROMISE' && p.delivery.label ? (
+      <span className={styles.eta}>
+        {p.delivery.prefix} <strong>{p.delivery.label}</strong>
+      </span>
+    ) : null
   );
   const badge = av?.badge ? (
     <span className={styles.preBadge} data-testid="preorder-badge">

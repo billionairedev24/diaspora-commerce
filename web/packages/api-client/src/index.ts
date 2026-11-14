@@ -8,6 +8,7 @@ export { creditSplit, MIN_CARD_MINOR } from './credit-split';
 export * from './custom-values';
 export * from './delivery-quotes-client';
 export * from './delivery-runs';
+export { deliveryWindowNeedsPlace, hasDeliveryWindow } from './delivery-window';
 export { ApiError, isApiError } from './errors';
 export * from './fact-rules';
 export * from './fee-rates';

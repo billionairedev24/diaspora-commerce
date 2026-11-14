@@ -27,6 +27,7 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		Returns: upstreams.NewReturns(client("tax-returns", base), tokens), Payments: upstreams.NewOrderPayments(client("payments", base)), Security: upstreams.NewSecurity(client("identity", base)),
 		Bookings:   upstreams.NewCustomerBookings(client("bookings", base)),
 		Lola:       upstreams.NewLola(client("ai-gateway", base), upstreams.LolaOptions{BaseURL: base}),
+		Arrival:    app.NewArrivalService(upstreams.NewPromise(client("promise", base)), log),
 		Delivery:   upstreams.NewDeliveryFacts(client("promise", base), client("carrier-gateway", base), client("geo", base), tokens),
 		Credit:     upstreams.NewCredit(client("payments", base)),
 		Membership: upstreams.NewMembership(client("payments", base)),

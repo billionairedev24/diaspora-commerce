@@ -28,6 +28,8 @@ type shopperClients struct {
 	shippingSync               app.ShippingSettingsEnsurer
 	taxMetrics                 app.TaxMetrics
 	zipLookup                  func(ctx context.Context, zip string) (city, state string, err error)
+	places                     app.PlaceResolver
+	arrival                    app.ArrivalService
 }
 
 // shopperServices wires the storefront's account, checkout payment, services & bookings and Lola use cases.
@@ -60,7 +62,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		Estimator: sc.estimator, ShippingSettings: sc.shippingSync,
 		ShippingAllocation: shippingAllocation,
 		TaxMetrics:         sc.taxMetrics, TaxQuoteKey: app.QuoteKey(cfg.Session.SigningKey), RequireTaxQuote: cfg.Checkout.RequireTaxQuote,
-		ZipLookup:      sc.zipLookup,
+		ZipLookup: sc.zipLookup, Places: sc.places, Arrival: sc.arrival,
 		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
 	settings := app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(sc.identity),

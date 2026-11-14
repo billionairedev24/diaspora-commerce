@@ -1,4 +1,4 @@
-import { formatMoney, type ProductSummary } from '@afrotransact/api-client';
+import { formatMoney, hasDeliveryWindow, type ProductSummary } from '@afrotransact/api-client';
 import { useRouter } from 'expo-router';
 import { MinusIcon as Minus, PlusIcon as Plus, TrashIcon as Trash } from 'phosphor-react-native';
 import { useEffect, useState } from 'react';
@@ -111,7 +111,7 @@ export function ProductRow({ p, onPress }: { p: ProductSummary; onPress: () => v
         <AppText numberOfLines={2}>{p.title}</AppText>
         <AppText variant="caption" color={c.textMuted}>{p.reviewCount > 0 ? `${p.sellerName} · ★ ${p.rating}` : p.sellerName}</AppText>
         <AppText variant="bodyStrong">{formatMoney(p.priceMinor, p.currency)}</AppText>
-        <AppText variant="caption" color={c.success}>{p.delivery.label}</AppText>
+        {hasDeliveryWindow(p.delivery) ? <AppText variant="caption" color={c.success}>{p.delivery.label}</AppText> : null}
         {p.availableQty === 0 ? <AppText variant="caption" color={c.textMuted}>Currently unavailable</AppText> : null}
         {p.lowStock ? <AppText variant="caption" color={c.lowStock}>Only {p.availableQty} left — order soon</AppText> : null}
       </View>

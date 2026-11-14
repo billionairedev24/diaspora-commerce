@@ -15,14 +15,38 @@ const (
 	Currency                = "USD"
 )
 
-// DeliveryPromise is the delivery estimate to the session's deliver-to ZIP.
+// DeliveryPromise is how an offer or package is delivered and, only when there is a real basis for it, when. Basis says
+// which: PROMISE (the promise service dated it from the seller's handling time, ship-from ZIP and the shopper's ZIP;
+// Label is then a window such as "Nov 18 – 20" and EarliestDate/LatestDate are its ISO dates) or NONE (no real basis:
+// Label is empty, Reason says what is missing, and no client may show a date).
 type DeliveryPromise struct {
-	Days     int     `json:"days"`
-	Label    string  `json:"label"`
-	Prefix   string  `json:"prefix"`
-	Free     bool    `json:"free"`
-	FeeMinor int64   `json:"feeMinor"`
-	Cutoff   *string `json:"cutoff"`
+	// Days is the calendar days to the window's earliest date; 0 and meaningless unless Basis is PROMISE.
+	Days     int    `json:"days"`
+	Label    string `json:"label"`
+	Prefix   string `json:"prefix"`
+	Free     bool   `json:"free"`
+	FeeMinor int64  `json:"feeMinor"`
+	// Cutoff is the promise service's "Order within 3 hrs 12 mins" for the window; nil when it gave none.
+	Cutoff *string `json:"cutoff"`
+	// Basis is PROMISE or NONE; Reason is why there is no date (NO_PLACE, NO_ORIGIN, NO_SERVICE, UNAVAILABLE) and is empty
+	// with a date.
+	Basis        string `json:"basis"`
+	Reason       string `json:"reason,omitempty"`
+	EarliestDate string `json:"earliestDate,omitempty"`
+	LatestDate   string `json:"latestDate,omitempty"`
+}
+
+// WithArrival dates the promise with a real window (a no-basis arrival keeps it undated and records why).
+func (p DeliveryPromise) WithArrival(a Arrival) DeliveryPromise {
+	p.Basis, p.Reason, p.Label, p.EarliestDate, p.LatestDate, p.Cutoff, p.Days = a.Basis, a.Reason, a.Label, a.EarliestDate, a.LatestDate, nil, 0
+	if a.Known() {
+		p.Days = a.Days
+		if a.CutoffLabel != "" {
+			c := a.CutoffLabel
+			p.Cutoff = &c
+		}
+	}
+	return p
 }
 
 // Seller is who sells an offer.
@@ -241,13 +265,22 @@ type DeliveryOption struct {
 	// FeeUnknown is true when the staff delivery fee could not be read: feeMinor is then not a price (never shown as $0)
 	// and the order cannot be placed until it is known.
 	FeeUnknown bool `json:"feeUnknown,omitempty"`
-	// Checkout only: the promise service's dates for this option (empty in the cart).
+	// The promise service's dates for this option; empty when there is no real basis for a date (ETA is then empty too).
 	EarliestDate string `json:"earliestDate,omitempty"`
 	LatestDate   string `json:"latestDate,omitempty"`
 	CutoffLabel  string `json:"cutoffLabel,omitempty"`
 	// FeeRule is the staff delivery fee rule that priced the option (carrier shipping; ADR 0005 §3); absent when the
 	// flat estimate applies. Orders keep the rule they charge by with the order.
 	FeeRule *FeeRuleRef `json:"feeRule,omitempty"`
+}
+
+// WithArrival dates the option with a real window: ETA is the window label, empty (no date) without a real basis.
+func (o DeliveryOption) WithArrival(a Arrival) DeliveryOption {
+	o.ETA, o.EarliestDate, o.LatestDate, o.CutoffLabel = "", "", "", ""
+	if a.Known() {
+		o.ETA, o.EarliestDate, o.LatestDate, o.CutoffLabel = a.Label, a.EarliestDate, a.LatestDate, a.CutoffLabel
+	}
+	return o
 }
 
 // FeeRuleRef names the delivery fee rule behind a fee: the method, the rule and its version, the amount and where it

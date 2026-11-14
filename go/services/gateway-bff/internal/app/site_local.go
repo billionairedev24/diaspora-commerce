@@ -2,14 +2,12 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"hash/fnv"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
-	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
 // Location-aware home rules. The shopper's deliver-to place (city, state, ZIP) and a daily seed steer what every rule
@@ -143,44 +141,50 @@ func rankForShopper(in []domain.ProductSummary, sc shopperScope) []domain.Produc
 	return out
 }
 
-// withinDays asks the promise service what each product takes to reach the shopper's ZIP and keeps those promised
-// within maxDays (default 2), carrying the promised days on the card. With no promise service or no ZIP nothing
-// qualifies.
+// withinDays asks for the real delivery window of each product to the shopper's ZIP and keeps those that arrive within
+// maxDays (default 2), carrying the window on the card. A product with no real basis for a date (a seller-shipped offer has
+// no ship-from on a card, no ZIP, no promise service) does not qualify: nothing is guessed.
 func (s *siteServiceImpl) withinDays(ctx context.Context, in []domain.ProductSummary, zip string, maxDays int, now time.Time) ([]domain.ProductSummary, error) {
-	if s.d.Promise == nil || zip == "" || len(in) == 0 {
+	if s.d.Arrival == nil || zip == "" || len(in) == 0 {
 		return []domain.ProductSummary{}, nil
 	}
 	if maxDays <= 0 {
 		maxDays = defaultFastDays
 	}
-	items := make([]port.PromiseItem, len(in))
+	reqs := make([]ArrivalRequest, len(in))
 	for i, p := range in {
-		items[i] = port.PromiseItem{ATIN: p.ATIN, Fulfilment: p.Fulfilment, SellerOrgID: p.SellerID}
+		reqs[i] = ArrivalRequest{Key: p.ATIN, Fulfilment: p.Fulfilment, SellerOrgID: p.SellerID}
 	}
-	days, err := s.d.Promise.Promises(ctx, zip, items)
-	if err != nil {
-		return nil, fmt.Errorf("delivery promises: %w", err)
-	}
+	windows := s.d.Arrival.Windows(ctx, zip, reqs, now)
 	out := []domain.ProductSummary{}
 	for _, p := range in {
-		if d, ok := days[p.ATIN]; ok && d >= 0 && d <= maxDays {
-			p.Delivery = s.d.Estimator.Promise(p.Fulfilment, d, now)
+		if w := windows[p.ATIN]; w.Known() && w.Days <= maxDays {
+			p.Delivery = s.d.Estimator.Promise(p.Fulfilment).WithArrival(w)
 			out = append(out, p)
 		}
 	}
 	return out, nil
 }
 
-// railTitle fills {city}, {state} and {day} (the day by which everything in the rail arrives).
+// railTitle fills {city}, {state} and {day} (the day by which everything in the rail arrives, from the real windows on its
+// cards; with none the " by {day}" is dropped rather than invented).
 func (s *siteServiceImpl) railTitle(title string, loc domain.DeliveryLocation, items []domain.ProductSummary, now time.Time) string {
 	title = strings.ReplaceAll(title, "{city}", firstNonEmpty(loc.City, "you"))
 	title = strings.ReplaceAll(title, "{state}", firstNonEmpty(loc.State, "your state"))
 	if strings.Contains(title, "{day}") {
-		latest := 0
+		latest := ""
 		for _, p := range items {
-			latest = max(latest, p.Delivery.Days)
+			if p.Delivery.Basis != domain.ArrivalPromise {
+				latest = ""
+				break
+			}
+			latest = max(latest, p.Delivery.LatestDate)
 		}
-		title = strings.ReplaceAll(title, "{day}", s.d.Estimator.DayLabel(latest, now))
+		if t, err := time.Parse(time.DateOnly, latest); err == nil {
+			title = strings.ReplaceAll(title, "{day}", t.Format("Monday, Jan 2"))
+		} else {
+			title = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(title, " by {day}", ""), "{day}", ""))
+		}
 	}
 	return title
 }

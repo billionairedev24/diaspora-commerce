@@ -509,14 +509,14 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 	if u.opts.Promise {
 		mux.HandleFunc("POST /v1/promises", func(w http.ResponseWriter, r *http.Request) {
 			var b struct {
-				Items []struct {
-					ATIN string `json:"atin"`
-				} `json:"items"`
+				Offers []struct {
+					OfferID string `json:"offerId"`
+				} `json:"offers"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&b)
 			out := []map[string]any{}
-			for _, it := range b.Items {
-				out = append(out, map[string]any{"atin": it.ATIN, "days": 1})
+			for _, o := range b.Offers {
+				out = append(out, map[string]any{"offerId": o.OfferID, "available": true, "earliestDate": "2026-10-12", "latestDate": "2026-10-14"})
 			}
 			writeJSON(w, 200, map[string]any{"promises": out})
 		})

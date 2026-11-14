@@ -36,9 +36,12 @@ func publicOffer(id, atin, product, sellerID, name, kind, city, fulfilment strin
 func (u *Upstreams) fakeOffers() map[string][]map[string]any {
 	accra := publicOffer(OfferAccraSheaID, "ATSHEAV001", "ATSHEA0001", "org_accra", "Accra Market", "SELLER", "Houston", "SELLER", 1300, 7, "SHIPS_FROM_SELLER")
 	accra["buyBoxRank"] = 2
+	// Kente's offer says where it ships from (a real basis for a delivery window); Accra's offer has no ship-from ZIP, so no date.
+	kente := publicOffer(OfferKenteSheaID, "ATSHEAV001", "ATSHEA0001", "org_kente", "Kente Naturals", "SELLER", "Atlanta", "SELLER", 1250, 40,
+		"BUY_BOX_WINNER", "LOWEST_PRICE")
+	kente["shipFromZip"] = "30303"
 	return map[string][]map[string]any{
-		"ATSHEAV001": {publicOffer(OfferKenteSheaID, "ATSHEAV001", "ATSHEA0001", "org_kente", "Kente Naturals", "SELLER", "Atlanta", "SELLER", 1250, 40,
-			"BUY_BOX_WINNER", "LOWEST_PRICE"), accra},
+		"ATSHEAV001": {kente, accra},
 		"ATJOLLOFV1": {publicOffer(OfferRetailJollofID, "ATJOLLOFV1", "ATJOLLOF01", "org_afrotransact_retail", "AfroTransact Retail", "PLATFORM",
 			"AfroTransact", "AFROTRANSACT", 599, 3, "BUY_BOX_WINNER", "FULFILLED_BY_AFROTRANSACT", "SOLD_BY_AFROTRANSACT")},
 	}

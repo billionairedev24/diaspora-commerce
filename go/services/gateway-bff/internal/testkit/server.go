@@ -113,6 +113,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	content := upstreams.NewContent(client("content", pending), cache, time.Minute)
 	payments := upstreams.NewPayments(client("payments", pending))
 	promise := upstreams.NewPromise(client("promise", pending))
+	arrival := app.NewArrivalService(promise, log)
 	orders := upstreams.NewOrders(client("orders", pending))
 	notifications := upstreams.NewNotifications(client("notifications", pending))
 	offersClient := client("offers", pending)
@@ -145,7 +146,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: "77042", DefaultCity: "Houston", DefaultState: "TX", TrustEdgeGeo: true, Log: log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store, Sessions: sessions,
-		Estimator: estimator, Clock: clock.Now, Log: log})
+		Estimator: estimator, Clock: clock.Now, Log: log, Arrival: arrival})
 	services := httpapi.Services{
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
@@ -160,7 +161,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Location: location,
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, "us", clock.Now,
 			app.WithServices(upstreams.NewCustomerBookings(client("bookings", base+ShopperPrefix)))),
-		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Notifications: notifications, Offers: storefrontOffers,
+		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Arrival: arrival, Notifications: notifications, Offers: storefrontOffers,
 			Tokens: upstreams.NewServiceTokens(identityClient, clientCreds), Limiter: store, AlertLimits: cfg.StockAlertLimits,
 			Location: location, Estimator: estimator, Sellers: sellers, Clock: clock.Now, Log: log}),
 		Cart:     carts,

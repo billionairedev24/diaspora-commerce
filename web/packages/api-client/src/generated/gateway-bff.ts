@@ -3488,21 +3488,46 @@ export interface components {
         SearchSort: "relevance" | "price_asc" | "price_desc" | "rating" | "fastest";
         /** @enum {string} */
         IdentityProviderId: "google" | "apple" | "facebook";
+        /**
+         * @description How an offer or package is delivered and, only with a real basis, when. `basis` is PROMISE (the promise service
+         *     dated it from the seller's configured handling time, the offer's ship-from ZIP, the shopper's place and the
+         *     business calendar with weekends and federal holidays: `label` is a window such as "Nov 18 – 20" and
+         *     `earliestDate`/`latestDate` are its ISO dates) or NONE (no real basis: `label` is empty, `reason` says what is
+         *     missing and no client may show a date; show the method, or "Delivery date shown at checkout" for NO_PLACE). The
+         *     BFF never derives a date from a constant or from "today plus N days".
+         */
         DeliveryPromise: {
-            /** @description Business days to the deliver-to ZIP (0 = today) */
+            /** @description Calendar days to the earliest date; meaningless (0) unless basis is PROMISE */
             days: number;
-            /** @example Tomorrow, Oct 11 */
+            /**
+             * @description Window label, e.g. "Nov 18 – 20" or "Wed, Nov 18"; EMPTY when basis is NONE
+             * @example Nov 18 – 20
+             */
             label: string;
             /**
-             * @example Delivery by AfroTransact
-             * @example AfroTransact collects from the store and delivers
+             * @description The method, plain "Delivery"; never wording that says AfroTransact collects or delivers
+             * @example Delivery
              */
             prefix: string;
             free: boolean;
             /** @description The flat delivery fee staff set (orders shipping settings); no carrier is ever named */
             feeMinor: number;
-            /** @example Order within 4 hrs 12 mins. */
+            /**
+             * @description The promise service's order-by countdown for the window; null when it gave none
+             * @example Order within 4 hrs 12 mins
+             */
             cutoff: string | null;
+            /** @enum {string} */
+            basis: "PROMISE" | "NONE";
+            /**
+             * @description Why there is no date: NO_PLACE (the shopper's ZIP is not known), NO_ORIGIN (no handling time or ship-from ZIP on the offer, AfroTransact Delivery from a store, or no fulfilment centre), NO_SERVICE (no promise service in this deployment), UNAVAILABLE (the promise service could not promise it)
+             * @enum {string}
+             */
+            reason?: "NO_PLACE" | "NO_ORIGIN" | "NO_SERVICE" | "UNAVAILABLE";
+            /** Format: date */
+            earliestDate?: string;
+            /** Format: date */
+            latestDate?: string;
         };
         Seller: {
             id: string;
@@ -4117,8 +4142,7 @@ export interface components {
         };
         DeliveryOption: {
             /**
-             * @description Launch shipping (listing rules section 3): `afrotransact_delivery` (Delivery by AfroTransact, or AfroTransact
-             *     collects from the store and delivers: one flat fee set by staff), `pickup` ($0), `quote_required` (the address
+             * @description Launch shipping (listing rules section 3): `afrotransact_delivery` (plain "Delivery": one flat fee set by staff), `pickup` ($0), `quote_required` (the address
              *     is outside every delivery zone: "Too far for standard delivery. Ask us for a quote"; disabled for payment,
              *     the order cannot be placed with it) and `carrier` (seller-shipped, only while the staff switch
              *     sellerCarrierShippingEnabled is on; off at launch). There is no express. No label ever names a carrier.
@@ -4126,6 +4150,7 @@ export interface components {
              */
             key: "carrier" | "afrotransact_delivery" | "pickup" | "quote_required";
             label: string;
+            /** @description The window label of this option ("Nov 18 – 20"); EMPTY when there is no real basis for a date, never a guess */
             eta: string;
             feeMinor: number;
             free: boolean;
@@ -4133,7 +4158,7 @@ export interface components {
             feeUnknown?: boolean;
             /**
              * Format: date
-             * @description Checkout only — promise service date range
+             * @description Promise service date range for this option; absent (and eta empty) when there is no real basis for a date
              */
             earliestDate?: string;
             /** Format: date */
