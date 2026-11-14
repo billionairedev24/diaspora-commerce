@@ -10,8 +10,10 @@ public enum ShadowKind {
     RATE,
     /** Reserved: outcome and rate both differ in a way a person must split up. */
     BOTH,
-    /** The provider could not answer for the line (error, timeout, no mapped code). */
+    /** The provider could not answer for the line (not configured, timed out or failed: see {@link ShadowFailure}). */
     PROVIDER_ERROR,
+    /** No code of the provider is mapped (or verified) for the line's outcome, so the provider was not asked. */
+    NO_CODE,
     /** The in-house engine has no decision for the line (blocked), so there is nothing to compare. */
     NO_DECISION;
 

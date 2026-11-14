@@ -339,7 +339,8 @@ final class TaxClassificationDtos {
     record ShadowDifference(UUID orderId, String orderRef, String lineId, String atin, String categoryCode, String state,
                             String shipToState,
                             String internalTaxCode, String providerCode, String kind, ShadowSide inHouse,
-                            ShadowSide provider, long differenceMinor, Instant quotedAt) {
+                            ShadowSide provider, long differenceMinor, Instant quotedAt, String shadowProvider,
+                            String failure) {
 
         static ShadowDifference of(ShadowRow r) {
             return new ShadowDifference(uuid(r.orderRef()), r.orderRef(), r.lineId(), r.atin(), r.categoryCode(),
@@ -347,7 +348,8 @@ final class TaxClassificationDtos {
                     new ShadowSide(r.inHouseOutcome() == null ? null : r.inHouseOutcome().name(), r.inHouseRate(),
                             r.inHouseTaxMinor(), null),
                     new ShadowSide(r.providerOutcome() == null ? null : r.providerOutcome().name(), r.providerRate(),
-                            r.providerTaxMinor(), r.providerError()), r.differenceMinor(), r.quotedAt());
+                            r.providerTaxMinor(), r.providerError()), r.differenceMinor(), r.quotedAt(), r.provider().name(),
+                    r.failure() == null ? null : r.failure().name());
         }
 
         private static UUID uuid(String s) {

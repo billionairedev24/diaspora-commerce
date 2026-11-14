@@ -83,7 +83,7 @@ at:
     tax:
       # RULES = built-in rules engine over the tax_state_rule / tax_local_rate tables (no external calls).
       # STRIPE_TAX also needs STRIPE_SECRET_KEY and Stripe Tax set up (registrations) in the Stripe dashboard.
-      # AVALARA is a skeleton adapter (config keys and request mapping; the AvaTax call is not written yet).
+      # AVALARA calls AvaTax REST v2 (CreateTransaction, type SalesOrder, never committed); needs the AVALARA_* variables below.
       # TAXJAR would need an adapter of the TaxCalculator port (not installed).
       # This is only the default until staff choose in Settings (PUT /v1/tax/settings).
       provider: ${TAX_PROVIDER:RULES}
@@ -119,7 +119,11 @@ at:
         account-id: ${AVALARA_ACCOUNT_ID:}
         license-key: ${AVALARA_LICENSE_KEY:}
         company-code: ${AVALARA_COMPANY_CODE:}
-        base-url: ${AVALARA_BASE_URL:https://sandbox-rest.avatax.com}
+        # sandbox (default) or production; picks sandbox-rest.avatax.com or rest.avatax.com. Anything else fails at start.
+        environment: ${AVALARA_ENVIRONMENT:sandbox}
+        base-url: ${AVALARA_BASE_URL:}
+        # AvaTax tax code of a separately stated delivery charge; verify against Avalara's tax code list.
+        shipping-tax-code: ${AVALARA_SHIPPING_TAX_CODE:}
     returns:
       default-window-days: ${RETURN_WINDOW_DAYS:30}
       window-days-by-product-type:

@@ -21,6 +21,7 @@ import com.afrotransact.taxreturns.application.TaxShadowService.Line;
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.profile.Outcome;
 import com.afrotransact.taxreturns.domain.profile.ResolveStatus;
+import com.afrotransact.taxreturns.domain.shadow.ShadowFailure;
 import com.afrotransact.taxreturns.domain.shadow.ShadowKind;
 import com.afrotransact.taxreturns.domain.shadow.ShadowRow;
 import com.afrotransact.taxreturns.domain.tax.CollectedBy;
@@ -108,8 +109,9 @@ class TaxShadowServiceImplTest {
 
         verify(stripe, never()).quoteStrict(any(), anyString(), any());
         assertThat(saved()).singleElement().satisfies(r -> {
-            assertThat(r.kind()).isEqualTo(ShadowKind.PROVIDER_ERROR);
-            assertThat(r.providerError()).contains("No STRIPE code is mapped");
+            assertThat(r.kind()).isEqualTo(ShadowKind.NO_CODE);
+            assertThat(r.failure()).isNull();
+            assertThat(r.providerError()).contains("No Stripe Tax code is mapped");
         });
     }
 
@@ -124,6 +126,7 @@ class TaxShadowServiceImplTest {
 
         assertThat(saved()).singleElement().satisfies(r -> {
             assertThat(r.kind()).isEqualTo(ShadowKind.PROVIDER_ERROR);
+            assertThat(r.failure()).isEqualTo(ShadowFailure.ERROR);
             assertThat(r.providerError()).contains("503");
             assertThat(r.inHouseTaxMinor()).isEqualTo(825);
         });
@@ -144,7 +147,10 @@ class TaxShadowServiceImplTest {
                 List.of(decided("1", false, Map.of("STRIPE", "txcd_1")))));
 
         assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(1_500));
-        assertThat(saved()).singleElement().satisfies(r -> assertThat(r.providerError()).contains("Timed out"));
+        assertThat(saved()).singleElement().satisfies(r -> {
+            assertThat(r.failure()).isEqualTo(ShadowFailure.TIMEOUT);
+            assertThat(r.providerError()).contains("Stripe Tax did not answer within");
+        });
         verify(telemetry).shadowFailure(TaxProviderId.STRIPE, "timeout");
     }
 
@@ -155,7 +161,22 @@ class TaxShadowServiceImplTest {
         service.run(new Compare(TaxProviderId.STRIPE, SHIP_TO, "USD", "order-1",
                 List.of(decided("1", true, Map.of("STRIPE", "txcd_1")))));
 
-        assertThat(saved()).singleElement().satisfies(r -> assertThat(r.providerError()).contains("not configured"));
+        assertThat(saved()).singleElement().satisfies(r -> {
+            assertThat(r.failure()).isEqualTo(ShadowFailure.NOT_CONFIGURED);
+            assertThat(r.providerError()).contains("Stripe Tax is not configured");
+        });
+    }
+
+    @Test
+    void aProviderWithoutAnAdapterNamesItselfInTheRecordedReason() {
+        service.run(new Compare(TaxProviderId.AVALARA, SHIP_TO, "USD", "order-1",
+                List.of(decided("1", false, Map.of("AVALARA", "PF050000")))));
+
+        assertThat(saved()).singleElement().satisfies(r -> {
+            assertThat(r.provider()).isEqualTo(TaxProviderId.AVALARA);
+            assertThat(r.failure()).isEqualTo(ShadowFailure.NOT_CONFIGURED);
+            assertThat(r.providerError()).contains("Avalara is not configured");
+        });
     }
 
     @Test

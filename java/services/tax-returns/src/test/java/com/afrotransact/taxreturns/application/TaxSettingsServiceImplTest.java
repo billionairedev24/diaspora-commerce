@@ -44,7 +44,7 @@ class TaxSettingsServiceImplTest {
 
     private TaxSettingsService service(String stripeKey, String avalaraAccount, TaxReturnsProperties.TaxProvider provider) {
         TaxReturnsProperties.AvalaraTax avalara = avalaraAccount == null ? null
-                : new TaxReturnsProperties.AvalaraTax(avalaraAccount, "key", "ACME", null, null);
+                : new TaxReturnsProperties.AvalaraTax(avalaraAccount, "key", "ACME", null, null, null, null);
         TaxReturnsProperties props = new TaxReturnsProperties(new TaxReturnsProperties.Tax(provider,
                 new TaxReturnsProperties.StripeTax(stripeKey, null, null), avalara, null, null), null, null, null, null);
         when(codes.countMapped(any())).thenReturn(105L);

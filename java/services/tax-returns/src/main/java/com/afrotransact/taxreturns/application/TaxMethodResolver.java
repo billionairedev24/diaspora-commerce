@@ -3,6 +3,8 @@ package com.afrotransact.taxreturns.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
@@ -40,6 +42,32 @@ public class TaxMethodResolver implements TaxMethodSource {
     @Override
     public Optional<TaxProviderId> shadowProvider() {
         return current().shadow;
+    }
+
+    /**
+     * SHADOW mode asks every provider that is set up and is not the one charging, so Stripe Tax and Avalara are
+     * recorded side by side. A provider without credentials is not asked (the report shows it as not configured).
+     */
+    @Override
+    public List<TaxProviderId> shadowProviders() {
+        Cached c = current();
+        if (c.shadow.isEmpty()) {
+            return List.of();
+        }
+        List<TaxProviderId> out = new ArrayList<>();
+        for (TaxProviderId id : TaxProviderId.values()) {
+            if (id != c.method.provider() && configured(id)) {
+                out.add(id);
+            }
+        }
+        return out;
+    }
+
+    private boolean configured(TaxProviderId id) {
+        return switch (id) {
+            case STRIPE -> props.tax().stripe().secretKey() != null && !props.tax().stripe().secretKey().isBlank();
+            case AVALARA -> props.tax().avalara().configured();
+        };
     }
 
     private Cached current() {

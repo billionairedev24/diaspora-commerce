@@ -28,10 +28,11 @@ import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
  * @param providerError    why the provider could not answer
  * @param differenceMinor  provider minus in-house tax
  * @param currency         currency
+ * @param failure          why the provider gave no quote (null when it answered or no code was mapped)
  */
 public record ShadowRow(Instant quotedAt, String orderRef, String lineId, String atin, TaxProviderId provider,
                         String state, String categoryCode, String internalTaxCode, String providerCode,
                         ShadowKind kind, Outcome inHouseOutcome, BigDecimal inHouseRate, Long inHouseTaxMinor,
                         Outcome providerOutcome, BigDecimal providerRate, Long providerTaxMinor, String providerError,
-                        long differenceMinor, String currency) {
+                        long differenceMinor, String currency, ShadowFailure failure) {
 }

@@ -215,10 +215,10 @@ abstract class CategoryTaxEngineScenarios {
         shadowRepository.saveAll(List.of(
                 new ShadowRow(at, "order-it", "1", "ATIT1", TaxProviderId.STRIPE, "TX", "nuts-seeds", "AT.NUTS_SEEDS.X",
                         "txcd_1", ShadowKind.MATCH, Outcome.TAXABLE, new BigDecimal("0.0825"), 825L,
-                        Outcome.TAXABLE, new BigDecimal("0.0825"), 825L, null, 0, "USD"),
+                        Outcome.TAXABLE, new BigDecimal("0.0825"), 825L, null, 0, "USD", null),
                 new ShadowRow(at, "order-it", "2", "ATIT2", TaxProviderId.STRIPE, "TX", "nuts-seeds", "AT.NUTS_SEEDS.X",
                         "txcd_1", ShadowKind.OUTCOME, Outcome.EXEMPT, null, 0L, Outcome.TAXABLE,
-                        new BigDecimal("0.0625"), 625L, null, 625, "USD")));
+                        new BigDecimal("0.0625"), 625L, null, 625, "USD", null)));
 
         TaxShadowService.Report r = shadow.report(LocalDate.now(ZoneOffset.UTC),
                 LocalDate.now(ZoneOffset.UTC), TaxProviderId.STRIPE, true, 0, 50);

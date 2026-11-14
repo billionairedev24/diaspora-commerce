@@ -20,16 +20,17 @@ public final class ShadowComparator {
      * @param inHouse  the in-house result for the line
      * @param provider the provider's result, or null when it could not answer
      * @param error    why it could not answer
+     * @param failure  the kind of failure when it could not answer
      */
     public static ShadowRow compare(Instant at, String orderRef, String state, String category, String currency,
                                     TaxProviderId id, TaxLineInput line, TaxLineResult inHouse, TaxLineResult provider,
-                                    String error) {
+                                    String error, ShadowFailure failure) {
         Outcome ours = line.exempt() ? Outcome.EXEMPT : Outcome.TAXABLE;
         String code = line.codeFor(id);
         if (provider == null) {
             return new ShadowRow(at, orderRef, line.lineId(), line.atin(), id, state, category, line.taxCode(), code,
                     ShadowKind.PROVIDER_ERROR, ours, rateOf(inHouse), taxOf(inHouse), null, null, null, error, 0L,
-                    currency);
+                    currency, failure == null ? ShadowFailure.ERROR : failure);
         }
         Outcome theirs = provider.taxMinor() > 0 ? Outcome.TAXABLE : Outcome.EXEMPT;
         long ourTax = inHouse == null ? 0L : inHouse.taxMinor();
@@ -44,14 +45,22 @@ public final class ShadowComparator {
         }
         return new ShadowRow(at, orderRef, line.lineId(), line.atin(), id, state, category, line.taxCode(), code, kind,
                 ours, rateOf(inHouse), taxOf(inHouse), theirs, provider.rate(), provider.taxMinor(), null, diff,
-                currency);
+                currency, null);
+    }
+
+    /** A line the provider was not asked about because none of its codes is mapped for the outcome: never a zero quote. */
+    public static ShadowRow noCode(Instant at, String orderRef, String state, String category, String currency,
+                                   TaxProviderId id, TaxLineInput line, TaxLineResult inHouse, String note) {
+        Outcome ours = line.exempt() ? Outcome.EXEMPT : Outcome.TAXABLE;
+        return new ShadowRow(at, orderRef, line.lineId(), line.atin(), id, state, category, line.taxCode(), null,
+                ShadowKind.NO_CODE, ours, rateOf(inHouse), taxOf(inHouse), null, null, null, note, 0L, currency, null);
     }
 
     /** A line the in-house engine could not decide: recorded, nothing to compare. */
     public static ShadowRow noDecision(Instant at, String orderRef, String state, String category, String currency,
                                        TaxProviderId id, String lineId, String atin) {
         return new ShadowRow(at, orderRef, lineId, atin, id, state, category, null, null, ShadowKind.NO_DECISION, null,
-                null, null, null, null, null, null, 0L, currency);
+                null, null, null, null, null, null, 0L, currency, null);
     }
 
     private static boolean rateDiffers(TaxLineResult a, TaxLineResult b) {

@@ -29,7 +29,7 @@ class ShadowComparatorTest {
 
     private static ShadowRow compare(boolean exempt, TaxLineResult ours, TaxLineResult theirs, String error) {
         return ShadowComparator.compare(AT, "order-1", "TX", "nuts-seeds", "USD", TaxProviderId.STRIPE, line(exempt), ours,
-                theirs, error);
+                theirs, error, error == null ? null : ShadowFailure.TIMEOUT);
     }
 
     @Test
@@ -68,6 +68,7 @@ class ShadowComparatorTest {
     void aProviderThatCouldNotAnswerIsAProviderErrorWithTheReason() {
         ShadowRow r = compare(false, result(825, "0.0825"), null, "Timed out");
         assertThat(r.kind()).isEqualTo(ShadowKind.PROVIDER_ERROR);
+        assertThat(r.failure()).isEqualTo(ShadowFailure.TIMEOUT);
         assertThat(r.providerError()).isEqualTo("Timed out");
         assertThat(r.kind().differs()).isTrue();
     }

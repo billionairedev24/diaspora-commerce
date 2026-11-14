@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 import com.afrotransact.taxreturns.domain.profile.Outcome;
+import com.afrotransact.taxreturns.domain.shadow.ShadowFailure;
 import com.afrotransact.taxreturns.domain.shadow.ShadowKind;
 import com.afrotransact.taxreturns.domain.shadow.ShadowRow;
 import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
@@ -29,9 +30,10 @@ class JdbcShadowQuoteRepository implements ShadowQuoteRepository {
             jdbc.sql("""
                     insert into tax_shadow_quote (quoted_at, order_ref, line_id, atin, provider, state, category_code,
                         internal_tax_code, provider_code, kind, in_house_outcome, in_house_rate, in_house_tax_minor,
-                        provider_outcome, provider_rate, provider_tax_minor, provider_error, difference_minor, currency)
+                        provider_outcome, provider_rate, provider_tax_minor, provider_error, difference_minor, currency,
+                        failure)
                     values (:at, :order, :line, :atin, :provider, :state, :category, :code, :providerCode, :kind,
-                        :ho, :hr, :ht, :po, :pr, :pt, :error, :diff, :currency)
+                        :ho, :hr, :ht, :po, :pr, :pt, :error, :diff, :currency, :failure)
                     """)
                     .param("at", Sql.ts(r.quotedAt())).param("order", r.orderRef()).param("line", r.lineId())
                     .param("atin", r.atin()).param("provider", r.provider().name()).param("state", r.state())
@@ -41,7 +43,8 @@ class JdbcShadowQuoteRepository implements ShadowQuoteRepository {
                     .param("po", name(r.providerOutcome())).param("pr", r.providerRate())
                     .param("pt", r.providerTaxMinor())
                     .param("error", r.providerError() == null ? null : trim(r.providerError()))
-                    .param("diff", r.differenceMinor()).param("currency", r.currency()).update();
+                    .param("diff", r.differenceMinor()).param("currency", r.currency()).param("failure", name(r.failure()))
+                    .update();
         }
     }
 
@@ -90,8 +93,13 @@ class JdbcShadowQuoteRepository implements ShadowQuoteRepository {
                         outcome(rs.getString("in_house_outcome")), rs.getBigDecimal("in_house_rate"),
                         (Long) rs.getObject("in_house_tax_minor"), outcome(rs.getString("provider_outcome")),
                         rs.getBigDecimal("provider_rate"), (Long) rs.getObject("provider_tax_minor"),
-                        rs.getString("provider_error"), rs.getLong("difference_minor"), rs.getString("currency")))
+                        rs.getString("provider_error"), rs.getLong("difference_minor"), rs.getString("currency"),
+                        failure(rs.getString("failure"))))
                 .list();
+    }
+
+    private static ShadowFailure failure(String v) {
+        return v == null ? null : ShadowFailure.valueOf(v);
     }
 
     private static Outcome outcome(String v) {

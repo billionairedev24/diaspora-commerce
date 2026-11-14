@@ -48,26 +48,38 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
         public Tax {
             provider = provider == null ? TaxProvider.RULES : provider;
             stripe = stripe == null ? new StripeTax(null, null, null) : stripe;
-            avalara = avalara == null ? new AvalaraTax(null, null, null, null, null) : avalara;
+            avalara = avalara == null ? new AvalaraTax(null, null, null, null, null, null, null) : avalara;
             classification = classification == null ? new Classification(null, null, false, null) : classification;
             shadow = shadow == null ? new Shadow(null, null, false, null) : shadow;
         }
     }
 
     /**
-     * Avalara AvaTax skeleton settings (the adapter maps requests but does not call AvaTax yet).
+     * Avalara AvaTax settings (REST v2). Only the first three are credentials; none is ever logged.
      *
-     * @param accountId   AvaTax account id (env AVALARA_ACCOUNT_ID)
-     * @param licenseKey  AvaTax license key (env AVALARA_LICENSE_KEY); never logged
-     * @param companyCode AvaTax company code the transactions belong to (env AVALARA_COMPANY_CODE)
-     * @param baseUrl     sandbox-rest.avatax.com or rest.avatax.com
-     * @param timeout     per-request timeout
+     * @param accountId       AvaTax account id (env AVALARA_ACCOUNT_ID)
+     * @param licenseKey      AvaTax license key (env AVALARA_LICENSE_KEY)
+     * @param companyCode     AvaTax company code the transactions belong to (env AVALARA_COMPANY_CODE)
+     * @param environment     {@code sandbox} (default) or {@code production} (env AVALARA_ENVIRONMENT); picks the host
+     * @param baseUrl         explicit host override (env AVALARA_BASE_URL), normally unset
+     * @param timeout         per-request timeout
+     * @param shippingTaxCode AvaTax tax code of a separately stated delivery charge (env AVALARA_SHIPPING_TAX_CODE)
      */
-    public record AvalaraTax(String accountId, String licenseKey, String companyCode, String baseUrl, Duration timeout) {
+    public record AvalaraTax(String accountId, String licenseKey, String companyCode, String environment, String baseUrl,
+                             Duration timeout, String shippingTaxCode) {
+
+        static final String SANDBOX = "https://sandbox-rest.avatax.com";
+        static final String PRODUCTION = "https://rest.avatax.com";
 
         public AvalaraTax {
-            baseUrl = baseUrl == null || baseUrl.isBlank() ? "https://sandbox-rest.avatax.com" : baseUrl;
+            environment = environment == null || environment.isBlank() ? "sandbox" : environment.trim().toLowerCase();
+            if (!environment.equals("sandbox") && !environment.equals("production")) {
+                throw new IllegalArgumentException("AVALARA_ENVIRONMENT must be sandbox or production");
+            }
+            baseUrl = baseUrl == null || baseUrl.isBlank() ? (environment.equals("production") ? PRODUCTION : SANDBOX)
+                    : baseUrl;
             timeout = timeout == null ? Duration.ofSeconds(5) : timeout;
+            shippingTaxCode = shippingTaxCode == null || shippingTaxCode.isBlank() ? "FR020100" : shippingTaxCode;
         }
 
         /** The three credentials are set. */

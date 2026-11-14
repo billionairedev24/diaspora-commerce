@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.shadow.ShadowComparator;
+import com.afrotransact.taxreturns.domain.shadow.ShadowFailure;
 import com.afrotransact.taxreturns.domain.shadow.ShadowRow;
 import com.afrotransact.taxreturns.domain.tax.TaxLineInput;
 import com.afrotransact.taxreturns.domain.tax.TaxLineResult;
@@ -89,36 +90,56 @@ class TaxShadowServiceImpl implements TaxShadowService, AutoCloseable {
         Instant at = clock.instant();
         String state = c.shipTo().state();
         List<ShadowRow> rows = new ArrayList<>();
-        List<TaxShadowService.Line> coded = new ArrayList<>();
+        List<TaxShadowService.Line> decided = new ArrayList<>();
         for (TaxShadowService.Line l : c.lines()) {
-            TaxLineInput in = l.input();
             if (l.decision().isBlocked()) {
+                TaxLineInput in = l.input();
                 rows.add(ShadowComparator.noDecision(at, c.reference(), state, l.decision().categoryCode(), c.currency(),
                         c.provider(), in.lineId(), in.atin()));
-            } else if (in.codeFor(c.provider()) == null) {
-                rows.add(ShadowComparator.compare(at, c.reference(), state, l.decision().categoryCode(), c.currency(),
-                        c.provider(), in, null, null, "No " + c.provider() + " code is mapped for " + in.taxCode()));
             } else {
-                coded.add(l);
+                decided.add(l);
             }
         }
-        if (!coded.isEmpty()) {
-            rows.addAll(compareCoded(c, coded, at, state));
+        if (!decided.isEmpty()) {
+            rows.addAll(compareDecided(c, decided, at, state));
         }
         repository.saveAll(rows);
         rows.forEach(r -> telemetry.shadow(c.provider(), r.kind()));
     }
 
-    private List<ShadowRow> compareCoded(Compare c, List<TaxShadowService.Line> coded, Instant at, String state) {
-        List<TaxLineInput> all = coded.stream().map(TaxShadowService.Line::input).toList();
-        List<TaxLineInput> taxable = all.stream().filter(i -> !i.exempt()).toList();
+    /** Our quote for every decided line, then the provider's for the lines that carry its code (never a guess). */
+    private List<ShadowRow> compareDecided(Compare c, List<TaxShadowService.Line> decided, Instant at, String state) {
+        List<TaxLineInput> taxable = decided.stream().map(TaxShadowService.Line::input).filter(i -> !i.exempt()).toList();
         Map<String, TaxLineResult> ours = results(taxable.isEmpty() ? null : inHouse.quote(c.shipTo(), c.currency(), taxable));
+        List<TaxShadowService.Line> coded = decided.stream().filter(l -> l.input().codeFor(c.provider()) != null)
+                .toList();
+        List<ShadowRow> rows = new ArrayList<>();
+        for (TaxShadowService.Line l : decided) {
+            TaxLineInput in = l.input();
+            if (in.codeFor(c.provider()) == null) {
+                rows.add(ShadowComparator.noCode(at, c.reference(), state, l.decision().categoryCode(), c.currency(),
+                        c.provider(), in, ours.get(in.lineId()), "No " + label(c.provider()) + " code is mapped for "
+                        + in.taxCode()));
+            }
+        }
+        if (!coded.isEmpty()) {
+            rows.addAll(compareCoded(c, coded, ours, at, state));
+        }
+        return rows;
+    }
+
+    private List<ShadowRow> compareCoded(Compare c, List<TaxShadowService.Line> coded,
+                                         Map<String, TaxLineResult> ours, Instant at, String state) {
+        List<TaxLineInput> all = coded.stream().map(TaxShadowService.Line::input).toList();
         Map<String, TaxLineResult> theirs = null;
         String error = null;
+        ShadowFailure failure = null;
+        String name = label(c.provider());
         ProviderTaxCalculator provider = providers.stream().filter(p -> p.provider() == c.provider()).findFirst()
                 .orElse(null);
         if (provider == null || !provider.configured()) {
-            error = c.provider() + " is not configured";
+            error = name + " is not configured: its credentials are not set, so it was not asked";
+            failure = ShadowFailure.NOT_CONFIGURED;
         } else {
             try {
                 TaxQuote q = CompletableFuture.supplyAsync(() -> provider.quoteStrict(c.shipTo(), c.currency(), all),
@@ -126,21 +147,27 @@ class TaxShadowServiceImpl implements TaxShadowService, AutoCloseable {
                 theirs = results(q);
             } catch (CompletionException ex) {
                 Throwable cause = ex.getCause() == null ? ex : ex.getCause();
-                error = cause instanceof TimeoutException ? "Timed out after " + props.tax().shadow().timeout()
-                        : cause instanceof TaxProviderException ? cause.getMessage() : cause.toString();
-                telemetry.shadowFailure(c.provider(), cause instanceof TimeoutException ? "timeout" : "error");
+                boolean timeout = cause instanceof TimeoutException;
+                error = timeout ? name + " did not answer within " + props.tax().shadow().timeout()
+                        : cause instanceof TaxProviderException ? cause.getMessage() : name + " failed: " + cause;
+                failure = timeout ? ShadowFailure.TIMEOUT : ShadowFailure.ERROR;
+                telemetry.shadowFailure(c.provider(), timeout ? "timeout" : "error");
             }
         }
         List<ShadowRow> rows = new ArrayList<>();
         for (TaxShadowService.Line l : coded) {
             TaxLineInput in = l.input();
             TaxLineResult theirResult = theirs == null ? null : theirs.get(in.lineId());
-            String why = theirs == null ? error : theirResult == null ? "The provider returned no result for the line"
-                    : null;
+            String why = theirs == null ? error : theirResult == null ? name + " returned no result for the line" : null;
+            ShadowFailure how = theirs == null ? failure : theirResult == null ? ShadowFailure.ERROR : null;
             rows.add(ShadowComparator.compare(at, c.reference(), state, l.decision().categoryCode(), c.currency(),
-                    c.provider(), in, ours.get(in.lineId()), theirResult, why));
+                    c.provider(), in, ours.get(in.lineId()), theirResult, why, how));
         }
         return rows;
+    }
+
+    private static String label(TaxProviderId id) {
+        return id == TaxProviderId.STRIPE ? "Stripe Tax" : "Avalara";
     }
 
     private static Map<String, TaxLineResult> results(TaxQuote q) {

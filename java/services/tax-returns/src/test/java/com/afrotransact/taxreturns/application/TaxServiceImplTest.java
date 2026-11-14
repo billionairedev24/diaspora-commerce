@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -266,7 +267,7 @@ class TaxServiceImplTest {
     void shadowComparesRealOrdersOnlyAndIncludesExemptAndBlockedLines() {
         approved("ATEXEMPT01", "nuts-seeds", EXEMPT_NUTS);
         approved("ATTAXABLE1", "nuts-seeds", TAXABLE_NUTS);
-        when(methods.shadowProvider()).thenReturn(Optional.of(TaxProviderId.STRIPE));
+        when(methods.shadowProviders()).thenReturn(List.of(TaxProviderId.STRIPE, TaxProviderId.AVALARA));
 
         quote(line("1", "ATEXEMPT01", 1_000), line("2", "ATTAXABLE1", 1_000));
         verify(shadow, never()).compare(any());
@@ -275,8 +276,9 @@ class TaxServiceImplTest {
                 line("2", "ATTAXABLE1", 1_000), line("3", "ATUNKNOWN1", 100)), null, "order-1"));
 
         ArgumentCaptor<TaxShadowService.Compare> c = ArgumentCaptor.forClass(TaxShadowService.Compare.class);
-        verify(shadow).compare(c.capture());
-        assertThat(c.getValue().provider()).isEqualTo(TaxProviderId.STRIPE);
+        verify(shadow, times(2)).compare(c.capture());
+        assertThat(c.getAllValues()).extracting(TaxShadowService.Compare::provider)
+                .containsExactly(TaxProviderId.STRIPE, TaxProviderId.AVALARA);
         assertThat(c.getValue().reference()).isEqualTo("order-1");
         assertThat(c.getValue().lines()).hasSize(3);
         assertThat(c.getValue().lines().get(0).input().exempt()).isTrue();

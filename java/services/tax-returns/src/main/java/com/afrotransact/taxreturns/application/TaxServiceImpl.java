@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 
 import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
@@ -152,17 +151,19 @@ class TaxServiceImpl implements TaxService {
                 quoted.fallbackLines());
     }
 
-    /** SHADOW mode: asks the shadow provider about the same lines in the background; never changes this quote. */
+    /** SHADOW mode: asks every shadow provider about the same lines in the background; never changes this quote. */
     private void compareInShadow(TaxQuoteCommand c, String currency, List<Item> items) {
-        Optional<TaxProviderId> provider = methods.shadowProvider();
+        List<TaxProviderId> providers = methods.shadowProviders();
         boolean real = c.reference() != null && !c.reference().isBlank();
-        if (provider.isEmpty() || !(real || props.tax().shadow().cartQuotes())) {
+        if (providers.isEmpty() || !(real || props.tax().shadow().cartQuotes())) {
             return;
         }
         List<TaxShadowService.Line> lines = items.stream().filter(i -> i.decision() != null)
                 .map(i -> new TaxShadowService.Line(i.input(), i.decision())).toList();
         if (!lines.isEmpty()) {
-            shadow.compare(new TaxShadowService.Compare(provider.get(), c.shipTo(), currency, c.reference(), lines));
+            for (TaxProviderId provider : providers) {
+                shadow.compare(new TaxShadowService.Compare(provider, c.shipTo(), currency, c.reference(), lines));
+            }
         }
     }
 
