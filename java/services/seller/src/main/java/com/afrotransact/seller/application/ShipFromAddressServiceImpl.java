@@ -62,6 +62,16 @@ class ShipFromAddressServiceImpl implements ShipFromAddressService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<ShipFromAddress> defaultLocation(String orgId) {
+        Actor actor = guard.current();
+        if (!(actor.type() == PrincipalType.SERVICE && actor.can(SERVICE_READ))) {
+            guard.orgRole(orgId, READERS, STAFF_PERMISSION);
+        }
+        return addresses.list(orgId).stream().filter(ShipFromAddress::isDefault).findFirst();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<ShipFromAddress> list(String orgId) {
         guard.orgRole(orgId, READERS, STAFF_PERMISSION);
         return addresses.list(orgId);

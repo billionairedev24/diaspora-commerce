@@ -1,6 +1,7 @@
 package com.afrotransact.seller.application;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.seller.domain.ShipFromAddress;
@@ -30,6 +31,13 @@ public interface ShipFromAddressService {
 
     /** One location by id: services with {@link #SERVICE_READ}, staff with {@link #STAFF_PERMISSION}, members. */
     ShipFromAddress location(UUID id);
+
+    /**
+     * The organisation's default ship-from address (where its own orders ship from), for services that need an origin
+     * (orders-service tells tax-returns where a seller-fulfilled line ships from): services with {@link #SERVICE_READ},
+     * staff with {@link #STAFF_PERMISSION}, members. Empty when the organisation has no address.
+     */
+    Optional<ShipFromAddress> defaultLocation(String orgId);
 
     List<ShipFromAddress> list(String orgId);
 

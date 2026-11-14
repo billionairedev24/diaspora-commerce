@@ -3250,6 +3250,28 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/SellingRuleAudit'
+  /v1/orgs/{orgId}/default-ship-from-location:
+    get:
+      tags:
+      - Ship-from addresses
+      summary: 'An organisation''s default ship-from address (services: sellers:ship-from.read)'
+      description: Where the organisation's own orders ship from. orders-service sends it to tax-returns as the origin of a seller-fulfilled line (Avalara prices by origin and destination). Staff with seller:ship-from and the organisation's members can read it too.
+      operationId: defaultShipFromLocation
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipFromAddress'
+        '404':
+          description: seller.ship-from-not-found - the organisation has no ship-from address yet
   /v1/ship-from-locations/{id}:
     get:
       tags:

@@ -2,6 +2,7 @@ package com.afrotransact.seller.adapter.in.web;
 
 import java.util.UUID;
 
+import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.seller.adapter.in.web.ShipFromDtos.ShipFromAddressResponse;
 import com.afrotransact.seller.application.ShipFromAddressService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,5 +29,16 @@ class ShipFromLocationController {
     @GetMapping("/v1/ship-from-locations/{id}")
     ShipFromAddressResponse shipFromLocation(@PathVariable UUID id) {
         return ShipFromAddressResponse.of(addresses.location(id));
+    }
+
+    @Operation(summary = "An organisation's default ship-from address (services: sellers:ship-from.read)",
+            description = "Where the organisation's own orders ship from. orders-service sends it to tax-returns as the "
+                    + "origin of a seller-fulfilled line (Avalara prices by origin and destination). 404 "
+                    + "seller.ship-from-not-found when the organisation has no address yet.")
+    @GetMapping("/v1/orgs/{orgId}/default-ship-from-location")
+    ShipFromAddressResponse defaultShipFromLocation(@PathVariable String orgId) {
+        return addresses.defaultLocation(orgId).map(ShipFromAddressResponse::of).orElseThrow(
+                () -> new NotFoundException("seller.ship-from-not-found", "Organisation " + orgId
+                        + " has no ship-from address"));
     }
 }
