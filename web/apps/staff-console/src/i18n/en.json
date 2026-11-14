@@ -2681,7 +2681,7 @@
   "st.home.rule.department-tiles": "Shown when at least {units} departments each have {unitProducts} eligible product. Each tile shows a real product photo.",
   "st.home.rule.deals": "Shown when {products} products are discounted enough, from at least {sellers} sellers.",
   "st.home.rule.groceries-rail": "Shown when {products} grocery products are in stock with a real photo.",
-  "st.home.rule.services-near-you": "Shown when at least {products} provider serves the shopper’s ZIP (Services near you) or exists in the market (Popular services).",
+  "st.home.rule.services-near-you": "Shown when at least {products} provider serves the shopper’s ZIP (Services near you) or exists in the market (Services you can book).",
   "st.home.rule.new-arrivals": "Shown when {products} products from at least {sellers} seller are no older than {days} days.",
   "st.home.rule.communities": "Shown only when {units} communities each have {unitProducts} eligible products from {unitSellers} sellers. Below that no community appears on the home, in the footer, in the menu or in the sitemap.",
   "st.home.rule.top-sellers": "Shown when {products} products with a real rating (never “0 reviews”) come from at least {sellers} sellers.",

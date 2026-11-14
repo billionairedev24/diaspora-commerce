@@ -1797,3 +1797,10 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - tax-returns logs a WARN naming the ATIN it looked up when no record exists or a record is ingested from catalog facts
 - docs/runbooks/CheckoutTaxEstimate.md explains the case
 - tax-returns change compiled and tested on JDK 25 (not verified in this session)","E06","","Highest","2","checkout tax bug","checkout","In Progress"
+"S443","Story","Cart rail and storefront copy claim only what is true","Owner: the empty cart showed 'Customers who bought items in your cart also bought'. The rail was a rating-sorted search, not purchase data. The cart rail now shows real related products (same department, in stock, real photo, organic) under a truthful heading, nothing for an empty cart except the visitor's own recently viewed items, and unearned social-proof copy was removed or reworded across the storefront, the customer app and the staff console.","- Empty cart renders no rail, except the browser's own recently viewed products under 'Your recently viewed items'
+- Cart with items: products of the cart's departments, in stock, real photo (shared eligibility helper), not in the cart, not sponsored, organic search only; heading 'More in {category}' or 'You might also like'
+- Nothing is shown when nothing real qualifies; a single seller already in the cart is not presented as a recommendation
+- No 'Customers also bought' wording (no co-purchase data exists; not built)
+- No '0 reviews'; flat rail without a card box; tokens only; five locales; RTL safe
+- Audit: Buy again and Popular right now (customer app), Popular services, Best sellers labels, 'Customers near you are looking' and 'today's deals' hints reworded or removed
+- Guard test scans the en catalogues for banned phrases; component tests and 1280/390 screenshots","E23","","High","3","storefront cart trust i18n","storefront-web","Done"

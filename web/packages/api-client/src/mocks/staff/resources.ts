@@ -1683,7 +1683,7 @@ function tileRules() {
   return [
     { value: 'top-rated', label: 'Top rated in a department' },
     { value: 'new', label: 'New in a department' },
-    { value: 'bestsellers', label: 'Best sellers in a department' },
+    { value: 'bestsellers', label: 'Top rated in a department' },
     { value: 'search', label: 'Search results for words' },
     { value: 'fastest', label: 'Fastest delivery from AfroTransact' },
     { value: 'near-you', label: 'Ships from near the shopper (their city, state or region)' },

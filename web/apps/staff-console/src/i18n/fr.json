@@ -2688,7 +2688,7 @@
   "st.home.rule.department-tiles": "Affiché lorsqu’au moins {units} rayons ont chacun {unitProducts} produit éligible. Chaque tuile montre une vraie photo de produit.",
   "st.home.rule.deals": "Affiché lorsque {products} produits sont assez réduits, de la part d’au moins {sellers} vendeurs.",
   "st.home.rule.groceries-rail": "Affiché lorsque {products} produits d’épicerie sont en stock avec une vraie photo.",
-  "st.home.rule.services-near-you": "Affiché lorsqu’au moins {products} prestataire dessert le code postal (Services près de chez vous) ou existe sur le marché (Services populaires).",
+  "st.home.rule.services-near-you": "Affiché lorsqu’au moins {products} prestataire dessert le code postal (Services près de chez vous) ou existe sur le marché (Services à réserver).",
   "st.home.rule.new-arrivals": "Affiché lorsque {products} produits d’au moins {sellers} vendeur ont moins de {days} jours.",
   "st.home.rule.communities": "Affiché seulement lorsque {units} communautés ont chacune {unitProducts} produits éligibles de {unitSellers} vendeurs. Sinon aucune communauté n’apparaît ni sur l’accueil, ni dans le pied de page, ni dans le menu, ni dans le plan du site.",
   "st.home.rule.top-sellers": "Affiché lorsque {products} produits avec une vraie note (jamais « 0 avis ») viennent d’au moins {sellers} vendeurs.",

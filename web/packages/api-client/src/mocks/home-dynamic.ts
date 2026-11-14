@@ -422,7 +422,7 @@ export function verdict(key: ModuleKey, r: HomeModuleRule, name: string, catalog
     case 'services-near-you': {
       const need = Math.max(1, r.minProducts);
       if (ctx.hasZip && ctx.nearServices.length >= need) return v(true, 'shown', `${plural(ctx.nearServices.length, 'provider serves', 'providers serve')} the visitor's ZIP: shown as Services near you.`, ctx.nearServices.length, need);
-      if (catalog.services.length >= need) return v(true, 'shown', `${plural(catalog.services.length, 'provider exists', 'providers exist')} in the market: shown as Popular services${ctx.hasZip ? ' (none near this ZIP)' : ' (no ZIP)'}.`, catalog.services.length, need);
+      if (catalog.services.length >= need) return v(true, 'shown', `${plural(catalog.services.length, 'provider exists', 'providers exist')} in the market: shown as Services you can book${ctx.hasZip ? ' (none near this ZIP)' : ' (no ZIP)'}.`, catalog.services.length, need);
       return v(false, 'nothing-to-show', `${name} needs ${plural(need, 'provider', 'providers')} in the market; ${catalog.services.length} exist.`, catalog.services.length, need);
     }
     case 'preorder':

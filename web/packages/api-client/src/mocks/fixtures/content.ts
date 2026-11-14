@@ -33,7 +33,7 @@ export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile
     { id: 't1', title: 'Shop by community', cta: 'See all communities', href: '/s', cells: [
       { label: 'Nigerian', href: '/s?community=Nigerian', imageUrl: null }, { label: 'Indian', href: '/s?community=Indian', imageUrl: null },
       { label: 'Jamaican', href: '/s?community=Jamaican', imageUrl: null }, { label: 'Ethiopian', href: '/s?community=Ethiopian', imageUrl: null }] },
-    { id: 't2', title: 'Top rated by department', cta: 'See best sellers', href: '/s', cells: [
+    { id: 't2', title: 'Top rated by department', cta: 'See top rated', href: '/s', cells: [
       { rule: { kind: 'top-rated', department: 'Groceries' } }, { rule: { kind: 'top-rated', department: 'Beauty' } },
       { rule: { kind: 'top-rated', department: 'Fashion' } }, { rule: { kind: 'top-rated', department: 'Books' } }] },
     { id: 't4', title: 'Book a service', cta: 'All services', href: '/services', cells: [
@@ -47,7 +47,7 @@ export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile
     { id: 'r-near', title: 'Shipping from near {city}', href: '/s', source: { kind: 'near-you', limit: 6 } },
     { id: 'r-fast', title: 'Get it by {day}', href: '/s?fulfilment=afrotransact', source: { kind: 'deliverable-fast', maxDays: 2, limit: 6 } },
     { id: 'r1', title: 'Fulfilled by AfroTransact — fast to {city}', href: '/s?fulfilment=afrotransact', source: { kind: 'fulfilled-fastest', limit: 6 } },
-    { id: 'r2', title: 'Best sellers in Groceries', href: '/s?dept=Groceries', source: { kind: 'department-bestsellers', department: 'Groceries', limit: 6 } },
+    { id: 'r2', title: 'Top rated in Groceries', href: '/s?dept=Groceries', source: { kind: 'department-bestsellers', department: 'Groceries', limit: 6 } },
     { id: 'r3', title: 'Discover other kitchens', href: '/s', source: { kind: 'curated', ids: ['p11', 'p9', 'p12', 'p22', 'p7', 'p10', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'] } }
   ]
 };

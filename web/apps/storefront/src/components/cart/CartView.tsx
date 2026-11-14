@@ -1,11 +1,11 @@
 'use client';
 
-import { type CartLine, type CartPackage, preorderFallback, SearchQuerySchema } from '@afrotransact/api-client';
+import { type CartLine, type CartPackage, preorderFallback, type ProductSummary, SearchQuerySchema, siteQueries } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, FulfilmentBadge, ImagePlaceholder, QuantityStepper, Skeleton, Stars } from '@afrotransact/ui';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { TaxZipEstimate } from '@/components/checkout/TaxZipEstimate';
 import { CartMembershipUpsell } from '@/components/membership/MembershipUpsell';
@@ -13,9 +13,12 @@ import { CartPreorderHeader, CartPreorderSummary, CartShipsNowHeader, Fulfilment
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchQueries } from '@/lib/api/queries';
+import { pickRelated,RELATED_SHOWN } from '@/lib/cart/related';
 import { useCart, useCartMutation } from '@/lib/cart/useCart';
 import { productHref, searchHref } from '@/lib/links-search';
 import { usePreorderResolution } from '@/lib/preorder/usePreorder';
+import { railItems, readViewed } from '@/lib/recent/recentlyViewed';
+import { recommendable } from '@/lib/seo/eligibility';
 
 import styles from './Cart.module.css';
 
@@ -143,33 +146,72 @@ function Package({ pkg, n, total }: { pkg: CartPackage; n: number; total: number
   );
 }
 
-function Recommendations({ exclude }: { exclude: Set<string> }) {
+/** One flat row of a rail: real photo, name, rating (never "0 reviews"), price, add to cart. No box around the rail. */
+function RailRow({ p }: { p: ProductSummary }) {
   const fmt = useFormatters();
   const t = useT();
-  const { data } = useQuery(searchQueries.results(browserApi(), SearchQuerySchema.parse({ sort: 'rating', size: 12 })));
   const m = useCartMutation();
-  const items = (data?.hits ?? []).filter((h) => !exclude.has(h.atin) && h.inStock).slice(0, 4);
+  return (
+    <li className={styles.rec} data-testid="cart-rec">
+      <Link href={productHref(p.atin)} tabIndex={-1} aria-hidden>
+        <ImagePlaceholder src={p.imageUrl} alt="" />
+      </Link>
+      <div className={styles.recBody}>
+        <Link href={productHref(p.atin)} className={styles.recName}>
+          {p.title}
+        </Link>
+        <Stars rating={p.rating} reviewCount={p.reviewCount} size={12} />
+        <strong className={styles.recPrice}>{fmt.money(p.priceMinor)}</strong>
+        <Button size="sm" onClick={() => m.mutate({ kind: 'add', offerId: p.offerId, quantity: 1, title: p.title })} aria-label={`${t('card.addToCart')}: ${p.title}`}>
+          {t('card.addToCart')}
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Cart rail, nothing but real data. With items: products from the same department(s) as the cart (search), in stock, real
+ * photo, not already in the cart, never sponsored; the heading says only what is true ("More in X" / "You might also
+ * like"). We have no co-purchase data, so we never claim what other customers bought. Empty cart: nothing, except the
+ * browser's own recently viewed products. Renders nothing when there is nothing real to show.
+ */
+function Recommendations({ departments, exclude, cartSellers }: { departments: string[]; exclude: Set<string>; cartSellers: Set<string> }) {
+  const t = useT();
+  const api = browserApi();
+  const results = useQueries({
+    queries: departments.map((department) => searchQueries.related(api, SearchQuerySchema.parse({ department, sort: 'rating', size: 24 })))
+  });
+  const items = pickRelated({ pools: results.map((r) => r.data?.hits ?? []), exclude, cartSellers });
   if (!items.length) return null;
   return (
-    <section className={styles.recs} aria-labelledby="recs-title">
-      <strong id="recs-title">{t('cart.alsoBought')}</strong>
-      {items.map((p) => (
-        <div key={p.atin} className={styles.rec}>
-          <Link href={productHref(p.atin)} tabIndex={-1} aria-hidden>
-            <ImagePlaceholder src={p.imageUrl} alt="" />
-          </Link>
-          <div className={styles.recBody}>
-            <Link href={productHref(p.atin)} className={styles.recName}>
-              {p.title}
-            </Link>
-            <Stars rating={p.rating} reviewCount={p.reviewCount} size={12} />
-            <strong className={styles.recPrice}>{fmt.money(p.priceMinor)}</strong>
-            <Button size="sm" onClick={() => m.mutate({ kind: 'add', offerId: p.offerId, quantity: 1, title: p.title })} aria-label={`${t('card.addToCart')}: ${p.title}`}>
-              {t('card.addToCart')}
-            </Button>
-          </div>
-        </div>
-      ))}
+    <section className={styles.recs} aria-labelledby="recs-title" data-testid="cart-recs">
+      <strong id="recs-title">{departments.length === 1 ? t('cart.moreIn', { category: departments[0] ?? '' }) : t('cart.mightLike')}</strong>
+      <ul className={styles.recList}>
+        {items.map((p) => (
+          <RailRow key={p.atin} p={p} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Empty cart only: the products this browser opened last (its own recently viewed list), in stock with a real photo. Nothing otherwise. */
+function RecentlyViewedRail() {
+  const t = useT();
+  const [atins, setAtins] = useState<string[]>([]);
+  useEffect(() => setAtins(readViewed()), []);
+  const { data } = useQuery(siteQueries.recentlyViewed(browserApi(), atins));
+  const items = railItems((data ?? []).filter((p) => recommendable(p))).slice(0, RELATED_SHOWN);
+  if (!items.length) return null;
+  return (
+    <section className={styles.recs} aria-labelledby="recent-title" data-testid="cart-recently-viewed">
+      <strong id="recent-title">{t('cart.recentlyViewed')}</strong>
+      <ul className={styles.recList}>
+        {items.map((p) => (
+          <RailRow key={p.atin} p={p} />
+        ))}
+      </ul>
     </section>
   );
 }
@@ -311,7 +353,15 @@ export function CartView() {
             }
           </CartPreorderSummary>
         </aside>
-        <Recommendations exclude={new Set(lines.map((l) => l.atin))} />
+        {lines.length > 0 ? (
+          <Recommendations
+            departments={[...new Set(lines.map((l) => l.department).filter(Boolean))].slice(0, 3)}
+            exclude={new Set([...lines.map((l) => l.atin), ...cart.saved.map((x) => x.atin)])}
+            cartSellers={new Set(cart.packages.map((p) => p.seller.name))}
+          />
+        ) : (
+          <RecentlyViewedRail />
+        )}
       </div>
     </div>
   );

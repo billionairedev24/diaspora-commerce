@@ -2688,7 +2688,7 @@
   "st.home.rule.department-tiles": "Se muestra cuando al menos {units} departamentos tienen cada uno {unitProducts} producto elegible. Cada mosaico muestra una foto real.",
   "st.home.rule.deals": "Se muestra cuando {products} productos tienen descuento suficiente, de al menos {sellers} vendedores.",
   "st.home.rule.groceries-rail": "Se muestra cuando {products} productos de alimentación están en stock con foto real.",
-  "st.home.rule.services-near-you": "Se muestra cuando al menos {products} proveedor atiende el ZIP (Servicios cerca de usted) o existe en el mercado (Servicios populares).",
+  "st.home.rule.services-near-you": "Se muestra cuando al menos {products} proveedor atiende el ZIP (Servicios cerca de usted) o existe en el mercado (Servicios que puedes reservar).",
   "st.home.rule.new-arrivals": "Se muestra cuando {products} productos de al menos {sellers} vendedor tienen menos de {days} días.",
   "st.home.rule.communities": "Se muestra solo cuando {units} comunidades tienen cada una {unitProducts} productos elegibles de {unitSellers} vendedores. Por debajo no aparece ninguna comunidad en el inicio, el pie, el menú ni el mapa del sitio.",
   "st.home.rule.top-sellers": "Se muestra cuando {products} productos con valoración real (nunca «0 reseñas») vienen de al menos {sellers} vendedores.",

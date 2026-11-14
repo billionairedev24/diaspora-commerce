@@ -14,7 +14,7 @@ test('home renders with header, department bar, placements and footer', async ({
   await expect(page.getByRole('navigation', { name: 'Departments' }).getByRole('link', { name: 'Groceries' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Announcements' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Best sellers in Groceries' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Top rated in Groceries' })).toBeVisible();
   const footer = page.getByRole('contentinfo');
   await expect(footer.getByRole('button', { name: 'Back to top' })).toBeVisible();
   await expect(footer.getByRole('list', { name: 'Follow AfroTransact' }).getByRole('link', { name: /Instagram/ })).toHaveAttribute('href', 'https://www.instagram.com/afrotransact');

@@ -39,6 +39,7 @@ export const searchKeys = {
   all: ['search'] as const,
   results: () => [...searchKeys.all, 'results'] as const,
   result: (query: SearchQuery) => [...searchKeys.results(), query] as const,
+  related: (query: SearchQuery) => [...searchKeys.all, 'related', query] as const,
   /** Storefront infinite list: one cache entry per filter set; pages are appended as the shopper scrolls. */
   infinite: (query: SearchQuery) => [...searchKeys.results(), 'infinite', { ...query, page: 0 }] as const,
   suggestions: (q: string) => [...searchKeys.all, 'suggest', q.trim().toLowerCase()] as const,

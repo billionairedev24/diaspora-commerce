@@ -53,6 +53,9 @@ export const productQueries = {
 };
 
 export const searchQueries = {
+  /** Products related to a cart (same department): organic only, so no ad slot is shown or charged for a recommendation. */
+  related: (api: ApiClient, query: SearchQuery) =>
+    queryOptions({ queryKey: searchKeys.related(query), queryFn: ({ signal }) => api.searchOrganic(query, signal), staleTime: 60_000 }),
   results: (api: ApiClient, query: SearchQuery) =>
     queryOptions({ queryKey: searchKeys.result(query), queryFn: ({ signal }) => api.search(query, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
   /** The storefront's results list: page 0 first, the next page whenever the shopper nears the end (no page numbers). */

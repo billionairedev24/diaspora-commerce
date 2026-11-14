@@ -75,11 +75,11 @@
       "needsReview": ["fr", "es", "ar", "yo"]
     },
     "home.services.popular.title": {
-      "en": "Popular services",
-      "fr": "Services populaires",
-      "es": "Servicios populares",
-      "ar": "خدمات شائعة",
-      "yo": "Àwọn iṣẹ́ tó gbajúmọ̀",
+      "en": "Services you can book",
+      "fr": "Services à réserver",
+      "es": "Servicios que puedes reservar",
+      "ar": "خدمات يمكنك حجزها",
+      "yo": "Àwọn iṣẹ́ tí o lè béèrè",
       "needsReview": ["fr", "es", "ar", "yo"]
     },
     "home.services.bookAgain.title": {

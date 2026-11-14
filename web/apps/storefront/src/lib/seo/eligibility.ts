@@ -51,3 +51,13 @@ export function realPhotoUrls(urls: readonly (string | null | undefined)[], orig
   }
   return out;
 }
+
+export interface RelatedCandidate extends SitemapProductCandidate {
+  /** Present when the hit is a paid placement; such hits are never shown as plain recommendations. */
+  sponsor?: unknown;
+}
+
+/** A product may be recommended (cart rail) only when it is in stock with a real photograph, the same rule as the sitemap and the home rails, and is not a paid placement. */
+export function recommendable(p: RelatedCandidate): boolean {
+  return sitemapProductEligible(p) && !p.sponsor;
+}
