@@ -14,8 +14,8 @@ export interface CountdownProps {
   to: string;
   /** "Closes in" / "Opens in" / "Delivers in". */
   label: string;
-  /** chip: ribbon chip · inline: "Closes in 3d 04h…" (PDP, cart) · blocks: hero tiles · bar: the window page strip. */
-  variant: 'chip' | 'inline' | 'blocks' | 'bar';
+  /** chip: ribbon chip · inline: "Closes in 3d 04h…" (PDP, cart) · blocks: hero tiles. */
+  variant: 'chip' | 'inline' | 'blocks';
   /** Called once when the target passes (refetch the resolution: the stage has moved on). */
   onElapsed?: () => void;
   className?: string;
@@ -56,22 +56,6 @@ export function Countdown({ to, label, variant, onElapsed, className }: Countdow
       <span role="timer" aria-live="off" aria-label={aria} className={className} data-testid="preorder-countdown">
         <span aria-hidden>
           {label} <span className={styles.mono}>{short}</span>
-        </span>
-      </span>
-    );
-  if (variant === 'bar')
-    return (
-      <span role="timer" aria-live="off" aria-label={aria} className={cx(styles.cdBar, className)} data-testid="preorder-countdown">
-        <span className={styles.cdBarLabel} aria-hidden>
-          {label}
-        </span>
-        <span className={styles.cdBarValues} aria-hidden>
-          {blocks.map((v, i) => (
-            <span key={units[i]} className={styles.cdBarUnit}>
-              <strong className={styles.cdBarValue}>{v}</strong>
-              <span className={styles.cdBarUnitLabel}>{units[i]}</span>
-            </span>
-          ))}
         </span>
       </span>
     );

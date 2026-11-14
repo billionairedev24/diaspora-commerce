@@ -2,7 +2,7 @@
 
 import { accountQueries, isApiError, preorderKeys, type PreorderPlace, type PreorderResolution } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { TextField, UsersThree } from '@afrotransact/ui';
+import { Button, Message, Section, TextField, UsersThree } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
@@ -66,12 +66,7 @@ export function WaitlistForm({ place }: { place: PreorderPlace }) {
   const [error, setError] = useState<string | null>(null);
   const join = useMutation({ mutationFn: (e: string) => api.joinPreorderWaitlist({ email: e, place }) });
   const value = email || me?.user?.email || '';
-  if (join.isSuccess)
-    return (
-      <p className={styles.waitlistDone} role="status">
-        {t('preorder.waitlist.done', { email: join.variables, city: join.data.city })}
-      </p>
-    );
+  if (join.isSuccess) return <Message tone="success">{t('preorder.waitlist.done', { email: join.variables, city: join.data.city })}</Message>;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(value.trim())) return setError(t('preorder.waitlist.invalid'));
@@ -83,24 +78,21 @@ export function WaitlistForm({ place }: { place: PreorderPlace }) {
       <div className={styles.waitlistField}>
         <TextField label={t('preorder.waitlist.email')} type="email" autoComplete="email" value={value} onChange={(e) => setEmail(e.target.value)} error={error} />
       </div>
-      <button type="submit" className={styles.inkButton} disabled={join.isPending}>
+      <Button type="submit" loading={join.isPending}>
         {t('preorder.waitlist.join')}
-      </button>
+      </Button>
     </form>
   );
 }
 
-/** /pre-orders for a covered city whose pre-order is off: fallback headline and body (and the waitlist form). */
-export function PreorderOffCard({ r, headingLevel = 2 }: { r: PreorderResolution; headingLevel?: 1 | 2 }) {
+/** /pre-orders for a covered city whose pre-order is off: the fallback headline and body over a hairline (and the waitlist form). */
+export function PreorderOffCard({ r }: { r: PreorderResolution }) {
   const t = useT();
   const waitlist = r.fallback === 'WAITLIST';
-  const Heading = headingLevel === 1 ? 'h1' : 'h2';
   return (
-    <section className={styles.offCard} data-testid="preorder-off">
-      <Heading className={styles.offTitle}>{waitlist ? t('preorder.off.headlineWaitlist', { city: r.place.city }) : t('preorder.off.headlineShip')}</Heading>
-      <p className={styles.offBody}>{waitlist ? t('preorder.off.bodyWaitlist') : t('preorder.off.bodyShip')}</p>
+    <Section title={waitlist ? t('preorder.off.headlineWaitlist', { city: r.place.city }) : t('preorder.off.headlineShip')} lead={waitlist ? t('preorder.off.bodyWaitlist') : t('preorder.off.bodyShip')} testId="preorder-off">
       {waitlist && <WaitlistForm place={r.place} />}
-    </section>
+    </Section>
   );
 }
 

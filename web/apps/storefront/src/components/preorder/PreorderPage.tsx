@@ -8,40 +8,22 @@ import {
   type PreorderListItem,
   type PreorderPlace,
   productKeys,
-  type ProductSummary,
   searchKeys,
   SearchQuerySchema,
   siteKeys
 } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import {
-  CalendarCheck,
-  CheckCircle,
-  Circle,
-  CircleHalf,
-  CreditCard,
-  cx,
-  Headset,
-  type Icon,
-  ImagePlaceholder,
-  MapPin,
-  QuantityStepper,
-  Skeleton,
-  Truck,
-  UsersThree,
-  useToast
-} from '@afrotransact/ui';
+import { DefinitionList, FlatPage, PageHeader, Section, Skeleton, StatusText, TextLinkButton, textLinkClassName, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 
+import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
+import searchStyles from '@/components/search/Search.module.css';
 import { useLolaLauncher } from '@/components/shell/LolaLauncher';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchQueries } from '@/lib/api/queries';
-import { lineForOffer, useCart, useCartMutation } from '@/lib/cart/useCart';
-import { productHref } from '@/lib/links';
 import { setAttribution } from '@/lib/preorder/attribution';
 import { preorderDates, preorderRules } from '@/lib/preorder/copy';
 import { type LivePreorder, useLivePreorder, useOpenPreorders, usePreorderResolution } from '@/lib/preorder/usePreorder';
@@ -51,200 +33,105 @@ import styles from './Preorder.module.css';
 import { PREORDER_PATH } from './PreorderBanners';
 import { PreorderOffCard } from './PreorderHome';
 
-const PILL = { OPEN: styles.pillOpen, UPCOMING: styles.pillUpcoming, CLOSED: styles.pillClosed } as const;
-const RULE_ICONS: Icon[] = [CalendarCheck, CreditCard, Truck, Headset];
+const STAGE_TONE = { OPEN: 'positive', UPCOMING: 'neutral', CLOSED: 'warning' } as const;
 
-/** Opens → Closes → Delivered, with the passed steps green and the next one gold. */
-export function PreorderTimeline({ live }: { live: LivePreorder }) {
-  const t = useT();
-  const idx = { UPCOMING: -1, OPEN: 0, CLOSED: 1 }[live.stage];
-  const steps = [
-    [t('preorder.timeline.opens'), live.dates.opensT],
-    [t('preorder.timeline.closes'), live.dates.closesT],
-    [t('preorder.timeline.delivered'), live.dates.deliversT]
-  ] as const;
-  return (
-    <ol className={styles.timeline} aria-label={t('preorder.timeline.label')} data-testid="preorder-timeline">
-      {steps.map(([label, date], i) => {
-        const done = i <= idx;
-        const current = i === idx + 1;
-        const StepIcon = done ? CheckCircle : current ? CircleHalf : Circle;
-        return (
-          <li key={label} className={cx(styles.step, done && styles.stepDone, current && styles.stepCurrent)} aria-current={current ? 'step' : undefined}>
-            <span className={styles.stepLabel}>
-              <StepIcon size={16} weight={done || current ? 'fill' : 'regular'} aria-hidden />
-              {label}
-            </span>
-            <strong className={styles.stepDate}>{date}</strong>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function ProductRow({ p, live }: { p: ProductSummary; live: LivePreorder }) {
-  const t = useT();
-  const fmt = useFormatters();
-  const { data: cart } = useCart();
-  const m = useCartMutation();
-  const line = lineForOffer(cart, p.offerId);
-  const locked = live.copy.addLabel;
-  return (
-    <li className={styles.row}>
-      <span className={styles.rowThumb}>
-        <ImagePlaceholder src={p.imageUrl} alt="" />
-      </span>
-      <span className={styles.rowText}>
-        <Link href={productHref(p.atin)} className={styles.rowName}>
-          {p.title}
-        </Link>
-        <span className={styles.rowSeller}>{p.sellerName}</span>
-      </span>
-      <strong className={styles.rowPrice}>{fmt.money(p.priceMinor, p.currency)}</strong>
-      {line ? (
-        <QuantityStepper
-          value={line.quantity}
-          max={locked ? line.quantity : line.maxQuantity}
-          busy={m.isPending}
-          itemLabel={p.title}
-          onChange={(q) => m.mutate({ kind: 'quantity', lineId: line.lineId, quantity: q, title: p.title })}
-          onRemove={() => m.mutate({ kind: 'remove', lineId: line.lineId, title: p.title })}
-        />
-      ) : (
-        <button
-          type="button"
-          className={styles.addPill}
-          disabled={!!locked || !p.inStock}
-          onClick={() => m.mutate({ kind: 'add', offerId: p.offerId, quantity: 1, title: p.title })}
-          aria-label={`${locked ?? (p.inStock ? t('card.addToCart') : t('card.unavailable'))}: ${p.title}`}
-        >
-          {locked ?? (p.inStock ? t('card.addToCart') : t('card.unavailable'))}
-        </button>
-      )}
-    </li>
-  );
-}
-
-/** One window: banner, stage pill, name, headline, timeline, countdown, "missed it" support, rules and its products. */
-export function PreorderWindowPage({ live }: { live: LivePreorder }) {
+/** Opens, closes and delivery dates as plain definition rows, with the stage and its live countdown on top. */
+function WindowFacts({ live }: { live: LivePreorder }) {
   const t = useT();
   const fmt = useFormatters();
   const qc = useQueryClient();
-  const lola = useLolaLauncher();
   const { r, w, copy, dates, city } = live;
+  const items = [
+    {
+      term: t('preorder.page.status'),
+      value: (
+        <>
+          <StatusText tone={STAGE_TONE[live.stage]}>{copy.stageLabel}</StatusText>
+          {r.countdownTo && (
+            <>
+              {' · '}
+              <Countdown variant="inline" to={r.countdownTo} label={copy.cdLabel} onElapsed={() => void qc.invalidateQueries({ queryKey: preorderKeys.all })} />
+            </>
+          )}
+        </>
+      )
+    },
+    { term: t('preorder.timeline.opens'), value: dates.opensT },
+    { term: t('preorder.timeline.closes'), value: dates.closesT },
+    { term: t('preorder.timeline.delivered'), value: dates.deliversT }
+  ];
+  if (w.showCount && w.count !== null && live.stage !== 'UPCOMING') items.push({ term: t('preorder.page.orders'), value: t('preorder.count', { count: fmt.number(w.count), city }) });
+  return <DefinitionList items={items} testId="preorder-timeline" />;
+}
+
+/** The pre-order products: the search grid, with "Reserve" as the add label. */
+function WindowProducts({ live }: { live: LivePreorder }) {
+  const t = useT();
+  const { w } = live;
   const department = w.departments[0] ?? null;
   const { data: results, isPending } = useQuery(searchQueries.results(browserApi(), SearchQuerySchema.parse({ department, size: 24 })));
   const products = (results?.hits ?? []).filter((h) => h.preorderEligible);
-  const rules = preorderRules(t, fmt, dates, w, r.supportPhone);
-  const hero = w.creatives.hero;
+  const labels = useMemo(() => ({ addToCart: t('preorder.reserve') }), [t]);
   return (
-    <div className={styles.page} data-testid="preorder-page">
-      {hero && (
-        <div className={styles.banner}>
-          <div role="img" aria-label={t('preorder.page.banner', { name: w.name })} className={styles.bannerImage} style={{ backgroundImage: `url("${hero.url}")` }} />
-        </div>
+    <Section title={t('preorder.page.inThis')} lead={w.categories.join(' · ')} id="preorder-products">
+      {isPending ? (
+        <Skeleton height={240} />
+      ) : products.length ? (
+        <ul className={searchStyles.grid} data-testid="preorder-grid">
+          {products.map((p) => (
+            <li key={p.atin} style={{ display: 'grid' }}>
+              <CartAwareProductCard product={p} labels={labels} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={styles.muted}>{t('preorder.page.noProducts')}</p>
       )}
-      <div className={styles.pageGrid}>
-        <div className={styles.col}>
-          <div className={styles.titleBlock}>
-            <span className={cx(styles.pill, PILL[live.stage])}>{copy.stageLabel}</span>
-            <h1 className={styles.pageTitle}>{w.name}</h1>
-            <p className={styles.muted}>{copy.headline}</p>
-          </div>
-          <PreorderTimeline live={live} />
-          {r.countdownTo && (
-            <div className={styles.cdBarWrap}>
-              <Countdown variant="bar" to={r.countdownTo} label={copy.cdLabel} onElapsed={() => void qc.invalidateQueries({ queryKey: preorderKeys.all })} />
-              {w.showCount && w.count !== null && live.stage !== 'UPCOMING' && (
-                <span className={styles.cdBarCount}>
-                  <UsersThree weight="fill" aria-hidden /> {t('preorder.count', { count: fmt.number(w.count), city })}
-                </span>
-              )}
-            </div>
-          )}
-          {live.stage === 'CLOSED' && (
-            <div className={styles.missed} data-testid="preorder-missed">
-              <Headset weight="fill" className={styles.missedIcon} aria-hidden />
-              <span className={styles.missedBody}>
-                <strong>{t('preorder.missed.title')}</strong>
-                <span className={styles.missedText}>{t('preorder.missed.body', { phone: r.supportPhone })}</span>
-                <span className={styles.missedActions}>
-                  <button type="button" className={styles.inkButton} onClick={() => lola.open()}>
-                    {t('preorder.missed.chat')}
-                  </button>
-                  <a href={`tel:${r.supportPhone.replace(/[^+\d]/g, '')}`}>
-                    <strong>{r.supportPhone}</strong>
-                  </a>
-                </span>
-              </span>
-            </div>
-          )}
-          <ul className={styles.rules} aria-label={t('preorder.rules.label')}>
-            {rules.map((text, i) => {
-              const RuleIcon = RULE_ICONS[i] ?? CalendarCheck;
-              return (
-                <li key={text} className={styles.rule}>
-                  <RuleIcon className={styles.ruleIcon} aria-hidden />
-                  <span>{text}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-        <section className={styles.col} aria-labelledby="preorder-products">
-          <div className={styles.listHead}>
-            <h2 id="preorder-products" className={styles.h3}>
-              {t('preorder.page.inThis')}
-            </h2>
-            <span className={styles.cats}>{w.categories.join(' · ')}</span>
-          </div>
-          {isPending ? (
-            <Skeleton height={240} />
-          ) : products.length ? (
-            <ul className={styles.rows}>
-              {products.map((p) => (
-                <ProductRow key={p.atin} p={p} live={live} />
-              ))}
-            </ul>
-          ) : (
-            <p className={styles.muted}>{t('preorder.page.noProducts')}</p>
-          )}
-        </section>
-      </div>
-      <OtherOpenWindows currentId={w.id} />
-    </div>
+    </Section>
   );
 }
 
-function OffCard({ w, onShop, busy }: { w: PreorderListItem; onShop: (w: PreorderListItem) => void; busy: boolean }) {
+/** One window: header with the order-by and delivery dates, its dates and countdown, "missed it" support, the rules and its products. */
+export function PreorderWindowPage({ live }: { live: LivePreorder }) {
   const t = useT();
   const fmt = useFormatters();
-  const d = preorderDates(w, fmt.tag);
-  const open = w.stage === 'OPEN';
+  const lola = useLolaLauncher();
+  const { r, w, dates } = live;
+  const rules = preorderRules(t, fmt, dates, w, r.supportPhone);
   return (
-    <li className={styles.offCardItem} data-testid="preorder-card">
-      <div role="img" aria-label={w.name} className={styles.offImage} style={w.heroUrl ? { backgroundImage: `url("${w.heroUrl}")` } : undefined} />
-      <div className={styles.offCardBody}>
-        <span className={cx(styles.offPill, open ? styles.pillOpen : styles.pillUpcoming)}>{open ? t('preorder.stage.open') : t('preorder.stage.upcoming')}</span>
-        <strong className={styles.offName}>{w.name}</strong>
-        <span className={styles.offWhere}>
-          <MapPin aria-hidden /> {w.where}
-        </span>
-        <span className={styles.offLabel}>
-          {open ? t('preorder.off.labelOpen', { closes: d.closesS, delivers: d.deliversS }) : t('preorder.off.labelUpcoming', { opens: d.opensS, delivers: d.deliversS })}
-        </span>
-        <button type="button" className={cx(styles.inkButton, styles.offCta)} onClick={() => onShop(w)} disabled={busy}>
-          {t('preorder.off.shopFor', { city: w.place.city })}
-        </button>
+    <FlatPage width="wide">
+      <div data-testid="preorder-page" className={styles.flow}>
+        <PageHeader title={w.name} lead={t('preorder.page.lead', { closes: dates.closesT, delivers: dates.deliversT })} />
+        <WindowFacts live={live} />
+        {live.stage === 'CLOSED' && (
+          <Section title={t('preorder.missed.title')} testId="preorder-missed">
+            <p className={styles.muted}>{t('preorder.missed.body', { phone: r.supportPhone })}</p>
+            <p className={styles.actions}>
+              <TextLinkButton onClick={() => lola.open()}>{t('preorder.missed.chat')}</TextLinkButton>
+              <a className={textLinkClassName} href={`tel:${r.supportPhone.replace(/[^+\d]/g, '')}`}>
+                {r.supportPhone}
+              </a>
+            </p>
+          </Section>
+        )}
+        <Section title={t('preorder.rules.label')} id="preorder-rules">
+          <ul className={styles.rules}>
+            {rules.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </Section>
+        <WindowProducts live={live} />
+        <OtherOpenWindows currentId={w.id} />
       </div>
-    </li>
+    </FlatPage>
   );
 }
 
-/** Windows (open and upcoming, or only open) with the "Shop for <city>" action that switches the shopper's delivery place. */
+/** Windows by place as plain rows: name, place, order-by and delivery dates, and the "Shop for <city>" action that switches the delivery place. */
 function WindowList({ windows, isPending }: { windows: PreorderListItem[]; isPending: boolean }) {
   const t = useT();
+  const fmt = useFormatters();
   const qc = useQueryClient();
   const toast = useToast();
   const router = useRouter();
@@ -268,12 +155,27 @@ function WindowList({ windows, isPending }: { windows: PreorderListItem[]; isPen
       setBusy(false);
     }
   };
-  if (isPending) return <Skeleton height={220} />;
+  if (isPending) return <Skeleton height={120} />;
   return (
-    <ul className={styles.offList}>
-      {windows.map((w) => (
-        <OffCard key={w.id} w={w} onShop={(x) => void shop(x)} busy={busy} />
-      ))}
+    <ul className={styles.windows}>
+      {windows.map((w) => {
+        const d = preorderDates(w, fmt.tag);
+        const open = w.stage === 'OPEN';
+        return (
+          <li key={w.id} className={styles.window} data-testid="preorder-card">
+            <div className={styles.windowMain}>
+              <strong className={styles.windowName}>{w.name}</strong>
+              <span className={styles.windowDetail}>
+                {w.where} · {open ? t('preorder.off.labelOpen', { closes: d.closesS, delivers: d.deliversS }) : t('preorder.off.labelUpcoming', { opens: d.opensS, delivers: d.deliversS })}
+              </span>
+            </div>
+            <StatusText tone={open ? 'positive' : 'neutral'}>{open ? t('preorder.stage.open') : t('preorder.stage.upcoming')}</StatusText>
+            <TextLinkButton onClick={() => void shop(w)} disabled={busy}>
+              {t('preorder.off.shopFor', { city: w.place.city })}
+            </TextLinkButton>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -285,29 +187,29 @@ function OtherOpenWindows({ currentId }: { currentId: string }) {
   const others = (data?.windows ?? []).filter((w) => w.stage === 'OPEN' && w.id !== currentId).sort((x, y) => x.where.localeCompare(y.where));
   if (!isPending && !others.length) return null;
   return (
-    <section className={styles.col} aria-labelledby="preorder-others" data-testid="preorder-other-windows">
-      <h2 id="preorder-others" className={styles.h3}>
-        {t('preorder.others.title')}
-      </h2>
-      <p className={styles.muted}>{t('preorder.others.body')}</p>
+    <Section title={t('preorder.others.title')} lead={t('preorder.others.body')} id="preorder-others" testId="preorder-other-windows">
       <WindowList windows={others} isPending={isPending} />
-    </section>
+    </Section>
   );
 }
 
-/** No live pre-order for the shopper's place: open and upcoming windows elsewhere ("shop one for family"). */
-export function PreorderOffPage({ city }: { city: string }) {
+/** No live pre-order for the shopper's place: the fallback statement (when the city is covered) and the windows elsewhere ("shop one for family"). */
+export function PreorderOffPage({ city, fallback }: { city: string; fallback?: ReactNode }) {
   const t = useT();
   const { data: open, isPending } = useOpenPreorders();
   const windows = open?.windows ?? [];
   return (
-    <div className={styles.page} data-testid="preorder-off-page">
-      <div className={styles.offHead}>
-        <h1 className={styles.offTitle}>{t('preorder.off.title')}</h1>
-        <p className={styles.offBody}>{windows.length ? t('preorder.off.some', { city }) : t('preorder.off.none')}</p>
+    <FlatPage width="wide">
+      <div data-testid="preorder-off-page" className={styles.flow}>
+        <PageHeader title={t('preorder.off.title')} lead={windows.length ? t('preorder.off.some', { city }) : t('preorder.off.none')} />
+        {fallback}
+        {(isPending || windows.length > 0) && (
+          <Section title={t('preorder.windows.title')} id="preorder-windows">
+            <WindowList windows={windows} isPending={isPending} />
+          </Section>
+        )}
       </div>
-      <WindowList windows={windows} isPending={isPending} />
-    </div>
+    </FlatPage>
   );
 }
 
@@ -330,12 +232,7 @@ function PreorderViewBody({ placeParam }: { placeParam: string | null }) {
   if (live) return <PreorderWindowPage live={live} />;
   // The ship / waitlist fallback is for a covered city whose pre-order is off; other cities just see the list.
   if (r && preorderFallback(r) && !place) {
-    return (
-      <>
-        <PreorderOffCard r={r} />
-        <PreorderOffPage city={r.place.city} />
-      </>
-    );
+    return <PreorderOffPage city={r.place.city} fallback={<PreorderOffCard r={r} />} />;
   }
   return <PreorderOffPage city={r?.place.city ?? ''} />;
 }

@@ -2,7 +2,7 @@
 
 import { type ProductSummary } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { ProductCard } from '@afrotransact/ui';
+import { ProductCard, type ProductCardLabels } from '@afrotransact/ui';
 import { useMemo } from 'react';
 
 import { useT } from '@/i18n/t';
@@ -33,8 +33,9 @@ export function useCardLabels() {
 }
 
 /** Product card wired to the cart: "Add to cart" becomes a −/+ stepper capped by stock; pre-order badge and lock (S273). */
-export function CartAwareProductCard({ product, variant = 'grid', showDelivery }: { product: ProductSummary; variant?: 'grid' | 'rail'; showDelivery?: boolean }) {
-  const cardLabels = useCardLabels();
+export function CartAwareProductCard({ product, variant = 'grid', showDelivery, labels }: { product: ProductSummary; variant?: 'grid' | 'rail'; showDelivery?: boolean; labels?: Partial<ProductCardLabels> }) {
+  const defaultLabels = useCardLabels();
+  const cardLabels = useMemo(() => ({ ...defaultLabels, ...labels }), [defaultLabels, labels]);
   const fmt = useFormatters();
   const { data: cart } = useCart();
   const m = useCartMutation();

@@ -365,12 +365,37 @@ describe('storefront pre-order states (mock BFF)', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Amarillo Pre-order #4' })).toBeVisible();
     expect(screen.getByText('Closed')).toBeVisible();
     expect(screen.getByTestId('preorder-missed')).toHaveTextContent('Missed the closing date?');
-    const rules = screen.getByRole('list', { name: 'How this pre-order works' });
+    const rules = within(screen.getByRole('region', { name: 'How this pre-order works' })).getByRole('list');
     expect(within(rules).getAllByRole('listitem')).toHaveLength(4);
     // Amarillo #4 offers door delivery only: the rule quotes the door fee without pickup.
     expect(rules).toHaveTextContent(/Everything is delivered on \w{3}, \w{3} \d+, \$7\.99 flat\. There's no minimum order count\./);
-    const steps = within(screen.getByTestId('preorder-timeline')).getAllByRole('listitem');
-    expect(steps[2]).toHaveAttribute('aria-current', 'step');
+    const facts = screen.getByTestId('preorder-timeline');
+    expect(facts).toHaveTextContent('Opens');
+    expect(facts).toHaveTextContent('Closes');
+    expect(facts).toHaveTextContent('Delivered');
+    expect(facts).toHaveTextContent('Closed');
+  });
+
+  it('window page is flat: one h1 with the order-by lead, "Reserve" on the shared product card, no ribbon, banner or timer bar', async () => {
+    await api().setDeliveryLocation({ zip: '79401' });
+    renderWithProviders(<PreorderView placeParam={null} />);
+    const h1 = await screen.findByRole('heading', { level: 1, name: 'Lubbock Pre-order #7' });
+    expect(h1.closest('header')).toHaveTextContent(/Order by .*\. Everything is delivered together on /);
+    expect(screen.getByTestId('preorder-countdown')).toHaveAttribute('role', 'timer');
+    const grid = await screen.findByTestId('preorder-grid');
+    const reserve = (await within(grid).findAllByRole('button', { name: /^Reserve:/ }))[0];
+    expect(reserve).toHaveTextContent('Reserve');
+    expect(within(grid).queryByRole('button', { name: /^Add to cart/ })).toBeNull();
+    expect(screen.queryByRole('img', { name: /banner/ })).toBeNull();
+  });
+
+  it('closed window locks the cards with the stage label instead of "Reserve"', async () => {
+    await api().setDeliveryLocation({ zip: '79101' });
+    renderWithProviders(<PreorderView placeParam={null} />);
+    const grid = await screen.findByTestId('preorder-grid');
+    await within(grid).findAllByRole('button');
+    expect(within(grid).queryByRole('button', { name: /^Reserve:/ })).toBeNull();
+    for (const b of within(grid).getAllByRole('button')) expect(b).toBeDisabled();
   });
 
   it('window page lists the other open windows by place below it, never itself', async () => {
