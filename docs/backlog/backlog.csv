@@ -1783,3 +1783,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Strings in the five locales (machine drafts flagged needsReview); staff docs and runbooks point at the new location
 - Java unit tests, Go gateway tests, vitest, tsc and eslint pass
 - Verified against the live local stack (real tax-returns, BFF, seller directory and catalog) with a Docker Testcontainers run of the tax-returns integration tests","E25","","High","5","staff-console tax i18n","staff-console","In Review"
+"S441","Story","Flat /pre-orders page (theme standards)","Owner complaint: /pre-orders did not meet the theme standards. Rebuilt on the flat primitives: PageHeader with a one-line lead, hairline sections, windows by place as plain rows with order-by and delivery dates, the shared product card with a Reserve CTA, the inline countdown only, flat waitlist and closed states. Customer copy no longer says AfroTransact delivers or collects.","- PageHeader (Fraunces h1 plus one-line lead) and hairline Sections; no boxes, dark bars, bordered timeline or icon bullets
+- Open windows listed by place with plain order-by and delivery dates; live page lists the other open windows
+- Products use the shared CartAwareProductCard in the search grid with a Reserve CTA (optional labels prop); closed and upcoming show the stage lock label
+- Only the inline Countdown remains; the bar variant and every unused CSS rule are deleted
+- Waitlist, ship and closed states are flat; tokens only, white canvas, no scrollbars, logical properties for Arabic RTL
+- New and changed copy exists in en, fr, es, yo and ar (i18n catalog test passes)
+- Vitest covers the window page, Reserve label, closed lock, other windows and waitlist; axe shows no WCAG 2.1 AA violations on live, closed, waitlist and ship at 1280 and 390 with no horizontal scroll
+- Arabic RTL rendering and the Playwright specs verified against a running stack","E23","","High","3","storefront design preorder","storefront-web","In Progress"

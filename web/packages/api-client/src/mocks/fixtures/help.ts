@@ -13,7 +13,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ]
   },
   {
-    slug: 'shipping', topic: 'ORDERS_DELIVERY', topicTitle: 'Orders & delivery', title: 'Shipping & delivery', summary: 'Delivery by AfroTransact and pickup.', updatedAt: UPDATED,
+    slug: 'shipping', topic: 'ORDERS_DELIVERY', topicTitle: 'Orders & delivery', title: 'Shipping & delivery', summary: 'Delivery and pickup.', updatedAt: UPDATED,
     sections: [
       { heading: 'Delivery fee', body: 'AfroTransact sets delivery for every order: delivery by AfroTransact at one flat fee, or pickup for free. Tracking updates arrive automatically.' },
       { heading: 'AfroTransact Delivery', body: 'Our own drivers deliver same-day or next-day in Houston, Edison/Iselin and Atlanta, with a photo and a one-time code.' },

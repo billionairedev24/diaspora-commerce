@@ -156,8 +156,14 @@ Every link carries `?src=<channel>&po=<CODE>&cr=<slot>`.
 - **Send to family** banner (placement `family`): metro shopper with a saved address in a pre-order city.
 - **Home hero** (placement `hero`): hero creative, kicker, headline, countdown blocks (days/hrs/min/sec), timeline
   Opens → Closes → Delivered, CTA, live count "142 pre-orders from Lubbock so far" when `showCount`.
-- **`/pre-orders`** page: off-page list of open/upcoming windows (`openList`); per-window page with rules (4 bullets),
-  timeline, products in the window's categories, "missed it" support block (phone).
+- **`/pre-orders`** page (flat, Amazon-style, no boxes or dark bars): `PageHeader` (Fraunces h1 and a one-line lead, `preorder.page.lead`:
+  "Order by {closes}. Everything is delivered together on {delivers}."), then hairline `Section`s. Window page: dates and stage
+  with the inline countdown as definition rows (`preorder-timeline`), the "missed it" support block when closed (plain text and text
+  links, phone), the four rules as a plain list, the window's products in the search grid (`CartAwareProductCard`, CTA "Reserve" via
+  its `labels` prop; locked stages show the stage label), then "Open pre-orders in other places". Off page: fallback statement and
+  waitlist form (or the ship explanation) over the list of open/upcoming windows by place (`openList`), each row with plain order-by
+  and delivery dates and "Shop for <city>". Only the `inline` countdown is used on the page (the `bar` variant is gone). Customer
+  copy never says AfroTransact delivers or collects ("Ships now", "Delivery").
 - **Badge** on product cards/search: "Pre-order · delivered Oct 25" / "Pre-order opens Oct 6" / "Pre-order closed";
   non-pre-order items show "Ships now · UPS Ground 3–5 days" (or "Arrives tomorrow" in metro).
 - **PDP**: pre-order delivery box + note (charged at checkout, cancel free until close), PDP banner creative

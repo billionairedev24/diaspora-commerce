@@ -43,7 +43,7 @@ test.describe('storefront · pre-orders (S273)', () => {
     await expect(ribbon).toContainText(/· \$7\.99 flat/);
     await expect(ribbon.getByRole('timer')).toHaveAttribute('aria-live', 'off');
     await expect(ribbon.getByRole('timer')).toHaveAttribute('aria-label', /^Closes in \d+ days, \d+ hours, \d+ minutes$/);
-    await expect(page.getByRole('list', { name: 'How this pre-order works' }).getByRole('listitem')).toHaveCount(4);
+    await expect(page.getByRole('region', { name: 'How this pre-order works' }).getByRole('listitem')).toHaveCount(4);
     await expect(page.getByTestId('preorder-timeline')).toContainText('Opens');
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'storefront pre-order window' });
   });
