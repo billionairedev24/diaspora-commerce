@@ -27,7 +27,13 @@ const nextConfig: NextConfig = {
     return [
       { source: '/listings/new/:step+', destination: '/listings/new', permanent: true },
       { source: '/listings/builder/:step*', destination: '/listings/new', permanent: true },
-      { source: '/listings/upload', destination: '/listings/bulk', permanent: true }
+      { source: '/listings/upload', destination: '/listings/bulk', permanent: true },
+      // Settings are one area, one page per section (docs/engineering/seller-settings.md): the old homes redirect there.
+      { source: '/orders/ship-from', destination: '/settings/locations', permanent: true },
+      { source: '/team', destination: '/settings/team', permanent: true },
+      { source: '/team/business-page', destination: '/settings/business', permanent: true },
+      { source: '/account/notifications', destination: '/settings/notifications', permanent: true },
+      { source: '/account/preferences', destination: '/settings/language', permanent: true }
     ];
   }
 };

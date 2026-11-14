@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FulfilmentSheet } from '@/components/listings/FulfilmentSheet';
 import { FeesView } from '@/components/money/FeesView';
 import { OrderSheet } from '@/components/orders/OrderSheet';
-import { ShipFromView } from '@/components/orders/ShipFromView';
+import { LocationsView } from '@/components/settings/LocationsView';
+import { ShippingView } from '@/components/settings/ShippingView';
 
 import { asRole, mockApi } from './mock-api';
 import { renderScreen } from './render';
@@ -18,13 +19,20 @@ describe('AfroTransact pickup and delivery fee', () => {
     asRole(null);
   });
 
-  it('shows where geo placed each ship-from address and turns pickup on with hours', async () => {
+  it('shows where geo placed each location (Settings > Locations)', async () => {
+    await renderScreen(<LocationsView />);
+    const rows = await screen.findAllByTestId('ship-from-address');
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0] as HTMLElement).getByTestId('ship-from-position')).toHaveTextContent('29.6713, -95.5559');
+    // Pickup and shipping hours are on their own pages, not here.
+    expect(within(rows[0] as HTMLElement).queryByRole('form')).toBeNull();
+    expect(within(rows[0] as HTMLElement).getByRole('link', { name: 'Pickup settings' })).toHaveAttribute('href', '/settings/pickup');
+  });
+
+  it('turns AfroTransact driver pickup on with hours (Settings > Shipping & delivery)', async () => {
     const user = userEvent.setup();
-    await renderScreen(<ShipFromView />);
-    const cards = await screen.findAllByTestId('ship-from-address');
-    expect(cards).toHaveLength(2);
-    expect(within(cards[0] as HTMLElement).getByTestId('ship-from-position')).toHaveTextContent('29.6713, -95.5559');
-    // The AfroTransact (driver) pickup form of the Katy address; customer pickup has its own form next to it.
+    await renderScreen(<ShippingView />);
+    const cards = await screen.findAllByTestId('shipping-location');
     const katy = within(cards[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
     const toggle = within(katy).getByLabelText(/AfroTransact picks up here/);
     expect(toggle).not.toBeChecked();
@@ -41,41 +49,18 @@ describe('AfroTransact pickup and delivery fee', () => {
     await waitFor(async () => expect((await mockApi().listShipFrom())[1]?.afrotransactPickup.enabled).toBe(true));
   });
 
-  it('lets customers pick up at a store address: hours and ready time, offered at checkout', async () => {
-    const user = userEvent.setup();
-    await renderScreen(<ShipFromView />);
-    const cards = await screen.findAllByTestId('ship-from-address');
-    expect(within(cards[0] as HTMLElement).getByTestId('customer-pickup')).toHaveTextContent('Customers can pick up');
-    const katy = within(cards[1] as HTMLElement).getByTestId('customer-pickup');
-    // Why customers do not see this address as a pickup point is said in plain words, not left to guesswork.
-    expect(within(katy).getByTestId('customer-pickup-issues')).toHaveTextContent('Customers can’t pick up here yet');
-    expect(within(cards[0] as HTMLElement).queryByTestId('customer-pickup-issues')).toBeNull();
-    await user.click(within(katy).getByLabelText(/Customers can pick up their orders here/));
-    expect(within(katy).getAllByTestId('customer-pickup-window')).toHaveLength(1);
-    const ready = within(katy).getByLabelText('Ready after (hours)');
-    await user.clear(ready);
-    await user.type(ready, '999');
-    await user.click(within(katy).getByRole('button', { name: 'Save customer pickup' }));
-    expect(await within(katy).findByText('Enter 0 to 168 hours')).toBeInTheDocument();
-    await user.clear(ready);
-    await user.type(ready, '4');
-    await user.click(within(katy).getByRole('button', { name: 'Save customer pickup' }));
-    await waitFor(async () => expect((await mockApi().listShipFrom())[1]?.customerPickup).toMatchObject({ enabled: true, readyHours: 4 }));
-  });
-
-  it('explains why pickup can’t be turned on: outside the area, not geocoded', async () => {
+  it('explains why driver pickup can’t be turned on: outside the area, not geocoded', async () => {
     const user = userEvent.setup();
     const api = mockApi();
     await api.createShipFrom({ name: 'Ade Okafor', line1: '500 Congress Ave', line2: '', city: 'Austin', state: 'TX', postalCode: '78701', phone: '', label: 'Austin' });
     await api.createShipFrom({ name: 'Ade Okafor', line1: '1 Unknown Rd', line2: '', city: 'Houston', state: 'TX', postalCode: '00000', phone: '', label: 'Nowhere' });
-    await renderScreen(<ShipFromView />);
-    const cards = await screen.findAllByTestId('ship-from-address');
+    await renderScreen(<ShippingView />);
+    const cards = await screen.findAllByTestId('shipping-location');
     const austin = cards[2] as HTMLElement;
     await user.click(within(austin).getByLabelText(/AfroTransact picks up here/));
     await user.click(within(austin).getByRole('button', { name: 'Save pickup settings' }));
     expect(await within(austin).findByRole('alert')).toHaveTextContent('outside the AfroTransact delivery area');
     const nowhere = cards[3] as HTMLElement;
-    expect(within(nowhere).getByText('We couldn’t locate this address yet.')).toBeInTheDocument();
     await user.click(within(nowhere).getByLabelText(/AfroTransact picks up here/));
     await user.click(within(nowhere).getByRole('button', { name: 'Save pickup settings' }));
     expect(await within(nowhere).findByRole('alert')).toHaveTextContent('couldn’t locate this address at street level');

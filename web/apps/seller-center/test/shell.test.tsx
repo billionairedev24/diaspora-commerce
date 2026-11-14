@@ -27,10 +27,19 @@ describe('portal shell', () => {
 
   it('shows the owner every seller module, grouped, with the payouts-paused banner', async () => {
     renderWithProviders(<PortalShell><p>page body</p></PortalShell>);
-    await waitFor(async () => expect(await navHrefs()).toEqual(['/', '/orders', '/returns', '/disputes', '/listings', '/reviews', '/inventory', '/coupons', '/payouts', '/fees', '/billing', '/account-health', '/team']));
+    await waitFor(async () => expect(await navHrefs()).toEqual(['/', '/orders', '/returns', '/disputes', '/listings', '/reviews', '/inventory', '/coupons', '/payouts', '/fees', '/billing', '/account-health', '/settings']));
     expect(screen.getByRole('button', { name: /commerce/i })).toHaveAttribute('aria-expanded', 'false');
     expect(await screen.findByText('Payouts are paused.')).toBeInTheDocument();
     expect(screen.getByText('page body')).toBeInTheDocument();
+    // Team & roles lives under Settings now: one Settings entry in the sidebar, no separate Team link.
+    expect(screen.getAllByRole('link', { name: 'Settings' })[0]).toHaveAttribute('href', '/settings');
+  });
+
+  it('opens Settings pages for an approved member and marks Settings as the current area', async () => {
+    nav.pathname = '/settings/pickup';
+    renderWithProviders(<PortalShell><p>pickup body</p></PortalShell>);
+    expect(await screen.findByText('pickup body')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Settings' })[0]).toHaveAttribute('aria-current', 'page');
   });
 
   it('hides modules the role cannot open and shows an access notice on direct visits', async () => {
@@ -79,7 +88,7 @@ describe('My account in Seller Center', () => {
     await user.click(await screen.findByRole('button', { name: /Account menu for/ }));
     const items = await screen.findAllByRole('menuitem');
     const links = Object.fromEntries(items.map((i) => [i.textContent?.trim() ?? '', i.getAttribute('href')]));
-    expect(links).toMatchObject({ 'My account': '/account', 'Sign-in & security': '/account/security', Notifications: '/account/notifications', Preferences: '/account/preferences' });
+    expect(links).toMatchObject({ 'My account': '/account', 'Sign-in & security': '/account/security', Notifications: '/settings/notifications', 'Language & number format': '/settings/language' });
     const storefront = items.find((i) => i.textContent?.includes('Open AfroTransact'));
     expect(storefront).toHaveAttribute('target', '_blank');
     expect(storefront?.getAttribute('href')).toMatch(/^http/);

@@ -72,8 +72,13 @@ export function Header({ session, menuButton }: { session: SellerSession | null;
           links={[
             { label: at('nav.title'), href: ACCOUNT_ROUTES.profile, icon: <UserCircle aria-hidden /> },
             { label: at('nav.security'), href: ACCOUNT_ROUTES.security, icon: <ShieldCheck aria-hidden /> },
-            { label: at('nav.notifications'), href: ACCOUNT_ROUTES.notifications, icon: <BellSimple aria-hidden /> },
-            { label: at('nav.preferences'), href: ACCOUNT_ROUTES.preferences, icon: <SlidersHorizontal aria-hidden /> },
+            // Alerts and language live under Settings (approved organisations); nothing to open before approval.
+            ...(session.approved
+              ? [
+                  { label: t('sc.settings.notifications.title'), href: '/settings/notifications', icon: <BellSimple aria-hidden /> },
+                  { label: t('sc.settings.language.title'), href: '/settings/language', icon: <SlidersHorizontal aria-hidden /> }
+                ]
+              : []),
             { label: t('sc.header.openStorefront'), href: storefrontUrl, icon: <Storefront aria-hidden />, external: true }
           ]}
           signOutLabel={t('sc.header.signOut')}

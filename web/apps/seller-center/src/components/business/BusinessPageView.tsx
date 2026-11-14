@@ -3,11 +3,11 @@
 import { type BusinessPageSettings, isApiError, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { Button, buttonClassName, Field, fieldStyles, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { LogoField } from '@/components/onboarding/steps/LogoField';
-import { PageHeader } from '@/components/ui/PageHeader';
+import { OfferServices } from '@/components/account/OfferServices';
+import { SettingsPage } from '@/components/settings/SettingsShell';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { useStorefrontUrl } from '@/lib/runtime-config';
@@ -58,14 +58,8 @@ export function BusinessPageView() {
     }
   });
 
-  const header = <PageHeader tour="page-business-page" title="Business page" description="The plain public page for your business: your logo, colour and what you offer. Shoppers and Stripe see it." />;
   if (!q.data || !v) {
-    return (
-      <>
-        {header}
-        {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : <Spinner />}
-      </>
-    );
+    return <SettingsPage section="business">{q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : <Spinner />}</SettingsPage>;
   }
   const page = q.data;
   const editable = page.canEdit;
@@ -80,8 +74,7 @@ export function BusinessPageView() {
   const href = page.slug ? `${storefront.replace(/\/+$/, '')}/b/${page.slug}` : null;
 
   return (
-    <>
-      {header}
+    <SettingsPage section="business">
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <form
           className="flex min-w-0 flex-col gap-4"
@@ -110,7 +103,7 @@ export function BusinessPageView() {
               className="mb-[calc(var(--at-space-1)+14px)] size-11 cursor-pointer rounded-sm border-0 bg-transparent p-0 sm:size-9"
             />
           </div>
-          <Field label="What you offer" help={`A few sentences. ${v.description.length}/${MAX_DESCRIPTION}`} error={errors.description}>
+          <Field label="What you sell or do" help={`A few sentences. ${v.description.length}/${MAX_DESCRIPTION}`} error={errors.description}>
             {(a11y) => (
               <textarea {...a11y} className={fieldStyles.control} rows={5} maxLength={MAX_DESCRIPTION} value={v.description} onChange={(e) => patch({ description: e.target.value })} disabled={!editable} />
             )}
@@ -154,9 +147,7 @@ export function BusinessPageView() {
           )}
         </section>
       </div>
-      <Link href="/team" className="text-sm underline">
-        Back to Team &amp; roles
-      </Link>
-    </>
+      <OfferServices />
+    </SettingsPage>
   );
 }

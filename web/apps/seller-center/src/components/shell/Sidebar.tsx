@@ -2,13 +2,59 @@
 
 import { type ModuleKey, type NavGroup, type OrgSummary, type SellerSession } from '@afrotransact/api-client';
 import { cx, Menu, MenuGroup, MenuItem } from '@afrotransact/ui';
-import { CaretDown, CaretUp, CaretUpDown, Check } from '@phosphor-icons/react/ssr';
+import { CaretDown, CaretUp, CaretUpDown, Check, Gear } from '@phosphor-icons/react/ssr';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { MODULE_ICONS } from '@/lib/modules';
 import { hrefOf } from '@/lib/routes';
+
+/** Modules that live under Settings now (shown there, not in the sidebar). */
+const SETTINGS_MODULES = new Set<ModuleKey>(['team']);
+
+/** The sidebar's groups without the modules that moved into Settings; a group left empty is dropped. */
+export function sidebarGroups(session: SellerSession): NavGroup[] {
+  if (!session.approved) return session.navGroups;
+  return session.navGroups.map((g) => ({ ...g, modules: g.modules.filter((m) => !SETTINGS_MODULES.has(m.key)) })).filter((g) => g.modules.length > 0);
+}
+
+function SettingsLink({ session, rail = false }: { session: SellerSession; rail?: boolean }) {
+  const t = useT();
+  const current = /^\/settings(\/|$)/.test(usePathname());
+  if (!session.approved) return null;
+  const label = t('sc.settings.title');
+  if (rail) {
+    return (
+      <div className="border-t border-border pt-2">
+        <Link
+          href="/settings"
+          aria-current={current ? 'page' : undefined}
+          title={label}
+          className={cx('relative flex size-11 items-center justify-center rounded-sm text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline', current && 'bg-gold-100 hover:bg-gold-100')}
+        >
+          <Gear size={20} aria-hidden weight={current ? 'fill' : 'regular'} />
+          <span className="at-visually-hidden">{label}</span>
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <Link
+      href="/settings"
+      data-tour="nav-settings"
+      aria-current={current ? 'page' : undefined}
+      className={cx(
+        'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline pointer-coarse:h-11',
+        current ? 'bg-gold-100 font-bold hover:bg-gold-100' : 'font-normal'
+      )}
+    >
+      <Gear size={18} aria-hidden weight={current ? 'fill' : 'regular'} />
+      <span className="flex-1 truncate">{label}</span>
+    </Link>
+  );
+}
 
 function orgSub(o: OrgSummary): string {
   const kind = o.kind === 'PROVIDER' ? 'Service provider' : 'Seller';
@@ -116,15 +162,17 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
 /** Grouped sidebar: collapsible groups, role-aware entries, org switcher on top, access note at the bottom. */
 export function Sidebar({ session, active, onSwitch, switching }: { session: SellerSession; active: ModuleKey | null; onSwitch: (orgId: string) => void; switching: boolean }) {
   const t = useT();
-  const single = session.navGroups.length === 1;
+  const groups = sidebarGroups(session);
+  const single = groups.length === 1;
   return (
     <nav aria-label={t('sc.sidebar.backOffice')} data-tour="sidebar" className="flex h-full flex-col gap-0.5 px-3 pt-4 pb-[calc(1rem+var(--at-chat-fab-clear,0px))]">
       <div className="pb-3" data-tour="org-switcher">
         <OrgSwitcher session={session} onSwitch={onSwitch} busy={switching} />
       </div>
-      {session.navGroups.map((g) => (
+      {groups.map((g) => (
         <NavGroupSection key={`${session.activeOrg?.id}-${g.key}`} group={g} active={active} single={single} />
       ))}
+      <SettingsLink session={session} />
       <p className="mt-auto px-2 pt-3 text-2xs leading-normal text-subtle">
         {t('sc.sidebar.access')} <strong>{session.activeOrg?.roleLabel ?? '—'}</strong>
         <br />
@@ -139,7 +187,7 @@ export function SidebarRail({ session, active }: { session: SellerSession; activ
   const t = useT();
   return (
     <nav aria-label={t('sc.sidebar.backOffice')} className="flex flex-col gap-2 px-2 pt-3 pb-[calc(0.75rem+var(--at-chat-fab-clear,0px))]">
-      {session.navGroups.map((g, gi) => (
+      {sidebarGroups(session).map((g, gi) => (
         <ul key={`${session.activeOrg?.id}-${g.key}`} aria-label={g.label} className={cx('m-0 flex list-none flex-col items-center gap-1 p-0', gi > 0 && 'border-t border-border pt-2')}>
           {g.modules.map((m) => {
             const Icon = MODULE_ICONS[m.key];
@@ -161,6 +209,7 @@ export function SidebarRail({ session, active }: { session: SellerSession; activ
           })}
         </ul>
       ))}
+      <SettingsLink session={session} rail />
     </nav>
   );
 }

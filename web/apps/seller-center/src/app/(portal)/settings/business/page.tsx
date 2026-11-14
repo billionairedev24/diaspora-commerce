@@ -2,8 +2,8 @@ import { type Metadata } from 'next';
 
 import { BusinessPageView } from '@/components/business/BusinessPageView';
 
-export const metadata: Metadata = { title: 'Business page' };
+export const metadata: Metadata = { title: 'Business profile' };
 
-export default function BusinessPagePage() {
+export default function Page() {
   return <BusinessPageView />;
 }

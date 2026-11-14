@@ -96,7 +96,7 @@ function OfferFulfilment({ offer, locations, editable }: { offer: SellerOffer; l
             tone="warning"
             title={t('sc.ff.noLocations')}
             action={
-              <Link href="/orders/ship-from" className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
+              <Link href="/settings/shipping" className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
                 {t('sc.ff.setUpPickup')}
               </Link>
             }

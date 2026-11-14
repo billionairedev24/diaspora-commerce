@@ -25,7 +25,7 @@ describe('Business page settings', () => {
     await renderScreen(<BusinessPageView />);
     const colour = await screen.findByLabelText('Brand colour');
     await user.type(colour, '#aabbcc');
-    await user.type(screen.getByLabelText(/What you offer/), 'Jollof and more');
+    await user.type(screen.getByLabelText(/What you sell or do/), 'Jollof and more');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(await screen.findByText('Your business page is updated.')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled());

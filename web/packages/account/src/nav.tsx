@@ -27,7 +27,7 @@ export function accountSectionOf(pathname: string): AccountSection | null {
 }
 
 /** Back-office "My account": heading, the sections as tabs (like the module pages) and the section. */
-export function AccountShell({ active, children }: { active: AccountSection; children: ReactNode }) {
+export function AccountShell({ active, sections, children }: { active: AccountSection; /** Tabs to show (all when omitted): Seller Center keeps notifications and language under Settings. */ sections?: readonly AccountSection[]; children: ReactNode }) {
   const t = useAccountT();
   const { Link } = useAccountEnv();
   const items: Array<{ key: AccountSection; label: string; icon: ReactNode }> = [
@@ -44,7 +44,7 @@ export function AccountShell({ active, children }: { active: AccountSection; chi
       </header>
       <nav aria-label={t('nav.label')} className={styles.nav} data-tour="account-nav">
         <p className={styles.navTitle}>{t('nav.label')}</p>
-        {items.map((i) => (
+        {items.filter((i) => !sections || sections.includes(i.key)).map((i) => (
           <Link key={i.key} href={ACCOUNT_ROUTES[i.key]} className={styles.navLink} aria-current={i.key === active ? 'page' : undefined}>
             {i.icon}
             {i.label}

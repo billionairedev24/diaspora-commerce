@@ -2,11 +2,10 @@
 
 import { InviteFormSchema, isApiError, type RoleCard, sellerKeys, sellerQueries, TEAM_ERROR_MESSAGES, type TeamMember } from '@afrotransact/api-client';
 import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
-import { Button, buttonClassName, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { CheckCircle, Eye, Prohibit } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
@@ -166,10 +165,7 @@ export function TeamView() {
     <ModulePage
       module="team"
       actions={
-        <>
-          <Link href="/team/business-page" className={buttonClassName({ variant: 'neutral' })}>Business page</Link>
-          {canManage ? <Button onClick={() => { setErrors({}); setForm({ email: '', roleKey: roleOptions[1]?.value ?? '' }); setInvite(true); }}>Invite member</Button> : null}
-        </>
+        canManage ? <Button onClick={() => { setErrors({}); setForm({ email: '', roleKey: roleOptions[1]?.value ?? '' }); setInvite(true); }}>Invite member</Button> : null
       }
     >
       <DataTable<TeamMember> id="seller.team" label="Team members" columns={columns} data={q.data.members} getRowId={(m) => m.userId} rowLabel={(m) => m.name}

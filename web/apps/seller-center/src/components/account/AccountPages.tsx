@@ -1,12 +1,10 @@
 'use client';
 
-import { AccountShell, AlertsScreen, PreferencesScreen, ProfileScreen, SecurityScreen } from '@afrotransact/account';
+import { AccountShell, ProfileScreen, SecurityScreen } from '@afrotransact/account';
 import { sellerKeys } from '@afrotransact/api-client';
 import { useToast } from '@afrotransact/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 
-import { OfferServices } from '@/components/account/OfferServices';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 
@@ -25,7 +23,7 @@ export function SellerProfilePage() {
     onError: () => toast.show(t('sc.portalShell.switchFailed'), 'error')
   });
   return (
-    <AccountShell active="profile">
+    <AccountShell active="profile" sections={['profile', 'security']}>
       <ProfileScreen heading={false} onSwitchOrg={(id) => switchOrg.mutate(id)} switching={switchOrg.isPending} />
     </AccountShell>
   );
@@ -33,26 +31,8 @@ export function SellerProfilePage() {
 
 export function SellerSecurityPage() {
   return (
-    <AccountShell active="security">
+    <AccountShell active="security" sections={['profile', 'security']}>
       <SecurityScreen audience="seller" heading={false} />
-    </AccountShell>
-  );
-}
-
-export function SellerNotificationsPage() {
-  return (
-    <AccountShell active="notifications">
-      <AlertsScreen heading={false} />
-    </AccountShell>
-  );
-}
-
-export function SellerPreferencesPage() {
-  const router = useRouter();
-  return (
-    <AccountShell active="preferences">
-      <PreferencesScreen heading={false} showDensity onLanguageChanged={() => router.refresh()} />
-      <OfferServices />
     </AccountShell>
   );
 }

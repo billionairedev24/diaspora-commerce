@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DashboardView } from '@/components/dashboard/DashboardView';
 import { OrdersView } from '@/components/orders/OrdersView';
-import { ShipFromView } from '@/components/orders/ShipFromView';
 import { blankWindow, cardVisible, checkTurnOn, nudgeVisible, previewZip, turnOnRequest } from '@/lib/pickup-prompt';
 
 import { asRole, mockApi } from './mock-api';
@@ -81,7 +80,7 @@ describe('pickup card rules', () => {
   });
 });
 
-describe('pickup card in Seller Center', () => {
+describe('pickup prompt in Seller Center', () => {
   beforeEach(async () => {
     resetSellerDb(new Date());
     asRole(null);
@@ -89,34 +88,23 @@ describe('pickup card in Seller Center', () => {
     await mockApi().setCustomerPickup('sfa-store', { enabled: false, hours: [], readyHours: 0 });
   });
 
-  it('is pre-filled, off until the seller confirms, and turns pickup on only then', async () => {
+  it('points to Settings > Pickup and never switches pickup on by itself', async () => {
     const user = userEvent.setup();
-    await renderScreen(<ShipFromView />);
+    await renderScreen(<DashboardView />);
     const card = await screen.findByTestId('pickup-prompt');
     expect(within(card).getByText(/Only switch this on if someone will be there/)).toBeInTheDocument();
-    expect(within(card).getByTestId('pickup-prompt-address')).toHaveTextContent('9800 Bissonnet St');
-    expect(within(card).getByTestId('pickup-prompt-address')).toHaveTextContent('+17135550142');
-    expect(within(card).getByTestId('pickup-prompt-preview')).toHaveTextContent('Shoppers near ZIP 77036 will see Pickup');
-    // Nothing is invented: no hours, and the button is off.
-    expect(within(card).queryAllByTestId('pickup-prompt-window')).toHaveLength(0);
-    const turnOn = within(card).getByRole('button', { name: 'Turn on pickup' });
-    expect(turnOn).toBeDisabled();
-    await user.click(within(card).getByRole('button', { name: 'Add a pickup window' }));
-    await user.type(within(card).getByLabelText('Opens, window 1'), '10:00');
-    await user.type(within(card).getByLabelText('Closes, window 1'), '16:00');
-    await user.type(within(card).getByLabelText('Ready after (hours)'), '3');
-    expect(turnOn).toBeDisabled();
-    expect((await mockApi().listShipFrom())[0]?.customerPickup?.enabled).toBe(false);
-    await user.click(within(card).getByLabelText('Someone will be at this address during these hours.'));
-    expect(turnOn).toBeEnabled();
-    await user.click(turnOn);
-    await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.customerPickup).toMatchObject({ enabled: true, readyHours: 3 }));
+    expect(within(card).getByRole('link', { name: 'Set up pickup' })).toHaveAttribute('href', '/settings/pickup');
+    // No form on Home: no hours, no ready time, no turn-on button.
+    expect(within(card).queryByRole('button', { name: 'Turn on pickup' })).toBeNull();
+    expect(within(card).queryByLabelText('Ready after (hours)')).toBeNull();
+    await user.click(within(card).getByRole('button', { name: 'Not now' }));
     await waitFor(() => expect(screen.queryByTestId('pickup-prompt')).toBeNull());
+    expect((await mockApi().listShipFrom())[0]?.customerPickup?.enabled).toBe(false);
   });
 
   it('remembers "Not now" and "Don’t ask again" on the server', async () => {
     const user = userEvent.setup();
-    await renderScreen(<ShipFromView />);
+    await renderScreen(<DashboardView />);
     await user.click(within(await screen.findByTestId('pickup-prompt')).getByRole('button', { name: 'Not now' }));
     await waitFor(() => expect(screen.queryByTestId('pickup-prompt')).toBeNull());
     expect(await mockApi().getPickupPrompt()).toMatchObject({ state: 'SNOOZED', show: false, nudge: true });
@@ -124,16 +112,14 @@ describe('pickup card in Seller Center', () => {
     expect(await mockApi().getPickupPrompt()).toMatchObject({ state: 'NEVER', show: false, nudge: true });
   });
 
-  it('shows on the home page', async () => {
-    await renderScreen(<DashboardView />);
-    expect(await screen.findByTestId('pickup-prompt')).toBeInTheDocument();
-  });
-
-  it('shows a small nudge on Orders even after "Don’t ask again", but not the card', async () => {
+  it('shows a small nudge on Orders, linking to Settings > Pickup, even after "Don’t ask again", but not the card', async () => {
     await mockApi().answerPickupPrompt('DONT_ASK_AGAIN');
     await renderScreen(<OrdersView />);
     expect(await screen.findByText(/Customers can’t collect orders from you yet/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Set up pickup' })).toHaveAttribute('href', '/settings/pickup');
     expect(screen.queryByTestId('pickup-prompt')).toBeNull();
+    // Orders is for orders: no ship-from or pickup configuration is reachable from its header.
+    expect(screen.queryByRole('link', { name: /Ship-from/ })).toBeNull();
   });
 
   it('is refused by the server without the confirmation, and never shows when pickup already exists', async () => {
@@ -142,8 +128,8 @@ describe('pickup card in Seller Center', () => {
     expect((await api.listShipFrom())[0]?.customerPickup?.enabled).toBe(false);
     await api.setCustomerPickup('sfa-store', { enabled: true, hours: [monday], readyHours: 2, hoursConfirmed: true });
     expect(await api.getPickupPrompt()).toMatchObject({ hasPickupPlace: true, show: false, nudge: false, address: null });
-    await renderScreen(<ShipFromView />);
-    await screen.findAllByTestId('ship-from-address');
+    await renderScreen(<DashboardView />);
+    await screen.findAllByText(/Home|Sales|Orders/);
     expect(screen.queryByTestId('pickup-prompt')).toBeNull();
   });
 });

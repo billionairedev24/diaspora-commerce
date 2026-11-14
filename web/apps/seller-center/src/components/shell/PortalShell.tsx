@@ -282,7 +282,9 @@ function PortalShellContent({ children }: { children: ReactNode }) {
     );
   }
 
-  const canOpen = accountPage || hubPage || allowed(session, active);
+  // Settings pages (/settings/…) open for an approved organisation; each section checks its own permission.
+  const settingsPage = session.approved && /^\/settings(\/|$)/.test(pathname);
+  const canOpen = accountPage || hubPage || settingsPage || allowed(session, active);
   return (
     <SellerSessionProvider session={session}>
       <SellerTourHost session={session}>
