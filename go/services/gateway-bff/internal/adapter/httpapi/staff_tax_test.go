@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -136,12 +137,20 @@ func newFakeTax(t *testing.T) *fakeTax {
 	diff := func(i int, kind string, inO, prO string, in, pr float64) map[string]any {
 		return map[string]any{"orderId": "ord-1", "lineId": "l-" + string(rune('a'+i)), "atin": "AT-NUTS", "internalTaxCode": "AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS",
 			"providerCode": "txcd_40040016", "kind": kind, "inHouse": map[string]any{"outcome": inO, "rate": in, "taxMinor": 0},
-			"provider": map[string]any{"outcome": prO, "rate": pr, "taxMinor": 83}, "differenceMinor": 83, "quotedAt": "2026-11-05T10:00:00Z", "shipToState": "TX"}
+			"provider": map[string]any{"outcome": prO, "rate": pr, "taxMinor": 83}, "differenceMinor": 83, "quotedAt": "2026-11-05T10:00:00Z", "shipToState": "TX",
+			"orderRef": "ord-1", "shadowProvider": "STRIPE"}
+	}
+	// Avalara is recorded on the same lines: it timed out on the first and has no code for the second.
+	avalara := func(i int, kind, failure, why string) map[string]any {
+		return map[string]any{"orderId": "ord-1", "orderRef": "ord-1", "lineId": "l-" + string(rune('a'+i)), "atin": "AT-NUTS", "internalTaxCode": "AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS",
+			"kind": kind, "failure": failure, "shadowProvider": "AVALARA", "inHouse": map[string]any{"outcome": "EXEMPT", "rate": 0, "taxMinor": 0},
+			"provider": map[string]any{"error": why}, "differenceMinor": 0, "quotedAt": "2026-11-05T10:00:00Z", "shipToState": "TX"}
 	}
 	f.shadow = map[string]any{"linesCompared": 300, "linesDiffering": 3, "absoluteDifferenceMinor": 249, "netDifferenceMinor": 249,
 		"byInternalTaxCode": []any{map[string]any{"internalTaxCode": "AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS", "providerCode": "txcd_40040016", "lines": 40, "differing": 3, "absoluteDifferenceMinor": 249},
 			map[string]any{"internalTaxCode": "AT.BABY_FOOD_FORMULA.STANDARD", "providerCode": "txcd_40090005", "lines": 3, "differing": 0, "absoluteDifferenceMinor": 0}},
-		"differences": []any{diff(0, "OUTCOME", "EXEMPT", "TAXABLE", 0, 0.0825), diff(1, "OUTCOME", "EXEMPT", "TAXABLE", 0, 0.0825), diff(2, "RATE", "TAXABLE", "TAXABLE", 0.0825, 0.08)}}
+		"differences": []any{diff(0, "OUTCOME", "EXEMPT", "TAXABLE", 0, 0.0825), diff(1, "OUTCOME", "EXEMPT", "TAXABLE", 0, 0.0825), diff(2, "RATE", "TAXABLE", "TAXABLE", 0.0825, 0.08),
+			avalara(0, "PROVIDER_ERROR", "TIMEOUT", "Avalara did not answer within PT4S"), avalara(1, "NO_CODE", "", "No Avalara code is mapped for AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS")}}
 	return f
 }
 
@@ -370,7 +379,26 @@ func (f *fakeTax) tax(w http.ResponseWriter, r *http.Request, p string, body map
 	case p == "/v1/tax/settings":
 		writeJ(w, 200, f.settings)
 	case p == "/v1/tax/shadow/report":
-		writeJ(w, 200, f.shadow)
+		out := map[string]any{}
+		maps.Copy(out, f.shadow)
+		want, only := r.URL.Query().Get("provider"), r.URL.Query().Get("onlyDifferences") == "true"
+		diffs, kinds := []any{}, map[string]float64{}
+		for _, d := range f.shadow["differences"].([]any) {
+			m := d.(map[string]any)
+			if want != "" && m["shadowProvider"] != want {
+				continue
+			}
+			kinds[m["kind"].(string)]++
+			if !only || m["kind"] != "MATCH" {
+				diffs = append(diffs, m)
+			}
+		}
+		byKind := []any{}
+		for k, n := range kinds {
+			byKind = append(byKind, map[string]any{"key": k, "lines": n})
+		}
+		out["differences"], out["byKind"] = diffs, byKind
+		writeJ(w, 200, out)
 	default:
 		problemJ(w, 404, "not-found")
 	}
@@ -1068,9 +1096,43 @@ func TestStaffTaxShadowReport(t *testing.T) {
 		t.Errorf("default window = %v to %v", r["from"], r["to"])
 	}
 	row := items(t, r)[0]
-	if row["orderNumber"] != "AT-000231" || row["kindLabel"] == "OUTCOME" || !strings.Contains(row["inHouseText"].(string), "Exempt") || !strings.Contains(row["providerText"].(string), "Taxable at 8.25%") {
+	quotes := row["quotes"].([]any)
+	stripe, aval := quotes[0].(map[string]any), quotes[1].(map[string]any)
+	if row["orderNumber"] != "AT-000231" || !strings.Contains(row["inHouse"].(map[string]any)["text"].(string), "Exempt") || stripe["provider"] != "STRIPE" ||
+		!strings.Contains(stripe["text"].(string), "Taxable at 8.25%") || stripe["state"] != "ANSWERED" || stripe["taxText"] != "$0.83" || stripe["differenceText"] != "$0.83" {
 		t.Errorf("sample row = %v", row)
 	}
+	// Avalara timed out on this line: its own state and a reason that names it, not a zero.
+	if aval["provider"] != "AVALARA" || aval["state"] != "TIMEOUT" || aval["stateLabel"] != "Timed out" || aval["taxMinor"] != nil || !strings.Contains(aval["reason"].(string), "Avalara did not answer") {
+		t.Errorf("avalara cell = %v", aval)
+	}
+	if row["status"] != "differ" || row["differs"] != true {
+		t.Errorf("line status = %v", row["status"])
+	}
+	// The second line has no Avalara code: its own state, never a $0.00 quote.
+	if noCode := items(t, r)[1]["quotes"].([]any)[1].(map[string]any); noCode["state"] != "NO_CODE" || noCode["taxText"] != "" || !strings.Contains(noCode["reason"].(string), "No Avalara code") {
+		t.Errorf("no-code cell = %v", noCode)
+	}
+	// Provider cards: Avalara is not configured in this environment and says which settings it needs (names only).
+	cards := r["providers"].([]any)
+	av := cards[1].(map[string]any)
+	if cards[0].(map[string]any)["state"] != "ASKING" || av["state"] != "NOT_CONFIGURED" || !strings.Contains(av["note"].(string), "AVALARA_ACCOUNT_ID") || !strings.Contains(av["note"].(string), "AVALARA_ENVIRONMENT") {
+		t.Errorf("provider cards = %v", cards)
+	}
+	if av["noAnswer"] != float64(1) || av["noCode"] != float64(1) {
+		t.Errorf("avalara tallies = %v", av)
+	}
+	// Filters: only lines with a provider that did not answer or has no code; search by category or order number.
+	if no := items(t, do("admin", "GET", "/v1/staff/tax/shadow?status=nocode", nil, 200)); len(no) != 0 {
+		t.Errorf("status=nocode (lines that differ are listed as differ) = %v", no)
+	}
+	if hit := items(t, do("admin", "GET", "/v1/staff/tax/shadow?search=AT-000231", nil, 200)); len(hit) != 3 {
+		t.Errorf("search by order number = %d lines", len(hit))
+	}
+	if miss := items(t, do("admin", "GET", "/v1/staff/tax/shadow?search=zzz", nil, 200)); len(miss) != 0 {
+		t.Errorf("search miss = %v", miss)
+	}
+	do("admin", "GET", "/v1/staff/tax/shadow?status=weird", nil, 422)
 	var nutsCat map[string]any
 	for _, c := range r["byCategory"].([]any) {
 		if m := c.(map[string]any); m["key"] == "nuts-seeds" {

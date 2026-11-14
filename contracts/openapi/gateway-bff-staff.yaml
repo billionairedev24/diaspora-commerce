@@ -3780,7 +3780,9 @@ paths:
       parameters:
         - {name: from, in: query, required: false, schema: {type: string}, description: 'Date, default 30 days ago'}
         - {name: to, in: query, required: false, schema: {type: string}, description: 'Date, default today'}
-        - {name: provider, in: query, required: false, schema: {type: string}}
+        - {name: provider, in: query, required: false, schema: {type: string}, description: 'The provider the summary, tallies and cutover checks are about (default: the one in shadow, else the one charging). The side-by-side lines always show every provider.'}
+        - {name: status, in: query, required: false, schema: {type: string, enum: [all, differ, match, noanswer, nocode]}, description: 'Line filter: some provider differs from ours, all answering providers match, a provider did not answer, a provider has no code mapped'}
+        - {name: search, in: query, required: false, schema: {type: string}, description: 'Order number, category, outcome code, ATIN or line id'}
         - {name: page, in: query, required: false, schema: {type: integer}}
         - {name: size, in: query, required: false, schema: {type: integer}}
       responses:
@@ -11224,7 +11226,18 @@ components:
         byOutcome: {type: array, items: {type: object, additionalProperties: true}}
         byState: {type: array, items: {type: object, additionalProperties: true}, description: Only when tax-returns sends shipToState on a difference}
         kinds: {type: array, items: {type: object, additionalProperties: true}}
-        items: {type: array, description: Sample differences with both quotes, items: {type: object, additionalProperties: true}}
+        providers:
+          type: array
+          description: 'One card per provider shadow mode can quote: whether it is configured, charging or being asked, and how its recorded lines came out (answered, differs, no answer, no code)'
+          items: {type: object, additionalProperties: true}
+        items:
+          type: array
+          description: 'Order lines with our quote and a cell per provider (`quotes`): state ANSWERED, NOT_CONFIGURED, TIMEOUT, ERROR, NO_CODE or NOT_ASKED, the reason naming the provider, tax and difference only when it answered. Filtered by status and search, paged.'
+          items: {type: object, additionalProperties: true}
+        status: {type: string}
+        search: {type: string}
+        linesInPeriod: {type: integer, description: Lines recorded in the period before filters}
+        comparisonPartial: {type: boolean, description: More rows exist than the side-by-side table reads (first 2000)}
         total: {type: integer}
         page: {type: integer}
         size: {type: integer}

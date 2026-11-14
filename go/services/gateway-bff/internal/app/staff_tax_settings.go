@@ -198,7 +198,23 @@ var shadowDefaults = map[string]float64{"minDays": 30, "minLines": 200, "minLine
 
 var shadowKinds = map[string]string{
 	"OUTCOME": "Different outcome (exempt against taxable)", "RATE": "Different rate", "BOTH": "Different outcome and rate",
-	"PROVIDER_ERROR": "The provider did not answer", "NO_DECISION": "We had no stored decision",
+	"PROVIDER_ERROR": "The provider did not answer", "NO_CODE": "No code mapped for this outcome", "NO_DECISION": "We had no stored decision",
+}
+
+// shadowStates are what one provider can say about one line: it answered, or why it did not. Never a zero in place of
+// a missing answer.
+var shadowStates = map[string]string{
+	"ANSWERED": "Answered", "NOT_CONFIGURED": "Not configured", "TIMEOUT": "Timed out", "ERROR": "Provider error",
+	"NO_CODE": "No code mapped", "NO_DECISION": "We had no decision", "NOT_ASKED": "Not asked",
+}
+
+// shadowProviders are the providers shadow mode can quote, in the order of the report's columns.
+var shadowProviders = []string{"STRIPE", "AVALARA"}
+
+// providerEnv names the settings a provider needs (names only, never values).
+var providerEnv = map[string]string{
+	"STRIPE":  "STRIPE_SECRET_KEY",
+	"AVALARA": "AVALARA_ACCOUNT_ID, AVALARA_LICENSE_KEY, AVALARA_COMPANY_CODE and AVALARA_ENVIRONMENT (sandbox or production)",
 }
 
 func shadowThresholds(report jobj) (map[string]float64, string) {
@@ -250,7 +266,11 @@ func (s *staffTaxImpl) Shadow(ctx context.Context, c *domain.Caller, q url.Value
 	if err != nil {
 		return nil, err
 	}
-	return s.shadowView(ctx, sc, st, report, diffs, partial, provider, from, to, page, size), nil
+	view := s.shadowView(ctx, sc, st, report, diffs, partial, provider, from, to)
+	if err := s.shadowComparison(ctx, sc, st, view, from, to, q, page, size); err != nil {
+		return nil, err
+	}
+	return view, nil
 }
 
 func shadowWindow(q url.Values, now time.Time) (from, to string, err error) {
@@ -344,7 +364,7 @@ func sideText(side jobj) string {
 
 type tally struct{ lines, differing, abs float64 }
 
-func (s *staffTaxImpl) shadowView(ctx context.Context, sc staffCtx, st, report jobj, diffs []jobj, partial bool, provider, from, to string, page, size int) jobj {
+func (s *staffTaxImpl) shadowView(ctx context.Context, sc staffCtx, st, report jobj, diffs []jobj, partial bool, provider, from, to string) jobj {
 	names := s.categoryNames(ctx, sc)
 	outcomes := map[string]string{}
 	codeRows, mapErr := s.providerMap(ctx, sc, provider)
@@ -389,7 +409,6 @@ func (s *staffTaxImpl) shadowView(ctx context.Context, sc staffCtx, st, report j
 	}
 	kinds, states := map[string]int{}, map[string]*tally{}
 	stateOrder := []string{}
-	rows := make([]jobj, 0, len(diffs))
 	for _, d := range diffs {
 		kinds[jstr(d, "kind")]++
 		if state := jstr(d, "shipToState"); state != "" {
@@ -400,14 +419,7 @@ func (s *staffTaxImpl) shadowView(ctx context.Context, sc staffCtx, st, report j
 			states[state].differing++
 			states[state].abs += absf(num(d, "differenceMinor"))
 		}
-		rows = append(rows, jobj{"orderId": jstr(d, "orderId"), "lineId": jstr(d, "lineId"), "atin": jstr(d, "atin"), "internalTaxCode": jstr(d, "internalTaxCode"),
-			"categoryName": firstNonEmpty(names[categoryOfCode(jstr(d, "internalTaxCode"))], domain.Humanize(categoryOfCode(jstr(d, "internalTaxCode")))),
-			"providerCode": jstr(d, "providerCode"), "kind": jstr(d, "kind"), "kindLabel": shadowKinds[jstr(d, "kind")],
-			"inHouseText": sideText(asObj(d["inHouse"])), "providerText": sideText(asObj(d["provider"])),
-			"differenceMinor": num(d, "differenceMinor"), "differenceText": taxMoney(num(d, "differenceMinor")), "quotedAt": jstr(d, "quotedAt")})
 	}
-	nameAll(ctx, sc, rows, orderRef("orderId"))
-	total := float64(len(rows))
 	linesCompared, linesDiffering := num(report, "linesCompared"), num(report, "linesDiffering")
 	mapped := jobj(nil)
 	if mapErr == nil {
@@ -418,7 +430,7 @@ func (s *staffTaxImpl) shadowView(ctx context.Context, sc staffCtx, st, report j
 		"absoluteDifferenceText": taxMoney(num(report, "absoluteDifferenceMinor")), "netDifferenceText": taxMoney(num(report, "netDifferenceMinor")),
 		"byCode": byCode, "byCategory": groups(catOrder, byCat, func(k string) string { return firstNonEmpty(names[k], domain.Humanize(k)) }),
 		"byOutcome": groups(outOrder, byOutcome, taxOutcomeLabelOrUnknown), "byState": groups(stateOrder, states, func(k string) string { return k }),
-		"kinds": kindCounts(kinds), "items": slicePage(rows, page, size), "total": len(rows), "page": page, "size": size, "partial": partial, "sampled": int(total),
+		"kinds": kindCounts(kinds), "partial": partial, "sampled": len(diffs),
 		"shadowProvider": jstr(st, "shadowProvider"), "canConfigure": sc.access.Can(permTaxConfigure), "runbookPath": cutoverRunbook, "shadowOff": false}
 	out["readiness"] = readiness(th, source, from, to, linesCompared, kinds, perCodeShort, len(byCode), mapped, partial)
 	return out
@@ -445,7 +457,7 @@ func taxOutcomeLabelOrUnknown(k string) string {
 
 func kindCounts(kinds map[string]int) []jobj {
 	out := []jobj{}
-	for _, k := range []string{"OUTCOME", "BOTH", "RATE", "NO_DECISION", "PROVIDER_ERROR"} {
+	for _, k := range []string{"OUTCOME", "BOTH", "RATE", "NO_DECISION", "PROVIDER_ERROR", "NO_CODE"} {
 		out = append(out, jobj{"kind": k, "label": shadowKinds[k], "count": kinds[k]})
 	}
 	return out
