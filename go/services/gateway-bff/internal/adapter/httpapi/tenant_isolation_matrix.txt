@@ -564,6 +564,7 @@ GET /v1/staff/tax/review-settings | STAFF_ONLY | identity /v1/me principalType S
 PUT /v1/staff/tax/review-settings | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 GET /v1/staff/tax/reviews | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 GET /v1/staff/tax/reviews/{atin} | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
+POST /v1/staff/tax/providers/{provider}/connection-test | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 POST /v1/staff/tax/reviews/{atin}/approve | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 POST /v1/staff/tax/reviews/{atin}/reclassify | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 POST /v1/staff/tax/reviews/{atin}/request-information | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate

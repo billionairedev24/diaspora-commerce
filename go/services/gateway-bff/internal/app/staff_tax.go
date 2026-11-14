@@ -42,6 +42,8 @@ type StaffTaxService interface {
 	ReviewSettings(ctx context.Context, c *domain.Caller) (any, error)
 	ChangeReviewSettings(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	Shadow(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// TestConnection asks a provider whether its credentials work (tax-returns Ping); never returns a credential.
+	TestConnection(ctx context.Context, c *domain.Caller, provider string) (any, error)
 }
 
 type staffTaxImpl struct{ r *staffResolver }

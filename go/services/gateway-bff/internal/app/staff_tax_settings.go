@@ -190,6 +190,39 @@ func (s *staffTaxImpl) ChangeMethod(ctx context.Context, c *domain.Caller, body 
 	return s.methodView(ctx, sc, out), nil
 }
 
+// TestConnection runs the provider's own credential check (Avalara: AvaTax Ping) so the owner can verify the account
+// before shadow mode runs. The answer says authenticated yes or no, the account name and the environment, in plain words;
+// it never carries the license key (tax-returns does not have it in the answer, and nothing here adds it).
+func (s *staffTaxImpl) TestConnection(ctx context.Context, c *domain.Caller, provider string) (any, error) {
+	sc, err := s.need(ctx, c, permTaxConfigure)
+	if err != nil {
+		return nil, err
+	}
+	provider = strings.ToUpper(strings.TrimSpace(provider))
+	if !validProvider(provider) {
+		return nil, domain.FieldProblem(domain.CodeValidationFailed, "Validation failed", "provider", "Choose Stripe or Avalara.")
+	}
+	var out jobj
+	if err := sc.call(ctx, sc.up.TaxReturns, port.StaffCall{Method: http.MethodPost, Path: "/v1/tax/providers/" + provider + "/connection-test"}, &out); err != nil {
+		return nil, taxErr(err)
+	}
+	label := taxProviderLabel(provider)
+	view := jobj{"provider": provider, "label": label, "configured": boolean(out, "configured"), "authenticated": boolean(out, "authenticated"),
+		"accountName": jstr(out, "accountName"), "environment": jstr(out, "environment"), "message": jstr(out, "message")}
+	switch {
+	case !boolean(out, "configured"):
+		view["status"], view["headline"] = "NOT_CONFIGURED", label+" is not set up in this environment"
+		if jstr(out, "message") == "" || !strings.Contains(jstr(out, "message"), "not configured") {
+			view["message"] = firstNonEmpty(jstr(out, "message"), notSetUp(provider))
+		}
+	case boolean(out, "authenticated"):
+		view["status"], view["headline"] = "OK", label+" accepted the credentials"
+	default:
+		view["status"], view["headline"] = "FAILED", label+" did not accept the credentials"
+	}
+	return view, nil
+}
+
 // ---------------------------------------------------------------- shadow report
 
 // shadowThresholds decide "ready to cut over?". tax-returns may return its own under `thresholds`; until it does these

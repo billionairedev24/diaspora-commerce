@@ -3743,6 +3743,21 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/providers/{provider}/connection-test:
+    post:
+      tags: [Tax]
+      operationId: testStaffTaxProviderConnection
+      security: [{sessionCookie: []}]
+      summary: 'Test the connection to a tax provider (Avalara: AvaTax Ping)'
+      description: 'tax-returns `POST /v1/tax/providers/{provider}/connection-test` (`tax:configure`). Asks the provider whether the configured credentials work before shadow mode runs. Calculates nothing and records nothing. Says authenticated yes or no, the account name and the environment; never the license key. 422 for an unknown provider.'
+      parameters:
+        - {name: provider, in: path, required: true, schema: {type: string, enum: [STRIPE, AVALARA]}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxConnectionTest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/tax/review-settings:
     get:
       tags: [Tax]
@@ -11154,6 +11169,19 @@ components:
         blocked: {type: boolean, description: The file has invalid rows so nothing was applied}
         problems: {type: array, items: {type: object, additionalProperties: true, description: 'line, internalTaxCode, message'}}
         preview: {type: array, items: {type: object, additionalProperties: true}}
+    StaffTaxConnectionTest:
+      type: object
+      required: [provider, label, status, headline, configured, authenticated, message]
+      properties:
+        provider: {type: string, enum: [STRIPE, AVALARA]}
+        label: {type: string}
+        status: {type: string, enum: [OK, FAILED, NOT_CONFIGURED]}
+        headline: {type: string, description: 'One plain sentence: accepted, not accepted, or not set up'}
+        configured: {type: boolean}
+        authenticated: {type: boolean}
+        accountName: {type: string, description: 'Account or user name the provider reported; empty when it did not'}
+        environment: {type: string, description: 'sandbox or production'}
+        message: {type: string, description: 'What worked or what to fix; never a credential'}
     StaffTaxMethod:
       type: object
       required: [method, methodLabel, methodExplain, options, shadowOptions, providers, history, runbookPath, canConfigure]

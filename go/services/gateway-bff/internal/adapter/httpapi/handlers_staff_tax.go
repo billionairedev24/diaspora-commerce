@@ -24,6 +24,7 @@ func (h *handlersImpl) registerStaffTax(route func(pattern string, fn http.Handl
 	route("GET /v1/staff/tax/review-settings", h.staffTaxReviewSettings)
 	route("PUT /v1/staff/tax/review-settings", h.staffTaxChangeReviewSettings)
 	route("GET /v1/staff/tax/shadow", h.staffTaxShadow)
+	route("POST /v1/staff/tax/providers/{provider}/connection-test", h.staffTaxConnectionTest)
 }
 
 func (h *handlersImpl) staffTaxProfiles(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +139,11 @@ func (h *handlersImpl) staffTaxChangeMethod(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	v, err := h.s.Staff.Tax.ChangeMethod(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTaxConnectionTest(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Tax.TestConnection(r.Context(), callerFrom(r.Context()), r.PathValue("provider"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

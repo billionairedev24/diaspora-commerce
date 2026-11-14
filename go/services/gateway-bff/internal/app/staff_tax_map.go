@@ -191,7 +191,7 @@ func (s *staffTaxImpl) CodeMap(ctx context.Context, c *domain.Caller, q url.Valu
 	}
 	return jobj{"provider": provider, "providerLabel": taxProviderLabel(provider), "activeProvider": active, "items": slicePage(rows, page, size), "total": len(rows),
 		"page": page, "size": size, "completeness": completeness(all), "canEdit": sc.access.Can(permTaxClassifyAdmin),
-		"states": []jobj{{"value": "UNMAPPED", "label": codeStateLabels["UNMAPPED"]}, {"value": "UNVERIFIED", "label": codeStateLabels["UNVERIFIED"]},
+		"states": []jobj{{"value": "UNMAPPED", "label": taxProviderLabel(provider) + " code needed"}, {"value": "UNVERIFIED", "label": codeStateLabels["UNVERIFIED"]},
 			{"value": "VERIFIED", "label": codeStateLabels["VERIFIED"]}, {"value": "NOT_NEEDED", "label": codeStateLabels["NOT_NEEDED"]}}}, nil
 }
 

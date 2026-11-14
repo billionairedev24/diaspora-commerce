@@ -76,6 +76,7 @@ type fakeTax struct {
 	liveWithout []map[string]any
 	liveCalls   int
 	shadow      map[string]any
+	connection  map[string]map[string]any
 	review      map[string]any
 	// extra are record ids listed after the four fixed ones (tests of one behaviour add their own).
 	extra []string
@@ -138,7 +139,7 @@ func newFakeTax(t *testing.T) *fakeTax {
 		return map[string]any{"orderId": "ord-1", "lineId": "l-" + string(rune('a'+i)), "atin": "AT-NUTS", "internalTaxCode": "AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS",
 			"providerCode": "txcd_40040016", "kind": kind, "inHouse": map[string]any{"outcome": inO, "rate": in, "taxMinor": 0},
 			"provider": map[string]any{"outcome": prO, "rate": pr, "taxMinor": 83}, "differenceMinor": 83, "quotedAt": "2026-11-05T10:00:00Z", "shipToState": "TX",
-			"orderRef": "ord-1", "shadowProvider": "STRIPE"}
+			"orderRef": "ord-1", "shadowProvider": "STRIPE", "addressPrecision": "ZIP"}
 	}
 	// Avalara is recorded on the same lines: it timed out on the first and has no code for the second.
 	avalara := func(i int, kind, failure, why string) map[string]any {
@@ -376,6 +377,14 @@ func (f *fakeTax) tax(w http.ResponseWriter, r *http.Request, p string, body map
 	case p == "/v1/tax/settings" && r.Method == http.MethodPut:
 		f.settings["method"], f.settings["shadowProvider"] = body["method"], body["shadowProvider"]
 		writeJ(w, 200, f.settings)
+	case strings.HasPrefix(p, "/v1/tax/providers/") && strings.HasSuffix(p, "/connection-test") && r.Method == http.MethodPost:
+		provider := strings.TrimSuffix(strings.TrimPrefix(p, "/v1/tax/providers/"), "/connection-test")
+		f.bodies["POST "+p] = body
+		if c, ok := f.connection[provider]; ok {
+			writeJ(w, 200, c)
+			return
+		}
+		writeJ(w, 200, map[string]any{"provider": provider, "configured": false, "authenticated": false, "message": "A connection test is not available for this provider"})
 	case p == "/v1/tax/settings":
 		writeJ(w, 200, f.settings)
 	case p == "/v1/tax/shadow/report":
@@ -1081,6 +1090,40 @@ func TestStaffTaxMethod(t *testing.T) {
 	do("admin", "PUT", "/v1/staff/tax/method", map[string]any{"method": "STRIPE_TAX", "reason": "All codes verified, adviser signed off"}, 200)
 }
 
+func TestStaffTaxConnectionTest(t *testing.T) {
+	f, do, raw := taxBFF(t)
+	// Not set up: says so, asks nothing about an account.
+	f.connection = map[string]map[string]any{"AVALARA": {"provider": "AVALARA", "configured": false, "authenticated": false, "message": "Avalara is not configured: set AVALARA_ACCOUNT_ID, AVALARA_LICENSE_KEY and AVALARA_COMPANY_CODE"}}
+	r := do("admin", "POST", "/v1/staff/tax/providers/avalara/connection-test", nil, 200)
+	if r["status"] != "NOT_CONFIGURED" || r["authenticated"] != false || !strings.Contains(r["message"].(string), "AVALARA_ACCOUNT_ID") || !strings.Contains(r["headline"].(string), "not set up") {
+		t.Errorf("not configured = %v", r)
+	}
+	// Authenticated: the account name and environment, never a key.
+	f.connection["AVALARA"] = map[string]any{"provider": "AVALARA", "configured": true, "authenticated": true, "accountName": "afro-sandbox", "environment": "sandbox", "message": "Avalara accepted the credentials (sandbox)"}
+	ok := do("admin", "POST", "/v1/staff/tax/providers/AVALARA/connection-test", nil, 200)
+	if ok["status"] != "OK" || ok["authenticated"] != true || ok["accountName"] != "afro-sandbox" || ok["environment"] != "sandbox" || ok["headline"] != "Avalara accepted the credentials" {
+		t.Errorf("authenticated = %v", ok)
+	}
+	for k := range ok {
+		if strings.Contains(strings.ToLower(k), "key") || strings.Contains(strings.ToLower(k), "license") {
+			t.Errorf("the answer carries a credential field %q", k)
+		}
+	}
+	// Wrong credentials: a plain failure with Avalara's reason.
+	f.connection["AVALARA"] = map[string]any{"provider": "AVALARA", "configured": true, "authenticated": false, "environment": "sandbox", "message": "AvaTax refused the request (AuthenticationException): Invalid credentials"}
+	bad := do("admin", "POST", "/v1/staff/tax/providers/AVALARA/connection-test", nil, 200)
+	if bad["status"] != "FAILED" || bad["authenticated"] != false || !strings.Contains(bad["message"].(string), "AuthenticationException") {
+		t.Errorf("failed = %v", bad)
+	}
+	do("admin", "POST", "/v1/staff/tax/providers/PAYPAL/connection-test", nil, 422)
+	// tax:configure only: guests, customers, staff without tax access and read-only staff are refused.
+	for _, who := range []string{"", "nobody", "noperm", "auditor"} {
+		if rec := raw(who, "POST", "/v1/staff/tax/providers/AVALARA/connection-test", nil); rec.Code != 401 && rec.Code != 403 {
+			t.Errorf("%q connection test = %d", who, rec.Code)
+		}
+	}
+}
+
 func TestStaffTaxShadowReport(t *testing.T) {
 	f, do, _ := taxBFF(t)
 	off := do("admin", "GET", "/v1/staff/tax/shadow", nil, 200)
@@ -1105,6 +1148,10 @@ func TestStaffTaxShadowReport(t *testing.T) {
 	// Avalara timed out on this line: its own state and a reason that names it, not a zero.
 	if aval["provider"] != "AVALARA" || aval["state"] != "TIMEOUT" || aval["stateLabel"] != "Timed out" || aval["taxMinor"] != nil || !strings.Contains(aval["reason"].(string), "Avalara did not answer") {
 		t.Errorf("avalara cell = %v", aval)
+	}
+	// Stripe was told only the ZIP: the cell says the figure is an estimate from a place, not from a street address.
+	if stripe["addressPrecision"] != "ZIP" || !strings.Contains(stripe["addressNote"].(string), "Estimated from the ZIP code") {
+		t.Errorf("address note = %v / %v", stripe["addressPrecision"], stripe["addressNote"])
 	}
 	if row["status"] != "differ" || row["differs"] != true {
 		t.Errorf("line status = %v", row["status"])

@@ -201,6 +201,7 @@ func providerCell(d jobj) jobj {
 	label := taxProviderLabel(id)
 	cell := jobj{"provider": id, "label": label, "kind": kind, "providerCode": jstr(d, "providerCode"), "taxMinor": nil, "taxText": "", "differenceMinor": nil, "differenceText": "", "reason": ""}
 	side := asObj(d["provider"])
+	cell["addressPrecision"], cell["addressNote"] = jstr(d, "addressPrecision"), addressNote(jstr(d, "addressPrecision"), label)
 	switch kind {
 	case "MATCH", "OUTCOME", "RATE", "BOTH":
 		cell["state"], cell["stateLabel"], cell["text"] = "ANSWERED", shadowStates["ANSWERED"], sideText(side)
@@ -220,6 +221,18 @@ func providerCell(d jobj) jobj {
 		cell["text"] = "We had no stored decision, so there is nothing to compare"
 	}
 	return cell
+}
+
+// addressNote says how exactly the provider was told where the order went, so a difference caused by a ZIP-only estimate
+// is not read as the provider being wrong. Empty for rows from before the precision was kept, and for a full address.
+func addressNote(precision, label string) string {
+	switch precision {
+	case "ZIP":
+		return "Estimated from the ZIP code: no street address was sent to " + label + "."
+	case "CITY":
+		return "Estimated from the city: the ZIP was looked up from the city name and no street address was sent to " + label + "."
+	}
+	return ""
 }
 
 // absentCell fills a provider column for a line it has no row for, saying why.
