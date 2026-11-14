@@ -2933,5 +2933,11 @@
   "st.tax.review.empty.queue": "Nada espera revisión fiscal.",
   "st.tax.review.empty.audit": "No hay artículos en la muestra de auditoría.",
   "st.tax.review.empty.decisions": "Aún no hay decisiones de este tipo.",
-  "st.tax.review.unknownSeller": "Vendedor desconocido"
+  "st.tax.review.unknownSeller": "Vendedor desconocido",
+  "st.tax.review.untitled": "Artículo sin título",
+  "st.tax.sheet.status": "Estado",
+  "st.tax.sheet.whyReview": "Por qué necesita revisión",
+  "st.tax.sheet.whyAudit": "Por qué está en la muestra de auditoría",
+  "st.tax.sheet.soldBy": "Vendido por {sellers}",
+  "st.tax.sheet.noSeller": "Ningún vendedor lo ha publicado aún"
 }

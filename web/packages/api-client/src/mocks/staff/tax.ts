@@ -109,6 +109,8 @@ interface MockVariant {
   noRule?: boolean;
   /** The product's first public photo. */
   imageUrl?: string;
+  /** The variant's options in words. */
+  variantLabel?: string;
   audit: { at: string; actorName: string; action: string; reason: string }[];
 }
 interface MockCode {
@@ -165,6 +167,7 @@ function seedVariants(): MockVariant[] {
       gtin: '00812345678905',
       imageUrl: tile('Cashews', '#c98f4a'),
       title: 'Roasted cashews, 6 oz bag',
+      variantLabel: 'Size 6 oz · Salted',
       sellers: ['Mama Nkechi’s Kitchen'],
       categoryCode: 'nuts-seeds',
       status: 'PENDING_REVIEW',
@@ -236,6 +239,7 @@ function seedVariants(): MockVariant[] {
     v({
       atin: 'AT20000111',
       title: 'Palm oil, 1 litre',
+      variantLabel: 'Pack of 1',
       sellers: ['Naija Pantry Foods'],
       categoryCode: 'packaged-snacks',
       status: 'MISSING_FACTS',
@@ -245,6 +249,7 @@ function seedVariants(): MockVariant[] {
     v({
       atin: 'AT20000106',
       title: 'Plantain flour, 2 lb bag',
+      variantLabel: 'Size 2 lb',
       sellers: ['Accra Crafts Collective'],
       categoryCode: 'baby-food-formula',
       status: 'STALE',
@@ -521,6 +526,7 @@ const reviewRow = (v: MockVariant): TaxReviewRow => ({
   atin: v.atin,
   gtin: v.gtin,
   title: v.title,
+  variantLabel: v.variantLabel ?? '',
   sellers: v.sellers,
   imageUrl: v.imageUrl ?? '',
   reviewReasonCode: reasonOf(v),

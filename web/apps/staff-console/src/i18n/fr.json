@@ -2933,5 +2933,11 @@
   "st.tax.review.empty.queue": "Rien n'attend d'examen fiscal.",
   "st.tax.review.empty.audit": "Aucun article dans l'échantillon d'audit.",
   "st.tax.review.empty.decisions": "Aucune décision de ce type pour le moment.",
-  "st.tax.review.unknownSeller": "Vendeur inconnu"
+  "st.tax.review.unknownSeller": "Vendeur inconnu",
+  "st.tax.review.untitled": "Article sans titre",
+  "st.tax.sheet.status": "Statut",
+  "st.tax.sheet.whyReview": "Pourquoi une revue est nécessaire",
+  "st.tax.sheet.whyAudit": "Pourquoi il est dans l’échantillon d’audit",
+  "st.tax.sheet.soldBy": "Vendu par {sellers}",
+  "st.tax.sheet.noSeller": "Aucun vendeur ne l’a encore mis en vente"
 }

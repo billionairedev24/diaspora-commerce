@@ -162,7 +162,10 @@ export type TaxProposed = z.infer<typeof TaxProposedSchema>;
 export const TaxReviewRowSchema = z.object({
   atin: z.string(),
   gtin: z.string().default(''),
+  /** The product's name (never blank: the BFF reads it from catalog when tax-returns has none yet). */
   title: z.string(),
+  /** Which variant this is ("Size 6 oz · Roasted"), from the variant's options; empty for a product with one variant. */
+  variantLabel: z.string().default(''),
   /** Seller names, never ids ("Unknown seller" when the directory cannot name one). */
   sellers: z.array(z.string()),
   /** First public photo of the product; empty when catalog has none. */

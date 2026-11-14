@@ -2933,5 +2933,11 @@
   "st.tax.review.empty.queue": "Kò sí ohun tó ń dúró de àyẹ̀wò owó orí.",
   "st.tax.review.empty.audit": "Kò sí ohun kankan nínú àpẹẹrẹ ìṣàyẹ̀wò.",
   "st.tax.review.empty.decisions": "Kò tíì sí ìpinnu irú èyí.",
-  "st.tax.review.unknownSeller": "Olùtajà àìmọ̀"
+  "st.tax.review.unknownSeller": "Olùtajà àìmọ̀",
+  "st.tax.review.untitled": "Ohun tí kò ní orúkọ",
+  "st.tax.sheet.status": "Ipò",
+  "st.tax.sheet.whyReview": "Ìdí tí ó fi nílò àyẹ̀wò",
+  "st.tax.sheet.whyAudit": "Ìdí tí ó fi wà nínú àyẹ̀wò àpẹẹrẹ",
+  "st.tax.sheet.soldBy": "{sellers} ló ń tà á",
+  "st.tax.sheet.noSeller": "Kò sí olùtajà tí ó tíì gbé e jáde"
 }

@@ -7,6 +7,7 @@ import { type ReactNode, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 
@@ -21,23 +22,37 @@ type Which = 'approve' | 'confirm' | 'reclassify' | 'info';
  */
 export function TaxReviewSheet({ atin, action, onClose, onAction }: { atin: string | null; action: string | null; onClose: () => void; onAction: (a: string | null) => void }) {
   const api = staffApi();
+  const t = useT();
   const q = useQuery({ ...staffTaxQueries.review(api.tax, atin ?? ''), enabled: atin !== null });
   const r = q.data;
+  // Only an item that actually waits for a person "needs review"; an approved or rejected one just has a status.
+  const waiting = r ? r.status !== 'APPROVED' && r.status !== 'REJECTED' : false;
   const which: Which | null = r?.canApprove && (action === 'approve' || action === 'reclassify' || action === 'info') ? action : r?.canConfirm && (action === 'confirm' || action === 'reclassify') ? action : null;
   return (
-    <Sheet open={atin !== null} onOpenChange={(o) => !o && onClose()} title={r ? r.title : 'Tax review'} description={r ? `${r.sellers.join(', ') || 'No seller yet'} · ${r.categoryName}` : undefined} closeLabel="Close">
+    <Sheet open={atin !== null} onOpenChange={(o) => !o && onClose()} title={r ? r.title || t('st.tax.review.untitled') : 'Tax review'} description={r ? `${r.sellers.join(', ') || t('st.tax.sheet.noSeller')} · ${r.categoryName}` : undefined} closeLabel="Close">
       {q.isPending && atin !== null ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {r ? (
         <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="m-0 flex-1 text-xl font-bold [overflow-wrap:anywhere]">{r.title}</h2>
-              <RecordPill status={r.status} label={r.statusLabel} />
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              {r.imageUrl ? (
+                <img src={r.imageUrl} alt="" width={64} height={64} className="size-16 shrink-0 rounded-sm border border-border bg-surface-muted object-cover" />
+              ) : (
+                <span aria-hidden className="size-16 shrink-0 rounded-sm border border-border bg-surface-muted" />
+              )}
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="m-0 min-w-0 flex-1 text-xl font-bold [overflow-wrap:anywhere]">{r.title || t('st.tax.review.untitled')}</h2>
+                  <RecordPill status={r.status} label={r.statusLabel} />
+                </div>
+                {r.variantLabel ? <p className="m-0 text-sm text-muted">{r.variantLabel}</p> : null}
+                <p className="m-0 text-sm text-muted">
+                  {r.sellers.length ? t('st.tax.sheet.soldBy', { sellers: r.sellers.join(', ') }) : t('st.tax.sheet.noSeller')} · {r.categoryName} ({r.departmentName})
+                </p>
+                <p className="m-0 font-mono text-xs text-muted">{r.atin}</p>
+              </div>
             </div>
-            <p className="m-0 text-sm text-muted">
-              {r.sellers.length ? `Sold by ${r.sellers.join(', ')}` : 'No seller has listed it yet'} · {r.categoryName} ({r.departmentName})
-            </p>
             {r.canApprove ? (
               <div role="group" aria-label="Decide" className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => onAction('approve')}>
@@ -65,7 +80,7 @@ export function TaxReviewSheet({ atin, action, onClose, onAction }: { atin: stri
               </Notice>
             ) : null}
           </div>
-          <Notice tone="info" title={r.auditSample ? 'Why it is in the audit sample' : 'Why it needs review'}>
+          <Notice tone="info" title={r.auditSample ? t('st.tax.sheet.whyAudit') : waiting ? t('st.tax.sheet.whyReview') : t('st.tax.sheet.status')}>
             {r.why}
           </Notice>
           <Proposed r={r} />

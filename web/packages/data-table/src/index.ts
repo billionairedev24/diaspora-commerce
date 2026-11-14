@@ -11,6 +11,7 @@
  * Kept out of @afrotransact/ui on purpose: ui is the dependency-light design system the storefront also ships; the
  * table brings TanStack Table and the export contract (api-client types) that only the back offices need.
  */
+export { CellText, ItemCell } from './cells';
 export { ColumnsMenu, type Density } from './ColumnsMenu';
 export { DataTable, type DataTableProps, pageNumbers } from './DataTable';
 export { columnLabel, datasetOf, type ExportOutcome, type TableExportRequest, tableKey } from './export';

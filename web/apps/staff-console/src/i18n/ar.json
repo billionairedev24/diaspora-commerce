@@ -2933,5 +2933,11 @@
   "st.tax.review.empty.queue": "لا شيء ينتظر المراجعة الضريبية.",
   "st.tax.review.empty.audit": "لا توجد عناصر في عيّنة التدقيق.",
   "st.tax.review.empty.decisions": "لا توجد قرارات من هذا النوع بعد.",
-  "st.tax.review.unknownSeller": "بائع غير معروف"
+  "st.tax.review.unknownSeller": "بائع غير معروف",
+  "st.tax.review.untitled": "عنصر بلا عنوان",
+  "st.tax.sheet.status": "الحالة",
+  "st.tax.sheet.whyReview": "لماذا يحتاج إلى مراجعة",
+  "st.tax.sheet.whyAudit": "لماذا هو ضمن عينة التدقيق",
+  "st.tax.sheet.soldBy": "يبيعه {sellers}",
+  "st.tax.sheet.noSeller": "لم يعرضه أي بائع بعد"
 }

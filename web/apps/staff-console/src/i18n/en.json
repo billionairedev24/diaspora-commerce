@@ -2926,5 +2926,11 @@
   "st.tax.review.empty.queue": "Nothing is waiting for tax review.",
   "st.tax.review.empty.audit": "No items are in the audit sample.",
   "st.tax.review.empty.decisions": "No decisions of this kind yet.",
-  "st.tax.review.unknownSeller": "Unknown seller"
+  "st.tax.review.unknownSeller": "Unknown seller",
+  "st.tax.review.untitled": "Untitled item",
+  "st.tax.sheet.status": "Status",
+  "st.tax.sheet.whyReview": "Why it needs review",
+  "st.tax.sheet.whyAudit": "Why it is in the audit sample",
+  "st.tax.sheet.soldBy": "Sold by {sellers}",
+  "st.tax.sheet.noSeller": "No seller has listed it yet"
 }

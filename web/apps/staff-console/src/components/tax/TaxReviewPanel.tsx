@@ -1,7 +1,7 @@
 'use client';
 
 import { staffTaxQueries, TAX_AUDIT_SAMPLE, type TaxReviewRow } from '@afrotransact/api-client';
-import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { CellText, DataTable, ItemCell, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { ChipGroup, Combobox, Select } from '@afrotransact/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -108,29 +108,27 @@ export function TaxReviewPanel() {
         header: t('st.tax.review.col.item'),
         size: 230,
         accessorFn: (r) => r.title,
-        cell: ({ row }) => (
-          <span className="flex items-center gap-3">
-            {row.original.imageUrl ? (
-              <img src={row.original.imageUrl} alt="" width={40} height={40} className="size-10 shrink-0 rounded-sm border border-border object-cover" />
-            ) : (
-              <span aria-hidden className="size-10 shrink-0 rounded-sm border border-border bg-surface-muted" />
-            )}
-            <strong className="min-w-0 font-semibold">{row.original.title}</strong>
-          </span>
-        ),
+        cell: ({ row }) => <ItemCell imageUrl={row.original.imageUrl} title={row.original.title || t('st.tax.review.untitled')} subtitle={row.original.variantLabel || row.original.gtin} />,
         meta: { label: t('st.tax.review.col.item'), kind: 'text' }
       },
-      { id: 'atin', header: t('st.tax.review.col.atin'), size: 110, accessorFn: (r) => r.atin, cell: ({ row }) => <span className="font-mono text-xs">{row.original.atin}</span>, meta: { label: t('st.tax.review.col.atin'), kind: 'text' } },
+      {
+        id: 'atin',
+        header: t('st.tax.review.col.atin'),
+        size: 120,
+        accessorFn: (r) => r.atin,
+        cell: ({ row }) => <CellText mono>{row.original.atin}</CellText>,
+        meta: { label: t('st.tax.review.col.atin'), kind: 'text' }
+      },
       {
         id: 'sellers',
         header: t('st.tax.review.col.seller'),
-        size: 140,
+        size: 150,
         enableSorting: false,
         accessorFn: (r) => r.sellers.join(', '),
-        cell: ({ row }) => row.original.sellers.join(', ') || t('st.tax.review.unknownSeller'),
+        cell: ({ row }) => <CellText>{row.original.sellers.join(', ') || t('st.tax.review.unknownSeller')}</CellText>,
         meta: { label: t('st.tax.review.col.seller'), kind: 'text' }
       },
-      { id: 'category', header: t('st.tax.review.col.category'), size: 130, accessorFn: (r) => r.categoryName, meta: { label: t('st.tax.review.col.category'), kind: 'text' } },
+      { id: 'category', header: t('st.tax.review.col.category'), size: 120, accessorFn: (r) => r.categoryName, meta: { label: t('st.tax.review.col.category'), kind: 'text' } },
       ...(decided
         ? ([
             {
@@ -147,13 +145,13 @@ export function TaxReviewPanel() {
               size: 130,
               enableSorting: false,
               accessorFn: (r) => r.reviewedByName,
-              cell: ({ row }) => row.original.reviewedByName || '—',
+              cell: ({ row }) => <CellText>{row.original.reviewedByName || '—'}</CellText>,
               meta: { label: t('st.tax.review.col.decidedBy'), kind: 'text' }
             },
             {
               id: 'reviewed',
               header: t('st.tax.review.col.when'),
-              size: 100,
+              size: 120,
               accessorFn: (r) => r.reviewedAt,
               cell: ({ row }) => (row.original.reviewedAt ? shortDate(row.original.reviewedAt) : '—'),
               meta: { label: t('st.tax.review.col.when'), kind: 'text' }
@@ -161,10 +159,10 @@ export function TaxReviewPanel() {
             {
               id: 'ruleVersion',
               header: t('st.tax.review.col.ruleVersion'),
-              size: 170,
+              size: 130,
               enableSorting: false,
               accessorFn: (r) => r.ruleVersion,
-              cell: ({ row }) => <span className="font-mono text-xs">{row.original.ruleVersion}</span>,
+              cell: ({ row }) => <CellText mono>{row.original.ruleVersion}</CellText>,
               meta: { label: t('st.tax.review.col.ruleVersion'), kind: 'text' }
             }
           ] satisfies ColumnDef<TaxReviewRow>[])
@@ -173,7 +171,7 @@ export function TaxReviewPanel() {
               {
                 id: 'proposed',
                 header: t('st.tax.review.col.taxInForce'),
-                size: 120,
+                size: 110,
                 enableSorting: false,
                 accessorFn: (r) => r.proposed.outcomeLabel || r.proposed.statusLabel,
                 meta: { label: t('st.tax.review.col.taxInForce'), kind: 'text' }
@@ -184,24 +182,24 @@ export function TaxReviewPanel() {
                 size: 140,
                 enableSorting: false,
                 accessorFn: (r) => r.reviewedByName,
-                cell: ({ row }) => row.original.reviewedByName || '—',
+                cell: ({ row }) => <CellText>{row.original.reviewedByName || '—'}</CellText>,
                 meta: { label: t('st.tax.review.col.approvedBy'), kind: 'text' }
               },
               {
                 id: 'reviewed',
                 header: t('st.tax.review.col.approved'),
-                size: 100,
+                size: 120,
                 accessorFn: (r) => r.reviewedAt,
                 cell: ({ row }) => (row.original.reviewedAt ? shortDate(row.original.reviewedAt) : '—'),
                 meta: { label: t('st.tax.review.col.approved'), kind: 'text' }
               },
-              { id: 'why', header: t('st.tax.review.col.whatToDo'), size: 220, enableSorting: false, accessorFn: (r) => r.why, meta: { label: t('st.tax.review.col.whatToDo'), kind: 'text' } }
+              { id: 'why', header: t('st.tax.review.col.whatToDo'), size: 180, enableSorting: false, accessorFn: (r) => r.why, meta: { label: t('st.tax.review.col.whatToDo'), kind: 'text' } }
             ] satisfies ColumnDef<TaxReviewRow>[])
           : ([
               {
                 id: 'proposed',
                 header: t('st.tax.review.col.proposed'),
-                size: 120,
+                size: 110,
                 enableSorting: false,
                 accessorFn: (r) => r.proposed.outcomeLabel || r.proposed.statusLabel,
                 meta: { label: t('st.tax.review.col.proposed'), kind: 'text' }
@@ -209,13 +207,19 @@ export function TaxReviewPanel() {
               {
                 id: 'why',
                 header: t('st.tax.review.col.why'),
-                size: 240,
+                size: 180,
                 enableSorting: false,
                 accessorFn: (r) => r.why,
                 cell: ({ row }) => (
-                  <span className="flex flex-col gap-0.5">
-                    {row.original.reviewReasonCode ? <strong className="font-semibold">{reasonLabel(t, row.original.reviewReasonCode, row.original.reviewReasonLabel)}</strong> : null}
-                    <span className="line-clamp-2 text-xs text-muted">{row.original.why}</span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    {row.original.reviewReasonCode ? (
+                      <strong className="block min-w-0 truncate font-semibold" title={reasonLabel(t, row.original.reviewReasonCode, row.original.reviewReasonLabel)}>
+                        {reasonLabel(t, row.original.reviewReasonCode, row.original.reviewReasonLabel)}
+                      </strong>
+                    ) : null}
+                    <CellText lines={row.original.reviewReasonCode ? 2 : 3} muted>
+                      {row.original.why}
+                    </CellText>
                   </span>
                 ),
                 meta: { label: t('st.tax.review.col.why'), kind: 'text' }
@@ -223,7 +227,7 @@ export function TaxReviewPanel() {
               {
                 id: 'submitted',
                 header: t('st.tax.review.col.submitted'),
-                size: 100,
+                size: 120,
                 accessorFn: (r) => r.classifiedAt,
                 cell: ({ row }) => (row.original.classifiedAt ? shortDate(row.original.classifiedAt) : '—'),
                 meta: { label: t('st.tax.review.col.submitted'), kind: 'text' }
@@ -359,6 +363,7 @@ export function TaxReviewPanel() {
           searchPlaceholder={t('st.tax.review.search')}
           noMatches={t('st.tax.review.noMatches')}
           enableSelection={false}
+          rowHeight={72}
           onRowClick={(r) => open(r.atin)}
           activeRowId={openAtin}
           empty={filtered ? t('st.tax.review.noMatches') : t(decided ? 'st.tax.review.empty.decisions' : audit ? 'st.tax.review.empty.audit' : 'st.tax.review.empty.queue')}

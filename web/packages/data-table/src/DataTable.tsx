@@ -78,6 +78,12 @@ export interface DataTableProps<T> {
   footer?: ReactNode;
   /** data-testid of every body row (end-to-end tests). */
   rowTestId?: string;
+  /**
+   * Fixed row height in px (wide layout): every row is exactly this tall, so rows line up whatever their cells hold.
+   * Cells never wrap past it: a text cell is one line with an ellipsis and its full text as a tooltip; use CellText
+   * (`lines`) or ItemCell for a cell that needs two. Off by default (rows grow with their content). Cards on phones ignore it.
+   */
+  rowHeight?: number;
 }
 
 const INTERACTIVE = 'button,a,input,label,select,textarea,summary,[role="menuitem"],[role="checkbox"],[data-no-row-click]';
@@ -144,7 +150,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
     enableSelection = true,
     pageSizes = PAGE_SIZES,
     footer,
-    rowTestId
+    rowTestId,
+    rowHeight
   } = props;
   const toast = useToast();
   const searchId = useId();
@@ -372,7 +379,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
         aria-sort={sortable ? (sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none') : undefined}
         style={pinStyle(c, true)}
         className={cx(
-          'group relative sticky top-0 z-[2] border-b border-border bg-surface-muted px-3 py-2 text-left text-xs font-bold text-muted',
+          'group relative sticky top-0 z-[2] border-b border-border bg-surface-muted px-3 py-2 text-left align-middle text-xs font-bold text-muted',
           end && 'text-right',
           c.getIsPinned() && c.getIsLastColumn('left') && 'border-r',
           // Narrow (cards): only the select-all box stays (as a chip); sorting moves to the toolbar's Sort select.
@@ -424,7 +431,9 @@ export function DataTable<T>(props: DataTableProps<T>) {
     );
   };
 
-  const pad = density === 'compact' ? 'py-1.5' : 'py-2.5';
+  const pad = rowHeight || density === 'compact' ? 'py-1.5' : 'py-2.5';
+  // Wide layout only (the card layout lets cells grow): the row height comes from the table's --dt-row-h.
+  const fixedCell = rowHeight ? '@xl/dt:h-(--dt-row-h) @xl/dt:max-h-(--dt-row-h)' : '';
   const sortOptions = table
     .getAllLeafColumns()
     .filter((c) => c.getCanSort() && c.getIsVisible())
@@ -453,7 +462,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
         <td
           key={cell.id}
           style={pinStyle(c)}
-          className={cx('px-3 align-top', pad, pinned && bg, '@max-xl/dt:static! @max-xl/dt:col-start-2 @max-xl/dt:row-start-1 @max-xl/dt:-my-2 @max-xl/dt:-mr-2 @max-xl/dt:bg-transparent @max-xl/dt:p-0')}
+          className={cx('px-3 align-middle', pad, pinned && bg, fixedCell, '@max-xl/dt:static! @max-xl/dt:col-start-2 @max-xl/dt:row-start-1 @max-xl/dt:-my-2 @max-xl/dt:-mr-2 @max-xl/dt:bg-transparent @max-xl/dt:p-0')}
           data-no-row-click
         >
           {/* The label is the touch target (44px on coarse pointers); the checkbox keeps its own name. */}
@@ -473,7 +482,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
     const primary = c.id === firstColumn;
     if (c.columnDef.meta?.actions) {
       return (
-        <td key={cell.id} className={cx('px-1 align-top', pad, '@max-xl/dt:static! @max-xl/dt:col-start-2 @max-xl/dt:row-start-1 @max-xl/dt:-my-2 @max-xl/dt:p-0')} data-no-row-click>
+        <td key={cell.id} className={cx('px-1 align-middle', pad, fixedCell, '@max-xl/dt:static! @max-xl/dt:col-start-2 @max-xl/dt:row-start-1 @max-xl/dt:-my-2 @max-xl/dt:p-0')} data-no-row-click>
           {flexRender(c.columnDef.cell, cell.getContext())}
         </td>
       );
@@ -483,9 +492,13 @@ export function DataTable<T>(props: DataTableProps<T>) {
         key={cell.id}
         style={pinStyle(c)}
         data-label={columnLabel(c)}
+        title={rowHeight && typeof cell.getValue() === 'string' ? (cell.getValue() as string) : undefined}
         className={cx(
-          'px-3 align-top [overflow-wrap:anywhere]',
+          'px-3 align-middle',
+          rowHeight ? 'overflow-hidden text-ellipsis whitespace-nowrap @max-xl/dt:whitespace-normal' : '',
+          '[overflow-wrap:anywhere]',
           pad,
+          fixedCell,
           c.columnDef.meta?.align === 'end' && 'text-right tabular-nums',
           pinned && bg,
           pinned && c.getIsLastColumn('left') && 'border-r border-border',
@@ -505,7 +518,6 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const fitted = Object.keys(sizing).length === 0;
   // The checkbox and the row-actions column keep a fixed width; the others share the rest.
   const isFixed = (c: Column<T, unknown>) => c.id === SELECT_COLUMN || !!c.columnDef.meta?.actions;
-  const fixedWidth = (enableSelection ? 44 : 0) + table.getVisibleLeafColumns().reduce((n, c) => n + (c.columnDef.meta?.actions ? c.getSize() : 0), 0);
   const flexibleTotal = Math.max(1, table.getVisibleLeafColumns().reduce((n, c) => n + (isFixed(c) ? 0 : c.getSize()), 0));
   // Fitted tables never squeeze a column below ~96px (text would wrap letter by letter on a tablet): past that the
   // region scrolls sideways with the checkbox and first column pinned. Phones get cards instead (container query).
@@ -639,13 +651,14 @@ export function DataTable<T>(props: DataTableProps<T>) {
             region scrolls sideways with the checkbox and first column pinned. */}
         <table
           className="table-fixed border-collapse text-sm @max-xl/dt:block @max-xl/dt:w-full! @max-xl/dt:min-w-0!"
-          style={{ width: fitted ? '100%' : table.getTotalSize(), minWidth: fitted ? `max(100%, ${minFitted}px)` : '100%' }}
+          style={{ width: fitted ? '100%' : table.getTotalSize(), minWidth: fitted ? `max(100%, ${minFitted}px)` : '100%', ...(rowHeight ? ({ '--dt-row-h': `${rowHeight}px` } as CSSProperties) : {}) }}
           aria-label={label}
           aria-busy={loading || fetching || undefined}
         >
           <colgroup className="@max-xl/dt:hidden">
             {table.getVisibleLeafColumns().map((c) => (
-              <col key={c.id} style={{ width: fitted && !isFixed(c) ? `calc((100% - ${fixedWidth}px) * ${c.getSize() / flexibleTotal})` : c.getSize() }} />
+              // Plain percentages: a calc() that mixes % and px in a <col> is ignored by some engines (every column then gets the same width).
+              <col key={c.id} style={{ width: fitted && !isFixed(c) ? `${((c.getSize() / flexibleTotal) * 100).toFixed(3)}%` : c.getSize() }} />
             ))}
           </colgroup>
           <thead className="@max-xl/dt:block">
