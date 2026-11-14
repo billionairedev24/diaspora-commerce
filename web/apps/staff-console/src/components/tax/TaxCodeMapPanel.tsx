@@ -1,7 +1,7 @@
 'use client';
 
 import { isApiError, staffTaxKeys, staffTaxQueries, type TaxCodeEntry, type TaxCodeMapImportResult, type TaxCompleteness, type TaxProvider } from '@afrotransact/api-client';
-import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { CellText, DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Button, ChipGroup, ProgressMeter, Select, TextField, useToast } from '@afrotransact/ui';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -89,24 +89,26 @@ export function TaxCodeMapPanel() {
       {
         id: 'internalTaxCode',
         header: 'Outcome',
-        size: 330,
+        size: 280,
         accessorFn: (r) => r.internalTaxCode,
         cell: ({ row }) => (
-          <span className="flex flex-col">
-            <span className="font-semibold">{row.original.outcomeName}</span>
-            <span className={`${mono} text-muted`}>{row.original.internalTaxCode}</span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <strong title={row.original.outcomeName} className="block truncate font-semibold">
+              {row.original.outcomeName}
+            </strong>
+            <CellText mono>{row.original.internalTaxCode}</CellText>
           </span>
         ),
         meta: { label: 'Outcome', kind: 'text' }
       },
-      { id: 'categoryName', header: 'Category', size: 190, accessorFn: (r) => r.categoryName, meta: { label: 'Category', kind: 'text' } },
-      { id: 'outcomeLabel', header: 'Tax', size: 130, accessorFn: (r) => r.outcomeLabel, meta: { label: 'Tax', kind: 'text' } },
-      { id: 'providerCode', header: 'Provider code', size: 150, accessorFn: (r) => r.providerCode, cell: ({ row }) => <span className={mono}>{row.original.providerCode || '—'}</span>, meta: { label: 'Provider code', kind: 'text' } },
-      { id: 'stateLabel', header: 'Status', size: 200, accessorFn: (r) => r.stateLabel, cell: ({ row }) => <CodeStatePill state={row.original.state} label={row.original.stateLabel} />, meta: { label: 'Status', kind: 'status' } },
+      { id: 'categoryName', header: 'Category', size: 170, accessorFn: (r) => r.categoryName, meta: { label: 'Category', kind: 'text' } },
+      { id: 'outcomeLabel', header: 'Tax', size: 150, accessorFn: (r) => r.outcomeLabel, meta: { label: 'Tax', kind: 'text' } },
+      { id: 'providerCode', header: 'Provider code', size: 170, accessorFn: (r) => r.providerCode, cell: ({ row }) => <CellText mono>{row.original.providerCode || '—'}</CellText>, meta: { label: 'Provider code', kind: 'text' } },
+      { id: 'stateLabel', header: 'Status', size: 190, accessorFn: (r) => r.stateLabel, cell: ({ row }) => <CodeStatePill state={row.original.state} label={row.original.stateLabel} />, meta: { label: 'Status', kind: 'status' } },
       {
         id: 'changedByName',
         header: 'Last change',
-        size: 200,
+        size: 190,
         enableSorting: false,
         accessorFn: (r) => r.changedByName,
         cell: ({ row }) => (row.original.changedByName ? `${row.original.changedByName}, ${shortDate(row.original.changedAt)}` : '—'),
@@ -172,6 +174,7 @@ export function TaxCodeMapPanel() {
         </>
       ) : null}
       <DataTable<TaxCodeEntry>
+        rowHeight={60}
         id={`staff.tax.codes.${current}`}
         label={`${data?.providerLabel ?? 'Provider'} codes`}
         columns={columns}

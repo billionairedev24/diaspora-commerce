@@ -1,7 +1,7 @@
 'use client';
 
 import { staffTaxQueries, type TaxProfileRow } from '@afrotransact/api-client';
-import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { CellText, DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Select } from '@afrotransact/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -12,7 +12,7 @@ import { ErrorState } from '@/components/ui/States';
 import { staffApi } from '@/lib/api';
 import { useSheetUrl } from '@/lib/use-sheet-url';
 
-import { GatePill, mono } from './shared';
+import { GatePill } from './shared';
 import { TaxProfileSheet } from './TaxProfileSheet';
 
 const PREFIX = 'profiles';
@@ -70,7 +70,11 @@ export function TaxProfilesPanel() {
   const columns = useMemo<ColumnDef<TaxProfileRow>[]>(
     () => [
       { id: 'departmentName', header: 'Department', size: 170, accessorFn: (r) => r.departmentName, meta: { label: 'Department', kind: 'text' } },
-      { id: 'name', header: 'Category', size: 230, accessorFn: (r) => r.name, cell: ({ row }) => <strong className="font-semibold">{row.original.name}</strong>, meta: { label: 'Category', kind: 'text' } },
+      { id: 'name', header: 'Category', size: 230, accessorFn: (r) => r.name, cell: ({ row }) => (
+          <strong title={row.original.name} className="line-clamp-2 font-semibold whitespace-normal">
+            {row.original.name}
+          </strong>
+        ), meta: { label: 'Category', kind: 'text' } },
       {
         id: 'statusLabel',
         header: 'Status',
@@ -85,11 +89,11 @@ export function TaxProfilesPanel() {
         size: 200,
         enableSorting: false,
         accessorFn: (r) => r.stripeCodeList,
-        cell: ({ row }) => <span className={mono}>{row.original.stripeCodes.join(', ') || '—'}</span>,
+        cell: ({ row }) => <CellText mono>{row.original.stripeCodes.join(', ') || '—'}</CellText>,
         meta: { label: 'Stripe codes', kind: 'text' }
       },
-      { id: 'scenarioCount', header: 'Scenarios', size: 100, accessorFn: (r) => r.scenarioCount, meta: { label: 'Scenarios', kind: 'number', align: 'end' } },
-      { id: 'ruleVersion', header: 'Rule version', size: 190, accessorFn: (r) => r.ruleVersion, cell: ({ row }) => <span className={mono}>{row.original.ruleVersion}</span>, meta: { label: 'Rule version', kind: 'text' } },
+      { id: 'scenarioCount', header: 'Scenarios', size: 125, accessorFn: (r) => r.scenarioCount, meta: { label: 'Scenarios', kind: 'number', align: 'end' } },
+      { id: 'ruleVersion', header: 'Rule version', size: 230, accessorFn: (r) => r.ruleVersion, cell: ({ row }) => <CellText mono>{row.original.ruleVersion}</CellText>, meta: { label: 'Rule version', kind: 'text' } },
       rowActionsColumn<TaxProfileRow>({
         header: 'Actions',
         name: (r) => r.name,
@@ -131,6 +135,7 @@ export function TaxProfilesPanel() {
         />
       </div>
       <DataTable<TaxProfileRow>
+        rowHeight={56}
         id="staff.tax.profiles"
         label="Tax profiles"
         columns={columns}

@@ -22,6 +22,9 @@ import { TaxShadowPanel } from './TaxShadowPanel';
  * here follows tax:read (see) and tax:classify-admin (change); the tabs keep the keys they had under Settings, so old
  * links to `?tab=tax-review` still land on the right one.
  */
+/** What only makes sense with a detail sheet open: switching tab drops it, so coming back to a tab never reopens a stale sheet. */
+const SHEET_PARAMS = ['open', 'variant', 'profile', 'do'];
+
 export function TaxView() {
   const t = useT();
   const router = useRouter();
@@ -79,7 +82,7 @@ export function TaxView() {
         <Tabs
           label={t('st.tax.tabs')}
           value={items.some((it) => it.value === tab) ? tab : (items[0]?.value ?? tab)}
-          onValueChange={(v) => router.replace(`${pathname}?${new URLSearchParams([...params.entries()].filter(([k]) => k !== 'open' && k !== 'tab').concat([['tab', v]])).toString()}`, { scroll: false })}
+          onValueChange={(v) => router.replace(`${pathname}?${new URLSearchParams([...params.entries()].filter(([k]) => !SHEET_PARAMS.includes(k) && k !== 'tab').concat([['tab', v]])).toString()}`, { scroll: false })}
           items={items}
         />
       </div>
