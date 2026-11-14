@@ -604,9 +604,11 @@ export const shopperHandlers = [
     const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
     const shipping = packageDeliveryFees(packages, q.get('packageDelivery'));
     const empty = { taxMinor: 0, taxJurisdictionLabel: '', taxLines: [], blockedLines: [], subtotalMinor: subtotal, shippingMinor: shipping, totalMinor: subtotal + shipping, currency: 'USD' };
-    // No ZIP code typed: a signed-in shopper's saved address is used (the default, else the first that can be taxed). One that
-    // cannot be taxed is ADDRESS_INCOMPLETE; only a guest or a shopper with no saved address is asked for a ZIP code.
+    // No ZIP code typed: the place the site already knows, in priority order like the BFF: a signed-in shopper's saved address
+    // (default first, else the first that can be taxed), then the delivery place chosen under "Deliver to", then the detected
+    // one. A guest is therefore never asked for a ZIP code while the header shows a place; only a visitor with none is.
     let saved: { zip: string; state: string; city: string } | undefined;
+    let known: { zip: string; state: string; city: string; source: 'CHOSEN_PLACE' | 'DETECTED_PLACE' } | undefined;
     if (!zip) {
       let book: { isDefault?: boolean; state?: string; zip: string; city: string }[] = [];
       try {
@@ -618,15 +620,19 @@ export const shopperHandlers = [
       const def = book.find((x) => x.isDefault);
       const a = def ? (taxable(def) ? def : undefined) : book.find(taxable);
       if (a) saved = { zip: a.zip, state: a.state ?? '', city: a.city };
-      else if (book.length > 0)
-        return json({ ...empty, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'ADDRESS_INCOMPLETE', taxRateLabel: TAX_LABELS.ADDRESS_INCOMPLETE });
-      else return json({ ...empty, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxRateLabel: TAX_LABELS.NEEDS_ZIP });
+      else {
+        const loc = ctx.session.zip ? sessionLocation(ctx.session) : null;
+        if (loc && loc.state) known = { zip: loc.zip, state: loc.state, city: loc.city, source: loc.source === 'chosen' ? 'CHOSEN_PLACE' : 'DETECTED_PLACE' };
+        else if (book.length > 0)
+          return json({ ...empty, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'ADDRESS_INCOMPLETE', taxRateLabel: TAX_LABELS.ADDRESS_INCOMPLETE });
+        else return json({ ...empty, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxRateLabel: TAX_LABELS.NEEDS_ZIP });
+      }
     }
-    const place = saved ?? locationForZip(zip.slice(0, 5));
-    if (!saved && (!/^\d{5}(-\d{4})?$/.test(zip) || !place)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'We don’t recognise that ZIP code.', { errors: { zip: 'Enter a 5-digit ZIP code' } });
+    const place = saved ?? known ?? locationForZip(zip.slice(0, 5));
+    if (!saved && !known && (!/^\d{5}(-\d{4})?$/.test(zip) || !place)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'We don’t recognise that ZIP code.', { errors: { zip: 'Enter a 5-digit ZIP code' } });
     const shippingByPackage = Object.fromEntries(packages.map((p) => [p.packageId, packageDeliveryFees([p], q.get('packageDelivery'))]));
-    const tax = mockCheckoutTax({ packages, state: place?.state, city: place?.city, zip: saved?.zip ?? zip, shippingByPackage, discountMinor: 0, hasAddress: true });
-    return json({ ...empty, ...tax, taxPlaceSource: saved ? 'SAVED_ADDRESS' : 'ZIP', taxMinor: tax.taxMinor, totalMinor: subtotal + shipping + tax.taxMinor });
+    const tax = mockCheckoutTax({ packages, state: place?.state, city: place?.city, zip: saved?.zip ?? known?.zip ?? zip, shippingByPackage, discountMinor: 0, hasAddress: true });
+    return json({ ...empty, ...tax, taxPlaceSource: saved ? 'SAVED_ADDRESS' : (known?.source ?? 'ZIP'), taxPlacePrecision: 'ZIP', taxMinor: tax.taxMinor, totalMinor: subtotal + shipping + tax.taxMinor });
   })),
 
   /* Checkout */

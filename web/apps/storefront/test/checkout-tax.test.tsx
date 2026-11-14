@@ -25,6 +25,19 @@ vi.mock('next/navigation', () => ({
 const problem = (code: string, detail: string) =>
   HttpResponse.json({ type: 'about:blank', title: 'Unprocessable', status: 422, code, detail }, { status: 422, headers: { 'content-type': 'application/problem+json' } });
 
+/** A visitor with no place at all (no saved address, nothing chosen, nothing detected): the cart estimate asks for a ZIP code. */
+const noPlaceAtAll = () =>
+  mockServer.use(
+    http.get('*/v1/checkout/tax-estimate', ({ request }) => {
+      const zip = new URL(request.url).searchParams.get('zip');
+      return HttpResponse.json(
+        zip
+          ? { taxEstimateStatus: 'ESTIMATED', taxMinor: 214, taxRateLabel: '8.25%', taxJurisdictionLabel: 'Houston, TX', taxZip: zip, taxLines: [], blockedLines: [], taxPlaceSource: 'ZIP', taxPlacePrecision: 'ZIP', subtotalMinor: 0, shippingMinor: 0, totalMinor: 0, currency: 'USD' }
+          : { taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxMinor: 0, taxRateLabel: 'x', taxJurisdictionLabel: '', taxLines: [], subtotalMinor: 0, shippingMinor: 0, totalMinor: 0, currency: 'USD' }
+      );
+    })
+  );
+
 describe('checkout tax', () => {
   installMockBff();
 
@@ -110,6 +123,7 @@ describe('checkout tax', () => {
     });
 
     it('no address and no ZIP code yet: an input for a ZIP code, never an amount; typing one shows the estimate for that place', async () => {
+      noPlaceAtAll();
       const summary = await overridden(() => ({ taxMinor: 0, taxRateLabel: 'Enter your ZIP code to see tax', taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }), { noAddress: true });
       expect(summary.getByTestId('checkout-tax-amount')).toHaveTextContent('—');
       expect(await summary.findByText('Enter your ZIP code to see tax')).toBeInTheDocument();
@@ -131,6 +145,7 @@ describe('checkout tax', () => {
     });
 
     it('a ZIP code that is not 5 digits is refused before asking', async () => {
+      noPlaceAtAll();
       const summary = await overridden(() => ({ taxMinor: 0, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }), { noAddress: true });
       const user = userEvent.setup();
       await user.type(await summary.findByLabelText('Enter your ZIP code to see tax'), '770');

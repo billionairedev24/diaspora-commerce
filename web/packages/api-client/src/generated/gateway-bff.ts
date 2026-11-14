@@ -1960,9 +1960,11 @@ export interface paths {
          * Estimated tax for a ZIP code, before an address exists (cart page, a new shopper)
          * @description The same tax-returns quote as the checkout summary, for the selected cart lines at each package's first
          *     delivery option, in the place the ZIP code is in. No coupon, membership or delivery choice is known yet, so the
-         *     final tax can differ; the checkout shows the estimate that is locked (`taxQuoteId`). With no `zip` a signed-in
-         *     shopper's saved address is used (see `taxPlaceSource`); only a guest or a shopper with no saved address gets
-         *     `NEEDS_ADDRESS` (the client shows a ZIP code input; never $0.00).
+         *     final tax can differ; the checkout shows the estimate that is locked (`taxQuoteId`). With no `zip` the place the site
+         *     already knows is used, in priority order: the signed-in shopper's saved address, the place chosen under "Deliver
+         *     to", the place detected from the edge's headers, the market's default (see `taxPlaceSource` and
+         *     `taxPlacePrecision`); only a visitor with none of them gets `NEEDS_ADDRESS` (the client shows a ZIP code input;
+         *     never $0.00).
          */
         get: operations["getCheckoutTaxEstimate"];
         put?: never;
@@ -3445,10 +3447,15 @@ export interface components {
             /** @description With BLOCKED_ITEMS: the cart lines that cannot be sold yet (name them and offer Remove; never ids). */
             blockedLines?: components["schemas"]["CheckoutBlockedLine"][];
             /**
-             * @description Where the estimate's place came from: the signed-in shopper's saved address (default first, else the first that can be taxed) or the ZIP code sent. Absent when there is no place yet. With no zip, a signed-in shopper whose saved address cannot be taxed gets UNAVAILABLE / ADDRESS_INCOMPLETE, and one whose address book could not be read gets UNAVAILABLE / SERVICE_UNAVAILABLE (Retry); NEEDS_ADDRESS / NEEDS_ZIP (the ZIP input) is only for guests and shoppers with no saved address. Additive: older clients ignore it.
+             * @description Where the estimate's place came from, in priority order: SAVED_ADDRESS (the signed-in shopper's default address, else the first that can be taxed), the ZIP code sent, CHOSEN_PLACE (the "Deliver to" place the shopper chose), DETECTED_PLACE (the place detected from the edge's visitor-location headers) and DEFAULT_PLACE (the market's default, the same place the header shows). Absent when there is no place. A saved address that cannot be taxed falls through to the known place; only when there is none does the shopper get UNAVAILABLE / ADDRESS_INCOMPLETE. An address book that could not be read gets UNAVAILABLE / SERVICE_UNAVAILABLE (Retry). NEEDS_ADDRESS / NEEDS_ZIP (the ZIP input) is rare: no saved address and no place with a real ZIP. Additive: older clients ignore new values.
              * @enum {string}
              */
-            taxPlaceSource?: "SAVED_ADDRESS" | "ZIP";
+            taxPlaceSource?: "SAVED_ADDRESS" | "CHOSEN_PLACE" | "DETECTED_PLACE" | "DEFAULT_PLACE" | "ZIP";
+            /**
+             * @description How exactly the place is known: ZIP (a real ZIP: saved, chosen, typed or reported by the edge) or CITY (only the city and state were known; the ZIP is the city's representative one from geo's ZIP table, and tax-returns was told shipTo.precision CITY). The client says "based on your location" for a detected place and may say "approximate" for CITY. Absent when there is no place.
+             * @enum {string}
+             */
+            taxPlacePrecision?: "ZIP" | "CITY";
             subtotalMinor: number;
             shippingMinor: number;
             /** @description Items + delivery + estimated tax, without a coupon or membership (not yet known) */

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
@@ -75,4 +76,17 @@ func (g *geoImpl) Reverse(ctx context.Context, lat, lon float64) (port.GeoAddres
 	var out port.GeoAddress
 	_, err := call(ctx, g.c, httpclient.Request{Path: "/v1/reverse", Query: v}, &out)
 	return out, err
+}
+
+// ZipsByCity is geo's GET /v1/zips/by-city (the embedded ZIP table; cached like a ZIP lookup, it is reference data).
+func (g *geoImpl) ZipsByCity(ctx context.Context, city, state string) (port.GeoCityZips, error) {
+	v := url.Values{"city": {city}, "state": {state}}
+	return cached(g.cache, "geo:city:"+strings.ToUpper(city)+"|"+strings.ToUpper(state), func() (port.GeoCityZips, http.Header, error) {
+		var out port.GeoCityZips
+		res, err := call(ctx, g.c, httpclient.Request{Path: "/v1/zips/by-city", Query: v}, &out)
+		if err != nil {
+			return out, nil, err
+		}
+		return out, res.Header, nil
+	}, func(http.Header) time.Duration { return g.zipTTL })
 }

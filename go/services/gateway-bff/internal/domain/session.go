@@ -48,11 +48,13 @@ type Session struct {
 	GuestCartID string    `json:"guestCartId,omitempty"`
 	ZIP         string    `json:"zip,omitempty"`
 	// City, State and LocationSource describe the deliver-to ZIP: the place the shopper picked or the edge detected.
-	City           string   `json:"city,omitempty"`
-	State          string   `json:"state,omitempty"`
-	LocationSource string   `json:"locationSource,omitempty"`
-	Tokens         *Tokens  `json:"tokens,omitempty"`
-	Profile        *Profile `json:"profile,omitempty"`
+	City           string `json:"city,omitempty"`
+	State          string `json:"state,omitempty"`
+	LocationSource string `json:"locationSource,omitempty"`
+	// LocationPrecision is "CITY" when the deliver-to ZIP was resolved from a detected city (see DeliveryLocation.Precision).
+	LocationPrecision string   `json:"locationPrecision,omitempty"`
+	Tokens            *Tokens  `json:"tokens,omitempty"`
+	Profile           *Profile `json:"profile,omitempty"`
 	// Audience is which sign-out policy applies (the web app the person signed in at); empty on sessions stored
 	// before the policy existed, which the service works out from the request and stamps.
 	Audience Audience `json:"audience,omitempty"`

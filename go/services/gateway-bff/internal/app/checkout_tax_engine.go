@@ -66,6 +66,8 @@ func (noTaxMetrics) QuoteLock(string)           {}
 // docs/engineering/checkout-tax-estimate.md).
 type taxDestination struct {
 	Country, State, PostalCode, City string
+	// Precision is CITY when the ZIP was resolved from a city name (tax-returns reports it back); empty means ZIP.
+	Precision string
 }
 
 func destinationOf(addr *port.IdentityAddress) taxDestination {
@@ -115,7 +117,7 @@ func (s *checkoutPaymentServiceImpl) buildTaxQuote(sum *domain.CheckoutSummary, 
 	}
 	cur := strings.ToUpper(firstNonEmpty(sum.Currency, domain.Currency))
 	b.req = port.UpTaxQuoteRequest{Currency: cur, ShipTo: port.UpTaxShipTo{Country: dest.Country, State: dest.State,
-		PostalCode: dest.PostalCode, City: dest.City}, Lines: lines}
+		PostalCode: dest.PostalCode, City: dest.City, Precision: dest.Precision}, Lines: lines}
 	return b
 }
 

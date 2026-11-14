@@ -45,6 +45,13 @@ func (s *checkoutPaymentServiceImpl) shippingAllocation() ShippingAllocation {
 // tax_estimate_unavailable_total{reason} and logs the cause.
 func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.CheckoutSummary, addr *port.IdentityAddress,
 	packageDelivery map[string]string) {
+	s.priceTaxAt(ctx, sum, addr, "", packageDelivery)
+}
+
+// priceTaxAt is priceTax for a place known to the given precision ("" or ZIP = a real ZIP; CITY = the ZIP was resolved from
+// a city name), which tax-returns reports back on every line. The checkout itself always prices a real address.
+func (s *checkoutPaymentServiceImpl) priceTaxAt(ctx context.Context, sum *domain.CheckoutSummary, addr *port.IdentityAddress, precision string,
+	packageDelivery map[string]string) {
 	switch {
 	case addr == nil:
 		s.taxUnavailable(ctx, sum, domain.TaxReasonNeedsZip, reasonNeedsZip, nil)
@@ -56,7 +63,11 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 		s.taxUnavailable(ctx, sum, domain.TaxReasonServiceUnavailable, reasonNotConfigured, errors.New("tax-returns client is not configured"))
 		return
 	}
-	basis := s.buildTaxQuote(sum, destinationOf(addr), packageDelivery)
+	dest := destinationOf(addr)
+	if precision == domain.PrecisionCity {
+		dest.Precision = precision
+	}
+	basis := s.buildTaxQuote(sum, dest, packageDelivery)
 	lines, method := basis.req.Lines, basis.method
 	shippingByLine, pkgOf, lineOf := basis.shippingByLine, basis.pkgOf, basis.lineOf
 	if len(lines) == 0 {

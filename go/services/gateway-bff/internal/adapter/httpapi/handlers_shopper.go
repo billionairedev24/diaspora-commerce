@@ -260,6 +260,11 @@ func (h *handlersImpl) payLinkConfirm(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) taxEstimate(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	if q.Get("zip") == "" {
+		// A visitor whose header place was never detected (this is their first call) gets the edge's place now, so the
+		// estimate works from the location the site already has instead of asking for a ZIP code.
+		h.detectLocation(r)
+	}
 	v, err := h.s.Shopper.Checkout.TaxEstimate(r.Context(), callerFrom(r.Context()), q.Get("zip"), parseCheckoutPackageDelivery(q))
 	h.ok(w, r, v, err)
 }

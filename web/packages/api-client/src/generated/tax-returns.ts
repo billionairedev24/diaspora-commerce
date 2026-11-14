@@ -1270,6 +1270,11 @@ export interface components {
             state: string;
             postalCode: string;
             city?: string;
+            /**
+             * @description How exactly the caller knew the place: ZIP (default; a typed, saved or chosen ZIP) or CITY (the ZIP was resolved from a city name, e.g. a place detected from edge headers). Never changes the rate looked up; the lines report it back as addressPrecision CITY so an estimate can be labelled honestly.
+             * @enum {string}
+             */
+            precision?: "ZIP" | "CITY";
         };
         /** @description Tax per line, rounded half up to the minor unit once per line */
         TaxQuote: {
@@ -1312,10 +1317,10 @@ export interface components {
             /** @description Plain message for the shopper when the line cannot be taxed */
             blockedReason?: string;
             /**
-             * @description How exactly the address was resolved: ZIP (rate table, the documented TX-03 launch limitation) or ADDRESS (a provider resolved the exact address)
+             * @description How exactly the address was resolved: ZIP (rate table, the documented TX-03 launch limitation), CITY (the request said the ZIP was resolved from a city name) or ADDRESS (a provider resolved the exact address)
              * @enum {string}
              */
-            addressPrecision?: "ZIP" | "ADDRESS";
+            addressPrecision?: "ZIP" | "CITY" | "ADDRESS";
             /** @description Why the line carries no tax, in plain words for the shopper (the category and the rule's own wording; no codes or ids; English). Present only for a RESOLVED, EXEMPT decision; never shown for any other status. */
             explanation?: string;
         };

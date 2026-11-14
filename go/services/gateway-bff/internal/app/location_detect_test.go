@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -28,7 +29,15 @@ type placeGeo struct {
 	suggest map[string][]port.GeoSuggestion // by kind
 	resolve map[string]port.GeoAddress
 	reverse port.GeoAddress
+	cities  map[string]port.GeoCityZips // by "CITY|ST"
 	kinds   []string
+}
+
+func (g *placeGeo) ZipsByCity(_ context.Context, city, state string) (port.GeoCityZips, error) {
+	if z, ok := g.cities[strings.ToUpper(city)+"|"+strings.ToUpper(state)]; ok {
+		return z, nil
+	}
+	return port.GeoCityZips{}, port.ErrNotFound
 }
 
 func (g *placeGeo) Zip(_ context.Context, zip string) (port.GeoAddress, error) {
@@ -179,5 +188,28 @@ func TestSetSuggestionCityUsesTheZipAtItsCentre(t *testing.T) {
 	geo.resolve["g:9"] = port.GeoAddress{City: "Lagos", Country: "NG"}
 	if _, err := svc.SetSuggestion(context.Background(), &domain.Caller{}, "g:9", ""); err == nil {
 		t.Error("a place outside the market must be refused")
+	}
+}
+
+func TestDetectWithOnlyACityAndStateUsesTheCitysRealZipAtCityPrecision(t *testing.T) {
+	geo := &placeGeo{zips: map[string]port.GeoAddress{"77002": {City: "Houston", State: "TX"}},
+		cities: map[string]port.GeoCityZips{"HOUSTON|TX": {City: "Houston", State: "TX", Zip: "77002", Zips: []string{"77002", "77003"}}}}
+	svc, _ := newPlaceService(geo, LocationOptions{TrustEdgeGeo: true})
+	c := &domain.Caller{}
+	svc.Detect(context.Background(), c, domain.EdgeHints{Country: "US", City: "Houston", Region: "TX"})
+	if c.Session == nil || c.Session.ZIP != "77002" || c.Session.LocationSource != domain.LocationDetected || c.Session.LocationPrecision != domain.PrecisionCity {
+		t.Fatalf("session = %+v", c.Session)
+	}
+	if loc := svc.Current(context.Background(), c); loc.Precision != domain.PrecisionCity || loc.Source != domain.LocationDetected || loc.Label != "Houston" {
+		t.Errorf("loc = %+v", loc)
+	}
+	// a region that is not a state code, or a city the table does not hold, is not detected (no guessing)
+	for name, h := range map[string]domain.EdgeHints{"region name": {Country: "US", City: "Houston", Region: "Texas"},
+		"unknown city": {Country: "US", City: "Atlantis", Region: "TX"}} {
+		c := &domain.Caller{}
+		svc.Detect(context.Background(), c, h)
+		if c.Session != nil {
+			t.Errorf("%s: detected %+v", name, c.Session)
+		}
 	}
 }

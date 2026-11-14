@@ -318,6 +318,17 @@ type GeoClient interface {
 	Validate(ctx context.Context, a GeoAddress) (GeoValidation, error)
 	Zip(ctx context.Context, zip string) (GeoAddress, error)
 	Reverse(ctx context.Context, lat, lon float64) (GeoAddress, error)
+	// ZipsByCity is geo's GET /v1/zips/by-city: the real ZIPs of a city from the ZIP table and the representative one;
+	// ErrNotFound when the table has no such city.
+	ZipsByCity(ctx context.Context, city, state string) (GeoCityZips, error)
+}
+
+// GeoCityZips are the ZIPs geo's table holds for a city; Zip is the representative one.
+type GeoCityZips struct {
+	City  string   `json:"city"`
+	State string   `json:"state"`
+	Zip   string   `json:"zip"`
+	Zips  []string `json:"zips"`
 }
 
 // ---------------------------------------------------------------- identity (OIDC + REST)

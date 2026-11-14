@@ -111,10 +111,11 @@ func (l *locationServiceImpl) lookup(ctx context.Context, zip, city, state, sour
 }
 
 func (l *locationServiceImpl) Current(ctx context.Context, c *domain.Caller) domain.DeliveryLocation {
-	zip, city, state, source := c.ZIP(), "", "", domain.LocationDefault
+	zip, city, state, source, precision := c.ZIP(), "", "", domain.LocationDefault, ""
 	if zip != "" && c.Session != nil {
 		city, state = c.Session.City, c.Session.State
 		source = firstNonEmpty(c.Session.LocationSource, domain.LocationChosen)
+		precision = c.Session.LocationPrecision
 	}
 	if zip == "" {
 		zip = l.o.DefaultZIP
@@ -123,10 +124,11 @@ func (l *locationServiceImpl) Current(ctx context.Context, c *domain.Caller) dom
 	if err != nil {
 		if zip != l.o.DefaultZIP {
 			l.o.Log.InfoContext(ctx, "zip lookup failed; showing the stored city only", "error", err)
-			return domain.DeliveryLocation{ZIP: zip, City: city, State: state, Label: city, Serviceable: true, Source: source}
+			return domain.DeliveryLocation{ZIP: zip, City: city, State: state, Label: city, Serviceable: true, Source: source, Precision: precision}
 		}
 		return l.fallback()
 	}
+	loc.Precision = precision
 	return loc
 }
 
@@ -159,6 +161,7 @@ func (l *locationServiceImpl) zipErr(err error) error {
 func (l *locationServiceImpl) remember(ctx context.Context, c *domain.Caller, loc domain.DeliveryLocation) error {
 	l.sessions.Ensure(c)
 	c.Session.ZIP, c.Session.City, c.Session.State, c.Session.LocationSource = loc.ZIP, loc.City, loc.State, loc.Source
+	c.Session.LocationPrecision = loc.Precision
 	if err := l.sessions.Save(ctx, c); err != nil {
 		return fmt.Errorf("remember location: %w", err)
 	}
@@ -277,7 +280,29 @@ func (l *locationServiceImpl) detect(ctx context.Context, h domain.EdgeHints) (d
 			return loc, true
 		}
 	}
-	return domain.DeliveryLocation{}, false
+	return l.detectByCity(ctx, h)
+}
+
+var edgeStateRe = regexp.MustCompile(`^[A-Za-z]{2}$`)
+
+// detectByCity is the last signal: the edge named a city and a two-letter state but no ZIP and no usable point. The ZIP is
+// the city's representative one from geo's ZIP table (real data, never invented) and the place is marked CITY precision,
+// so an estimate made from it says so. No such city in the table means no detection.
+func (l *locationServiceImpl) detectByCity(ctx context.Context, h domain.EdgeHints) (domain.DeliveryLocation, bool) {
+	city, state := strings.TrimSpace(h.City), strings.TrimSpace(h.Region)
+	if city == "" || !edgeStateRe.MatchString(state) {
+		return domain.DeliveryLocation{}, false
+	}
+	z, err := l.geo.ZipsByCity(ctx, city, state)
+	if err != nil || !zipRe.MatchString(z.Zip) {
+		if err != nil && !errors.Is(err, port.ErrNotFound) {
+			l.o.Log.InfoContext(ctx, "city to ZIP lookup failed; no location detected", "error", err)
+		}
+		return domain.DeliveryLocation{}, false
+	}
+	loc := l.place(ctx, z.Zip, firstNonEmpty(z.City, city), strings.ToUpper(firstNonEmpty(z.State, state)), domain.LocationDetected)
+	loc.Precision = domain.PrecisionCity
+	return loc, true
 }
 
 func sourceOf(provider, id string) string {

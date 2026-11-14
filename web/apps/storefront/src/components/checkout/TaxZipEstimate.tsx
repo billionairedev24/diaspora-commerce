@@ -3,7 +3,7 @@
 import { accountQueries, type CartTaxEstimate, type CheckoutBlockedLine, isApiError, shopperQueries, siteQueries } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button } from '@afrotransact/ui';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n/t';
@@ -18,8 +18,9 @@ type Props = {
   /** Read the estimate again when this changes (the cart's contents); the shown amount follows the cart. */
   refreshKey?: string | number;
   /**
-   * Work the place out without asking: the signed-in shopper's saved address (default first), else the delivery place they
-   * chose in the header when it has a ZIP code. The ZIP code input is then only for a guest or a shopper with no usable place.
+   * Work the place out without asking. The BFF uses the place the site already has, in priority order: the signed-in
+   * shopper's saved address, the delivery place they chose in the header, the place detected from the edge, the market's
+   * default. The ZIP code input is then only for a visitor with none of them (rare).
    */
   useSavedAddress?: boolean;
   /** Takes a blocked line out of the cart (the cart page). Without it the blocked items are only named. */
@@ -28,7 +29,8 @@ type Props = {
 
 /**
  * What the tax row shows, from the BFF's own `taxEstimateStatus` / `taxUnavailableReason` and never from a guess:
- *  - `estimate`: the amount with the place it is for (a saved address, the chosen delivery place or a typed ZIP code);
+ *  - `estimate`: the amount with the place it is for (a saved address, the chosen or detected delivery place, or a typed ZIP
+ *    code) and, for a place we worked out ourselves, where it came from;
  *  - `blocked`: items we can't sell yet are named, with Remove (the cart page);
  *  - `incomplete`: the saved address lacks a state or ZIP code, with Edit address;
  *  - `retry`: the estimate could not be worked out right now, with Retry;
@@ -51,7 +53,6 @@ export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLi
   const t = useT();
   const fmt = useFormatters();
   const api = browserApi();
-  const qc = useQueryClient();
   const [zip, setZip] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +65,9 @@ export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLi
   const me = useQuery({ ...accountQueries.me(api), enabled: useSavedAddress });
   const signedIn = me.data?.authenticated === true;
   const book = useQuery({ ...shopperQueries.addresses(api), enabled: useSavedAddress && signedIn });
-  const placeKey = `${signedIn}:${(book.data ?? []).map((a) => `${a.id}/${a.isDefault}/${a.state ?? ''}/${a.zip}`).join(',')}`;
+  // The header's "Deliver to" place is part of the place too: picking another one reads the estimate again.
+  const where = useQuery({ ...siteQueries.deliveryLocation(api), enabled: useSavedAddress });
+  const placeKey = `${signedIn}:${where.data?.zip ?? ''}/${where.data?.source ?? ''}:${(book.data ?? []).map((a) => `${a.id}/${a.isDefault}/${a.state ?? ''}/${a.zip}`).join(',')}`;
 
   const show = useCallback(
     (est: CartTaxEstimate, auto: boolean): View => {
@@ -98,21 +101,9 @@ export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLi
         if (current()) setView(show(est, false));
         return;
       }
-      // 1. the saved address (the BFF reads it); 2. the delivery place chosen in the header, when it has a ZIP code.
-      let est = await api.getTaxEstimate('');
-      let auto = true;
-      if (est.taxEstimateStatus === 'NEEDS_ADDRESS') {
-        const place = await qc.fetchQuery(siteQueries.deliveryLocation(api)).catch(() => null);
-        if (place?.source === 'chosen' && ZIP.test(place.zip)) {
-          try {
-            est = await api.getTaxEstimate(place.zip);
-          } catch (err) {
-            // A place the estimate cannot use is not an error to show: the shopper can type a ZIP code.
-            if (!(isApiError(err) && err.status === 422)) throw err;
-            auto = false;
-          }
-        } else auto = false;
-      }
+      // The BFF works the place out (saved address, chosen place, detected place); nothing to resolve here.
+      const est = await api.getTaxEstimate('');
+      const auto = true;
       if (current()) setView(show(est, auto));
     } catch (err) {
       if (!current()) return;
@@ -124,7 +115,7 @@ export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLi
     } finally {
       if (current()) setBusy(false);
     }
-  }, [api, qc, show, t]);
+  }, [api, show, t]);
 
   useEffect(() => {
     if (useSavedAddress || typed.current) void run();
@@ -149,10 +140,13 @@ export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLi
 
   if (view.kind === 'estimate') {
     const { est } = view;
+    // A place we worked out ourselves says where it came from; a saved address or a ZIP code the shopper typed needs no note.
+    const basis = est.taxPlaceSource === 'DETECTED_PLACE' ? t('co.taxBasedOnLocation') : est.taxPlaceSource === 'DEFAULT_PLACE' ? t('co.taxBasedOnArea') : '';
     return (
       <div className={styles.taxState} data-testid="tax-zip-result">
         <span>
           <strong data-testid="tax-zip-amount">{fmt.money(est.taxMinor)}</strong> · {t('co.taxFor', { place: est.taxJurisdictionLabel || est.taxZip || '' })}
+          {basis && <span className={styles.muted} data-testid="tax-zip-basis">{` · ${basis}`}</span>}
         </span>
         <button
           type="button"
@@ -164,7 +158,7 @@ export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLi
             setView({ kind: 'zip' });
           }}
         >
-          {view.auto ? t('co.taxZip.otherPlace') : t('co.taxZip.change')}
+          {view.auto ? t('co.taxZip.changePlace') : t('co.taxZip.change')}
         </button>
       </div>
     );

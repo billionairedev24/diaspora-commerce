@@ -57,13 +57,45 @@ describe('cart tax estimate', () => {
     const asked = sent.filter((r) => r.url.includes('/v1/checkout/tax-estimate'));
     expect(asked.length).toBeGreaterThan(0);
     expect(asked.every((r) => !/zip=\d/.test(r.url))).toBe(true);
-    expect(within(box).getByRole('button', { name: 'Estimate for another ZIP code' })).toBeInTheDocument();
+    expect(within(box).getByRole('button', { name: 'Change' })).toBeInTheDocument();
   });
 
-  it('a guest is asked for a ZIP code, shown no amount until one is typed, and gets the estimate for that place', async () => {
+  it('a signed-out visitor whose place was detected sees an estimate for it, labelled as based on their location, with no ZIP box', async () => {
     const api = createApiClient({ baseUrl: `${window.location.origin}/api/bff` });
     const seller = await api.getProduct('AT000000P6');
     await api.addToCart({ offerId: seller.buyBox?.offerId ?? '', quantity: 1 });
+    renderWithProviders(<CartView />);
+    const box = await screen.findByTestId('cart-tax-estimate');
+    const result = await within(box).findByTestId('tax-zip-result');
+    expect(result).toHaveTextContent('Estimated for Houston, TX');
+    expect(within(box).getByTestId('tax-zip-basis')).toHaveTextContent('based on your location');
+    expect(within(box).getByTestId('tax-zip-amount').textContent).toMatch(/^\$\d+\.\d{2}$/);
+    expect(within(box).queryByTestId('tax-zip-form')).not.toBeInTheDocument();
+    expect(box.textContent).not.toMatch(/Enter your ZIP code/);
+    expect(within(box).getByRole('button', { name: 'Change' })).toBeInTheDocument();
+    // the visitor is never made to type anything: asked with no ZIP code, the BFF uses the place it already has
+    const asked = sent.filter((r) => r.url.includes('/v1/checkout/tax-estimate'));
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked.every((r) => !/zip=\d/.test(r.url))).toBe(true);
+  });
+
+  it('with no place at all (rare) the visitor is asked for a ZIP code, shown no amount until one is typed, and gets the estimate for that place', async () => {
+    const api = createApiClient({ baseUrl: `${window.location.origin}/api/bff` });
+    const seller = await api.getProduct('AT000000P6');
+    await api.addToCart({ offerId: seller.buyBox?.offerId ?? '', quantity: 1 });
+    mockServer.use(
+      http.get('*/v1/checkout/tax-estimate', ({ request }) => {
+        const zip = new URL(request.url).searchParams.get('zip');
+        return zip
+          ? HttpResponse.json({
+              taxEstimateStatus: 'ESTIMATED', taxMinor: 214, taxRateLabel: '8.25%', taxJurisdictionLabel: 'Houston, TX', taxZip: zip, taxLines: [], blockedLines: [],
+              taxPlaceSource: 'ZIP', taxPlacePrecision: 'ZIP', subtotalMinor: 0, shippingMinor: 0, totalMinor: 0, currency: 'USD'
+            })
+          : HttpResponse.json({
+              taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxMinor: 0, taxRateLabel: 'x', taxJurisdictionLabel: '', taxLines: [], subtotalMinor: 0, shippingMinor: 0, totalMinor: 0, currency: 'USD'
+            });
+      })
+    );
     renderWithProviders(<CartView />);
     const box = await screen.findByTestId('cart-tax-estimate');
     const form = await within(box).findByTestId('tax-zip-form');
@@ -73,10 +105,18 @@ describe('cart tax estimate', () => {
     await user.type(within(form).getByLabelText('Enter your ZIP code to see tax'), '77002');
     await user.click(within(form).getByRole('button', { name: 'See tax' }));
     await waitFor(() => expect(within(box).getByTestId('tax-zip-result')).toHaveTextContent('Estimated for Houston, TX'));
+    expect(within(box).queryByTestId('tax-zip-basis')).not.toBeInTheDocument();
     expect(sent.some((r) => r.url.includes('/v1/checkout/tax-estimate') && r.url.includes('zip=77002'))).toBe(true);
     // changing the ZIP code goes back to the input
     await user.click(within(box).getByRole('button', { name: 'Change ZIP code' }));
     expect(within(box).getByTestId('tax-zip-form')).toBeInTheDocument();
+  });
+
+  it('a place worked out from the market default says so, and a saved address needs no note', async () => {
+    await overrideEstimate({ taxPlaceSource: 'DEFAULT_PLACE' });
+    renderWithProviders(<CartView />);
+    const box = await screen.findByTestId('cart-tax-estimate');
+    expect(await within(box).findByTestId('tax-zip-basis')).toHaveTextContent('based on your delivery area');
   });
 
   it('a guest who chose a delivery place with a ZIP code is not asked for one either', async () => {
@@ -88,7 +128,8 @@ describe('cart tax estimate', () => {
     const box = await screen.findByTestId('cart-tax-estimate');
     expect(await within(box).findByTestId('tax-zip-result')).toHaveTextContent('Estimated for Houston, TX');
     expect(within(box).queryByTestId('tax-zip-form')).not.toBeInTheDocument();
-    expect(sent.some((r) => r.url.includes('/v1/checkout/tax-estimate') && r.url.includes('zip=77002'))).toBe(true);
+    expect(within(box).queryByTestId('tax-zip-basis')).not.toBeInTheDocument();
+    expect(sent.filter((r) => r.url.includes('/v1/checkout/tax-estimate')).every((r) => !/zip=\d/.test(r.url))).toBe(true);
   });
 
   it('a signed-in shopper with no saved address at all is asked for a ZIP code, like a guest', async () => {

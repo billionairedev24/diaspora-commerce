@@ -306,6 +306,8 @@ type UpTaxShipTo struct {
 	State      string `json:"state"`
 	PostalCode string `json:"postalCode"`
 	City       string `json:"city,omitempty"`
+	// Precision is CITY when the ZIP was resolved from a city name; omitted (ZIP) otherwise.
+	Precision string `json:"precision,omitempty"`
 }
 
 // UpTaxQuoteRequest is tax-returns' TaxQuoteRequest.

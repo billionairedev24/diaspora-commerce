@@ -323,7 +323,16 @@ type DeliveryLocation struct {
 	Serviceable bool   `json:"serviceable"`
 	// Source is "chosen" (the shopper picked it), "detected" (edge headers / override) or "default" (the market's).
 	Source string `json:"source"`
+	// Precision is how exactly the place is known: "ZIP" (a ZIP the shopper chose or the edge reported) or "CITY" (only
+	// the city and state were known and the ZIP is the city's representative one from geo's table). Empty means ZIP.
+	Precision string `json:"precision,omitempty"`
 }
+
+// Location precisions (DeliveryLocation.Precision, tax-returns shipTo.precision).
+const (
+	PrecisionZip  = "ZIP"
+	PrecisionCity = "CITY"
+)
 
 // Location sources.
 const (
@@ -778,17 +787,24 @@ type CartTaxEstimate struct {
 	TaxZip               string                `json:"taxZip,omitempty"`
 	TaxLines             []CheckoutTaxLine     `json:"taxLines"`
 	BlockedLines         []CheckoutBlockedLine `json:"blockedLines,omitempty"`
-	// TaxPlaceSource says where the estimate's place came from (SAVED_ADDRESS or ZIP); absent when there is no place yet.
+	// TaxPlaceSource says where the estimate's place came from (SAVED_ADDRESS, CHOSEN_PLACE, DETECTED_PLACE, DEFAULT_PLACE
+	// or ZIP); absent when there is no place yet.
 	TaxPlaceSource string `json:"taxPlaceSource,omitempty"`
-	SubtotalMinor  int64  `json:"subtotalMinor"`
-	ShippingMinor  int64  `json:"shippingMinor"`
-	TotalMinor     int64  `json:"totalMinor"`
-	Currency       string `json:"currency"`
+	// TaxPlacePrecision is ZIP (a real ZIP: saved, chosen, typed or reported by the edge) or CITY (only the city was known;
+	// the ZIP is the city's representative one), so the row can say how exact the estimate is. Absent with no place.
+	TaxPlacePrecision string `json:"taxPlacePrecision,omitempty"`
+	SubtotalMinor     int64  `json:"subtotalMinor"`
+	ShippingMinor     int64  `json:"shippingMinor"`
+	TotalMinor        int64  `json:"totalMinor"`
+	Currency          string `json:"currency"`
 }
 
 // Places a CartTaxEstimate can be worked out for (CartTaxEstimate.TaxPlaceSource).
 const (
 	TaxPlaceSavedAddress = "SAVED_ADDRESS"
+	TaxPlaceChosen       = "CHOSEN_PLACE"
+	TaxPlaceDetected     = "DETECTED_PLACE"
+	TaxPlaceDefault      = "DEFAULT_PLACE"
 	TaxPlaceZip          = "ZIP"
 )
 
