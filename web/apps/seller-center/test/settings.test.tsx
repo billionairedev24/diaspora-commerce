@@ -11,7 +11,6 @@ import { SettingsShell } from '@/components/settings/SettingsShell';
 import { SETTINGS_SECTIONS } from '@/lib/settings-sections';
 
 import nextConfig from '../next.config';
-
 import { asRole, mockApi } from './mock-api';
 import { renderScreen } from './render';
 

@@ -62,14 +62,14 @@ export const SELLER_TOURS = [
     id: 'team',
     prefix: 'sc.tour.team',
     journey: 'setup',
-    route: '/team',
+    route: '/settings/team',
     audience: { permissions: ['team:view'] },
     steps: [
       ['page', 'page-team'],
       ['invite', 'page-team-actions', { optional: true }],
       ['people', 'table-seller.team', { placement: 'top' }],
       ['roles'],
-      ['business', 'page-business-page', { route: '/team/business-page' }]
+      ['business', 'page-settings-business', { route: '/settings/business' }]
     ]
   }),
   defineChapter({
@@ -82,8 +82,20 @@ export const SELLER_TOURS = [
       ['nav', 'account-nav', { placement: 'end' }],
       ['profile', 'account-section', { placement: 'top' }],
       ['security', 'account-section', { route: '/account/security', placement: 'top' }],
-      ['alerts', 'account-section', { route: '/account/notifications', placement: 'top' }],
-      ['display', 'account-section', { route: '/account/preferences', placement: 'top' }]
+      ['alerts', 'page-settings-notifications', { route: '/settings/notifications', placement: 'top' }],
+      ['display', 'page-settings-language', { route: '/settings/language', placement: 'top' }]
+    ]
+  }),
+  defineChapter({
+    id: 'settings',
+    prefix: 'sc.tour.settings',
+    journey: 'setup',
+    route: '/settings',
+    audience: { flags: ['approved'] },
+    steps: [
+      ['page', 'page-settings'],
+      ['list', 'settings-list', { placement: 'top' }],
+      ['status']
     ]
   }),
   defineChapter({
@@ -225,13 +237,25 @@ export const SELLER_TOURS = [
     id: 'shipping-setup',
     prefix: 'sc.tour.shippingSetup',
     journey: 'fulfilment',
-    route: '/orders/ship-from',
+    route: '/settings/locations',
     audience: { permissions: ['orders:view'], flags: ['seller'] },
     steps: [
-      ['page', 'page-ship-from'],
-      ['actions', 'page-ship-from-actions'],
+      ['page', 'page-settings-locations'],
+      ['actions', 'page-settings-locations-actions', { optional: true }],
       ['address', 'ship-from-address', { placement: 'top', optional: true }],
-      ['pickup', 'ship-from-pickup', { placement: 'start', optional: true }]
+      ['shipping', 'settings-shipping-location', { route: '/settings/shipping', placement: 'top', optional: true }]
+    ]
+  }),
+  defineChapter({
+    id: 'pickup-setup',
+    prefix: 'sc.tour.pickupSetup',
+    journey: 'fulfilment',
+    route: '/settings/pickup',
+    audience: { permissions: ['orders:view'], flags: ['seller'] },
+    steps: [
+      ['page', 'page-settings-pickup'],
+      ['location', 'settings-pickup-location', { placement: 'top', optional: true }],
+      ['safe']
     ]
   }),
   defineChapter({

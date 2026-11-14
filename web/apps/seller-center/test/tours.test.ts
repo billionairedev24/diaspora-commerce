@@ -30,9 +30,9 @@ const ALL_MODULES: [ModuleKey, AccessLevel][] = (
 describe('seller tours', () => {
   it('has the chapters in journey order', () => {
     expect(SELLER_TOURS.map((t) => t.id)).toEqual([
-      'welcome', 'application', 'account-health', 'team', 'account-settings', 'help-support',
+      'welcome', 'application', 'account-health', 'team', 'account-settings', 'settings', 'help-support',
       'listings-overview', 'first-product', 'product-sections', 'images', 'bulk-upload', 'approvals', 'inventory',
-      'orders', 'shipping-setup', 'run-pickups', 'returns-disputes',
+      'orders', 'shipping-setup', 'pickup-setup', 'run-pickups', 'returns-disputes',
       'dashboard', 'payouts', 'fees-billing', 'coupons', 'reviews',
       'services', 'availability', 'bookings', 'provider-earnings'
     ]);
@@ -98,9 +98,9 @@ describe('seller tours', () => {
 describe('seller tour audiences', () => {
   it('an owner of an approved seller business sees the chapters its modules reach, and none of the provider or plan-gated ones', () => {
     expect(idsFor(OWNER)).toEqual([
-      'welcome', 'account-health', 'account-settings', 'help-support',
+      'welcome', 'account-health', 'account-settings', 'settings', 'help-support',
       'listings-overview', 'first-product', 'product-sections', 'approvals', 'inventory',
-      'orders', 'shipping-setup', 'run-pickups',
+      'orders', 'shipping-setup', 'pickup-setup', 'run-pickups',
       'dashboard', 'payouts'
     ]);
   });
@@ -120,7 +120,7 @@ describe('seller tour audiences', () => {
 
   it('a fulfilment role sees only what its permissions reach', () => {
     const fulfilment = session([['home', 'VIEW'], ['orders', 'EDIT'], ['inventory', 'EDIT']], { activeOrg: { ...OWNER.activeOrg!, roleKey: 'seller.fulfilment', roleLabel: 'Fulfilment' } });
-    expect(idsFor(fulfilment)).toEqual(['welcome', 'account-settings', 'help-support', 'inventory', 'orders', 'shipping-setup', 'run-pickups', 'dashboard']);
+    expect(idsFor(fulfilment)).toEqual(['welcome', 'account-settings', 'settings', 'help-support', 'inventory', 'orders', 'shipping-setup', 'pickup-setup', 'run-pickups', 'dashboard']);
   });
 
   it('view-only access to listings offers the overview but not the product-building chapters', () => {
@@ -145,7 +145,7 @@ describe('seller tour audiences', () => {
   it('seller-only chapters are not offered in the Provider Hub', () => {
     const provider = session([['home', 'FULL'], ['orders', 'FULL'], ['returns', 'FULL'], ['coupons', 'FULL'], ['reviews', 'FULL']], { portal: 'PROVIDER_HUB' });
     const ids = idsFor(provider);
-    for (const seller of ['orders', 'shipping-setup', 'run-pickups', 'returns-disputes', 'coupons', 'reviews']) expect(ids).not.toContain(seller);
+    for (const seller of ['orders', 'shipping-setup', 'pickup-setup', 'run-pickups', 'returns-disputes', 'coupons', 'reviews']) expect(ids).not.toContain(seller);
   });
 
   it('a person whose application is not approved gets the welcome and application chapters, plus account and help', () => {

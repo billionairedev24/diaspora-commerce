@@ -9,7 +9,7 @@ import {
   ShipFromFormSchema,
   shipFromToForm
 } from '@afrotransact/api-client';
-import { AddressFields, Button, Checkbox, PhoneNumberField, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
+import { AddressFields, Button, PhoneNumberField, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { MapPin, Plus } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -190,7 +190,7 @@ export function LocationsView() {
       ) : null}
       <ul className="m-0 flex list-none flex-col p-0" data-testid="locations-list">
         {q.data?.map((a) => (
-          <li key={a.id} className="flex flex-col gap-2 border-b border-border py-4 first:border-t" data-testid="ship-from-address">
+          <li key={a.id} className="flex flex-col gap-2 border-b border-border py-4 first:border-t" data-testid="ship-from-address" data-tour="ship-from-address">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="m-0 flex-1 text-md font-semibold">{a.label || a.city}</h2>
               {a.isDefault ? <StatusPill tone="info">{t('sc.shipFrom.default')}</StatusPill> : null}

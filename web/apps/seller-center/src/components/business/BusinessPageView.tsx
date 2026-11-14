@@ -5,8 +5,8 @@ import { Button, buttonClassName, Field, fieldStyles, TextField, useToast } from
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { LogoField } from '@/components/onboarding/steps/LogoField';
 import { OfferServices } from '@/components/account/OfferServices';
+import { LogoField } from '@/components/onboarding/steps/LogoField';
 import { SettingsPage } from '@/components/settings/SettingsShell';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
