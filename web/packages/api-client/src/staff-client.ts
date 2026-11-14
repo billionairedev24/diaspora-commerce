@@ -88,6 +88,7 @@ import {
   type SupportRefundRequest,
   type TaxRatesImportResult,
   TaxRatesImportResultSchema} from './schemas/staff';
+import { createStaffAccessApi } from './staff-access';
 import { createStaffContentApi } from './staff-content';
 import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
 import { createStaffDepartmentsApi } from './staff-departments';
@@ -269,6 +270,7 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Settings → Markets & locations: /v1/staff/markets/** (location tree) and /v1/staff/places (gazetteer) */
     markets: createStaffMarketsApi(request),
+    access: createStaffAccessApi(request),
     /* Fees & commissions → Sales tax: /v1/staff/tax/** (category profiles, review queue, provider code maps, method, shadow report) */
     tax: createStaffTaxApi(request),
     /* Settings → Published pages: /v1/staff/content/** (index, legal and help editors, drafts, publication, rollback) */

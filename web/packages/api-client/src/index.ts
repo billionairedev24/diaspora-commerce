@@ -74,6 +74,7 @@ export { type SlotQuery } from './shopper-client';
 export * from './size-chart-table';
 export * from './size-charts';
 export { createStaffApiClient, type ResourceQuery, type StaffApiClient } from './staff-client';
+export * from './staff-access';
 export * from './staff-content';
 export { createStaffDeliveryFeesApi, staffDeliveryFeeKeys, staffDeliveryFeeQueries, type StaffDeliveryFeesApi } from './staff-delivery-fees';
 export * from './staff-departments';

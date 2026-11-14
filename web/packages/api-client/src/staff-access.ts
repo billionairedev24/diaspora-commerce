@@ -1,0 +1,121 @@
+/* Settings > Roles and permissions (contracts/openapi/gateway-bff-staff.yaml, tag Access): the permission catalogue, the roles of each
+   portal, who holds a role, a person's effective permissions with direct grants, reasoned changes and the change log.
+   Identity owns the data; the console never hard-codes a permission, so a permission added by an identity migration shows up as is. */
+import { keepPreviousData, queryOptions } from '@tanstack/react-query';
+import { z } from 'zod';
+
+import { type Requester } from './http';
+
+export const ACCESS_PORTALS = ['platform', 'seller', 'provider', 'account'] as const;
+export const AccessPortalSchema = z.enum(ACCESS_PORTALS);
+export type AccessPortal = z.infer<typeof AccessPortalSchema>;
+
+/** A change needs a reason of 3 to 300 characters (the BFF checks it again). */
+export const ACCESS_REASON_MIN = 3;
+export const ACCESS_REASON_MAX = 300;
+
+export const AccessPermissionSchema = z.object({ key: z.string(), module: z.string(), description: z.string() });
+export type AccessPermission = z.infer<typeof AccessPermissionSchema>;
+export const AccessPermissionListSchema = z.object({ items: z.array(AccessPermissionSchema) });
+export type AccessPermissionList = z.infer<typeof AccessPermissionListSchema>;
+
+export const AccessRoleSchema = z.object({
+  key: z.string(),
+  portal: z.string(),
+  name: z.string(),
+  description: z.string().default(''),
+  permissions: z.array(z.string()),
+  permissionCount: z.number().int()
+});
+export type AccessRole = z.infer<typeof AccessRoleSchema>;
+export const AccessRoleListSchema = z.object({ portal: z.string(), items: z.array(AccessRoleSchema), canAdmin: z.boolean() });
+export type AccessRoleList = z.infer<typeof AccessRoleListSchema>;
+
+export const AccessRoleMemberSchema = z.object({ id: z.string(), name: z.string(), email: z.string(), enabled: z.boolean(), markets: z.array(z.string()).default([]) });
+export type AccessRoleMember = z.infer<typeof AccessRoleMemberSchema>;
+export const AccessRoleMembersSchema = z.object({ role: z.string(), items: z.array(AccessRoleMemberSchema), partial: z.boolean() });
+export type AccessRoleMembers = z.infer<typeof AccessRoleMembersSchema>;
+
+export const AccessPersonSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  enabled: z.boolean(),
+  principalType: z.string(),
+  roles: z.array(z.object({ key: z.string(), name: z.string() })),
+  directGrants: z.array(z.string()),
+  effectivePermissions: z.array(z.string()),
+  roleMarkets: z.record(z.string(), z.array(z.string())).default({})
+});
+export type AccessPerson = z.infer<typeof AccessPersonSchema>;
+export const AccessPersonPageSchema = z.object({ items: z.array(AccessPersonSchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
+export type AccessPersonPage = z.infer<typeof AccessPersonPageSchema>;
+
+export const AccessLogEntrySchema = z.object({
+  id: z.string(),
+  at: z.string(),
+  actorName: z.string(),
+  action: z.string(),
+  actionLabel: z.string(),
+  targetName: z.string(),
+  role: z.string(),
+  roleName: z.string().default(''),
+  subject: z.string(),
+  detail: z.string()
+});
+export type AccessLogEntry = z.infer<typeof AccessLogEntrySchema>;
+export const AccessLogPageSchema = z.object({ items: z.array(AccessLogEntrySchema), page: z.number().int(), size: z.number().int(), partial: z.boolean() });
+export type AccessLogPage = z.infer<typeof AccessLogPageSchema>;
+
+export interface AccessLogQuery {
+  userId?: string;
+  role?: string;
+  permission?: string;
+  page?: number;
+  size?: number;
+}
+
+const A = '/v1/staff/access';
+const enc = encodeURIComponent;
+
+/** Roles and permissions routes of the staff BFF (mounted as `staffApi().access`). */
+export function createStaffAccessApi(request: Requester) {
+  return {
+    permissions: (signal?: AbortSignal): Promise<AccessPermissionList> => request(`${A}/permissions`, AccessPermissionListSchema, { signal }),
+    roles: (portal: AccessPortal, signal?: AbortSignal): Promise<AccessRoleList> => request(`${A}/roles`, AccessRoleListSchema, { query: { portal }, signal }),
+    roleMembers: (role: string, signal?: AbortSignal): Promise<AccessRoleMembers> => request(`${A}/roles/${enc(role)}/members`, AccessRoleMembersSchema, { signal }),
+    setRolePermission: (role: string, permission: string, on: boolean, reason: string): Promise<AccessRole> =>
+      request(`${A}/roles/${enc(role)}/permissions/${enc(permission)}`, AccessRoleSchema, { method: on ? 'PUT' : 'DELETE', body: { reason } }),
+    people: (q: string, page: number, size: number, signal?: AbortSignal): Promise<AccessPersonPage> =>
+      request(`${A}/people`, AccessPersonPageSchema, { query: { q: q || undefined, page: String(page), size: String(size) }, signal }),
+    person: (id: string, signal?: AbortSignal): Promise<AccessPerson> => request(`${A}/people/${enc(id)}`, AccessPersonSchema, { signal }),
+    setPersonPermission: (id: string, permission: string, on: boolean, reason: string): Promise<AccessPerson> =>
+      request(`${A}/people/${enc(id)}/permissions/${enc(permission)}`, AccessPersonSchema, { method: on ? 'PUT' : 'DELETE', body: { reason } }),
+    log: (q: AccessLogQuery, signal?: AbortSignal): Promise<AccessLogPage> =>
+      request(`${A}/log`, AccessLogPageSchema, {
+        query: { userId: q.userId || undefined, role: q.role || undefined, permission: q.permission || undefined, page: String(q.page ?? 0), size: String(q.size ?? 50) },
+        signal
+      })
+  };
+}
+export type StaffAccessApi = ReturnType<typeof createStaffAccessApi>;
+
+export const staffAccessKeys = {
+  all: ['staff', 'access'] as const,
+  permissions: () => [...staffAccessKeys.all, 'permissions'] as const,
+  roles: (portal: AccessPortal) => [...staffAccessKeys.all, 'roles', portal] as const,
+  members: (role: string) => [...staffAccessKeys.all, 'members', role] as const,
+  people: (q: string, page: number, size: number) => [...staffAccessKeys.all, 'people', q, page, size] as const,
+  person: (id: string) => [...staffAccessKeys.all, 'person', id] as const,
+  log: (q: AccessLogQuery) => [...staffAccessKeys.all, 'log', q] as const
+};
+
+export const staffAccessQueries = {
+  permissions: (api: StaffAccessApi) => queryOptions({ queryKey: staffAccessKeys.permissions(), queryFn: ({ signal }) => api.permissions(signal), staleTime: 60_000 }),
+  roles: (api: StaffAccessApi, portal: AccessPortal) => queryOptions({ queryKey: staffAccessKeys.roles(portal), queryFn: ({ signal }) => api.roles(portal, signal), staleTime: 10_000 }),
+  members: (api: StaffAccessApi, role: string) => queryOptions({ queryKey: staffAccessKeys.members(role), queryFn: ({ signal }) => api.roleMembers(role, signal), staleTime: 30_000 }),
+  people: (api: StaffAccessApi, q: string, page: number, size: number) =>
+    queryOptions({ queryKey: staffAccessKeys.people(q, page, size), queryFn: ({ signal }) => api.people(q, page, size, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
+  person: (api: StaffAccessApi, id: string) => queryOptions({ queryKey: staffAccessKeys.person(id), queryFn: ({ signal }) => api.person(id, signal), staleTime: 5_000 }),
+  log: (api: StaffAccessApi, q: AccessLogQuery) => queryOptions({ queryKey: staffAccessKeys.log(q), queryFn: ({ signal }) => api.log(q, signal), placeholderData: keepPreviousData, staleTime: 5_000 })
+};
