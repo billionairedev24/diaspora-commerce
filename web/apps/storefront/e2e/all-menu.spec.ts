@@ -5,12 +5,12 @@ import { expect, type Page, test } from '@playwright/test';
 
 const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
 
-/** WCAG A/AA violations of the open page, colour contrast included (the vitest run has no colour engine). */
+/** WCAG A/AA violations of the open drawer (the page behind it is inert), colour contrast included (the vitest run has no colour engine). */
 async function axeViolations(page: Page) {
   await page.evaluate(axeSource);
   return page.evaluate(async () => {
     const axe = (window as unknown as { axe: { run: (c: Element, o: object) => Promise<{ violations: Array<{ id: string; nodes: Array<{ target: unknown }> }> }> } }).axe;
-    const r = await axe.run(document.body, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } });
+    const r = await axe.run(document.querySelector('[role="dialog"]') ?? document.body, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } });
     return r.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }));
   });
 }
