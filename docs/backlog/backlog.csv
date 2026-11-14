@@ -272,7 +272,7 @@
 - Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","Done"
 "S080","Story","Pickup points and seller pickup","Platform pickup points/lockers and seller-configured pickup with address and hours.","- Sellers set their pickup address and hours in Seller Center
 - Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","Done"
-"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","Done"
+"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","In Progress"
 "S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
 - Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","Done"
 "S082","Story","Vehicle inspection","10 checks with critical items, odometer, fuel, cold-box temperature, 4 live photos and signature.","- Failing brakes, tyres or lights blocks the route and reports a defect to dispatch
@@ -1870,7 +1870,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S454","Story","QA: delivery modes and delivery proof","Verifies the admin-run delivery work: seller-shipped orders never wait for an AfroTransact driver.","- A seller-shipped order goes from paid to shipped without any admin assignment
 - An AfroTransact-delivered order is run end to end in the staff Delivery module with delivery:manage
 - Marking delivered requires a photo; the customer order and Seller Center show the proof
-- Stuck seller-shipped orders fixed by the data fix","E36","","Highest","5","qa delivery","qa","To Do"
+- Stuck seller-shipped orders fixed by the data fix
+- S488 Admin Delivery desk: every acceptance criterion verified with evidence","E36","","Highest","5","qa delivery","qa","To Do"
 "S455","Story","QA: production smoke on OVH","After the launch set is deployed to production.","- Every launch-set service healthy; storefront, checkout and seller sign-in work on the prod domain
 - No demo data in prod; sitemap and robots correct for prod only
 - Rollback rehearsed once","E36","","Highest","3","qa prod","qa","To Do"
@@ -1916,7 +1917,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S464","Story","QA pass: Inventory: platform & FBA stock, lots and concurrency","Verify the open stories of the Inventory: platform & FBA stock, lots and concurrency work stream (E09) on the local stack; file a bug for every failure.","- S375 Build the inventory rules (blocked on owner decisions): every acceptance criterion verified with evidence","E36","","High","1","qa stream-e09","qa","To Do"
 "S465","Story","QA pass: Carriers & shipping (USPS, UPS, FedEx, DHL)","Verify the open stories of the Carriers & shipping (USPS, UPS, FedEx, DHL) work stream (E11) on the local stack; file a bug for every failure.","- S204 Confirm carrier sandbox integrations (USPS, UPS, FedEx, DHL): every acceptance criterion verified with evidence
 - S365 Verify launch shipping and delivery quotes: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e11","qa","To Do"
-"S466","Story","QA pass: AfroTransact Delivery & driver app","Verify the open stories of the AfroTransact Delivery & driver app work stream (E12) on the local stack; file a bug for every failure.","- S444 Seller Center Settings area: one page per section; pickup moves out of Orders; fix address form crash: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e12","qa","To Do"
+"S466","Story","QA pass: AfroTransact Delivery & driver app","Verify the open stories of the AfroTransact Delivery & driver app work stream (E12) on the local stack; file a bug for every failure.","- S444 Seller Center Settings area: one page per section; pickup moves out of Orders; fix address form crash: every acceptance criterion verified with evidence
+- S488 Admin Delivery desk: AfroTransact-delivered orders end to end with photo proof: every acceptance criterion verified with evidence","E36","","High","2","qa stream-e12","qa","To Do"
 "S467","Story","QA pass: Seller & provider onboarding with two-step review","Verify the open stories of the Seller & provider onboarding with two-step review work stream (E13) on the local stack; file a bug for every failure.","- S327 Sellers sell only in approved departments, with a request flow: every acceptance criterion verified with evidence
 - S356 Verify application review workflow: every acceptance criterion verified with evidence
 - S363 Verify selling approvals: every acceptance criterion verified with evidence
