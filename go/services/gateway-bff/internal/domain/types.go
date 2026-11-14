@@ -200,9 +200,13 @@ type Suggestions struct {
 
 // CartLine is one cart row.
 type CartLine struct {
-	LineID         string  `json:"lineId"`
-	ATIN           string  `json:"atin"`
-	OfferID        string  `json:"offerId"`
+	LineID string `json:"lineId"`
+	// ATIN is the PRODUCT ATIN (links to the product page). It is not the id tax-returns knows the item by.
+	ATIN    string `json:"atin"`
+	OfferID string `json:"offerId"`
+	// VariantATIN is the variant (SKU) ATIN: the id catalog, inventory and tax-returns' classification records are keyed
+	// by, so the one id a tax quote line may carry. Not serialised (LineID is the same value on the wire).
+	VariantATIN    string  `json:"-"`
 	Title          string  `json:"title"`
 	Unit           string  `json:"unit"`
 	Department     string  `json:"department"`

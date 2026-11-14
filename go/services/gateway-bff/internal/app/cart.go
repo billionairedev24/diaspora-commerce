@@ -528,7 +528,7 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 			qty := max(1, l.Quantity)
 			sel := !deselected[l.VariantATIN] && !l.Unavailable
 			line := domain.CartLine{
-				LineID: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN), OfferID: firstNonEmpty(l.OfferID, l.VariantATIN), Title: l.Title,
+				LineID: l.VariantATIN, VariantATIN: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN), OfferID: firstNonEmpty(l.OfferID, l.VariantATIN), Title: l.Title,
 				Unit: info[l.VariantATIN].unit, Department: info[l.VariantATIN].department, ProductType: info[l.VariantATIN].productType,
 				Perishable: info[l.VariantATIN].perishable, FactsMissing: !info[l.VariantATIN].loaded,
 				SellerBehaviour: info[l.VariantATIN].product.SellerBehaviourFor(p.SellerOrgID),

@@ -53,7 +53,7 @@ func pkg(id string, ship int64, lines ...domain.CartLine) domain.CheckoutPackage
 }
 
 func cl(id, title string, qty int, price int64) domain.CartLine {
-	return domain.CartLine{LineID: id, ATIN: "ATIN-" + id, OfferID: "of-" + id, Title: title, Quantity: qty, PriceMinor: price}
+	return domain.CartLine{LineID: id, VariantATIN: "ATIN-" + id, ATIN: "PROD-" + id, OfferID: "of-" + id, Title: title, Quantity: qty, PriceMinor: price}
 }
 
 func price(t *testing.T, f *fakeReturns, alloc ShippingAllocation, sum domain.CheckoutSummary) domain.CheckoutSummary {

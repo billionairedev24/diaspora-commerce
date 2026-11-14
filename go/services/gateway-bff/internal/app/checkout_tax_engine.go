@@ -109,7 +109,7 @@ func (s *checkoutPaymentServiceImpl) buildTaxQuote(sum *domain.CheckoutSummary, 
 			if behaviour == nil {
 				behaviour = map[string]any{}
 			}
-			lines = append(lines, port.UpTaxQuoteLine{LineID: l.LineID, ATIN: l.ATIN, SellerOrgID: quoteSellerOrg(p), ProductType: l.ProductType,
+			lines = append(lines, port.UpTaxQuoteLine{LineID: l.LineID, ATIN: variantATINOf(l), SellerOrgID: quoteSellerOrg(p), ProductType: l.ProductType,
 				Quantity: l.Quantity, UnitPriceMinor: l.PriceMinor, DiscountMinor: byOffer[l.OfferID], ShippingMinor: alloc[i], SellerBehaviour: behaviour})
 		}
 	}
@@ -117,6 +117,13 @@ func (s *checkoutPaymentServiceImpl) buildTaxQuote(sum *domain.CheckoutSummary, 
 	b.req = port.UpTaxQuoteRequest{Currency: cur, ShipTo: port.UpTaxShipTo{Country: dest.Country, State: dest.State,
 		PostalCode: dest.PostalCode, City: dest.City}, Lines: lines}
 	return b
+}
+
+// variantATINOf is the id a tax quote line carries: the VARIANT ATIN, which tax-returns' classification records (and
+// orders' own quote) are keyed by. CartLine.ATIN is the product ATIN used for product-page links and is never sent;
+// lines built without a VariantATIN fall back to LineID, which is the variant ATIN by construction.
+func variantATINOf(l domain.CartLine) string {
+	return firstNonEmpty(l.VariantATIN, l.LineID)
 }
 
 // quoteSellerOrg is the seller org orders sends: the cart service's own value, empty for AfroTransact's own items (never

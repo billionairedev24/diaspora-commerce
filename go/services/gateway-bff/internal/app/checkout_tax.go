@@ -66,7 +66,7 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 	for _, l := range lineOf {
 		if l.FactsMissing {
 			// orders quotes with catalog's facts for the item; quoting without them could differ from the final tax.
-			s.taxUnavailable(ctx, sum, domain.TaxReasonFactsUnavailable, reasonFactsMissing, errors.New("catalog facts for "+l.ATIN+" could not be read"))
+			s.taxUnavailable(ctx, sum, domain.TaxReasonFactsUnavailable, reasonFactsMissing, errors.New("catalog facts for "+variantATINOf(l)+" could not be read"))
 			return
 		}
 	}
@@ -89,6 +89,10 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 			tl.Status = domain.TaxLineBlocked
 			sum.TaxLines = append(sum.TaxLines, tl)
 			l, p := lineOf[ql.LineID], pkgOf[ql.LineID]
+			// Staff-facing only (logs): why tax-returns would not decide the line. Never part of the response.
+			s.d.log().WarnContext(ctx, "checkout tax line blocked", "lineId", ql.LineID, "variantAtin", ql.ATIN, "productAtin", l.ATIN,
+				"answered", answered, "decisionStatus", a.DecisionStatus, "outcome", a.Outcome, "blockedReason", a.BlockedReason,
+				"packageId", p.PackageID, "shipToState", addr.State)
 			sum.BlockedLines = append(sum.BlockedLines, domain.CheckoutBlockedLine{LineID: l.LineID, OfferID: l.OfferID, ATIN: l.ATIN,
 				Title: l.Title, PackageID: p.PackageID, Message: blockedMessage(l.Title), Action: blockedAction})
 			continue

@@ -75,7 +75,7 @@ func TestEstimateSendsTaxReturnsTheSameRequestAsOrders(t *testing.T) {
 				cp.Seller, cp.SellerOrgRaw = domain.Seller{ID: *p.SellerOrgID, Kind: domain.SellerKindSeller}, *p.SellerOrgID
 			}
 			for _, l := range p.Lines {
-				cp.Lines = append(cp.Lines, domain.CartLine{LineID: l.LineID, ATIN: l.ATIN, OfferID: l.OfferID, ProductType: l.ProductType, Quantity: l.Quantity,
+				cp.Lines = append(cp.Lines, domain.CartLine{LineID: l.LineID, VariantATIN: l.ATIN, ATIN: l.ATIN, OfferID: l.OfferID, ProductType: l.ProductType, Quantity: l.Quantity,
 					PriceMinor: l.UnitPriceMinor, SellerBehaviour: l.SellerBehaviour})
 				outcome[l.LineID] = l.Outcome
 				if l.DiscountMinor > 0 {
