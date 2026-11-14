@@ -1829,3 +1829,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Profiles and Provider codes use the same fixed rows; switching tab drops the sheet parameters
 - Screenshots at 1280 and 390 in docs/engineering/img; docs/engineering/detail-sheets.md
 - Owner confirms the item name, photo and staff names on the live stack (not verified in this session)","E06","","High","5","staff-console tax tables","checkout","In Progress"
+"S447","Story","Seller Center Settings: one column; Pickup and driver pickup as a simple weekly list","Owner feedback on Settings > Pickup: three columns is odd, too complicated, misaligned. Settings is one content column with a Settings back link; Pickup is one switch (the confirmation), one address line, Mon-Sun rows with open toggle and from/to selects on one row, Copy to weekdays / Same every day, a ready-time select and one Save. Same weekly list for AfroTransact driver pickup. Alignment is measured.","- Settings has no sub-nav column: one content column, a Settings link above a section, each section still its own route and permission
+- Pickup has one switch Let customers collect orders (no checkboxes) with one confirmation line; address is one read-only line with Change in Locations
+- Hours are seven rows Mon-Sun, each open/closed with from and to selects (30-minute steps, no native clock inputs) on the same row; all closed by default; Copy to weekdays and Same every day
+- Ready time is a select (Same day, 1 hour, 2 hours, 4 hours, Next day); one Save enabled only for a valid change, with plain inline validation (an open day with to later than from)
+- API unchanged: one window per open day, closed days send none, a turn-on sends hoursConfirmed and the ready time, never on by default
+- Every control in a row shares height and vertical centre within 1px at 1280 and 390 (Playwright measurement); Locations and Shipping & delivery checked
+- Driver pickup uses the same weekly list
+- Unit and Playwright tests, before/after screenshots, docs and five locales (fr, es, ar, yo machine drafts marked for review)","E24","","High","5","seller-center settings pickup a11y i18n","seller-center","Done"
