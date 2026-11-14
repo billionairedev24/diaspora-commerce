@@ -1804,3 +1804,14 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - No '0 reviews'; flat rail without a card box; tokens only; five locales; RTL safe
 - Audit: Buy again and Popular right now (customer app), Popular services, Best sellers labels, 'Customers near you are looking' and 'today's deals' hints reworded or removed
 - Guard test scans the en catalogues for banned phrases; component tests and 1280/390 screenshots","E23","","High","3","storefront cart trust i18n","storefront-web","Done"
+"S444","Story","Seller Center Settings area: one page per section; pickup moves out of Orders; fix address form crash","Owner feedback: typing in the pickup/address form crashed the page (TypeError null .value from a state updater) and Orders > Ship-from & pickup was the wrong home for settings. Fixed the crash at its root, added a Settings area (business profile, locations, shipping & delivery, pickup, payouts, team & roles, notifications, tax information, documents & compliance, language & number format), each its own page with its own save and permission, with old routes redirecting. Pickup server rules are unchanged. See docs/engineering/seller-settings.md.","- Typing in every field of the location, pickup and driver pickup forms throws nothing and never reaches the error boundary (vitest and a real browser on the mock BFF)
+- No setState updater reads an event (scan test over apps and packages); the same pattern in Billing, Coupons and two staff console editors is fixed
+- The route error boundary reports route, component and stack top to telemetry
+- Settings home lists the sections the role may open as a flat list with a one-line description and a saved-state status, with a left sub-nav on desktop
+- Each section is its own route with its own save; a role without the module cannot open it and View-only roles get no save buttons
+- Pickup page shows the location address read-only with a link to Locations, never defaults on, and sends a turn-on only with typed hours, a ready time and the confirmation (server rules unchanged)
+- Orders has no ship-from or pickup form (one-line nudge and the Home prompt link to Settings > Pickup); old routes redirect
+- Staff console has no way to turn a seller's pickup on
+- Five locales, plain wording without the word offer, tours and docs updated, screenshots at 1280 and 390
+- Arabic (right to left) layout checked in a browser
+- Owner approves the proposed section list","E12","","High","8","seller-center pickup settings i18n a11y","delivery","In Progress"
