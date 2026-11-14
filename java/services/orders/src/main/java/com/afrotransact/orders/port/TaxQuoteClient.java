@@ -16,11 +16,17 @@ public interface TaxQuoteClient {
      *
      * @param orderId the order id: tax-returns' SHADOW mode compares only quotes that carry one; null for estimates
      */
-    record Request(String currency, String country, String state, String postalCode, String city, List<Line> lines,
-                   String orderId) {
+    record Request(String currency, String country, String state, String postalCode, String city, String line1,
+                   List<Line> lines, String orderId) {
 
         public Request {
             lines = List.copyOf(lines);
+        }
+
+        /** A quote to a ZIP and city only (no street line). */
+        public Request(String currency, String country, String state, String postalCode, String city, List<Line> lines,
+                       String orderId) {
+            this(currency, country, state, postalCode, city, null, lines, orderId);
         }
 
         /** A quote without an order reference. */
@@ -35,15 +41,25 @@ public interface TaxQuoteClient {
      *
      * @param shippingMinor this line's share of its package's delivery charge (allocated per
      *                      {@code at.orders.tax.shipping-allocation}, TX-05 to TX-07)
+     * @param shipFrom      where the line ships from when orders knows it, else null (tax-returns then does not ask a
+     *                      provider that prices by origin)
      * @param sellerBehaviour how this seller sells the item (sold_heated, heated_by_seller, utensils_provided,
      *                      seller_is_bakery) when catalog reports it for this seller's own listing; empty otherwise,
      *                      in which case a category that needs it blocks the line (never guessed)
      */
     record Line(String lineId, String atin, String sellerOrgId, String productType, int quantity,
-                long unitPriceMinor, long discountMinor, long shippingMinor, Map<String, Object> sellerBehaviour) {
+                long unitPriceMinor, long discountMinor, long shippingMinor, Map<String, Object> sellerBehaviour,
+                ShipFrom shipFrom) {
 
         public Line {
             sellerBehaviour = sellerBehaviour == null ? Map.of() : Map.copyOf(sellerBehaviour);
+        }
+
+        /** A line without a ship-from address. */
+        public Line(String lineId, String atin, String sellerOrgId, String productType, int quantity,
+                    long unitPriceMinor, long discountMinor, long shippingMinor, Map<String, Object> sellerBehaviour) {
+            this(lineId, atin, sellerOrgId, productType, quantity, unitPriceMinor, discountMinor, shippingMinor,
+                    sellerBehaviour, null);
         }
 
         /** A line without seller behaviour. */
@@ -52,6 +68,14 @@ public interface TaxQuoteClient {
             this(lineId, atin, sellerOrgId, productType, quantity, unitPriceMinor, discountMinor, shippingMinor,
                     Map.of());
         }
+    }
+
+    /**
+     * Where a line ships from.
+     *
+     * @param source SELLER_LOCATION or FULFILMENT_CENTRE
+     */
+    record ShipFrom(String line1, String city, String state, String postalCode, String country, String source) {
     }
 
     /** The quote: one result per requested line. */

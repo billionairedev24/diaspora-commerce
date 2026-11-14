@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 import com.afrotransact.orders.config.OrdersProperties;
@@ -19,6 +20,7 @@ import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.ShippingAllocation;
 import com.afrotransact.orders.domain.TaxDecision;
+import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import com.afrotransact.orders.port.UpstreamFailure;
 import org.junit.jupiter.api.Test;
@@ -71,7 +73,7 @@ class CheckoutTaxImplTest {
     }
 
     private CheckoutTax proportional() {
-        return new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL));
+        return new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL), ShipFromAddresses.NONE);
     }
 
     private static CheckoutPlan.Line taxed(OrderDraft d, String lineId) {
@@ -120,6 +122,33 @@ class CheckoutTaxImplTest {
     }
 
     @Test
+    void sendsTheStreetOfTheShipToAndTheShipFromOfEachShipment() {
+        TaxQuoteClient.ShipFrom dallas = new TaxQuoteClient.ShipFrom("100 Commerce St", "Dallas", "TX", "75201", "US",
+                "SELLER_LOCATION");
+        ShipFromAddresses origins = (type, seller, node, pickup) -> Optional.of(dallas);
+
+        new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL), origins)
+                .tax(draft(0, line("l1", 1, "Rice", 1, 1000, 0)));
+
+        TaxQuoteClient.Request sent = requests.getFirst();
+        assertThat(sent.line1()).isEqualTo("1 Main St");
+        assertThat(sent.lines()).extracting(TaxQuoteClient.Line::shipFrom).containsExactly(dallas);
+    }
+
+    @Test
+    void aShipFromLookupThatFailsOrKnowsNothingNeverStopsTheCheckout() {
+        ShipFromAddresses down = (type, seller, node, pickup) -> {
+            throw new UpstreamFailure("seller", 503, "seller.down", "down", true, List.of(), null);
+        };
+
+        OrderDraft out = new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL), down)
+                .tax(draft(0, line("l1", 1, "Rice", 1, 1000, 0)));
+
+        assertThat(requests.getFirst().lines()).extracting(TaxQuoteClient.Line::shipFrom).containsOnlyNulls();
+        assertThat(taxed(out, "l1").taxMinor()).isPositive();
+    }
+
+    @Test
     void theSnapshotReachesTheOrderLine() {
         OrderDraft out = proportional().tax(draft(300, line("l1", 1, "Rice", 1, 1000, 0)));
         OrderLine saved = OrderDrafts.toOrder(out, "pay-1").shipments().getFirst().lines().getFirst();
@@ -156,7 +185,7 @@ class CheckoutTaxImplTest {
 
     @Test
     void firstLineIsTheRollbackToThePreviousAttribution() {
-        new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.FIRST_LINE)).tax(draft(599,
+        new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.FIRST_LINE), ShipFromAddresses.NONE).tax(draft(599,
                 line("l1", 1, "Rice", 1, 1000, 0), line("l2", 2, "Oil", 1, 1000, 0)));
         assertThat(requests.getFirst().lines()).extracting(TaxQuoteClient.Line::shippingMinor)
                 .containsExactly(599L, 0L);
@@ -211,7 +240,7 @@ class CheckoutTaxImplTest {
     void aQuoteMissingALineIsRetriedNotGuessed() {
         TaxQuoteClient partial = request -> new TaxQuoteClient.Quote("RULES",
                 List.of(taxable(request.lines().getFirst())));
-        CheckoutTax tax = new CheckoutTaxImpl(partial, new TaxSettings(ShippingAllocation.PROPORTIONAL));
+        CheckoutTax tax = new CheckoutTaxImpl(partial, new TaxSettings(ShippingAllocation.PROPORTIONAL), ShipFromAddresses.NONE);
         assertThatThrownBy(() -> tax.tax(draft(0, line("l1", 1, "Rice", 1, 1000, 0), line("l2", 2, "Oil", 1, 500, 0))))
                 .isInstanceOfSatisfying(UpstreamFailure.class, f -> assertThat(f.code())
                         .isEqualTo("tax-returns.incomplete-quote"));

@@ -17,6 +17,7 @@ import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.ShippingAllocation;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -102,7 +103,7 @@ class CheckoutTaxParityTest {
             }
 
             OrderDraft taxed = new CheckoutTaxImpl(fakeTaxReturns,
-                    new TaxSettings(ShippingAllocation.parse(c.path("allocation").asString()))).tax(draft);
+                    new TaxSettings(ShippingAllocation.parse(c.path("allocation").asString())), ShipFromAddresses.NONE).tax(draft);
 
             TaxQuoteClient.Request request = sent.getFirst();
             assertThat(request.currency()).as(name).isEqualTo(c.path("currency").asString());

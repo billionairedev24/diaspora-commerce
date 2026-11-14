@@ -11,6 +11,7 @@ import java.util.function.Function;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.TaxDecision;
+import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import com.afrotransact.orders.port.UpstreamFailure;
 import org.slf4j.Logger;
@@ -34,10 +35,12 @@ class CheckoutTaxImpl implements CheckoutTax {
 
     private final TaxQuoteClient quotes;
     private final TaxSettings settings;
+    private final ShipFromAddresses origins;
 
-    CheckoutTaxImpl(TaxQuoteClient quotes, TaxSettings settings) {
+    CheckoutTaxImpl(TaxQuoteClient quotes, TaxSettings settings, ShipFromAddresses origins) {
         this.quotes = quotes;
         this.settings = settings;
+        this.origins = origins;
     }
 
     @Override
@@ -46,6 +49,7 @@ class CheckoutTaxImpl implements CheckoutTax {
         List<TaxQuoteClient.Line> lines = new ArrayList<>();
         Map<String, Long> shippingByLine = new HashMap<>();
         for (OrderDraft.DraftShipment s : draft.shipments()) {
+            TaxQuoteClient.ShipFrom from = origin(s);
             List<CheckoutPlan.Line> sorted = sorted(s);
             long[] weights = sorted.stream().mapToLong(l -> Math.max(0, l.itemsMinor() - l.discountMinor())).toArray();
             long[] shipping = settings.shippingAllocation().allocate(s.shippingMinor(), weights);
@@ -54,12 +58,12 @@ class CheckoutTaxImpl implements CheckoutTax {
                 shippingByLine.put(l.lineId(), shipping[i]);
                 lines.add(new TaxQuoteClient.Line(l.lineId(), l.variantAtin(),
                         l.sellerOrgId() != null ? l.sellerOrgId() : s.sellerOrgId(), l.productType(),
-                        l.quantity(), l.unitPriceMinor(), l.discountMinor(), shipping[i], l.sellerBehaviour()));
+                        l.quantity(), l.unitPriceMinor(), l.discountMinor(), shipping[i], l.sellerBehaviour(), from));
             }
         }
         TaxQuoteClient.Quote quote = quotes.quote(new TaxQuoteClient.Request(draft.currency(),
                 to.country() == null || to.country().isBlank() ? "US" : to.country(), to.state(), to.postalCode(),
-                to.city(), lines, draft.orderId()));
+                to.city(), to.line1(), lines, draft.orderId()));
         Map<String, TaxQuoteClient.LineTax> byLine = new LinkedHashMap<>();
         quote.lines().stream().filter(t -> t.lineId() != null).forEach(t -> byLine.putIfAbsent(t.lineId(), t));
         if (!byLine.keySet().containsAll(lines.stream().map(TaxQuoteClient.Line::lineId).toList())) {
@@ -85,6 +89,17 @@ class CheckoutTaxImpl implements CheckoutTax {
             return l.withTax(t.taxMinor(), t.jurisdiction(), t.localJurisdiction(), t.shippingTaxMinor(),
                     decision(t, quote.provider()), shippingByLine.get(l.lineId()));
         });
+    }
+
+    /** Where the shipment ships from, when known: a lookup that fails or knows nothing leaves it out, never fails checkout. */
+    private TaxQuoteClient.ShipFrom origin(OrderDraft.DraftShipment s) {
+        try {
+            return origins.forShipment(s.fulfilmentType(), s.sellerOrgId(), s.nodeId(), s.pickupLocationId())
+                    .orElse(null);
+        } catch (RuntimeException ex) {
+            LOG.warn("ship-from of shipment {} unknown for the tax quote: {}", s.id(), ex.toString());
+            return null;
+        }
     }
 
     private static TaxDecision decision(TaxQuoteClient.LineTax t, String provider) {

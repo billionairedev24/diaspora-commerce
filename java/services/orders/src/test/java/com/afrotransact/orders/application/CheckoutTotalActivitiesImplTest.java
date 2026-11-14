@@ -14,6 +14,7 @@ import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.ShippingAllocation;
+import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.temporal.failure.ApplicationFailure;
@@ -38,7 +39,7 @@ class CheckoutTotalActivitiesImplTest {
         TaxQuoteClient quotes = request -> new TaxQuoteClient.Quote("RULES", request.lines().stream()
                 .map(l -> new TaxQuoteClient.LineTax(l.lineId(), 214, 0, "US-TX", null, "RESOLVED", "TAXABLE", "AT.X",
                         "txcd", "v1", null, "ZIP")).toList());
-        return new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL)).tax(d);
+        return new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL), ShipFromAddresses.NONE).tax(d);
     }
 
     private static CheckoutInput input(CheckoutInput.TaxGuard shown) {

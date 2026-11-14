@@ -25,6 +25,7 @@ import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.ShippingAllocation;
+import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import org.junit.jupiter.api.Test;
 import tools.jackson.core.type.TypeReference;
@@ -66,7 +67,7 @@ class CategoryTaxMatrixTest {
                 sent.add(request);
                 return new TaxQuoteClient.Quote("RULES", request.lines().stream().map(l -> answer(l, expect, resolved)).toList());
             };
-            CheckoutTax tax = new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL));
+            CheckoutTax tax = new CheckoutTaxImpl(quotes, new TaxSettings(ShippingAllocation.PROPORTIONAL), ShipFromAddresses.NONE);
             CheckoutPlan.Line line = new CheckoutPlan.Line("line-" + n, 1, "ATMX" + n, "PMX" + n, "Item " + n, null, 1, 4_000, 0,
                     "groceries", false, null, 2, null, 500, String.valueOf(s.get("categoryCode")), null, 0, "org_a", "Seller")
                     .withBehaviour(behaviour);
@@ -143,7 +144,7 @@ class CategoryTaxMatrixTest {
     @Test
     void aLineTheEngineCannotDecideNeverGetsADefaultRate() {
         TaxQuoteClient.Quote none = new TaxQuoteClient.Quote("RULES", List.of());
-        CheckoutTax tax = new CheckoutTaxImpl(request -> none, new TaxSettings(ShippingAllocation.PROPORTIONAL));
+        CheckoutTax tax = new CheckoutTaxImpl(request -> none, new TaxSettings(ShippingAllocation.PROPORTIONAL), ShipFromAddresses.NONE);
         CheckoutPlan.Line line = new CheckoutPlan.Line("l1", 1, "ATX", "P", "Item", null, 1, 1_000, 0, "groceries", false, null, 2,
                 null, 0, "nuts-seeds", null, 0, "org_a", "Seller");
 

@@ -34,6 +34,9 @@ class HttpTaxQuoteClient implements TaxQuoteClient {
         shipTo.put("state", request.state());
         shipTo.put("postalCode", request.postalCode());
         shipTo.put("city", request.city());
+        if (request.line1() != null && !request.line1().isBlank()) {
+            shipTo.put("line1", request.line1());
+        }
         List<Map<String, Object>> lines = new ArrayList<>();
         for (Line l : request.lines()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -46,6 +49,16 @@ class HttpTaxQuoteClient implements TaxQuoteClient {
             m.put("discountMinor", l.discountMinor());
             m.put("shippingMinor", l.shippingMinor());
             m.put("sellerBehaviour", l.sellerBehaviour());
+            if (l.shipFrom() != null) {
+                Map<String, Object> from = new LinkedHashMap<>();
+                from.put("line1", l.shipFrom().line1());
+                from.put("city", l.shipFrom().city());
+                from.put("state", l.shipFrom().state());
+                from.put("postalCode", l.shipFrom().postalCode());
+                from.put("country", l.shipFrom().country());
+                from.put("source", l.shipFrom().source());
+                m.put("shipFrom", from);
+            }
             lines.add(m);
         }
         Map<String, Object> payload = new LinkedHashMap<>();
