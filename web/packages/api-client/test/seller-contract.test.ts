@@ -176,7 +176,8 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
 
   it('lets sellers only confirm, pack and mark ready, and buys a label once per key', async () => {
     const api = client();
-    const row = (await api.listOrders({ status: 'PLACED', limit: 1 })).items[0];
+    // The carrier-label flow (the staff carrier switch on); the other half of the seed ships it themselves (next test).
+    const row = (await api.listOrders({ status: 'PLACED', limit: 50 })).items.find((r) => Number(r.shipmentId.replace(/\D/g, '')) % 2 === 1 && r.fulfilment === 'SELLER');
     if (!row) throw new Error('fixture has a placed order');
     await expect(api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'PACKED')).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
     for (const st of ['CONFIRMED', 'PACKED', 'READY'] as const) {
@@ -202,6 +203,29 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(label.order.shipments[0]?.canBuyLabel).toBe(false);
     const again = await api.buyLabel(row.orderNumber, row.shipmentId, { carrier: q.carrier, service: q.service, parcel: { weightLb: 3 }, shipFrom: from }, 'key-123456789');
     expect(again.trackingNumber).toBe(label.trackingNumber);
+  });
+
+  it('lets a seller who ships it themselves mark it shipped with details and confirm delivery, never offering a label', async () => {
+    const api = client();
+    const row = (await api.listOrders({ status: 'PLACED', limit: 50 })).items.find((r) => Number(r.shipmentId.replace(/\D/g, '')) % 2 === 0 && r.fulfilment === 'SELLER');
+    if (!row) throw new Error('fixture has a seller-shipped placed order');
+    for (const st of ['CONFIRMED', 'PACKED', 'READY'] as const) await api.updateShipmentStatus(row.orderNumber, row.shipmentId, st);
+    let o = await api.getOrder(row.orderNumber);
+    let s = o.shipments[0];
+    expect(s?.fulfilmentMode).toBe('seller_ships');
+    expect(s?.canBuyLabel).toBe(false);
+    expect(s?.needsShipDetails).toBe(true);
+    expect(s?.nextActions).toEqual(['PICKED_UP']);
+    // How it left is the seller's to say: nothing, spaces or a path-like tracking number are refused.
+    await expect(api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'PICKED_UP')).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+    o = await api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'PICKED_UP', undefined, undefined, { shipNote: 'Handed to Tunde’s courier at 3pm' });
+    s = o.shipments[0];
+    expect(s?.status).toBe('PICKED_UP');
+    expect(s?.proof).toBeNull();
+    expect(s?.nextActions).toEqual(['DELIVERED']);
+    o = await api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'DELIVERED');
+    expect(o.shipments[0]?.status).toBe('DELIVERED');
+    expect(o.shipments[0]?.proof).toBeNull();
   });
 
   it('submits a product for review or pending category approval', async () => {

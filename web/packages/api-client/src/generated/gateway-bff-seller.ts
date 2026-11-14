@@ -4448,16 +4448,17 @@ export interface components {
             country: string;
         };
         /**
-         * @description How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
-         *     tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+         * @description How AfroTransact handed the parcel over, shown on a delivered shipment (a driver, or AfroTransact staff with a photo).
+         *     Null for seller-shipped orders (the seller ships and confirms those), carrier deliveries, pickups and deliveries staff
+         *     confirmed by hand. It is never shown for an order AfroTransact did not deliver. The photo and signature links are
          *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
          */
         DeliveryProof: {
             /**
-             * @description To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place
+             * @description To the customer (who gave their code), to someone else (name, relationship, signature), left in a safe place, or PHOTO: delivered by AfroTransact staff with a photo (the recipient name is optional)
              * @enum {string}
              */
-            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE";
+            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE" | "PHOTO";
             recipientName: string | null;
             relationship: string | null;
             safePlace: string | null;
@@ -4466,6 +4467,8 @@ export interface components {
              * @description Proof photo; null when none or it cannot be shown right now
              */
             photoUrl: string | null;
+            /** @description Every proof photo that can be shown right now, in order (the first is photoUrl) */
+            photoUrls: string[];
             /**
              * Format: uri
              * @description Recipient's signature (someone-else handovers)
@@ -4483,6 +4486,13 @@ export interface components {
             status: components["schemas"]["ShipmentStatus"];
             statusLabel: string;
             fulfilment: components["schemas"]["Fulfilment"];
+            /**
+             * @description seller_ships: you ship it and mark it shipped and delivered, it is never in an AfroTransact delivery queue. afrotransact_delivery: you opted into delivery by AfroTransact. fulfilled_by_afrotransact: AfroTransact fulfils and delivers it.
+             * @enum {string}
+             */
+            fulfilmentMode: "seller_ships" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+            /** @description The next step is Mark shipped and you ship it yourself: send a tracking number or say how it was sent (shipNote) */
+            needsShipDetails: boolean;
             perishable: boolean;
             lines: {
                 title: string;
@@ -4530,6 +4540,12 @@ export interface components {
             status: components["schemas"]["SellerStatusAction"];
             /** @description The buyer's 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise */
             handoverCode?: string;
+            /** @description Marking shipped a shipment you ship yourself: how it was sent (who took it, a local delivery). Needed unless a trackingNumber is given (422 orders.ship-details-required) */
+            shipNote?: string;
+            /** @description Marking shipped a shipment you ship yourself: the tracking number (no spaces) */
+            trackingNumber?: string;
+            /** @description Optional courier name for your own records; customers are never shown it */
+            trackingCarrier?: string;
         };
         Parcel: {
             weightLb: number;

@@ -3,6 +3,7 @@ import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 import { BACKGROUND } from '../http';
 import { type ExportJobList } from '../schemas/exports';
 import { type LookupKind, type NotificationPreviewRequest, type ResourceKey, type RunDispatchStatus } from '../schemas/staff';
+import { type DeliveryQuery } from '../schemas/staff-delivery';
 import { type ResourceQuery, type StaffApiClient } from '../staff-client';
 import { pollingOf,type PollRule } from './polling';
 
@@ -25,6 +26,10 @@ export const staffKeys = {
   feeOrgs: (q: string) => [...staffKeys.fees(), 'orgs', q] as const,
   lookup: (kind: string, q: string) => [...staffKeys.all, 'lookup', kind, q] as const,
   deliveryQuote: (orgId: string, miles: number, packages: number) => [...staffKeys.fees(), 'delivery-quote', orgId, miles, packages] as const,
+  deliveries: () => [...staffKeys.all, 'delivery'] as const,
+  deliveryList: (q: object) => [...staffKeys.deliveries(), 'list', q] as const,
+  delivery: (shipmentId: string) => [...staffKeys.deliveries(), 'one', shipmentId] as const,
+  deliveryCouriers: () => [...staffKeys.deliveries(), 'couriers'] as const,
   pickups: () => [...staffKeys.all, 'dispatch', 'pickups'] as const,
   pickupList: (nodeId: string) => [...staffKeys.pickups(), 'list', nodeId] as const,
   pickup: (shipmentId: string) => [...staffKeys.pickups(), 'pickup', shipmentId] as const,
@@ -77,6 +82,12 @@ export const staffQueries = {
       queryFn: ({ signal }) => api.quoteDelivery({ sellerOrgId: orgId, distanceMiles: miles, packages }, signal),
       staleTime: 30_000
     }),
+  deliveries: (api: StaffApiClient, q: DeliveryQuery = {}) =>
+    queryOptions({ queryKey: staffKeys.deliveryList(q), queryFn: ({ signal }) => api.listDeliveries(q, signal), placeholderData: keepPreviousData, staleTime: 10_000, refetchInterval: 30_000 }),
+  delivery: (api: StaffApiClient, shipmentId: string) =>
+    queryOptions({ queryKey: staffKeys.delivery(shipmentId), queryFn: ({ signal }) => api.getDelivery(shipmentId, signal), staleTime: 5_000 }),
+  deliveryCouriers: (api: StaffApiClient) =>
+    queryOptions({ queryKey: staffKeys.deliveryCouriers(), queryFn: ({ signal }) => api.listDeliveryCouriers(signal), staleTime: 60_000 }),
   pickups: (api: StaffApiClient, nodeId = '') =>
     queryOptions({ queryKey: staffKeys.pickupList(nodeId), queryFn: ({ signal }) => api.listPickups(nodeId, signal), staleTime: 10_000 }),
   pickupSuggestions: (api: StaffApiClient, shipmentId: string) =>

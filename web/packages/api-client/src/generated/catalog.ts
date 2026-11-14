@@ -322,7 +322,7 @@ export interface paths {
         put?: never;
         /**
          * Upload and validate a .xlsx or .csv file
-         * @description Every row is validated (required fields, allowed values, numbers and units, GTIN check digit, duplicate SKUs in the file and against the organisation's listings, image URL format). 422 catalog.upload-rejected when the file cannot be read (format, 10 MB (25 MB for PRICE_QTY), 5,000 rows (50,000 for PRICE_QTY), missing required columns); nothing is stored then. mode=OFFER matches each row to an existing page (barcode, ATIN or brand and part number) and PRICE_QTY reads a price and quantity feed (S393, S394). 409 catalog.import-already-running (one active upload per mode) and catalog.import-daily-limit (20 a day). fileSha256 and sameFileAs say when the organisation uploaded the same file before. Starts nothing: see POST /v1/imports/{id}/start.
+         * @description Every row is validated (required fields, allowed values, numbers and units, GTIN check digit, duplicate SKUs in the file and against the organisation's listings, image URL format). 422 catalog.upload-rejected when the file cannot be read (format, 10 MB (25 MB for PRICE_QTY), 5,000 rows (50,000 for PRICE_QTY), missing required columns); nothing is stored then. mode=OFFER matches each row to an existing page (barcode, ATIN or brand and part number) and PRICE_QTY reads a price and quantity feed, one row per listing named by Seller SKU first, else ATIN, else a barcode that matches exactly one of the organisation's own listings (a barcode that matches more than one fails that row with the plain message "This barcode matches more than one of your listings. Use your SKU.") (S393, S394). 409 catalog.import-already-running (one active upload per mode) and catalog.import-daily-limit (20 a day). fileSha256 and sameFileAs say when the organisation uploaded the same file before. Starts nothing: see POST /v1/imports/{id}/start.
          */
         post: operations["uploadImport"];
         delete?: never;
@@ -2255,7 +2255,7 @@ export interface components {
             alt?: string;
             /** @description LABEL for the label photo (ingredients and nutrition panel, Supplement Facts, Drug Facts); absent for a product picture */
             role?: string;
-            /** @description Media asset id of a photo uploaded to media-service (S390). Send it instead of url for a photo that is held for review (it has no public URL): catalog asks media (the asset must belong to the seller), publishes the photo into the listing when it is cleared and keeps the listing off sale while it is held. A photo that media already published may also be given by id: catalog replaces it with its public URL. Rejected, unknown or another seller's assets are refused (422, images[i]). Not allowed in a variant's own images. */
+            /** @description Media asset id of a photo uploaded to media-service (S390). Send it instead of url for a photo that is held for review (it has no public URL): catalog asks media (the asset must belong to the seller), publishes the photo into the listing when it is cleared and keeps the listing off sale while it is held. A photo that media already published may also be given by id: catalog replaces it with its public URL. Rejected, unknown or another seller's assets are refused (422, images[i], or variants[i].images in a variant's own pictures). A variant's own pictures can be given by id too: they are held the same way, and the listing stays off sale while any of them is held (422 ImageHeld on approve or resume). */
             assetId?: string;
             /** @description Response only. True while the photo is held for review ("We are checking your photo"); the listing is saved and can be submitted but is not live until the photo is cleared */
             readonly held?: boolean;
@@ -4858,7 +4858,7 @@ export interface operations {
             query?: {
                 productType?: string;
                 categoryId?: string;
-                /** @description OFFER (sell products already on AfroTransact: barcode, ATIN or brand and part number, with price, quantity, condition, shipping and handling; no image, title or attribute columns) and PRICE_QTY (seller SKU or ATIN with price, list price and quantity) are generated server-side and do not depend on a category (S393, S394) */
+                /** @description OFFER (sell products already on AfroTransact: barcode, ATIN or brand and part number, with price, quantity, condition, shipping and handling; no image, title or attribute columns) and PRICE_QTY (Seller SKU, or ATIN, or a barcode that matches exactly one of the seller's listings, with price, list price and quantity) are generated server-side and do not depend on a category (S393, S394) */
                 mode?: "CREATE" | "UPDATE" | "OFFER" | "PRICE_QTY";
                 format?: string;
             };

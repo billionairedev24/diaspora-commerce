@@ -14,6 +14,7 @@ import {
   type CheckoutLocalDelivery,
   type CheckoutPackage,
   type CheckoutSummary,
+  type FulfilmentMode,
   LolaChatRequestSchema,
   NotificationPreferencesSchema,
   type OrderConfirmation,
@@ -701,8 +702,12 @@ export const shopperHandlers = [
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
       const opt = p.deliveryOptions.find((o) => o.key === sel?.option);
       const needsCode = (sel?.option === 'afrotransact_delivery' || sel?.option === 'pickup') && (p.lines.some((l) => l.perishable) || sel.preferences?.handover === 'hand');
+      // Who moves it, as orders decides at checkout: the seller ships a seller-packed package that did not opt into delivery by
+      // AfroTransact, whatever the shopper's "Delivery" option; AfroTransact moves Fulfilled by AfroTransact and opted-in ones.
+      const mode: FulfilmentMode =
+        sel?.option === 'pickup' ? 'pickup' : p.fulfilment === 'AFROTRANSACT' ? 'fulfilled_by_afrotransact' : p.fulfilment === 'AFROTRANSACT_DELIVERY' ? 'afrotransact_delivery' : 'seller_ships';
       return { shipmentId: `${orderNumber}-s${i + 1}`, label: `${p.heading} · ${opt?.label ?? ''}`.trim(), status: 'placed', statusLabel: 'Order placed',
-        items: p.lines.map((l) => `${l.title} × ${l.quantity}`).join(' · '), sellerName: p.seller.name, deliveryMethod: sel?.option ?? 'carrier', cancellable: true,
+        items: p.lines.map((l) => `${l.title} × ${l.quantity}`).join(' · '), sellerName: p.seller.name, deliveryMethod: mode === 'seller_ships' && sel?.option !== 'carrier' ? 'seller_ships' : (sel?.option ?? 'carrier'), fulfilmentMode: mode, cancellable: true,
         carrier: null, trackingNumber: null, promisedFrom: opt?.earliestDate ?? null, promisedBy: opt?.latestDate ?? null, deliveredAt: null,
         deliveryCode: needsCode ? String(1000 + ((n * 7919) % 9000)) : null,
         lines: p.lines.map((l) => ({ lineId: l.lineId, atin: l.atin, title: l.title, imageUrl: null, quantity: l.quantity, unitPriceMinor: l.priceMinor, itemsMinor: l.lineTotalMinor })),

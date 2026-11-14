@@ -57,6 +57,7 @@ import { canAdvance, planRun } from './dispatch';
 import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, FEE_ORGS, feeRecords, feesOverview, feeView, MOCK_RETAIL_ORG_ID, quoteDelivery, searchFeeOrgs } from './fees';
 import { staffHomeModules } from './home-modules';
+import { deliveryHandlers } from './delivery';
 import { homeSettingsHandlers } from './home-settings';
 import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop, stepUpErrors } from './identity';
 import { MOCK_DRIVERS, MOCK_STAFF } from './lookups';
@@ -1329,6 +1330,7 @@ export const staffHandlers = [
   /* ── pre-orders (S274): delivery-runs' staff API through the BFF ── */
   ...preorderHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Run economics and advertorials (S263, S265) */
+  ...deliveryHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...runHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),

@@ -99,6 +99,7 @@ function deliveredOrder(orderNumber: string, placed: Date, items: Array<{ id: st
         sellerName: seller,
         // A delivered order of the seed history: delivered by AfroTransact (no carrier is named to shoppers at launch).
         deliveryMethod: 'afrotransact_delivery',
+        fulfilmentMode: 'fulfilled_by_afrotransact',
         cancellable: false,
         carrier: null,
         trackingNumber: null,

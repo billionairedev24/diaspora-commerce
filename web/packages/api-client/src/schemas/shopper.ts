@@ -40,7 +40,14 @@ export type PaymentSheetKeys = z.infer<typeof PaymentSheetKeysSchema>;
 /* ── Orders ────────────────────────────────────────────────────── */
 
 /** How a placed order's shipment reached the shopper (history keeps 'express' of any order placed before launch shipping). */
-export const DeliveryMethodSchema = z.enum(['carrier', 'express', 'afrotransact_delivery', 'pickup']);
+export const DeliveryMethodSchema = z.enum(['carrier', 'express', 'seller_ships', 'afrotransact_delivery', 'pickup']);
+
+/** Who moves a shipment. The apps say AfroTransact delivers, and show delivery proof, only for the AfroTransact modes. */
+export const FulfilmentModeSchema = z.enum(['seller_ships', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
+export type FulfilmentMode = z.infer<typeof FulfilmentModeSchema>;
+
+/** True when AfroTransact itself delivers (or hands over) this mode: the only modes that may show a proof of delivery. */
+export const deliveredByAfroTransact = (mode: FulfilmentMode): boolean => mode === 'afrotransact_delivery' || mode === 'fulfilled_by_afrotransact' || mode === 'preorder_run';
 export type DeliveryMethod = z.infer<typeof DeliveryMethodSchema>;
 
 /** A delivery option the checkout page can show a package (launch shipping: no express, quote_required outside the zones). */
@@ -73,13 +80,15 @@ export type OrderLineView = z.infer<typeof OrderLineViewSchema>;
 export const OrderPickupSchema = z.object({ id: z.string(), name: z.string(), address: z.string(), hours: z.string(), ready: z.string(), setBy: z.enum(['platform', 'seller']) });
 export type OrderPickup = z.infer<typeof OrderPickupSchema>;
 
-/** How our driver handed a parcel over (photo, who received it); the links last about five minutes. */
+/** How AfroTransact handed a parcel over (a driver, or staff with a photo; who received it); the links last about five minutes. */
 export const DeliveryProofSchema = z.object({
-  method: z.enum(['CUSTOMER', 'SOMEONE_ELSE', 'SAFE_PLACE']),
+  method: z.enum(['CUSTOMER', 'SOMEONE_ELSE', 'SAFE_PLACE', 'PHOTO']),
   recipientName: nullableString,
   relationship: nullableString,
   safePlace: nullableString,
   photoUrl: nullableString,
+  /** Every photo that can be shown right now, in order (staff may attach several); the first is photoUrl. */
+  photoUrls: z.array(z.string()).default([]),
   signatureUrl: nullableString,
   at: z.string()
 });
@@ -93,6 +102,8 @@ export const ShipmentDetailSchema = z.object({
   items: z.string(),
   sellerName: z.string(),
   deliveryMethod: DeliveryMethodSchema,
+  /** Who moves it (honest wording: AfroTransact is named only when it delivers). */
+  fulfilmentMode: FulfilmentModeSchema,
   cancellable: z.boolean(),
   /** When Cancel stops being offered (before packing, inside the cancellation window); null when it is not offered. */
   cancellableUntil: z.string().nullable().optional(),
@@ -101,7 +112,7 @@ export const ShipmentDetailSchema = z.object({
   promisedFrom: nullableString,
   promisedBy: nullableString,
   deliveredAt: nullableString,
-  /** How our driver handed it over; null for carrier, pickup and by-hand deliveries. */
+  /** How AfroTransact handed it over; null for seller-shipped, carrier, pickup and by-hand deliveries. */
   proof: DeliveryProofSchema.nullable().optional(),
   deliveryCode: nullableString,
   lines: z.array(OrderLineViewSchema),

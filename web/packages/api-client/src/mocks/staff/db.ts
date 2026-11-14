@@ -10,6 +10,7 @@ import { seedCatalogReview } from './catalog-review';
 import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './content-pages';
 import { seedQuotes,seedQuoteSettings } from './delivery-quotes';
 import { MOCK_DEPARTMENT_ORGS, type MockDepartmentsState, seedDepartments } from './departments';
+import { type MockDeliveryState, seedDelivery } from './delivery';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
@@ -61,6 +62,8 @@ export interface MockStaffDb {
   feeSchedules: MockFeeSchedule[];
   /** fulfilment's seller pickups (AfroTransact Delivery from the seller's store, S255). */
   dispatch: MockDispatch;
+  /** The Delivery module: AfroTransact-delivered shipments, their jobs, proofs and audit trail. */
+  delivery: MockDeliveryState;
   /** notifications' versioned templates and their sample data (S268). */
   templates: { rows: MockTemplateRow[]; samples: Record<string, MockTemplateSample> };
   /** delivery-runs' pre-order windows, orders, coverage and settings (S274). */
@@ -698,6 +701,7 @@ function seed(now: Date): MockStaffDb {
     audit: [],
     feeSchedules,
     dispatch: seedDispatch(now),
+    delivery: seedDelivery(now),
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),

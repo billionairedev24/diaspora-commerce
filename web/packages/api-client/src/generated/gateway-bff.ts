@@ -6000,16 +6000,17 @@ export interface components {
             publishableKey: string;
         };
         /**
-         * @description How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
-         *     tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+         * @description How AfroTransact handed the parcel over, shown on a delivered shipment (a driver, or AfroTransact staff with a photo).
+         *     Null for seller-shipped orders (the seller ships and confirms those), carrier deliveries, pickups and deliveries staff
+         *     confirmed by hand. It is never shown for an order AfroTransact did not deliver. The photo and signature links are
          *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
          */
         DeliveryProof: {
             /**
-             * @description To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place
+             * @description To the customer (who gave their code), to someone else (name, relationship, signature), left in a safe place, or PHOTO: delivered by AfroTransact staff with a photo (the recipient name is optional)
              * @enum {string}
              */
-            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE";
+            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE" | "PHOTO";
             recipientName: string | null;
             relationship: string | null;
             safePlace: string | null;
@@ -6018,6 +6019,8 @@ export interface components {
              * @description Proof photo; null when none or it cannot be shown right now
              */
             photoUrl: string | null;
+            /** @description Every proof photo that can be shown right now, in order (the first is photoUrl) */
+            photoUrls: string[];
             /**
              * Format: uri
              * @description Recipient's signature (someone-else handovers)
@@ -6090,7 +6093,12 @@ export interface components {
                 items: string;
                 sellerName: string;
                 /** @enum {string} */
-                deliveryMethod: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+                deliveryMethod: "carrier" | "express" | "seller_ships" | "afrotransact_delivery" | "pickup";
+                /**
+                 * @description Who moves it. The app says AfroTransact delivers, and shows delivery proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
+                 * @enum {string}
+                 */
+                fulfilmentMode: "seller_ships" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
                 /** @description Cancel is offered: before the parcel is packed and inside the cancellation window */
                 cancellable: boolean;
                 /**
@@ -6148,7 +6156,7 @@ export interface components {
                 status: string;
                 eta: string | null;
                 /** @enum {string} */
-                method: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+                method: "carrier" | "express" | "seller_ships" | "afrotransact_delivery" | "pickup";
                 /** @enum {string|null} */
                 handover: "hand" | "door" | "desk" | null;
                 perishable: boolean;

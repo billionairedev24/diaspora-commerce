@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { BookingTakeHomeSchema, SellerNegotiatedRateSchema, SellerRateCardSchema } from '../fee-rates';
 import { ImageCheckSchema } from '../seller-matching';
-import { DeliveryProofSchema } from './shopper';
+import { DeliveryProofSchema, FulfilmentModeSchema } from './shopper';
 import { ServiceDeliverySchema } from './shopper';
 
 /* Zod schemas for contracts/openapi/gateway-bff-seller.yaml (Seller Center & Provider Hub). Every response is
@@ -503,6 +503,10 @@ export const SellerShipmentSchema = z.object({
   status: ShipmentStatusSchema,
   statusLabel: z.string(),
   fulfilment: FulfilmentKindSchema,
+  /** seller_ships: you ship it and mark it shipped and delivered (never in an AfroTransact queue); afrotransact_delivery: you opted into delivery by AfroTransact; fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. */
+  fulfilmentMode: FulfilmentModeSchema,
+  /** The next step is Mark shipped and you ship it yourself: send a tracking number or say how it was sent. */
+  needsShipDetails: z.boolean(),
   perishable: z.boolean(),
   lines: z.array(
     z.object({ title: z.string(), quantity: z.number().int(), unitPriceMinor: z.number().int(), itemsMinor: z.number().int(), variantAtin: z.string(), imageUrl: nullableString })
@@ -518,7 +522,7 @@ export const SellerShipmentSchema = z.object({
   hasLabel: z.boolean().default(false),
   /** The products' listed package (lb / in), to prefill the label form. */
   suggestedParcel: SuggestedParcelSchema.nullable().default(null),
-  /** How our driver handed it over (photo, who received it); null for carrier, pickup and by-hand deliveries. */
+  /** How AfroTransact handed it over (photo, who received it), read-only; null for seller-shipped, carrier, pickup and by-hand deliveries. */
   proof: DeliveryProofSchema.nullable().default(null),
   timeline: z.array(z.object({ status: z.string(), at: z.string(), actor: z.string() })),
   /** AfroTransact Delivery from the seller's store (S255): the seller delivery fee is deducted from the payout. */

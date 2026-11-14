@@ -1,10 +1,24 @@
 import { type AddressSearchOptions } from './address-lookup';
 import { createStaffFeeRatesApi } from './fee-rates';
-import { type ApiClientOptions, createRequester } from './http';
+import { ApiError, problemFrom } from './errors';
+import { absolute, type ApiClientOptions, createRequester, type FetchLike } from './http';
 import { createInventoryHubApi } from './inventory-hub';
 import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
 import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type LookupKind, type LookupResult, LookupResultSchema } from './schemas/staff';
+import {
+  type DeliveryActionInput,
+  type DeliveryCourier,
+  DeliveryCourierListSchema,
+  type DeliveryDetail,
+  DeliveryDetailSchema,
+  type DeliveryList,
+  DeliveryListSchema,
+  type DeliveryProofInput,
+  type DeliveryQuery,
+  type DeliveryUploadTicket,
+  DeliveryUploadTicketSchema
+} from './schemas/staff-delivery';
 import {
   type Customer360,
   Customer360Schema,
@@ -101,6 +115,7 @@ const enc = encodeURIComponent;
 /** Typed client for the staff console routes (contracts/openapi/gateway-bff-staff.yaml). */
 export function createStaffApiClient(options: ApiClientOptions) {
   const request = createRequester(options);
+  const doFetch: FetchLike = options.fetch ?? ((req) => fetch(req));
   const idem = (key?: string): Record<string, string> | undefined => (key ? { 'Idempotency-Key': key } : undefined);
   const record = (resource: ResourceKey, id: string) => `/v1/staff/resources/${enc(resource)}/${enc(id)}`;
 
@@ -173,6 +188,51 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request('/v1/staff/fees/delivery-quote', DeliveryQuoteSchema, { method: 'POST', body, signal }),
     importTaxRates: (csv: string): Promise<TaxRatesImportResult> =>
       request('/v1/staff/tax-rates/import', TaxRatesImportResultSchema, { method: 'POST', body: { csv } }),
+
+    /* Delivery module: AfroTransact staff run AfroTransact-delivered orders end to end (docs/engineering/delivery-fulfilment.md) */
+    listDeliveries: (q: DeliveryQuery = {}, signal?: AbortSignal): Promise<DeliveryList> =>
+      request('/v1/staff/deliveries', DeliveryListSchema, {
+        query: {
+          status: q.status?.join(',') || undefined,
+          mode: q.mode,
+          q: q.q || undefined,
+          assignee: q.assignee || undefined,
+          city: q.city || undefined,
+          seller: q.seller || undefined,
+          sort: q.sort,
+          desc: q.desc ? 'true' : undefined,
+          page: q.page ? String(q.page) : undefined,
+          size: q.size ? String(q.size) : undefined
+        },
+        signal
+      }),
+    listDeliveryCouriers: (signal?: AbortSignal): Promise<DeliveryCourier[]> => request('/v1/staff/deliveries/couriers', DeliveryCourierListSchema, { signal }),
+    getDelivery: (shipmentId: string, signal?: AbortSignal): Promise<DeliveryDetail> => request(`/v1/staff/deliveries/${enc(shipmentId)}`, DeliveryDetailSchema, { signal }),
+    takeDelivery: (shipmentId: string, body: DeliveryActionInput, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/take`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
+    assignDelivery: (shipmentId: string, assigneeId: string, body: DeliveryActionInput, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/assign`, DeliveryDetailSchema, { method: 'POST', body: { assigneeId, ...body }, headers: idem(key) }),
+    markDeliveryPickedUp: (shipmentId: string, body: DeliveryActionInput, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/picked-up`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
+    markDeliveryOutForDelivery: (shipmentId: string, body: DeliveryActionInput, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/out-for-delivery`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
+    markDeliveryDelivered: (shipmentId: string, body: DeliveryProofInput, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/delivered`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
+    markDeliveryFailed: (shipmentId: string, reason: string, version?: number, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/failed`, DeliveryDetailSchema, { method: 'POST', body: { reason, ...(version === undefined ? {} : { version }) }, headers: idem(key) }),
+    correctDeliveryProof: (shipmentId: string, body: DeliveryProofInput, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/proof`, DeliveryDetailSchema, { method: 'PUT', body, headers: idem(key) }),
+    /** Signs a direct upload of a proof photo (private bucket); the caller PUTs the file to `upload.url`. */
+    requestDeliveryPhotoUpload: (file: { name: string; type: string; size: number }): Promise<DeliveryUploadTicket> =>
+      request('/v1/staff/deliveries/uploads', DeliveryUploadTicketSchema, { method: 'POST', body: { fileName: file.name, contentType: file.type, size: file.size } }),
+
+    /** Signs the upload, sends the photo straight to private storage and answers the asset id to attach to the delivery. */
+    uploadDeliveryPhoto: async (file: File): Promise<string> => {
+      const ticket = await request('/v1/staff/deliveries/uploads', DeliveryUploadTicketSchema, { method: 'POST', body: { fileName: file.name, contentType: file.type, size: file.size } });
+      const res = await doFetch(new Request(absolute(ticket.upload.url), { method: ticket.upload.method, headers: ticket.upload.headers, body: file }));
+      if (!res.ok) throw new ApiError(await problemFrom(res));
+      return ticket.assetId;
+    },
 
     /* Dispatch: seller pickups (S255) */
     listPickups: (nodeId?: string, signal?: AbortSignal): Promise<PickupList> =>

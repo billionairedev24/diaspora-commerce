@@ -177,7 +177,22 @@ function seedOrders(now: Date): SellerOrderDetail[] {
     const stripe = Math.floor(((itemsMinor + shippingMinor) * 290 + 5000) / 10_000) + 30;
     const deliveryFee = local ? 200 : 0;
     const keptShipping = local || fba ? 0 : shippingMinor;
-    const next = fba ? [] : status === 'PLACED' ? ['CONFIRMED' as const] : status === 'CONFIRMED' ? ['PACKED' as const] : status === 'PACKED' ? ['READY' as const] : [];
+    // A seller-packed shipment that did not opt into delivery by AfroTransact is the seller's to ship: half of the seed uses the
+    // carrier-label flow (the staff carrier switch on), half ships it themselves (the launch default: tracking or handover details).
+    const own = !fba && !local && i % 2 === 0;
+    const next = fba
+      ? []
+      : status === 'PLACED'
+        ? ['CONFIRMED' as const]
+        : status === 'CONFIRMED'
+          ? ['PACKED' as const]
+          : status === 'PACKED'
+            ? ['READY' as const]
+            : own && status === 'READY'
+              ? ['PICKED_UP' as const]
+              : own && status === 'IN_TRANSIT'
+                ? ['DELIVERED' as const]
+                : [];
     const total = itemsMinor + shippingMinor;
     return {
       orderNumber: `AT-2026-${String(400123 + i * 37).padStart(6, '0')}`,
@@ -194,6 +209,8 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           status,
           statusLabel: SHIPMENT_LABELS[status],
           fulfilment: fba ? 'AFROTRANSACT' : local ? 'AFROTRANSACT_DELIVERY' : 'SELLER',
+          fulfilmentMode: fba ? 'fulfilled_by_afrotransact' : local ? 'afrotransact_delivery' : 'seller_ships',
+          needsShipDetails: own && status === 'READY',
           perishable: false,
           lines: [{ title, quantity: qty, unitPriceMinor: price, itemsMinor, variantAtin: `ATADEV${String(i).padStart(4, '0')}`, imageUrl: null }],
           itemsMinor,
@@ -202,8 +219,8 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           carrier: tracking ? 'usps' : null,
           trackingNumber: tracking,
           nextActions: next,
-          canBuyLabel: !fba && !local && !tracking && ['CONFIRMED', 'PACKED', 'READY'].includes(status),
-          hasLabel: !fba && !local && Boolean(tracking),
+          canBuyLabel: !fba && !local && !own && !tracking && ['CONFIRMED', 'PACKED', 'READY'].includes(status),
+          hasLabel: !fba && !local && !own && Boolean(tracking),
           proof: null,
           suggestedParcel: { weightLb: 1.2, lengthIn: 9, widthIn: 6, heightIn: 2 },
           timeline: [{ status: 'PLACED', at: iso(placed), actor: 'customer' }],

@@ -45,6 +45,10 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
     label: 'Notifications',
     description: 'Email, SMS, push and WhatsApp templates: live preview with production-shaped sample data, version history and new versions.'
   },
+  delivery: {
+    label: 'Delivery',
+    description: 'Orders AfroTransact delivers: take a job, assign a courier, pick up, deliver with a photo as proof, or record a failed attempt. Seller-shipped orders and pickups are not here.'
+  },
   preorders: {
     label: 'Pre-orders',
     description: 'Open pre-order windows by city with opening, closing and delivery dates. Upload advertorials, watch every pre-order live, export and add late orders.'
@@ -53,7 +57,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
 
 export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKey[] }[] = [
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
-  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'deliveryQuotes', 'preorders'] },
+  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'delivery', 'deliveryQuotes', 'preorders'] },
   { key: 'partners', label: 'Partners', modules: ['orgs', 'apps', 'deptRequests', 'support', 'rbac'] },
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'tax', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
@@ -101,6 +105,12 @@ export const PENDING_PERMISSIONS: Record<string, string[]> = {
   'platform.retail_buyer': ['delivery-runs:read'],
   'platform.developer': ['delivery-runs:read', 'notifications:read', 'notifications:templates:write', 'preorders:manage', 'preorders:export', 'preorders:late-add', 'plans:manage', 'billing:adjust', 'seller:billing']
 };
+
+/* Delivery module grants (identity migration V49): view for the roles that watch deliveries, manage for those that run them. */
+const DELIVERY_READ = ['delivery:read'];
+const DELIVERY_RUN = ['delivery:read', 'delivery:manage'];
+for (const role of ['platform.super_admin', 'platform.operations_manager', 'platform.fulfilment_ops', 'platform.dispatcher']) (PENDING_PERMISSIONS[role] ??= []).push(...DELIVERY_RUN);
+for (const role of ['platform.customer_support', 'platform.product_owner', 'platform.auditor', 'platform.developer']) (PENDING_PERMISSIONS[role] ??= []).push(...DELIVERY_READ);
 
 /* Pre-orders grants (identity migration V22, docs/spikes/preorder-design-implementation.md §6) until identity seeds them. */
 const PREORDER_GRANTS = ['delivery-runs:read', 'preorders:manage', 'preorders:export', 'preorders:late-add'];
@@ -178,6 +188,11 @@ export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | 
     // Derived from orders' delivery-quotes permissions, as the BFF does (identity V41; the matrix has no column for it).
     const perms = permissionsOf(roles);
     return perms.includes('delivery-quotes:agree') || perms.includes('delivery-quotes:assign') ? 'EDIT' : perms.includes('delivery-quotes:view') ? 'VIEW' : null;
+  }
+  if (module === 'delivery') {
+    // The Delivery module follows delivery:read (view) and delivery:manage (act), as identity V49 grants them.
+    const perms = permissionsOf(roles);
+    return perms.includes('delivery:manage') ? 'EDIT' : perms.includes('delivery:read') ? 'VIEW' : null;
   }
   if (module === 'deptRequests') {
     // Derived from the seller service's permissions, as the BFF does (identity's matrix has no column for it).

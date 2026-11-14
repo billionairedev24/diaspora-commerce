@@ -1410,6 +1410,235 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The delivery queue (AfroTransact-delivered shipments)
+         * @description orders `GET /v1/deliveries`. Only shipments AfroTransact delivers (Fulfilled by AfroTransact, or sellers who opted
+         *     into delivery by AfroTransact); seller-shipped orders and pickups are never listed. Server-driven table: filters,
+         *     search, sort and page are sent here. Default statuses: ready, picked_up, in_transit, out_for_delivery,
+         *     delivery_failed. Needs VIEW on the Delivery module and delivery:read (or delivery:manage).
+         */
+        get: operations["listStaffDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/couriers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who can be assigned a delivery, by name
+         * @description orders `GET /v1/deliveries/couriers`. Enabled staff holding delivery:manage. Needs VIEW and delivery:read.
+         */
+        get: operations["listStaffDeliveryCouriers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a direct upload of a proof-of-delivery photo
+         * @description media `POST /v1/uploads` with purpose `proof-photo`: a private bucket, JPEG, PNG or WebP up to 10 MB, served only
+         *     through short-lived signed links. The console PUTs the file to `upload.url`, then sends `assetId` in
+         *     `photoAssetIds` when it marks the delivery delivered. Needs EDIT and delivery:manage.
+         */
+        post: operations["requestStaffDeliveryPhotoUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One delivery with its job, proof and audit trail
+         * @description orders `GET /v1/deliveries/{id}`. The street address, phone, delivery instructions, coordinates and audit notes
+         *     come only with delivery:manage; readers see the name and city. Proof photos are short-lived signed links.
+         */
+        get: operations["getStaffDelivery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/take": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take the delivery (assign it to yourself)
+         * @description Needs EDIT and delivery:manage. Idempotent per `Idempotency-Key`; 409 when someone else has it or `version` is stale.
+         */
+        post: operations["takeStaffDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign the delivery to a named staff member or courier
+         * @description The assignee must hold delivery:manage (orders reads their name from identity). Needs EDIT and delivery:manage.
+         */
+        post: operations["assignStaffDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/picked-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark picked up from the seller or the warehouse
+         * @description Needs EDIT and delivery:manage, and the delivery taken or assigned first (409 otherwise). Idempotent.
+         */
+        post: operations["markStaffDeliveryPickedUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/out-for-delivery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark out for delivery (also the reattempt after a failed delivery)
+         * @description Notifies the customer. Needs EDIT and delivery:manage. Idempotent.
+         */
+        post: operations["markStaffDeliveryOutForDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/delivered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark delivered with proof (at least one photo)
+         * @description The BFF checks each photo with media (purpose proof-photo, JPEG/PNG/WebP, at most 10 MB, uploaded) before orders
+         *     saves the proof once: photos, optional recipient name and note, the time and the staff member's name;
+         *     coordinates only when sent. A second call changes nothing. Notifies the customer. 422 without a photo.
+         *     Needs EDIT and delivery:manage.
+         */
+        post: operations["markStaffDeliveryDelivered"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a failed delivery attempt with a reason
+         * @description The attempt is counted; it can be tried again with out-for-delivery. Needs EDIT and delivery:manage.
+         */
+        post: operations["markStaffDeliveryFailed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Correct a saved proof of delivery (reason required, audited)
+         * @description The only way a saved proof changes; the old values stay in the audit trail. Needs EDIT and delivery:manage.
+         */
+        put: operations["correctStaffDeliveryProof"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/dispatch/pickups": {
         parameters: {
             query?: never;
@@ -5878,6 +6107,169 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description One line of the delivery queue. Names and cities, never ids (shipmentId is the handle for actions). */
+        DeliveryRow: {
+            shipmentId: string;
+            orderNumber: string;
+            shipmentLabel: string;
+            /**
+             * @description AFROTRANSACT_DELIVERY = the seller opted in; FULFILLED_BY_AFROTRANSACT = FBA or Retail
+             * @enum {string}
+             */
+            mode: "AFROTRANSACT_DELIVERY" | "FULFILLED_BY_AFROTRANSACT";
+            /** @enum {string} */
+            status: "placed" | "confirmed" | "packed" | "ready" | "picked_up" | "in_transit" | "out_for_delivery" | "delivery_failed" | "delivered";
+            sellerName: string;
+            /** @description The seller's city or the fulfilment centre's; empty when it cannot be read */
+            originCity: string;
+            customerName: string;
+            customerCity: string;
+            customerState: string;
+            customerPostalCode: string;
+            units: number;
+            perishable: boolean;
+            /** Format: date */
+            promisedBy: string | null;
+            assigneeName: string | null;
+            assigneeMe: boolean;
+            attempts: number;
+            /** Format: int64 */
+            version: number;
+            proofAttached: boolean;
+            /** Format: date-time */
+            updatedAt: string | null;
+            /** Format: date-time */
+            deliveredAt: string | null;
+        };
+        DeliveryList: {
+            items: components["schemas"]["DeliveryRow"][];
+            page: number;
+            size: number;
+            /** Format: int64 */
+            total: number;
+            /** @description Shipments per status over the whole queue */
+            counts: {
+                [key: string]: number;
+            };
+            canManage: boolean;
+        };
+        DeliveryCourier: {
+            id: string;
+            name: string;
+            me: boolean;
+        };
+        DeliveryDestination: {
+            name: string;
+            line1: string | null;
+            line2: string | null;
+            city: string;
+            state: string;
+            postalCode: string | null;
+            phone: string | null;
+            instructions: string | null;
+            handToCustomer: boolean;
+        };
+        DeliveryItem: {
+            title: string;
+            quantity: number;
+        };
+        DeliveryJob: {
+            assigneeName: string | null;
+            /** Format: date-time */
+            assignedAt: string | null;
+            assignedBy: string | null;
+            attempts: number;
+            lastFailure: string | null;
+            /**
+             * Format: int64
+             * @description Send back with the next action; 409 when stale
+             */
+            version: number;
+        };
+        DeliveryProofView: {
+            photoAssetIds: string[];
+            /** @description Signed links (about 5 minutes) in the same order; empty string when one could not be signed */
+            photoUrls: string[];
+            recipientName: string | null;
+            note: string | null;
+            latitude: number | null;
+            longitude: number | null;
+            /** Format: date-time */
+            deliveredAt: string;
+            recordedByName: string;
+            /** Format: date-time */
+            correctedAt: string | null;
+            correctedByName: string | null;
+            corrections: number;
+            /** Format: int64 */
+            version: number;
+        };
+        DeliveryAuditLine: {
+            /** @enum {string} */
+            action: "TAKE" | "ASSIGN" | "REASSIGN" | "PICKED_UP" | "OUT_FOR_DELIVERY" | "DELIVERED" | "FAILED" | "REATTEMPT" | "PROOF_CORRECTED" | "DATA_FIX";
+            fromStatus: string;
+            toStatus: string;
+            actorName: string;
+            note: string;
+            /** Format: date-time */
+            at: string;
+        };
+        DeliveryDetail: {
+            row: components["schemas"]["DeliveryRow"];
+            destination: components["schemas"]["DeliveryDestination"];
+            items: components["schemas"]["DeliveryItem"][];
+            job: components["schemas"]["DeliveryJob"];
+            proof: components["schemas"]["DeliveryProofView"] | null;
+            audit: components["schemas"]["DeliveryAuditLine"][];
+            /** @description The statuses the signed-in staff member may move it to now */
+            nextStatuses: string[];
+            canManage: boolean;
+        };
+        DeliveryActionRequest: {
+            /** Format: int64 */
+            version?: number | null;
+            note?: string;
+        };
+        DeliveryAssignRequest: {
+            assigneeId: string;
+            /** Format: int64 */
+            version?: number | null;
+            note?: string;
+        };
+        DeliveryFailedRequest: {
+            reason: string;
+            /** Format: int64 */
+            version?: number | null;
+        };
+        DeliveryProofRequest: {
+            photoAssetIds: string[];
+            recipientName?: string;
+            note?: string;
+            /** @description Only when the device had a position; never required, and only together with longitude */
+            latitude?: number | null;
+            longitude?: number | null;
+            /** @description Required to correct a saved proof */
+            reason?: string;
+            /** Format: int64 */
+            version?: number | null;
+        };
+        DeliveryUploadRequest: {
+            fileName: string;
+            /** @enum {string} */
+            contentType: "image/jpeg" | "image/png" | "image/webp";
+            size: number;
+        };
+        DeliveryUploadTicket: {
+            assetId: string;
+            upload: {
+                /** @enum {string} */
+                method: "PUT" | "POST";
+                url: string;
+                headers: {
+                    [key: string]: string;
+                };
+            };
+        };
         StaffLocaleLabels: {
             en: string;
             fr?: string;
@@ -7463,10 +7855,10 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /**
-         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes, tax and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; tax is the Sales tax module, derived from tax-returns' tax:read (view) and tax:classify-admin (edit); preorders follows the Pre-orders matrix column).
+         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests, deliveryQuotes, tax and identity are derived; deptRequests follows applications:review / applications:approve; deliveryQuotes follows orders' delivery-quotes:view / delivery-quotes:agree / delivery-quotes:assign; identity needs the identity:admin permission; tax is the Sales tax module, derived from tax-returns' tax:read (view) and tax:classify-admin (edit); preorders follows the Pre-orders matrix column; delivery follows the Delivery matrix column and delivery:read / delivery:manage).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "search" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "deptRequests" | "deliveryQuotes" | "support" | "rbac" | "payouts" | "fees" | "tax" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "search" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "deptRequests" | "deliveryQuotes" | "support" | "rbac" | "payouts" | "fees" | "tax" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans" | "delivery";
         StaffUser: {
             id: string;
             firstName: string;
@@ -13224,6 +13616,368 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveries: {
+        parameters: {
+            query?: {
+                /** @description Comma separated: ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered, placed, confirmed, packed */
+                status?: string;
+                mode?: "AFROTRANSACT_DELIVERY" | "FULFILLED_BY_AFROTRANSACT";
+                /** @description Order number, seller, customer, city or assignee */
+                q?: string;
+                /** @description `me`, `unassigned` or a staff id */
+                assignee?: string;
+                /** @description Customer city */
+                city?: string;
+                seller?: string;
+                sort?: "promised" | "order" | "seller" | "city" | "status" | "updated";
+                desc?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryCouriers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Staff */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryCourier"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    requestStaffDeliveryPhotoUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload ticket */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryUploadTicket"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    takeStaffDelivery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeliveryActionRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    assignStaffDelivery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryAssignRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    markStaffDeliveryPickedUp: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeliveryActionRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    markStaffDeliveryOutForDelivery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeliveryActionRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    markStaffDeliveryDelivered: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryProofRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    markStaffDeliveryFailed: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryFailedRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    correctStaffDeliveryProof: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryProofRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };
