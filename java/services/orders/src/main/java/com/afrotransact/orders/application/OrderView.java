@@ -146,6 +146,14 @@ public record OrderView(String id, String orderNumber, String status, String cus
      */
     public record DeliveryProof(String handoverMethod, String recipientName, String relationship, String safePlace,
                                 String failureReason, String photoAssetId, String signatureAssetId, Double latitude,
-                                Double longitude) {
+                                Double longitude, List<String> photoAssetIds) {
+
+        /** A proof with one photo (the driver app). */
+        public DeliveryProof(String handoverMethod, String recipientName, String relationship, String safePlace,
+                             String failureReason, String photoAssetId, String signatureAssetId, Double latitude,
+                             Double longitude) {
+            this(handoverMethod, recipientName, relationship, safePlace, failureReason, photoAssetId,
+                    signatureAssetId, latitude, longitude, photoAssetId == null ? List.of() : List.of(photoAssetId));
+        }
     }
 }

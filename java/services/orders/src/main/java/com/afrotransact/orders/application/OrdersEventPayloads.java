@@ -308,4 +308,17 @@ public final class OrdersEventPayloads {
                     o.currency(), ItemSummary.of(s));
         }
     }
+    /** orders.delivery.assigned — a staff member took an AfroTransact delivery or assigned it to a courier. */
+    public record DeliveryAssigned(String orderId, String orderNumber, String shipmentId, String assigneeId,
+                                   String assigneeName, String assignedById, Instant at) {
+    }
+
+    /**
+     * orders.delivery.proof_attached and orders.delivery.proof_corrected — the photos live in the private media
+     * bucket; the event carries counts and whether a recipient was named, never the photos, the name or the note.
+     */
+    public record DeliveryProof(String orderId, String orderNumber, String customerId, String shipmentId,
+                                String sellerOrgId, int photoCount, boolean recipientNamed, boolean hasPosition,
+                                Instant deliveredAt, int corrections, String recordedById, Instant at) {
+    }
 }

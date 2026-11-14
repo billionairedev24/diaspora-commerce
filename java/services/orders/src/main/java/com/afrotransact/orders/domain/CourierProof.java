@@ -1,5 +1,7 @@
 package com.afrotransact.orders.domain;
 
+import java.util.List;
+
 /**
  * Proof the driver app attaches to a courier event.
  *
@@ -16,7 +18,19 @@ package com.afrotransact.orders.domain;
  */
 public record CourierProof(String photoAssetId, HandoverMethod handoverMethod, String handoverCode,
                            String recipientName, String relationship, String signatureAssetId, String safePlace,
-                           String failureReason, Double latitude, Double longitude) {
+                           String failureReason, Double latitude, Double longitude, List<String> photoAssetIds) {
+
+    public CourierProof {
+        photoAssetIds = photoAssetIds == null ? List.of() : List.copyOf(photoAssetIds);
+    }
+
+    /** A proof from the driver app: one photo. */
+    public CourierProof(String photoAssetId, HandoverMethod handoverMethod, String handoverCode,
+                        String recipientName, String relationship, String signatureAssetId, String safePlace,
+                        String failureReason, Double latitude, Double longitude) {
+        this(photoAssetId, handoverMethod, handoverCode, recipientName, relationship, signatureAssetId, safePlace,
+                failureReason, latitude, longitude, null);
+    }
 
     public static CourierProof none() {
         return new CourierProof(null, null, null, null, null, null, null, null, null, null);
@@ -25,6 +39,14 @@ public record CourierProof(String photoAssetId, HandoverMethod handoverMethod, S
     /** Copy without the handover code, safe to store in the history. */
     public CourierProof redacted() {
         return new CourierProof(photoAssetId, handoverMethod, handoverCode == null ? null : "****", recipientName,
-                relationship, signatureAssetId, safePlace, failureReason, latitude, longitude);
+                relationship, signatureAssetId, safePlace, failureReason, latitude, longitude, photoAssetIds);
+    }
+
+    /** Every photo of the proof, the first one first (a driver proof has exactly one). */
+    public List<String> photos() {
+        if (!photoAssetIds.isEmpty()) {
+            return photoAssetIds;
+        }
+        return photoAssetId == null || photoAssetId.isBlank() ? List.of() : List.of(photoAssetId);
     }
 }

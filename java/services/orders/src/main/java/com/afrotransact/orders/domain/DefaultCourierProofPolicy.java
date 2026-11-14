@@ -59,6 +59,8 @@ public final class DefaultCourierProofPolicy implements CourierProofPolicy {
                     throw new OrdersRuleViolation("orders.safe-place-required", "Say where the parcel was left");
                 }
             }
+            case PHOTO -> throw new OrdersRuleViolation("orders.handover-method-invalid",
+                    "Photo-only proof is recorded in the staff Delivery module, not from the driver app");
             default -> throw new IllegalStateException("Unexpected handover method " + p.handoverMethod());
         }
     }

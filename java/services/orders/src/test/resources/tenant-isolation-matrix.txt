@@ -27,3 +27,13 @@ GET /v1/delivery-quotes/{id} | CUSTOMER_SELF | own(): quote.customerId == token 
 GET /v1/public/shipping-settings | PUBLIC | platform-wide flat fee, no tenant data | -
 PUT /v1/shipping-settings/{currency} | STAFF_ONLY | orders:shipping.edit, granted only to platform roles [principal-guard] | -
 GET /v1/shipping-settings/{currency}/changes | STAFF_ONLY | orders:shipping.view, granted only to platform roles [principal-guard] | -
+GET /v1/deliveries | STAFF_ONLY | OrdersAccess.deliveryReader: STAFF principal (or super admin) holding delivery:read or delivery:manage; sellers, customers and services are refused; the queue lists only AfroTransact-delivered shipments [principal-guard] | -
+GET /v1/deliveries/couriers | STAFF_ONLY | OrdersAccess.deliveryReader [principal-guard] | -
+GET /v1/deliveries/{shipmentId} | STAFF_ONLY | OrdersAccess.deliveryReader; a seller-shipped shipment is 404 (never in the desk); street address, phone, position and audit details only with delivery:manage [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/take | STAFF_ONLY | OrdersAccess.deliveryManager: STAFF holding delivery:manage [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/assign | STAFF_ONLY | OrdersAccess.deliveryManager; the assignee must hold delivery:manage (name read from identity) [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/picked-up | STAFF_ONLY | OrdersAccess.deliveryManager [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/out-for-delivery | STAFF_ONLY | OrdersAccess.deliveryManager [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/delivered | STAFF_ONLY | OrdersAccess.deliveryManager; proof (at least one photo) validated by DeliveryProofDraft [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/failed | STAFF_ONLY | OrdersAccess.deliveryManager; a reason is required [principal-guard] | -
+PUT /v1/deliveries/{shipmentId}/proof | STAFF_ONLY | OrdersAccess.deliveryManager; audited correction with a reason [principal-guard] | -

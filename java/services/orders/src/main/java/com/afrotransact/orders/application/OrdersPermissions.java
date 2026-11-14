@@ -31,6 +31,14 @@ public final class OrdersPermissions {
     /** Dispatch (staff or fulfilment-service): read delivery briefs to plan routes. */
     public static final String DISPATCH = "delivery:dispatch";
 
+    /** The staff console Delivery module: view the queue, delivery proof and the audit trail. */
+    public static final String DELIVERY_READ = "delivery:read";
+    /**
+     * The staff console Delivery module: take a job, assign a courier, mark picked up, out for delivery, delivered
+     * (with proof) or failed, and correct a saved proof. Granted by identity V49.
+     */
+    public static final String DELIVERY_MANAGE = "delivery:manage";
+
     /** See delivery quote requests, their timeline and who has them (customer care, supervisors). */
     public static final String QUOTES_VIEW = "delivery-quotes:view";
     /** Hold a delivery quote request, agree an amount or decline it (reason required, audited). */

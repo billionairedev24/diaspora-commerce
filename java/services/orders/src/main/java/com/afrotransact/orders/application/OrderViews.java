@@ -174,6 +174,6 @@ class OrderViews {
         }
         return new OrderView.DeliveryProof(p.handoverMethod() == null ? null : p.handoverMethod().name(),
                 p.recipientName(), p.relationship(), p.safePlace(), p.failureReason(), p.photoAssetId(),
-                p.signatureAssetId(), staff ? p.latitude() : null, staff ? p.longitude() : null);
+                p.signatureAssetId(), staff ? p.latitude() : null, staff ? p.longitude() : null, p.photos());
     }
 }

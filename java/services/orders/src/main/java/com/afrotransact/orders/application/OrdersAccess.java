@@ -138,6 +138,29 @@ class OrdersAccess {
                 + "(orders:pay-link)");
     }
 
+    /** The Delivery module's readers: staff holding delivery:read or delivery:manage (never a service or a seller). */
+    Actor deliveryReader() {
+        Actor actor = actors.current();
+        if (actor.type() != PrincipalType.STAFF && !superAdmin(actor)) {
+            throw new ForbiddenActionException("orders.delivery-staff-only", "The Delivery module is for staff");
+        }
+        String held = actor.can(OrdersPermissions.DELIVERY_READ) ? OrdersPermissions.DELIVERY_READ
+                : OrdersPermissions.DELIVERY_MANAGE;
+        permissions.require(held);
+        return relationships.require(held, OrdersRelations.PLATFORM_VIEW_ALL, FgaObject.PLATFORM);
+    }
+
+    /** The Delivery module's operators: staff holding delivery:manage (checked on the server for every action). */
+    Actor deliveryManager() {
+        Actor actor = actors.current();
+        if (actor.type() != PrincipalType.STAFF && !superAdmin(actor)) {
+            throw new ForbiddenActionException("orders.delivery-staff-only", "The Delivery module is for staff");
+        }
+        permissions.require(OrdersPermissions.DELIVERY_MANAGE);
+        return relationships.require(OrdersPermissions.DELIVERY_MANAGE, OrdersRelations.PLATFORM_VIEW_ALL,
+                FgaObject.PLATFORM);
+    }
+
     /** The order lookup: SERVICE principals with orders:lookup, or staff with orders:read. */
     Actor lookupCaller() {
         Actor actor = actors.current();

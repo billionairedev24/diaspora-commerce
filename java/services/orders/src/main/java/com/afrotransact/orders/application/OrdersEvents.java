@@ -26,6 +26,13 @@ public final class OrdersEvents {
     public static final String PREORDER_REFUND_FAILED = "orders.preorder.refund_failed";
     public static final String PREORDER_PAYMENT_LINK_CREATED = "orders.preorder.payment_link_created";
 
+    /** Delivery desk: a staff member took a delivery or assigned it to a courier (by name). */
+    public static final String DELIVERY_ASSIGNED = "orders.delivery.assigned";
+    /** Delivery desk: proof of delivery (photo, optional recipient and note) was attached to a delivered shipment. */
+    public static final String DELIVERY_PROOF_ATTACHED = "orders.delivery.proof_attached";
+    /** Delivery desk: an admin corrected a saved proof of delivery (audited). */
+    public static final String DELIVERY_PROOF_CORRECTED = "orders.delivery.proof_corrected";
+
     private OrdersEvents() {
     }
 }
