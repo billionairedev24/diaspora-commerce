@@ -2,7 +2,7 @@
 
 import { isApiError, staffTaxKeys, staffTaxQueries, type TaxCodeEntry, type TaxCodeMapImportResult, type TaxCompleteness, type TaxProvider } from '@afrotransact/api-client';
 import { CellText, DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
-import { Button, ChipGroup, ProgressMeter, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, ChipGroup, ProgressMeter, Select, TextField, Toolbar, useToast } from '@afrotransact/ui';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -128,7 +128,7 @@ export function TaxCodeMapPanel() {
       <p className="m-0 max-w-[80ch] text-sm text-muted">
         The code each provider uses for each outcome. It is mapped per outcome, never per category, because one provider code can carry different outcomes. A mapping counts only once a person has verified it.
       </p>
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+      <Toolbar>
         <ChipGroup<TaxProvider>
           label="Provider"
           options={PROVIDERS}
@@ -164,7 +164,7 @@ export function TaxCodeMapPanel() {
             </Button>
           ) : null}
         </div>
-      </div>
+      </Toolbar>
       {data ? (
         <>
           <CompletenessMeter c={data.completeness} label={data.providerLabel} />

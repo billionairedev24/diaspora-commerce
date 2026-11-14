@@ -2,7 +2,7 @@
 
 import { staffTaxQueries, type TaxProfileRow } from '@afrotransact/api-client';
 import { CellText, DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
-import { Select } from '@afrotransact/ui';
+import { Select, Toolbar } from '@afrotransact/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -116,7 +116,7 @@ export function TaxProfilesPanel() {
       <p className="m-0 max-w-[80ch] text-sm text-muted">
         One profile per category: the questions sellers answer, the rules that turn the answers into exempt or taxable, and whether the category may go live. The rules are a draft until the Texas tax professional signs them off. Rules change through the dataset and a new rule version, not here.
       </p>
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+      <Toolbar>
         <Select
           label="Department"
           value={department}
@@ -133,7 +133,7 @@ export function TaxProfilesPanel() {
           onChange={(e) => setFilter('status', e.currentTarget.value)}
           className="min-w-64"
         />
-      </div>
+      </Toolbar>
       <DataTable<TaxProfileRow>
         rowHeight={56}
         id="staff.tax.profiles"

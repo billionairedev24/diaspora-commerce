@@ -1,0 +1,15 @@
+/* A row of page-level controls (filters, a provider toggle, export/import buttons) that share one centre line.
+   Fields reserve a message row under the control for forms; here that reserve is dropped so a Field's control, a chip
+   and a button all sit on the same bottom edge, and all are the same height. */
+.controls {
+  align-items: flex-end;
+  /* Small buttons and chips take the control height, so every control in the row is the same size. */
+  --at-size-control-sm: var(--at-size-control);
+}
+.controls [data-at-field] { position: relative; }
+.controls [data-at-field] > p:empty { display: none; }
+/* A help or error message hangs under the control instead of pushing it up. */
+.controls [data-at-field] > p:not(:empty) { position: absolute; top: 100%; inset-inline-start: 0; margin-block-start: 2px; white-space: nowrap; }
+.controls:has([data-at-field] > p:not(:empty)) { padding-block-end: calc(var(--at-text-xs) * 1.4 + 2px); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--at-space-3) var(--at-space-6); }

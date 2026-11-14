@@ -2,7 +2,7 @@
 
 import { staffTaxQueries, TAX_AUDIT_SAMPLE, type TaxReviewRow } from '@afrotransact/api-client';
 import { CellText, DataTable, ItemCell, rowActionsColumn, useTableState } from '@afrotransact/data-table';
-import { ChipGroup, Combobox, Select } from '@afrotransact/ui';
+import { ChipGroup, Combobox, Select, Toolbar } from '@afrotransact/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -266,7 +266,7 @@ export function TaxReviewPanel() {
     <div className="flex flex-col gap-3">
       {gate ? null : <TaxGateBanner onShow={showGate} />}
       {gate ? null : <p className="m-0 max-w-[80ch] text-sm text-muted">{t(audit ? 'st.tax.review.help.audit' : decided ? 'st.tax.review.help.decisions' : 'st.tax.review.help.queue')}</p>}
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3" data-tour="tax-review-views">
+      <Toolbar data-tour="tax-review-views">
         <ChipGroup<View>
           label={t('st.tax.review.show')}
           options={[
@@ -286,9 +286,9 @@ export function TaxReviewPanel() {
             })
           }
         />
-      </div>
+      </Toolbar>
       {gate ? null : (
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3" role="group" aria-label={t('st.tax.review.filters')} data-tour="tax-review-filters">
+        <Toolbar role="group" aria-label={t('st.tax.review.filters')} data-tour="tax-review-filters">
           {audit ? null : (
             <Select
               label={t('st.tax.review.filter.status')}
@@ -343,7 +343,7 @@ export function TaxReviewPanel() {
               {t('st.tax.review.filter.clear')}
             </button>
           ) : null}
-        </div>
+        </Toolbar>
       )}
       {gate ? <TaxGateList /> : null}
       {gate ? null : (

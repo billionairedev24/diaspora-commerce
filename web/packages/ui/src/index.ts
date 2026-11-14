@@ -82,6 +82,7 @@ export { PhoneNumberField, type PhoneNumberFieldProps, splitE164 as splitPhoneE1
 export { Select, type SelectOption, type SelectProps, TextField, type TextFieldProps } from './form/TextField';
 export * from './icons';
 export { PageStack, type PageStackProps } from './layout/PageStack';
+export { controlRowClassName, Toolbar, type ToolbarProps } from './layout/Toolbar';
 export { SheetTableScroll, type SheetTableScrollProps } from './layout/SheetTableScroll';
 export { type StatItem, StatStrip, type StatStripProps, type StatTone } from './layout/StatStrip';
 export { Dialog, DialogActions, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
