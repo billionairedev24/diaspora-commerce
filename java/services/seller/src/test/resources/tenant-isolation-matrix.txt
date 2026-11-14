@@ -1,4 +1,5 @@
 # seller tenant isolation matrix. OpenFGA off in prod: AccessGuard.orgRole/orgRoleOrStaff (org claim + role, or org member list; cheap, for reads) and liveOrgRole/liveOrgRoleOrStaff (member list only, for billing, Stripe onboarding, branding, org rename) and staff()/staffAny() (STAFF/SERVICE principal + permission).
+@WebhookController | WEBHOOK | StripeWebhookAdapter verifies Stripe-Signature (HMAC) and fails closed when the secret or header is missing; inbox dedup by event id | -
 DELETE /v1/orgs/{orgId}/billing/payment-methods/{id} | ORG_OWNED | AccessGuard.liveOrgRole(orgId path vs the members table of that org + role suffix; the token role is never trusted, so a removed or downgraded member is refused at once); ids re-checked against orgId | SellerTenantIsolationTest
 DELETE /v1/orgs/{orgId}/ship-from-addresses/{id} | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/application-review-settings | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
@@ -24,8 +25,6 @@ GET /v1/department-requests/{id} | STAFF_ONLY | AccessGuard.staff/staffAny (STAF
 GET /v1/departments | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
 GET /v1/markets | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
 GET /v1/orgs/directory | SERVICE_ONLY | sellers:directory permission plus SERVICE or STAFF principal (OrgDirectory/OrgMirror service) | -
-GET /v1/orgs/{orgId}/default-ship-from-location | ORG_OWNED | ShipFromAddressServiceImpl.defaultLocation: SERVICE with sellers:ship-from.read, else orgRole(orgId path vs actor org claim + role suffix, or members table of that org) | ShipFromDefaultLocationTest
-GET /v1/orgs/{orgId}/members/{userId}/role | SERVICE_ONLY | sellers:membership.read permission plus SERVICE principal only (OrgMembershipService, payments-service client; staff and members refused) | SellerTenantIsolationTest
 GET /v1/orgs/mirror |SERVICE_ONLY | sellers:directory permission plus SERVICE or STAFF principal (OrgDirectory/OrgMirror service) | -
 GET /v1/orgs/{id} | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{id}/mirror | SERVICE_ONLY | sellers:directory permission plus SERVICE or STAFF principal (OrgDirectory/OrgMirror service) | -
@@ -44,16 +43,21 @@ GET /v1/orgs/{orgId}/billing/rewards | ORG_SCOPED_LIST | AccessGuard.liveOrgRole
 GET /v1/orgs/{orgId}/billing/usage | ORG_SCOPED_LIST | AccessGuard.liveOrgRole(orgId path vs the members table of that org + role suffix; the token role is never trusted, so a removed or downgraded member is refused at once); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/business-page | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/catalog-scope | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
+GET /v1/orgs/{orgId}/default-ship-from-location | ORG_OWNED | ShipFromAddressServiceImpl.defaultLocation: SERVICE with sellers:ship-from.read, else orgRole(orgId path vs actor org claim + role suffix, or members table of that org) | ShipFromDefaultLocationTest
 GET /v1/orgs/{orgId}/enforcement | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + billing/enforce/approve permission) | -
 GET /v1/orgs/{orgId}/entitlements | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
+GET /v1/orgs/{orgId}/members/{userId}/role | SERVICE_ONLY | sellers:membership.read permission plus SERVICE principal only (OrgMembershipService, payments-service client; staff and members refused) | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/selling-applications | ORG_SCOPED_LIST | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/selling-applications/{applicationId} | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/selling-approvals | ORG_SCOPED_LIST | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/selling-capabilities | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/selling-status | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/orgs/{orgId}/ship-from-addresses | ORG_SCOPED_LIST | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
+GET /v1/orgs/{orgId}/store-page | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
+GET /v1/orgs/{orgId}/store-page/audit | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/plans | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
 GET /v1/public/business-pages/{slug} | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
+GET /v1/public/storefronts/{slug} | PUBLIC | published storefront settings of an approved seller only (the same fields the page shows); no tenant-private fields | -
 GET /v1/review-reason-codes | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
 GET /v1/selling-applications | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
 GET /v1/selling-applications/{id} | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
@@ -110,6 +114,8 @@ POST /v1/orgs/{orgId}/selling-applications | ORG_OWNED | AccessGuard.orgRole(org
 POST /v1/orgs/{orgId}/selling-applications/{applicationId}/resubmit | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 POST /v1/orgs/{orgId}/ship-from-addresses | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 POST /v1/orgs/{orgId}/ship-from-addresses/{id}/default | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
+POST /v1/orgs/{orgId}/store-page/publish | ORG_OWNED | AccessGuard.liveOrgRole(orgId path vs the members table of that org + role suffix; the token role is never trusted, so a removed or downgraded member is refused at once); ids re-checked against orgId | SellerTenantIsolationTest
+POST /v1/orgs/{orgId}/store-page/unpublish | ORG_OWNED | AccessGuard.liveOrgRole(orgId path vs the members table of that org + role suffix; the token role is never trusted, so a removed or downgraded member is refused at once); ids re-checked against orgId | SellerTenantIsolationTest
 POST /v1/orgs/{orgId}/stripe/account-session | ORG_OWNED | AccessGuard.liveOrgRole(orgId path vs the members table of that org + role suffix; the token role is never trusted, so a removed or downgraded member is refused at once); ids re-checked against orgId | SellerTenantIsolationTest
 POST /v1/orgs/{orgId}/suspend | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + billing/enforce/approve permission) | -
 POST /v1/selling-applications/{id}/assignment | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
@@ -134,5 +140,5 @@ PUT /v1/orgs/{orgId}/business-page | ORG_OWNED | AccessGuard.liveOrgRole(orgId p
 PUT /v1/orgs/{orgId}/catalog-scope/departments | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + billing/enforce/approve permission) | -
 PUT /v1/orgs/{orgId}/ship-from-addresses/{id} | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 PUT /v1/orgs/{orgId}/ship-from-addresses/{id}/afrotransact-pickup | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
+PUT /v1/orgs/{orgId}/store-page | ORG_OWNED | AccessGuard.liveOrgRole(orgId path vs the members table of that org + role suffix; the token role is never trusted, so a removed or downgraded member is refused at once); ids re-checked against orgId | SellerTenantIsolationTest
 PUT /v1/selling-rules/{id} | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
-@WebhookController | WEBHOOK | StripeWebhookAdapter verifies Stripe-Signature (HMAC) and fails closed when the secret or header is missing; inbox dedup by event id | -

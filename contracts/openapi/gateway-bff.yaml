@@ -3774,6 +3774,39 @@ paths:
               schema: {$ref: '#/components/schemas/ProviderPage'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/storefronts/{slug}:
+    get:
+      tags: [Storefront]
+      operationId: getStorefront
+      summary: A seller's public storefront (/b/{slug})
+      description: |
+        Public, cached for a minute. 404 when there is no such page, the seller has not published it, or the organisation
+        is not approved (or suspended): the storefront shows a 404 page. Everything is sanitised: plain text, https links on
+        an allowed host, images only from AfroTransact media.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, maxLength: 80}}
+      responses:
+        '200': {description: Storefront, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/storefronts/{slug}/products:
+    get:
+      tags: [Storefront]
+      operationId: getStorefrontProducts
+      summary: The storefront's All products grid (search within the store, filters, sort, pages)
+      description: Same rules as the storefront (only sellable products). 404 like the storefront.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, maxLength: 80}}
+        - {name: q, in: query, schema: {type: string, maxLength: 80}}
+        - {name: category, in: query, schema: {type: string, maxLength: 80}}
+        - {name: price, in: query, schema: {type: string, enum: [u10, 10-25, 25-50, 50-100, o100]}}
+        - {name: sort, in: query, schema: {type: string, enum: [relevance, price_asc, price_desc, rating, newest]}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 48}}
+      responses:
+        '200': {description: Products, content: {application/json: {schema: {$ref: '#/components/schemas/StorefrontProducts'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/business-pages/{slug}:
     get:
       tags: [Services]
@@ -7313,6 +7346,150 @@ components:
               durationMinutes: {type: integer}
               priceMinor: {type: integer, format: int64}
               currency: {type: string}
+    StoreConfig:
+      type: object
+      description: |
+        How a seller's storefront (`/b/{slug}`) looks and which sections it has. Stored by the seller service as opaque
+        JSON (draft and published); gateway-bff validates and sanitises every field on the way in and again on the way out.
+        Plain text only (line breaks allowed, no HTML); image URLs must be AfroTransact media; links must be https on an allowed host.
+      required: [schemaVersion, theme, hero, announcement, grid, sections, featured, categories, about, policies, contact, pickup, social]
+      properties:
+        schemaVersion: {type: integer, enum: [1]}
+        theme:
+          type: object
+          required: [preset, accent]
+          properties:
+            preset: {type: string, enum: [clean, warm-market, bold, midnight, heritage, fresh]}
+            accent: {type: [string, 'null'], pattern: '^#[0-9a-f]{6}$', description: 'Accent colour. Null uses the preset. Rejected (422 STORE_ACCENT_LOW_CONTRAST) when text on it, or it on the canvas, fails WCAG AA; the text colour on it is computed, never chosen.'}
+        hero:
+          type: object
+          required: [style, tagline, bannerUrl, focalX, focalY]
+          properties:
+            style: {type: string, enum: [image, colour, split]}
+            tagline: {type: string, maxLength: 140}
+            bannerUrl: {type: [string, 'null'], maxLength: 2048}
+            focalX: {type: integer, minimum: 0, maximum: 100, description: Percent, where the banner stays in view when cropped}
+            focalY: {type: integer, minimum: 0, maximum: 100}
+        announcement:
+          type: object
+          required: [text, href]
+          properties:
+            text: {type: string, maxLength: 140}
+            href: {type: [string, 'null'], maxLength: 2048}
+        grid:
+          type: object
+          required: [columns]
+          properties:
+            columns: {type: integer, enum: [3, 4]}
+        sections:
+          type: array
+          description: Order and visibility of the optional sections. The header, hero and All products are always present.
+          maxItems: 6
+          items:
+            type: object
+            required: [id, enabled]
+            properties:
+              id: {type: string, enum: [announcement, featured, categories, about, policies, reviews]}
+              enabled: {type: boolean}
+        featured: {type: array, maxItems: 8, items: {type: string, maxLength: 40}, description: ATINs the seller picked; only the sellable ones are shown}
+        categories:
+          type: object
+          required: [mode, chosen]
+          properties:
+            mode: {type: string, enum: [auto, chosen]}
+            chosen: {type: array, maxItems: 8, items: {type: string, maxLength: 80}}
+        about:
+          type: object
+          required: [heading, body, photoUrl]
+          properties:
+            heading: {type: string, maxLength: 80}
+            body: {type: string, maxLength: 2000}
+            photoUrl: {type: [string, 'null'], maxLength: 2048}
+        policies:
+          type: object
+          required: [shipping, returns]
+          properties:
+            shipping: {type: string, maxLength: 600}
+            returns: {type: string, maxLength: 600}
+        contact:
+          type: object
+          required: [showEmail, phone, hours]
+          properties:
+            showEmail: {type: boolean}
+            phone: {type: string, maxLength: 24}
+            hours: {type: string, maxLength: 200}
+        pickup:
+          type: object
+          required: [show]
+          properties:
+            show: {type: boolean, description: 'Show that customers can collect orders, and the ZIP, when the seller has turned pickup on in Settings > Pickup'}
+        social:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            required: [network, url]
+            properties:
+              network: {type: string, enum: [instagram, facebook, tiktok, x, youtube, whatsapp, website]}
+              url: {type: string, maxLength: 2048}
+    StorefrontCategory:
+      type: object
+      required: [name, count]
+      properties:
+        name: {type: string}
+        count: {type: integer}
+    StorefrontProducts:
+      type: object
+      required: [hits, total, page, pageCount, size, categories, prices]
+      properties:
+        hits: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+        pageCount: {type: integer}
+        categories: {type: array, items: {$ref: '#/components/schemas/StorefrontCategory'}}
+        prices:
+          type: array
+          items:
+            type: object
+            required: [value, label, count]
+            properties:
+              value: {type: string}
+              label: {type: string}
+              count: {type: integer}
+    Storefront:
+      type: object
+      description: |
+        A seller's public storefront: the published settings plus real data, in one response. Only sellable products
+        appear (in stock, a real photograph, a resolved tax decision). `reviews` is null when the products have no
+        reviews (never "0 reviews"). Carrier names and fulfilment details are never present.
+      required: [slug, name, logoUrl, description, config, preview, indexable, verified, sellingSinceYear, contactEmail, pickup, categories, featured, reviews, products]
+      properties:
+        slug: {type: string}
+        name: {type: string}
+        logoUrl: {type: [string, 'null']}
+        description: {type: [string, 'null'], description: The business description (used when About has no text)}
+        config: {$ref: '#/components/schemas/StoreConfig'}
+        preview: {type: boolean, description: True for the seller's draft preview}
+        indexable: {type: boolean, description: 'Approved, published and at least one live product; the storefront adds the environment rules'}
+        verified: {type: boolean, description: True only for an approved organisation}
+        sellingSinceYear: {type: [integer, 'null'], description: 'Year the organisation joined AfroTransact'}
+        contactEmail: {type: [string, 'null'], description: Only when the seller chose to show it}
+        pickup:
+          type: [object, 'null']
+          description: Only when the seller shows it AND pickup is on in Settings > Pickup
+          required: [zip]
+          properties:
+            zip: {type: string}
+        categories: {type: array, items: {$ref: '#/components/schemas/StorefrontCategory'}}
+        featured: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+        reviews:
+          type: [object, 'null']
+          required: [average, count]
+          properties:
+            average: {type: number}
+            count: {type: integer}
+        products: {$ref: '#/components/schemas/StorefrontProducts'}
     ProviderPage:
       type: object
       required: [orgId, displayName, timeZone, location, policy, instantBooking, team, services]
