@@ -22,6 +22,8 @@ export const nav = {
     const [p, s = ''] = url.split('?');
     nav.pathname = p ?? '/';
     nav.search = s;
+    // Code that reads the live address (the sheets' close and open) sees the same URL as next/navigation.
+    window.history.replaceState(null, '', url);
     listeners.forEach((l) => l());
   },
   push: vi.fn((url: string) => nav.set(url)),
