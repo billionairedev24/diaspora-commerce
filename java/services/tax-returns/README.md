@@ -86,7 +86,7 @@ amount of a line's items and / or shipping; tax follows proportionally.
 
 `TaxCalculator` port; the default adapter `RulesTaxCalculator` runs the domain `DefaultTaxRules` over the rate table
 (no external calls). `at.taxreturns.tax.provider` is the default method until staff choose in Settings: `RULES`, `STRIPE_TAX`
-or `AVALARA` (AvaTax REST v2; see docs/engineering/tax-shadow-mode.md); `TAXJAR` is reserved (startup fails if selected without its adapter). **What is taxed is decided
+or `AVALARA` (AvaTax REST v2 through Avalara's Java SDK; see docs/engineering/tax-shadow-mode.md); `TAXJAR` is reserved (startup fails if selected without its adapter). **What is taxed is decided
 by the stored classification decision of the variant ATIN, see "Category tax engine" below**; this section is about the rate.
 
 - **Rate** = state rate for the line's category (`GENERAL`, `GROCERY` — reduced or exempt, `PREPARED_FOOD`) + local
@@ -276,7 +276,7 @@ that cannot take a quote (not set up, unreachable, a line without a code) answer
 **Metrics**: `tax_quote_lines_total{status,reason}`, `tax_provider_fallback_total{provider,why}`, `tax_provider_fallback_lines_total`, `tax_shadow_lines_total{provider,kind}`, `tax_shadow_failures_total{provider,why}`,
 `tax_classification_resolve_total{status}`, `tax_classification_changes_total{kind}`.
 
-**Not built (open)**: Stripe tax transactions for captured payments and refund reversals (calculation only, as before); the Avalara call itself; the holiday calendar (the exemption window is always false); the 8.25% combined-rate cap
+**Not built (open)**: Stripe tax transactions for captured payments and refund reversals (calculation only, as before); the Avalara call against a real sandbox (the adapter exists and is tested against a fake AvaTax); the holiday calendar (the exemption window is always false); the 8.25% combined-rate cap
 (TX-01); exact-address resolution (TX-03, the ZIP table is the default, precision `ZIP`); bundle itemisation (TX-09); TX-07 mixed-basket shipping attribution; TX-12 fee classification; shadowing the in-house engine behind a provider method.
 
 ## Legacy tax classification (V5, no longer used by quotes)

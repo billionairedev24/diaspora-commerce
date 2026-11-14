@@ -284,7 +284,9 @@ name. The tax rules are a **draft** until a Texas tax professional signs them of
 
 - **Who calculates tax** explains each choice in plain words (our own rules, Stripe Tax, Avalara) and the **shadow mode**: a
   provider that is asked for the same lines on real orders and compared, never charged. A provider that is not set up, or whose
-  codes are not all verified, cannot be chosen, and the page says why.
+  codes are not all verified, cannot be chosen, and the page says why. **Test connection** (under Provider codes, needs `tax:configure`)
+  asks Avalara whether the account details set for this environment work, and shows yes or no, the account name and sandbox or
+  production. It never shows the license key.
 - **Tax profiles** lists the 73 categories with a plain status: *Ready*, *Needs tax sign-off*, *Needs a specific provider code*,
   *Blocked until bundles are itemised* or *Waiting on a decision*. Filter by department and status. Open one to read the questions
   sellers are asked, the rules as sentences (for example "If net weight is at least 2.5 oz and servings per package is more than 1,
@@ -313,7 +315,8 @@ name. The tax rules are a **draft** until a Texas tax professional signs them of
   decision.
 - **Provider codes** shows, for Stripe and Avalara, the code for each outcome with whether a person verified it, and how many
   outcomes still need a code. A line with no verified code is blocked at checkout, never guessed. Export the map to CSV, or import a
-  CSV: you see what would change first, and a file with a bad row is not applied at all.
+  CSV: you see what would change first, and a file with a bad row is not applied at all. For Avalara, the filter **Avalara code needed**
+  lists the outcomes that still have no Avalara code.
 - **Shadow report** compares a provider's quote with ours on real orders and says whether it is ready to cut over, check by check
   (long enough, enough orders, same exempt or taxable answer, reliable, every code verified). The steps to move to a provider are in
   the cutover runbook (`docs/runbooks/tax-provider-cutover.md`).

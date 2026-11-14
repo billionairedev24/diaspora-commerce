@@ -14,17 +14,18 @@ before any shopper is charged by the provider.
 
 1. The profiles you cut over are `ACTIVE` with the tax professional's written sign-off on this dataset (`ruleVersion`), or the quotes are blocked anyway.
 2. Provider credentials are in the secret store, never in the repo: Stripe `STRIPE_SECRET_KEY` (Stripe Tax set up, registrations done); Avalara
-   `AVALARA_ACCOUNT_ID`, `AVALARA_LICENSE_KEY`, `AVALARA_COMPANY_CODE`, and `AVALARA_ENVIRONMENT` (`sandbox` or `production`). The AvaTax adapter is written but has only been
-   run against a fake AvaTax; run it against the Avalara sandbox before relying on it (see "Avalara status" below).
+   `AVALARA_ACCOUNT_ID`, `AVALARA_LICENSE_KEY`, `AVALARA_COMPANY_CODE`, and `AVALARA_ENVIRONMENT` (`sandbox` or `production`; optional `AVALARA_APP_NAME`). The AvaTax adapter
+   (Avalara's Java SDK) has only been run against a fake AvaTax; run the **Avalara sandbox checklist** in [tax-shadow-mode.md](../engineering/tax-shadow-mode.md) first, starting with *Test connection* on Who calculates tax.
 3. In production set `TAX_REQUIRE_VERIFIED_CODES=true` so a provider only ever receives codes a person verified.
 4. Staff with `tax:classify-admin` (code map) and `tax:configure` (settings) exist; the tax professional can read `tax:read` screens.
 5. The orders service sends `orderId` and each line's `sellerBehaviour` on checkout quotes (SHADOW compares only quotes that carry an order id).
+6. For Avalara: every seller has a default **ship-from address**, every fulfilment centre node has its street address, and the Avalara company has a matching location and Texas nexus. Avalara prices by origin and destination, so a line with no ship-from is **not asked** (the report says so); it is never priced from a guessed origin.
 
 ## Steps
 
 ### 1. Fill the provider column of the code map
 
-`GET /v1/tax/provider-code-map?provider=AVALARA&unmappedOnly=true` lists what is missing; `PUT /v1/tax/provider-code-map/{internalTaxCode}` sets one entry
+`GET /v1/tax/provider-code-map?provider=AVALARA&unmappedOnly=true` lists what is missing (in the console, Provider codes, provider Avalara, filter **Avalara code needed**; Export CSV / Import CSV work per provider and carry the provider and its code column); `PUT /v1/tax/provider-code-map/{internalTaxCode}` sets one entry
 (`{provider, providerCode, verified, reason}`). One entry per outcome code (105), never per category. Stripe starts filled from the source document, **unverified**.
 Blocked outcomes (the unitemised bundle) stay unmapped on purpose. Every change is versioned, audited and starts a new rule version.
 
@@ -109,19 +110,12 @@ The report names the provider and the reason on every line (Sales tax, Shadow re
 |---|---|---|
 | Not configured | credentials are not set in this environment | set `STRIPE_SECRET_KEY`, or `AVALARA_ACCOUNT_ID`, `AVALARA_LICENSE_KEY`, `AVALARA_COMPANY_CODE`, `AVALARA_ENVIRONMENT` (names only here; values come from the secret store) and restart |
 | Timed out | no answer within `TAX_SHADOW_TIMEOUT` (default 4s); `tax_shadow_failures_total{why="timeout"}` | check the provider's status page and network egress; raise the timeout only for shadow; a few are normal, a pattern is not |
-| Provider error | refused or failed: the text carries the HTTP status and the provider's message (for Avalara a 401 means wrong account id or license key or the wrong environment; a message about addresses means AvaTax wants a ship-from or company location) | fix per the message; `tax_shadow_failures_total{why="error"}` |
+| Provider error | refused or failed: the text carries the provider's error code and message (for Avalara `AuthenticationException` means wrong account id or license key or the wrong environment: press *Test connection*; "no ship-from address was given" means the seller or fulfilment centre has no address on file; a message about addresses or locations means AvaTax wants a registered company location) | fix per the message; `tax_shadow_failures_total{why="error"}` |
 | No code mapped | the provider was not asked: the outcome has no (verified) code | Provider codes tab: map and verify it; with `TAX_REQUIRE_VERIFIED_CODES=true` an unverified code counts as no code |
 | Rows missing for one provider | it is the charging method, not configured, or shadow mode is off | Who calculates tax: shadow mode on; the provider card at the top of the report says which |
 
 ## Avalara status
 
-`AvalaraTaxCalculator` calls AvaTax REST v2 (`POST /api/v2/transactions/create`, type `SalesOrder`, `commit=false`, so nothing is recorded in AvaTax) for both shadow quotes and, when it is the method, charging quotes
-(visible fallback to the rules on any failure). Details, settings and limits: [tax-shadow-mode.md](../engineering/tax-shadow-mode.md). **Not yet run against a real Avalara sandbox**: before step 2, point
-`AVALARA_ENVIRONMENT=sandbox` at a sandbox company, map a few codes, place a test order and read the Avalara column of the report; an error there carries AvaTax's own message.
-
-## Identity setup
-
-Included in this change: `java/services/identity/.../V38__tax_classification_permissions.sql` creates the permissions `tax:classify` and `tax:classify-admin`, the
-role **Tax Reviewer** (`platform.tax_reviewer`: `tax:read`, `tax:classify`, `tax:classify-admin`), grants `tax:classify-admin` + `tax:classify` to Super Admin, `tax:classify-admin` + `tax:read` to Catalog Manager,
-`tax:classify` to Auditor, and gives Catalog Manager and Tax Reviewer **Fees & commissions: VIEW** (where the Tax screens live). The **catalog-service** client scope `tax:classify` is added in the four
-`application-*.yml` files of identity (restart identity). The orders-service and gateway-bff clients keep `tax:quote`. Until V38 runs, tax-returns accepts `tax:configure` holders (Super Admin, Finance) for the admin actions.
+`AvalaraTaxCalculator` calls AvaTax REST v2 through Avalara's official Java SDK (`CreateTransaction`, type `SalesOrder`, `commit=false`, so nothing is recorded in AvaTax) with the ship-to and the ship-from address of each line, for both shadow quotes and, when it is the method, charging quotes
+(visible fallback to the rules on any failure). Details, settings, SDK findings and the sandbox checklist: [tax-shadow-mode.md](../engineering/tax-shadow-mode.md). **Not yet run against a real Avalara sandbox**: before step 2 follow the sandbox checklist
+(Test connection, map a few codes, place a test order, read the Avalara column of the report); an error there carries AvaTax's own message. Do not mark S448 done before that run.

@@ -1837,13 +1837,16 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Every control in a row shares height and vertical centre within 1px at 1280 and 390 (Playwright measurement); Locations and Shipping & delivery checked
 - Driver pickup uses the same weekly list
 - Unit and Playwright tests, before/after screenshots, docs and five locales (fr, es, ar, yo machine drafts marked for review)","E24","","High","5","seller-center settings pickup a11y i18n","seller-center","Done"
-"S448","Story","Shadow mode compares every configured tax provider with our rules, with a real AvaTax adapter","Shadow mode used to ask one provider and the Avalara adapter was a skeleton, so the Shadow report showed 'The provider did not answer' with no provider or cause. Shadow now asks every configured non-charging provider (Stripe Tax and Avalara) per line, records one row per provider, and the staff report shows our quote next to each provider with provider-specific states. Also fixes the misaligned Show filter on Provider codes (shared Toolbar).","- Shadow mode asks every configured provider other than the charging one and stores one row per provider per line (unit tested)
-- Avalara adapter creates an uncommitted AvaTax SalesOrder with the mapped code and reads tax and rate per line (tested against a fake AvaTax server)
+"S448","Story","Shadow mode compares every configured tax provider with our rules, with a real AvaTax adapter","Shadow mode used to ask one provider and the Avalara adapter was a skeleton, so the Shadow report showed 'The provider did not answer' with no provider or cause. Shadow now asks every configured non-charging provider (Stripe Tax and Avalara) per line, records one row per provider, and the staff report shows our quote next to each provider with provider-specific states. Also fixes the misaligned Show filter on Provider codes (shared Toolbar). The Avalara adapter now uses Avalara's official Java SDK (net.avalara.avatax:avatax-rest-v2-api-java_2.11 26.9.0, Apache-2.0) and sends both the ship-to and the ship-from address of each line; staff can Test connection (SDK Ping) before shadow mode runs.","- Shadow mode asks every configured provider other than the charging one and stores one row per provider per line (unit tested)
+- Avalara adapter uses Avalara's official Java SDK (pinned in platform-parent, scala-library excluded) and creates an uncommitted AvaTax SalesOrder with the mapped code and reads tax and rate per line (tested against a fake AvaTax server through the SDK)
+- The AvaTax request carries addresses.shipTo (street when known, city, state, ZIP, country) and addresses.shipFrom (seller location or fulfilment centre); a line without a ship-from is not asked, with a plain reason (tested)
 - A line without a mapped code is reported as no code, never as a zero quote
-- Report distinguishes not configured, timed out, provider error, no code mapped and answered, and names the provider and the cause
+- Report distinguishes not configured, timed out, provider error, no code mapped and answered, names the provider and the cause, and says when the ship-to was only a ZIP ('Estimated from the ZIP code')
 - Staff report lists our quote, Stripe Tax and Avalara per order line with search and a status filter, in 5 locales
+- Staff Who calculates tax has Test connection for Avalara (authenticated yes/no, account name, environment, never the key) and Provider codes has an 'Avalara code needed' filter (tested)
+- orders-service sends the ship-to street and each shipment's ship-from (centre, pickup location or the seller's default address) to tax-returns (tested)
 - Filter rows on the Sales tax tabs share one centre line and control height, measured at 1280 and 390 px
-- Adapter verified against a real Avalara sandbox company","E17","","High","8","tax shadow avalara","returns","In Progress"
+- Adapter verified against a real Avalara sandbox company (NOT done: follow the Avalara sandbox checklist in docs/engineering/tax-shadow-mode.md, then record the run on S451)","E17","","High","8","tax shadow avalara","returns","In Progress"
 "E36","Epic","QA & launch verification","Independent verification of every open story and the cross-cutting checks that agents could not run (real stack, Docker ITs, sandboxes, browsers, translations). A story is Done only when its QA pass has evidence.","","","QA & launch verification","Highest","","qa","qa","To Do"
 "S449","Story","QA: real-stack regression of the Nov 13-14 fixes","Run the fixes from Nov 13-14 on the owner's local stack and record what works.","- Identity adds new client scopes on local start (identity.client.reconciled logged for catalog-service and offers-service); no invalid_scope in catalog or offers logs
 - Catalog tax gate sweep succeeds every minute; make tax-gate-sweep returns 200
@@ -1855,9 +1858,10 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S450","Story","QA: Java Testcontainers ITs green in CI","Docker-backed integration tests never ran in the agent sandboxes.","- CI runs every Java service's ITs with Docker (TaxSettingsIT, RiskBasedReviewIT and the rest)
 - RiskBasedReviewIT's 2 known failures fixed or explained
 - S381 S383 S384 S385 S386 S387 marked Done once their ITs pass","E36","","Highest","5","qa ci java","qa","To Do"
-"S451","Story","QA: Avalara sandbox run for shadow mode","Avalara adapter is only tested against a fake server (S448).","- AVALARA_* env vars set locally for a sandbox company (names only, never values in chat or code)
-- A real order produces an Avalara shadow row per line; ship-from and shipping tax code confirmed
-- Shadow report shows Answered for Avalara lines with mapped codes","E36","","High","3","qa tax avalara","qa","To Do"
+"S451","Story","QA: Avalara sandbox run for shadow mode","Avalara adapter (official Java SDK) is only tested against a fake server (S448); follow the 'Avalara sandbox checklist' in docs/engineering/tax-shadow-mode.md.","- AVALARA_* env vars set locally for a sandbox company (names only, never values in chat or code)
+- Staff Test connection says authenticated yes with the sandbox account name
+- A real order produces an Avalara shadow row per line; ship-from and shipping tax code (FR020100 default, not yet checked against Avalara's list) confirmed
+- Shadow report shows Answered for Avalara lines with mapped codes, with the order number, our tax and Avalara's tax recorded here","E36","","High","3","qa tax avalara","qa","To Do"
 "S452","Story","QA: browser pass of all three web apps at 1280 and 390","Owner's browser pass, including right-to-left Arabic.","- Storefront, Seller Center and Staff console core journeys pass at 1280 and 390 with no console errors
 - Arabic right-to-left layout checked on the weekly hours list, sheets and tables
 - Findings filed as bugs in ATV2","E36","","High","5","qa browser","qa","To Do"
