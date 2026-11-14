@@ -202,3 +202,10 @@ and go/pkg/auth's `Middleware` turn the person into a `CUSTOMER` of their own su
 - **Cart mismatches** (`orders.line-not-in-cart`, `orders.cart-changed`, `orders.cart-empty`,
   `orders.cart-not-checkoutable`) show "Your cart changed, please review it." with a link back to the cart in the
   storefront and the customer app (`isCartMismatch` in `@afrotransact/api-client`); the raw detail is never shown.
+
+## 7. Delivery permissions
+
+`delivery:read` (see the Delivery queue, proof and audit) and `delivery:manage` (act: take, assign, picked up, out for delivery, delivered
+with proof, failed, reattempt, correct proof; also what makes a person assignable as a courier). Seeded by identity `V49`, enforced in
+orders (`OrdersAccess.deliveryReader/deliveryManager`) and again in gateway-bff next to the `delivery` module level. Role matrix and the
+runbook: [delivery-fulfilment.md](delivery-fulfilment.md).

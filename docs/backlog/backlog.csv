@@ -2013,3 +2013,12 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S486","Story","QA pass: Community delivery runs (preorders)","Verify the open stories of the Community delivery runs (preorders) work stream (E34) on the local stack; file a bug for every failure.","- S262 Location subscriptions and run announcements: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e34","qa","To Do"
 "S487","Story","QA pass: Shopper wallet, gift cards, referrals and membership","Verify the open stories of the Shopper wallet, gift cards, referrals and membership work stream (E35) on the local stack; file a bug for every failure.","- S322 Referral program: share a code, both sides earn credit: every acceptance criterion verified with evidence
 - S323 Membership tiers: Prime-style benefits with configurable tiers: every acceptance criterion verified with evidence","E36","","High","1","qa stream-e35","qa","To Do"
+"S488","Story","Admin Delivery desk: AfroTransact-delivered orders end to end with photo proof","Seller-shipped orders never wait for a driver. AfroTransact-delivered orders (FBA, or seller opt-in) are taken, assigned, picked up, delivered or failed by staff in the staff console Delivery module with delivery:manage / delivery:read, with photo proof shown to the customer. Driver app dormant behind DRIVER_APP_ENABLED.","- Seller-shipped shipments never enter a delivery queue (regression test)
+- Delivery module with queue, filters, names, take/assign, picked up, out for delivery, delivered with proof, failed, reattempt
+- Permissions enforced server-side, audit trail, optimistic locking, idempotent transitions
+- Delivery proof photo stored privately, validated, immutable except audited correction
+- Customer order page shows proof only for AfroTransact-delivered orders; Seller Center read-only
+- Asyncapi events and customer notifications for out for delivery and delivered
+- Data fix for stuck seller-shipped orders is idempotent
+- Playwright journey and screenshots at 1280 and 390
+- docs/engineering/delivery-fulfilment.md","E12","","Highest","8","delivery staff-console orders","delivery","To Do"
