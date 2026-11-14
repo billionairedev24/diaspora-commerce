@@ -85,6 +85,7 @@ export { PageStack, type PageStackProps } from './layout/PageStack';
 export { SheetTableScroll, type SheetTableScrollProps } from './layout/SheetTableScroll';
 export { type StatItem, StatStrip, type StatStripProps, type StatTone } from './layout/StatStrip';
 export { Dialog, DialogActions, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
+export { Drawer, type DrawerProps } from './overlay/Drawer';
 export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSeparator } from './overlay/Menu';
 export { Popover, type PopoverProps } from './overlay/Popover';
 export { ConfirmDelete, type ConfirmDeleteProps, type RowAction, type RowActionItem, RowActions, type RowActionsProps, RowName, type RowNameProps } from './overlay/RowActions';

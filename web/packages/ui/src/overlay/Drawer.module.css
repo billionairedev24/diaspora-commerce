@@ -1,0 +1,33 @@
+/* Navigation drawer. Flat: no shadow, a dim backdrop does the separating. Slides in from the inline-start edge (the right in RTL). */
+.overlay { position: fixed; inset: 0; z-index: calc(var(--at-z-drawer) - 1); background: var(--at-color-overlay); }
+.drawer {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: var(--at-z-drawer);
+  display: flex;
+  flex-direction: column;
+  width: min(365px, 85%);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+}
+.drawer.end { inset-inline-start: auto; inset-inline-end: 0; }
+.drawer:focus { outline: none; }
+.head { display: flex; align-items: center; gap: var(--at-space-2); min-height: 56px; padding-inline: var(--at-space-4) var(--at-space-2); background: var(--at-color-header-bg); color: var(--at-color-header-text); }
+.headMain { flex: 1; min-width: 0; }
+.close { display: grid; place-items: center; flex: none; width: var(--at-size-touch); height: var(--at-size-touch); border: 0; border-radius: var(--at-radius-pill); background: none; color: inherit; cursor: pointer; }
+.close:focus-visible { outline: 2px solid var(--at-color-header-hover-ring); outline-offset: -2px; }
+@media (hover: hover) { .close:hover { background: var(--at-color-header-hover-bg); } }
+/* No visible scrollbar (global rule), the list scrolls inside; the page behind is locked by the dialog. */
+.body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .drawer[data-state='open'] { animation: drawer-in 180ms ease-out; }
+  .overlay[data-state='open'] { animation: drawer-fade 180ms ease-out; }
+}
+@keyframes drawer-in { from { translate: -100% 0; } }
+@keyframes drawer-fade { from { opacity: 0; } }
+:global([dir='rtl']) .drawer[data-state='open'] { animation-name: drawer-in-rtl; }
+@keyframes drawer-in-rtl { from { translate: 100% 0; } }
+.end[data-state='open'] { animation-name: drawer-in-rtl; }
+:global([dir='rtl']) .end[data-state='open'] { animation-name: drawer-in; }
