@@ -227,7 +227,7 @@ func absentCell(card jobj) jobj {
 	id, label := jstr(card, "provider"), jstr(card, "label")
 	cell := jobj{"provider": id, "label": label, "kind": "", "providerCode": "", "taxMinor": nil, "taxText": "", "differenceMinor": nil, "differenceText": ""}
 	if jstr(card, "state") == "NOT_CONFIGURED" {
-		cell["state"], cell["stateLabel"], cell["reason"] = "NOT_CONFIGURED", shadowStates["NOT_CONFIGURED"], label+" is not configured: set "+providerEnv[id]+"."
+		cell["state"], cell["stateLabel"], cell["reason"] = "NOT_CONFIGURED", shadowStates["NOT_CONFIGURED"], label+" is not configured: set "+providerEnvShort[id]+"."
 	} else {
 		cell["state"], cell["stateLabel"], cell["reason"] = "NOT_ASKED", shadowStates["NOT_ASKED"], jstr(card, "note")
 	}

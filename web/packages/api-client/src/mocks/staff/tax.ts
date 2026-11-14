@@ -648,7 +648,7 @@ function shadowView(state: MockTaxState, provider: string, page: number, size: n
   const sample: { code: string; lines: number; differing: number; kind: string; inH: string; pr: string; state: string; cents: number }[] = [
     { code: 'AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS', lines: 64, differing: 3, kind: 'OUTCOME', inH: 'Exempt (no tax)', pr: 'Taxable at 8.25%, tax $0.83', state: 'TX', cents: 83 },
     { code: 'AT.PACKAGED_SNACKS.STANDARD', lines: 88, differing: 2, kind: 'RATE', inH: 'Taxable at 8.25%, tax $0.75', pr: 'Taxable at 8%, tax $0.73', state: 'TX', cents: -2 },
-    { code: 'AT.BABY_FOOD_FORMULA.STANDARD', lines: 41, differing: 0, kind: 'RATE', inH: '', pr: '', state: 'TX', cents: 0 },
+    { code: 'AT.BABY_FOOD_FORMULA.STANDARD', lines: 41, differing: 0, kind: 'MATCH', inH: 'Exempt (no tax)', pr: 'Exempt (no tax)', state: 'TX', cents: 0 },
     { code: 'AT.FLAVORED_WATER_SODA.STANDARD', lines: 12, differing: 1, kind: 'PROVIDER_ERROR', inH: 'Taxable at 8.25%, tax $0.50', pr: 'No answer: Stripe timed out', state: 'TX', cents: 0 }
   ];
   const known = sample.filter((s) => ALL_ROWS.some((x) => x.row.internalTaxCode === s.code));
@@ -681,7 +681,7 @@ function shadowView(state: MockTaxState, provider: string, page: number, size: n
   const cell = (p: 'STRIPE' | 'AVALARA', s: (typeof sample)[number], j: number): TaxShadowCell => {
     const card = cards.find((c) => c.provider === p)!;
     const label = PROVIDER[p] ?? p;
-    if (!card.configured) return { provider: p, label, state: 'NOT_CONFIGURED', stateLabel: 'Not configured', text: card.note, reason: card.note, kind: '', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
+    if (!card.configured) return { provider: p, label, state: 'NOT_CONFIGURED', stateLabel: 'Not configured', text: `${label} is not configured: set ${p === 'STRIPE' ? 'STRIPE_SECRET_KEY' : 'the AVALARA_* settings'}.`, reason: `${label} is not configured: set ${p === 'STRIPE' ? 'STRIPE_SECRET_KEY' : 'the AVALARA_* settings'}.`, kind: '', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
     if (card.state === 'CHARGING') return { provider: p, label, state: 'NOT_ASKED', stateLabel: 'Not asked', text: card.note, reason: card.note, kind: '', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
     if (s.kind === 'PROVIDER_ERROR') return { provider: p, label, state: 'TIMEOUT', stateLabel: 'Timed out', text: `${label} did not answer within PT4S`, reason: `${label} did not answer within PT4S`, kind: 'PROVIDER_ERROR', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
     if (p === 'AVALARA' && j === 0) return { provider: p, label, state: 'NO_CODE', stateLabel: 'No code mapped', text: `No ${label} code is mapped for ${s.code}`, reason: `No ${label} code is mapped for ${s.code}`, kind: 'NO_CODE', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };

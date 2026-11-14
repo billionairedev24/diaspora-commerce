@@ -1,16 +1,17 @@
 'use client';
 
-import { staffTaxQueries, type TaxShadow, type TaxShadowGroup, type TaxShadowRow } from '@afrotransact/api-client';
-import { Checklist, Select, StatStrip, TextField } from '@afrotransact/ui';
+import { staffTaxQueries, TAX_SHADOW_STATUSES, type TaxShadow, type TaxShadowGroup, type TaxShadowStatus } from '@afrotransact/api-client';
+import { type TableState, useTableState } from '@afrotransact/data-table';
+import { Checklist, Select, StatStrip, TextField, Toolbar } from '@afrotransact/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { staffApi } from '@/lib/api';
-import { dateTime } from '@/lib/format';
 
 import { mono, RunbookLink, Section } from './shared';
+import { TaxShadowLines, TaxShadowProviders } from './TaxShadowLines';
 
 const pct = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
 
@@ -26,24 +27,21 @@ export function TaxShadowPanel() {
   const from = params.get('shadow.from') ?? '';
   const to = params.get('shadow.to') ?? '';
   const provider = params.get('shadow.provider') ?? '';
-  const page = Number(params.get('shadow.page') ?? 0) || 0;
+  const statusParam = params.get('shadow.status') ?? 'all';
+  const status: TaxShadowStatus = (TAX_SHADOW_STATUSES as readonly string[]).includes(statusParam) ? (statusParam as TaxShadowStatus) : 'all';
+  const table = useTableState({ searchParams: params, prefix: 'shadowlines', defaultPageSize: 10 });
   const order = from && to && from > to ? 'The end date must be after the start.' : undefined;
   const q = useQuery({
-    ...staffTaxQueries.shadow(api.tax, { from: order ? undefined : from || undefined, to: order ? undefined : to || undefined, provider: provider || undefined, page, size: 10 }),
+    ...staffTaxQueries.shadow(api.tax, { from: order ? undefined : from || undefined, to: order ? undefined : to || undefined, provider: provider || undefined, status, search: table.q || undefined, page: table.pagination.pageIndex, size: table.pagination.pageSize }),
     placeholderData: keepPreviousData
   });
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(params.toString());
     if (value) next.set(`shadow.${key}`, value);
     else next.delete(`shadow.${key}`);
-    next.delete('shadow.page');
+    next.delete('shadowlines.page');
     const qs = next.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  };
-  const goPage = (n: number) => {
-    const next = new URLSearchParams(params.toString());
-    next.set('shadow.page', String(n));
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   };
   if (q.isPending) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
@@ -55,23 +53,23 @@ export function TaxShadowPanel() {
         <RunbookLink path={d.runbookPath || 'docs/runbooks/tax-provider-cutover.md'}>the cutover runbook</RunbookLink>
         .
       </p>
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+      <Toolbar>
         <TextField label="From" type="date" value={from || d.from} max={to || d.to} onChange={(e) => set('from', e.currentTarget.value)} />
         <TextField label="To" type="date" value={to || d.to} min={from || d.from} error={order} onChange={(e) => set('to', e.currentTarget.value)} />
         <Select label="Provider" value={provider || d.provider} options={[{ value: 'STRIPE', label: 'Stripe Tax' }, { value: 'AVALARA', label: 'Avalara' }]} placeholder={d.shadowOff ? 'Choose a provider' : undefined} onChange={(e) => set('provider', e.currentTarget.value)} />
-      </div>
+      </Toolbar>
       {d.shadowOff ? (
         <Notice tone="info" title="Shadow mode is off">
           {d.message || 'Turn it on in Who calculates tax to compare a provider with our own rules on real orders.'}
         </Notice>
       ) : (
-        <Report d={d} page={page} onPage={goPage} />
+        <Report d={d} table={table} status={status} onStatus={(v) => set('status', v === 'all' ? '' : v)} loading={q.isPending} fetching={q.isFetching} />
       )}
     </div>
   );
 }
 
-function Report({ d, page, onPage }: { d: TaxShadow; page: number; onPage: (n: number) => void }) {
+function Report({ d, table, status, onStatus, loading, fetching }: { d: TaxShadow; table: TableState; status: TaxShadowStatus; onStatus: (s: TaxShadowStatus) => void; loading: boolean; fetching: boolean }) {
   const r = d.readiness;
   return (
     <>
@@ -86,6 +84,7 @@ function Report({ d, page, onPage }: { d: TaxShadow; page: number; onPage: (n: n
           </p>
         </section>
       ) : null}
+      <TaxShadowProviders d={d} />
       <StatStrip
         label={`${d.providerLabel} against our rules, ${d.from} to ${d.to}`}
         items={[
@@ -133,7 +132,7 @@ function Report({ d, page, onPage }: { d: TaxShadow; page: number; onPage: (n: n
           </table>
         )}
       </Section>
-      <Samples rows={d.items} total={d.total} page={page} size={d.size} onPage={onPage} />
+      <TaxShadowLines d={d} state={table} status={status} onStatus={onStatus} loading={loading} fetching={fetching} />
     </>
   );
 }
@@ -172,60 +171,6 @@ function Groups({ title, rows }: { title: string; rows: TaxShadowGroup[] }) {
             ))}
           </tbody>
         </table>
-      )}
-    </Section>
-  );
-}
-
-function Samples({ rows, total, page, size, onPage }: { rows: TaxShadowRow[]; total: number; page: number; size: number; onPage: (n: number) => void }) {
-  const pages = Math.max(1, Math.ceil(total / size));
-  return (
-    <Section title="Sample lines with both quotes">
-      {rows.length === 0 ? (
-        <p className="m-0 text-sm text-muted">No lines differ in this period.</p>
-      ) : (
-        <>
-          <table className="w-full border-collapse text-sm">
-            <caption className="at-visually-hidden">Order lines where the two quotes differ</caption>
-            <thead>
-              <tr className="text-left text-muted">
-                <th scope="col" className="py-1 pe-3 font-normal">Order</th>
-                <th scope="col" className="py-1 pe-3 font-normal">What differs</th>
-                <th scope="col" className="py-1 pe-3 font-normal">Our quote</th>
-                <th scope="col" className="py-1 font-normal">Provider’s quote</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={`${r.orderId}-${r.lineId}`} className="border-t border-border align-top">
-                  <th scope="row" className="py-1.5 pe-3 text-left font-normal">
-                    <span className="block font-semibold">{r.orderNumber || 'Order'}</span>
-                    <span className="text-xs text-muted">{r.quotedAt ? dateTime(r.quotedAt) : ''}</span>
-                  </th>
-                  <td className="py-1.5 pe-3">
-                    {r.kindLabel}
-                    <span className="block text-xs text-muted">{r.categoryName} · {r.differenceText}</span>
-                  </td>
-                  <td className="py-1.5 pe-3">{r.inHouseText}</td>
-                  <td className="py-1.5">{r.providerText}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {pages > 1 ? (
-            <nav aria-label="Sample lines pages" className="flex items-center gap-3 text-sm">
-              <button type="button" className="underline disabled:no-underline disabled:opacity-50" disabled={page <= 0} onClick={() => onPage(page - 1)}>
-                Previous
-              </button>
-              <span>
-                Page {page + 1} of {pages}
-              </span>
-              <button type="button" className="underline disabled:no-underline disabled:opacity-50" disabled={page + 1 >= pages} onClick={() => onPage(page + 1)}>
-                Next
-              </button>
-            </nav>
-          ) : null}
-        </>
       )}
     </Section>
   );

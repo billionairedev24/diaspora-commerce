@@ -217,6 +217,9 @@ var providerEnv = map[string]string{
 	"AVALARA": "AVALARA_ACCOUNT_ID, AVALARA_LICENSE_KEY, AVALARA_COMPANY_CODE and AVALARA_ENVIRONMENT (sandbox or production)",
 }
 
+// providerEnvShort is the same in a table cell.
+var providerEnvShort = map[string]string{"STRIPE": "STRIPE_SECRET_KEY", "AVALARA": "the AVALARA_* settings"}
+
 func shadowThresholds(report jobj) (map[string]float64, string) {
 	out := map[string]float64{}
 	for k, v := range shadowDefaults {

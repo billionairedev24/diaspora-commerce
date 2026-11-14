@@ -235,7 +235,7 @@ describe('method and shadow mock', () => {
     expect(r.items[0]?.quotes.map((q) => q.provider)).toEqual(['STRIPE', 'AVALARA']);
     const avalara = r.items[0]!.quotes[1]!;
     expect(avalara).toMatchObject({ state: 'NOT_CONFIGURED', taxMinor: null, taxText: '' });
-    expect(avalara.reason).toMatch(/Avalara is not configured.*AVALARA_ACCOUNT_ID/);
+    expect(avalara.reason).toMatch(/Avalara is not configured: set the AVALARA_\* settings/);
     const none = await api.shadow({ search: 'zzz' });
     expect(none.total).toBe(0);
     const noAnswer = await api.shadow({ status: 'noanswer', size: 50 });

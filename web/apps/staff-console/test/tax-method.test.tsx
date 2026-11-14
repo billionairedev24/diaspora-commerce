@@ -101,10 +101,32 @@ describe('Shadow report', () => {
     expect(within(ready).getByText(/placeholders until the tax adviser/)).toBeInTheDocument();
     const byCategory = screen.getByRole('table', { name: /By category/ });
     expect(within(byCategory).getByText('Nuts seeds')).toBeInTheDocument();
-    const samples = screen.getByRole('region', { name: 'Sample lines with both quotes' });
+    const samples = screen.getByRole('region', { name: 'Our quote against each provider' });
     expect(within(samples).getAllByText(/^AT-\d+/).length).toBeGreaterThan(0);
     expect(within(samples).getAllByText(/Exempt \(no tax\)/).length).toBeGreaterThan(0);
     expect(within(samples).getAllByText(/Taxable at 8.25%/).length).toBeGreaterThan(0);
+  });
+
+  it('shows our quote next to Stripe Tax and Avalara, and says which provider did not answer and why', async () => {
+    await renderScreen(<TaxShadowPanel />);
+    const samples = await screen.findByRole('region', { name: 'Our quote against each provider' });
+    const table = await within(samples).findByRole('table', { name: 'Order lines with every quote' });
+    for (const name of ['Our quote', 'Stripe Tax', 'Avalara']) expect(within(table).getByRole('columnheader', { name: new RegExp(name) })).toBeInTheDocument();
+    // Avalara is not configured in the mock: a state and a reason that names it and the settings, never $0.00.
+    expect(within(table).getAllByText('Not configured').length).toBeGreaterThan(0);
+    expect(within(table).getAllByText(/Avalara is not configured: set the AVALARA_\* settings/).length).toBeGreaterThan(0);
+    expect(within(table).queryByText('$0.00')).not.toBeInTheDocument();
+    const cards = screen.getByRole('region', { name: 'Providers in the comparison' });
+    expect(within(within(cards).getByTestId('shadow-provider-AVALARA')).getByText('Not configured')).toBeInTheDocument();
+    expect(within(within(cards).getByTestId('shadow-provider-STRIPE')).getByText('Asked on every real order')).toBeInTheDocument();
+  });
+
+  it('filters the lines by what a provider said', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<TaxShadowPanel />);
+    const samples = await screen.findByRole('region', { name: 'Our quote against each provider' });
+    await user.selectOptions(within(samples).getByLabelText('Show'), 'match');
+    expect(await within(samples).findByText('No line matches these filters.')).toBeInTheDocument();
   });
 
   it('explains that shadow mode is off instead of showing empty numbers', async () => {
