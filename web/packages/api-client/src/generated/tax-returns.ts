@@ -1101,7 +1101,7 @@ export interface components {
             /** @description Avalara can be chosen (account id, license key and company code are set) */
             avalaraAvailable?: boolean;
             /**
-             * @description SHADOW mode: this provider is quoted next to the in-house engine on real orders; differences are logged (GET /v1/tax/shadow/report) and the shadow quote is never charged. Null = off.
+             * @description SHADOW mode is on when set. Every configured provider other than the charging one is then quoted next to the in-house engine on real orders (Stripe Tax and Avalara side by side); differences are logged (GET /v1/tax/shadow/report) and the shadow quote is never charged. Null = off.
              * @enum {string|null}
              */
             shadowProvider?: "STRIPE" | "AVALARA" | null;
@@ -1947,7 +1947,7 @@ export interface components {
             /** @description Per in-house outcome (EXEMPT, TAXABLE or NONE) */
             byOutcome?: components["schemas"]["ShadowGroup"][];
             byState?: components["schemas"]["ShadowGroup"][];
-            /** @description MATCH, OUTCOME, RATE, PROVIDER_ERROR, NO_DECISION */
+            /** @description MATCH, OUTCOME, RATE, PROVIDER_ERROR, NO_CODE, NO_DECISION */
             byKind?: components["schemas"]["ShadowGroup"][];
             differences?: components["schemas"]["ShadowDifference"][];
             page?: number;
@@ -1982,8 +1982,18 @@ export interface components {
             atin?: string;
             internalTaxCode?: string;
             providerCode?: string;
-            /** @enum {string} */
-            kind?: "OUTCOME" | "RATE" | "BOTH" | "PROVIDER_ERROR" | "NO_DECISION";
+            /**
+             * @description NO_CODE: no code of the provider is mapped for the outcome, the provider was not asked (never a zero quote). PROVIDER_ERROR: asked or due to be asked, no answer (see failure).
+             * @enum {string}
+             */
+            kind?: "OUTCOME" | "RATE" | "BOTH" | "PROVIDER_ERROR" | "NO_CODE" | "NO_DECISION";
+            /** @description The provider this row is about (every configured provider is recorded side by side */
+            shadowProvider?: components["schemas"]["TaxProvider"];
+            /**
+             * @description Why the provider gave no quote (PROVIDER_ERROR rows). The reason text is in provider.error and names the provider.
+             * @enum {string|null}
+             */
+            failure?: "NOT_CONFIGURED" | "TIMEOUT" | "ERROR" | null;
             inHouse?: components["schemas"]["ShadowQuoteSide"];
             provider?: components["schemas"]["ShadowQuoteSide"];
             /** Format: int64 */

@@ -10589,10 +10589,13 @@ export interface components {
         StaffTaxReviewRow: {
             atin: string;
             gtin?: string;
+            /** @description The product's name: read from catalog by the variant ATIN when tax-returns has none yet, never blank for a variant catalog knows */
             title: string;
+            /** @description Which variant it is, from its options ("5 lb · Parboiled"); empty for a one-variant product */
+            variantLabel?: string;
             /** @description Seller names (never ids; "Unknown seller" when the directory cannot name one) */
             sellers: string[];
-            /** @description First public photo of the product; empty when catalog has none */
+            /** @description First public photo of the variant (else the product's); empty when catalog has none */
             imageUrl?: string;
             categoryCode: string;
             categoryName: string;
@@ -10842,10 +10845,20 @@ export interface components {
             kinds?: {
                 [key: string]: unknown;
             }[];
-            /** @description Sample differences with both quotes */
+            /** @description One card per provider shadow mode can quote: whether it is configured, charging or being asked, and how its recorded lines came out (answered, differs, no answer, no code) */
+            providers?: {
+                [key: string]: unknown;
+            }[];
+            /** @description Order lines with our quote and a cell per provider (`quotes`): state ANSWERED, NOT_CONFIGURED, TIMEOUT, ERROR, NO_CODE or NOT_ASKED, the reason naming the provider, tax and difference only when it answered. Filtered by status and search, paged. */
             items?: {
                 [key: string]: unknown;
             }[];
+            status?: string;
+            search?: string;
+            /** @description Lines recorded in the period before filters */
+            linesInPeriod?: number;
+            /** @description More rows exist than the side-by-side table reads (first 2000) */
+            comparisonPartial?: boolean;
             total?: number;
             page?: number;
             size?: number;
@@ -16373,7 +16386,12 @@ export interface operations {
                 from?: string;
                 /** @description Date, default today */
                 to?: string;
+                /** @description The provider the summary, tallies and cutover checks are about (default: the one in shadow, else the one charging). The side-by-side lines always show every provider. */
                 provider?: string;
+                /** @description Line filter: some provider differs from ours, all answering providers match, a provider did not answer, a provider has no code mapped */
+                status?: "all" | "differ" | "match" | "noanswer" | "nocode";
+                /** @description Order number, category, outcome code, ATIN or line id */
+                search?: string;
                 page?: number;
                 size?: number;
             };

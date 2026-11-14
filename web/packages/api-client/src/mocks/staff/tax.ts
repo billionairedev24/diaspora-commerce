@@ -19,7 +19,10 @@ import {
   type TaxReviewPage,
   type TaxReviewRow,
   type TaxReviewSettings,
-  type TaxShadow} from '../../staff-tax';
+  type TaxShadow,
+  type TaxShadowCell,
+  type TaxShadowProvider,
+  type TaxShadowRow} from '../../staff-tax';
 import fixture from './fixtures/category-tax-map.json';
 import { allows } from './model';
 import { type PreorderCtx, type PreorderHandlerDeps } from './preorders';
@@ -635,12 +638,13 @@ const SHADOW_KINDS: Record<string, string> = {
   RATE: 'Different rate',
   BOTH: 'Different outcome and rate',
   PROVIDER_ERROR: 'The provider did not answer',
+  NO_CODE: 'No code mapped for this outcome',
   NO_DECISION: 'We had no stored decision'
 };
 
-function shadowView(state: MockTaxState, provider: string, page: number, size: number, can: boolean, from: string, to: string): TaxShadow {
+function shadowView(state: MockTaxState, provider: string, page: number, size: number, can: boolean, from: string, to: string, status: string, search: string): TaxShadow {
   if (!provider)
-    return { provider: '', providerLabel: '', from, to, shadowOff: true, canConfigure: can, message: 'Shadow mode is off. Turn it on in Who calculates tax to compare a provider with our own rules on real orders.', linesCompared: 0, linesDiffering: 0, differingPct: 0, absoluteDifferenceText: '', netDifferenceText: '', byCode: [], byCategory: [], byOutcome: [], byState: [], kinds: [], items: [], total: 0, page, size, partial: false, runbookPath: 'docs/runbooks/tax-provider-cutover.md' };
+    return { provider: '', providerLabel: '', from, to, shadowOff: true, canConfigure: can, message: 'Shadow mode is off. Turn it on in Who calculates tax to compare a provider with our own rules on real orders.', linesCompared: 0, linesDiffering: 0, differingPct: 0, absoluteDifferenceText: '', netDifferenceText: '', byCode: [], byCategory: [], byOutcome: [], byState: [], kinds: [], providers: [], items: [], linesInPeriod: 0, comparisonPartial: false, total: 0, page, size, partial: false, runbookPath: 'docs/runbooks/tax-provider-cutover.md' };
   const sample: { code: string; lines: number; differing: number; kind: string; inH: string; pr: string; state: string; cents: number }[] = [
     { code: 'AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS', lines: 64, differing: 3, kind: 'OUTCOME', inH: 'Exempt (no tax)', pr: 'Taxable at 8.25%, tax $0.83', state: 'TX', cents: 83 },
     { code: 'AT.PACKAGED_SNACKS.STANDARD', lines: 88, differing: 2, kind: 'RATE', inH: 'Taxable at 8.25%, tax $0.75', pr: 'Taxable at 8%, tax $0.73', state: 'TX', cents: -2 },
@@ -652,24 +656,72 @@ function shadowView(state: MockTaxState, provider: string, page: number, size: n
     const hit = ALL_ROWS.find((x) => x.row.internalTaxCode === s.code)!;
     return { internalTaxCode: s.code, providerCode: hit.row.stripeCode, categoryName: hit.category.name, outcomeLabel: OUTCOME[hit.row.outcome] ?? '', lines: s.lines, differing: s.differing, differingPct: Math.round((s.differing / s.lines) * 10_000) / 100 };
   });
-  const diffs = known.filter((s) => s.differing > 0).flatMap((s, i) =>
-    Array.from({ length: s.differing }, (_, j) => ({
-      orderId: `ord-${i}-${j}`,
-      orderNumber: `AT-00${2310 + i * 5 + j}`,
-      lineId: `l-${i}-${j}`,
-      atin: 'AT20000101',
-      internalTaxCode: s.code,
-      categoryName: ALL_ROWS.find((x) => x.row.internalTaxCode === s.code)!.category.name,
-      providerCode: ALL_ROWS.find((x) => x.row.internalTaxCode === s.code)!.row.stripeCode,
-      kind: s.kind,
-      kindLabel: SHADOW_KINDS[s.kind] ?? s.kind,
-      inHouseText: s.inH,
-      providerText: s.pr,
-      differenceMinor: s.cents,
-      differenceText: `${s.cents < 0 ? '-' : ''}$${(Math.abs(s.cents) / 100).toFixed(2)}`,
-      quotedAt: ago(i + 1)
-    }))
+  const money = (c: number) => `${c < 0 ? '-' : ''}$${(Math.abs(c) / 100).toFixed(2)}`;
+  const names = (provider === 'AVALARA' ? ['AVALARA'] : ['STRIPE', 'AVALARA']) as ('STRIPE' | 'AVALARA')[];
+  const cards: TaxShadowProvider[] = (['STRIPE', 'AVALARA'] as const).map((p) => {
+    const ok = configured(state, p);
+    const charging = state.method.method === (p === 'STRIPE' ? 'STRIPE_TAX' : 'AVALARA');
+    const label = PROVIDER[p] ?? p;
+    return {
+      provider: p,
+      label,
+      configured: ok,
+      state: !ok ? 'NOT_CONFIGURED' : charging ? 'CHARGING' : 'ASKING',
+      stateLabel: !ok ? 'Not configured' : charging ? 'Charging customers' : 'Asked on every real order',
+      note: !ok ? `${label} is not configured, so it is not asked. Set ${p === 'STRIPE' ? 'STRIPE_SECRET_KEY' : 'AVALARA_ACCOUNT_ID, AVALARA_LICENSE_KEY, AVALARA_COMPANY_CODE and AVALARA_ENVIRONMENT (sandbox or production)'} for this environment.` : charging ? `${label} is the method charging customers, so it is not quoted in shadow.` : 'Quoted next to ours on every real order; never charged.',
+      lines: 0,
+      answered: 0,
+      matches: 0,
+      differs: 0,
+      noAnswer: 0,
+      noCode: 0
+    };
+  });
+  void names;
+  const cell = (p: 'STRIPE' | 'AVALARA', s: (typeof sample)[number], j: number): TaxShadowCell => {
+    const card = cards.find((c) => c.provider === p)!;
+    const label = PROVIDER[p] ?? p;
+    if (!card.configured) return { provider: p, label, state: 'NOT_CONFIGURED', stateLabel: 'Not configured', text: card.note, reason: card.note, kind: '', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
+    if (card.state === 'CHARGING') return { provider: p, label, state: 'NOT_ASKED', stateLabel: 'Not asked', text: card.note, reason: card.note, kind: '', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
+    if (s.kind === 'PROVIDER_ERROR') return { provider: p, label, state: 'TIMEOUT', stateLabel: 'Timed out', text: `${label} did not answer within PT4S`, reason: `${label} did not answer within PT4S`, kind: 'PROVIDER_ERROR', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
+    if (p === 'AVALARA' && j === 0) return { provider: p, label, state: 'NO_CODE', stateLabel: 'No code mapped', text: `No ${label} code is mapped for ${s.code}`, reason: `No ${label} code is mapped for ${s.code}`, kind: 'NO_CODE', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
+    return { provider: p, label, state: 'ANSWERED', stateLabel: 'Answered', text: s.pr, reason: '', kind: s.kind, providerCode: '', taxMinor: s.cents + 50, taxText: money(s.cents + 50), differenceMinor: s.cents, differenceText: money(s.cents) };
+  };
+  const allLines: TaxShadowRow[] = known.flatMap((s, i) =>
+    Array.from({ length: Math.max(s.differing, 1) }, (_, j) => {
+      const category = ALL_ROWS.find((x) => x.row.internalTaxCode === s.code)!.category.name;
+      const quotes = (['STRIPE', 'AVALARA'] as const).map((p) => cell(p, s, j));
+      const differs = quotes.some((q) => q.state === 'ANSWERED' && q.kind !== 'MATCH' && s.differing > 0);
+      const status = differs ? 'differ' : quotes.some((q) => ['TIMEOUT', 'ERROR', 'NOT_CONFIGURED'].includes(q.state)) ? 'noanswer' : quotes.some((q) => q.state === 'NO_CODE') ? 'nocode' : 'match';
+      return {
+        orderId: `ord-${i}-${j}`,
+        orderNumber: `AT-00${2310 + i * 5 + j}`,
+        lineId: `l-${i}-${j}`,
+        atin: 'AT20000101',
+        internalTaxCode: s.code,
+        categoryName: category,
+        status,
+        differs,
+        inHouse: { provider: '', label: '', state: 'ANSWERED', stateLabel: 'Answered', text: s.inH, reason: '', kind: '', providerCode: '', taxMinor: 50, taxText: '$0.50', differenceMinor: null, differenceText: '' },
+        quotes,
+        quotedAt: ago(i + 1)
+      } satisfies TaxShadowRow;
+    })
   );
+  for (const l of allLines)
+    for (const q of l.quotes) {
+      const card = cards.find((c) => c.provider === q.provider)!;
+      if (card.state !== 'ASKING') continue;
+      card.lines += 1;
+      if (q.state === 'ANSWERED') {
+        card.answered += 1;
+        if (q.kind === 'MATCH') card.matches += 1;
+        else card.differs += 1;
+      } else if (q.state === 'NO_CODE') card.noCode += 1;
+      else card.noAnswer += 1;
+    }
+  const needle = search.trim().toLowerCase();
+  const diffs = allLines.filter((l) => (status === 'all' || l.status === status) && (!needle || `${l.orderNumber} ${l.categoryName} ${l.internalTaxCode} ${l.atin} ${l.lineId}`.toLowerCase().includes(needle)));
   const lines = known.reduce((n, s) => n + s.lines, 0);
   const differing = known.reduce((n, s) => n + s.differing, 0);
   const cat = (k: string) => known.filter((s) => s.code.split('.')[1] === k);
@@ -678,7 +730,8 @@ function shadowView(state: MockTaxState, provider: string, page: number, size: n
     const d = cat(k).reduce((n, s) => n + s.differing, 0);
     return { key: k.toLowerCase().replace(/_/g, '-'), label: humanizeCode(k), lines: l, differing: d, differingPct: Math.round((d / l) * 10_000) / 100 };
   });
-  const kinds = ['OUTCOME', 'BOTH', 'RATE', 'NO_DECISION', 'PROVIDER_ERROR'].map((k) => ({ kind: k, label: SHADOW_KINDS[k] ?? k, count: diffs.filter((d) => d.kind === k).length }));
+  const kindOf = (l: TaxShadowRow) => l.quotes.find((q) => q.provider === provider)?.kind ?? '';
+  const kinds = ['OUTCOME', 'BOTH', 'RATE', 'NO_DECISION', 'PROVIDER_ERROR', 'NO_CODE'].map((k) => ({ kind: k, label: SHADOW_KINDS[k] ?? k, count: allLines.filter((d) => kindOf(d) === k).length }));
   const outcomeDiff = kinds.filter((k) => ['OUTCOME', 'BOTH', 'NO_DECISION'].includes(k.kind)).reduce((n, k) => n + k.count, 0);
   const comp = completeness(state, provider as 'STRIPE' | 'AVALARA');
   const days = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
@@ -686,7 +739,7 @@ function shadowView(state: MockTaxState, provider: string, page: number, size: n
     { key: 'window', title: 'Long enough', ok: days >= 30, detail: `Compared ${days} days; at least 30 needed (a full filing month).` },
     { key: 'volume', title: 'Enough real orders', ok: lines >= 200, detail: `${lines} order lines compared; at least 200 needed.` },
     { key: 'outcomes', title: 'Same exempt or taxable answer', ok: outcomeDiff === 0, detail: `${outcomeDiff} lines where the provider disagreed on exempt or taxable, or we had no decision. Each must be fixed (re-map, refine the code) or accepted in writing by the tax adviser.` },
-    { key: 'errors', title: 'Provider answers reliably', ok: (diffs.filter((d) => d.kind === 'PROVIDER_ERROR').length / Math.max(lines, 1)) * 100 <= 1, detail: `${diffs.filter((d) => d.kind === 'PROVIDER_ERROR').length} lines the provider did not answer; at most 1% allowed.` },
+    { key: 'errors', title: 'Provider answers reliably', ok: (kinds.find((k) => k.kind === 'PROVIDER_ERROR')!.count / Math.max(lines, 1)) * 100 <= 1, detail: `${kinds.find((k) => k.kind === 'PROVIDER_ERROR')!.count} lines the provider did not answer; at most 1% allowed.` },
     { key: 'perCode', title: 'Every outcome seen often enough', ok: byCode.every((b) => b.lines >= 5), detail: `${byCode.filter((b) => b.lines < 5).length} of ${byCode.length} outcomes had fewer than 5 lines.` },
     { key: 'codes', title: 'Every code verified', ok: comp.complete, detail: `${comp.unmapped} outcomes have no code and ${comp.unverified} are not verified.` }
   ];
@@ -712,7 +765,10 @@ function shadowView(state: MockTaxState, provider: string, page: number, size: n
     ],
     byState: [{ key: 'TX', label: 'TX', lines, differing, differingPct: Math.round((differing / lines) * 10_000) / 100 }],
     kinds,
+    providers: cards,
     items: diffs.slice(page * size, page * size + size),
+    linesInPeriod: allLines.length,
+    comparisonPartial: false,
     total: diffs.length,
     page,
     size,
@@ -1237,7 +1293,7 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         if (Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to))) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { from: 'Use a date like 2026-11-09' });
         if (Date.parse(to) < Date.parse(from)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { to: 'The end date must be after the start, within a year' });
         const { page, size } = paged([], q);
-        return shadowView(st, provider, page, size, ctx.permissions.includes('tax:configure'), from, to);
+        return shadowView(st, provider, page, size, ctx.permissions.includes('tax:configure'), from, to, (q.get('status') ?? 'all').toLowerCase(), q.get('search') ?? '');
       })
     )
   ];

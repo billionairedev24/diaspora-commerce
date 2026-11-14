@@ -465,23 +465,62 @@ export const TaxReadinessSchema = z.object({
 });
 export type TaxReadiness = z.infer<typeof TaxReadinessSchema>;
 
+/** What one provider (or we) said about one line. A provider that gave no quote has a state and a reason, never a $0.00. */
+export const TAX_SHADOW_STATES = ['ANSWERED', 'NOT_CONFIGURED', 'TIMEOUT', 'ERROR', 'NO_CODE', 'NO_DECISION', 'NOT_ASKED'] as const;
+export type TaxShadowState = (typeof TAX_SHADOW_STATES)[number];
+
+const ShadowCellSchema = z.object({
+  provider: z.string().default(''),
+  label: z.string().default(''),
+  state: z.enum(TAX_SHADOW_STATES),
+  stateLabel: z.string(),
+  text: z.string().default(''),
+  reason: z.string().default(''),
+  kind: z.string().default(''),
+  providerCode: z.string().default(''),
+  taxMinor: z.number().nullable().default(null),
+  taxText: z.string().default(''),
+  differenceMinor: z.number().nullable().default(null),
+  differenceText: z.string().default('')
+});
+export type TaxShadowCell = z.infer<typeof ShadowCellSchema>;
+
+/** The statuses of the line filter: some provider differs from ours, all answering providers match, one did not answer, one has no code. */
+export const TAX_SHADOW_STATUSES = ['all', 'differ', 'match', 'noanswer', 'nocode'] as const;
+export type TaxShadowStatus = (typeof TAX_SHADOW_STATUSES)[number];
+
+/** One order line: our quote and a cell per provider (in the order of `providers`). */
 export const TaxShadowRowSchema = z.object({
   orderId: z.string().default(''),
   orderNumber: z.string().default(''),
   lineId: z.string().default(''),
   atin: z.string().default(''),
-  internalTaxCode: z.string(),
+  internalTaxCode: z.string().default(''),
   categoryName: z.string().default(''),
-  providerCode: z.string().default(''),
-  kind: z.string(),
-  kindLabel: z.string(),
-  inHouseText: z.string(),
-  providerText: z.string(),
-  differenceMinor: z.number(),
-  differenceText: z.string().default(''),
+  status: z.string().default(''),
+  differs: z.boolean().default(false),
+  inHouse: ShadowCellSchema,
+  quotes: z.array(ShadowCellSchema).default([]),
   quotedAt: z.string().default('')
 });
 export type TaxShadowRow = z.infer<typeof TaxShadowRowSchema>;
+
+/** A provider shadow mode can quote: configured or not, charging or asked, and how its recorded lines came out. */
+export const TaxShadowProviderSchema = z.object({
+  provider: z.string(),
+  label: z.string(),
+  configured: z.boolean(),
+  state: z.enum(['NOT_CONFIGURED', 'CHARGING', 'ASKING']),
+  stateLabel: z.string(),
+  note: z.string().default(''),
+  lines: z.number().default(0),
+  answered: z.number().default(0),
+  matches: z.number().default(0),
+  differs: z.number().default(0),
+  noAnswer: z.number().default(0),
+  noCode: z.number().default(0)
+});
+export type TaxShadowProvider = z.infer<typeof TaxShadowProviderSchema>;
 
 export const TaxShadowSchema = z.object({
   provider: z.string(),
@@ -501,7 +540,10 @@ export const TaxShadowSchema = z.object({
   byOutcome: z.array(ShadowGroupSchema).default([]),
   byState: z.array(ShadowGroupSchema).default([]),
   kinds: z.array(z.object({ kind: z.string(), label: z.string(), count: z.number() })).default([]),
+  providers: z.array(TaxShadowProviderSchema).default([]),
   items: z.array(TaxShadowRowSchema).default([]),
+  linesInPeriod: z.number().default(0),
+  comparisonPartial: z.boolean().default(false),
   total: z.number().default(0),
   page: z.number().default(0),
   size: z.number().default(25),
@@ -515,6 +557,10 @@ export interface TaxShadowQuery {
   from?: string;
   to?: string;
   provider?: string;
+  /** Line filter (see TAX_SHADOW_STATUSES). */
+  status?: TaxShadowStatus;
+  /** Order number, category, outcome code, ATIN or line id. */
+  search?: string;
   page?: number;
   size?: number;
 }
@@ -569,7 +615,7 @@ export function createStaffTaxApi(request: Requester) {
     /** Needs tax:classify-admin and a reason (10+ characters). Applies to new classification events. */
     changeReviewSettings: (body: TaxReviewSettingsChange): Promise<TaxReviewSettings> => request(`${T}/review-settings`, TaxReviewSettingsSchema, { method: 'PUT', body }),
     shadow: (q: TaxShadowQuery, signal?: AbortSignal): Promise<TaxShadow> =>
-      request(`${T}/shadow`, TaxShadowSchema, { query: params({ from: q.from, to: q.to, provider: q.provider, page: q.page, size: q.size }), signal })
+      request(`${T}/shadow`, TaxShadowSchema, { query: params({ from: q.from, to: q.to, provider: q.provider, status: q.status === 'all' ? undefined : q.status, search: q.search, page: q.page, size: q.size }), signal })
   };
 }
 
