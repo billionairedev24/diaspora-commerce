@@ -66,6 +66,39 @@ describe('Who calculates tax', () => {
     expect(screen.getByRole('radio', { name: /Our own rules/ })).toBeDisabled();
   });
 
+  it('tests the Avalara connection: not set up, accepted with the account name, or refused, and never shows a key', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<TaxMethodPanel />);
+    await screen.findByRole('heading', { name: 'Our own rules works out the tax now' });
+    await user.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/Avalara is not set up in this environment/)).toBeInTheDocument();
+    expect(screen.getByText(/Authenticated: no/)).toBeInTheDocument();
+
+    const answer = (body: object) =>
+      interceptStaff(async (req, next) => {
+        if (new URL(req.url).pathname.endsWith('/tax/providers/AVALARA/connection-test')) return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+        return next(req);
+      });
+    answer({ provider: 'AVALARA', label: 'Avalara', status: 'OK', headline: 'Avalara accepted the credentials', configured: true, authenticated: true, accountName: 'afro-sandbox', environment: 'sandbox', message: 'Avalara accepted the credentials (sandbox)' });
+    await user.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/Authenticated: yes/)).toBeInTheDocument();
+    expect(screen.getByText(/Account: afro-sandbox/)).toBeInTheDocument();
+    expect(screen.getByText(/Environment: sandbox/)).toBeInTheDocument();
+    expect(document.body.textContent ?? '').not.toMatch(/license/i);
+
+    answer({ provider: 'AVALARA', label: 'Avalara', status: 'FAILED', headline: 'Avalara did not accept the credentials', configured: true, authenticated: false, accountName: '', environment: 'sandbox', message: 'AvaTax refused the request (AuthenticationException): Invalid credentials' });
+    await user.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/Avalara did not accept the credentials/)).toBeInTheDocument();
+    expect(screen.getByText(/AuthenticationException/)).toBeInTheDocument();
+  });
+
+  it('offers no Test connection without tax:configure', async () => {
+    asRoles('platform.auditor');
+    await renderScreen(<TaxMethodPanel />);
+    await screen.findByText(/Changing them needs the tax:configure permission/);
+    expect(screen.queryByRole('button', { name: 'Test connection' })).not.toBeInTheDocument();
+  });
+
   it('shows a loading state, then the unavailable state', async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
@@ -116,6 +149,8 @@ describe('Shadow report', () => {
     expect(within(table).getAllByText('Not configured').length).toBeGreaterThan(0);
     expect(within(table).getAllByText(/Avalara is not configured: set the AVALARA_\* settings/).length).toBeGreaterThan(0);
     expect(within(table).queryByText('$0.00')).not.toBeInTheDocument();
+    // A figure from a ZIP-only ship-to is labelled as an estimate, so a difference is not read as the provider being wrong.
+    expect(within(table).getAllByText(/Estimated from the ZIP code: no street address was sent to Stripe Tax/).length).toBeGreaterThan(0);
     const cards = screen.getByRole('region', { name: 'Providers in the comparison' });
     expect(within(within(cards).getByTestId('shadow-provider-AVALARA')).getByText('Not configured')).toBeInTheDocument();
     expect(within(within(cards).getByTestId('shadow-provider-STRIPE')).getByText('Asked on every real order')).toBeInTheDocument();

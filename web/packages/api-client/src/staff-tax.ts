@@ -402,6 +402,20 @@ export const TaxMethodSchema = z.object({
 });
 export type TaxMethod = z.infer<typeof TaxMethodSchema>;
 
+/** What "Test connection" found out about a provider. Never carries a credential. */
+export const TaxConnectionTestSchema = z.object({
+  provider: TaxProviderSchema,
+  label: z.string(),
+  status: z.enum(['OK', 'FAILED', 'NOT_CONFIGURED']),
+  headline: z.string(),
+  configured: z.boolean(),
+  authenticated: z.boolean(),
+  accountName: z.string().default(''),
+  environment: z.string().default(''),
+  message: z.string().default('')
+});
+export type TaxConnectionTest = z.infer<typeof TaxConnectionTestSchema>;
+
 export interface TaxMethodChange {
   method: TaxMethodKey;
   shadowProvider: TaxProvider | '';
@@ -481,7 +495,11 @@ const ShadowCellSchema = z.object({
   taxMinor: z.number().nullable().default(null),
   taxText: z.string().default(''),
   differenceMinor: z.number().nullable().default(null),
-  differenceText: z.string().default('')
+  differenceText: z.string().default(''),
+  /** How exactly the ship-to was known when the provider was asked (ADDRESS, CITY or ZIP; empty on older rows). */
+  addressPrecision: z.string().optional(),
+  /** Plain words when the provider priced a place, not a street ("Estimated from the ZIP code ..."); empty otherwise. */
+  addressNote: z.string().optional()
 });
 export type TaxShadowCell = z.infer<typeof ShadowCellSchema>;
 
@@ -611,6 +629,8 @@ export function createStaffTaxApi(request: Requester) {
       request(`${T}/code-map/import`, TaxCodeMapImportResultSchema, { method: 'POST', body }),
     method: (signal?: AbortSignal): Promise<TaxMethod> => request(`${T}/method`, TaxMethodSchema, { signal }),
     changeMethod: (body: TaxMethodChange): Promise<TaxMethod> => request(`${T}/method`, TaxMethodSchema, { method: 'PUT', body }),
+    /** Asks the provider whether its credentials work (tax:configure). Calculates nothing; the answer never carries a key. */
+    testConnection: (provider: TaxProvider): Promise<TaxConnectionTest> => request(`${T}/providers/${provider}/connection-test`, TaxConnectionTestSchema, { method: 'POST' }),
     reviewSettings: (signal?: AbortSignal): Promise<TaxReviewSettings> => request(`${T}/review-settings`, TaxReviewSettingsSchema, { signal }),
     /** Needs tax:classify-admin and a reason (10+ characters). Applies to new classification events. */
     changeReviewSettings: (body: TaxReviewSettingsChange): Promise<TaxReviewSettings> => request(`${T}/review-settings`, TaxReviewSettingsSchema, { method: 'PUT', body }),

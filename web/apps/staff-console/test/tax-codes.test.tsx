@@ -41,6 +41,17 @@ describe('Provider codes', () => {
     expect(nav.search).toContain('codes.provider=AVALARA');
   });
 
+  it('names the filter for the codes still missing after the provider: Avalara code needed', async () => {
+    const user = userEvent.setup();
+    nav.set('/tax?tab=tax-codes&codes.provider=AVALARA');
+    await renderScreen(<TaxCodeMapPanel />);
+    await screen.findByRole('table', { name: 'Avalara codes' });
+    const filter = screen.getByLabelText('Show');
+    expect(within(filter).getByRole('option', { name: 'Avalara code needed' })).toBeInTheDocument();
+    await user.selectOptions(filter, 'UNMAPPED');
+    expect(nav.search).toContain('codes.state=UNMAPPED');
+  });
+
   it('edits one code with a reason, checks its format, and verifies it', async () => {
     const user = userEvent.setup();
     nav.set('/tax?tab=tax-codes&codes.provider=AVALARA');

@@ -22,6 +22,11 @@ function QuoteCell({ cell, same, vs }: { cell: TaxShadowCell; same: string; vs: 
       <span className="flex min-w-0 flex-col gap-0.5 whitespace-normal">
         <CellText title={cell.text}>{cell.text}</CellText>
         {note ? <CellText muted>{note}</CellText> : null}
+        {cell.addressNote ? (
+          <CellText muted lines={2} title={cell.addressNote}>
+            {cell.addressNote}
+          </CellText>
+        ) : null}
       </span>
     );
   }

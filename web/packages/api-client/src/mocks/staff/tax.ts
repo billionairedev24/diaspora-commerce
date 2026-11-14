@@ -685,7 +685,7 @@ function shadowView(state: MockTaxState, provider: string, page: number, size: n
     if (card.state === 'CHARGING') return { provider: p, label, state: 'NOT_ASKED', stateLabel: 'Not asked', text: card.note, reason: card.note, kind: '', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
     if (s.kind === 'PROVIDER_ERROR') return { provider: p, label, state: 'TIMEOUT', stateLabel: 'Timed out', text: `${label} did not answer within PT4S`, reason: `${label} did not answer within PT4S`, kind: 'PROVIDER_ERROR', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
     if (p === 'AVALARA' && j === 0) return { provider: p, label, state: 'NO_CODE', stateLabel: 'No code mapped', text: `No ${label} code is mapped for ${s.code}`, reason: `No ${label} code is mapped for ${s.code}`, kind: 'NO_CODE', providerCode: '', taxMinor: null, taxText: '', differenceMinor: null, differenceText: '' };
-    return { provider: p, label, state: 'ANSWERED', stateLabel: 'Answered', text: s.pr, reason: '', kind: s.kind, providerCode: '', taxMinor: s.cents + 50, taxText: money(s.cents + 50), differenceMinor: s.cents, differenceText: money(s.cents) };
+    return { provider: p, label, state: 'ANSWERED', stateLabel: 'Answered', text: s.pr, reason: '', kind: s.kind, providerCode: '', taxMinor: s.cents + 50, taxText: money(s.cents + 50), differenceMinor: s.cents, differenceText: money(s.cents), addressPrecision: 'ZIP', addressNote: `Estimated from the ZIP code: no street address was sent to ${label}.` };
   };
   const allLines: TaxShadowRow[] = known.flatMap((s, i) =>
     Array.from({ length: Math.max(s.differing, 1) }, (_, j) => {
@@ -1156,7 +1156,7 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
           size,
           completeness: completeness(st, provider),
           canEdit: canAdmin(ctx),
-          states: Object.entries(STATE_LABEL).map(([value, label]) => ({ value: value === 'NOT_NEEDED' ? 'NOT_NEEDED' : value, label }))
+          states: Object.entries(STATE_LABEL).map(([value, label]) => ({ value, label: value === 'UNMAPPED' ? `${PROVIDER[provider] ?? provider} code needed` : label }))
         } satisfies TaxCodeMap;
       })
     ),
@@ -1249,6 +1249,17 @@ export function taxHandlers(W: string, deps: PreorderHandlerDeps) {
         st.history.unshift({ at: ctx.now.toISOString(), changedByName: actor(ctx), fromLabel: METHOD_TEXT[st.method.method]!.label, toLabel: METHOD_TEXT[b.method]!.label, reason: b.reason.trim() });
         Object.assign(st.method, { method: b.method, shadowProvider: shadow, changedByName: actor(ctx), changedAt: ctx.now.toISOString() });
         return methodView(st, true);
+      })
+    ),
+    http.post(
+      `${W}/tax/providers/:provider/connection-test`,
+      route((ctx, p) => {
+        needs(ctx, 'tax:configure');
+        const provider = String(p.provider).toUpperCase();
+        if (provider !== 'STRIPE' && provider !== 'AVALARA') throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Choose Stripe or Avalara.', { provider: 'Choose Stripe or Avalara.' });
+        const label = PROVIDER[provider];
+        if (!configured(tax(ctx), provider)) return { provider, label, status: 'NOT_CONFIGURED', headline: `${label} is not set up in this environment`, configured: false, authenticated: false, accountName: '', environment: '', message: notSetUp(provider) };
+        return { provider, label, status: 'OK', headline: `${label} accepted the credentials`, configured: true, authenticated: true, accountName: 'afro-sandbox', environment: 'sandbox', message: `${label} accepted the credentials (sandbox)` };
       })
     ),
     http.get(

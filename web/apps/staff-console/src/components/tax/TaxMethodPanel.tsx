@@ -1,6 +1,6 @@
 'use client';
 
-import { isApiError, staffTaxKeys, staffTaxQueries, type TaxMethod, type TaxMethodKey, type TaxProvider } from '@afrotransact/api-client';
+import { isApiError, staffTaxKeys, staffTaxQueries, type TaxConnectionTest, type TaxMethod, type TaxMethodKey, type TaxProvider } from '@afrotransact/api-client';
 import { Button, Select, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -129,6 +129,7 @@ function Loaded({ m }: { m: TaxMethod }) {
               <div key={p.provider} className="flex flex-col gap-1">
                 <CompletenessMeter c={p.completeness} label={p.label} />
                 {!p.configured ? <p className="m-0 text-xs text-warning">{p.label} isn’t set up for this environment.</p> : null}
+                {p.provider === 'AVALARA' && m.canConfigure ? <ConnectionTest provider={p.provider} label={p.label} /> : null}
               </div>
             ) : null
           )}
@@ -189,6 +190,43 @@ function Loaded({ m }: { m: TaxMethod }) {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * "Test connection": asks the provider whether the credentials set in this environment work (Avalara: AvaTax Ping), so the
+ * owner can check them before shadow mode runs. Shows yes or no, the account name and the environment, and what to fix. It
+ * never shows the license key (the service does not return it).
+ */
+function ConnectionTest({ provider, label }: { provider: TaxProvider; label: string }) {
+  const api = staffApi();
+  const test = useMutation<TaxConnectionTest, Error>({ mutationFn: () => api.tax.testConnection(provider), retry: false });
+  const r = test.data;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Button variant="neutral" size="sm" loading={test.isPending} onClick={() => test.mutate()}>
+        Test connection
+      </Button>
+      <div role="status" aria-live="polite" className="text-sm">
+        {r ? (
+          <p className={`m-0 ${r.status === 'OK' ? '' : 'text-warning'}`}>
+            <strong className="font-semibold">{r.headline}.</strong>{' '}
+            {r.status === 'OK' ? (
+              <>
+                Authenticated: yes. {r.accountName ? `Account: ${r.accountName}. ` : ''}
+                {r.environment ? `Environment: ${r.environment}.` : ''}
+              </>
+            ) : (
+              <>
+                Authenticated: no. {r.message}
+              </>
+            )}
+          </p>
+        ) : null}
+        {test.isError ? <p className="m-0 text-warning">{problemMessage(test.error)}</p> : null}
+        {!r && !test.isError ? <span className="sr-only">{label} connection not tested yet</span> : null}
+      </div>
     </div>
   );
 }
