@@ -66,7 +66,7 @@ export function RunNote({ block, className }: { block: CartPreorder; className?:
   );
 }
 
-/** "Ships now · Delivery by AfroTransact" header above the packages that are not part of the pre-order. */
+/** "Ships now" header above the packages that are not part of the pre-order. */
 export function CartShipsNowHeader({ waitlist, metro }: { waitlist?: boolean; metro?: boolean }) {
   const t = useT();
   return (

@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 
 describe('the delivery option list at launch (listing rules section 3)', () => {
-  it('is a flat list: Delivery by AfroTransact with its price and date, no carrier, no express', () => {
+  it('is a flat list: delivery with its price and date, no carrier, no express', () => {
     card(pkg([delivery, pickup]));
     const row = screen.getByTestId('delivery-option-afrotransact_delivery');
     expect(row).toHaveTextContent('Delivery');

@@ -90,7 +90,7 @@ function LocalDeliveryQuote({ pkg, onRemove, onChangeAddress, removing }: { pkg:
  * Redesigned PackageCard:
  * - Package items with data-testid="checkout-item", title, thumbnail, quantity, price, and fresh tag.
  * - Delivery | Pickup mode toggle (pill segmented controls).
- * - A flat list of delivery options (Amazon style, no cards): Delivery by AfroTransact at the one flat fee staff set, with its
+ * - A flat list of delivery options (Amazon style, no cards): Delivery at the one flat fee staff set, with its
  *   arrival promise and price. No carrier is ever named and there is no express. A package outside every delivery zone shows
  *   one disabled option, "Too far for standard delivery. Ask us for a quote", with a button (onRequestQuote); pickup stays.
  * - AfroTransact Delivery preferences and safe-place choices when platform delivery is selected.

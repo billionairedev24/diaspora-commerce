@@ -283,7 +283,7 @@ export function fixtureCatalog(n: number): Catalog {
       inStock: true,
       lowStock: false,
       stockStatus: 'IN_STOCK',
-      delivery: { days: 2, label: 'In 2 days', prefix: 'Delivery by AfroTransact', free: false, feeMinor: 599, cutoff: null },
+      delivery: { days: 2, label: 'In 2 days', prefix: 'Delivery', free: false, feeMinor: 599, cutoff: null },
       offerCount: 1,
       minOfferPriceMinor: price,
       sponsor: null,

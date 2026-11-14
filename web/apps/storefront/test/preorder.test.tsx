@@ -208,7 +208,7 @@ describe('storefront pre-order states (mock BFF)', () => {
     const [pre, now] = await screen.findAllByTestId('card-availability');
     await waitFor(() => expect(pre).toHaveTextContent(/^Pre-order · delivered \w{3} \d+$/));
     expect(screen.getAllByTestId('preorder-badge')).toHaveLength(1);
-    expect(now).toHaveTextContent('Ships now · Delivery by AfroTransact');
+    expect(now).toHaveTextContent('Ships now');
     expect(screen.getByRole('button', { name: `Add to cart: ${jollof.title}` })).toBeEnabled();
     unmount();
 
@@ -230,7 +230,7 @@ describe('storefront pre-order states (mock BFF)', () => {
     renderWithProviders(<CartView />);
     const head = await screen.findByTestId('cart-preorder-head');
     expect(head).toHaveTextContent(/Pre-order · delivered \w{3}, \w{3} \d+/);
-    expect(screen.getByTestId('cart-ships-now-head')).toHaveTextContent('Ships now · Delivery by AfroTransact');
+    expect(screen.getByTestId('cart-ships-now-head')).toHaveTextContent('Ships now');
     const door = screen.getByTestId('fulfil-door');
     const pickup = screen.getByTestId('fulfil-pickup');
     expect(door).toHaveAttribute('aria-pressed', 'true');
@@ -326,7 +326,7 @@ describe('storefront pre-order states (mock BFF)', () => {
     await api().setDeliveryLocation({ zip: '79401' });
     await preview({ enabled: false });
     homeAndPreorders();
-    expect(await screen.findByRole('heading', { name: 'Delivery by AfroTransact for now.' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Ships now for your city.' })).toBeVisible();
     expect(screen.getByTestId('home-slot')).toBeEmptyDOMElement();
     expect(screen.queryByTestId('preorder-waitlist')).toBeNull();
   });
@@ -371,6 +371,25 @@ describe('storefront pre-order states (mock BFF)', () => {
     expect(rules).toHaveTextContent(/Everything is delivered on \w{3}, \w{3} \d+, \$7\.99 flat\. There's no minimum order count\./);
     const steps = within(screen.getByTestId('preorder-timeline')).getAllByRole('listitem');
     expect(steps[2]).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('window page lists the other open windows by place below it, never itself', async () => {
+    await api().setDeliveryLocation({ zip: '79101' });
+    renderWithProviders(<PreorderView placeParam={null} />);
+    await screen.findByRole('heading', { level: 1, name: 'Amarillo Pre-order #4' });
+    const others = await screen.findByTestId('preorder-other-windows');
+    expect(others).toHaveTextContent('Open pre-orders in other places');
+    const cards = await within(others).findAllByTestId('preorder-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveTextContent('Lubbock Pre-order #7');
+    expect(cards[0]).toHaveTextContent('Open');
+  });
+
+  it('the only open window has no other-windows section', async () => {
+    await api().setDeliveryLocation({ zip: '79401' });
+    renderWithProviders(<PreorderView placeParam={null} />);
+    await screen.findByRole('heading', { level: 1, name: 'Lubbock Pre-order #7' });
+    await waitFor(() => expect(screen.queryByTestId('preorder-other-windows')).toBeNull());
   });
 });
 

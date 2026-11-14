@@ -212,6 +212,7 @@ export function PreorderWindowPage({ live }: { live: LivePreorder }) {
           )}
         </section>
       </div>
+      <OtherOpenWindows currentId={w.id} />
     </div>
   );
 }
@@ -241,15 +242,13 @@ function OffCard({ w, onShop, busy }: { w: PreorderListItem; onShop: (w: Preorde
   );
 }
 
-/** No live pre-order for the shopper's place: open and upcoming windows elsewhere ("shop one for family"). */
-export function PreorderOffPage({ city }: { city: string }) {
+/** Windows (open and upcoming, or only open) with the "Shop for <city>" action that switches the shopper's delivery place. */
+function WindowList({ windows, isPending }: { windows: PreorderListItem[]; isPending: boolean }) {
   const t = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const router = useRouter();
-  const { data: open, isPending } = useOpenPreorders();
   const [busy, setBusy] = useState(false);
-  const windows = open?.windows ?? [];
   const shop = async (w: PreorderListItem) => {
     setAttribution('page', { po: w.code });
     if (!w.zip) {
@@ -269,21 +268,45 @@ export function PreorderOffPage({ city }: { city: string }) {
       setBusy(false);
     }
   };
+  if (isPending) return <Skeleton height={220} />;
+  return (
+    <ul className={styles.offList}>
+      {windows.map((w) => (
+        <OffCard key={w.id} w={w} onShop={(x) => void shop(x)} busy={busy} />
+      ))}
+    </ul>
+  );
+}
+
+/** Below a live window: the other open windows, by place (nothing when there are none). */
+function OtherOpenWindows({ currentId }: { currentId: string }) {
+  const t = useT();
+  const { data, isPending } = useOpenPreorders();
+  const others = (data?.windows ?? []).filter((w) => w.stage === 'OPEN' && w.id !== currentId).sort((x, y) => x.where.localeCompare(y.where));
+  if (!isPending && !others.length) return null;
+  return (
+    <section className={styles.col} aria-labelledby="preorder-others" data-testid="preorder-other-windows">
+      <h2 id="preorder-others" className={styles.h3}>
+        {t('preorder.others.title')}
+      </h2>
+      <p className={styles.muted}>{t('preorder.others.body')}</p>
+      <WindowList windows={others} isPending={isPending} />
+    </section>
+  );
+}
+
+/** No live pre-order for the shopper's place: open and upcoming windows elsewhere ("shop one for family"). */
+export function PreorderOffPage({ city }: { city: string }) {
+  const t = useT();
+  const { data: open, isPending } = useOpenPreorders();
+  const windows = open?.windows ?? [];
   return (
     <div className={styles.page} data-testid="preorder-off-page">
       <div className={styles.offHead}>
         <h1 className={styles.offTitle}>{t('preorder.off.title')}</h1>
         <p className={styles.offBody}>{windows.length ? t('preorder.off.some', { city }) : t('preorder.off.none')}</p>
       </div>
-      {isPending ? (
-        <Skeleton height={220} />
-      ) : (
-        <ul className={styles.offList}>
-          {windows.map((w) => (
-            <OffCard key={w.id} w={w} onShop={(x) => void shop(x)} busy={busy} />
-          ))}
-        </ul>
-      )}
+      <WindowList windows={windows} isPending={isPending} />
     </div>
   );
 }
