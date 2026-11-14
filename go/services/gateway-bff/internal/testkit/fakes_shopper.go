@@ -544,6 +544,21 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 		writeJSON(w, 200, map[string]any{"orgId": ShopperProviderID, "displayName": "Braids by Ama", "timeZone": "America/Chicago", "location": "Houston, TX",
 			"policy": policy, "instantBooking": false, "services": []any{service}, "team": []map[string]any{{"id": "0c0c0c0c-0000-4000-8000-0000000000aa", "displayName": "Ama"}}})
 	})
+	// A published storefront (seller kind) for the shopper routes; other addresses are unpublished.
+	mux.HandleFunc("GET /v1/public/storefronts/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("slug") != "ades-kitchen" {
+			problem(w, 404, "seller.storefront-not-found", "No storefront", nil)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "slug": "ades-kitchen", "name": "Ade's Kitchen", "description": "Home-style Nigerian pantry.",
+			"logoUrl": nil, "brandColor": nil, "contactEmail": "ade@example.com", "publishedAt": "2026-11-10T10:00:00Z", "orgCreatedAt": "2025-02-01T10:00:00Z",
+			"config": map[string]any{"schemaVersion": 1, "theme": map[string]any{"preset": "warm-market", "accent": nil},
+				"hero": map[string]any{"style": "colour", "tagline": "Jollof and more", "bannerUrl": nil, "focalX": 50, "focalY": 50},
+				"announcement": map[string]any{"text": "", "href": nil}, "grid": map[string]any{"columns": 3},
+				"sections": []any{}, "featured": []any{}, "categories": map[string]any{"mode": "auto", "chosen": []any{}},
+				"about": map[string]any{"heading": "", "body": "", "photoUrl": nil}, "policies": map[string]any{"shipping": "", "returns": ""},
+				"contact": map[string]any{"showEmail": true, "phone": "", "hours": ""}, "pickup": map[string]any{"show": false}, "social": []any{}}})
+	})
 	mux.HandleFunc("GET /v1/public/business-pages/{slug}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("slug") == "ades-kitchen" {
 			writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "slug": "ades-kitchen", "kind": "SELLER", "name": "Ade's Kitchen",

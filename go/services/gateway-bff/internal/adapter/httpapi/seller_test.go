@@ -439,6 +439,52 @@ func TestSellerContractConformance(t *testing.T) {
 		"logoUrl": "https://img.afrotransact.dev/a1.webp"}); r.status != 200 || r.json(t)["logoUrl"] != "https://img.afrotransact.dev/a1.webp" {
 		t.Fatalf("business page save = %d %s", r.status, r.body)
 	}
+	// Store page (the branded storefront): defaults first, validation next to the field, optimistic locking, publish, audit, unpublish.
+	sp := b.do("GET", "/v1/seller/store-page", nil)
+	if sp.status != 200 || sp.json(t)["version"] != float64(0) || sp.json(t)["isPublished"] != false || sp.json(t)["canEdit"] != true ||
+		sp.json(t)["draft"].(map[string]any)["theme"].(map[string]any)["preset"] != "clean" {
+		t.Fatalf("store page = %d %s", sp.status, sp.body)
+	}
+	cfg := sp.json(t)["draft"].(map[string]any)
+	cfg["hero"].(map[string]any)["tagline"] = "Jollof and more"
+	cfg["hero"].(map[string]any)["bannerUrl"] = "https://img.afrotransact.dev/storefront/banner.webp"
+	cfg["theme"] = map[string]any{"preset": "warm-market", "accent": "#b45309"}
+	bad := b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": withAccent(cfg, "#ffd400")})
+	if bad.status != 422 || bad.json(t)["code"] != "STORE_ACCENT_LOW_CONTRAST" || bad.json(t)["errors"].(map[string]any)["theme.accent"] == nil {
+		t.Fatalf("low contrast accent = %d %s", bad.status, bad.body)
+	}
+	html := b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": withAbout(cfg, "<script>alert(1)</script>")})
+	if html.status != 422 || html.json(t)["errors"].(map[string]any)["about.body"] == nil {
+		t.Fatalf("markup = %d %s", html.status, html.body)
+	}
+	foreign := cfg
+	foreign["hero"] = map[string]any{"style": "image", "tagline": "", "bannerUrl": "https://evil.example.org/x.jpg", "focalX": 50, "focalY": 50}
+	if r := b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": foreign}); r.status != 422 || r.json(t)["errors"].(map[string]any)["hero.bannerUrl"] == nil {
+		t.Fatalf("foreign image = %d %s", r.status, r.body)
+	}
+	cfg["hero"] = map[string]any{"style": "image", "tagline": "Jollof and more", "bannerUrl": "https://img.afrotransact.dev/storefront/banner.webp", "focalX": 50, "focalY": 50}
+	saved := b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": cfg})
+	if saved.status != 200 || saved.json(t)["version"] != float64(1) || saved.json(t)["hasUnpublishedChanges"] != true {
+		t.Fatalf("store page save = %d %s", saved.status, saved.body)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": cfg}), 409) // stale
+	mustStatus(t, b.do("POST", "/v1/seller/store-page/publish", map[string]any{"version": 0}), 409)
+	if r := b.do("POST", "/v1/seller/store-page/publish", map[string]any{"version": 1}); r.status != 200 || r.json(t)["isPublished"] != true || r.json(t)["published"] == nil {
+		t.Fatalf("publish = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/store-page/audit", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 2 ||
+		r.json(t)["items"].([]any)[0].(map[string]any)["action"] != "PUBLISHED" || r.json(t)["items"].([]any)[0].(map[string]any)["actor"] == "someone-else" {
+		t.Fatalf("audit = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/store-page/preview", nil); r.status != 200 || r.json(t)["preview"] != true || r.json(t)["indexable"] != false || r.json(t)["slug"] != "ades-kitchen" {
+		t.Fatalf("preview = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/store-page/featured-search?q=jollof", nil); r.status != 200 {
+		t.Fatalf("featured search = %d %s", r.status, r.body)
+	}
+	if r := b.do("POST", "/v1/seller/store-page/unpublish", nil); r.status != 200 || r.json(t)["isPublished"] != false {
+		t.Fatalf("unpublish = %d %s", r.status, r.body)
+	}
 	// Run pick lists (S264): the active org's runs, the collected flag from the bag's stage, a run that is not there is 404.
 	if r := b.do("GET", "/v1/seller/run-pickups?orgId=someone-else", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 1 {
 		t.Fatalf("run pickups = %d %s", r.status, r.body)
@@ -879,4 +925,22 @@ func TestComplianceForMembersWhoMayNotSeeAccountHealth(t *testing.T) {
 	if items, _ := got["items"].([]any); len(items) != 0 {
 		t.Fatalf("items = %v, want none", got["items"])
 	}
+}
+
+func withAccent(cfg map[string]any, accent string) map[string]any {
+	out := map[string]any{}
+	for k, v := range cfg {
+		out[k] = v
+	}
+	out["theme"] = map[string]any{"preset": "clean", "accent": accent}
+	return out
+}
+
+func withAbout(cfg map[string]any, body string) map[string]any {
+	out := map[string]any{}
+	for k, v := range cfg {
+		out[k] = v
+	}
+	out["about"] = map[string]any{"heading": "", "body": body, "photoUrl": nil}
+	return out
 }

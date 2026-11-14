@@ -615,6 +615,100 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/store-page:
+    get:
+      tags: [Store page]
+      operationId: getStorePage
+      security: [{sessionCookie: []}]
+      summary: The storefront settings, draft and published (Settings > Store page)
+      description: seller `GET /v1/orgs/{orgId}/store-page` for the active organisation (Team view). `canEdit` and `canPublish` are false for members who may only look.
+      responses:
+        '200': {description: Store page, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Store page]
+      operationId: saveStorePageDraft
+      security: [{sessionCookie: []}]
+      summary: Save the draft (the live page does not change)
+      description: |
+        Team edit (the seller service limits it to the owner and admins). The body is validated: 422 with `fieldErrors`
+        keyed by the config path (`hero.tagline`, `theme.accent`...); `STORE_ACCENT_LOW_CONTRAST` when an accent fails WCAG AA.
+        409 `CONFLICT` when `version` is stale: reload, merge, save again (optimistic locking).
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageDraftInput'}}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/store-page/publish:
+    post:
+      tags: [Store page]
+      operationId: publishStorePage
+      security: [{sessionCookie: []}]
+      summary: Publish the draft (the page goes live at /b/{slug})
+      description: Only an approved organisation can publish (422 `STORE_NOT_APPROVED`). 409 when `version` is not the latest draft. Writes an audit entry.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageVersionInput'}}}}
+      responses:
+        '200': {description: Published, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/store-page/unpublish:
+    post:
+      tags: [Store page]
+      operationId: unpublishStorePage
+      security: [{sessionCookie: []}]
+      summary: Take the page down (/b/{slug} answers 404 until it is published again)
+      description: The published version is kept in the audit trail. Writes an audit entry.
+      responses:
+        '200': {description: Unpublished, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/store-page/audit:
+    get:
+      tags: [Store page]
+      operationId: listStorePageAudit
+      security: [{sessionCookie: []}]
+      summary: Who saved, published and unpublished, newest first (last 50)
+      responses:
+        '200': {description: Audit, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageAudit'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/store-page/preview:
+    get:
+      tags: [Store page]
+      operationId: previewStorePage
+      security: [{sessionCookie: []}]
+      summary: The storefront built from the DRAFT, for the live preview
+      description: Same shape as the public `GET /v1/storefronts/{slug}`, but from the draft and for the signed-in organisation only (works before publishing). Not cached.
+      responses:
+        '200': {description: Storefront, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/store-page/featured-search:
+    get:
+      tags: [Store page]
+      operationId: searchStorePageProducts
+      security: [{sessionCookie: []}]
+      summary: Find the organisation's sellable products to feature (by name)
+      description: Only products that can be shown on the storefront (in stock, real photo, tax decided). Up to 20.
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 80}}
+      responses:
+        '200': {description: Products, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageProductList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/run-pickups:
     get:
       tags: [Orders]
@@ -4336,6 +4430,198 @@ components:
         description: {type: string, maxLength: 500}
         brandColor: {type: string, description: '#rrggbb or empty', maxLength: 7}
         logoUrl: {type: string, description: 'https URL from POST /v1/seller/uploads (purpose storefront), or empty', maxLength: 2048}
+    StoreConfig:
+      type: object
+      description: |
+        How a seller's storefront (`/b/{slug}`) looks and which sections it has. Stored by the seller service as opaque
+        JSON (draft and published); gateway-bff validates and sanitises every field on the way in and again on the way out.
+        Plain text only (line breaks allowed, no HTML); image URLs must be AfroTransact media; links must be https on an allowed host.
+      required: [schemaVersion, theme, hero, announcement, grid, sections, featured, categories, about, policies, contact, pickup, social]
+      properties:
+        schemaVersion: {type: integer, enum: [1]}
+        theme:
+          type: object
+          required: [preset, accent]
+          properties:
+            preset: {type: string, enum: [clean, warm-market, bold, midnight, heritage, fresh]}
+            accent: {type: [string, 'null'], pattern: '^#[0-9a-f]{6}$', description: 'Accent colour. Null uses the preset. Rejected (422 STORE_ACCENT_LOW_CONTRAST) when text on it, or it on the canvas, fails WCAG AA; the text colour on it is computed, never chosen.'}
+        hero:
+          type: object
+          required: [style, tagline, bannerUrl, focalX, focalY]
+          properties:
+            style: {type: string, enum: [image, colour, split]}
+            tagline: {type: string, maxLength: 140}
+            bannerUrl: {type: [string, 'null'], maxLength: 2048}
+            focalX: {type: integer, minimum: 0, maximum: 100, description: 'Percent: where the banner stays in view when cropped'}
+            focalY: {type: integer, minimum: 0, maximum: 100}
+        announcement:
+          type: object
+          required: [text, href]
+          properties:
+            text: {type: string, maxLength: 140}
+            href: {type: [string, 'null'], maxLength: 2048}
+        grid:
+          type: object
+          required: [columns]
+          properties:
+            columns: {type: integer, enum: [3, 4]}
+        sections:
+          type: array
+          description: Order and visibility of the optional sections. The header, hero and All products are always present.
+          maxItems: 6
+          items:
+            type: object
+            required: [id, enabled]
+            properties:
+              id: {type: string, enum: [announcement, featured, categories, about, policies, reviews]}
+              enabled: {type: boolean}
+        featured: {type: array, maxItems: 8, items: {type: string, maxLength: 40}, description: ATINs the seller picked; only the sellable ones are shown}
+        categories:
+          type: object
+          required: [mode, chosen]
+          properties:
+            mode: {type: string, enum: [auto, chosen]}
+            chosen: {type: array, maxItems: 8, items: {type: string, maxLength: 80}}
+        about:
+          type: object
+          required: [heading, body, photoUrl]
+          properties:
+            heading: {type: string, maxLength: 80}
+            body: {type: string, maxLength: 2000}
+            photoUrl: {type: [string, 'null'], maxLength: 2048}
+        policies:
+          type: object
+          required: [shipping, returns]
+          properties:
+            shipping: {type: string, maxLength: 600}
+            returns: {type: string, maxLength: 600}
+        contact:
+          type: object
+          required: [showEmail, phone, hours]
+          properties:
+            showEmail: {type: boolean}
+            phone: {type: string, maxLength: 24}
+            hours: {type: string, maxLength: 200}
+        pickup:
+          type: object
+          required: [show]
+          properties:
+            show: {type: boolean, description: 'Show that customers can collect orders, and the ZIP, when the seller has turned pickup on in Settings > Pickup'}
+        social:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            required: [network, url]
+            properties:
+              network: {type: string, enum: [instagram, facebook, tiktok, x, youtube, whatsapp, website]}
+              url: {type: string, maxLength: 2048}
+    StorePageSettings:
+      type: object
+      required: [slug, name, draft, published, isPublished, version, publishedVersion, hasUnpublishedChanges, updatedAt, publishedAt, canEdit, canPublish, logoUrl, contactEmail, approved]
+      properties:
+        slug: {type: [string, 'null'], description: 'The address /b/{slug}; null until the page is first made'}
+        name: {type: string}
+        logoUrl: {type: [string, 'null'], description: The logo from Business profile (one source)}
+        contactEmail: {type: [string, 'null']}
+        draft: {$ref: '#/components/schemas/StoreConfig'}
+        published: {oneOf: [{$ref: '#/components/schemas/StoreConfig'}, {type: 'null'}]}
+        isPublished: {type: boolean}
+        version: {type: integer, format: int64, description: Optimistic-lock version of the draft; send it back on save (409 when stale)}
+        publishedVersion: {type: [integer, 'null'], format: int64}
+        hasUnpublishedChanges: {type: boolean}
+        updatedAt: {type: [string, 'null'], format: date-time}
+        publishedAt: {type: [string, 'null'], format: date-time}
+        approved: {type: boolean, description: 'Only an approved organisation can publish; its draft can be edited before'}
+        canEdit: {type: boolean}
+        canPublish: {type: boolean}
+    StorePageDraftInput:
+      type: object
+      required: [version, config]
+      properties:
+        version: {type: integer, format: int64}
+        config: {$ref: '#/components/schemas/StoreConfig'}
+    StorePageVersionInput:
+      type: object
+      required: [version]
+      properties:
+        version: {type: integer, format: int64}
+    StorePageAuditEntry:
+      type: object
+      required: [at, action, actor, version]
+      properties:
+        at: {type: string, format: date-time}
+        action: {type: string, enum: [DRAFT_SAVED, PUBLISHED, UNPUBLISHED]}
+        actor: {type: string, description: The member's display name}
+        version: {type: integer, format: int64}
+    StorePageAudit:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StorePageAuditEntry'}}
+    StorefrontCategory:
+      type: object
+      required: [name, count]
+      properties:
+        name: {type: string}
+        count: {type: integer}
+    StorefrontProducts:
+      type: object
+      required: [hits, total, page, pageCount, size, categories, prices]
+      properties:
+        hits: {type: array, items: {type: object, additionalProperties: true, description: 'ProductSummary, see gateway-bff.yaml'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+        pageCount: {type: integer}
+        categories: {type: array, items: {$ref: '#/components/schemas/StorefrontCategory'}}
+        prices:
+          type: array
+          items:
+            type: object
+            required: [value, label, count]
+            properties:
+              value: {type: string}
+              label: {type: string}
+              count: {type: integer}
+    Storefront:
+      type: object
+      description: |
+        A seller's public storefront: the published settings plus real data, in one response. Only sellable products
+        appear (in stock, a real photograph, a resolved tax decision). `reviews` is null when the products have no
+        reviews (never "0 reviews"). Carrier names and fulfilment details are never present.
+      required: [slug, name, logoUrl, description, config, preview, indexable, verified, sellingSinceYear, contactEmail, pickup, categories, featured, reviews, products]
+      properties:
+        slug: {type: string}
+        name: {type: string}
+        logoUrl: {type: [string, 'null']}
+        description: {type: [string, 'null'], description: The business description (used when About has no text)}
+        config: {$ref: '#/components/schemas/StoreConfig'}
+        preview: {type: boolean, description: True for the seller's draft preview}
+        indexable: {type: boolean, description: 'Approved, published and at least one live product; the storefront adds the environment rules'}
+        verified: {type: boolean, description: True only for an approved organisation}
+        sellingSinceYear: {type: [integer, 'null'], description: 'Year the organisation joined AfroTransact'}
+        contactEmail: {type: [string, 'null'], description: Only when the seller chose to show it}
+        pickup:
+          type: [object, 'null']
+          description: Only when the seller shows it AND pickup is on in Settings > Pickup
+          required: [zip]
+          properties:
+            zip: {type: string}
+        categories: {type: array, items: {$ref: '#/components/schemas/StorefrontCategory'}}
+        featured: {type: array, items: {type: object, additionalProperties: true, description: 'ProductSummary, see gateway-bff.yaml'}}
+        reviews:
+          type: [object, 'null']
+          required: [average, count]
+          properties:
+            average: {type: number}
+            count: {type: integer}
+        products: {$ref: '#/components/schemas/StorefrontProducts'}
+    StorePageProductList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true, description: 'ProductSummary, see gateway-bff.yaml'}}
     ShipFromAddress:
       type: object
       required: [id, label, name, company, phone, line1, line2, city, state, postalCode, country, isDefault, version, position, afrotransactPickup]

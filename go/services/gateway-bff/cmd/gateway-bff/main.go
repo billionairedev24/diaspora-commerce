@@ -34,6 +34,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
 const serviceName = "gateway-bff"
@@ -245,6 +246,15 @@ func run() error {
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
 		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store, limiter: store, estimator: estimator, shippingSync: shippingSync,
 		taxMetrics: taxmetrics.New(reg), zipLookup: zipLookup, places: places, arrival: arrival}, services, log)
+	// A seller's branded storefront /b/{slug}: public read, and the Settings > Store page editor with its draft preview.
+	storePolicy := domain.StorePolicy{MediaPrefixes: cfg.StoreMediaPrefixes(loader.Env())}
+	var storePickup port.DeliveryFactsClient
+	if !up.Carrier.Disabled {
+		storePickup = upstreams.NewDeliveryFacts(nil, client("carrier-gateway", up.Carrier), client("geo", up.Geo), serviceTokens)
+	}
+	storefronts := app.NewStorefrontService(upstreams.NewStorefronts(client("seller", up.Seller)), services.Search, storePickup, storePolicy, nil)
+	services.Shopper.Storefronts = storefronts
+	services.SellerStorePage = app.NewSellerStorePageService(sellerDeps, storefronts, storePolicy)
 	// Staff console (cmd/gateway-bff/staff.go).
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,

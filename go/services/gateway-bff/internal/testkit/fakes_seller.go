@@ -820,6 +820,64 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		page["description"], page["brandColor"], page["logoUrl"] = b["description"], b["brandColor"], b["logoUrl"]
 		writeJSON(w, 200, page)
 	})
+	// Store page (the seller's branded storefront): a draft, a published copy, a version for optimistic locking, an audit trail.
+	store := struct {
+		draft, published any
+		version          int64
+		audit            []map[string]any
+	}{}
+	storeView := func() map[string]any {
+		return map[string]any{"draft": store.draft, "published": store.published, "isPublished": store.published != nil, "version": store.version,
+			"publishedVersion": nil, "hasUnpublishedChanges": store.draft != nil, "updatedAt": nil, "publishedAt": nil, "approved": true}
+	}
+	mux.HandleFunc("GET /v1/orgs/{id}/store-page", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		writeJSON(w, 200, storeView())
+	})
+	mux.HandleFunc("PUT /v1/orgs/{id}/store-page", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b struct {
+			Config  any   `json:"config"`
+			Version int64 `json:"version"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b.Version != store.version {
+			problem(w, 409, "seller.store-page-stale", "Changed by someone else", nil)
+			return
+		}
+		store.draft, store.version = b.Config, store.version+1
+		store.audit = append([]map[string]any{{"at": "2026-11-14T10:00:00Z", "action": "DRAFT_SAVED", "actor": "someone-else", "version": store.version}}, store.audit...)
+		writeJSON(w, 200, storeView())
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/store-page/publish", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b struct {
+			Version int64 `json:"version"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if store.draft == nil || b.Version != store.version {
+			problem(w, 409, "seller.store-page-stale", "Changed by someone else", nil)
+			return
+		}
+		store.published = store.draft
+		store.audit = append([]map[string]any{{"at": "2026-11-14T10:05:00Z", "action": "PUBLISHED", "actor": "someone-else", "version": store.version}}, store.audit...)
+		writeJSON(w, 200, storeView())
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/store-page/unpublish", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		store.published = nil
+		store.audit = append([]map[string]any{{"at": "2026-11-14T10:10:00Z", "action": "UNPUBLISHED", "actor": "someone-else", "version": store.version}}, store.audit...)
+		writeJSON(w, 200, storeView())
+	})
+	mux.HandleFunc("GET /v1/orgs/{id}/store-page/audit", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		writeJSON(w, 200, store.audit)
+	})
 	mux.HandleFunc("GET /v1/orgs/{id}/ship-from-addresses", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()

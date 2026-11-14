@@ -4430,6 +4430,92 @@ components:
         description: {type: string, maxLength: 500}
         brandColor: {type: string, description: '#rrggbb or empty', maxLength: 7}
         logoUrl: {type: string, description: 'https URL from POST /v1/seller/uploads (purpose storefront), or empty', maxLength: 2048}
+    StoreConfig:
+      type: object
+      description: |
+        How a seller's storefront (`/b/{slug}`) looks and which sections it has. Stored by the seller service as opaque
+        JSON (draft and published); gateway-bff validates and sanitises every field on the way in and again on the way out.
+        Plain text only (line breaks allowed, no HTML); image URLs must be AfroTransact media; links must be https on an allowed host.
+      required: [schemaVersion, theme, hero, announcement, grid, sections, featured, categories, about, policies, contact, pickup, social]
+      properties:
+        schemaVersion: {type: integer, enum: [1]}
+        theme:
+          type: object
+          required: [preset, accent]
+          properties:
+            preset: {type: string, enum: [clean, warm-market, bold, midnight, heritage, fresh]}
+            accent: {type: [string, 'null'], pattern: '^#[0-9a-f]{6}$', description: 'Accent colour. Null uses the preset. Rejected (422 STORE_ACCENT_LOW_CONTRAST) when text on it, or it on the canvas, fails WCAG AA; the text colour on it is computed, never chosen.'}
+        hero:
+          type: object
+          required: [style, tagline, bannerUrl, focalX, focalY]
+          properties:
+            style: {type: string, enum: [image, colour, split]}
+            tagline: {type: string, maxLength: 140}
+            bannerUrl: {type: [string, 'null'], maxLength: 2048}
+            focalX: {type: integer, minimum: 0, maximum: 100, description: 'Percent: where the banner stays in view when cropped'}
+            focalY: {type: integer, minimum: 0, maximum: 100}
+        announcement:
+          type: object
+          required: [text, href]
+          properties:
+            text: {type: string, maxLength: 140}
+            href: {type: [string, 'null'], maxLength: 2048}
+        grid:
+          type: object
+          required: [columns]
+          properties:
+            columns: {type: integer, enum: [3, 4]}
+        sections:
+          type: array
+          description: Order and visibility of the optional sections. The header, hero and All products are always present.
+          maxItems: 6
+          items:
+            type: object
+            required: [id, enabled]
+            properties:
+              id: {type: string, enum: [announcement, featured, categories, about, policies, reviews]}
+              enabled: {type: boolean}
+        featured: {type: array, maxItems: 8, items: {type: string, maxLength: 40}, description: ATINs the seller picked; only the sellable ones are shown}
+        categories:
+          type: object
+          required: [mode, chosen]
+          properties:
+            mode: {type: string, enum: [auto, chosen]}
+            chosen: {type: array, maxItems: 8, items: {type: string, maxLength: 80}}
+        about:
+          type: object
+          required: [heading, body, photoUrl]
+          properties:
+            heading: {type: string, maxLength: 80}
+            body: {type: string, maxLength: 2000}
+            photoUrl: {type: [string, 'null'], maxLength: 2048}
+        policies:
+          type: object
+          required: [shipping, returns]
+          properties:
+            shipping: {type: string, maxLength: 600}
+            returns: {type: string, maxLength: 600}
+        contact:
+          type: object
+          required: [showEmail, phone, hours]
+          properties:
+            showEmail: {type: boolean}
+            phone: {type: string, maxLength: 24}
+            hours: {type: string, maxLength: 200}
+        pickup:
+          type: object
+          required: [show]
+          properties:
+            show: {type: boolean, description: 'Show that customers can collect orders, and the ZIP, when the seller has turned pickup on in Settings > Pickup'}
+        social:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            required: [network, url]
+            properties:
+              network: {type: string, enum: [instagram, facebook, tiktok, x, youtube, whatsapp, website]}
+              url: {type: string, maxLength: 2048}
     StorePageSettings:
       type: object
       required: [slug, name, draft, published, isPublished, version, publishedVersion, hasUnpublishedChanges, updatedAt, publishedAt, canEdit, canPublish, logoUrl, contactEmail, approved]

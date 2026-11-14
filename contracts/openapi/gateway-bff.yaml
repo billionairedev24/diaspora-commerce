@@ -3799,12 +3799,13 @@ paths:
         - {name: slug, in: path, required: true, schema: {type: string, maxLength: 80}}
         - {name: q, in: query, schema: {type: string, maxLength: 80}}
         - {name: category, in: query, schema: {type: string, maxLength: 80}}
-        - {name: price, in: query, schema: {type: string, enum: [u10, 10-25, 25-50, 50-100, o100]}}
+        - {name: price, in: query, schema: {type: string, enum: [u10, 10-25, 25-50, o50]}}
         - {name: sort, in: query, schema: {type: string, enum: [relevance, price_asc, price_desc, rating, newest]}}
         - {name: page, in: query, schema: {type: integer, minimum: 1}}
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 48}}
       responses:
         '200': {description: Products, content: {application/json: {schema: {$ref: '#/components/schemas/StorefrontProducts'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/business-pages/{slug}:
@@ -7368,7 +7369,7 @@ components:
             style: {type: string, enum: [image, colour, split]}
             tagline: {type: string, maxLength: 140}
             bannerUrl: {type: [string, 'null'], maxLength: 2048}
-            focalX: {type: integer, minimum: 0, maximum: 100, description: Percent, where the banner stays in view when cropped}
+            focalX: {type: integer, minimum: 0, maximum: 100, description: 'Percent: where the banner stays in view when cropped'}
             focalY: {type: integer, minimum: 0, maximum: 100}
         announcement:
           type: object
