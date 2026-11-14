@@ -269,7 +269,7 @@ def load_env(path):
     return env
 
 
-PROJECT_NAME = "AfroTransact"
+PROJECT_NAME = "AfroTransact v2"
 # Company-managed Scrum: custom fields (story points, acceptance criteria) and workflows behave predictably.
 SCRUM_TEMPLATE = "com.pyxis.greenhopper.jira:gh-simplified-scrum-classic"
 
@@ -384,9 +384,10 @@ class Sync:
 
 def story_extra(sync, row, itype):
     extra = {}
-    fid, _ = sync.field(itype, "story point estimate", "story points")
-    if fid and row["Story Points"]:
-        extra[fid] = float(row["Story Points"])
+    for name in ("story point estimate", "story points"):
+        fid, _ = sync.field(itype, name)
+        if fid and row["Story Points"]:
+            extra[fid] = float(row["Story Points"])
     if "priority" in sync.fields.get(itype, {}) and row["Priority"]:
         extra["priority"] = {"name": row["Priority"]}
     fid, f = sync.field(itype, "acceptance criteria")
@@ -469,6 +470,8 @@ def main():
             if only and s["Issue Id"] not in only and e["Issue Id"] not in only:
                 continue
             labels = [PROGRAMME_LABEL, "bk-" + s["Issue Id"]] + [re.sub(r"[^\w.-]", "-", l) for l in s["Labels"].split()]
+            if s["Status"].lower() == "in review":
+                labels.append("in-review")  # the default Scrum workflow has no In Review column
             try:
                 skey, act = sync.upsert(s["Issue Id"], "story", s["Summary"], adf_story(s), sorted(set(labels)),
                                         parent=ekey, extra=story_extra(sync, s, "story"))
