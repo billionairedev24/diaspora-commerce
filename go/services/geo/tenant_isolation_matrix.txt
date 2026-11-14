@@ -12,6 +12,7 @@ POST /v1/geocode | PUBLIC | stateless calculation | n/a
 GET /v1/zones | ORG_SCOPED_LIST | signed-in only; callers without geo:zones:write see active zones only (drafts are staff data) | TestZoneListHidesDraftZonesFromEveryoneWithoutZoneWrite
 POST /v1/zones | STAFF_ONLY | geo:zones:write (staff roles only) | TestZoneListHidesDraftZonesFromEveryoneWithoutZoneWrite
 GET /v1/zips/nearby | PUBLIC | reference data | n/a
+GET /v1/zips/by-city | PUBLIC | reference data | n/a
 GET /v1/places/countries | PUBLIC | reference data | n/a
 GET /v1/places/countries/{country}/regions | PUBLIC | reference data | n/a
 GET /v1/places/countries/{country}/regions/{region}/cities | PUBLIC | reference data | n/a

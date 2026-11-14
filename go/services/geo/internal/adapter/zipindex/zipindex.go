@@ -21,8 +21,9 @@ import (
 var files embed.FS
 
 type zipIndexImpl struct {
-	byZip map[string]domain.ZipPlace
-	all   []domain.ZipPlace
+	byZip  map[string]domain.ZipPlace
+	byCity map[string][]domain.ZipPlace
+	all    []domain.ZipPlace
 }
 
 var _ port.ZipIndex = (*zipIndexImpl)(nil)
@@ -43,7 +44,7 @@ func Parse(data []byte) (port.ZipIndex, error) {
 		return nil, fmt.Errorf("zipindex: open: %w", err)
 	}
 	defer func() { _ = zr.Close() }()
-	ix := &zipIndexImpl{byZip: map[string]domain.ZipPlace{}}
+	ix := &zipIndexImpl{byZip: map[string]domain.ZipPlace{}, byCity: map[string][]domain.ZipPlace{}}
 	sc := bufio.NewScanner(zr)
 	for sc.Scan() {
 		f := strings.Split(sc.Text(), "\t")
@@ -58,6 +59,8 @@ func Parse(data []byte) (port.ZipIndex, error) {
 		p := domain.ZipPlace{Zip: f[0], City: f[1], State: f[2], Lat: lat, Lon: lon}
 		ix.byZip[p.Zip] = p
 		ix.all = append(ix.all, p)
+		key := cityKey(p.City, p.State)
+		ix.byCity[key] = append(ix.byCity[key], p)
 	}
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("zipindex: read: %w", err)
@@ -110,4 +113,31 @@ func (ix *zipIndexImpl) Nearby(lat, lon, miles float64, limit int) []domain.Near
 		out = out[:limit]
 	}
 	return out
+}
+
+func cityKey(city, state string) string {
+	return strings.ToUpper(strings.Join(strings.Fields(city), " ")) + "|" + strings.ToUpper(strings.TrimSpace(state))
+}
+
+func (ix *zipIndexImpl) ByCity(city, state string) (domain.CityZips, bool) {
+	places := ix.byCity[cityKey(city, state)]
+	if len(places) == 0 {
+		return domain.CityZips{}, false
+	}
+	var lat, lon float64
+	for _, p := range places {
+		lat, lon = lat+p.Lat, lon+p.Lon
+	}
+	lat, lon = lat/float64(len(places)), lon/float64(len(places))
+	out := domain.CityZips{City: places[0].City, State: places[0].State, Zips: make([]string, 0, len(places))}
+	best := math.MaxFloat64
+	for _, p := range places {
+		out.Zips = append(out.Zips, p.Zip)
+		d := domain.HaversineMiles(lat, lon, p.Lat, p.Lon)
+		if d < best || (d == best && p.Zip < out.Zip) {
+			best, out.Zip = d, p.Zip
+		}
+	}
+	sort.Strings(out.Zips)
+	return out, true
 }

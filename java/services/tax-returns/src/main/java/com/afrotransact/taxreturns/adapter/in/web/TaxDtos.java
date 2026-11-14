@@ -37,7 +37,19 @@ final class TaxDtos {
 
     @Schema(name = "TaxShipTo")
     record ShipTo(@Size(max = 2) String country, @NotBlank @Size(max = 10) String state,
-                  @NotBlank @Size(max = 10) String postalCode, @Size(max = 120) String city) {
+                  @NotBlank @Size(max = 10) String postalCode, @Size(max = 120) String city,
+                  @Schema(description = "How exactly the place was known by the caller: ZIP (default; a typed or saved ZIP) or "
+                          + "CITY (a ZIP resolved from a city name, so the rate is the city's representative one). "
+                          + "Reported back as addressPrecision CITY; it never changes the rate looked up.")
+                  @Pattern(regexp = "ZIP|CITY") String precision) {
+
+        ShipTo(String country, String state, String postalCode, String city) {
+            this(country, state, postalCode, city, null);
+        }
+
+        boolean cityPrecision() {
+            return "CITY".equals(precision);
+        }
     }
 
     @Schema(name = "TaxQuoteLine")
@@ -103,6 +115,12 @@ final class TaxDtos {
                     r.addressPrecision(), d == null ? null : d.explanation());
         }
 
+        QuoteLineResponse withCityPrecision() {
+            return !"ZIP".equals(addressPrecision) ? this : new QuoteLineResponse(lineId, sellerOrgId, taxCategory, taxableMinor, rate,
+                    taxMinor, jurisdiction, localJurisdiction, collectedBy, shippingTaxMinor, taxCode, decisionStatus, outcome,
+                    internalTaxCode, providerTaxCode, ruleVersion, blockedReason, "CITY", explanation);
+        }
+
         private static String providerId(String quoteProvider) {
             return "STRIPE_TAX".equals(quoteProvider) ? "STRIPE" : "AVALARA".equals(quoteProvider) ? "AVALARA" : "";
         }
@@ -114,6 +132,12 @@ final class TaxDtos {
                                  + "could not take the quote; see fallbackLines)") String provider,
                          @Schema(description = "Lines the provider could not take when provider is RULES-FALLBACK")
                          List<String> fallbackLines, List<QuoteLineResponse> lines) {
+
+        /** The same quote with CITY precision on every line that was looked up by ZIP (the caller resolved the ZIP from a city). */
+        QuoteResponse withCityPrecision() {
+            return new QuoteResponse(currency, jurisdiction, collectedBy, totalTaxMinor, provider, fallbackLines,
+                    lines.stream().map(QuoteLineResponse::withCityPrecision).toList());
+        }
 
         static QuoteResponse of(TaxQuote q) {
             return new QuoteResponse(q.currency(), q.jurisdiction(), q.collectedBy().name(), q.totalTaxMinor(),

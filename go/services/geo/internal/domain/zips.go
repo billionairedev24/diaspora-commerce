@@ -30,3 +30,13 @@ func HaversineMiles(lat1, lon1, lat2, lon2 float64) float64 {
 	a := math.Sin(dp/2)*math.Sin(dp/2) + math.Cos(p1)*math.Cos(p2)*math.Sin(dl/2)*math.Sin(dl/2)
 	return 2 * earthRadiusMiles * math.Asin(math.Min(1, math.Sqrt(a)))
 }
+
+// CityZips are the ZIPs the table holds for one city. Zip is the representative one: the ZIP whose centroid is nearest
+// the mean of the city's ZIP centroids (ties: the lowest ZIP), so the answer is stable and central, never a guess outside
+// the table.
+type CityZips struct {
+	City  string   `json:"city"`
+	State string   `json:"state"`
+	Zip   string   `json:"zip"`
+	Zips  []string `json:"zips"`
+}

@@ -57,7 +57,8 @@ class TaxController {
                     + "half up once per line. Non-facilitator states and non-US addresses get no tax.")
     @PostMapping("/v1/tax/quotes")
     QuoteResponse quote(@Valid @RequestBody QuoteRequest body) {
-        return QuoteResponse.of(tax.quote(body.toCommand()));
+        QuoteResponse out = QuoteResponse.of(tax.quote(body.toCommand()));
+        return body.shipTo().cityPrecision() ? out.withCityPrecision() : out;
     }
 
     @Operation(summary = "The rate table: state rules and local ZIP rates (tax:read)")

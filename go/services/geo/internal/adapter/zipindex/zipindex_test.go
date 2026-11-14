@@ -54,3 +54,34 @@ func TestNearbyLimit(t *testing.T) {
 		t.Fatalf("limit 3 gave %d", len(got))
 	}
 }
+
+func TestByCityHoustonTexasHasRealZips(t *testing.T) {
+	ix, err := zipindex.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, ok := ix.ByCity(" houston ", "tx")
+	if !ok || c.City != "Houston" || c.State != "TX" || len(c.Zips) < 20 {
+		t.Fatalf("Houston TX = %+v ok=%v", c, ok)
+	}
+	inTable := false
+	for _, z := range c.Zips {
+		if z == c.Zip {
+			inTable = true
+		}
+	}
+	p, found := ix.Lookup(c.Zip)
+	if !inTable || !found || p.City != "Houston" || p.State != "TX" {
+		t.Fatalf("representative %s must be one of the city's ZIPs, got %+v", c.Zip, p)
+	}
+	again, _ := ix.ByCity("Houston", "TX")
+	if again.Zip != c.Zip {
+		t.Fatalf("representative ZIP must be stable: %s vs %s", again.Zip, c.Zip)
+	}
+	if _, ok := ix.ByCity("Nowhereville", "TX"); ok {
+		t.Fatal("unknown city must not resolve")
+	}
+	if pa, _ := ix.ByCity("Houston", "PA"); pa.Zip == c.Zip {
+		t.Fatal("state must separate cities of the same name")
+	}
+}

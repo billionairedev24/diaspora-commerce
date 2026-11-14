@@ -151,6 +151,35 @@ paths:
                         distanceMiles: {type: number}
                         zips: {type: array, items: {type: string}}
         '400': {$ref: '#/components/responses/Problem'}
+  /v1/zips/by-city:
+    get:
+      tags: [Addresses]
+      operationId: zipsByCity
+      summary: The ZIPs of a city from the US ZIP table, with the representative one
+      description: |
+        For a place known only by city and state (for example detected from edge headers): the ZIPs the embedded table
+        holds for the city and `zip`, the one whose centroid is nearest the centre of the city's ZIPs (stable, never
+        outside the table). Reference data, cacheable for a day. Callers that use `zip` for a rate must say the place
+        is known to city precision (tax-returns `shipTo.precision = CITY`).
+      security: []
+      parameters:
+        - {name: city, in: query, required: true, schema: {type: string, maxLength: 120}}
+        - {name: state, in: query, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
+      responses:
+        '200':
+          description: The city's ZIPs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [city, state, zip, zips]
+                properties:
+                  city: {type: string}
+                  state: {type: string}
+                  zip: {type: string, description: Representative ZIP}
+                  zips: {type: array, items: {type: string}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/reverse:
     get:
       tags: [Addresses]

@@ -79,4 +79,7 @@ type ZipIndex interface {
 	// Nearby returns the distinct cities (city + state) with a ZIP centroid within miles of the point, nearest
 	// first, at most limit of them.
 	Nearby(lat, lon, miles float64, limit int) []domain.NearbyCity
+	// ByCity returns the ZIPs of a city (case-insensitive name, two-letter state) with the representative one (the ZIP
+	// whose centroid is nearest the centre of the city's ZIPs); ok is false when the table has no such city.
+	ByCity(city, state string) (domain.CityZips, bool)
 }
