@@ -149,8 +149,8 @@ func (s *staffTaxImpl) reviewSettingsView(ctx context.Context, sc staffCtx, st j
 		history = append(history, jobj{"at": jstr(h, "changedAt"), "changedBy": jstr(h, "changedBy"), "fromLabel": settingsSummary(from, names),
 			"toLabel": settingsSummary(to, names), "summary": settingsSummary(to, names), "reason": jstr(h, "reason")})
 	}
-	nameAll(ctx, sc, history, personRef("changedBy", "Changed by"))
-	nameAll(ctx, sc, []jobj{st}, personRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, history, staffRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, []jobj{st}, staffRef("changedBy", "Changed by"))
 	return jobj{"mode": mode, "modeLabel": reviewModeName(mode), "modeExplain": taxReviewModes[mode].explain, "options": options, "categories": categories,
 		"alwaysReviewNames": alwaysNames, "alwaysReviewStatuses": statuses, "auditPercent": percent,
 		"auditExplain": "About " + strconv.Itoa(percent) + " in every 100 items the system approves are also put in the Audit sample. They stay live. A reviewer confirms each one or moves it to the right category, which closes it until it is reviewed again.",

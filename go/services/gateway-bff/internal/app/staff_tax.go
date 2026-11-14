@@ -367,8 +367,8 @@ func (s *staffTaxImpl) profileView(ctx context.Context, sc staffCtx, p jobj) job
 	canChange := sc.access.Can(permTaxClassifyAdmin)
 	actions := profileActions(status, canChange)
 	history := objs(p, "history")
-	nameAll(ctx, sc, history, personRef("changedBy", "Changed by"))
-	nameAll(ctx, sc, []jobj{p}, personRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, history, staffRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, []jobj{p}, staffRef("changedBy", "Changed by"))
 	return jobj{"categoryCode": jstr(p, "categoryCode"), "name": jstr(p, "name"), "department": jstr(p, "department"), "departmentName": jstr(p, "departmentName"),
 		"status": status, "statusLabel": taxGateLabel(status), "statusExplain": taxGates[status].explain, "defaultOutcome": jstr(p, "defaultOutcome"),
 		"defaultOutcomeLabel": jstr(p, "defaultOutcomeLabel"), "scenarioCount": p["scenarioCount"], "openDecision": p["openDecision"], "ruleVersion": jstr(p, "ruleVersion"),

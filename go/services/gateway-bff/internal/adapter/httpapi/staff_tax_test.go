@@ -76,6 +76,8 @@ type fakeTax struct {
 	liveCalls   int
 	shadow      map[string]any
 	review      map[string]any
+	// extra are record ids listed after the four fixed ones (tests of one behaviour add their own).
+	extra []string
 }
 
 func newFakeTax(t *testing.T) *fakeTax {
@@ -206,6 +208,13 @@ func (f *fakeTax) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJ(w, 200, map[string]any{"id": strings.TrimPrefix(p, "/v1/products/"), "images": []any{map[string]any{"url": "https://media.afrotransact.test/" + strings.TrimPrefix(p, "/v1/products/") + ".webp"}}})
+	case p == "/v1/variants/ATH0ZXZ594": // the variant; its product is ATH1GHCM73 (the page address, not a key of tax-returns)
+		writeJ(w, 200, map[string]any{
+			"product": map[string]any{"id": "00000000-0000-0000-0000-0000000000b1", "atin": "ATH1GHCM73", "title": "Ofada rice 5 lb",
+				"images": []any{map[string]any{"url": "https://media.afrotransact.test/ofada.webp"}}, "variants": []any{map[string]any{"atin": "ATH0ZXZ594"}, map[string]any{"atin": "ATH0ZXZ595"}}},
+			"variant": map[string]any{"atin": "ATH0ZXZ594", "options": map[string]any{"size": "5 lb", "grain": "Parboiled"}, "images": []any{}}})
+	case strings.HasPrefix(p, "/v1/variants/"), strings.HasPrefix(p, "/v1/products/atin/"):
+		problemJ(w, 404, "catalog.variant-not-found")
 	case p == "/v1/orders/ord-1":
 		writeJ(w, 200, map[string]any{"id": "ord-1", "orderNumber": "AT-000231"})
 	case p == "/v1/tax-gate/live-without-decision":
@@ -222,7 +231,7 @@ func (f *fakeTax) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // list answers like tax-returns' list: a light record (no decisions, evidence or audit) that names its sellers by id.
 func (f *fakeTax) list(q url.Values) map[string]any {
-	ids := []string{"AT-NUTS", "AT-EBOOK", "AT-DONE", "AT-AUDIT"}
+	ids := append([]string{"AT-NUTS", "AT-EBOOK", "AT-DONE", "AT-AUDIT"}, f.extra...)
 	if q.Get("sort") == "title" {
 		sort.Slice(ids, func(i, j int) bool { return f.records[ids[i]]["title"].(string) < f.records[ids[j]]["title"].(string) })
 		if q.Get("order") == "desc" {
@@ -785,8 +794,13 @@ func TestStaffTaxReviewQueueSearchFilterAndSort(t *testing.T) {
 	if got := atins("/v1/staff/tax/reviews?status=ALL"); len(got) != 4 {
 		t.Errorf("any state lists records in every review state: %v", got)
 	}
-	if last := f.calls[len(f.calls)-1]; strings.Contains(last, "status=") {
-		t.Errorf("any state must not send a status to tax-returns: %v", last)
+	for i := len(f.calls) - 1; i >= 0; i-- {
+		if strings.Contains(f.calls[i], "/v1/tax/variant-classifications?") {
+			if strings.Contains(f.calls[i], "status=") {
+				t.Errorf("any state must not send a status to tax-returns: %v", f.calls[i])
+			}
+			break
+		}
 	}
 	do("admin", "GET", "/v1/staff/tax/reviews?reason=BECAUSE", nil, 422)
 	do("admin", "GET", "/v1/staff/tax/reviews?sort=sellers,asc", nil, 422)
@@ -802,6 +816,77 @@ func TestStaffTaxReviewQueueSearchFilterAndSort(t *testing.T) {
 	}
 	if reasons := page["reasons"].([]any); len(reasons) != 10 || reasons[0].(map[string]any)["value"] != "CONFLICT" {
 		t.Errorf("reasons offered = %v", reasons)
+	}
+}
+
+// TestStaffTaxReviewNamesTheItemByVariantATIN: tax records are keyed by the VARIANT ATIN (ATH0ZXZ594) and the product has
+// its own (ATH1GHCM73). A record made before catalog's event carried the title and product id has neither, and the queue
+// showed a blank item with no photo: the BFF asks catalog about the variant, so the name, the variant in words and the photo
+// come from the product that variant belongs to, and the product's own ATIN is never used as a key.
+func TestStaffTaxReviewNamesTheItemByVariantATIN(t *testing.T) {
+	f, do, _ := taxBFF(t)
+	f.records["ATH0ZXZ594"] = map[string]any{"atin": "ATH0ZXZ594", "ownerOrgId": "org-1", "categoryCode": "rice-grains", "status": "PENDING_REVIEW", "reviewReasonCode": "NEW_LISTING", "facts": map[string]any{},
+		"resolution": map[string]any{"status": "NEEDS_APPROVAL", "missingFacts": []any{}, "ruleVersion": "tx-2026.11.09-draft.1"}, "decisions": []any{}, "audit": []any{}, "classifiedBy": "usr-seller", "classifiedAt": "2026-11-08T13:00:00Z"}
+	f.extra = []string{"ATH0ZXZ594"}
+
+	page := do("admin", "GET", "/v1/staff/tax/reviews", nil, 200)
+	var row map[string]any
+	for _, r := range items(t, page) {
+		if r["atin"] == "ATH0ZXZ594" {
+			row = r
+		}
+	}
+	if row == nil {
+		t.Fatalf("the variant is not in the queue: %v", page)
+	}
+	if row["title"] != "Ofada rice 5 lb" || row["variantLabel"] != "Parboiled · 5 lb" || row["imageUrl"] != "https://media.afrotransact.test/ofada.webp" {
+		t.Errorf("name, variant and photo come from the variant's product: title=%q variant=%q photo=%q", row["title"], row["variantLabel"], row["imageUrl"])
+	}
+	sheet := do("admin", "GET", "/v1/staff/tax/reviews/ATH0ZXZ594", nil, 200)
+	if sheet["title"] != "Ofada rice 5 lb" || sheet["variantLabel"] != "Parboiled · 5 lb" || sheet["imageUrl"] != "https://media.afrotransact.test/ofada.webp" {
+		t.Errorf("the sheet names the item too: %v / %v / %v", sheet["title"], sheet["variantLabel"], sheet["imageUrl"])
+	}
+	for _, c := range f.calls {
+		if strings.Contains(c, "ATH1GHCM73") {
+			t.Errorf("the product's own ATIN is not a key anywhere: %s", c)
+		}
+	}
+}
+
+// TestStaffTaxReviewNamesWhoDecided: the person who decided is named, "Former staff member" when identity no longer knows
+// them, and the signed-in reviewer is never unknown to themselves even without the right to read other users.
+func TestStaffTaxReviewNamesWhoDecided(t *testing.T) {
+	f, do, _ := taxBFF(t)
+	done := func(atin, by string) map[string]any {
+		return map[string]any{"atin": atin, "title": atin, "ownerOrgId": "org-1", "categoryCode": "packaged-snacks", "status": "APPROVED", "facts": map[string]any{},
+			"resolution": map[string]any{"status": "RESOLVED", "outcome": "TAXABLE", "missingFacts": []any{}, "ruleVersion": "x"}, "decisions": []any{}, "reviewedBy": by, "reviewedAt": "2026-11-07T08:00:00Z",
+			"audit": []any{map[string]any{"at": "2026-11-07T08:00:00Z", "actor": by, "action": "APPROVED", "reason": "Label matches"}}}
+	}
+	f.records["AT-GONE"], f.records["AT-MINE"] = done("AT-GONE", "stf-left-2025"), done("AT-MINE", "stf-catalog")
+	f.extra = []string{"AT-GONE", "AT-MINE"}
+	decidedBy := func(who, atin string) string {
+		for _, r := range items(t, do(who, "GET", "/v1/staff/tax/reviews?status=APPROVED", nil, 200)) {
+			if r["atin"] == atin {
+				return r["reviewedByName"].(string)
+			}
+		}
+		return "<missing>"
+	}
+	if got := decidedBy("admin", "AT-GONE"); got != "Former staff member" {
+		t.Errorf("a person identity cannot name = %q", got)
+	}
+	if got := decidedBy("catalog", "AT-MINE"); got != "Test catalog" {
+		t.Errorf("the reviewer deciding as themselves (no access:read) = %q", got)
+	}
+	if got := decidedBy("admin", "AT-DONE"); got != "Ada Okafor" {
+		t.Errorf("a staff member identity names = %q", got)
+	}
+	sheet := do("admin", "GET", "/v1/staff/tax/reviews/AT-GONE", nil, 200)
+	if got := sheet["decision"].(map[string]any)["reviewedByName"]; got != "Former staff member" {
+		t.Errorf("sheet decision = %v", got)
+	}
+	if got := sheet["audit"].([]any)[0].(map[string]any)["actorName"]; got != "Former staff member" {
+		t.Errorf("history actor = %v", got)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -81,9 +82,9 @@ func (s *staffTaxImpl) Reviews(ctx context.Context, c *domain.Caller, q url.Valu
 	list := jpage(raw)
 	names := s.categoryNames(ctx, sc)
 	nameSystemActors(list.items, "reviewedBy", "classifiedBy")
-	nameAll(ctx, sc, list.items, personRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
+	nameAll(ctx, sc, list.items, staffRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
 	nameSellers(ctx, sc, list.items)
-	addProductImages(ctx, sc, list.items)
+	addCatalogDetails(ctx, sc, list.items)
 	rows := make([]jobj, 0, len(list.items))
 	for _, it := range list.items {
 		rows = append(rows, reviewRow(it, names))
@@ -227,39 +228,108 @@ func sellerNames(it jobj) []string {
 	return []string{}
 }
 
-// reviewImageLookups caps the product reads one page of the queue makes for its thumbnails.
+// reviewImageLookups caps the catalog reads one page of the queue makes for names and thumbnails.
 const reviewImageLookups = 50
 
-// addProductImages puts the first public photo of each record's product on it ("imageUrl"), one catalog read per
-// distinct product. A product catalog cannot answer for is left without a photo; the row still names it.
-func addProductImages(ctx context.Context, sc staffCtx, items []jobj) {
+// catalogDetail is what catalog says about one variant of a tax record.
+type catalogDetail struct{ title, variantLabel, imageURL string }
+
+// publicImage is the first photo with a public address (a photo held for review has none yet).
+func publicImage(m jobj) string {
+	for _, img := range objs(m, "images") {
+		if u := jstr(img, "url"); strings.HasPrefix(u, "https://") {
+			return u
+		}
+	}
+	return ""
+}
+
+// subObject is the JSON object under key, or an empty one.
+func subObject(o jobj, key string) jobj {
+	m, _ := o[key].(map[string]any)
+	return m
+}
+
+// variantLabelOf says which variant it is in words ("6 oz · Salted"): the option values in the order of their names.
+func variantLabelOf(variant jobj) string {
+	opts, _ := variant["options"].(map[string]any)
+	keys := make([]string, 0, len(opts))
+	for k := range opts {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	var out []string
+	for _, k := range keys {
+		if v, _ := opts[k].(string); strings.TrimSpace(v) != "" {
+			out = append(out, strings.TrimSpace(v))
+		}
+	}
+	return strings.Join(out, " · ")
+}
+
+// addCatalogDetails puts the product's name ("title"), the variant in words ("variantLabel") and the first public photo
+// ("imageUrl") on each record, one catalog read per distinct variant.
+//
+// Tax records are keyed by the VARIANT ATIN, and so is the lookup: GET /v1/variants/{atin} answers with the product and
+// that variant. (The stored title and product id are only there when catalog's tax-facts event carried them: a record
+// made before that has neither, and the queue then showed a blank item.) A variant catalog cannot find falls back to
+// the product id the record remembers; one catalog cannot answer for keeps the stored title and has no photo, and the
+// row still shows its ATIN. Never the product's own ATIN: that is the page address, not a key of tax-returns.
+func addCatalogDetails(ctx context.Context, sc staffCtx, items []jobj) {
 	if sc.up.Catalog == nil {
 		return
 	}
-	var ids []string
+	type ask struct{ atin, productID string }
+	var asks []ask
+	seen := map[string]bool{}
 	for _, it := range items {
-		if id := jstr(it, "productId"); id != "" && !slices.Contains(ids, id) {
-			ids = append(ids, id)
+		atin := jstr(it, "atin")
+		if atin != "" && !seen[atin] {
+			seen[atin] = true
+			asks = append(asks, ask{atin, jstr(it, "productId")})
 		}
 	}
-	if len(ids) > reviewImageLookups {
-		ids = ids[:reviewImageLookups]
+	if len(asks) > reviewImageLookups {
+		asks = asks[:reviewImageLookups]
 	}
-	images := fanOut(ctx, ids, func(ctx context.Context, id string) string {
-		var product jobj
-		if sc.get(ctx, sc.up.Catalog, "/v1/products/"+url.PathEscape(id), nil, &product) != nil {
-			return ""
-		}
-		for _, img := range objs(product, "images") {
-			if u := jstr(img, "url"); strings.HasPrefix(u, "https://") {
-				return u
+	var mu sync.Mutex
+	found := map[string]catalogDetail{}
+	ids := make([]string, 0, len(asks))
+	byAtin := map[string]ask{}
+	for _, a := range asks {
+		ids = append(ids, a.atin)
+		byAtin[a.atin] = a
+	}
+	fanOut(ctx, ids, func(ctx context.Context, atin string) string {
+		var d catalogDetail
+		var lookup jobj
+		if sc.get(ctx, sc.up.Catalog, "/v1/variants/"+url.PathEscape(atin), nil, &lookup) == nil {
+			product, variant := subObject(lookup, "product"), subObject(lookup, "variant")
+			d = catalogDetail{title: strings.TrimSpace(jstr(product, "title")), variantLabel: variantLabelOf(variant), imageURL: firstNonEmpty(publicImage(variant), publicImage(product))}
+			if len(objs(product, "variants")) <= 1 {
+				d.variantLabel = ""
+			}
+		} else if id := byAtin[atin].productID; id != "" {
+			var product jobj
+			if sc.get(ctx, sc.up.Catalog, "/v1/products/"+url.PathEscape(id), nil, &product) == nil {
+				d = catalogDetail{title: strings.TrimSpace(jstr(product, "title")), imageURL: publicImage(product)}
 			}
 		}
-		return ""
+		mu.Lock()
+		found[atin] = d
+		mu.Unlock()
+		return atin
 	})
 	for _, it := range items {
-		if u := images[jstr(it, "productId")]; u != "" {
-			it["imageUrl"] = u
+		d := found[jstr(it, "atin")]
+		if d.title != "" {
+			it["title"] = d.title
+		}
+		if d.variantLabel != "" {
+			it["variantLabel"] = d.variantLabel
+		}
+		if d.imageURL != "" {
+			it["imageUrl"] = d.imageURL
 		}
 	}
 }
@@ -285,7 +355,7 @@ func reviewRow(it jobj, names map[string]string) jobj {
 	return jobj{"atin": jstr(it, "atin"), "gtin": jstr(it, "gtin"), "title": jstr(it, "title"), "sellers": sellerNames(it), "categoryCode": cat,
 		"categoryName": firstNonEmpty(names[cat], domain.Humanize(cat)), "status": status, "statusLabel": taxRecordStatus[status],
 		"why": reviewWhy(it), "reviewReasonCode": jstr(it, "reviewReasonCode"), "reviewReasonLabel": reviewReasonLabel(jstr(it, "reviewReasonCode")),
-		"imageUrl": jstr(it, "imageUrl"), "proposed": proposedOf(it), "classifiedAt": jstr(it, "classifiedAt"), "classifiedByName": jstr(it, "classifiedByName"),
+		"variantLabel": jstr(it, "variantLabel"), "imageUrl": jstr(it, "imageUrl"), "proposed": proposedOf(it), "classifiedAt": jstr(it, "classifiedAt"), "classifiedByName": jstr(it, "classifiedByName"),
 		"reviewedAt": jstr(it, "reviewedAt"), "reviewedByName": jstr(it, "reviewedByName"), "ruleVersion": jstr(it, "ruleVersion"),
 		"auditSample": boolean(it, "auditSample"), "autoApproved": status == "APPROVED" && jstr(it, "reviewedByName") == autoApprovalWho}
 }
@@ -362,12 +432,23 @@ func (s *staffTaxImpl) reviewView(ctx context.Context, sc staffCtx, rec jobj) jo
 	}
 	nameSystemActors([]jobj{rec}, "reviewedBy", "classifiedBy")
 	nameSystemActors(objs(rec, "audit"), "actor")
-	nameAll(ctx, sc, []jobj{rec}, personRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
+	nameAll(ctx, sc, []jobj{rec}, staffRef("reviewedBy", "Decided by"), personRef("classifiedBy", "Submitted by"))
 	nameAll(ctx, sc, objs(rec, "decisions"), sellerRef("sellerOrgId"))
 	nameSellers(ctx, sc, []jobj{rec})
-	addProductImages(ctx, sc, []jobj{rec})
+	addCatalogDetails(ctx, sc, []jobj{rec})
 	nameAll(ctx, sc, objs(rec, "evidence"), personRef("uploadedBy", "Uploaded by"))
-	nameAll(ctx, sc, objs(rec, "audit"), personRef("actor", "Person"))
+	// A decision in the history was taken by staff (a person who left reads "Former staff member"); a submission or a change
+	// of facts came from the seller's side.
+	var staffMoves, sellerMoves []jobj
+	for _, a := range objs(rec, "audit") {
+		if act := jstr(a, "action"); act == "SUBMITTED" || act == "FACTS_CHANGED" || act == "EVIDENCE_ADDED" {
+			sellerMoves = append(sellerMoves, a)
+		} else {
+			staffMoves = append(staffMoves, a)
+		}
+	}
+	nameAll(ctx, sc, staffMoves, staffRef("actor", "Person"))
+	nameAll(ctx, sc, sellerMoves, personRef("actor", "Person"))
 	row := reviewRow(rec, map[string]string{cat: jstr(profile, "name")})
 	proposed := proposedOf(rec)
 	proposed["because"] = ""
@@ -382,7 +463,7 @@ func (s *staffTaxImpl) reviewView(ctx context.Context, sc staffCtx, rec jobj) jo
 	status := jstr(rec, "status")
 	canDecide := sc.access.Can(permTaxClassifyAdmin)
 	view := jobj{"atin": row["atin"], "gtin": row["gtin"], "title": row["title"], "sellers": row["sellers"], "categoryCode": cat, "categoryName": row["categoryName"],
-		"departmentName": taxDepartmentName(jstr(profile, "department")), "productTypeCode": jstr(rec, "productTypeCode"), "status": status, "statusLabel": row["statusLabel"], "why": row["why"], "reviewReasonCode": row["reviewReasonCode"], "reviewReasonLabel": row["reviewReasonLabel"], "imageUrl": row["imageUrl"],
+		"departmentName": taxDepartmentName(jstr(profile, "department")), "productTypeCode": jstr(rec, "productTypeCode"), "status": status, "statusLabel": row["statusLabel"], "why": row["why"], "reviewReasonCode": row["reviewReasonCode"], "reviewReasonLabel": row["reviewReasonLabel"], "variantLabel": row["variantLabel"], "imageUrl": row["imageUrl"],
 		"profileStatus": profileStatus, "profileStatusLabel": taxGateLabel(profileStatus), "proposed": proposed,
 		"facts": factValues(rec, facts, profile), "sellerListings": sellerListings(rec, facts), "evidence": evidenceView(rec, facts),
 		"decision":         jobj{"reviewedByName": row["reviewedByName"], "reviewedAt": row["reviewedAt"], "ruleVersion": jstr(rec, "ruleVersion")},

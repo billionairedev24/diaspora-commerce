@@ -43,7 +43,7 @@ func TestStaffTaxAuditSampleTab(t *testing.T) {
 	if !strings.Contains(row["why"].(string), "confirm it or move it") {
 		t.Fatalf("why = %v", row["why"])
 	}
-	if got := strings.Join(f.calls[len(f.calls)-3:], " "); !strings.Contains(got, "auditSample=true") {
+	if got := strings.Join(f.calls, " "); !strings.Contains(got, "auditSample=true") {
 		t.Fatalf("tax-returns was not asked for the audit sample: %v", f.calls)
 	}
 	do("admin", "GET", "/v1/staff/tax/reviews?status=NOPE", nil, 422)

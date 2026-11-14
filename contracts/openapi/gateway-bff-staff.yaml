@@ -11014,9 +11014,10 @@ components:
       properties:
         atin: {type: string}
         gtin: {type: string}
-        title: {type: string}
+        title: {type: string, description: "The product's name: read from catalog by the variant ATIN when tax-returns has none yet, never blank for a variant catalog knows"}
+        variantLabel: {type: string, description: 'Which variant it is, from its options ("5 lb · Parboiled"); empty for a one-variant product'}
         sellers: {type: array, items: {type: string}, description: 'Seller names (never ids; "Unknown seller" when the directory cannot name one)'}
-        imageUrl: {type: string, description: 'First public photo of the product; empty when catalog has none'}
+        imageUrl: {type: string, description: "First public photo of the variant (else the product's); empty when catalog has none"}
         categoryCode: {type: string}
         categoryName: {type: string}
         status: {type: string}

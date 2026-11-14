@@ -90,6 +90,15 @@ func personRef(idKey, label string) nameRef {
 	return newRef(nameUser, idKey, label, "Unknown user")
 }
 
+// staffRef names a staff member who decided something (approved, rejected, moved a category). One identity can no longer
+// name is somebody who left: "Former staff member", never "Unknown user".
+func staffRef(idKey, label string) nameRef {
+	return newRef(nameUser, idKey, label, formerStaff)
+}
+
+// formerStaff is shown for a staff member identity cannot name any more (their account was removed or disabled).
+const formerStaff = "Former staff member"
+
 func routeRef(idKey string) nameRef { return newRef(nameRoute, idKey, "Route", "Unknown route") }
 
 // orderRef names an order id by its order number ("orderId" → "orderNumber").
@@ -343,6 +352,11 @@ func (n *staffNames) lookupUsers(ctx context.Context, sc staffCtx, ids []string)
 	return fanOut(ctx, ids, func(ctx context.Context, id string) string {
 		var u jobj
 		if sc.get(ctx, sc.up.Identity, "/v1/admin/users/"+url.PathEscape(id), nil, &u) != nil {
+			// identity's user read needs access:read, which most staff do not hold: the signed-in staff member still
+			// knows their own name from their session, so the person looking is never "unknown" to themselves.
+			if id == sc.me.ID {
+				return firstNonEmpty(strings.TrimSpace(sc.me.FirstName+" "+sc.me.LastName), sc.me.Email)
+			}
 			return ""
 		}
 		return firstNonEmpty(strings.TrimSpace(jstr(u, "name")), strings.TrimSpace(jstr(u, "firstName")+" "+jstr(u, "lastName")), jstr(u, "email"))

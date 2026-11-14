@@ -113,8 +113,8 @@ func (s *staffTaxImpl) methodView(ctx context.Context, sc staffCtx, st jobj) job
 		history = append(history, jobj{"at": jstr(h, "changedAt"), "changedBy": jstr(h, "changedBy"), "fromLabel": taxMethodName(jstr(h, "from")), "toLabel": taxMethodName(jstr(h, "to")),
 			"reason": jstr(h, "reason")})
 	}
-	nameAll(ctx, sc, history, personRef("changedBy", "Changed by"))
-	nameAll(ctx, sc, []jobj{st}, personRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, history, staffRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, []jobj{st}, staffRef("changedBy", "Changed by"))
 	view := jobj{"method": method, "methodLabel": taxMethodName(method), "methodExplain": taxMethods[method].explain, "shadowProvider": shadow, "shadowLabel": "Off",
 		"options": options, "shadowOptions": shadowOptions, "providers": providers, "history": history, "changedByName": jstr(st, "changedByName"), "changedAt": jstr(st, "changedAt"),
 		"activeProvider": activeProvider(st), "runbookPath": cutoverRunbook, "canConfigure": sc.access.Can(permTaxConfigure),

@@ -184,7 +184,7 @@ func (s *staffTaxImpl) CodeMap(ctx context.Context, c *domain.Caller, q url.Valu
 	if err := sortBy(rows, q["sort"], "internalTaxCode", "categoryName", "outcomeLabel", "providerCode", "stateLabel"); err != nil {
 		return nil, err
 	}
-	nameAll(ctx, sc, slicePage(rows, page, size), personRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, slicePage(rows, page, size), staffRef("changedBy", "Changed by"))
 	cats := map[string]string{}
 	for _, e := range all {
 		cats[jstr(e, "categoryCode")] = jstr(e, "categoryName")
@@ -238,7 +238,7 @@ func (s *staffTaxImpl) UpdateCode(ctx context.Context, c *domain.Caller, interna
 	if err != nil {
 		return nil, err
 	}
-	nameAll(ctx, sc, []jobj{out}, personRef("changedBy", "Changed by"))
+	nameAll(ctx, sc, []jobj{out}, staffRef("changedBy", "Changed by"))
 	st := codeState(out)
 	out["state"], out["stateLabel"] = st, codeStateLabels[st]
 	out["outcomeLabel"] = taxOutcomeLabel(jstr(out, "outcome"))
