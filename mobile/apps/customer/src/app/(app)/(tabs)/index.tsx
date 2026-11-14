@@ -33,7 +33,9 @@ export default function Home() {
   const def = addresses.data?.find((a) => a.isDefault) ?? addresses.data?.[0];
   const active = orders.data?.find((o) => o.shipments.some((s) => stepIndex(s.status) < 4 && !['returned', 'cancelled'].includes(s.status)) && o.status !== 'refunded');
   const hits = products.data?.hits ?? [];
-  const reorder = hits.slice(0, 4);
+  // "Buy again" is only ever products from the shopper's own orders (by ATIN), in stock, with a photo; there is no popularity data, so nothing else fills the shelf.
+  const orderedAtins = new Set((orders.data ?? []).flatMap((o) => o.shipments.flatMap((s) => s.items.map((i) => i.atin))));
+  const reorder = hits.filter((p) => orderedAtins.has(p.atin) && p.inStock && !!p.imageUrl).slice(0, 4);
   const sameDay = hits.filter((p) => p.delivery.days === 0).slice(0, 4);
   const refresh = useRefresh(products, orders, addresses);
 
@@ -79,11 +81,6 @@ export default function Home() {
           </Pressable>
         ))}
       </View>
-      <View style={styles.hero}>
-        <AppText variant="label" color={t.gold['500']}>{tr('cu.index.justLanded')}</AppText>
-        <AppText variant="title" color={c.textInverse}>{tr('cu.index.freshFromAccra')}</AppText>
-        <AppText variant="small" color={t.ink['200']}>{tr('cu.index.shitoPalmOilAndJollof')}</AppText>
-      </View>
       <Pressable accessibilityRole="button" onPress={() => router.push('/lola')} style={styles.lola}>
         <View style={styles.lolaIcon}><Sparkle size={20} weight="fill" color={c.badgeAiText} /></View>
         <View style={{ flex: 1 }}>
@@ -96,8 +93,8 @@ export default function Home() {
         {reorder.length ? (
           <View style={{ gap: sp['2'] }}>
             <View style={styles.sectionHead}>
-              <AppText variant="heading">{orders.data?.length ? tr('cu.index.buyAgain') : tr('cu.index.popularNow')}</AppText>
-              {orders.data?.length ? <AppText variant="caption" color={c.textMuted}>{tr('cu.index.basedOnYourOrders')}</AppText> : null}
+              <AppText variant="heading">{tr('cu.index.buyAgain')}</AppText>
+              <AppText variant="caption" color={c.textMuted}>{tr('cu.index.basedOnYourOrders')}</AppText>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: sp['3'] }}>
               {reorder.map((p) => (
@@ -140,7 +137,6 @@ const styles = StyleSheet.create({
   cats: { flexDirection: 'row', justifyContent: 'space-between' },
   cat: { alignItems: 'center', gap: 4, width: 64 },
   catIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  hero: { borderRadius: t.radius.lg, padding: sp['5'], backgroundColor: t.ink['900'], gap: sp['1'] },
   lola: { flexDirection: 'row', alignItems: 'center', gap: sp['3'], padding: 14, borderRadius: t.radius.md, borderWidth: 1, borderColor: c.border },
   lolaIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.badgeAiBg, alignItems: 'center', justifyContent: 'center' },
   sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },

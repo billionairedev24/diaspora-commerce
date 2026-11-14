@@ -32,7 +32,7 @@ const (
 var tileRuleOptions = []domain.FieldOption{
 	{Value: ruleTopRated, Label: "Top rated in a department"},
 	{Value: ruleNew, Label: "New in a department"},
-	{Value: ruleBestseller, Label: "Best sellers in a department"},
+	{Value: ruleBestseller, Label: "Top rated in a department"},
 	{Value: ruleSearch, Label: "Search results for words"},
 	{Value: ruleFastest, Label: "Fastest delivery from AfroTransact"},
 	{Value: ruleNear, Label: "Ships from near the shopper (their city, state or region)"},

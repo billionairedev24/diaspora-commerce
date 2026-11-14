@@ -208,7 +208,7 @@ func defaultPlacements() domain.Placements {
 		{ID: "deliverable-fast", Title: "Get it by {day}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "deliverable-fast", Limit: 24}},
 		{ID: "near-you", Title: "Shipping from near {city}", Href: "/s", Source: domain.RailSource{Kind: "near-you", Limit: 24}},
 		{ID: "fastest", Title: "Fast delivery to {city}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "fulfilled-fastest", Limit: 24}},
-		{ID: "popular", Title: "Popular right now", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: domain.SortRating, Limit: 24}},
+		{ID: "popular", Title: "Top rated", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: domain.SortRating, Limit: 24}},
 	}}
 }
 

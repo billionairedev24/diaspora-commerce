@@ -26,7 +26,7 @@ photo. A product without reviews is never shown as "0 reviews" and is never put 
 | 10,000 | Everything above, never more than 12 modules. Which departments, products and communities show rotates from visit to visit (next section). |
 
 Services appears in the menu and on the home whenever any provider exists in the market. With a ZIP it says "Services near
-{city}"; without one, or when none serves that ZIP, it says "Popular services".
+{city}"; without one, or when none serves that ZIP, it says "Services you can book".
 
 ### Different views every visit
 

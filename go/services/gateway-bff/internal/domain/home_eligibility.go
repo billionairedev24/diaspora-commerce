@@ -241,7 +241,7 @@ func decide(d ModuleDecision, key string, r ModuleRule, sig HomeSignals) ModuleD
 			return show(fmt.Sprintf("%d providers serve this place.", sig.ServiceProviders))
 		}
 		if sig.ServiceProvidersAll >= r.MinProducts && sig.ServiceProvidersAll > 0 {
-			return show(fmt.Sprintf("No provider serves this place yet; %d providers are listed in the market (popular services).", sig.ServiceProvidersAll))
+			return show(fmt.Sprintf("No provider serves this place yet; %d providers are listed in the market (services you can book).", sig.ServiceProvidersAll))
 		}
 		return hide(ReasonNothing, "No service provider is listed in this market yet.")
 	case ModPreorder:

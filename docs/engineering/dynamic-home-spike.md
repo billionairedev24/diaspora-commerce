@@ -116,7 +116,7 @@ HTML because of per-visitor data.
 | Deals | discount rule (10 percent or more off list) | 6 eligible deals, 2 or more sellers | Countdown only when staff set an end |
 | Department tiles | live taxonomy + counts | 2 or more departments with 1 or more eligible products; tile photo = best eligible product of that department | Biggest departments first, capped at 8, link to the department page |
 | Groceries rail | department Groceries | 6 eligible products | Same mechanism generates "Top in {department}" for the biggest departments |
-| Services near you | bookings (providers by ZIP) | 1 or more provider serving the place; else "Popular services" with 3 or more providers market-wide; "Book again" for signed-in with past bookings | Cards are services (provider, from price, real photo), not products |
+| Services near you | bookings (providers by ZIP) | 1 or more provider serving the place; else "Services you can book" (not "popular": we have no popularity data) with 3 or more providers market-wide; "Book again" for signed-in with past bookings | Cards are services (provider, from price, real photo), not products |
 | Communities (conditional) | product attribute facet | 3 or more communities, each with 8 or more eligible products and 2 or more sellers | Never shown with fewer; photo = a real top product |
 | New arrivals | newest eligible products | 8 products, newest not older than 30 days, 1 or more seller | Doubles as the cold-start rail |
 | Top sellers | rating-weighted | 8 eligible products with a real rating, 2 or more sellers | Never shows "0 reviews" |
