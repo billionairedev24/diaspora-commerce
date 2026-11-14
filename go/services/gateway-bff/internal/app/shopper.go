@@ -269,6 +269,8 @@ func methodKey(deliveryMethod, serviceLevel string) string {
 		return "afrotransact_delivery"
 	case "PICKUP":
 		return "pickup"
+	case "SELLER_SHIPS":
+		return domain.ModeSellerShips
 	}
 	if lv := strings.ToLower(serviceLevel); lv == "express" || lv == "overnight" || lv == "two_day" {
 		return "express"
@@ -296,7 +298,7 @@ func toOrderSummary(o port.UpOrder) domain.OrderSummary {
 		}
 		out.Shipments = append(out.Shipments, domain.OrderShipment{ShipmentID: firstNonEmpty(s.ShipmentID, s.ID), Label: s.Label,
 			SellerName: s.SellerName, Lines: lines,
-			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, CancellableUntil: optStr(s.CancellableUntil), Carrier: optStr(s.Carrier),
+			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, CancellableUntil: optStr(s.CancellableUntil),
 			TrackingNumber: optStr(s.TrackingNumber), PromisedBy: optStr(s.PromisedBy), DeliveredAt: optStr(s.DeliveredAt),
 			DeliveryCode: optStr(s.HandoverCode), Returnable: s.Returnable, ReturnWindowEndsAt: optStr(s.ReturnWindowEndsAt),
 			ProblemReportOnly: s.ProblemReportOnly})
@@ -353,9 +355,16 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 		ItemsMinor: o.ItemsMinor, ShippingMinor: o.ShippingMinor, TaxMinor: o.TaxMinor, DiscountMinor: o.DiscountMinor,
 		TotalMinor: o.TotalMinor, ShipTo: sum.ShipTo, ShippingAddress: orderAddress(o.ShippingAddress), Shipments: []domain.ShipmentDetail{}}
 	for _, sh := range o.Shipments {
+		mode := domain.FulfilmentModeOf(sh.FulfilmentType, sh.DeliveryMethod, sh.LocalDelivery != nil)
+		method := methodKey(sh.DeliveryMethod, sh.ServiceLevel)
+		if mode == domain.ModeSellerShips {
+			// A seller-packed shipment the old checkout labelled "AfroTransact Delivery" is still shipped by its seller.
+			method = domain.ModeSellerShips
+		}
 		d := domain.ShipmentDetail{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: strings.ToLower(sh.Status),
-			StatusLabel: statusLabel(sh.Status), Items: sh.Items, SellerName: sh.SellerName, DeliveryMethod: methodKey(sh.DeliveryMethod, sh.ServiceLevel),
-			Cancellable: sh.Cancellable, CancellableUntil: optStr(sh.CancellableUntil), Carrier: optStr(sh.Carrier), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
+			StatusLabel: statusLabel(sh.Status), Items: sh.Items, SellerName: sh.SellerName, DeliveryMethod: method, FulfilmentMode: mode,
+			// Carrier names are never shown to customers: the tracking number is all they get.
+			Cancellable: sh.Cancellable, CancellableUntil: optStr(sh.CancellableUntil), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
 			PromisedBy: optStr(sh.PromisedBy), DeliveredAt: optStr(sh.DeliveredAt), DeliveryCode: optStr(sh.HandoverCode),
 			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline), Returnable: sh.Returnable,
 			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly, DeliveryFeeRule: sh.DeliveryFeeRule}
@@ -370,7 +379,10 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 		for _, t := range sh.Timeline {
 			entries = append(entries, proofEntry{to: t.To, at: t.At, proof: t.Proof})
 		}
-		d.Proof = deliveredProof(entries)
+		if domain.DeliveredByAfroTransact(mode) {
+			// Delivery proof exists only when AfroTransact delivered it; a seller-shipped order never shows one.
+			d.Proof = deliveredProof(entries)
+		}
 		for _, l := range sh.Lines {
 			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, ProductATIN: l.ProductATIN, Title: l.Title,
 				ImageURL: optStr(l.ImageURL), Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, ItemsMinor: l.ItemsMinor})
@@ -442,7 +454,7 @@ func (s *customerOrdersServiceImpl) Tracking(ctx context.Context, c *domain.Call
 		st := strings.ToLower(sh.Status)
 		t := domain.TrackedShipment{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: st,
 			ETA: optStr(firstNonEmpty(sh.PromisedBy, sh.PromisedFrom)), Method: methodKey(sh.DeliveryMethod, sh.ServiceLevel),
-			Perishable: sh.Perishable, DeliveryCode: optStr(sh.HandoverCode), Carrier: optStr(sh.Carrier),
+			Perishable: sh.Perishable, DeliveryCode: optStr(sh.HandoverCode),
 			TrackingNumber: optStr(sh.TrackingNumber), Items: []domain.TrackedItem{}, Timeline: timeline(sh.Timeline)}
 		if sh.Preferences != nil && sh.Preferences.Handover != "" {
 			t.Handover = ptr(strings.ToLower(sh.Preferences.Handover))

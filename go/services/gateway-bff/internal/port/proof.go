@@ -11,6 +11,8 @@ type UpDeliveryProof struct {
 	SafePlace        string `json:"safePlace"`
 	FailureReason    string `json:"failureReason"`
 	PhotoAssetID     string `json:"photoAssetId"`
+	// PhotoAssetIDs are every photo of the proof (staff may attach several); empty for a driver's single photo.
+	PhotoAssetIDs []string `json:"photoAssetIds"`
 	SignatureAssetID string `json:"signatureAssetId"`
 }
 

@@ -18,9 +18,13 @@ func deliveredProof(entries []proofEntry) *domain.DeliveryProof {
 		if !strings.EqualFold(e.to, "delivered") || p == nil || p.HandoverMethod == "" {
 			continue
 		}
+		photos := p.PhotoAssetIDs
+		if len(photos) == 0 && p.PhotoAssetID != "" {
+			photos = []string{p.PhotoAssetID}
+		}
 		out = &domain.DeliveryProof{Method: strings.ToUpper(p.HandoverMethod), RecipientName: optStr(p.RecipientName),
 			Relationship: optStr(p.Relationship), SafePlace: optStr(p.SafePlace), At: e.at,
-			PhotoAssetID: p.PhotoAssetID, SignatureAssetID: p.SignatureAssetID}
+			PhotoAssetID: p.PhotoAssetID, PhotoAssetIDs: photos, SignatureAssetID: p.SignatureAssetID, PhotoURLs: []string{}}
 	}
 	return out
 }
@@ -40,7 +44,8 @@ func attachProofLinks(ctx context.Context, links port.ProofLinks, proofs []*doma
 	ids := []string{}
 	for _, p := range proofs {
 		if p != nil {
-			ids = append(ids, p.PhotoAssetID, p.SignatureAssetID)
+			ids = append(ids, proofPhotoIDs(p)...)
+			ids = append(ids, p.SignatureAssetID)
 		}
 	}
 	if len(ids) == 0 {
@@ -51,13 +56,30 @@ func attachProofLinks(ctx context.Context, links port.ProofLinks, proofs []*doma
 		if p == nil {
 			continue
 		}
-		if u := urls[p.PhotoAssetID]; u != "" {
-			p.PhotoURL = &u
+		for _, id := range proofPhotoIDs(p) {
+			if u := urls[id]; u != "" {
+				p.PhotoURLs = append(p.PhotoURLs, u)
+			}
+		}
+		if len(p.PhotoURLs) > 0 {
+			first := p.PhotoURLs[0]
+			p.PhotoURL = &first
 		}
 		if u := urls[p.SignatureAssetID]; u != "" {
 			p.SignatureURL = &u
 		}
 	}
+}
+
+// proofPhotoIDs are a proof's photos: staff may attach several; a driver's proof has the one.
+func proofPhotoIDs(p *domain.DeliveryProof) []string {
+	if len(p.PhotoAssetIDs) > 0 {
+		return p.PhotoAssetIDs
+	}
+	if p.PhotoAssetID != "" {
+		return []string{p.PhotoAssetID}
+	}
+	return nil
 }
 
 // enrichStaffProof adds photoUrl and signatureUrl to the proof of every timeline entry of a raw orders-service order
@@ -124,6 +146,9 @@ func proofSections(order jobj) []domain.DetailSection {
 		case "SAFE_PLACE":
 			add("Handed over", "Left in a safe place", "text")
 			add("Left at", jstr(proof, "safePlace"), "text")
+		case "PHOTO":
+			add("Handed over", "Delivered by AfroTransact staff, with a photo", "text")
+			add("Received by", jstr(proof, "recipientName"), "text")
 		}
 		add("Photo", jstr(proof, "photoUrl"), "image")
 		add("Signature", jstr(proof, "signatureUrl"), "image")

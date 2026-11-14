@@ -73,3 +73,46 @@ func TestStaffSeesTheProofWithItsPicturesAndPosition(t *testing.T) {
 		t.Fatal("no proof, no section")
 	}
 }
+
+// Delivery by AfroTransact staff: several photos, an optional recipient, no driver handover details.
+func TestStaffPhotoProofCarriesEveryPhotoAndTheRecipient(t *testing.T) {
+	entries := []proofEntry{{to: "DELIVERED", at: "2026-11-14T16:00:00Z", proof: &port.UpDeliveryProof{HandoverMethod: "PHOTO", RecipientName: "Ada Obi",
+		PhotoAssetID: "p1", PhotoAssetIDs: []string{"p1", "p2", "p3"}}}}
+	p := deliveredProof(entries)
+	if p == nil || p.Method != "PHOTO" || *p.RecipientName != "Ada Obi" || len(p.PhotoAssetIDs) != 3 {
+		t.Fatalf("proof = %+v", p)
+	}
+	attachProofLinks(context.Background(), fakeProofLinks{"p1": "https://m/p1", "p3": "https://m/p3"}, []*domain.DeliveryProof{p})
+	if len(p.PhotoURLs) != 2 || p.PhotoURLs[0] != "https://m/p1" || p.PhotoURLs[1] != "https://m/p3" || *p.PhotoURL != "https://m/p1" {
+		t.Fatalf("a photo that cannot be signed is left out and the first one stays photoUrl: %+v", p.PhotoURLs)
+	}
+	// No recipient named is fine: the customer is told only when it was delivered.
+	if q := deliveredProof([]proofEntry{{to: "delivered", at: "x", proof: &port.UpDeliveryProof{HandoverMethod: "PHOTO", PhotoAssetID: "p1"}}}); q == nil || q.RecipientName != nil || len(q.PhotoAssetIDs) != 1 {
+		t.Fatalf("proof without recipient = %+v", q)
+	}
+}
+
+func TestFulfilmentModeDecidesWhoMayShowProof(t *testing.T) {
+	cases := []struct {
+		ft, dm string
+		local  bool
+		want   string
+		proof  bool
+	}{
+		{"SELLER_FULFILLED", "SELLER_SHIPS", false, domain.ModeSellerShips, false},
+		{"SELLER_FULFILLED", "CARRIER", false, domain.ModeSellerShips, false},
+		// A package the old checkout mislabelled: AfroTransact Delivery with no seller-store snapshot is shipped by its seller.
+		{"SELLER_FULFILLED", "AFROTRANSACT_DELIVERY", false, domain.ModeSellerShips, false},
+		{"SELLER_FULFILLED", "AFROTRANSACT_DELIVERY", true, domain.ModeSellerStore, true},
+		{"FBA_AFROTRANSACT", "AFROTRANSACT_DELIVERY", false, domain.ModeFulfilled, true},
+		{"RETAIL_1P", "AFROTRANSACT_DELIVERY", false, domain.ModeFulfilled, true},
+		{"SELLER_FULFILLED", "PICKUP", false, domain.ModePickup, false},
+		{"PREORDER", "AFROTRANSACT_DELIVERY", false, domain.ModePreorderRun, true},
+	}
+	for _, c := range cases {
+		got := domain.FulfilmentModeOf(c.ft, c.dm, c.local)
+		if got != c.want || domain.DeliveredByAfroTransact(got) != c.proof {
+			t.Errorf("%s/%s local=%v: mode %s proof %v, want %s %v", c.ft, c.dm, c.local, got, domain.DeliveredByAfroTransact(got), c.want, c.proof)
+		}
+	}
+}

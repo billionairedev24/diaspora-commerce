@@ -15,7 +15,7 @@ import (
 const proofLinkTTL = 5 * 60
 
 // maxProofAssets bounds the lookups one page makes (a photo and a signature per delivered shipment).
-const maxProofAssets = 12
+const maxProofAssets = 40
 
 type proofLinksImpl struct {
 	c      httpclient.Client

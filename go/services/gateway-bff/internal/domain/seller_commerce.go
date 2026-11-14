@@ -185,7 +185,7 @@ func CanBuyLabel(fulfilment, deliveryMethod, status, tracking string) bool {
 	if fulfilment != ShipsFromSeller || tracking != "" {
 		return false
 	}
-	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" {
+	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" || dm == "SELLER_SHIPS" {
 		return false
 	}
 	return slices.Contains(labelStatuses, status)
@@ -258,8 +258,13 @@ type SellerShipment struct {
 	Status         string               `json:"status"`
 	StatusLabel    string               `json:"statusLabel"`
 	Fulfilment     string               `json:"fulfilment"`
-	Perishable     bool                 `json:"perishable"`
-	Lines          []SellerShipmentLine `json:"lines"`
+	// FulfilmentMode is seller_ships, afrotransact_delivery (the seller opted in), fulfilled_by_afrotransact, pickup or preorder_run.
+	FulfilmentMode string `json:"fulfilmentMode"`
+	// NeedsShipDetails: the next step is "Mark shipped" and the seller ships it themselves, so it needs a tracking number or
+	// handover details (there is no label to buy).
+	NeedsShipDetails bool                 `json:"needsShipDetails"`
+	Perishable       bool                 `json:"perishable"`
+	Lines            []SellerShipmentLine `json:"lines"`
 	ItemsMinor     int64                `json:"itemsMinor"`
 	ShippingMinor  int64                `json:"shippingMinor"`
 	TotalMinor     int64                `json:"totalMinor"`
@@ -273,7 +278,7 @@ type SellerShipment struct {
 	SuggestedParcel *SuggestedParcel     `json:"suggestedParcel"`
 	Timeline        []TimelineEntry      `json:"timeline"`
 	LocalDelivery   *SellerLocalDelivery `json:"localDelivery"`
-	// Proof is how our driver handed it over (photo, who received it); nil for carrier, pickup and manual deliveries.
+	// Proof is how AfroTransact handed it over (photo, who received it); nil for seller-shipped, carrier, pickup and manual deliveries. Read-only.
 	Proof *DeliveryProof `json:"proof"`
 }
 

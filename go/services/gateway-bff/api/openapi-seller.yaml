@@ -4757,27 +4757,31 @@ components:
     DeliveryProof:
       type: [object, 'null']
       description: |
-        How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
-        tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+        How AfroTransact handed the parcel over, shown on a delivered shipment (a driver, or AfroTransact staff with a photo).
+        Null for seller-shipped orders (the seller ships and confirms those), carrier deliveries, pickups and deliveries staff
+        confirmed by hand. It is never shown for an order AfroTransact did not deliver. The photo and signature links are
         short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
-      required: [method, recipientName, relationship, safePlace, photoUrl, signatureUrl, at]
+      required: [method, recipientName, relationship, safePlace, photoUrl, photoUrls, signatureUrl, at]
       properties:
-        method: {type: string, enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE], description: 'To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place'}
+        method: {type: string, enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE, PHOTO], description: 'To the customer (who gave their code), to someone else (name, relationship, signature), left in a safe place, or PHOTO: delivered by AfroTransact staff with a photo (the recipient name is optional)'}
         recipientName: {type: [string, 'null']}
         relationship: {type: [string, 'null']}
         safePlace: {type: [string, 'null']}
         photoUrl: {type: [string, 'null'], format: uri, description: Proof photo; null when none or it cannot be shown right now}
+        photoUrls: {type: array, items: {type: string, format: uri}, description: 'Every proof photo that can be shown right now, in order (the first is photoUrl)'}
         signatureUrl: {type: [string, 'null'], format: uri, description: Recipient's signature (someone-else handovers)}
         at: {type: string, format: date-time, description: When it was delivered}
     SellerShipment:
       type: object
-      required: [shipmentId, label, status, statusLabel, fulfilment, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, hasLabel, suggestedParcel, timeline, localDelivery]
+      required: [shipmentId, label, status, statusLabel, fulfilment, fulfilmentMode, needsShipDetails, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, hasLabel, suggestedParcel, timeline, localDelivery]
       properties:
         shipmentId: {type: string}
         label: {type: string}
         status: {$ref: '#/components/schemas/ShipmentStatus'}
         statusLabel: {type: string}
         fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        fulfilmentMode: {type: string, enum: [seller_ships, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'seller_ships: you ship it and mark it shipped and delivered, it is never in an AfroTransact delivery queue. afrotransact_delivery: you opted into delivery by AfroTransact. fulfilled_by_afrotransact: AfroTransact fulfils and delivers it.'}
+        needsShipDetails: {type: boolean, description: 'The next step is Mark shipped and you ship it yourself: send a tracking number or say how it was sent (shipNote)'}
         perishable: {type: boolean}
         lines:
           type: array
@@ -4839,6 +4843,9 @@ components:
       properties:
         status: {$ref: '#/components/schemas/SellerStatusAction'}
         handoverCode: {type: string, pattern: '^\d{4}$', description: 'The buyer''s 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise'}
+        shipNote: {type: string, maxLength: 500, description: 'Marking shipped a shipment you ship yourself: how it was sent (who took it, a local delivery). Needed unless a trackingNumber is given (422 orders.ship-details-required)'}
+        trackingNumber: {type: string, maxLength: 80, description: 'Marking shipped a shipment you ship yourself: the tracking number (no spaces)'}
+        trackingCarrier: {type: string, maxLength: 40, description: 'Optional courier name for your own records; customers are never shown it'}
     Parcel:
       type: object
       required: [weightLb]

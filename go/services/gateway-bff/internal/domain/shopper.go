@@ -48,6 +48,9 @@ type ShipmentDetail struct {
 	Items          string `json:"items"`
 	SellerName     string `json:"sellerName"`
 	DeliveryMethod string `json:"deliveryMethod"`
+	// FulfilmentMode is who moves it: seller_ships, afrotransact_delivery (the seller opted in), fulfilled_by_afrotransact,
+	// pickup or preorder_run. The app words "AfroTransact delivers" and shows proof only for the AfroTransact modes.
+	FulfilmentMode string `json:"fulfilmentMode"`
 	Cancellable    bool   `json:"cancellable"`
 	// CancellableUntil is when Cancel stops being offered (before packing and inside the cancellation window); null when
 	// it is not offered now.
@@ -68,7 +71,7 @@ type ShipmentDetail struct {
 	LocalDelivery *OrderLocalDelivery `json:"localDelivery"`
 	// Pickup is where a pickup shipment is collected; nil for other shipments (or when the point can't be read).
 	Pickup *OrderPickup `json:"pickup"`
-	// Proof is how our driver handed it over (photo, who received it); null for carrier, pickup and manual deliveries.
+	// Proof is how AfroTransact handed it over (photo, who received it); null for seller-shipped, carrier, pickup and manual deliveries.
 	Proof *DeliveryProof `json:"proof"`
 	// DeliveryFeeRule is the delivery fee rule the shipping was charged by, as it was when the order was placed: later
 	// edits of the rule never change it. Null for flat rates and AfroTransact Delivery from a seller's store.

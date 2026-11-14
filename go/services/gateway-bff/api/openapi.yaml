@@ -6742,16 +6742,18 @@ components:
     DeliveryProof:
       type: [object, 'null']
       description: |
-        How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
-        tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+        How AfroTransact handed the parcel over, shown on a delivered shipment (a driver, or AfroTransact staff with a photo).
+        Null for seller-shipped orders (the seller ships and confirms those), carrier deliveries, pickups and deliveries staff
+        confirmed by hand. It is never shown for an order AfroTransact did not deliver. The photo and signature links are
         short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
-      required: [method, recipientName, relationship, safePlace, photoUrl, signatureUrl, at]
+      required: [method, recipientName, relationship, safePlace, photoUrl, photoUrls, signatureUrl, at]
       properties:
-        method: {type: string, enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE], description: 'To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place'}
+        method: {type: string, enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE, PHOTO], description: 'To the customer (who gave their code), to someone else (name, relationship, signature), left in a safe place, or PHOTO: delivered by AfroTransact staff with a photo (the recipient name is optional)'}
         recipientName: {type: [string, 'null']}
         relationship: {type: [string, 'null']}
         safePlace: {type: [string, 'null']}
         photoUrl: {type: [string, 'null'], format: uri, description: Proof photo; null when none or it cannot be shown right now}
+        photoUrls: {type: array, items: {type: string, format: uri}, description: 'Every proof photo that can be shown right now, in order (the first is photoUrl)'}
         signatureUrl: {type: [string, 'null'], format: uri, description: Recipient's signature (someone-else handovers)}
         at: {type: string, format: date-time, description: When it was delivered}
     TimelineEvent:
@@ -6814,7 +6816,7 @@ components:
           type: array
           items:
             type: object
-            required: [shipmentId, label, status, statusLabel, items, sellerName, deliveryMethod, cancellable, carrier, trackingNumber, promisedFrom, promisedBy, deliveredAt, deliveryCode, lines, timeline]
+            required: [shipmentId, label, status, statusLabel, items, sellerName, deliveryMethod, fulfilmentMode, cancellable, carrier, trackingNumber, promisedFrom, promisedBy, deliveredAt, deliveryCode, lines, timeline]
             properties:
               shipmentId: {type: string}
               label: {type: string}
@@ -6822,7 +6824,8 @@ components:
               statusLabel: {type: string}
               items: {type: string}
               sellerName: {type: string}
-              deliveryMethod: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+              deliveryMethod: {type: string, enum: [carrier, express, seller_ships, afrotransact_delivery, pickup]}
+              fulfilmentMode: {type: string, enum: [seller_ships, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Who moves it. The app says AfroTransact delivers, and shows delivery proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run'}
               cancellable: {type: boolean, description: 'Cancel is offered: before the parcel is packed and inside the cancellation window'}
               cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered (the window''s end); null when it is not offered now'}
               carrier: {type: [string, 'null']}
@@ -6881,7 +6884,7 @@ components:
               label: {type: string}
               status: {type: string}
               eta: {type: [string, 'null']}
-              method: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+              method: {type: string, enum: [carrier, express, seller_ships, afrotransact_delivery, pickup]}
               handover: {type: [string, 'null'], enum: [hand, door, desk, null]}
               perishable: {type: boolean}
               deliveryCode: {type: [string, 'null']}
