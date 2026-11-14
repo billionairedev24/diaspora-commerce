@@ -86,6 +86,10 @@ export const blockedMessage = (title: string) => `We can't sell ${title} yet. We
 
 export function mockCheckoutTax(input: MockTaxInput): MockTax {
   const { packages, state, city, shippingByPackage, discountMinor, hasAddress, zip } = input;
+  // Nothing selected (the BFF says this before it looks at the address): never a $0.00 estimate for an empty order.
+  if (packages.length === 0) {
+    return { taxMinor: 0, taxRateLabel: TAX_LABELS.NO_ITEMS, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'NO_ITEMS', taxJurisdictionLabel: '', taxLines: [], blockedLines: [], canPlaceOrder: false, shippingTaxAllocation: undefined };
+  }
   if (!hasAddress) {
     return { taxMinor: 0, taxRateLabel: TAX_LABELS.NEEDS_ZIP, taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], blockedLines: [], canPlaceOrder: false, shippingTaxAllocation: undefined };
   }

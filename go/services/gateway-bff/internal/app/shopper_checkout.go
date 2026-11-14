@@ -169,6 +169,9 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	sum.PublishableKey = s.d.PublishableKey
 	sum.CanPlaceOrder, sum.BlockedLines, sum.TaxLines = true, []domain.CheckoutBlockedLine{}, []domain.CheckoutTaxLine{}
 	if len(sum.Packages) == 0 {
+		// Nothing is selected (the cart may still hold items, all unticked): say so instead of leaving the default
+		// "enter your ZIP code", which would ask for a place nobody needs yet.
+		s.taxUnavailable(ctx, &sum, taxReasonNoItems, reasonNoItems, nil)
 		return sum, nil
 	}
 	var addr *port.IdentityAddress
