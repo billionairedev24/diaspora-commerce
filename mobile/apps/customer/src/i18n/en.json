@@ -266,5 +266,10 @@
   "cu.mfa.emailTitle": "We emailed a 6-digit code to {hint}.",
   "cu.mfa.emailTitleNoHint": "We emailed a 6-digit code to your email address.",
   "cu.mfa.emailAgain": "Email me a new code",
-  "cu.mfa.emailAgainIn": "Email again in {time}"
+  "cu.mfa.emailAgainIn": "Email again in {time}",
+  "cu.order.deliveredByUs": "Delivered by AfroTransact",
+  "cu.order.shareCode": "Share this code at the door",
+  "cu.order.proofTitle": "PROOF OF DELIVERY",
+  "cu.order.receivedBy": "Received by {name}",
+  "cu.order.proofPhotoN": "Delivery photo {n}"
 }

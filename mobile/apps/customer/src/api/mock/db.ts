@@ -12,7 +12,11 @@ export interface MockShipment {
   label: string;
   status: string;
   eta: string | null;
-  method: 'afrotransact_delivery' | 'carrier' | 'express' | 'pickup';
+  method: 'afrotransact_delivery' | 'carrier' | 'express' | 'seller_ships' | 'pickup';
+  /** Who moves it (orders decides at checkout); defaults to the method's usual mode. */
+  fulfilmentMode?: 'seller_ships' | 'afrotransact_delivery' | 'fulfilled_by_afrotransact' | 'pickup' | 'preorder_run';
+  /** Staff proof of an AfroTransact delivery. */
+  proof?: { method: 'PHOTO'; recipientName: string | null; photoUrls: string[]; at: string };
   handover: 'hand' | 'door' | 'desk' | null;
   perishable: boolean;
   deliveryCode: string | null;
@@ -47,7 +51,11 @@ function seedOrders(): MockOrder[] {
     { orderNumber: 'AT-1049-2283', placedAt: daysFromNow(0, 9).toISOString(), totalMinor: 5247, shipTo: 'Adaeze Okafor, Houston TX 77032', status: 'out_for_delivery',
       shipments: [{ shipmentId: 'shp_1049_1', label: 'AfroTransact Delivery', status: 'out_for_delivery', eta: '6–8 pm', method: 'afrotransact_delivery', handover: 'hand', perishable: false, deliveryCode: '4821', items: [{ atin: 'ATBASMAT05', quantity: 1 }, { atin: 'ATSUYA0006', quantity: 2 }] }] },
     { orderNumber: 'AT-0988-1120', placedAt: '2026-09-25T15:00:00Z', totalMinor: 3498, shipTo: 'Adaeze Okafor, Houston TX 77032', status: 'delivered',
-      shipments: [{ shipmentId: 'shp_0988_1', label: 'Delivery', status: 'delivered', eta: null, method: 'carrier', handover: null, perishable: false, deliveryCode: null, items: [{ atin: 'ATBASMAT05', quantity: 1 }, { atin: 'ATGARI0004', quantity: 1 }] }] },
+      shipments: [{ shipmentId: 'shp_0988_1', label: 'Delivery', status: 'delivered', eta: null, method: 'seller_ships', fulfilmentMode: 'seller_ships', handover: null, perishable: false, deliveryCode: null, items: [{ atin: 'ATBASMAT05', quantity: 1 }, { atin: 'ATGARI0004', quantity: 1 }] }] },
+    { orderNumber: 'AT-1002-4417', placedAt: '2026-11-10T15:00:00Z', totalMinor: 2899, shipTo: 'Adaeze Okafor, Houston TX 77032', status: 'delivered',
+      shipments: [{ shipmentId: 'shp_1002_1', label: 'Delivery', status: 'delivered', eta: null, method: 'afrotransact_delivery', fulfilmentMode: 'fulfilled_by_afrotransact', handover: null, perishable: false, deliveryCode: null,
+        proof: { method: 'PHOTO', recipientName: 'Adaeze Okafor', photoUrls: ['data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22240%22%3E%3Crect width=%22320%22 height=%22240%22 fill=%22%23e9e4d8%22/%3E%3Crect x=%22115%22 y=%2255%22 width=%2290%22 height=%22150%22 fill=%22%237a5a3a%22/%3E%3C/svg%3E'], at: '2026-11-13T17:20:00Z' },
+        items: [{ atin: 'ATGARI0004', quantity: 1 }] }] },
     { orderNumber: 'AT-0951-7743', placedAt: '2026-09-30T15:00:00Z', totalMinor: 1800, shipTo: 'Adaeze Okafor, Houston TX 77032', status: 'refunded',
       shipments: [{ shipmentId: 'shp_0951_1', label: 'Delivery', status: 'returned', eta: null, method: 'carrier', handover: null, perishable: false, deliveryCode: null, items: [{ atin: 'ATKENTE008', quantity: 1 }] }] }
   ];

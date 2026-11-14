@@ -273,5 +273,10 @@
   "cu.mfa.emailTitle": "A fi kóòdù oní-nọ́ńbà 6 ránṣẹ́ sí {hint}.",
   "cu.mfa.emailTitleNoHint": "A fi kóòdù oní-nọ́ńbà 6 ránṣẹ́ sí ímeèlì rẹ.",
   "cu.mfa.emailAgain": "Fi kóòdù tuntun ránṣẹ́ sí mi",
-  "cu.mfa.emailAgainIn": "Tún fi ránṣẹ́ ní {time}"
+  "cu.mfa.emailAgainIn": "Tún fi ránṣẹ́ ní {time}",
+  "cu.order.deliveredByUs": "AfroTransact ló ń fi jíṣẹ́",
+  "cu.order.shareCode": "Fún wọn ní kóòdù yìí ní ẹnu ọ̀nà",
+  "cu.order.proofTitle": "ẸRÍ ÌFIJIṢẸ́",
+  "cu.order.receivedBy": "{name} ló gbà á",
+  "cu.order.proofPhotoN": "Fọ́tò ìfijiṣẹ́ {n}"
 }

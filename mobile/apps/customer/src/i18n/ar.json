@@ -273,5 +273,10 @@
   "cu.mfa.emailTitle": "أرسلنا رمزًا من 6 أرقام إلى {hint}.",
   "cu.mfa.emailTitleNoHint": "أرسلنا رمزًا من 6 أرقام إلى بريدك الإلكتروني.",
   "cu.mfa.emailAgain": "أرسل لي رمزًا جديدًا",
-  "cu.mfa.emailAgainIn": "إعادة الإرسال بعد {time}"
+  "cu.mfa.emailAgainIn": "إعادة الإرسال بعد {time}",
+  "cu.order.deliveredByUs": "توصيل AfroTransact",
+  "cu.order.shareCode": "شارك هذا الرمز عند الباب",
+  "cu.order.proofTitle": "إثبات التسليم",
+  "cu.order.receivedBy": "استلمها {name}",
+  "cu.order.proofPhotoN": "صورة التسليم {n}"
 }

@@ -452,12 +452,24 @@ func (s *customerOrdersServiceImpl) Tracking(ctx context.Context, c *domain.Call
 		Currency: firstNonEmpty(o.Currency, domain.Currency), Shipments: []domain.TrackedShipment{}}
 	for _, sh := range o.Shipments {
 		st := strings.ToLower(sh.Status)
-		t := domain.TrackedShipment{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: st,
-			ETA: optStr(firstNonEmpty(sh.PromisedBy, sh.PromisedFrom)), Method: methodKey(sh.DeliveryMethod, sh.ServiceLevel),
+		mode := domain.FulfilmentModeOf(sh.FulfilmentType, sh.DeliveryMethod, sh.LocalDelivery != nil)
+		method := methodKey(sh.DeliveryMethod, sh.ServiceLevel)
+		if mode == domain.ModeSellerShips && strings.EqualFold(sh.DeliveryMethod, "AFROTRANSACT_DELIVERY") {
+			method = domain.ModeSellerShips // a seller-packed package the old checkout labelled AfroTransact Delivery
+		}
+		t := domain.TrackedShipment{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: st, FulfilmentMode: mode,
+			ETA: optStr(firstNonEmpty(sh.PromisedBy, sh.PromisedFrom)), Method: method,
 			Perishable: sh.Perishable, DeliveryCode: optStr(sh.HandoverCode),
 			TrackingNumber: optStr(sh.TrackingNumber), Items: []domain.TrackedItem{}, Timeline: timeline(sh.Timeline)}
 		if sh.Preferences != nil && sh.Preferences.Handover != "" {
 			t.Handover = ptr(strings.ToLower(sh.Preferences.Handover))
+		}
+		if domain.DeliveredByAfroTransact(mode) {
+			entries := make([]proofEntry, 0, len(sh.Timeline))
+			for _, e := range sh.Timeline {
+				entries = append(entries, proofEntry{to: e.To, at: e.At, proof: e.Proof})
+			}
+			t.Proof = deliveredProof(entries)
 		}
 		for _, l := range sh.Lines {
 			t.Items = append(t.Items, domain.TrackedItem{ATIN: l.VariantATIN, Title: l.Title, Quantity: l.Quantity, PriceMinor: l.UnitPriceMinor,
@@ -478,6 +490,11 @@ func (s *customerOrdersServiceImpl) Tracking(ctx context.Context, c *domain.Call
 		}
 		out.Shipments = append(out.Shipments, t)
 	}
+	proofs := make([]*domain.DeliveryProof, 0, len(out.Shipments))
+	for _, sh := range out.Shipments {
+		proofs = append(proofs, sh.Proof)
+	}
+	attachProofLinks(ctx, s.d.ProofLinks, proofs)
 	return out, nil
 }
 

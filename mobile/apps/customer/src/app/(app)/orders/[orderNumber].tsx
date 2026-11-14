@@ -4,13 +4,14 @@ import { formatMoney } from '@afrotransact/api-client';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { CheckCircleIcon as CheckCircle, KeyIcon as Key } from 'phosphor-react-native';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
 import { useTracking } from '@/api/queries';
 import { useAuth } from '@/auth/AuthProvider';
 import { env } from '@/config/env';
 import { canRate } from '@/domain/reviews';
-import { headline, showDeliveryCode, stepIndex, TRACKING_STEPS } from '@/domain/tracking';
+import { deliveredByAfroTransact, headline, showDeliveryCode, stepDetail, stepIndex, TRACKING_STEPS } from '@/domain/tracking';
+import { useT } from '@/i18n';
 import { RateItem } from '@/features/reviews/RateItem';
 import { useQuantity } from '@/features/shop/cartHooks';
 import { c, sp, t } from '@/theme';
@@ -27,6 +28,7 @@ export default function Tracking() {
   const router = useRouter();
   const { user } = useAuth();
   const tr = useTracking(orderNumber ?? '');
+  const tt = useT();
   const d = tr.data;
   const header = <SubHeader title={`Order ${orderNumber ?? ''}`} onBack={() => router.navigate('/orders')} />;
   if (!d) return <Screen header={header}>{tr.isError ? <Banner tone="danger">Tracking isn’t available for this order yet.</Banner> : <Loading />}</Screen>;
@@ -51,22 +53,34 @@ export default function Tracking() {
                   </View>
                   <View style={{ flex: 1, paddingBottom: sp['3'] }}>
                     <AppText variant="bodyStrong" color={i <= step ? c.text : c.textSubtle}>{st.title}</AppText>
-                    {i <= step ? <AppText variant="small" color={c.textMuted}>{i === 2 && s.method !== 'afrotransact_delivery' ? s.label : st.detail}</AppText> : null}
+                    {i <= step ? <AppText variant="small" color={c.textMuted}>{i === 2 && s.method !== 'afrotransact_delivery' && s.fulfilmentMode !== 'seller_ships' ? s.label : stepDetail(st, s.fulfilmentMode)}</AppText> : null}
                   </View>
                 </View>
               ))}
             </View>
-            {s.driver || showDeliveryCode(s) ? (
+            {deliveredByAfroTransact(s.fulfilmentMode) && showDeliveryCode(s) ? (
               <Card>
                 <View style={styles.driver}>
-                  {s.driver ? <View style={styles.avatar}><AppText variant="bodyStrong" color={c.textInverse}>{s.driver.initials}</AppText></View> : <Key size={28} color={c.text} />}
+                  <Key size={28} color={c.text} />
                   <View style={{ flex: 1 }}>
-                    <AppText variant="bodyStrong">{s.driver ? `${s.driver.name} · AfroTransact Delivery` : 'AfroTransact Delivery'}</AppText>
-                    <AppText variant="small" color={c.textMuted}>{showDeliveryCode(s) ? 'Share this code at the door' : 'Your driver will text on arrival'}</AppText>
+                    <AppText variant="bodyStrong">{tt('cu.order.deliveredByUs')}</AppText>
+                    <AppText variant="small" color={c.textMuted}>{tt('cu.order.shareCode')}</AppText>
                   </View>
-                  {showDeliveryCode(s) ? <AppText variant="display" accessibilityLabel={`Delivery code ${s.deliveryCode?.split('').join(' ')}`} style={{ letterSpacing: 4 }}>{s.deliveryCode}</AppText> : null}
+                  <AppText variant="display" accessibilityLabel={`Delivery code ${s.deliveryCode?.split('').join(' ')}`} style={{ letterSpacing: 4 }}>{s.deliveryCode}</AppText>
                 </View>
               </Card>
+            ) : null}
+            {s.proof && deliveredByAfroTransact(s.fulfilmentMode) ? (
+              <View style={{ gap: sp['2'] }} testID="delivery-proof">
+                <SectionLabel>{tt('cu.order.proofTitle')}</SectionLabel>
+                <AppText variant="bodyStrong">{s.proof.recipientName ? tt('cu.order.receivedBy', { name: s.proof.recipientName }) : tt('cu.order.deliveredByUs')}</AppText>
+                <AppText variant="small" color={c.textMuted}>{new Date(s.proof.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</AppText>
+                <View style={styles.photos}>
+                  {s.proof.photoUrls.map((u, i) => (
+                    <Image key={u} source={{ uri: u }} style={styles.photo} accessibilityLabel={tt('cu.order.proofPhotoN', { n: i + 1 })} />
+                  ))}
+                </View>
+              </View>
             ) : null}
             <SectionLabel>IN THIS PACKAGE</SectionLabel>
             {s.items.map((it) => (
@@ -94,5 +108,7 @@ const styles = StyleSheet.create({
   line: { flex: 1, width: 2, backgroundColor: t.ink['200'], marginVertical: 2 },
   driver: { flexDirection: 'row', alignItems: 'center', gap: sp['3'] },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: t.ink['1000'], alignItems: 'center', justifyContent: 'center' },
-  item: { flexDirection: 'row', alignItems: 'center', gap: sp['2'] }
+  item: { flexDirection: 'row', alignItems: 'center', gap: sp['2'] },
+  photos: { flexDirection: 'row', flexWrap: 'wrap', gap: sp['2'] },
+  photo: { width: 140, height: 105, borderRadius: t.radius.md, backgroundColor: t.ink['100'] }
 });

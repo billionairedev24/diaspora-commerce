@@ -273,5 +273,10 @@
   "cu.mfa.emailTitle": "Enviamos un código de 6 dígitos a {hint}.",
   "cu.mfa.emailTitleNoHint": "Enviamos un código de 6 dígitos a su correo electrónico.",
   "cu.mfa.emailAgain": "Enviarme un código nuevo",
-  "cu.mfa.emailAgainIn": "Reenviar en {time}"
+  "cu.mfa.emailAgainIn": "Reenviar en {time}",
+  "cu.order.deliveredByUs": "Entregado por AfroTransact",
+  "cu.order.shareCode": "Comparta este código en la puerta",
+  "cu.order.proofTitle": "PRUEBA DE ENTREGA",
+  "cu.order.receivedBy": "Recibido por {name}",
+  "cu.order.proofPhotoN": "Foto de entrega {n}"
 }

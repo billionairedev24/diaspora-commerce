@@ -30,6 +30,16 @@ export type Device = Identity['schemas']['Device'];
 export type RegisterDeviceRequest = Identity['schemas']['RegisterDeviceRequest'];
 export type NotificationPreferences = Identity['schemas']['NotificationPreferences'];
 
+export type FulfilmentMode = 'seller_ships' | 'afrotransact_delivery' | 'fulfilled_by_afrotransact' | 'pickup' | 'preorder_run';
+
+/** GET /v1/account/orders/{orderNumber}/tracking → shipments[].proof (contracts/openapi/gateway-bff.yaml, DeliveryProof). */
+export interface DeliveryProof {
+  method: 'CUSTOMER' | 'SOMEONE_ELSE' | 'SAFE_PLACE' | 'PHOTO';
+  recipientName: string | null;
+  photoUrls: string[];
+  at: string;
+}
+
 /** Shipment tracking (proposed BFF route GET /v1/account/orders/{orderNumber}/tracking — not in the contract yet;
     served by the in-app mock in dev). */
 export interface OrderTracking {
@@ -42,7 +52,11 @@ export interface OrderTracking {
     label: string;
     status: string;
     eta: string | null;
-    method: 'afrotransact_delivery' | 'carrier' | 'express' | 'pickup';
+    method: 'afrotransact_delivery' | 'carrier' | 'express' | 'seller_ships' | 'pickup';
+    /** Who moves it. The app names AfroTransact as the deliverer, and shows proof, only for the AfroTransact modes. */
+    fulfilmentMode: FulfilmentMode;
+    /** How AfroTransact handed it over (photos with short-lived links, who received it, when); null for every other mode. */
+    proof: DeliveryProof | null;
     handover: 'hand' | 'door' | 'desk' | null;
     perishable: boolean;
     deliveryCode: string | null;

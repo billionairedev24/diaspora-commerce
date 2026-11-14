@@ -6878,13 +6878,15 @@ components:
           type: array
           items:
             type: object
-            required: [shipmentId, label, status, eta, method, handover, perishable, deliveryCode, driver, carrier, trackingNumber, items, timeline]
+            required: [shipmentId, label, status, eta, method, fulfilmentMode, proof, handover, perishable, deliveryCode, driver, carrier, trackingNumber, items, timeline]
             properties:
               shipmentId: {type: string}
               label: {type: string}
               status: {type: string}
               eta: {type: [string, 'null']}
               method: {type: string, enum: [carrier, express, seller_ships, afrotransact_delivery, pickup]}
+              fulfilmentMode: {type: string, enum: [seller_ships, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Who moves it. The app names AfroTransact as the deliverer, and shows proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run'}
+              proof: {$ref: '#/components/schemas/DeliveryProof'}
               handover: {type: [string, 'null'], enum: [hand, door, desk, null]}
               perishable: {type: boolean}
               deliveryCode: {type: [string, 'null']}
@@ -6894,7 +6896,7 @@ components:
                 properties:
                   name: {type: string}
                   initials: {type: string}
-              carrier: {type: [string, 'null']}
+              carrier: {type: [string, 'null'], description: 'Never filled for customers: carrier names are not shown to them'}
               trackingNumber: {type: [string, 'null']}
               items:
                 type: array

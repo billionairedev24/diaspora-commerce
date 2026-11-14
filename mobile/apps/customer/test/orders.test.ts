@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { headline, showDeliveryCode, stepIndex } from '../src/domain/tracking';
+import { deliveredByAfroTransact, headline, showDeliveryCode, stepDetail, stepIndex, TRACKING_STEPS } from '../src/domain/tracking';
 
 describe('tracking', () => {
   it('maps shipment statuses to steps', () => {
@@ -22,5 +22,25 @@ describe('tracking', () => {
     expect(showDeliveryCode({ ...base, perishable: true })).toBe(true);
     expect(showDeliveryCode({ ...base, perishable: true, status: 'delivered' })).toBe(false);
     expect(showDeliveryCode({ ...base, perishable: true, method: 'carrier' })).toBe(false);
+  });
+
+  it('names AfroTransact as the deliverer, and shows proof, only for the modes AfroTransact delivers', () => {
+    expect(deliveredByAfroTransact('afrotransact_delivery')).toBe(true);
+    expect(deliveredByAfroTransact('fulfilled_by_afrotransact')).toBe(true);
+    expect(deliveredByAfroTransact('preorder_run')).toBe(true);
+    expect(deliveredByAfroTransact('seller_ships')).toBe(false);
+    expect(deliveredByAfroTransact('pickup')).toBe(false);
+  });
+
+  it('never says the fulfilment centre or AfroTransact Delivery moves a seller-shipped order', () => {
+    const texts = TRACKING_STEPS.map((st) => stepDetail(st, 'seller_ships'));
+    expect(texts.join(' ')).not.toMatch(/AfroTransact|fulfilment centre|driver/i);
+    expect(stepDetail(TRACKING_STEPS[1], 'seller_ships')).toBe('Packed by the seller');
+    expect(stepDetail(TRACKING_STEPS[2], 'seller_ships')).toBe('Shipped by the seller');
+    expect(stepDetail(TRACKING_STEPS[1], 'fulfilled_by_afrotransact')).toBe('Packed at the fulfilment centre');
+  });
+
+  it('the delivery code is only for AfroTransact Delivery, never a seller-shipped order', () => {
+    expect(showDeliveryCode({ method: 'seller_ships', handover: 'hand', perishable: true, deliveryCode: '4821', status: 'out_for_delivery' })).toBe(false);
   });
 });

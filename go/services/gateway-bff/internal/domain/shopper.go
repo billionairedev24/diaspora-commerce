@@ -505,15 +505,21 @@ type TrackingDriver struct {
 
 // TrackedShipment is one shipment with its timeline (orders) and carrier scans (carrier-gateway).
 type TrackedShipment struct {
-	ShipmentID     string          `json:"shipmentId"`
-	Label          string          `json:"label"`
-	Status         string          `json:"status"`
-	ETA            *string         `json:"eta"`
-	Method         string          `json:"method"`
-	Handover       *string         `json:"handover"`
-	Perishable     bool            `json:"perishable"`
-	DeliveryCode   *string         `json:"deliveryCode"`
-	Driver         *TrackingDriver `json:"driver"`
+	ShipmentID   string          `json:"shipmentId"`
+	Label        string          `json:"label"`
+	Status       string          `json:"status"`
+	ETA          *string         `json:"eta"`
+	Method       string          `json:"method"`
+	Handover     *string         `json:"handover"`
+	Perishable   bool            `json:"perishable"`
+	DeliveryCode *string         `json:"deliveryCode"`
+	Driver       *TrackingDriver `json:"driver"`
+	// FulfilmentMode is who moves it (seller_ships, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run); the
+	// apps name AfroTransact as the deliverer, and show proof, only for the AfroTransact modes.
+	FulfilmentMode string `json:"fulfilmentMode"`
+	// Proof is how AfroTransact handed it over; null for every other mode.
+	Proof *DeliveryProof `json:"proof"`
+	// Carrier is never filled for customers (carrier names are not shown to them).
 	Carrier        *string         `json:"carrier"`
 	TrackingNumber *string         `json:"trackingNumber"`
 	Items          []TrackedItem   `json:"items"`

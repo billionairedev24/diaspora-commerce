@@ -6157,6 +6157,12 @@ export interface components {
                 eta: string | null;
                 /** @enum {string} */
                 method: "carrier" | "express" | "seller_ships" | "afrotransact_delivery" | "pickup";
+                /**
+                 * @description Who moves it. The app names AfroTransact as the deliverer, and shows proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
+                 * @enum {string}
+                 */
+                fulfilmentMode: "seller_ships" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+                proof: components["schemas"]["DeliveryProof"];
                 /** @enum {string|null} */
                 handover: "hand" | "door" | "desk" | null;
                 perishable: boolean;
@@ -6165,6 +6171,7 @@ export interface components {
                     name: string;
                     initials: string;
                 } | null;
+                /** @description Never filled for customers: carrier names are not shown to them */
                 carrier: string | null;
                 trackingNumber: string | null;
                 items: {
