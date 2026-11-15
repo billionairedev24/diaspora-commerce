@@ -96,7 +96,9 @@ function seed(now: Date): MockAccessState {
   };
   const invitations = [
     invitation(1, 'Tunde', 'Bakare', 'tunde@afrotransact.com', 'platform.customer_support', 1, 'Joins support in Lagos'),
-    invitation(2, 'Chidi', 'Eze', 'chidi@afrotransact.com', 'platform.finance', 6, 'Covers payouts while Musa is away')
+    invitation(2, 'Chidi', 'Eze', 'chidi@afrotransact.com', 'platform.finance', 6, 'Covers payouts while Musa is away'),
+    invitation(3, 'Ngozi', 'Adeyemi', 'ngozi@afrotransact.com', 'platform.marketing', 0, 'Runs the Lagos launch campaign'),
+    invitation(4, 'Kwame', 'Asante', 'kwame@afrotransact.com', 'platform.catalog_manager', 0, 'Moderates new listings')
   ];
   return { catalogue: MOCK_PERMISSIONS.map((p) => ({ ...p })), roles, people, log, invitations, seq: 3 };
 }
@@ -275,7 +277,7 @@ export function accessHandlers(W: string, deps: PreorderHandlerDeps) {
         const inv: MockInvitation = {
           id: `0b0b0b0b-0000-4000-8000-${String(s.seq).padStart(12, '0')}`, name: `${b.firstName.trim()} ${b.lastName.trim()}`, firstName: b.firstName.trim(), lastName: b.lastName.trim(), email,
           roleKey: b.roleKey, roleName: role?.name ?? b.roleKey, reason: b.reason.trim(), invitedByName: ctx.action.actor, createdAt: now, lastSentAt: now,
-          expiresAt: new Date(ctx.now.getTime() + INVITATION_TTL_MS).toISOString(), sendCount: 1, token: `mock-token-${s.seq}`, state: 'PENDING'
+          expiresAt: new Date(ctx.now.getTime() + INVITATION_TTL_MS).toISOString(), sendCount: 1, token: `mock-token-new-${s.seq}`, state: 'PENDING'
         };
         s.invitations.push(inv);
         note(s, ctx, { action: 'STAFF_INVITATION_CREATED', actionLabel: 'Staff invitation created', targetName: inv.name, role: inv.roleKey, roleName: inv.roleName, subject: email, detail: inv.reason });

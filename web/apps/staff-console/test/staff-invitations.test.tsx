@@ -2,6 +2,7 @@ import { resetStaffDb } from '@afrotransact/api-client/mocks/staff';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { InviteAccept } from '@/components/invite/InviteAccept';
@@ -27,7 +28,7 @@ describe('Staff accounts: invitations', () => {
     expect(within(tunde).getByText('tunde@afrotransact.com')).toBeInTheDocument();
     expect(within(tunde).getByText('Customer Support')).toBeInTheDocument();
     expect(within(tunde).getByText('Ifeoma Okafor')).toBeInTheDocument();
-    expect(within(tunde).getByText(/Waiting, link expires/)).toBeInTheDocument();
+    expect(within(tunde).getByText(/^Expires /)).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/mock-token|0b0b0b0b/);
     // the old "New staff account" form with a temporary password is gone
     expect(screen.queryByText(/Temporary password/i)).not.toBeInTheDocument();
@@ -133,6 +134,16 @@ describe('The invitation page (no staff navigation, no session)', () => {
     expect(await screen.findByRole('heading', { name: 'Your account is ready' })).toBeInTheDocument();
     expect(screen.getByTestId('invite-signin')).toHaveAttribute('href', expect.stringContaining('/v1/auth/login'));
     expect(container.textContent).not.toContain('Plantain-Jollof');
+  });
+
+  it('keeps the token when React runs the effect twice (development StrictMode)', async () => {
+    window.history.replaceState(null, '', '/invite#token=mock-token-3');
+    renderWithProviders(
+      <StrictMode>
+        <InviteAccept />
+      </StrictMode>
+    );
+    expect(await screen.findByRole('heading', { name: 'Welcome, Ngozi' })).toBeInTheDocument();
   });
 
   it('says what to do for a link that is not valid, was used, or was withdrawn', async () => {
