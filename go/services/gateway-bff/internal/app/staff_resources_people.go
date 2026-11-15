@@ -134,25 +134,8 @@ func usersResource() *staffResource {
 					return sc.post(ctx, sc.up.Identity, "/v1/admin/users/"+url.PathEscape(jstr(o, "id"))+"/enable", jobj{}, nil)
 				}},
 		},
-		create: &staffCreate{permission: "access:admin",
-			form: func(context.Context, staffCtx) domain.Form {
-				return domain.Form{Title: "New staff account", SubmitLabel: "Create account", Fields: []domain.FormField{
-					withMax(ff("firstName", "First name", "text", true), 80), withMax(ff("lastName", "Last name", "text", true), 80),
-					withPattern(ff("email", "Work email", "email", true), `^[^@\s]+@afrotransact\.com$`, "Staff accounts use an @afrotransact.com address"),
-					withPattern(ff("phone", "Mobile", "text", true), `^\+[1-9][0-9]{7,14}$`, "Use the international format, e.g. +18325550100"),
-					withMax(ff("password", "Temporary password", "password", true), 128),
-					withOptions(ff("roles", "Roles", "multiselect", true), platformRoleOptions()),
-				}}
-			},
-			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {
-				var out jobj
-				body := jobj{"firstName": vs(v, "firstName"), "lastName": vs(v, "lastName"), "email": vs(v, "email"), "phone": vs(v, "phone"),
-					"password": vs(v, "password"), "roles": vlist(v, "roles")}
-				if err := sc.post(ctx, sc.up.Identity, "/v1/admin/users", body, &out); err != nil {
-					return "", err
-				}
-				return jstr(out, "id"), nil
-			}},
+		// No create: staff accounts are made by invitation (Settings > Staff accounts, internal/app/staff_invitations.go), so
+		// nobody picks a temporary password for another person.
 	}
 }
 
