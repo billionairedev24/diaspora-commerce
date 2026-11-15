@@ -70,7 +70,10 @@ class ReservationApiAdapterTest {
 
         @Override
         public Reservation get(String orderId) {
-            CHECKER.require("inventory:read");
+            // reservationReader(): a SERVICE holding inventory:reserve, otherwise staff with inventory:read
+            if (!ACTORS.current().can("inventory:reserve")) {
+                CHECKER.require("inventory:read");
+            }
             return reservation();
         }
 

@@ -6,7 +6,7 @@ import java.util.Set;
 
 /**
  * What other modules may ask inventory in-process about checkout reservations: the calls orders and fulfilment make over HTTP
- * today ({@code /v1/reservations...}, scope {@code inventory:reserve}; the read needs {@code inventory:read}). Every call runs
+ * today ({@code /v1/reservations...}, scope {@code inventory:reserve}; the read also accepts it, staff need {@code inventory:read}). Every call runs
  * under an in-process caller principal ({@code com.afrotransact.module.InProcessCalls}); inventory's own permission checks
  * apply and a caller without the scope is refused with {@code ModuleApiException} status 403.
  *

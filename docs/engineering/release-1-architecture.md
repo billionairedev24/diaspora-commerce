@@ -509,7 +509,7 @@ which maps `ModuleApiException` back to the failure type the HTTP adapter raised
 | payments -> seller (plan) | `SellerPlanDirectory` | `seller-api` `BillingPlanApi` | `seller:billing` | in-process |
 | bookings -> payments | `PaymentsClient` | `payments-api` `BookingPaymentsApi` | `payments:service` | in-process |
 | fulfilment -> orders | `OrdersClient` | `orders-api` `ShipmentApi` | `delivery:relay`, step rules of `ShipmentService` | in-process |
-| fulfilment -> inventory | `InventoryClient` | `ReservationApi.find` | `inventory:read` | in-process |
+| fulfilment -> inventory | `InventoryClient` | `ReservationApi.find` | `inventory:reserve` (a service) or staff `inventory:read` | in-process |
 | trust-ops -> payments | `PaymentsClient` | `payments-api` `ClaimRefundApi` | `payments:service` | in-process |
 | trust-ops -> seller | `SellerEnforcementClient` | `seller-api` `SellerEnforcementApi` | `sellers:enforce` | in-process |
 | identity -> seller | `SellerOrgSource` | `seller-api` `OrgMirrorApi` | `sellers:directory` (added to identity's caller scopes) | in-process (a plain data call; identity's token validation, JWKS and login chains are untouched) |
