@@ -18,6 +18,26 @@ func (h *handlersImpl) registerStaffAccess(route func(pattern string, fn http.Ha
 	route("PUT /v1/staff/access/people/{id}/permissions/{permission}", h.staffAccessGrantPerson)
 	route("DELETE /v1/staff/access/people/{id}/permissions/{permission}", h.staffAccessRevokePerson)
 	route("GET /v1/staff/access/log", h.staffAccessLog)
+	route("GET /v1/staff/access/modules", h.staffAccessModules)
+	route("PUT /v1/staff/access/modules/{portal}/{module}/{role}", h.staffAccessModuleChange)
+}
+
+func (h *handlersImpl) staffAccessModules(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Access.Modules(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("portal"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffAccessModuleChange(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Level  string `json:"level"`
+		Reason string `json:"reason"`
+	}
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Access.ChangeModuleAccess(r.Context(), callerFrom(r.Context()), r.PathValue("portal"), r.PathValue("module"), r.PathValue("role"), b.Level, b.Reason)
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) staffAccessPermissions(w http.ResponseWriter, r *http.Request) {

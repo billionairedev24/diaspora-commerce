@@ -155,7 +155,10 @@ class AccessAdminController {
         return ModuleMatrixResponse.of(admin.moduleMatrix(portal(portal)));
     }
 
-    @Operation(summary = "Set one cell of the module access matrix")
+    @Operation(summary = "Set one cell of the module access matrix",
+            description = "Needs access:admin. The change and its reason go in the access change log. Super Admin keeps at "
+                    + "least Edit on Users & roles and Access control (409 identity.access-lockout), so the console can "
+                    + "always be administered.")
     @PutMapping("/v1/admin/module-access/{portal}/{moduleKey}/{roleKey}")
     ModuleAccessResponse setModuleAccess(@PathVariable String portal, @PathVariable String moduleKey,
                                          @PathVariable String roleKey, @Valid @RequestBody SetModuleAccessRequest body) {
@@ -165,7 +168,7 @@ class AccessAdminController {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("level must be none, view, edit, approve or full", ex);
         }
-        return ModuleAccessResponse.of(admin.setModuleAccess(portal(portal), moduleKey, roleKey, level));
+        return ModuleAccessResponse.of(admin.setModuleAccess(portal(portal), moduleKey, roleKey, level, body.reason()));
     }
 
     @Operation(summary = "Append-only access change log (who changed what and when)")

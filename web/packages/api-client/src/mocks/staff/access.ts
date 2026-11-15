@@ -4,11 +4,11 @@
 import { http } from 'msw';
 import { z } from 'zod';
 
-import { ACCESS_PORTALS, type AccessLogEntry, type AccessPerson, type AccessRole, type AccessRoleMember, type StaffInvitation } from '../../staff-access';
+import { ACCESS_PORTALS, type AccessLogEntry, type AccessModuleLevel, type AccessPerson, type AccessRole, type AccessRoleMember, type StaffInvitation } from '../../staff-access';
 import { MOCK_OTHER_ROLES, MOCK_PERMISSIONS } from './access-catalogue';
 import { allows } from './model';
 import { type PreorderCtx, type PreorderHandlerDeps } from './preorders';
-import { ROLE_LABELS, ROLE_PERMISSIONS } from './rbac-data';
+import { MATRIX_MODULES, ROLE_LABELS, ROLE_MATRIX, ROLE_PERMISSIONS } from './rbac-data';
 
 interface MockPerson {
   id: string;
@@ -27,6 +27,8 @@ interface MockAccessState {
   people: MockPerson[];
   log: AccessLogEntry[];
   invitations: MockInvitation[];
+  /** Platform module access: level by module key, by role key (starts from identity's seed, as generated in rbac-data.ts). */
+  matrix: Record<string, Record<string, AccessModuleLevel>>;
   seq: number;
 }
 
@@ -56,6 +58,14 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
 };
 
 const LOCKED: Record<string, string[]> = { 'platform.super_admin': ['access:admin', 'access:read'] };
+const LOCKED_MODULES: Record<string, string[]> = { 'platform.super_admin': ['rbac', 'access'] };
+const LEVEL_OF_CODE: Record<string, AccessModuleLevel> = { F: 'full', A: 'approve', E: 'edit', V: 'view', '-': 'none' };
+/** Module names as identity's access_module seed words them. */
+const MODULE_LABELS: Record<string, string> = {
+  dash: 'Dashboard', orders: 'Orders', catalog: 'Listing moderation', inventory: 'Inventory', retail: 'AfroTransact Retail (1P)', dispatch: 'Delivery dispatch', apps: 'Applications', rbac: 'Users & roles',
+  payouts: 'Payouts & ledger', fees: 'Fees & commissions', marketing: 'Ads & announcements', disputes: 'Disputes & returns', audit: 'Audit log', markets: 'Markets & locations', siteCfg: 'Site content & legal', dev: 'Developers'
+};
+const LEVELS: AccessModuleLevel[] = ['none', 'view', 'edit', 'approve', 'full'];
 const states = new WeakMap<object, MockAccessState>();
 
 function seed(now: Date): MockAccessState {
@@ -100,7 +110,13 @@ function seed(now: Date): MockAccessState {
     invitation(3, 'Ngozi', 'Adeyemi', 'ngozi@afrotransact.com', 'platform.marketing', 0, 'Runs the Lagos launch campaign'),
     invitation(4, 'Kwame', 'Asante', 'kwame@afrotransact.com', 'platform.catalog_manager', 0, 'Moderates new listings')
   ];
-  return { catalogue: MOCK_PERMISSIONS.map((p) => ({ ...p })), roles, people, log, invitations, seq: 3 };
+  const matrix: MockAccessState['matrix'] = {};
+  Object.entries(ROLE_MATRIX).forEach(([role, codes]) => {
+    MATRIX_MODULES.forEach((m, i) => {
+      (matrix[m] ??= {})[role] = LEVEL_OF_CODE[codes[i] ?? '-'] ?? 'none';
+    });
+  });
+  return { catalogue: MOCK_PERMISSIONS.map((p) => ({ ...p })), roles, people, log, invitations, matrix, seq: 3 };
 }
 
 const state = (ctx: PreorderCtx): MockAccessState => {
@@ -339,6 +355,35 @@ export function accessHandlers(W: string, deps: PreorderHandlerDeps) {
         s.people.push({ id: `stf-n${s.seq}`, name: inv.name, email: inv.email, enabled: true, principalType: 'STAFF', roles: [inv.roleKey], directGrants: [], roleMarkets: {} });
         note(s, ctx, { action: 'STAFF_INVITATION_ACCEPTED', actionLabel: 'Staff invitation accepted', targetName: inv.name, role: inv.roleKey, roleName: inv.roleName, subject: inv.email, detail: inv.reason });
         return new Response(JSON.stringify({ email: inv.email, roleName: inv.roleName }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      })
+    ),
+    http.get(
+      `${A}/modules`,
+      route((ctx) => {
+        const s = read(ctx);
+        const portal = new URL(ctx.request.url).searchParams.get('portal') ?? 'platform';
+        if (!(ACCESS_PORTALS as readonly string[]).includes(portal)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { portal: 'Choose platform, seller, provider or account' });
+        const rolesOf = Object.values(s.roles).filter((r) => r.portal === portal && (portal !== 'platform' || s.matrix.dash?.[r.key] !== undefined));
+        const modules = portal === 'platform' ? MATRIX_MODULES.map((m) => ({ key: m, label: MODULE_LABELS[m] ?? m, levels: { ...(s.matrix[m] ?? {}) } })) : [];
+        const locked = portal === 'platform' ? Object.entries(LOCKED_MODULES).flatMap(([role, mods]) => mods.map((module) => ({ role, module, minimum: 'edit' as const }))) : [];
+        return { portal, levels: LEVELS, roles: rolesOf.map((r) => ({ key: r.key, name: r.name })), modules, locked, canAdmin: canAdmin(ctx) };
+      })
+    ),
+    http.put(
+      `${A}/modules/:portal/:module/:role`,
+      route(async (ctx, p) => {
+        // The level is read from a copy: write() reads the reason from the body itself.
+        const { level } = await json(ctx.request.clone(), z.object({ level: z.string().default('') }).passthrough());
+        const { s, reason } = await write(ctx);
+        const module = p.module ?? '';
+        const role = p.role ?? '';
+        if (!LEVELS.includes(level as AccessModuleLevel)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { level: 'Choose none, view, edit, approve or full' });
+        if (p.portal !== 'platform' || !s.matrix[module] || !s.roles[role]) throw notFound(!s.roles[role] ? 'role' : 'module');
+        if ((LOCKED_MODULES[role] ?? []).includes(module) && (level === 'none' || level === 'view')) throw problem(409, 'ACCESS_LOCKOUT', 'Can’t lower this', 'Super Admin keeps at least Edit on this module so the console can always be administered.');
+        const before = s.matrix[module][role] ?? 'none';
+        s.matrix[module][role] = level as AccessModuleLevel;
+        note(s, ctx, { action: 'MODULE_ACCESS_CHANGED', actionLabel: 'Module access changed', role, roleName: s.roles[role]?.name ?? role, subject: `platform:${module}`, detail: `${before} → ${level}: ${reason}` });
+        return { portal: 'platform', module, role, level };
       })
     ),
     http.get(

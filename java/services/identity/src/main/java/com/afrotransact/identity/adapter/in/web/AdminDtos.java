@@ -101,7 +101,9 @@ final class AdminDtos {
 
     @Schema(name = "SetModuleAccessRequest")
     record SetModuleAccessRequest(@NotBlank @Schema(allowableValues = {"none", "view", "edit", "approve", "full"})
-                                  String level) {
+                                  String level,
+                                  @Size(max = 300) @Schema(description = "Why; kept in the access change log with the "
+                                          + "change (the staff console always sends one)") String reason) {
     }
 
     @Schema(name = "ModuleAccess")

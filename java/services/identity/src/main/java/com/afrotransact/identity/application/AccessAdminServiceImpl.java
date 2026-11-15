@@ -53,6 +53,8 @@ import org.springframework.transaction.annotation.Transactional;
 class AccessAdminServiceImpl implements AccessAdminService {
 
     private static final int MAX_PAGE = 200;
+    /** Platform modules Super Admin must keep Edit on: Users & roles and Access control. */
+    private static final Set<String> LOCKED_MODULES = Set.of("rbac", "access");
 
     private final CurrentUser current;
     private final PermissionChecker permissions;
@@ -330,6 +332,13 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Override
     @Transactional
     public ModuleAccess setModuleAccess(Portal portal, String moduleKey, String roleKey, AccessLevel level) {
+        return setModuleAccess(portal, moduleKey, roleKey, level, null);
+    }
+
+    @Override
+    @Transactional
+    public ModuleAccess setModuleAccess(Portal portal, String moduleKey, String roleKey, AccessLevel level,
+                                        String reason) {
         Actor actor = permissions.require(IdentityPermissions.ACCESS_ADMIN);
         Role role = role(roleKey);
         if (role.portal() != portal) {
@@ -340,10 +349,16 @@ class AccessAdminServiceImpl implements AccessAdminService {
         if (!known) {
             throw new NotFoundException("identity.module-not-found", "Unknown module " + moduleKey);
         }
+        if (portal == Portal.PLATFORM && RoleKeys.SUPER_ADMIN.equals(roleKey) && LOCKED_MODULES.contains(moduleKey)
+                && level.ordinal() < AccessLevel.EDIT.ordinal()) {
+            throw new ConflictException("identity.access-lockout", "Super Admin keeps at least Edit on "
+                    + moduleKey + " so the console can always be administered");
+        }
         AccessLevel previous = modules.set(portal, moduleKey, roleKey, level);
         if (previous != level) {
+            String why = reason == null || reason.isBlank() ? "" : ": " + reason.trim();
             changeLog.append(actor.subject(), "module.access.changed", null, roleKey, portal.wire() + ":" + moduleKey,
-                    previous.wire() + " → " + level.wire());
+                    previous.wire() + " → " + level.wire() + why);
         }
         return new ModuleAccess(portal, moduleKey, roleKey, level);
     }

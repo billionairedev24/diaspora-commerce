@@ -300,7 +300,7 @@ Findings that decide the Go design:
 
 ## 10. Re-check after merging main (2026-11-15, main at 72ae69796)
 
-Merged into release-1 (d1368b31b): seller storefront (`seller` V92, `StorePage*`, `PublicStorefrontController`), gateway-bff storefront/staff-access/seller store-page work (Go), sitemap stores. One conflict, `docs/backlog/backlog.csv` (both sides appended), resolved by taking main's file and re-appending the release-1 epic E37 and stories S491-S499 (renumbered).
+Merged into release-1 (d1368b31b): seller storefront (`seller` V92, `StorePage*`, `PublicStorefrontController`), gateway-bff storefront/staff-access/seller store-page work (Go), sitemap stores. One conflict, `docs/backlog/backlog.csv` (both sides appended), resolved by taking main's file and re-appending the release-1 epic E37 and stories S491-S499 (renumbered; renumbered again to S495-S503 when main took S491-S494).
 
 - **No consolidated module was touched** (catalog and tax-returns have no changes from main in this merge), so nothing needed adapting. `tools/release/sync-main.sh` now lists, after every merge, any change main made to the outbound adapters, config or pom of a mounted module under "ADAPT", and `--require-current` fails when release-1 is behind main.
 - **seller (batch 2)**: the new public storefront endpoints are permitted in `SellerSecurityConfiguration` itself (`GET /v1/public/storefronts[/*]`), not in `at.security.public-paths`. This confirms hazard 10: when seller mounts, its custom chain must become a `securityMatcher` chain ahead of the shared one, and its permit list must be carried over, or the storefront returns 401. V92 is a new migration in seller's own history (no renumbering).

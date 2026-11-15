@@ -410,7 +410,7 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `PUT/DELETE /v1/admin/users/{id}/roles/{role}?market=` | `access:admin` | Assign/remove account and platform roles; `market` scopes a staff role (S248) |
 | `PUT/DELETE /v1/admin/users/{id}/permissions/{perm}` | `access:admin` | Direct grants (e.g. `delivery:operate`) |
 | `POST /v1/admin/users/{id}/disable`, `…/enable` | `access:admin` | Disable ends every session immediately |
-| `GET /v1/admin/module-access?portal=`, `PUT /v1/admin/module-access/{portal}/{module}/{role}` | read / admin | Module access matrix |
+| `GET /v1/admin/module-access?portal=`, `PUT /v1/admin/module-access/{portal}/{module}/{role}` | read / admin | Module access matrix; the PUT takes `{level, reason}`, logs the reason, and keeps Super Admin at Edit or more on Users & roles and Access control (409 `identity.access-lockout`) |
 | `GET /v1/admin/access-log?userId=&role=&permission=&page=&size=` | `access:read` | Append-only change log; the three filters are exact, indexed matches (V50) and combine with AND; the page carries `total` |
 | `GET /v1/admin/identity-providers`, `PUT /v1/admin/identity-providers/{id}` | read / admin | Identity provider switches |
 | `GET /v1/admin/data-protection`, `POST /v1/admin/data-protection/rotate` | STAFF + `platform.super_admin` | Encryption-key status, re-encrypt MFA secrets under the current key ([Data protection](#data-protection-s202)) |
