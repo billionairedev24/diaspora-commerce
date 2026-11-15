@@ -3202,7 +3202,6 @@
   "st.acc.members.none": "Personne n’a encore ce rôle.",
   "st.acc.members.markets": "limité à {markets}",
   "st.acc.members.disabled": "compte désactivé",
-  "st.acc.members.partial": "Seules les premières personnes de l’annuaire ont été vérifiées ; la liste peut être incomplète. Cherchez une personne précise dans Personnes.",
   "st.acc.permissions.title": "Ce que ce rôle peut faire",
   "st.acc.permissions.none": "Aucune autorisation ne correspond.",
   "st.acc.filter.search": "Rechercher une autorisation",
@@ -3271,5 +3270,11 @@
   "st.tour.roles.roles.title": "Les rôles, par portail",
   "st.tour.roles.roles.body": "Choisissez personnel de la plateforme, vendeur, prestataire ou compte, puis ouvrez un rôle pour voir qui l’a et activer ou désactiver ses autorisations.",
   "st.tour.roles.change.title": "Chaque modification a un motif",
-  "st.tour.roles.change.body": "Activer une autorisation demande une confirmation et un motif. Le motif et votre nom sont consignés dans le journal, et la modification atteint les sessions en 5 minutes environ. L’onglet Personnes montre ce qu’une personne peut faire et d’où vient chaque autorisation."
+  "st.tour.roles.change.body": "Activer une autorisation demande une confirmation et un motif. Le motif et votre nom sont consignés dans le journal, et la modification atteint les sessions en 5 minutes environ. L’onglet Personnes montre ce qu’une personne peut faire et d’où vient chaque autorisation.",
+  "st.acc.members.paging": "Personnes ayant ce rôle, pages",
+  "st.acc.members.range": "{from} à {to} sur {total}",
+  "st.acc.members.prev": "Précédent",
+  "st.acc.members.next": "Suivant",
+  "st.acc.log.permission": "Autorisation",
+  "st.acc.log.anyPermission": "Toute autorisation"
 }

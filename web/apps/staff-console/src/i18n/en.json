@@ -3195,7 +3195,6 @@
   "st.acc.members.none": "Nobody has this role yet.",
   "st.acc.members.markets": "limited to {markets}",
   "st.acc.members.disabled": "account off",
-  "st.acc.members.partial": "Only the first people in the directory were checked, so this list may be incomplete. Search People for a particular person.",
   "st.acc.permissions.title": "What this role can do",
   "st.acc.permissions.none": "No permissions match.",
   "st.acc.filter.search": "Search permissions",
@@ -3264,5 +3263,11 @@
   "st.tour.roles.roles.title": "Roles, by portal",
   "st.tour.roles.roles.body": "Choose platform staff, seller, provider or account, then open a role to see who has it and switch its permissions on or off.",
   "st.tour.roles.change.title": "Every change has a reason",
-  "st.tour.roles.change.body": "Switching a permission asks you to confirm and say why. The reason and your name go in the change log, and the change reaches people’s sign-ins within about 5 minutes. The People tab shows what a person can do and where each permission comes from."
+  "st.tour.roles.change.body": "Switching a permission asks you to confirm and say why. The reason and your name go in the change log, and the change reaches people’s sign-ins within about 5 minutes. The People tab shows what a person can do and where each permission comes from.",
+  "st.acc.members.paging": "People with this role, pages",
+  "st.acc.members.range": "{from} to {to} of {total}",
+  "st.acc.members.prev": "Previous",
+  "st.acc.members.next": "Next",
+  "st.acc.log.permission": "Permission",
+  "st.acc.log.anyPermission": "Any permission"
 }

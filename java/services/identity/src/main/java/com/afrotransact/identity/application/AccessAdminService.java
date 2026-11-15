@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.afrotransact.identity.domain.AccessChange;
 import com.afrotransact.identity.domain.AccessLevel;
+import com.afrotransact.identity.domain.AccessLogFilter;
 import com.afrotransact.identity.domain.ModuleAccess;
 import com.afrotransact.identity.domain.Permission;
 import com.afrotransact.identity.domain.Portal;
@@ -27,8 +28,15 @@ public interface AccessAdminService {
     /** People search; also open to {@code users:read} (customer support's customer look-up). */
     PageView<UserAccessView> users(String query, int page, int size);
 
+    /** People search narrowed to the holders of {@code roleKey} (null or blank: everyone). */
+    PageView<UserAccessView> users(String query, String roleKey, int page, int size);
+
     UserAccessView user(UUID userId);
 
+    /**
+     * Provisions an account with a temporary password. Off by default (at.identity.staff-invitations.
+     * temp-password-enabled): StaffInvitationService replaces it, and this answers 409 identity.temp-password-disabled.
+     */
     UserAccessView createStaffUser(CreateStaffUserCommand command);
 
     /** People tab: toggle an account or platform role (platform-wide). */
@@ -53,4 +61,7 @@ public interface AccessAdminService {
     ModuleAccess setModuleAccess(Portal portal, String moduleKey, String roleKey, AccessLevel level);
 
     PageView<AccessChange> changeLog(UUID userId, int page, int size);
+
+    /** Change log narrowed by person, role and/or permission; the page carries the exact total. */
+    PageView<AccessChange> changeLog(AccessLogFilter filter, int page, int size);
 }

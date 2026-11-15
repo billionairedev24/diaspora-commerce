@@ -19,12 +19,16 @@ import { useAccessNav } from './useAccessNav';
 
 type Show = 'all' | 'on' | 'off';
 
+/** Identity pages the holders; the total it returns is exact. */
+const MEMBERS_PAGE = 50;
+
 /** Who holds the role, by name, with the market a role is limited to. */
 function Members({ role }: { role: AccessRole }) {
   const t = useT();
   const api = staffApi();
   const nav = useAccessNav();
-  const q = useQuery(staffAccessQueries.members(api.access, role.key));
+  const [page, setPage] = useState(0);
+  const q = useQuery(staffAccessQueries.members(api.access, role.key, page, MEMBERS_PAGE));
   if (q.isPending) return <Spinner center={false} />;
   if (q.isError) return <p className="m-0 text-sm text-muted">{problemMessage(q.error)}</p>;
   if (q.data.items.length === 0) return <p className="m-0 text-sm text-muted">{t('st.acc.members.none')}</p>;
@@ -42,7 +46,17 @@ function Members({ role }: { role: AccessRole }) {
           </li>
         ))}
       </ul>
-      {q.data.partial ? <p className="m-0 text-xs text-muted">{t('st.acc.members.partial')}</p> : null}
+      {q.data.total > MEMBERS_PAGE ? (
+        <nav aria-label={t('st.acc.members.paging')} className="flex min-h-11 flex-wrap items-center gap-3 text-sm" data-testid="role-members-paging">
+          <span className="text-muted">{t('st.acc.members.range', { from: page * MEMBERS_PAGE + 1, to: page * MEMBERS_PAGE + q.data.items.length, total: q.data.total })}</span>
+          <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)} className="min-h-11 cursor-pointer border-0 bg-transparent p-0 text-link underline disabled:cursor-default disabled:text-muted disabled:no-underline">
+            {t('st.acc.members.prev')}
+          </button>
+          <button type="button" disabled={(page + 1) * MEMBERS_PAGE >= q.data.total} onClick={() => setPage(page + 1)} className="min-h-11 cursor-pointer border-0 bg-transparent p-0 text-link underline disabled:cursor-default disabled:text-muted disabled:no-underline">
+            {t('st.acc.members.next')}
+          </button>
+        </nav>
+      ) : null}
     </>
   );
 }

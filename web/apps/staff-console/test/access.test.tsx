@@ -100,6 +100,24 @@ describe('Roles and permissions', () => {
     expect(within(log).getByText('Role permission removed: Refunds: issue', { exact: false })).toBeInTheDocument();
   });
 
+  it('filters the change log by permission with an exact total, and never says the answer may be incomplete', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<AccessView />);
+    const detail = await openRole(user, 'Finance');
+    expect(within(detail).queryByText(/may be incomplete/)).not.toBeInTheDocument();
+    await user.click(sw(detail, 'Refunds: issue for Finance'));
+    await user.type(await screen.findByLabelText(/^Why/), reasonText);
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove permission' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'All roles' }));
+    await user.click(await screen.findByRole('tab', { name: 'Change log' }));
+    await user.selectOptions(await screen.findByLabelText('Permission'), 'refunds:issue');
+    const log = await screen.findByRole('table', { name: 'Change log' });
+    expect(await within(log).findByText(reasonText)).toBeInTheDocument();
+    expect(await screen.findByText(/^Showing 1–\d+ of \d+$/)).toBeInTheDocument();
+    expect(screen.queryByText(/may be incomplete|newest 200/)).not.toBeInTheDocument();
+  });
+
   it('filters a role’s permissions by search, by on/off and by area', async () => {
     const user = userEvent.setup();
     await renderScreen(<AccessView />);

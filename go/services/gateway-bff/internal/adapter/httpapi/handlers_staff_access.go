@@ -31,7 +31,10 @@ func (h *handlersImpl) staffAccessRoles(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *handlersImpl) staffAccessRoleMembers(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Staff.Access.RoleMembers(r.Context(), callerFrom(r.Context()), r.PathValue("role"))
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	size, _ := strconv.Atoi(q.Get("size"))
+	v, err := h.s.Staff.Access.RoleMembers(r.Context(), callerFrom(r.Context()), r.PathValue("role"), page, size)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

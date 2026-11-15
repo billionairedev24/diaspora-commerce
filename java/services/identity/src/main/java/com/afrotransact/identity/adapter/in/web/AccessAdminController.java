@@ -21,8 +21,10 @@ import com.afrotransact.identity.application.PageView;
 import com.afrotransact.identity.application.UserAccessView;
 import com.afrotransact.identity.domain.AccessChange;
 import com.afrotransact.identity.domain.AccessLevel;
+import com.afrotransact.identity.domain.AccessLogFilter;
 import com.afrotransact.identity.domain.Portal;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -75,9 +77,11 @@ class AccessAdminController {
 
     @Operation(summary = "People: search users by name or email")
     @GetMapping("/v1/admin/users")
-    UserPageResponse users(@RequestParam(required = false) String q, @RequestParam(defaultValue = "0") int page,
-                           @RequestParam(defaultValue = "50") int size) {
-        PageView<UserAccessView> p = admin.users(q, page, size);
+    UserPageResponse users(@RequestParam(required = false) String q,
+                           @RequestParam(required = false) @Schema(description = "Only people who hold this role key",
+                                   example = "platform.customer_support") String role,
+                           @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
+        PageView<UserAccessView> p = admin.users(q, role, page, size);
         return new UserPageResponse(p.items().stream().map(UserAccessResponse::of).toList(), p.page(), p.size(),
                 p.total());
     }
@@ -167,11 +171,17 @@ class AccessAdminController {
     @Operation(summary = "Append-only access change log (who changed what and when)")
     @GetMapping("/v1/admin/access-log")
     AccessChangePageResponse log(@RequestParam(required = false) UUID userId,
+                                 @RequestParam(required = false) @Schema(description = "Only changes to this role "
+                                         + "(its permissions, its module access, or granted to / taken from a person)",
+                                         example = "platform.customer_support") String role,
+                                 @RequestParam(required = false) @Schema(description = "Only changes to this "
+                                         + "permission key (on a role or granted directly)", example = "refunds:issue")
+                                 String permission,
                                  @RequestParam(defaultValue = "0") int page,
                                  @RequestParam(defaultValue = "50") int size) {
-        PageView<AccessChange> p = admin.changeLog(userId, page, size);
+        PageView<AccessChange> p = admin.changeLog(new AccessLogFilter(userId, role, permission), page, size);
         return new AccessChangePageResponse(p.items().stream().map(AccessChangeResponse::of).toList(), p.page(),
-                p.size());
+                p.size(), p.total());
     }
 
     private static Portal portal(String value) {

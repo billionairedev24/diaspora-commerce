@@ -149,8 +149,12 @@ export function accessHandlers(W: string, deps: PreorderHandlerDeps) {
       `${A}/roles/:role/members`,
       route((ctx, p) => {
         const s = read(ctx);
-        const items: AccessRoleMember[] = s.people.filter((x) => x.roles.includes(p.role ?? '')).map((x) => ({ id: x.id, name: x.name, email: x.email, enabled: x.enabled, markets: x.roleMarkets[p.role ?? ''] ?? [] }));
-        return { role: p.role, items, partial: false };
+        const q = new URL(ctx.request.url).searchParams;
+        const page = Number(q.get('page') ?? 0);
+        const size = Number(q.get('size') ?? 50);
+        const holders = s.people.filter((x) => x.roles.includes(p.role ?? ''));
+        const items: AccessRoleMember[] = holders.slice(page * size, page * size + size).map((x) => ({ id: x.id, name: x.name, email: x.email, enabled: x.enabled, markets: x.roleMarkets[p.role ?? ''] ?? [] }));
+        return { role: p.role, items, total: holders.length, page, size };
       })
     ),
     ...(['put', 'delete'] as const).map((method) =>
@@ -218,7 +222,7 @@ export function accessHandlers(W: string, deps: PreorderHandlerDeps) {
         const rows = s.log.filter((e) => (!who || e.targetName === who.name) && (!role || e.role === role) && (!perm || e.subject === perm));
         const page = Number(q.get('page') ?? 0);
         const size = Number(q.get('size') ?? 50);
-        return { items: rows.slice(page * size, page * size + size), page, size, partial: false };
+        return { items: rows.slice(page * size, page * size + size), page, size, total: rows.length };
       })
     )
   ];

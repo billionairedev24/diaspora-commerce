@@ -13,6 +13,7 @@ import com.afrotransact.identity.adapter.out.persistence.RotatingSecretEncoder;
 import com.afrotransact.identity.application.AuthSettingsService;
 import com.afrotransact.identity.application.FirstPartySignInSettings;
 import com.afrotransact.identity.application.InvitationSettings;
+import com.afrotransact.identity.application.StaffInvitationSettings;
 import com.afrotransact.identity.application.ProtectedClients;
 import com.afrotransact.identity.application.TokenIssuer;
 import com.afrotransact.identity.adapter.out.notification.LoggingVerificationCodeSender;
@@ -191,6 +192,12 @@ class IdentityConfiguration {
     @Bean
     InvitationSettings invitationSettings(IdentityProperties props) {
         return new InvitationSettings(props.invitations().acceptUrl());
+    }
+
+    @Bean
+    StaffInvitationSettings staffInvitationSettings(IdentityProperties props) {
+        IdentityProperties.StaffInvitations s = props.staffInvitations();
+        return new StaffInvitationSettings(s.acceptUrl(), s.ttl(), s.tempPasswordEnabled(), props.staffEmailDomains());
     }
 
     @Bean

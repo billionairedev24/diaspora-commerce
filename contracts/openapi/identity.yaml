@@ -141,6 +141,20 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: role
+        in: query
+        required: false
+        description: Only changes to this role (its permissions, its module access, or granted to / taken from a person)
+        schema:
+          type: string
+          example: platform.customer_support
+      - name: permission
+        in: query
+        required: false
+        description: Only changes to this permission key (on a role or granted directly)
+        schema:
+          type: string
+          example: refunds:issue
       - name: page
         in: query
         required: false
@@ -899,6 +913,13 @@ paths:
         required: false
         schema:
           type: string
+      - name: role
+        in: query
+        required: false
+        description: Only people who hold this role key
+        schema:
+          type: string
+          example: platform.customer_support
       - name: page
         in: query
         required: false
@@ -938,6 +959,136 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/UserAccess'
+  /v1/admin/staff-invitations:
+    get:
+      tags:
+      - Staff invitations
+      summary: Open staff invitations (pending, and expired ones never used), newest first
+      description: Needs access:read. Names and emails, never the token.
+      operationId: open
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema: {type: integer, format: int32, default: 0}
+      - name: size
+        in: query
+        required: false
+        schema: {type: integer, format: int32, default: 50, maximum: 100}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StaffInvitationPage'
+    post:
+      tags:
+      - Staff invitations
+      summary: Invite a person to be staff
+      description: Needs access:admin. Creates a pending invitation (single-use token, 72 hours by default, stored hashed)
+        and queues the email through identity.staff-invitation.created. Inviting an email that already has a pending
+        invitation replaces it. 409 identity.email-taken when an account exists; 422 for a role that is not a staff
+        role or an email outside the staff domains; only a Super Admin can invite a Super Admin.
+      operationId: invite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteStaffRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StaffInvitation'
+  /v1/admin/staff-invitations/{invitationId}/resend:
+    post:
+      tags:
+      - Staff invitations
+      summary: Send an invitation again with a new token and expiry (the old link stops working)
+      description: Needs access:admin. 409 identity.staff-invitation-not-open when it was accepted or revoked.
+      operationId: resend
+      parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StaffInvitation'
+  /v1/admin/staff-invitations/{invitationId}/revoke:
+    post:
+      tags:
+      - Staff invitations
+      summary: Revoke an open invitation (its link stops working at once)
+      description: Needs access:admin and a reason of 3 to 300 characters.
+      operationId: revoke
+      parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeStaffInvitationRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+  /v1/staff-invitations/preview:
+    post:
+      tags:
+      - Staff invitations
+      summary: Look up a staff invitation link (public)
+      description: Name, email, role and status for the accept page. 404 for a token that is not an invitation. The token
+        is sent in the body so it stays out of access logs.
+      operationId: preview
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffInvitationTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StaffInvitationPreview'
+      security: []
+  /v1/staff-invitations/accept:
+    post:
+      tags:
+      - Staff invitations
+      summary: Accept a staff invitation by choosing a password (public)
+      description: 'Creates the account (enabled, email verified, with the invited role) and spends the token. The password
+        must meet the password policy. Expired, withdrawn or used links: 422 identity.staff-invitation-expired / -revoked
+        / -used. Sign-in then follows the usual two-step verification rules for staff.'
+      operationId: accept_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptStaffInvitationRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AcceptedStaffInvitation'
+      security: []
   /v1/admin/users/{userId}:
     get:
       tags:
@@ -4442,6 +4593,76 @@ components:
           type: string
         detail:
           type: string
+    InviteStaffRequest:
+      type: object
+      required: [firstName, lastName, email, roleKey, reason]
+      properties:
+        firstName: {type: string, maxLength: 80}
+        lastName: {type: string, maxLength: 80}
+        email: {type: string, maxLength: 254}
+        roleKey: {type: string, maxLength: 80, description: A platform (staff) role}
+        reason: {type: string, minLength: 3, maxLength: 300}
+    RevokeStaffInvitationRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 3, maxLength: 300}
+    StaffInvitation:
+      type: object
+      description: Never carries the token
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        firstName: {type: string}
+        lastName: {type: string}
+        roleKey: {type: string}
+        roleName: {type: string}
+        status: {type: string, enum: [PENDING, EXPIRED]}
+        reason: {type: string}
+        invitedByName: {type: string}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        lastSentAt: {type: string, format: date-time}
+        sendCount: {type: integer, format: int32}
+    StaffInvitationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffInvitation'
+        page: {type: integer, format: int32}
+        size: {type: integer, format: int32}
+        total: {type: integer, format: int64}
+    StaffInvitationTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string, maxLength: 200}
+    AcceptStaffInvitationRequest:
+      type: object
+      required: [token, password, confirmPassword]
+      properties:
+        token: {type: string, maxLength: 200}
+        password: {type: string, maxLength: 128}
+        confirmPassword: {type: string, maxLength: 128}
+        phone: {type: string, maxLength: 30, description: Optional; can be added and verified later}
+        phoneRegion: {type: string, maxLength: 2}
+    StaffInvitationPreview:
+      type: object
+      description: What an invite link is for, shown before choosing a password
+      properties:
+        firstName: {type: string}
+        lastName: {type: string}
+        email: {type: string}
+        roleName: {type: string}
+        status: {type: string, enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]}
+        expiresAt: {type: string, format: date-time}
+    AcceptedStaffInvitation:
+      type: object
+      properties:
+        email: {type: string}
+        roleName: {type: string}
     AccessChangePage:
       type: object
       properties:
@@ -4455,6 +4676,10 @@ components:
         size:
           type: integer
           format: int32
+        total:
+          type: integer
+          format: int64
+          description: Entries matching the filter
     PasswordConfirmation:
       type: object
       description: Re-authentication to turn a factor off

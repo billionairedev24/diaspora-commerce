@@ -17,6 +17,7 @@ import com.afrotransact.identity.application.IdentityEventPayloads.UserRegistere
 import com.afrotransact.identity.application.IdentityEventPayloads.UserStatusChanged;
 import com.afrotransact.identity.domain.AccessChange;
 import com.afrotransact.identity.domain.AccessLevel;
+import com.afrotransact.identity.domain.AccessLogFilter;
 import com.afrotransact.identity.domain.AccessPolicy;
 import com.afrotransact.identity.domain.AccessProfile;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
@@ -69,6 +70,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
     private final PhoneNumberPolicy phones;
     private final PasswordHasher hasher;
     private final DomainEventPublisher events;
+    private final StaffInvitationSettings invitationSettings;
     private final Clock clock;
 
     AccessAdminServiceImpl(CurrentUser current, PermissionChecker permissions, UserAccountRepository users,
@@ -76,7 +78,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
                            AccessChangeLog changeLog, AccessProfileLoader profiles, AccessPolicy accessPolicy,
                            SessionStore sessions, MfaRepository mfa, SignUpPolicy signUpPolicy,
                            PasswordPolicy passwordPolicy, PhoneNumberPolicy phones, PasswordHasher hasher,
-                           DomainEventPublisher events, Clock clock) {
+                           DomainEventPublisher events, StaffInvitationSettings invitationSettings, Clock clock) {
         this.current = current;
         this.permissions = permissions;
         this.users = users;
@@ -93,6 +95,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
         this.phones = phones;
         this.hasher = hasher;
         this.events = events;
+        this.invitationSettings = invitationSettings;
         this.clock = clock;
     }
 
@@ -135,12 +138,19 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Override
     @Transactional(readOnly = true)
     public PageView<UserAccessView> users(String query, int page, int size) {
+        return users(query, null, page, size);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageView<UserAccessView> users(String query, String roleKey, int page, int size) {
         requirePeopleRead();
         int s = Math.max(1, Math.min(size, MAX_PAGE));
         int p = Math.max(0, page);
         String q = query == null ? "" : query.trim();
-        List<UserAccessView> items = users.search(q, s, p * s).stream().map(this::view).toList();
-        return new PageView<>(items, p, s, users.count(q));
+        String role = roleKey == null || roleKey.isBlank() ? null : roleKey.trim();
+        List<UserAccessView> items = users.search(q, role, s, p * s).stream().map(this::view).toList();
+        return new PageView<>(items, p, s, users.count(q, role));
     }
 
     @Override
@@ -154,6 +164,11 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Transactional
     public UserAccessView createStaffUser(CreateStaffUserCommand c) {
         Actor actor = permissions.require(IdentityPermissions.ACCESS_ADMIN);
+        if (!invitationSettings.tempPasswordEnabled()) {
+            throw new ConflictException("identity.temp-password-disabled", "Staff accounts are created by invitation "
+                    + "(POST /v1/admin/staff-invitations): the person sets their own password. "
+                    + "at.identity.staff-invitations.temp-password-enabled turns this old path back on");
+        }
         Map<String, String> errors = new LinkedHashMap<>();
         if (!signUpPolicy.validName(trim(c.firstName()))) {
             errors.put("firstName", "Use letters, spaces, hyphens or apostrophes");
@@ -341,6 +356,15 @@ class AccessAdminServiceImpl implements AccessAdminService {
         int p = Math.max(0, page);
         List<AccessChange> items = changeLog.recent(userId, s, p * s);
         return new PageView<>(items, p, s, -1);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageView<AccessChange> changeLog(AccessLogFilter filter, int page, int size) {
+        requireRead();
+        int s = Math.max(1, Math.min(size, MAX_PAGE));
+        int p = Math.max(0, page);
+        return new PageView<>(changeLog.search(filter, s, p * s), p, s, changeLog.count(filter));
     }
 
     /** Grants {@code roleKey} for one market (adds the role, scoped, when the user does not hold it yet). */

@@ -25,6 +25,7 @@ public final class IdentityEvents {
     public static final String USER_PHONE_VERIFIED = "identity.user.phone-verified";
     /** Key = organisation id. Carries the plain single-use token for the invitation email. */
     public static final String INVITATION_CREATED = "identity.invitation.created";
+    public static final String STAFF_INVITATION_CREATED = "identity.staff-invitation.created";
     public static final String INVITATION_REVOKED = "identity.invitation.revoked";
     /** Key = the accepting user's id. */
     public static final String INVITATION_ACCEPTED = "identity.invitation.accepted";

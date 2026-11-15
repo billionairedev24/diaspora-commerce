@@ -157,7 +157,8 @@ class SecurityConfiguration {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.POST, "/v1/accounts", "/v1/accounts/verification",
                                 "/v1/accounts/verification/resend", "/v1/invitations/lookup", "/v1/password-reset",
-                                "/v1/password-reset/confirm").permitAll()
+                                "/v1/password-reset/confirm", "/v1/staff-invitations/preview",
+                                "/v1/staff-invitations/accept").permitAll()
                         .requestMatchers(HttpMethod.GET, "/v1/identity-providers").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs.jwt(j -> j.jwtAuthenticationConverter(jwtConverter())));

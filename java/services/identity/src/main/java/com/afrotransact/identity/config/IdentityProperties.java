@@ -25,6 +25,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param firstParty        first-party sign-in API (clients allowed to call it and redeem login tickets)
  * @param signInProtection  brute-force protection limits (per account and per IP)
  * @param invitations       organisation invitations (Seller Center accept page)
+ * @param staffInvitations  staff invitations (staff console accept page, expiry, the off-by-default temporary-password path)
  * @param dataProtection    encryption at rest of MFA secrets (key-encryption key provider and keys)
  * @param pages             hosted sign-in pages: the apps they brand themselves for and their legal/support links
  * @param auth              defaults of the authentication settings the staff console can override (S291)
@@ -45,6 +46,7 @@ public record IdentityProperties(
         FirstParty firstParty,
         SignInProtection signInProtection,
         Invitations invitations,
+        StaffInvitations staffInvitations,
         DataProtection dataProtection,
         Pages pages,
         Auth auth,
@@ -64,6 +66,7 @@ public record IdentityProperties(
         firstParty = firstParty == null ? new FirstParty(null, null) : firstParty;
         signInProtection = signInProtection == null ? new SignInProtection(null, null) : signInProtection;
         invitations = invitations == null ? new Invitations(null) : invitations;
+        staffInvitations = staffInvitations == null ? new StaffInvitations(null, null, false) : staffInvitations;
         dataProtection = dataProtection == null ? new DataProtection(null, null, null, null, null) : dataProtection;
         pages = pages == null ? new Pages(null, null, null, null, null, null, null, null) : pages;
         auth = auth == null ? new Auth(null, null, null, null, null, null) : auth;
@@ -200,6 +203,14 @@ public record IdentityProperties(
             return "DataProtection[provider=" + provider + ", keyId=" + keyId + ", sealOnStartup=" + sealOnStartup
                     + "]";
         }
+    }
+
+    /**
+     * @param acceptUrl           staff console page that accepts a staff invitation (the token follows {@code #token=})
+     * @param ttl                 how long an invitation and each resend stays valid (default 72 hours)
+     * @param tempPasswordEnabled keep {@code POST /v1/admin/users} (account with a temporary password) working; off by default
+     */
+    public record StaffInvitations(String acceptUrl, Duration ttl, boolean tempPasswordEnabled) {
     }
 
     /** @param acceptUrl Seller Center page that accepts an invitation ({@code ?token=} is appended) */

@@ -33,7 +33,7 @@ export type AccessRoleList = z.infer<typeof AccessRoleListSchema>;
 
 export const AccessRoleMemberSchema = z.object({ id: z.string(), name: z.string(), email: z.string(), enabled: z.boolean(), markets: z.array(z.string()).default([]) });
 export type AccessRoleMember = z.infer<typeof AccessRoleMemberSchema>;
-export const AccessRoleMembersSchema = z.object({ role: z.string(), items: z.array(AccessRoleMemberSchema), partial: z.boolean() });
+export const AccessRoleMembersSchema = z.object({ role: z.string(), items: z.array(AccessRoleMemberSchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
 export type AccessRoleMembers = z.infer<typeof AccessRoleMembersSchema>;
 
 export const AccessPersonSchema = z.object({
@@ -64,7 +64,7 @@ export const AccessLogEntrySchema = z.object({
   detail: z.string()
 });
 export type AccessLogEntry = z.infer<typeof AccessLogEntrySchema>;
-export const AccessLogPageSchema = z.object({ items: z.array(AccessLogEntrySchema), page: z.number().int(), size: z.number().int(), partial: z.boolean() });
+export const AccessLogPageSchema = z.object({ items: z.array(AccessLogEntrySchema), page: z.number().int(), size: z.number().int(), total: z.number().int() });
 export type AccessLogPage = z.infer<typeof AccessLogPageSchema>;
 
 export interface AccessLogQuery {
@@ -83,7 +83,8 @@ export function createStaffAccessApi(request: Requester) {
   return {
     permissions: (signal?: AbortSignal): Promise<AccessPermissionList> => request(`${A}/permissions`, AccessPermissionListSchema, { signal }),
     roles: (portal: AccessPortal, signal?: AbortSignal): Promise<AccessRoleList> => request(`${A}/roles`, AccessRoleListSchema, { query: { portal }, signal }),
-    roleMembers: (role: string, signal?: AbortSignal): Promise<AccessRoleMembers> => request(`${A}/roles/${enc(role)}/members`, AccessRoleMembersSchema, { signal }),
+    roleMembers: (role: string, page: number, size: number, signal?: AbortSignal): Promise<AccessRoleMembers> =>
+      request(`${A}/roles/${enc(role)}/members`, AccessRoleMembersSchema, { query: { page: String(page), size: String(size) }, signal }),
     setRolePermission: (role: string, permission: string, on: boolean, reason: string): Promise<AccessRole> =>
       request(`${A}/roles/${enc(role)}/permissions/${enc(permission)}`, AccessRoleSchema, { method: on ? 'PUT' : 'DELETE', body: { reason } }),
     people: (q: string, page: number, size: number, signal?: AbortSignal): Promise<AccessPersonPage> =>
@@ -104,7 +105,7 @@ export const staffAccessKeys = {
   all: ['staff', 'access'] as const,
   permissions: () => [...staffAccessKeys.all, 'permissions'] as const,
   roles: (portal: AccessPortal) => [...staffAccessKeys.all, 'roles', portal] as const,
-  members: (role: string) => [...staffAccessKeys.all, 'members', role] as const,
+  members: (role: string, page: number, size: number) => [...staffAccessKeys.all, 'members', role, page, size] as const,
   people: (q: string, page: number, size: number) => [...staffAccessKeys.all, 'people', q, page, size] as const,
   person: (id: string) => [...staffAccessKeys.all, 'person', id] as const,
   log: (q: AccessLogQuery) => [...staffAccessKeys.all, 'log', q] as const
@@ -113,7 +114,8 @@ export const staffAccessKeys = {
 export const staffAccessQueries = {
   permissions: (api: StaffAccessApi) => queryOptions({ queryKey: staffAccessKeys.permissions(), queryFn: ({ signal }) => api.permissions(signal), staleTime: 60_000 }),
   roles: (api: StaffAccessApi, portal: AccessPortal) => queryOptions({ queryKey: staffAccessKeys.roles(portal), queryFn: ({ signal }) => api.roles(portal, signal), staleTime: 10_000 }),
-  members: (api: StaffAccessApi, role: string) => queryOptions({ queryKey: staffAccessKeys.members(role), queryFn: ({ signal }) => api.roleMembers(role, signal), staleTime: 30_000 }),
+  members: (api: StaffAccessApi, role: string, page: number, size: number) =>
+    queryOptions({ queryKey: staffAccessKeys.members(role, page, size), queryFn: ({ signal }) => api.roleMembers(role, page, size, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
   people: (api: StaffAccessApi, q: string, page: number, size: number) =>
     queryOptions({ queryKey: staffAccessKeys.people(q, page, size), queryFn: ({ signal }) => api.people(q, page, size, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
   person: (api: StaffAccessApi, id: string) => queryOptions({ queryKey: staffAccessKeys.person(id), queryFn: ({ signal }) => api.person(id, signal), staleTime: 5_000 }),

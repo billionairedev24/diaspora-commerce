@@ -135,6 +135,17 @@ public final class IdentityEventPayloads {
                                     Recipient recipient, boolean transactional) {
     }
 
+    /**
+     * {@code identity.staff-invitation.created}: an invitation was issued or re-issued. {@code acceptUrl} carries the
+     * single-use token in its fragment; the notifications service emails it to {@code recipient} and nothing else may
+     * store or log it.
+     */
+    public record StaffInvitationCreated(String invitationId, String email, String firstName, String lastName,
+                                         String roleKey, String roleName, String acceptUrl, Instant expiresAt,
+                                         long expiresInHours, boolean resent, String invitedBy, String inviterName,
+                                         Recipient recipient, boolean transactional) {
+    }
+
     /** {@code identity.invitation.revoked}: an open invitation was withdrawn (or replaced by a new one). */
     public record InvitationRevoked(String invitationId, String orgId, String email, String roleKey, String actorId,
                                     String reason, Instant at) {

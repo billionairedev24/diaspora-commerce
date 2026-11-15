@@ -78,8 +78,10 @@ screens with switches disabled and "You can look but not change". Super Admin ke
 `permissions`, `roles?portal=`, `roles/{role}/members`, `PUT/DELETE roles/{role}/permissions/{permission}`, `people?q=`, `people/{id}`,
 `PUT/DELETE people/{id}/permissions/{permission}` (body `{reason}`), `log?userId=&role=&permission=`. Every call goes out with the staff member's own
 token, so identity's `access:read` / `access:admin` is the final word; the BFF also requires View (reads) or Edit (changes) on Users & roles and the reason.
-Limits of identity's API, handled and visible: no "people with this role" query (the BFF reads up to 1,000 people and says `partial`); the access log
-filters by person only (role and permission are matched over the newest 200 entries, `partial`).
+Both answers are exact and server-paged, with nothing scanned in the BFF: identity filters its directory by role (`GET /v1/admin/users?role=`) and its
+change log by person, role and permission (`GET /v1/admin/access-log?userId=&role=&permission=`, exact indexed matches, migration V50) and returns `total`.
+The console shows "Showing x to y of total" and no "may be incomplete" notice; the change log has a Permission filter beside Role. The table's own search
+box on the change log narrows the page that is showing only.
 
 ## Code map
 

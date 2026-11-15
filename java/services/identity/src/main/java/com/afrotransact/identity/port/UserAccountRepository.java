@@ -21,4 +21,9 @@ public interface UserAccountRepository {
     List<UserAccount> search(String query, int limit, int offset);
 
     long count(String query);
+
+    /** Search narrowed to the people who hold {@code roleKey} (null or blank: no role filter). */
+    List<UserAccount> search(String query, String roleKey, int limit, int offset);
+
+    long count(String query, String roleKey);
 }
