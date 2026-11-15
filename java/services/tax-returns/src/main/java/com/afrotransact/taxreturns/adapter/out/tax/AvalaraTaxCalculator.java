@@ -34,6 +34,7 @@ import net.avalara.avatax.rest.client.models.PingResultModel;
 import net.avalara.avatax.rest.client.models.TransactionLineDetailModel;
 import net.avalara.avatax.rest.client.models.TransactionLineModel;
 import net.avalara.avatax.rest.client.models.TransactionModel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -64,6 +65,7 @@ class AvalaraTaxCalculator implements ProviderTaxCalculator, AutoCloseable {
     private final ProviderFallback fallback;
     private final Clock clock;
 
+    @Autowired
     AvalaraTaxCalculator(TaxReturnsProperties props, InHouseTaxCalculator rules, TaxTelemetry telemetry, Clock clock) {
         this(props.tax().avalara(), props.tax().avalara().configured()
                 ? new SdkAvaTaxGateway(props.tax().avalara()) : null, rules, telemetry, clock);
