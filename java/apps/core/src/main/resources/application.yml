@@ -49,15 +49,9 @@ management:
         enabled: true
       # Component names and statuses (no details): readiness lists every module, the module groups list its database.
       show-components: always
-      group:
-        # Readiness shows every module's start state. The live database check is not in readiness: a database blip must not
-        # take the whole application out of rotation. It is in the module's own group.
-        readiness:
-          include: readinessState,catalogModule,taxreturnsModule
-        catalog:
-          include: catalogModule,catalogDatabase
-        tax-returns:
-          include: taxreturnsModule,taxreturnsDatabase
+      # Health groups are generated per mounted module by module-core: readiness = readinessState plus each module's start state
+      # (so a module that is switched off is not listed), and /actuator/health/<module> adds that module's live database check.
+      # The database check is not in readiness: a database blip must not take the whole application out of rotation.
   tracing:
     sampling:
       probability: ${TRACE_SAMPLING:1.0}

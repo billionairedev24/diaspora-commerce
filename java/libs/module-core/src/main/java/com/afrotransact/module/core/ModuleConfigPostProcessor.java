@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -54,6 +55,8 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
         }
         List<String> profiles = activeProfiles(environment);
         Map<String, Set<String>> unions = new LinkedHashMap<>();
+        Map<String, Object> health = new LinkedHashMap<>();
+        List<String> readiness = new ArrayList<>(List.of("readinessState"));
         for (Resource base : bases) {
             Matcher matcher = MODULE_FILE.matcher(url(base));
             if (!matcher.matches()) {
@@ -84,8 +87,13 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
                 }
             }
             environment.getPropertySources().addLast(new MapPropertySource("moduleConfig[" + module + "]", kept));
+            addHealth(environment, module, health, readiness);
             LOG.debug("Module '" + module + "': " + kept.size() + " properties loaded, " + dropped
                     + " process-wide properties ignored (profiles " + profiles + ")");
+        }
+        if (!health.isEmpty()) {
+            health.put("management.endpoint.health.group.readiness.include", String.join(",", readiness));
+            environment.getPropertySources().addLast(new MapPropertySource("moduleConfig[health]", health));
         }
         if (!unions.isEmpty()) {
             Map<String, Object> merged = new LinkedHashMap<>();
@@ -97,6 +105,22 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
             });
             environment.getPropertySources().addLast(new MapPropertySource("moduleConfig[merged]", merged));
         }
+    }
+
+    /**
+     * Health groups are generated because Spring Boot refuses to start when a group names a contributor that does not exist,
+     * which is what a static list would do the moment a module is switched off. Readiness lists each mounted module's start
+     * state; the module's own group adds its live database check. A module with no database has no database indicator.
+     */
+    private static void addHealth(ConfigurableEnvironment environment, String module, Map<String, Object> health,
+                                  List<String> readiness) {
+        String key = module.replaceAll("[^a-zA-Z0-9]", "").toLowerCase(Locale.ROOT);
+        boolean database = !environment.getProperty("at.modules." + module + ".datasource.url", "").isBlank();
+        if (!database) {
+            return;
+        }
+        readiness.add(key + "Module");
+        health.put("management.endpoint.health.group." + module + ".include", key + "Module," + key + "Database");
     }
 
     /** Applies a profile file over the base the way Spring Boot does: a list in the profile replaces the whole base list. */

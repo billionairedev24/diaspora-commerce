@@ -1,5 +1,7 @@
 package com.afrotransact.module.core;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,9 +45,44 @@ final class ModuleRoutingTaskScheduler implements TaskScheduler, DisposableBean 
     }
 
     private TaskScheduler poolFor(Runnable task) {
-        Object target = task instanceof ScheduledMethodRunnable method ? method.getTarget() : task;
-        ThreadPoolTaskScheduler pool = pools.get(modules.nameOf(target));
+        ThreadPoolTaskScheduler pool = pools.get(modules.nameOf(ownerOf(task)));
         return pool != null ? pool : pools.get(ModuleRegistry.CORE);
+    }
+
+    /**
+     * The bean that owns the {@code @Scheduled} method. Spring wraps the method runnable (in Spring 7 in a private
+     * {@code Task$OutcomeTrackingRunnable}), so wrappers are opened until the method runnable is found; a runnable that is not
+     * one is attributed to itself, which puts it on the core pool.
+     */
+    private static Object ownerOf(Runnable task) {
+        Runnable current = task;
+        for (int depth = 0; depth < 5; depth++) {
+            if (current instanceof ScheduledMethodRunnable method) {
+                return method.getTarget();
+            }
+            Runnable inner = wrapped(current);
+            if (inner == null) {
+                break;
+            }
+            current = inner;
+        }
+        return task;
+    }
+
+    private static Runnable wrapped(Runnable wrapper) {
+        for (Class<?> type = wrapper.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
+            for (Field field : type.getDeclaredFields()) {
+                if (Runnable.class.isAssignableFrom(field.getType()) && !Modifier.isStatic(field.getModifiers())) {
+                    try {
+                        field.setAccessible(true);
+                        return (Runnable) field.get(wrapper);
+                    } catch (ReflectiveOperationException | RuntimeException ex) {
+                        return null;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     @Override
