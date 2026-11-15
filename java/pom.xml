@@ -21,6 +21,11 @@
         <module>libs/module-api/catalog-api</module>
         <module>libs/module-api/tax-returns-api</module>
         <module>libs/module-api/seller-api</module>
+        <module>libs/module-api/fulfilment-api</module>
+        <module>libs/module-api/orders-api</module>
+        <module>libs/module-api/ai-gateway-api</module>
+        <module>libs/module-api/content-api</module>
+        <module>libs/module-api/identity-api</module>
         <module>libs/module-api/inventory-api</module>
         <module>libs/module-api/payments-api</module>
         <module>libs/module-api/offers-api</module>

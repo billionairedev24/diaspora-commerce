@@ -135,6 +135,31 @@
             </dependency>
             <dependency>
                 <groupId>com.afrotransact</groupId>
+                <artifactId>fulfilment-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>orders-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>ai-gateway-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>content-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>identity-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
                 <artifactId>inventory-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
