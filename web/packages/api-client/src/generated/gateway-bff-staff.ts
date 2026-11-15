@@ -3751,6 +3751,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/tax/providers/{provider}/connection-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test the connection to a tax provider (Avalara: AvaTax Ping)
+         * @description tax-returns `POST /v1/tax/providers/{provider}/connection-test` (`tax:configure`). Asks the provider whether the configured credentials work before shadow mode runs. Calculates nothing and records nothing. Says authenticated yes or no, the account name and the environment; never the license key. 422 for an unknown provider.
+         */
+        post: operations["testStaffTaxProviderConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/tax/review-settings": {
         parameters: {
             query?: never;
@@ -11399,6 +11419,23 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        StaffTaxConnectionTest: {
+            /** @enum {string} */
+            provider: "STRIPE" | "AVALARA";
+            label: string;
+            /** @enum {string} */
+            status: "OK" | "FAILED" | "NOT_CONFIGURED";
+            /** @description One plain sentence: accepted, not accepted, or not set up */
+            headline: string;
+            configured: boolean;
+            authenticated: boolean;
+            /** @description Account or user name the provider reported; empty when it did not */
+            accountName?: string;
+            /** @description sandbox or production */
+            environment?: string;
+            /** @description What worked or what to fix; never a credential */
+            message: string;
+        };
         StaffTaxMethod: {
             /** @enum {string} */
             method: "RULES" | "STRIPE_TAX" | "AVALARA";
@@ -17629,6 +17666,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffTaxMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    testStaffTaxProviderConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "STRIPE" | "AVALARA";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxConnectionTest"];
                 };
             };
             401: components["responses"]["Problem"];
