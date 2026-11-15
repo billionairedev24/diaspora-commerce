@@ -7,11 +7,12 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.payments.api.OrderPaymentsApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
  * {@code UpstreamFailure}s (a decline is 402, an already-captured payment 409, a missing payment 404).
  */
 @Component
-@ConditionalOnExpression("'${at.orders.payments.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "payments", value = ModuleMode.IN_PROCESS)
 class InProcessPaymentsClient implements PaymentsClient {
 
     private static final String SERVICE = "payments";

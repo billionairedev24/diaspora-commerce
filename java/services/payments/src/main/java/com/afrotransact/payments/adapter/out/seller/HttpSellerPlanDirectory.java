@@ -5,13 +5,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.payments.port.SellerPlanDirectory;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -24,7 +25,7 @@ import tools.jackson.databind.JsonNode;
  * scope. Off (always empty) while {@code at.payments.seller.base-url} ({@code SELLER_URL}) is blank.
  */
 @Component
-@ConditionalOnExpression("'${at.payments.seller.mode:${at.payments.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "payments", callee = "seller", value = ModuleMode.HTTP)
 class HttpSellerPlanDirectory implements SellerPlanDirectory {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpSellerPlanDirectory.class);

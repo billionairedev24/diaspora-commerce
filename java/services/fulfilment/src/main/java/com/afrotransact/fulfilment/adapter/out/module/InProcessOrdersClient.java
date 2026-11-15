@@ -3,10 +3,11 @@ package com.afrotransact.fulfilment.adapter.out.module;
 import com.afrotransact.fulfilment.port.CourierEvent;
 import com.afrotransact.fulfilment.port.OrdersClient;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.api.ShipmentApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  * client (the note is cut at 500 characters, the proof is always sent) and the same {@code UpstreamFailure}s.
  */
 @Component
-@ConditionalOnExpression("'${at.fulfilment.orders.mode:${at.fulfilment.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "fulfilment", callee = "orders", value = ModuleMode.IN_PROCESS)
 class InProcessOrdersClient implements OrdersClient {
 
     private static final String SERVICE = "orders";

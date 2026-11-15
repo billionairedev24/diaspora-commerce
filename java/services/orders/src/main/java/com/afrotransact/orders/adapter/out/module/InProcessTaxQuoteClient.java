@@ -1,11 +1,12 @@
 package com.afrotransact.orders.adapter.out.module;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.TaxQuoteClient;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.api.TaxQuoteApi;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component;
  * checkout tax step already handles (a missing scope is 403, an unavailable provider 503).
  */
 @Component
-@ConditionalOnExpression("'${at.orders.tax-returns.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "tax-returns", value = ModuleMode.IN_PROCESS)
 class InProcessTaxQuoteClient implements TaxQuoteClient {
 
     private static final String SERVICE = "tax-returns";
@@ -24,7 +25,7 @@ class InProcessTaxQuoteClient implements TaxQuoteClient {
 
     InProcessTaxQuoteClient(ObjectProvider<TaxQuoteApi> api, ModuleUpstream upstream, ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(TaxQuoteApi.class, true, false).length > 0, "orders",
-                "tax-returns", "at.orders.tax-returns.mode");
+                "tax-returns", "at.orders.taxreturns.mode");
         this.api = api;
         this.upstream = upstream;
     }

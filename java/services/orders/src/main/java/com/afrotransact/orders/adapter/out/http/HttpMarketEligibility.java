@@ -3,19 +3,20 @@ package com.afrotransact.orders.adapter.out.http;
 import java.time.Duration;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** content-service (port 8112) {@code GET /v1/markets/eligibility?country=&state=&zip=} (public). */
 @Component
-@ConditionalOnExpression("'${at.orders.content.mode:${at.orders.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "orders", callee = "content", value = ModuleMode.HTTP)
 class HttpMarketEligibility implements MarketEligibility {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpMarketEligibility.class);

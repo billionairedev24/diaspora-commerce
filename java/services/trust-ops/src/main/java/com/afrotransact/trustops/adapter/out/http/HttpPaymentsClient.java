@@ -5,17 +5,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.config.TrustOpsProperties;
 import com.afrotransact.trustops.port.PaymentsClient;
 import org.springframework.http.MediaType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** payments-service refunds: {@code POST /v1/payments/{id}/refunds} and {@code POST /v1/orders/{id}/refunds}. */
 @Component
-@ConditionalOnExpression("'${at.trust-ops.payments.mode:${at.trust-ops.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "payments", value = ModuleMode.HTTP)
 class HttpPaymentsClient implements PaymentsClient {
 
     private static final String SERVICE = "payments";

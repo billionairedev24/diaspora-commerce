@@ -6,9 +6,10 @@ import java.util.Optional;
 import com.afrotransact.fulfilment.port.InventoryClient;
 import com.afrotransact.inventory.api.ReservationApi;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Component;
  * node and lots reserved for an order, as picking needs them. No reservation is {@link Optional#empty()}, as a 404 is over HTTP.
  */
 @Component
-@ConditionalOnExpression("'${at.fulfilment.inventory.mode:${at.fulfilment.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "fulfilment", callee = "inventory", value = ModuleMode.IN_PROCESS)
 class InProcessInventoryClient implements InventoryClient {
 
     private static final String SERVICE = "inventory";

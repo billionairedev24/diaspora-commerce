@@ -1,12 +1,13 @@
 package com.afrotransact.trustops.adapter.out.module;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.SellerEnforcementApi;
 import com.afrotransact.trustops.domain.SuspensionReason;
 import com.afrotransact.trustops.port.SellerEnforcementClient;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  * as in the HTTP client; both calls are idempotent.
  */
 @Component
-@ConditionalOnExpression("'${at.trust-ops.seller.mode:${at.trust-ops.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "seller", value = ModuleMode.IN_PROCESS)
 class InProcessSellerEnforcementClient implements SellerEnforcementClient {
 
     private static final String SERVICE = "seller";
@@ -26,7 +27,7 @@ class InProcessSellerEnforcementClient implements SellerEnforcementClient {
     InProcessSellerEnforcementClient(ObjectProvider<SellerEnforcementApi> api, ModuleUpstream upstream,
                                      ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(SellerEnforcementApi.class, true, false).length > 0,
-                "trust-ops", "seller", "at.trust-ops.seller.mode");
+                "trust-ops", "seller", "at.trustops.seller.mode");
         this.api = api;
         this.upstream = upstream;
     }

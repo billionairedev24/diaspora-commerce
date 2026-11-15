@@ -4,11 +4,12 @@ import java.util.UUID;
 
 import com.afrotransact.bookings.api.ReviewModerationApi;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.port.BookingsReviewClient;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
  * are idempotent, and bookings' refusals keep their status and code in the {@code UpstreamException}.
  */
 @Component
-@ConditionalOnExpression("'${at.trust-ops.bookings.mode:${at.trust-ops.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "bookings", value = ModuleMode.IN_PROCESS)
 class InProcessBookingsReviewClient implements BookingsReviewClient {
 
     private static final String SERVICE = "bookings";
@@ -29,7 +30,7 @@ class InProcessBookingsReviewClient implements BookingsReviewClient {
     InProcessBookingsReviewClient(ObjectProvider<ReviewModerationApi> api, ModuleUpstream upstream,
                                   ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(ReviewModerationApi.class, true, false).length > 0,
-                "trust-ops", "bookings", "at.trust-ops.bookings.mode");
+                "trust-ops", "bookings", "at.trustops.bookings.mode");
         this.api = api;
         this.upstream = upstream;
     }

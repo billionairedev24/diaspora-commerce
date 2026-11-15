@@ -8,18 +8,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** payments-service (port 8105) as the orders SERVICE principal (payments:service). */
 @Component
-@ConditionalOnExpression("'${at.orders.payments.mode:${at.orders.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "orders", callee = "payments", value = ModuleMode.HTTP)
 class HttpPaymentsClient implements PaymentsClient {
 
     private static final String IDEMPOTENCY_KEY = "Idempotency-Key";

@@ -1,11 +1,12 @@
 package com.afrotransact.trustops.adapter.out.module;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.SellerStandingApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.port.OffersClient;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component;
  * missing rating is null), as the HTTP client reads it first.
  */
 @Component
-@ConditionalOnExpression("'${at.trust-ops.offers.mode:${at.trust-ops.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "offers", value = ModuleMode.IN_PROCESS)
 class InProcessOffersClient implements OffersClient {
 
     private static final String SERVICE = "offers";
@@ -24,7 +25,7 @@ class InProcessOffersClient implements OffersClient {
 
     InProcessOffersClient(ObjectProvider<SellerStandingApi> api, ModuleUpstream upstream, ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(SellerStandingApi.class, true, false).length > 0,
-                "trust-ops", "offers", "at.trust-ops.offers.mode");
+                "trust-ops", "offers", "at.trustops.offers.mode");
         this.api = api;
         this.upstream = upstream;
     }

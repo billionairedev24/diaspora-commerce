@@ -4,14 +4,15 @@ import java.util.List;
 import java.util.Optional;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.MemberBenefits;
 import com.afrotransact.orders.port.UpstreamFailure;
 import com.afrotransact.payments.api.MembershipBenefitsApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Component;
  * HTTP the answer is advisory: when payments cannot answer, a shopper gets no early access and pays the delivery fees.
  */
 @Component
-@ConditionalOnExpression("'${at.orders.payments.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "payments", value = ModuleMode.IN_PROCESS)
 class InProcessMemberBenefits implements MemberBenefits {
 
     private static final Logger LOG = LoggerFactory.getLogger(InProcessMemberBenefits.class);

@@ -3,18 +3,19 @@ package com.afrotransact.trustops.adapter.out.http;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.config.TrustOpsProperties;
 import com.afrotransact.trustops.domain.SuspensionReason;
 import com.afrotransact.trustops.port.SellerEnforcementClient;
 import org.springframework.http.MediaType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** seller-service {@code POST /v1/orgs/{orgId}/suspend} and {@code /reinstate} (contracts/openapi/seller.yaml). */
 @Component
-@ConditionalOnExpression("'${at.trust-ops.seller.mode:${at.trust-ops.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "seller", value = ModuleMode.HTTP)
 class HttpSellerEnforcementClient implements SellerEnforcementClient {
 
     private static final String SERVICE = "seller";

@@ -4,11 +4,12 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.PickupLocations;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -19,7 +20,7 @@ import tools.jackson.databind.JsonNode;
  * ({@code sellers:ship-from.read}). 404 = no location; 5xx / I/O = retryable {@link UpstreamFailure}.
  */
 @Component
-@ConditionalOnExpression("'${at.orders.offers.mode:${at.orders.mode:http}}' != 'in-process' or '${at.orders.seller.mode:${at.orders.mode:http}}' != 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "offers", value = ModuleMode.HTTP)
 class HttpPickupLocations implements PickupLocations {
 
     private final Upstream offers;

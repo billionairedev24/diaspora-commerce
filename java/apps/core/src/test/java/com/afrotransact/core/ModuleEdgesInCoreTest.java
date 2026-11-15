@@ -99,7 +99,16 @@ class ModuleEdgesInCoreTest {
                 continue;
             }
             boolean calleeOff = OFF.contains(edge.callee());
+            boolean callerOff = OFF.contains(edge.caller());
             int beans = ctx.getBeanNamesForType(type).length;
+            if (callerOff) {
+                // the consuming module is not mounted in this run: none of its adapters is a bean
+                if (beans != 0) {
+                    wrong.add(type.getSimpleName() + " (" + edge.caller() + " -> " + edge.callee() + "): " + beans
+                            + " beans although " + edge.caller() + " is off");
+                }
+                continue;
+            }
             if (edge.value() == ModuleMode.IN_PROCESS) {
                 inProcessChecked++;
                 if (beans != (calleeOff ? 0 : 1)) {

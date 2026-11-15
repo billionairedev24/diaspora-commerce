@@ -3,11 +3,12 @@ package com.afrotransact.orders.adapter.out.module;
 import java.util.List;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Component;
  * redeem, as over HTTP; the idempotency key is passed through.
  */
 @Component
-@ConditionalOnExpression("'${at.orders.offers.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "offers", value = ModuleMode.IN_PROCESS)
 class InProcessCouponsClient implements CouponsClient {
 
     private static final String SERVICE = "offers";

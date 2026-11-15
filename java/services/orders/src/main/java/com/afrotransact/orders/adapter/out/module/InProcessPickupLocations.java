@@ -3,12 +3,13 @@ package com.afrotransact.orders.adapter.out.module;
 import java.util.Optional;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.port.PickupLocations;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.ShipFromAddressApi;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,8 +17,7 @@ import org.springframework.stereotype.Component;
  * {@link ShipFromAddressApi} (the location itself) inside this JVM. Used when both edges are in-process.
  */
 @Component
-@ConditionalOnExpression("'${at.orders.offers.mode:${at.orders.mode:http}}' == 'in-process' "
-        + "and '${at.orders.seller.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "offers", value = ModuleMode.IN_PROCESS)
 class InProcessPickupLocations implements PickupLocations {
 
     private final ObjectProvider<CheckoutOffersApi> offers;

@@ -7,14 +7,15 @@ import java.util.Map;
 import com.afrotransact.fulfilment.port.CourierEvent;
 import com.afrotransact.fulfilment.port.OrdersClient;
 import com.afrotransact.fulfilment.port.ServiceTokenProvider;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /** orders-service (port 8104): transitions, courier events and tracking. */
 @Component
-@ConditionalOnExpression("'${at.fulfilment.orders.mode:${at.fulfilment.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "fulfilment", callee = "orders", value = ModuleMode.HTTP)
 class HttpOrdersClient implements OrdersClient {
 
     private static final String IDEMPOTENCY_KEY = "Idempotency-Key";

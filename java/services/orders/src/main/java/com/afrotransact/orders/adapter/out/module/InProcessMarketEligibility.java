@@ -4,13 +4,14 @@ import java.util.Optional;
 
 import com.afrotransact.content.api.MarketEligibilityApi;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
  * As over HTTP the check is advisory: when content cannot answer, checkout is allowed and a missing answer is empty.
  */
 @Component
-@ConditionalOnExpression("'${at.orders.content.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "content", value = ModuleMode.IN_PROCESS)
 class InProcessMarketEligibility implements MarketEligibility {
 
     private static final Logger LOG = LoggerFactory.getLogger(InProcessMarketEligibility.class);

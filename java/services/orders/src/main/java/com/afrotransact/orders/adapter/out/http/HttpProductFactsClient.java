@@ -6,13 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -22,7 +23,7 @@ import tools.jackson.databind.JsonNode;
  * commission category. Missing answers are left out (callers treat them as non-perishable, default commission).
  */
 @Component
-@ConditionalOnExpression("'${at.orders.catalog.mode:${at.orders.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "orders", callee = "catalog", value = ModuleMode.HTTP)
 class HttpProductFactsClient implements ProductFactsClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpProductFactsClient.class);

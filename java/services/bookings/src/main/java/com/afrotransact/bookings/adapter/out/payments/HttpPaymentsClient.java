@@ -12,9 +12,10 @@ import java.util.function.Function;
 import com.afrotransact.bookings.config.BookingsProperties;
 import com.afrotransact.bookings.port.PaymentsClient;
 import com.afrotransact.bookings.port.PaymentsClientException;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -30,7 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
  * (kind SERVICE: the connection fee). Booking lines are sent as kind SERVICE with the service's category.
  */
 @Component
-@ConditionalOnExpression("'${at.bookings.payments.mode:${at.bookings.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "bookings", callee = "payments", value = ModuleMode.HTTP)
 class HttpPaymentsClient implements PaymentsClient {
 
     private static final String IDEMPOTENCY_KEY = "Idempotency-Key";

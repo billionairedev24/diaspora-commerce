@@ -4,11 +4,12 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.payments.api.ClaimRefundApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.port.PaymentsClient;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
  * crash never refunds twice; refusals keep payments' status and code in the {@code UpstreamException}.
  */
 @Component
-@ConditionalOnExpression("'${at.trust-ops.payments.mode:${at.trust-ops.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "payments", value = ModuleMode.IN_PROCESS)
 class InProcessPaymentsClient implements PaymentsClient {
 
     private static final String SERVICE = "payments";
@@ -27,7 +28,7 @@ class InProcessPaymentsClient implements PaymentsClient {
 
     InProcessPaymentsClient(ObjectProvider<ClaimRefundApi> api, ModuleUpstream upstream, ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(ClaimRefundApi.class, true, false).length > 0, "trust-ops",
-                "payments", "at.trust-ops.payments.mode");
+                "payments", "at.trustops.payments.mode");
         this.api = api;
         this.upstream = upstream;
     }

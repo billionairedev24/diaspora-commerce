@@ -443,8 +443,8 @@ at:
     mode: ${AT_FULFILMENT_MODE:in-process}
   # trust-ops -> payments (claim refunds), seller (suspend / reinstate), bookings (review moderation), offers (seller performance)
   # in-process; its other edges (catalog, orders lookup, ai-gateway triage) are still HTTP.
-  trust-ops:
-    mode: ${AT_TRUST_OPS_MODE:in-process}
+  trustops:
+    mode: ${AT_TRUSTOPS_MODE:in-process}
   # identity -> seller (organisation mirror for the reconcile job) in-process; token validation stays on the real JWT/JWKS path.
   identity:
     mode: ${AT_IDENTITY_MODE:in-process}

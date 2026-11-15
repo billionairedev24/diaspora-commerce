@@ -6,10 +6,11 @@ import java.util.List;
 
 import com.afrotransact.inventory.api.ReservationApi;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.InventoryClient;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.ListableBeanFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Component;
  * dependency could be circular).
  */
 @Component
-@ConditionalOnExpression("'${at.orders.inventory.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "inventory", value = ModuleMode.IN_PROCESS)
 class InProcessInventoryClient implements InventoryClient {
 
     private static final String SERVICE = "inventory";

@@ -10,16 +10,17 @@ import com.afrotransact.identity.adapter.out.seller.SelfIssuedServiceToken;
 import com.afrotransact.identity.port.SellerOrgSource;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.seller.api.OrgMirrorApi;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
@@ -56,12 +57,27 @@ class SellerSyncConfiguration {
         }
     }
 
+    /**
+     * The mode of the identity -> seller edge, by the rule of {@code ConditionalOnModuleMode}: {@code at.identity.seller.mode}, else
+     * {@code at.identity.mode}, else http; a mode that comes only from the caller-level default gives way to http when seller is
+     * switched off in this application.
+     */
+    private static boolean inProcess(Environment env) {
+        String edge = env.getProperty("at.identity.seller.mode");
+        if (edge != null && !edge.isBlank()) {
+            return ModuleMode.parse(edge, ModuleMode.HTTP) == ModuleMode.IN_PROCESS;
+        }
+        boolean sellerOff = "false".equalsIgnoreCase(env.getProperty("at.modules.seller.enabled"));
+        return ModuleMode.parse(env.getProperty("at.identity.mode"), ModuleMode.HTTP) == ModuleMode.IN_PROCESS
+                && !sellerOff;
+    }
+
     @Bean
     SellerOrgSource sellerOrgSource(SellerSyncProperties props, IdentityProperties identity,
                                     JWKSource<SecurityContext> jwkSource, Clock clock, ListableBeanFactory beans,
                                     ObjectProvider<OrgMirrorApi> mirrorApi, ObjectProvider<CallerPrincipals> callers,
-                                    @Value("${at.identity.seller.mode:${at.identity.mode:http}}") String mode) {
-        if ("in-process".equals(mode)) {
+                                    Environment env) {
+        if (inProcess(env)) {
             InProcessCalls.requireRunning(beans.getBeanNamesForType(OrgMirrorApi.class, true, false).length > 0,
                     "identity", "seller", "at.identity.seller.mode");
             return new InProcessSellerOrgSource(mirrorApi, callers);

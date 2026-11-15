@@ -3,18 +3,19 @@ package com.afrotransact.orders.adapter.out.http;
 import java.time.Duration;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** offers-service {@code GET /v1/offers/{id}} with the orders-service token ({@code offers:read}). 404 = unknown. */
 @Component
-@ConditionalOnExpression("'${at.orders.offers.mode:${at.orders.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "orders", callee = "offers", value = ModuleMode.HTTP)
 class HttpOfferInventory implements OfferInventory {
 
     private final Upstream offers;

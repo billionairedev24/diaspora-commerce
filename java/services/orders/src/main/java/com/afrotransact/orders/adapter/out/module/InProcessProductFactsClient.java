@@ -9,14 +9,15 @@ import java.util.Set;
 
 import com.afrotransact.catalog.api.ProductListingApi;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,7 +26,7 @@ import org.springframework.stereotype.Component;
  * degradation as over HTTP: an unknown variant is left out, an unavailable catalog fails listings and is skipped for facts.
  */
 @Component
-@ConditionalOnExpression("'${at.orders.catalog.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "catalog", value = ModuleMode.IN_PROCESS)
 class InProcessProductFactsClient implements ProductFactsClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(InProcessProductFactsClient.class);

@@ -11,10 +11,11 @@ import com.afrotransact.module.CallerPrincipal;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleApiException;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.payments.api.BookingPaymentsApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,7 +25,7 @@ import org.springframework.stereotype.Component;
  * anything else is {@code status 0}, "unavailable". Same default reasons as the HTTP client.
  */
 @Component
-@ConditionalOnExpression("'${at.bookings.payments.mode:${at.bookings.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "bookings", callee = "payments", value = ModuleMode.IN_PROCESS)
 class InProcessPaymentsClient implements PaymentsClient {
 
     private static final String MODULE = "bookings";

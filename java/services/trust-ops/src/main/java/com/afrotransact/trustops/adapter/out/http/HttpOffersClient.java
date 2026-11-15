@@ -3,11 +3,12 @@ package com.afrotransact.trustops.adapter.out.http;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.config.TrustOpsProperties;
 import com.afrotransact.trustops.port.OffersClient;
 import com.afrotransact.trustops.port.UpstreamException;
 import org.springframework.http.MediaType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -17,7 +18,7 @@ import tools.jackson.databind.JsonNode;
  * rating is read first ({@code GET /v1/sellers/{orgId}/standing}) and sent back unchanged.
  */
 @Component
-@ConditionalOnExpression("'${at.trust-ops.offers.mode:${at.trust-ops.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "offers", value = ModuleMode.HTTP)
 class HttpOffersClient implements OffersClient {
 
     private static final String SERVICE = "offers";

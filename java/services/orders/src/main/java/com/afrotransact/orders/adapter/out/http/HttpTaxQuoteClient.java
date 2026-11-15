@@ -6,18 +6,19 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** tax-returns-service (port 8111) {@code POST /v1/tax/quotes} with the orders-service token (scope tax:quote). */
 @Component
-@ConditionalOnExpression("'${at.orders.tax-returns.mode:${at.orders.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "orders", callee = "tax-returns", value = ModuleMode.HTTP)
 class HttpTaxQuoteClient implements TaxQuoteClient {
 
     private final Upstream taxReturns;

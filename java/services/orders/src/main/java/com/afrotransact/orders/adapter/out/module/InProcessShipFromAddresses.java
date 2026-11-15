@@ -5,16 +5,17 @@ import java.util.function.Supplier;
 
 import com.afrotransact.inventory.api.NodeAddressApi;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.ShipFromAddressApi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,8 +25,7 @@ import org.springframework.stereotype.Component;
  * edges are in-process.
  */
 @Component
-@ConditionalOnExpression("'${at.orders.inventory.mode:${at.orders.mode:http}}' == 'in-process' "
-        + "and '${at.orders.seller.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "inventory", value = ModuleMode.IN_PROCESS)
 class InProcessShipFromAddresses implements ShipFromAddresses {
 
     private static final Logger LOG = LoggerFactory.getLogger(InProcessShipFromAddresses.class);

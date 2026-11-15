@@ -494,10 +494,11 @@ Owner requirement: a monolith makes no HTTP call to itself. Each converted edge 
 application service, whose own permission check decides; the callee's error types leave as `ModuleApiException` with the status and code
 its `@RestControllerAdvice` gives), and a consumer adapter behind the existing `port/` interface in the caller's `adapter/out/module`,
 which maps `ModuleApiException` back to the failure type the HTTP adapter raised (`UpstreamFailure`, `UpstreamException`,
-`PaymentsClientException`), so the caller's behaviour does not depend on the mode. Switch: `at.<caller>.<callee>.mode`, falling back to
-`at.<caller>.mode`, default `http` (standalone) and `in-process` in core (`application.yml`: `at.orders.mode`, `at.bookings.mode`,
-`at.fulfilment.mode`, `at.trust-ops.mode`, `at.identity.mode`, `at.payments.mode`). The HTTP adapter is kept and carries the opposite
-`@ConditionalOnExpression`. Each in-process adapter checks at start that the callee's API bean exists and fails naming both modules.
+`PaymentsClientException`), so the caller's behaviour does not depend on the mode. Switch: `@ConditionalOnModuleMode(caller, callee, mode)` (module names without dashes in the property: `at.<caller>.<callee>.mode`, falling back to
+`at.<caller>.mode`, default `http` standalone and `in-process` in core: `at.orders.mode`, `at.bookings.mode`, `at.fulfilment.mode`, `at.trustops.mode`,
+`at.identity.mode`, `at.payments.mode`; a caller-level default gives way to `http` when the callee is switched off). The HTTP adapter is kept with the
+opposite mode. Each in-process adapter checks at start that the callee's API bean exists and fails naming both modules. Two adapters read two callees
+(`PickupLocations`: offers and seller; `ShipFromAddresses`: inventory and seller): they follow the first edge named, the second API must be running.
 
 | Caller -> callee | Port (HTTP adapter kept) | Published API | Scope the callee checks | State |
 |---|---|---|---|---|
@@ -532,11 +533,17 @@ Still HTTP in core, and why:
 | mcp-server -> catalog, inventory, orders, seller, payments, bookings | not converted yet: the tools relay the end user's token, so an in-process version must run the callee as that user (the actor already on the request thread), not as a service principal, and keep the AI/MCP spend cap path unchanged |
 | retail -> catalog, inventory; delivery-runs -> orders, catalog | retail and delivery-runs are disabled in core by default; the callers are converted when they are enabled |
 
-Tests per converted edge: a consumer test (principal passed, failure mapping, defaults of the HTTP adapter kept), a provider test per API method
-that a caller without the scope is refused with 403 (`InProcessKit` in `platform-test`; the application service is stood in by a mock that requires the
-permission through the real `DefaultPermissionChecker`, so it proves the guard, the actor and the 403 mapping, not the production service's own
-permission string), `ArchitectureTest` of every module, and `CoreBootTest` for the modules that boot without Valkey and Temporal (orders and fulfilment
-are off in that test, so their in-process wiring is not exercised by a boot here).
+Tests per converted edge: a consumer test (principal passed, failure mapping, defaults of the HTTP adapter kept); a provider test per API method in the
+callee (a stand-in for the application service that requires the permission through the real `DefaultPermissionChecker`, `InProcessKit` in `platform-test`:
+it proves the guard, the actor and the 403 mapping, not the production service's permission string); `ArchitectureTest` of each module; and, on the
+real application services of a running core, `InProcessScopesInCoreTest` (41 cases: every method refuses a caller without the scope its HTTP endpoint
+needs with 403 and does not refuse one that has it), `ModuleEdgesInCoreTest` and `ModuleEdgeGuardTest` (the chosen adapter per edge; no unlisted HTTP
+adapter in core; `http-edges.txt` lists what stays HTTP) and `CoreBootTest`, run here on a throw-away Postgres 16. Orders and fulfilment are off in those
+runs (Valkey, Temporal and PostGIS are not available here), so the orders and fulfilment adapters are proved by their consumer tests, the bean-choice check
+(none are beans while their module is off) and the compile, not by a boot, and `ShipmentApi` has no real-service 403 case.
+
+Not covered by a 403 case on the real service: `CheckoutOffersApi` (coupons check no scope; the offer read looks the offer up first, so an unknown id is 404 as
+over HTTP) and the public reads `ProductListingApi` and `MarketEligibilityApi`.
 
 ### 12.8 Module-to-module edges from catalog, offers, inventory, seller, content and tax-returns (in-process conversion)
 

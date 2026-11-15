@@ -3,16 +3,17 @@ package com.afrotransact.orders.adapter.out.module;
 import java.util.Optional;
 
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.port.OfferInventory;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /** {@link OfferInventory} through offers' {@link CheckoutOffersApi} inside this JVM (mode {@code in-process}). */
 @Component
-@ConditionalOnExpression("'${at.orders.offers.mode:${at.orders.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "orders", callee = "offers", value = ModuleMode.IN_PROCESS)
 class InProcessOfferInventory implements OfferInventory {
 
     private static final String SERVICE = "offers";
