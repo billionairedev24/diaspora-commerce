@@ -484,7 +484,29 @@ the route diff against `contracts/` (only the static duplicate scan of the OpenA
 (unit-level only for payments -> seller), load, checkout SLO, the detach procedure of the runbook (written, not rehearsed), the identity hosted-page chain
 under a real browser flow, Helm/Argo (other agent).
 
-### 12.6 Measurement (this sandbox, 2026-11-15; not comparable to the Phase 2 table)
+### 12.6 Measurement (this sandbox, 2026-11-15; one run, not comparable to the Phase 2 table)
 
-See the measurement note at the end of the Phase 2 section if the run completed; otherwise this paragraph says so. Boot of 13 modules (no fulfilment) with
-`-Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1`: started in about 16 to 22 s, RSS about 530 to 610 MB, 22 to 26 database connections idle.
+Core with 13 modules enabled (identity, catalog, tax-returns, offers, inventory, content, seller, orders, payments, bookings, trust-ops, ai-gateway,
+mcp-server; **fulfilment off: no PostGIS here**; retail and delivery-runs off), local profile, security off, Postgres 16 and Valkey on the same
+machine, no Kafka broker, Temporal workers off, `java -Xmx1g -XX:+UseSerialGC -XX:TieredStopAtLevel=1`, classes from the build directory (not the
+container image):
+
+| Metric | Value |
+|---|---|
+| Startup to "Started CoreApplication" (migrations of 13 schemas already applied) | 21.7 s (first start with migrations: about 16 to 22 s in earlier runs) |
+| RSS after 30 s idle and after 80 requests | 622 MB and 623 MB |
+| Threads | 379 |
+| Database connections (13 module pools plus the admin connection of the local profile) | 26 idle: 2 per module, 3 for orders; unchanged after the requests |
+
+Not measured: image size, build time, the same modules as separate JVMs on this machine, load, fulfilment, steady state under Kafka consumers,
+RSS with Temporal workers and Spring AI warm. The Phase 2 memory target (S2) is therefore **not** re-confirmed for the full set.
+
+### 12.7 Tests run in this session
+
+module-core unit tests (including `ModuleSchemaModeTest` and, against Postgres 16, `ModuleSchemaPostgresTest`); the unit and ArchUnit suites of every Java
+service (ai-gateway, bookings, delivery-runs, fulfilment, identity 378, mcp-server, orders, payments, retail, seller, trust-ops, offers, inventory, content,
+tax-returns and catalog from the spike) all green after the changes (the ITs, which need Docker, were not run); `KafkaGroupIdsTest` (every
+`@KafkaListener` keeps its `<module>-service` group) and `CoreBootTest` (core boots on Postgres with security on, orders, fulfilment, ai-gateway and mcp-server off
+because they need Valkey/Temporal, PostGIS and provider keys; readiness UP, anonymous storefront and webhook permits, 401 elsewhere). `CoreBootTest`
+and `ModuleSchemaPostgresTest` need `AT_TEST_PG_ADMIN_URL`, `AT_TEST_PG_ADMIN_USER`, `AT_TEST_PG_ADMIN_PASSWORD` (a throw-away database; CI's Postgres service
+container) and are skipped without them; `AT_TEST_CORE_FULL=true` also enables the four modules above.
