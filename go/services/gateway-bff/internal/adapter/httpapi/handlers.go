@@ -225,7 +225,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	// Storefront account, checkout payment, services & bookings, Lola
 	h.registerShopper(route)
 	// Staff console
-	h.registerStaff(route)
+	h.registerStaff(route, auth)
 }
 
 // finish issues, rotates or clears the session cookie and echoes an issued guest cart id to app callers.

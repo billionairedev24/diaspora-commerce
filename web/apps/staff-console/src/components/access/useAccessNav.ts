@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-export type AccessView = 'roles' | 'people' | 'log';
+export type AccessView = 'roles' | 'people' | 'modules' | 'log';
 
 /** The address of Roles and permissions: which tab (`view`), the portal, the open role or person, and the person a log is for. */
 export function useAccessNav() {
@@ -10,7 +10,7 @@ export function useAccessNav() {
   const router = useRouter();
   const pathname = usePathname();
   const raw = params.get('view');
-  const view: AccessView = raw === 'people' || raw === 'log' ? raw : 'roles';
+  const view: AccessView = raw === 'people' || raw === 'modules' || raw === 'log' ? raw : 'roles';
   /** Keeps the other parameters (a table's search, sort and page) unless a key is set to null. */
   const go = (patch: Record<string, string | null>, replace = true) => {
     const next = new URLSearchParams(params.toString());
@@ -19,5 +19,5 @@ export function useAccessNav() {
     if (replace) router.replace(href, { scroll: false });
     else router.push(href, { scroll: false });
   };
-  return { view, portal: params.get('portal'), role: params.get('role'), person: params.get('person'), log: params.get('log'), go };
+  return { view, portal: params.get('portal'), mportal: params.get('mportal'), role: params.get('role'), person: params.get('person'), log: params.get('log'), go };
 }

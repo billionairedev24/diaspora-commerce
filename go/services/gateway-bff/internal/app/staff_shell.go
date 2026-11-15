@@ -141,6 +141,13 @@ func newStaffResolver(d StaffDeps) *staffResolver {
 	return &staffResolver{d: d, names: newStaffNames(d.Clock, d.RetailOrgID)}
 }
 
+// forgetMatrix drops the cached platform matrix (after a change made through this BFF): the next staff call reads identity again.
+func (r *staffResolver) forgetMatrix() {
+	if r.d.Cache != nil {
+		r.d.Cache.Set("identity:module-matrix:platform", []byte("null"), time.Second)
+	}
+}
+
 // matrix reads identity's PLATFORM matrix; staff without access:read (403) and an unavailable identity fall back to
 // the seeded defaults. Either result is cached.
 func (r *staffResolver) matrix(ctx context.Context, bearer string) domain.ModuleMatrix {

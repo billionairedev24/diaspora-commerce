@@ -777,6 +777,7 @@ paths:
       tags:
       - Access control
       summary: Set one cell of the module access matrix
+      description: Needs access:admin. The change and its reason go in the access change log. Super Admin keeps at least Edit on Users & roles and Access control (409 identity.access-lockout), so the console can always be administered.
       operationId: setModuleAccess
       parameters:
       - name: portal
@@ -3103,6 +3104,10 @@ components:
           - approve
           - full
           minLength: 1
+        reason:
+          type: string
+          description: Why; kept in the access change log with the change (the staff console always sends one)
+          maxLength: 300
       required:
       - level
     ModuleAccess:

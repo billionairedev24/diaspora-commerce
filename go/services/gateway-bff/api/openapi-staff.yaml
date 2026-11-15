@@ -60,6 +60,8 @@ tags:
     description: 'Developer tools for the identity service (identity:admin): the token inspector and the published OIDC documents. Its tables (oauth-clients, identity-sessions, signing-keys, auth-settings, session-policy) are Resources. The identity-sessions table has a Device column (the User-Agent identity records at sign-in, parsed to a label such as `Chrome on macOS`; empty when none was recorded) and its sheet also shows the raw user agent. Step-up: the forms of the most dangerous actions (rotate the signing key, sign a user or a client out, disable a client, change the settings) end with a `stepUpPassword` field (type password, not required). The BFF checks it at identity (`POST /v1/admin/identity/step-up`) and relays the proof as `X-Step-Up`; a blank value is accepted when the person signed in within five minutes, otherwise the action answers 422 on `stepUpPassword`. A wrong password counts towards the account lockout. The password is never stored, cached or logged.'
   - name: Access
     description: 'Settings > Roles and permissions (access:read to look, access:admin to change). The permission catalogue, the roles of each portal with their permissions, who holds a role, a person''s direct grants and effective permissions, and the access change log. Identity owns the data and checks access:read / access:admin on every call with the staff member''s own token; the BFF also needs View (reads) or Edit (changes) on the Users & roles module and a reason of 3 to 300 characters on every change. A change reaches a person''s sign-in on their next access token (within about 5 minutes).'
+  - name: Staff invitations
+    description: 'Settings > Staff accounts: staff with access:admin invite a person by name, work email and role with a reason (replacing accounts with a temporary password). The open invitations (pending, and expired ones never used) are listed with names and emails, can be sent again (a new link; the old one stops working) or revoked. The invitee opens the emailed link, which carries a single-use token (72 hours by default, kept hashed by identity) after `#token=` so it never reaches a server log; the two session-less routes (`preview`, `accept`) take the token in the body, are rate limited like sign-in, and never log, cache or return it or the password. Identity creates the account (enabled, email verified, the invited role), applies the password policy, and audits every step. At first sign-in the usual two-step verification enrolment for staff applies.'
   - name: Exports
     description: Server-side CSV / XLSX exports with signed, expiring download links
   - name: Support
@@ -2384,6 +2386,43 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/modules:
+    get:
+      tags: [Access]
+      operationId: getAccessModules
+      security: [{sessionCookie: []}]
+      summary: The module access matrix of a portal
+      description: identity `GET /v1/admin/module-access?portal=` (access:read). Rows are modules (by their staff-facing label), columns are roles (by name); each cell is a level, `none`, `view`, `edit`, `approve` or `full`. `locked` lists the cells that cannot be lowered below Edit (Super Admin on Users & roles and Access control). `canAdmin` says the caller may change cells.
+      parameters:
+        - {name: portal, in: query, schema: {type: string, enum: [platform, seller, provider, account], default: platform}}
+      responses:
+        '200': {description: The matrix, content: {application/json: {schema: {$ref: '#/components/schemas/AccessModuleMatrix'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/modules/{portal}/{module}/{role}:
+    put:
+      tags: [Access]
+      operationId: setAccessModuleLevel
+      security: [{sessionCookie: []}]
+      summary: Set one cell of the module access matrix
+      description: Needs Edit on Users & roles, access:admin and a reason of 3 to 300 characters, kept in the access change log with the staff member's name. 409 `ACCESS_LOCKOUT` when it would take Super Admin below Edit on Users & roles or Access control. The matrix reaches the staff console within about a minute (it is cached), and a person's next page load.
+      parameters:
+        - {name: portal, in: path, required: true, schema: {type: string, enum: [platform, seller, provider, account]}}
+        - {name: module, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z][A-Za-z0-9]{0,40}$'}}
+        - {name: role, in: path, required: true, schema: {type: string, pattern: '^[a-z]+\.[a-z0-9_]+$'}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessModuleChange'}}}}
+      responses:
+        '200': {description: The cell now, content: {application/json: {schema: {$ref: '#/components/schemas/AccessModuleCell'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/access/log:
     get:
       tags: [Access]
@@ -2402,6 +2441,103 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/invitations:
+    get:
+      tags: [Staff invitations]
+      operationId: listStaffInvitations
+      security: [{sessionCookie: []}]
+      summary: Open staff invitations (pending, and expired ones never used), newest first
+      description: identity `GET /v1/admin/staff-invitations` (access:read). Names and emails; the token is never part of an answer. Server-driven paging with an exact `total`.
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: A page of open invitations, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvitationPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Staff invitations]
+      operationId: inviteStaff
+      security: [{sessionCookie: []}]
+      summary: Invite a person to be staff
+      description: Needs Edit on Users & roles and access:admin. Identity stores a pending invitation (single-use token, hashed, 72 hours by default) and the notifications service emails the link. Inviting an email that has an open invitation replaces it (the old link stops working). 409 when an account with the email already exists; 422 for a role that is not a staff role or an email outside the staff domains. Only a Super Admin can invite a Super Admin.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInviteRequest'}}}}
+      responses:
+        '201': {description: Invited, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvitation'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/invitations/{id}/resend:
+    post:
+      tags: [Staff invitations]
+      operationId: resendStaffInvitation
+      security: [{sessionCookie: []}]
+      summary: Send an invitation again with a new link and expiry
+      description: Needs Edit on Users & roles and access:admin. The previous link stops working. 409 when the invitation was accepted or revoked.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Sent again, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvitation'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/invitations/{id}/revoke:
+    post:
+      tags: [Staff invitations]
+      operationId: revokeStaffInvitation
+      security: [{sessionCookie: []}]
+      summary: Revoke an open invitation (its link stops working at once)
+      description: Needs Edit on Users & roles and access:admin and a reason of 3 to 300 characters, kept in the access change log.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessChangeRequest'}}}}
+      responses:
+        '204': {description: Revoked}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/invitations/preview:
+    post:
+      tags: [Staff invitations]
+      operationId: previewStaffInvitation
+      security: []
+      summary: Who an invite link is for (no session)
+      description: The token is in the body, never the URL. Answers name, email, role and status (`PENDING`, `ACCEPTED`, `REVOKED`, `EXPIRED`) so the page can say what to do; 404 for a token that is not an invitation. Rate limited like sign-in; not cached.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvitationToken'}}}}
+      responses:
+        '200': {description: The invitation, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvitationPreview'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/invitations/accept:
+    post:
+      tags: [Staff invitations]
+      operationId: acceptStaffInvitation
+      security: []
+      summary: Choose a password and activate the account (no session)
+      description: Identity checks the token (single use, not expired, not revoked), applies the password policy and creates the account with the invited role. 422 with field errors for the password (`password`, `confirmPassword`, `phone`); 422 when the link expired, was withdrawn or was used (the page then offers to ask for a new one or to sign in); 404 for a token that is not an invitation. The token and the password are never logged or kept. Rate limited like sign-in; not cached.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvitationAccept'}}}}
+      responses:
+        '201': {description: Account created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvitationAccepted'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── pre-orders (S270–S275)
@@ -7948,6 +8084,50 @@ components:
         total: {type: integer, format: int64}
         page: {type: integer}
         size: {type: integer}
+    AccessModuleMatrix:
+      type: object
+      required: [portal, levels, roles, modules, locked, canAdmin]
+      properties:
+        portal: {type: string}
+        levels: {type: array, items: {type: string, enum: [none, view, edit, approve, full]}, description: 'The levels in order, lowest first'}
+        roles: {type: array, items: {$ref: '#/components/schemas/AccessModuleRole'}}
+        modules: {type: array, items: {$ref: '#/components/schemas/AccessModuleRow'}}
+        locked: {type: array, items: {$ref: '#/components/schemas/AccessModuleLock'}}
+        canAdmin: {type: boolean}
+    AccessModuleRole:
+      type: object
+      required: [key, name]
+      properties:
+        key: {type: string}
+        name: {type: string}
+    AccessModuleRow:
+      type: object
+      required: [key, label, levels]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        levels: {type: object, additionalProperties: {type: string, enum: [none, view, edit, approve, full]}, description: 'Level by role key; a role with no entry has none'}
+    AccessModuleLock:
+      type: object
+      required: [role, module, minimum]
+      properties:
+        role: {type: string}
+        module: {type: string}
+        minimum: {type: string, enum: [edit]}
+    AccessModuleChange:
+      type: object
+      required: [level, reason]
+      properties:
+        level: {type: string, enum: [none, view, edit, approve, full]}
+        reason: {type: string, minLength: 3, maxLength: 300, description: Kept in the access change log}
+    AccessModuleCell:
+      type: object
+      required: [portal, module, role, level]
+      properties:
+        portal: {type: string}
+        module: {type: string}
+        role: {type: string}
+        level: {type: string, enum: [none, view, edit, approve, full]}
     AccessLogEntry:
       type: object
       required: [id, at, actorName, action, actionLabel, targetName, role, subject, detail]
@@ -7970,6 +8150,73 @@ components:
         page: {type: integer}
         size: {type: integer}
         total: {type: integer, format: int64, description: Entries that match the filter}
+    StaffInviteRequest:
+      type: object
+      required: [firstName, lastName, email, roleKey, reason]
+      properties:
+        firstName: {type: string, minLength: 1, maxLength: 80}
+        lastName: {type: string, minLength: 1, maxLength: 80}
+        email: {type: string, format: email, description: Work email; identity may limit it to the staff domains}
+        roleKey: {type: string, pattern: '^platform\.[a-z0-9_]+$', description: A platform (staff) role}
+        reason: {type: string, minLength: 3, maxLength: 300, description: Kept in the access change log}
+    StaffInvitation:
+      type: object
+      required: [id, name, firstName, lastName, email, roleKey, roleName, status, reason, invitedByName, createdAt, expiresAt, lastSentAt, sendCount]
+      properties:
+        id: {type: string, format: uuid, description: Opaque key for resend and revoke; never shown}
+        name: {type: string}
+        firstName: {type: string}
+        lastName: {type: string}
+        email: {type: string}
+        roleKey: {type: string}
+        roleName: {type: string}
+        status: {type: string, enum: [PENDING, EXPIRED]}
+        reason: {type: string}
+        invitedByName: {type: string, description: Who invited (a name)}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        lastSentAt: {type: string, format: date-time}
+        sendCount: {type: integer}
+    StaffInvitationPage:
+      type: object
+      required: [items, total, page, size, canAdmin]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffInvitation'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+        canAdmin: {type: boolean, description: 'The caller may invite, resend and revoke'}
+    StaffInvitationToken:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string, maxLength: 200, description: The single-use token from the link (after `#token=`)}
+    StaffInvitationPreview:
+      type: object
+      required: [firstName, lastName, name, email, roleName, status, expiresAt]
+      properties:
+        firstName: {type: string}
+        lastName: {type: string}
+        name: {type: string}
+        email: {type: string}
+        roleName: {type: string}
+        status: {type: string, enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]}
+        expiresAt: {type: string, format: date-time}
+    StaffInvitationAccept:
+      type: object
+      required: [token, password, confirmPassword]
+      properties:
+        token: {type: string, maxLength: 200}
+        password: {type: string, minLength: 1, maxLength: 128, writeOnly: true}
+        confirmPassword: {type: string, minLength: 1, maxLength: 128, writeOnly: true}
+        phone: {type: string, maxLength: 30, description: Optional; can be added later}
+        phoneRegion: {type: string, minLength: 2, maxLength: 2}
+    StaffInvitationAccepted:
+      type: object
+      required: [email, roleName]
+      properties:
+        email: {type: string}
+        roleName: {type: string}
     IdentityDocuments:
       type: object
       required: [discovery, jwks]
