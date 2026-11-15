@@ -173,7 +173,7 @@ func New(cfg Config, specs []Spec) (Host, error) {
 			Env: cfg.Env,
 			Lookup: modcfg.New(modcfg.Options{Module: s.Name, Base: cfg.Getenv, InProcess: inprocURLs,
 				SharedDBURL: sharedDB, Schema: s.Schema}),
-			Logger: cfg.Logger.With("module", s.Name, "service", s.Name),
+			Logger: cfg.Logger.With("module", s.Name),
 		}
 		m, err := s.New(deps)
 		if err != nil {
