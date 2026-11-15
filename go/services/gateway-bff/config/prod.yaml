@@ -13,6 +13,7 @@ platform:
   sellerCenterUrl: https://seller.afrotransact.com
   staffConsoleUrl: https://admin.afrotransact.com
   authIssuerUrl: https://auth.afrotransact.com
+  mediaPublicUrl: https://media.afrotransact.com
 web:
   bffPath: /api/bff
 session:

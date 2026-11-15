@@ -4467,13 +4467,13 @@ components:
             columns: {type: integer, enum: [3, 4]}
         sections:
           type: array
-          description: Order and visibility of the optional sections. The header, hero and All products are always present.
-          maxItems: 6
+          description: Order and visibility of the optional sections of the organisation's kind. The header and hero are always present, and All products for a seller.
+          maxItems: 7
           items:
             type: object
             required: [id, enabled]
             properties:
-              id: {type: string, enum: [announcement, featured, categories, about, policies, reviews]}
+              id: {type: string, enum: [announcement, featured, categories, about, policies, reviews, services, book, schedule, team], description: 'A seller has announcement, featured, categories, about, policies, reviews; a provider has announcement, about, services, book, schedule, team, reviews. Any other id for the kind is 422.'}
               enabled: {type: boolean}
         featured: {type: array, maxItems: 8, items: {type: string, maxLength: 40}, description: ATINs the seller picked; only the sellable ones are shown}
         categories:
@@ -4518,8 +4518,9 @@ components:
               url: {type: string, maxLength: 2048}
     StorePageSettings:
       type: object
-      required: [slug, name, draft, published, isPublished, version, publishedVersion, hasUnpublishedChanges, updatedAt, publishedAt, canEdit, canPublish, logoUrl, contactEmail, approved]
+      required: [kind, slug, name, draft, published, isPublished, version, publishedVersion, hasUnpublishedChanges, updatedAt, publishedAt, canEdit, canPublish, logoUrl, contactEmail, approved]
       properties:
+        kind: {type: string, enum: [SELLER, PROVIDER], description: 'The organisation kind: decides the sections the editor offers'}
         slug: {type: [string, 'null'], description: 'The address /b/{slug}; null until the page is first made'}
         name: {type: string}
         logoUrl: {type: [string, 'null'], description: The logo from Business profile (one source)}
@@ -4584,14 +4585,83 @@ components:
               value: {type: string}
               label: {type: string}
               count: {type: integer}
+    StorefrontProvider:
+      type: object
+      description: |
+        What makes a provider's page bookable, from bookings' public view of the provider: nothing here is invented. Services are in person
+        (IN_PERSON or AT_HOME): there are no virtual services. `hours` is Monday first in the provider's time zone and EMPTY when no hours are
+        set (the page then shows no schedule, never "closed"). `area` has no address, base ZIP or coordinates.
+      required: [orgId, timeZone, location, instantBooking, policyLabel, policyText, services, hours, area, team]
+      properties:
+        orgId: {type: string}
+        timeZone: {type: string}
+        location: {type: string}
+        instantBooking: {type: boolean}
+        policyLabel: {type: string}
+        policyText: {type: string}
+        services:
+          type: array
+          items:
+            type: object
+            required: [id, name, description, category, durationMinutes, priceMinor, depositMinor, currency, modes, imageUrl]
+            properties:
+              id: {type: string, description: 'Book it with the existing booking flow: GET /v1/services/{id}/days|slots|summary, POST /v1/services/bookings'}
+              name: {type: string}
+              description: {type: string}
+              category: {type: string}
+              durationMinutes: {type: integer}
+              priceMinor: {type: integer, format: int64}
+              depositMinor: {type: integer, format: int64}
+              currency: {type: string}
+              modes: {type: array, items: {type: string, enum: [IN_PERSON, AT_HOME]}}
+              imageUrl: {type: [string, 'null'], description: Only AfroTransact media}
+        hours:
+          type: array
+          items:
+            type: object
+            required: [day, ranges]
+            properties:
+              day: {type: string, enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]}
+              ranges:
+                type: array
+                items:
+                  type: object
+                  required: [start, end]
+                  properties:
+                    start: {type: string, description: 'HH:mm local'}
+                    end: {type: string, description: 'HH:mm local, exclusive'}
+        area:
+          type: [object, 'null']
+          required: [baseCity, baseState, radiusMiles, servedCities, extraAreas]
+          properties:
+            baseCity: {type: string}
+            baseState: {type: string}
+            radiusMiles: {type: integer}
+            servedCities: {type: array, items: {type: string}}
+            extraAreas: {type: array, items: {type: string}}
+        team:
+          type: array
+          description: Team members customers can book
+          items:
+            type: object
+            required: [id, displayName]
+            properties:
+              id: {type: string}
+              displayName: {type: string}
     Storefront:
       type: object
       description: |
         A seller's public storefront: the published settings plus real data, in one response. Only sellable products
         appear (in stock, a real photograph, a resolved tax decision). `reviews` is null when the products have no
         reviews (never "0 reviews"). Carrier names and fulfilment details are never present.
-      required: [slug, name, logoUrl, description, config, preview, indexable, verified, sellingSinceYear, contactEmail, pickup, categories, featured, reviews, products]
+      required: [kind, provider, slug, name, logoUrl, description, config, preview, indexable, verified, sellingSinceYear, contactEmail, pickup, categories, featured, reviews, products]
       properties:
+        kind: {type: string, enum: [SELLER, PROVIDER], description: 'A provider''s page has `provider` and no products, categories or featured'}
+        provider:
+          oneOf:
+            - {$ref: '#/components/schemas/StorefrontProvider'}
+            - {type: 'null'}
+          description: Present on a provider's page when bookings could be read
         slug: {type: string}
         name: {type: string}
         logoUrl: {type: [string, 'null']}
@@ -4612,6 +4682,7 @@ components:
         featured: {type: array, items: {type: object, additionalProperties: true, description: 'ProductSummary, see gateway-bff.yaml'}}
         reviews:
           type: [object, 'null']
+          description: 'Backend aggregate over REAL reviews only (a seller: catalog, all published reviews of its products; a provider: bookings, approved reviews). Null unless count is at least 1: never "0 reviews".'
           required: [average, count]
           properties:
             average: {type: number}

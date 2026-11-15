@@ -20,7 +20,7 @@ export interface SettingsSection {
 /** In the order the list and the sub-nav show them: the business, where it is, how orders reach customers, money, people, personal. */
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { key: 'business', href: '/settings/business', module: 'team', sellerOnly: false },
-  { key: 'store-page', href: '/settings/store-page', module: 'team', sellerOnly: true },
+  { key: 'store-page', href: '/settings/store-page', module: 'team', sellerOnly: false },
   { key: 'locations', href: '/settings/locations', module: 'orders', sellerOnly: true },
   { key: 'shipping', href: '/settings/shipping', module: 'orders', sellerOnly: true },
   { key: 'pickup', href: '/settings/pickup', module: 'orders', sellerOnly: true },

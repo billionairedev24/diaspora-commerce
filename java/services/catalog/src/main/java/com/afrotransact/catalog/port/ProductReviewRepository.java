@@ -61,6 +61,12 @@ public interface ProductReviewRepository {
     /** The stored rating; empty when the product never had a published review. */
     Optional<RatingSummary> rating(UUID productId);
 
+    /**
+     * The rating over every published review of the organisation's products (average, count, star breakdown), computed
+     * from the reviews themselves; {@link RatingSummary#NONE} when there is none.
+     */
+    RatingSummary sellerRating(String orgId);
+
     /** Stored ratings of these products (products without one are absent). */
     Map<UUID, RatingSummary> ratings(Collection<UUID> productIds);
 

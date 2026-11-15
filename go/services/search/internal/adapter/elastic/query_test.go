@@ -50,3 +50,26 @@ func TestFacetsOfLeavesCardinalityOutOfFacets(t *testing.T) {
 		t.Fatalf("distinctSellers = %d", distinctSellers(res))
 	}
 }
+
+func TestOnSaleFiltersOnTheFlagOnlyWhenAsked(t *testing.T) {
+	plain, _ := json.Marshal(buildFilters(domain.Query{}))
+	if strings.Contains(string(plain), "on_sale") {
+		t.Fatalf("an ordinary search must not filter on on_sale: %s", plain)
+	}
+	sale, _ := json.Marshal(buildFilters(domain.Query{OnSale: true}))
+	if !strings.Contains(string(sale), `"on_sale":true`) {
+		t.Fatalf("filters %s lack on_sale", sale)
+	}
+}
+
+func TestWasPriceIsShownOnlyAboveThePriceOnAFlaggedDocument(t *testing.T) {
+	for _, c := range []struct {
+		price, list int64
+		on          bool
+		want        int64
+	}{{800, 1000, true, 1000}, {800, 800, true, 0}, {800, 500, true, 0}, {800, 1000, false, 0}, {0, 1000, true, 0}} {
+		if got := listPrice(c.price, c.list, c.on); got != c.want {
+			t.Errorf("listPrice(%d,%d,%v)=%d want %d", c.price, c.list, c.on, got, c.want)
+		}
+	}
+}

@@ -184,6 +184,8 @@ export function serviceJsonLd(i: ServiceLdInput): JsonLdObject | undefined {
 export function storefrontJsonLd(i: {
   origin: string;
   store: {
+    /** A provider's page is a ProfessionalService (a local business), a seller's a Store. */
+    kind?: 'SELLER' | 'PROVIDER';
     slug: string;
     name: string;
     logoUrl: string | null;
@@ -200,8 +202,8 @@ export function storefrontJsonLd(i: {
   const r = i.store.reviews;
   return {
     '@context': CONTEXT,
-    '@type': 'Store',
-    '@id': `${url}#store`,
+    '@type': i.store.kind === 'PROVIDER' ? 'ProfessionalService' : 'Store',
+    '@id': `${url}#${i.store.kind === 'PROVIDER' ? 'business' : 'store'}`,
     name: i.store.name,
     url,
     ...(description ? { description } : {}),

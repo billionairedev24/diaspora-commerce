@@ -24,6 +24,10 @@ type SearchParams struct {
 	MaxPrice   int64
 	MaxDays    int
 	InStock    bool
+	// ATINs keeps only these products (search atins, at most 20).
+	ATINs []string
+	// OnSale keeps products with a real was-price above the price (search onSale).
+	OnSale bool
 	// EligibleOnly restricts hits and facet counts to live, in-stock products with a real photo (search eligibleOnly, S415)
 	// and asks for DistinctSellers.
 	EligibleOnly bool
@@ -38,23 +42,25 @@ type SearchParams struct {
 
 // SearchHit is a search-service product card.
 type SearchHit struct {
-	ATIN         string  `json:"atin"`
-	Title        string  `json:"title"`
-	Brand        string  `json:"brand"`
-	CategoryPath string  `json:"categoryPath"`
-	SellerName   string  `json:"sellerName"`
-	SellerKind   string  `json:"sellerKind"`
-	Fulfilment   string  `json:"fulfilment"`
-	PriceMinor   int64   `json:"priceMinor"`
-	Currency     string  `json:"currency"`
-	Rating       float64 `json:"rating"`
-	ReviewCount  int     `json:"reviewCount"`
-	InStock      bool    `json:"inStock"`
-	LowStock     bool    `json:"lowStock"`
-	AvailableQty int     `json:"availableQty"`
-	DeliveryDays int     `json:"deliveryDays"`
-	ImageURL     string  `json:"imageUrl"`
-	OfferCount   int     `json:"offerCount"`
+	ATIN         string `json:"atin"`
+	Title        string `json:"title"`
+	Brand        string `json:"brand"`
+	CategoryPath string `json:"categoryPath"`
+	SellerName   string `json:"sellerName"`
+	SellerKind   string `json:"sellerKind"`
+	Fulfilment   string `json:"fulfilment"`
+	PriceMinor   int64  `json:"priceMinor"`
+	// ListPriceMinor is the was-price; present only when it is above PriceMinor.
+	ListPriceMinor int64   `json:"listPriceMinor"`
+	Currency       string  `json:"currency"`
+	Rating         float64 `json:"rating"`
+	ReviewCount    int     `json:"reviewCount"`
+	InStock        bool    `json:"inStock"`
+	LowStock       bool    `json:"lowStock"`
+	AvailableQty   int     `json:"availableQty"`
+	DeliveryDays   int     `json:"deliveryDays"`
+	ImageURL       string  `json:"imageUrl"`
+	OfferCount     int     `json:"offerCount"`
 	// Sponsored is present on ads only (S240).
 	Sponsored *SearchSponsored `json:"sponsored,omitempty"`
 }

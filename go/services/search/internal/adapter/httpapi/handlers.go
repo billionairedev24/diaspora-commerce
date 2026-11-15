@@ -62,11 +62,19 @@ func (h *handlersImpl) search(w http.ResponseWriter, r *http.Request) {
 		SellerKind:   strings.ToUpper(v.Get("sellerKind")),
 		SellerID:     strings.TrimSpace(v.Get("sellerId")),
 		InStockOnly:  v.Get("inStock") == "true",
+		OnSale:       v.Get("onSale") == "true",
 		EligibleOnly: v.Get("eligibleOnly") == "true",
 		Sort:         domain.Sort(v.Get("sort")),
 		Ads:          v.Get("ads") == "true",
 		Track:        v.Get("track") != "false",
 		CustomerID:   customerID(r),
+	}
+	if a := strings.TrimSpace(v.Get("atins")); a != "" {
+		for _, one := range strings.Split(a, ",") {
+			if one = strings.TrimSpace(one); one != "" && len(q.ATINs) < 20 {
+				q.ATINs = append(q.ATINs, one)
+			}
+		}
 	}
 	if c := v.Get("community"); c != "" {
 		q.Communities = strings.Split(c, ",")

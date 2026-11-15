@@ -22,6 +22,9 @@ public interface UsageLedger {
     /** Everything used by all callers and features on the day: the figure the daily spend ceiling is checked against. */
     UsageTotals globalTotals(LocalDate day);
 
+    /** What each feature used on the UTC day, from the ledger itself (nothing is estimated here), most expensive first. */
+    List<FeatureDayUsage> dayUsageByFeature(LocalDate day);
+
     /** Billable usage per organisation and UTC day in [from, to], ordered by organisation and day. */
     List<OrgDayUsage> orgUsage(LocalDate from, LocalDate to);
 
@@ -41,6 +44,10 @@ public interface UsageLedger {
      */
     record Entry(String subject, String orgId, String feature, String task, String model, TokenUsage usage, long costMicros,
                  boolean degraded, boolean fallback, Instant at) {
+    }
+
+    /** One feature's usage on one UTC day: model calls, prompt + completion tokens and estimated cost in micro-dollars. */
+    record FeatureDayUsage(String feature, long calls, long tokens, long costMicros) {
     }
 
     /**

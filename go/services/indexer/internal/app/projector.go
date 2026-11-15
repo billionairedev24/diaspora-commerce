@@ -167,6 +167,11 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 		doc.VariantATINs = append(doc.VariantATINs, v.ATIN)
 		if i == 0 || (v.PriceMinor > 0 && v.PriceMinor < doc.PriceMinor) {
 			doc.PriceMinor = v.PriceMinor
+			// A sale is only real when the was-price is above the price: otherwise nothing is stored.
+			doc.ListPriceMinor, doc.OnSale = 0, false
+			if v.CompareAtMinor != nil && *v.CompareAtMinor > v.PriceMinor && v.PriceMinor > 0 {
+				doc.ListPriceMinor, doc.OnSale = *v.CompareAtMinor, true
+			}
 			if v.Currency != "" {
 				doc.Currency = strings.ToUpper(v.Currency)
 			}

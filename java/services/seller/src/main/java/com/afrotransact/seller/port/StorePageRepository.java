@@ -28,9 +28,9 @@ public interface StorePageRepository {
 
     List<StorePageAuditEntry> audit(String orgId, int limit);
 
-    /** Published storefronts of approved sellers (organisation, address, when published), by address. */
+    /** Published storefronts of approved sellers and providers (kind, organisation, address, when published), by address. */
     List<PublishedStore> published(int limit);
 
-    record PublishedStore(String orgId, String slug, Instant publishedAt) {
+    record PublishedStore(String kind, String orgId, String slug, Instant publishedAt) {
     }
 }

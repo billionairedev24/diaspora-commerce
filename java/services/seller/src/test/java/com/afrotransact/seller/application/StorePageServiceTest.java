@@ -53,6 +53,32 @@ class StorePageServiceTest {
                 new Organisation(ORG, OrgKind.SELLER, "Store LLC", "Store", "US", null, status, NOW, NOW, 0)));
     }
 
+    private void provider(OrgStatus status) {
+        when(orgs.findById(ORG)).thenReturn(Optional.of(
+                new Organisation(ORG, OrgKind.PROVIDER, "Braids LLC", "Braids", "US", null, status, NOW, NOW, 0)));
+    }
+
+    @Test
+    void aProviderPublishesItsPageLikeASellerOnceApproved() {
+        provider(OrgStatus.APPROVED);
+        when(pages.find(ORG)).thenReturn(Optional.of(row(1, null, null)));
+        when(pages.publish(eq(ORG), eq(1L), any(), anyString())).thenReturn(true);
+        service.publish(ORG, 1);
+        verify(pages).publish(eq(ORG), eq(1L), any(), anyString());
+        verify(pages).audit(eq(ORG), eq("PUBLISHED"), anyString(), eq(1L), any());
+        when(pages.find(ORG)).thenReturn(Optional.of(row(2, "{\"a\":1}", 2L)));
+        assertThat(service.publishedFor(ORG)).isPresent();
+    }
+
+    @Test
+    void aProviderThatIsNotApprovedCannotPublishAndHasNoPublicPage() {
+        provider(OrgStatus.PENDING_REVIEW);
+        assertThatThrownBy(() -> service.publish(ORG, 1)).isInstanceOf(BusinessRuleException.class);
+        verify(pages, never()).publish(any(), anyLong(), any(), any());
+        when(pages.find(ORG)).thenReturn(Optional.of(row(2, "{\"a\":1}", 2L)));
+        assertThat(service.publishedFor(ORG)).isEmpty();
+    }
+
     private static StorePage row(long version, String published, Long publishedVersion) {
         return new StorePage(ORG, "{\"a\":1}", published, version, publishedVersion, NOW, "user_1",
                 published == null ? null : NOW);

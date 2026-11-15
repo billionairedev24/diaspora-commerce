@@ -39,25 +39,27 @@ func NewIndex(es *elasticsearch.Client, opts ...Option) port.Index {
 }
 
 type source struct {
-	ATIN         string   `json:"atin"`
-	Title        string   `json:"title"`
-	Brand        string   `json:"brand"`
-	Department   string   `json:"department"`
-	CategoryPath string   `json:"category_path"`
-	SellerID     string   `json:"seller_id"`
-	VariantATINs []string `json:"variant_atins"`
-	SellerName   string   `json:"seller_name"`
-	SellerKind   string   `json:"seller_kind"`
-	Fulfilment   string   `json:"fulfilment"`
-	PriceMinor   int64    `json:"price_minor"`
-	Currency     string   `json:"currency"`
-	Rating       float64  `json:"rating"`
-	ReviewCount  int      `json:"review_count"`
-	InStock      bool     `json:"in_stock"`
-	AvailableQty int      `json:"available_qty"`
-	DeliveryDays int      `json:"delivery_days"`
-	ImageURL     string   `json:"image_url"`
-	OfferCount   int      `json:"offer_count"`
+	ATIN           string   `json:"atin"`
+	Title          string   `json:"title"`
+	Brand          string   `json:"brand"`
+	Department     string   `json:"department"`
+	CategoryPath   string   `json:"category_path"`
+	SellerID       string   `json:"seller_id"`
+	VariantATINs   []string `json:"variant_atins"`
+	SellerName     string   `json:"seller_name"`
+	SellerKind     string   `json:"seller_kind"`
+	Fulfilment     string   `json:"fulfilment"`
+	PriceMinor     int64    `json:"price_minor"`
+	ListPriceMinor int64    `json:"list_price_minor"`
+	OnSale         bool     `json:"on_sale"`
+	Currency       string   `json:"currency"`
+	Rating         float64  `json:"rating"`
+	ReviewCount    int      `json:"review_count"`
+	InStock        bool     `json:"in_stock"`
+	AvailableQty   int      `json:"available_qty"`
+	DeliveryDays   int      `json:"delivery_days"`
+	ImageURL       string   `json:"image_url"`
+	OfferCount     int      `json:"offer_count"`
 }
 
 type bucket struct {
@@ -303,8 +305,16 @@ func (i *indexImpl) do(ctx context.Context, index string, body object, out *resp
 
 func toHit(s source) domain.Hit {
 	return domain.Hit{ATIN: s.ATIN, Title: s.Title, Brand: s.Brand, CategoryPath: s.CategoryPath,
-		SellerName: s.SellerName, SellerKind: s.SellerKind, Fulfilment: s.Fulfilment, PriceMinor: s.PriceMinor,
+		SellerName: s.SellerName, SellerKind: s.SellerKind, Fulfilment: s.Fulfilment, PriceMinor: s.PriceMinor, ListPriceMinor: listPrice(s.PriceMinor, s.ListPriceMinor, s.OnSale),
 		Currency: s.Currency, Rating: s.Rating, ReviewCount: s.ReviewCount, InStock: s.InStock,
 		AvailableQty: s.AvailableQty, DeliveryDays: s.DeliveryDays, ImageURL: s.ImageURL, OfferCount: s.OfferCount,
 		SellerID: s.SellerID, Department: s.Department, VariantATINs: s.VariantATINs}
+}
+
+// listPrice is the was-price to show: only a stored list price above the price on a document flagged on sale.
+func listPrice(price, list int64, onSale bool) int64 {
+	if onSale && list > price && price > 0 {
+		return list
+	}
+	return 0
 }

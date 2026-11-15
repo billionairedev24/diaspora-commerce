@@ -66,6 +66,8 @@ type StaffUpstreams struct {
 	Search StaffUpstream
 	// Carrier is carrier-gateway: customer pickup points (Delivery dispatch › Pickup points).
 	Carrier StaffUpstream
+	// AI is ai-gateway: today's spend against the daily cap (Settings > AI and MCP spend cap).
+	AI StaffUpstream
 	// Proof signs the links to a delivery's proof photo and signature on an order's sheet (optional: none without it).
 	Proof ProofLinks
 }

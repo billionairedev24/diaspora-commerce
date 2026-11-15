@@ -13,7 +13,10 @@ import (
 
 type reviewsImpl struct{ c httpclient.Client }
 
-var _ port.ReviewsClient = (*reviewsImpl)(nil)
+var (
+	_ port.ReviewsClient       = (*reviewsImpl)(nil)
+	_ port.SellerRatingsClient = (*reviewsImpl)(nil)
+)
 
 // NewReviews returns the catalog client for verified-purchase product reviews (S324).
 func NewReviews(c httpclient.Client) port.ReviewsClient { return &reviewsImpl{c: c} }
@@ -84,5 +87,11 @@ func (r *reviewsImpl) Reply(ctx context.Context, bearer, reviewID, text string) 
 	var out port.UpSellerReview
 	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/product-reviews/" + url.PathEscape(reviewID) + "/reply",
 		Bearer: bearer, UserBearer: true, JSON: map[string]any{"text": text}}, &out)
+	return out, err
+}
+
+func (r *reviewsImpl) SellerRating(ctx context.Context, orgID string) (port.UpRating, error) {
+	var out port.UpRating
+	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/public/sellers/" + url.PathEscape(orgID) + "/rating"}, &out)
 	return out, err
 }

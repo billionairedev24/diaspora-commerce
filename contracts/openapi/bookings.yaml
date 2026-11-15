@@ -3245,6 +3245,50 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PublicTeamMember'
+        weeklyHours:
+          type: array
+          description: 'Working hours per weekday (Monday first) in the provider''s time zone: the bookable team''s hours merged; a day with no ranges is closed'
+          items:
+            $ref: '#/components/schemas/PublicDayHours'
+        serviceArea:
+          $ref: '#/components/schemas/PublicServiceArea'
+    PublicDayHours:
+      type: object
+      properties:
+        day:
+          type: string
+          enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
+        ranges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicTimeRange'
+    PublicTimeRange:
+      type: object
+      description: Local wall-clock HH:mm, end exclusive
+      properties:
+        start:
+          type: string
+        end:
+          type: string
+    PublicServiceArea:
+      type: object
+      description: Base city, travel radius and the named extra areas; no address, ZIP of the base or coordinates. Absent until the provider has set a service area.
+      properties:
+        baseCity:
+          type: string
+        baseState:
+          type: string
+        radiusMiles:
+          type: integer
+          format: int32
+        servedCities:
+          type: array
+          items:
+            type: string
+        extraAreas:
+          type: array
+          items:
+            type: string
     ServiceAreaPreview:
       type: object
       properties:

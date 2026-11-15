@@ -3123,7 +3123,7 @@
   "st.sx.ai.row.mcp": "Servidor MCP",
   "st.sx.ai.row.mcpValue": "Privado: solo accesible dentro de la plataforma, cada llamada requiere un token autenticado. Sus herramientas que llaman a la IA cuentan para el mismo límite.",
   "st.sx.ai.row.changed": "Quién puede cambiarlo",
-  "st.sx.ai.row.changedValue": "Un ingeniero, en los ajustes de despliegue del servicio de IA (AI_GLOBAL_DAILY_COST_USD), y luego un reinicio. Lo habitual es subirlo un día y volver a bajarlo. Los valores de arriba son los predeterminados del despliegue, no el gasto de hoy.",
+  "st.sx.ai.row.changedValue": "Un ingeniero, en los ajustes de despliegue del servicio de IA (AI_GLOBAL_DAILY_COST_USD), y luego un reinicio. Lo habitual es subirlo un día y volver a bajarlo.",
   "st.sx.ai.runbook": "Cómo funciona y cómo subirlo por un día: docs/runbooks/ai-spend-and-mcp-access.md.",
   "st.sx.staff.title": "Cuentas del personal",
   "st.sx.staff.description": "Todas las personas que trabajan en AfroTransact, sus roles y quién está desactivado.",
@@ -3365,5 +3365,17 @@
   "st.acc.mx.locked": "Super Admin siempre conserva al menos Editar en Usuarios y roles y en Control de acceso, para que la consola siempre se pueda administrar.",
   "st.acc.mx.delay": "Un cambio llega a la consola del personal en aproximadamente un minuto.",
   "st.acc.mx.empty": "Ningún módulo coincide.",
-  "st.acc.mx.noneForPortal": "Este portal no tiene módulos en la matriz."
+  "st.acc.mx.noneForPortal": "Este portal no tiene módulos en la matriz.",
+  "st.sx.ai.today.title": "Hoy",
+  "st.sx.ai.today.spent": "{spent} de {cap} usados ({percent} %)",
+  "st.sx.ai.today.spentNoCap": "{spent} usados (no hay límite diario)",
+  "st.sx.ai.today.meter": "{percent} % del límite de hoy usado",
+  "st.sx.ai.today.calls": "{calls} llamadas de IA y {tokens} tokens hoy.",
+  "st.sx.ai.today.none": "Hoy no se registró ninguna llamada de IA, así que el gasto es cero.",
+  "st.sx.ai.today.resets": "El día termina a las 00:00 UTC ({when}).",
+  "st.sx.ai.today.byFeature": "Gasto por función",
+  "st.sx.ai.today.featureCalls": "{calls, plural, one {# llamada} other {# llamadas}}",
+  "st.sx.ai.today.estimate": "El costo es una estimación según el uso que informa el proveedor tras cada llamada, así que el día puede pasar el límite por las llamadas en curso.",
+  "st.sx.ai.force.title": "Lo que está en vigor",
+  "st.sx.ai.row.totalUnlimited": "No hay un límite diario en este despliegue."
 }

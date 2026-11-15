@@ -19,6 +19,7 @@ import com.afrotransact.bookings.domain.AreaPolicy;
 import com.afrotransact.bookings.domain.BookedService;
 import com.afrotransact.bookings.domain.BookingsRuleViolation;
 import com.afrotransact.bookings.domain.CustomerPlace;
+import com.afrotransact.bookings.domain.NamedArea;
 import com.afrotransact.bookings.domain.Provider;
 import com.afrotransact.bookings.domain.RatingSummary;
 import com.afrotransact.bookings.domain.ServiceArea;
@@ -28,6 +29,7 @@ import com.afrotransact.bookings.domain.ServiceOffering;
 import com.afrotransact.bookings.domain.ShopperRadius;
 import com.afrotransact.bookings.domain.ServiceZone;
 import com.afrotransact.bookings.domain.TeamMember;
+import com.afrotransact.bookings.domain.WeeklyHours;
 import com.afrotransact.bookings.domain.ZoneCity;
 import com.afrotransact.bookings.domain.Zones;
 import com.afrotransact.bookings.port.GeoClient;
@@ -235,7 +237,10 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
             throw ProviderSetupServiceImpl.notFound(orgId);
         }
         Provider p = providers.find(orgId).orElseThrow(() -> ProviderSetupServiceImpl.notFound(orgId));
-        return new ProviderPage(p, offerings.byOrg(orgId, true), bookableTeam(orgId));
+        List<TeamMember> bookable = bookableTeam(orgId);
+        ServiceArea area = areaRepo.find(orgId).orElse(null);
+        return new ProviderPage(p, offerings.byOrg(orgId, true), bookable,
+                WeeklyHours.union(bookable.stream().map(TeamMember::hours).toList()), area, extraAreaLabels(area));
     }
 
     @Override
@@ -304,6 +309,26 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
             }
         }
         return null;
+    }
+
+    /** The named extra areas as a customer reads them: "Taylor, TX", "76574" or the zone's name. */
+    private List<String> extraAreaLabels(ServiceArea area) {
+        if (area == null || area.extraAreas().isEmpty()) {
+            return List.of();
+        }
+        Zones zones = new Zones(areaConfig.zones());
+        List<String> out = new ArrayList<>();
+        for (NamedArea a : area.extraAreas()) {
+            String label = switch (a.kind()) {
+                case CITY -> a.value() + ", " + a.state();
+                case ZIP -> a.value();
+                case ZONE -> zones.zone(a.value()).map(ServiceZone::name).orElse(null);
+            };
+            if (label != null && !out.contains(label)) {
+                out.add(label);
+            }
+        }
+        return List.copyOf(out);
     }
 
     private List<TeamMember> bookableTeam(String orgId) {

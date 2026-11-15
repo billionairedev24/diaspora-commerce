@@ -41,6 +41,34 @@ public record WeeklyHours(Map<DayOfWeek, List<TimeRange>> days) {
         return days.getOrDefault(day, List.of());
     }
 
+    /**
+     * When at least one of these members is working: per weekday, the ranges of all of them merged (overlapping or
+     * touching ranges become one). A day nobody works stays closed. This is what a customer can be offered.
+     */
+    public static WeeklyHours union(List<WeeklyHours> all) {
+        Map<DayOfWeek, List<TimeRange>> merged = new EnumMap<>(DayOfWeek.class);
+        for (DayOfWeek day : DayOfWeek.values()) {
+            List<TimeRange> ranges = new ArrayList<>();
+            for (WeeklyHours h : all) {
+                ranges.addAll(h.rangesFor(day));
+            }
+            ranges.sort(Comparator.comparing(TimeRange::start));
+            List<TimeRange> out = new ArrayList<>();
+            for (TimeRange r : ranges) {
+                if (!out.isEmpty() && !r.start().isAfter(out.getLast().end())) {
+                    TimeRange last = out.removeLast();
+                    out.add(new TimeRange(last.start(), r.end().isAfter(last.end()) ? r.end() : last.end()));
+                } else {
+                    out.add(r);
+                }
+            }
+            if (!out.isEmpty()) {
+                merged.put(day, out);
+            }
+        }
+        return new WeeklyHours(merged);
+    }
+
     public boolean isOpen(DayOfWeek day) {
         return !rangesFor(day).isEmpty();
     }

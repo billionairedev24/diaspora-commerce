@@ -435,3 +435,39 @@ func TestRatingWriteFailuresAreRetriedThenDeadLettered(t *testing.T) {
 		t.Fatalf("expected one dead letter and no rating, got %d / %+v", len(dlq.got), idx.ratings)
 	}
 }
+
+func saleEnvelope(t *testing.T, variants []domain.VariantPayload) events.Envelope {
+	t.Helper()
+	payload, _ := json.Marshal(domain.ProductEvent{ProductID: "p2", ATIN: "AT00000002", OwnerKind: "SELLER", OwnerOrgID: "org_s", Status: "LIVE",
+		Title: "Shea butter", CategoryID: "c1", Variants: variants})
+	return events.Envelope{ID: "e2", Type: domain.ProductApproved, Payload: payload, OccurredAt: time.Now()}
+}
+
+// A sale is indexed only when the was-price is above the price of the variant the indexed price comes from.
+func TestOnlyARealWasPriceMakesAProductOnSale(t *testing.T) {
+	was := func(v int64) *int64 { return &v }
+	cases := []struct {
+		name     string
+		variants []domain.VariantPayload
+		list     int64
+		onSale   bool
+	}{
+		{"discount", []domain.VariantPayload{{ATIN: "AT0000000A", PriceMinor: 800, CompareAtMinor: was(1000), Currency: "usd"}}, 1000, true},
+		{"equal is no sale", []domain.VariantPayload{{ATIN: "AT0000000A", PriceMinor: 800, CompareAtMinor: was(800), Currency: "usd"}}, 0, false},
+		{"lower is no sale", []domain.VariantPayload{{ATIN: "AT0000000A", PriceMinor: 800, CompareAtMinor: was(500), Currency: "usd"}}, 0, false},
+		{"none", []domain.VariantPayload{{ATIN: "AT0000000A", PriceMinor: 800, Currency: "usd"}}, 0, false},
+		// The cheapest variant sets the price, so its own was-price decides, not another variant's.
+		{"cheapest variant decides", []domain.VariantPayload{{ATIN: "AT0000000A", PriceMinor: 1200, CompareAtMinor: was(2000), Currency: "usd"},
+			{ATIN: "AT0000000B", PriceMinor: 800, Currency: "usd"}}, 0, false},
+	}
+	for _, c := range cases {
+		idx := &fakeIndex{}
+		p := app.NewProjector(idx, fakeCatalog{}, fakeSellers{}, "us", quiet)
+		if err := p.Handle(context.Background(), saleEnvelope(t, c.variants)); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if d := idx.docs[0]; d.OnSale != c.onSale || d.ListPriceMinor != c.list {
+			t.Errorf("%s: onSale=%v list=%d, want %v %d", c.name, d.OnSale, d.ListPriceMinor, c.onSale, c.list)
+		}
+	}
+}

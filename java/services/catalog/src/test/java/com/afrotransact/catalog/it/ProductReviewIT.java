@@ -630,6 +630,20 @@ class ProductReviewIT {
     }
 
     @Test
+    void aSellerRatingIsComputedFromItsPublishedReviewsOnly() throws Exception {
+        JsonNode none = get("/v1/public/sellers/org_without_reviews/rating");
+        assertThat(none.path("count").asInt()).isZero();
+        Product p = liveProduct();
+        reviewed(p, cust(), "Ada Obi", 5, "Perfect");
+        reviewed(p, cust(), "Bola Ade", 4, "Good");
+        JsonNode rating = get("/v1/public/sellers/" + RETAIL_ORG + "/rating");
+        assertThat(rating.path("count").asInt()).isEqualTo(2);
+        assertThat(rating.path("average").asDouble()).isEqualTo(4.5);
+        assertThat(rating.path("breakdown")).hasSize(5);
+        assertThat(rating.toString()).doesNotContain("customer");
+    }
+
+    @Test
     void aProductWithoutReviewsHasAZeroRatingOnItsPage() throws Exception {
         Product p = liveProduct();
         JsonNode product = get("/v1/public/products/" + p.atin().value());

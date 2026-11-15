@@ -254,10 +254,16 @@ func summaryFromHit(h port.SearchHit, est domain.Estimator, now time.Time) domai
 	if currency == "" {
 		currency = domain.Currency
 	}
+	// The was-price only when it is a real discount: above the price.
+	var list *int64
+	if h.ListPriceMinor > h.PriceMinor && h.PriceMinor > 0 {
+		v := h.ListPriceMinor
+		list = &v
+	}
 	return domain.ProductSummary{
 		ATIN: h.ATIN, Title: h.Title, Brand: h.Brand, Community: "", Department: domain.DepartmentOf(h.CategoryPath),
 		Unit: "", Rating: min(5, max(0, h.Rating)), ReviewCount: max(0, h.ReviewCount), ImageURL: strPtr(h.ImageURL),
-		OfferID: h.ATIN, PriceMinor: h.PriceMinor, ListPriceMinor: nil, Currency: strings.ToUpper(currency),
+		OfferID: h.ATIN, PriceMinor: h.PriceMinor, ListPriceMinor: list, Currency: strings.ToUpper(currency),
 		SellerName: firstNonEmpty(h.SellerName, sellerFallback(kind)), SellerKind: kind, SellerCity: "",
 		Fulfilment: fulfilment, AvailableQty: qty, InStock: status != domain.OutOfStock, LowStock: status == domain.LowStock,
 		StockStatus: status, Delivery: est.Promise(fulfilment), OfferCount: max(1, h.OfferCount),

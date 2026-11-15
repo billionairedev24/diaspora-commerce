@@ -122,6 +122,11 @@ export interface components {
             fulfilment: "AFROTRANSACT" | "SELLER";
             /** Format: int64 */
             priceMinor: number;
+            /**
+             * Format: int64
+             * @description The was-price: present only when it is above priceMinor (a real discount); absent otherwise.
+             */
+            listPriceMinor?: number;
             currency: string;
             rating?: number;
             reviewCount?: number;
@@ -274,6 +279,10 @@ export interface operations {
                 /** @description Delivery within N days */
                 maxDays?: number;
                 inStock?: boolean;
+                /** @description Comma-separated product ATINs (at most 20): only these products, still subject to every other filter (a seller's featured picks). */
+                atins?: string;
+                /** @description Only products whose price has a real was-price above it (index flag on_sale, from the variant's compareAt/list price). Same on Meilisearch and Elasticsearch. */
+                onSale?: boolean;
                 /**
                  * @description Home, nav, footer and sitemap counts (S415). Restricts hits AND facets to products a shopper may be shown: live,
                  *     in stock and `photo_ok` (a real photograph: http(s) or site-relative, not svg, ico, data: or a placeholder path).

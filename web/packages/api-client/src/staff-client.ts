@@ -1,24 +1,11 @@
 import { type AddressSearchOptions } from './address-lookup';
-import { createStaffFeeRatesApi } from './fee-rates';
 import { ApiError, problemFrom } from './errors';
+import { createStaffFeeRatesApi } from './fee-rates';
 import { absolute, type ApiClientOptions, createRequester, type FetchLike } from './http';
 import { createInventoryHubApi } from './inventory-hub';
 import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
 import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type LookupKind, type LookupResult, LookupResultSchema } from './schemas/staff';
-import {
-  type DeliveryActionInput,
-  type DeliveryCourier,
-  DeliveryCourierListSchema,
-  type DeliveryDetail,
-  DeliveryDetailSchema,
-  type DeliveryList,
-  DeliveryListSchema,
-  type DeliveryProofInput,
-  type DeliveryQuery,
-  type DeliveryUploadTicket,
-  DeliveryUploadTicketSchema
-} from './schemas/staff-delivery';
 import {
   type Customer360,
   Customer360Schema,
@@ -88,7 +75,21 @@ import {
   type SupportRefundRequest,
   type TaxRatesImportResult,
   TaxRatesImportResultSchema} from './schemas/staff';
+import {
+  type DeliveryActionInput,
+  type DeliveryCourier,
+  DeliveryCourierListSchema,
+  type DeliveryDetail,
+  DeliveryDetailSchema,
+  type DeliveryList,
+  DeliveryListSchema,
+  type DeliveryProofInput,
+  type DeliveryQuery,
+  type DeliveryUploadTicket,
+  DeliveryUploadTicketSchema
+} from './schemas/staff-delivery';
 import { createStaffAccessApi } from './staff-access';
+import { createStaffAiSpendApi } from './staff-ai-spend';
 import { createStaffContentApi } from './staff-content';
 import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
 import { createStaffDepartmentsApi } from './staff-departments';
@@ -271,6 +272,7 @@ export function createStaffApiClient(options: ApiClientOptions) {
     /* Settings → Markets & locations: /v1/staff/markets/** (location tree) and /v1/staff/places (gazetteer) */
     markets: createStaffMarketsApi(request),
     access: createStaffAccessApi(request),
+    aiSpend: createStaffAiSpendApi(request),
     /* Fees & commissions → Sales tax: /v1/staff/tax/** (category profiles, review queue, provider code maps, method, shadow report) */
     tax: createStaffTaxApi(request),
     /* Settings → Published pages: /v1/staff/content/** (index, legal and help editors, drafts, publication, rollback) */

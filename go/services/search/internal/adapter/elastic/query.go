@@ -43,7 +43,7 @@ double confidence = Math.min(1.0, Math.log10(1 + n) / 2.0);
 return 1 + params.w * r * confidence;`
 
 var sourceFields = []string{"atin", "title", "brand", "department", "category_path", "seller_id", "seller_name",
-	"seller_kind", "fulfilment", "price_minor", "currency", "rating", "review_count", "in_stock", "available_qty",
+	"seller_kind", "fulfilment", "price_minor", "list_price_minor", "on_sale", "currency", "rating", "review_count", "in_stock", "available_qty",
 	"delivery_days", "image_url", "offer_count", "variant_atins"}
 
 func (r Ranking) textFields() []string {
@@ -181,6 +181,9 @@ func buildFilters(q domain.Query) []any {
 	if q.SellerKind != "" {
 		f = append(f, object{"term": object{"seller_kind": q.SellerKind}})
 	}
+	if len(q.ATINs) > 0 {
+		f = append(f, object{"terms": object{"atin": q.ATINs}})
+	}
 	if q.SellerID != "" {
 		f = append(f, object{"term": object{"seller_id": q.SellerID}})
 	}
@@ -205,6 +208,9 @@ func buildFilters(q domain.Query) []any {
 	}
 	if q.EligibleOnly {
 		f = append(f, object{"term": object{"photo_ok": true}})
+	}
+	if q.OnSale {
+		f = append(f, object{"term": object{"on_sale": true}})
 	}
 	if q.WithinMiles > 0 {
 		f = append(f, object{"geo_distance": object{

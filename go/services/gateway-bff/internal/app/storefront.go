@@ -29,6 +29,8 @@ type StorefrontService interface {
 
 // StorefrontSource is everything the page is made from besides the live products.
 type StorefrontSource struct {
+	// Kind is domain.StoreKindSeller (the default) or domain.StoreKindProvider.
+	Kind                                                  string
 	OrgID, Slug, Name, Description, LogoURL, ContactEmail string
 	Config                                                domain.StoreConfig
 	Since                                                 time.Time
@@ -48,6 +50,8 @@ type storefrontServiceImpl struct {
 	pages    port.StorefrontsClient
 	search   SearchService
 	pickup   port.DeliveryFactsClient
+	ratings  port.SellerRatingsClient
+	bookings port.CustomerBookingsClient
 	policy   domain.StorePolicy
 	clock    Clock
 	cache    *ttlCache[port.UpStorefront]
@@ -57,11 +61,38 @@ type storefrontServiceImpl struct {
 
 var _ StorefrontService = (*storefrontServiceImpl)(nil)
 
+// StorefrontOption wires an optional dependency of the StorefrontService.
+type StorefrontOption func(*storefrontServiceImpl)
+
+// WithSellerRatings sets where a seller's rating aggregate comes from (catalog, computed from real published reviews).
+// Without it a seller's page never shows a rating.
+func WithSellerRatings(r port.SellerRatingsClient) StorefrontOption {
+	return func(s *storefrontServiceImpl) { s.ratings = r }
+}
+
+// WithProviders sets bookings, which makes provider pages bookable: their services, schedule, area, team and rating.
+// Without it a provider's page has only its own settings.
+func WithProviders(b port.CustomerBookingsClient) StorefrontOption {
+	return func(s *storefrontServiceImpl) { s.bookings = b }
+}
+
 // NewStorefrontService returns the StorefrontService. pickup is optional (without it the page never claims pickup).
-func NewStorefrontService(pages port.StorefrontsClient, search SearchService, pickup port.DeliveryFactsClient, policy domain.StorePolicy, clock Clock) StorefrontService {
-	return &storefrontServiceImpl{pages: pages, search: search, pickup: pickup, policy: policy, clock: clock,
+func NewStorefrontService(pages port.StorefrontsClient, search SearchService, pickup port.DeliveryFactsClient, policy domain.StorePolicy, clock Clock, opts ...StorefrontOption) StorefrontService {
+	s := &storefrontServiceImpl{pages: pages, search: search, pickup: pickup, policy: policy, clock: clock,
 		cache: newTTLCache[port.UpStorefront](storefrontTTL, 5*time.Minute), built: newTTLCache[domain.Storefront](storefrontTTL, 5*time.Minute),
 		products: newTTLCache[domain.StorefrontProducts](30*time.Second, time.Minute)}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// kindOf is the organisation kind of a source or upstream value: anything but PROVIDER is a seller.
+func kindOf(k string) string {
+	if strings.EqualFold(k, domain.StoreKindProvider) {
+		return domain.StoreKindProvider
+	}
+	return domain.StoreKindSeller
 }
 
 func storefrontNotFound(cause error) error {
@@ -90,12 +121,12 @@ func (s *storefrontServiceImpl) upstream(ctx context.Context, slug string) (port
 	return up, err
 }
 
-func (s *storefrontServiceImpl) config(raw json.RawMessage) domain.StoreConfig {
-	cfg := domain.DefaultStoreConfig()
+func (s *storefrontServiceImpl) config(raw json.RawMessage, kind string) domain.StoreConfig {
+	cfg := domain.DefaultStoreConfigFor(kind)
 	if len(raw) > 0 && string(raw) != "null" {
 		var in domain.StoreConfig
 		if json.Unmarshal(raw, &in) == nil {
-			cfg = domain.SanitizeStoreConfig(in, s.policy)
+			cfg = domain.SanitizeStoreConfig(in, s.policy.ForKind(kind))
 		}
 	}
 	return cfg
@@ -107,8 +138,9 @@ func (s *storefrontServiceImpl) Get(ctx context.Context, slug string) (domain.St
 		return domain.Storefront{}, err
 	}
 	v, _, err := s.built.get(up.Slug, s.clock.now(), func() (domain.Storefront, error) {
-		return s.Build(ctx, StorefrontSource{OrgID: up.OrgID, Slug: up.Slug, Name: up.Name, Description: up.Description, LogoURL: up.LogoURL,
-			ContactEmail: up.ContactEmail, Config: s.config(up.Config), Since: up.OrgCreatedAt})
+		kind := kindOf(up.Kind)
+		return s.Build(ctx, StorefrontSource{Kind: kind, OrgID: up.OrgID, Slug: up.Slug, Name: up.Name, Description: up.Description, LogoURL: up.LogoURL,
+			ContactEmail: up.ContactEmail, Config: s.config(up.Config, kind), Since: up.OrgCreatedAt})
 	})
 	return v, err
 }
@@ -117,6 +149,9 @@ func (s *storefrontServiceImpl) Products(ctx context.Context, slug string, q dom
 	up, err := s.upstream(ctx, slug)
 	if err != nil {
 		return domain.StorefrontProducts{}, err
+	}
+	if kindOf(up.Kind) == domain.StoreKindProvider {
+		return domain.StorefrontProducts{Hits: []domain.ProductSummary{}, Page: 1, Size: storefrontPageSize, Categories: []domain.StorefrontCategory{}, Prices: []domain.StorefrontPrice{}}, nil
 	}
 	return s.page(ctx, up.OrgID, q)
 }
@@ -143,10 +178,10 @@ func clampPage(q domain.StorefrontQuery) domain.StorefrontQuery {
 // search filters (eligibleOnly) and the same photo rule is applied again here.
 func (s *storefrontServiceImpl) page(ctx context.Context, orgID string, q domain.StorefrontQuery) (domain.StorefrontProducts, error) {
 	q = clampPage(q)
-	key := orgID + "|" + q.Q + "|" + q.Category + "|" + q.Price + "|" + q.Sort + "|" + itoa(q.Page) + "|" + itoa(q.Size)
+	key := orgID + "|" + q.Q + "|" + q.Category + "|" + q.Price + "|" + strconv.FormatBool(q.OnSale) + "|" + q.Sort + "|" + itoa(q.Page) + "|" + itoa(q.Size)
 	v, _, err := s.products.get(key, s.clock.now(), func() (domain.StorefrontProducts, error) {
 		res, err := s.search.Search(ctx, &domain.Caller{}, domain.SearchQuery{Q: q.Q, Department: q.Category, Price: q.Price, Sort: q.Sort,
-			Page: q.Page - 1, Size: q.Size, SellerID: orgID, EligibleOnly: true})
+			Page: q.Page - 1, Size: q.Size, SellerID: orgID, EligibleOnly: true, OnSale: q.OnSale})
 		if err != nil {
 			return domain.StorefrontProducts{}, err
 		}
@@ -182,38 +217,20 @@ func pricesOf(in []domain.FacetBucket) []domain.StorefrontPrice {
 	return out
 }
 
-// Build makes the storefront: the first page of products, the categories, the seller's featured picks that are still
-// sellable, the reviews summary (only when there are reviews) and pickup (only when shown and on).
+// Build makes the storefront. A seller's: the first page of products, the categories, the featured picks that are still
+// sellable, the rating (only when real reviews exist) and pickup (only when shown and on). A provider's: its services,
+// schedule, area, team and rating from bookings.
 func (s *storefrontServiceImpl) Build(ctx context.Context, src StorefrontSource) (domain.Storefront, error) {
+	if kindOf(src.Kind) == domain.StoreKindProvider {
+		return s.buildProvider(ctx, src), nil
+	}
 	first, err := s.page(ctx, src.OrgID, domain.StorefrontQuery{Page: 1, Size: storefrontPageSize})
 	if err != nil {
 		return domain.Storefront{}, err
 	}
-	// The whole sellable range, for featured picks and the reviews summary (a few pages at most).
-	var all []domain.ProductSummary
-	for p := 1; p <= storefrontScanPages; p++ {
-		pg, err := s.page(ctx, src.OrgID, domain.StorefrontQuery{Page: p, Size: storefrontScanSize})
-		if err != nil {
-			break
-		}
-		all = append(all, pg.Hits...)
-		if p >= pg.PageCount {
-			break
-		}
-	}
 	cfg := src.Config
-	byATIN := map[string]domain.ProductSummary{}
-	for _, p := range all {
-		byATIN[p.ATIN] = p
-	}
-	featured := make([]domain.ProductSummary, 0, len(cfg.Featured))
-	for _, a := range cfg.Featured {
-		if p, ok := byATIN[a]; ok {
-			featured = append(featured, p)
-		}
-	}
-	out := domain.Storefront{Slug: src.Slug, Name: src.Name, LogoURL: strPtr(src.LogoURL), Description: strPtr(src.Description), Config: cfg,
-		Preview: src.Preview, Verified: true, Categories: first.Categories, Featured: featured, Products: first}
+	out := domain.Storefront{Kind: domain.StoreKindSeller, Slug: src.Slug, Name: src.Name, LogoURL: strPtr(src.LogoURL), Description: strPtr(src.Description), Config: cfg,
+		Preview: src.Preview, Verified: true, Categories: first.Categories, Featured: s.featured(ctx, src.OrgID, cfg.Featured), Products: first}
 	if !src.Since.IsZero() {
 		y := src.Since.Year()
 		out.SellingSinceYear = &y
@@ -221,27 +238,55 @@ func (s *storefrontServiceImpl) Build(ctx context.Context, src StorefrontSource)
 	if cfg.Contact.ShowEmail {
 		out.ContactEmail = strPtr(src.ContactEmail)
 	}
-	out.Reviews = reviewsOf(all)
+	out.Reviews = s.sellerReviews(ctx, src.OrgID)
 	out.Pickup = s.pickupOf(ctx, src.OrgID, cfg)
 	out.Indexable = !src.Preview && len(first.Hits) > 0
 	return out, nil
 }
 
-// reviewsOf averages the real ratings of the products that have reviews, weighted by review count; nil when none do
-// (never "0 reviews").
-func reviewsOf(products []domain.ProductSummary) *domain.StorefrontReviews {
-	var count int
-	var sum float64
-	for _, p := range products {
-		if p.ReviewCount > 0 && p.Rating > 0 {
-			count += p.ReviewCount
-			sum += p.Rating * float64(p.ReviewCount)
+// featured resolves the seller's picks by ATIN straight from search (the seller's own, sellable products), so a pick is never
+// lost because it sits beyond the first pages of the catalogue; a pick that is no longer sellable (out of stock, no photo)
+// is left out, and the order is the seller's.
+func (s *storefrontServiceImpl) featured(ctx context.Context, orgID string, atins []string) []domain.ProductSummary {
+	out := []domain.ProductSummary{}
+	if len(atins) == 0 {
+		return out
+	}
+	res, err := s.search.Search(ctx, &domain.Caller{}, domain.SearchQuery{SellerID: orgID, EligibleOnly: true, ATINs: atins, Sort: domain.SortRelevance, Size: len(atins)})
+	if err != nil {
+		return out
+	}
+	by := map[string]domain.ProductSummary{}
+	for _, p := range eligibleOnly(res.Hits) {
+		by[p.ATIN] = p
+	}
+	for _, a := range atins {
+		if p, ok := by[a]; ok {
+			out = append(out, p)
 		}
 	}
-	if count == 0 {
+	return out
+}
+
+// sellerReviews is the seller's rating from catalog's aggregate over its real published reviews; nil with no reviews (never
+// "0 reviews") or when the aggregate cannot be read (a rating is never guessed).
+func (s *storefrontServiceImpl) sellerReviews(ctx context.Context, orgID string) *domain.StorefrontReviews {
+	if s.ratings == nil {
 		return nil
 	}
-	return &domain.StorefrontReviews{Average: float64(int(sum/float64(count)*10+0.5)) / 10, Count: count}
+	r, err := s.ratings.SellerRating(ctx, orgID)
+	if err != nil {
+		return nil
+	}
+	return reviewsOf(r.Average, r.Count)
+}
+
+// reviewsOf rounds an average to one decimal; nil unless there is at least one real review and a real average.
+func reviewsOf(average float64, count int) *domain.StorefrontReviews {
+	if count < 1 || average <= 0 {
+		return nil
+	}
+	return &domain.StorefrontReviews{Average: float64(int(min(5, average)*10+0.5)) / 10, Count: count}
 }
 
 // pickupOf is the ZIP of the seller's first active pickup place, only when the seller shows pickup. Carrier names and
@@ -285,6 +330,10 @@ func (s *storefrontServiceImpl) List(ctx context.Context) (domain.StorefrontList
 		wg.Add(1)
 		go func() {
 			defer func() { <-sem; wg.Done() }()
+			if kindOf(st.Kind) == domain.StoreKindProvider {
+				live[i] = s.providerLive(ctx, st.OrgID)
+				return
+			}
 			res, err := s.search.Search(ctx, &domain.Caller{}, domain.SearchQuery{SellerID: st.OrgID, EligibleOnly: true, Size: 1})
 			live[i] = err == nil && len(eligibleOnly(res.Hits)) > 0
 		}()
@@ -293,7 +342,7 @@ func (s *storefrontServiceImpl) List(ctx context.Context) (domain.StorefrontList
 	out := domain.StorefrontList{Items: []domain.StorefrontListItem{}}
 	for i, st := range all {
 		if live[i] {
-			out.Items = append(out.Items, domain.StorefrontListItem{Slug: st.Slug, PublishedAt: st.PublishedAt})
+			out.Items = append(out.Items, domain.StorefrontListItem{Kind: kindOf(st.Kind), Slug: st.Slug, PublishedAt: st.PublishedAt})
 		}
 	}
 	return out, nil

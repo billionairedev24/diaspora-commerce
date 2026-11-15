@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-@Tag(name = "Storefronts", description = "A seller's published storefront. Public, read-only.")
+@Tag(name = "Storefronts", description = "A seller's or provider's published storefront. Public, read-only.")
 @RestController
 class PublicStorefrontController {
 
@@ -36,34 +36,35 @@ class PublicStorefrontController {
     }
 
     @Schema(name = "PublicStorefront")
-    record PublicStorefrontResponse(String orgId, String slug, String name, String description, String logoUrl,
+    record PublicStorefrontResponse(@Schema(description = "SELLER or PROVIDER") String kind, String orgId, String slug, String name, String description, String logoUrl,
                                     String brandColor, String contactEmail,
                                     @Schema(description = "The published settings document") JsonNode config,
                                     Instant publishedAt, Instant orgCreatedAt) {
     }
 
-    @Operation(summary = "A seller's published storefront settings (no login)",
+    @Operation(summary = "A seller's or provider's published storefront settings (no login)",
             description = "404 when there is no page, it is not published, or the organisation is not approved.")
     @GetMapping("/v1/public/storefronts/{slug}")
     PublicStorefrontResponse storefront(@PathVariable String slug) {
-        PublicBusinessPage page = pages.find(slug).filter(p -> "SELLER".equals(p.kind())).orElseThrow(this::missing);
+        PublicBusinessPage page = pages.find(slug).orElseThrow(this::missing);
         StorePage published = store.publishedFor(page.orgId()).orElseThrow(this::missing);
         Instant since = orgs.findById(page.orgId()).map(o -> o.createdAt()).orElse(null);
-        return new PublicStorefrontResponse(page.orgId(), page.slug(), page.name(), page.description(), page.logoUrl(),
+        return new PublicStorefrontResponse(page.kind(), page.orgId(), page.slug(), page.name(), page.description(), page.logoUrl(),
                 page.brandColor(), page.contactEmail(), json.readTree(published.published()), published.publishedAt(),
                 since);
     }
 
     @Schema(name = "PublishedStorefront")
-    record PublishedStorefrontResponse(String orgId, String slug, Instant publishedAt) {
+    record PublishedStorefrontResponse(@Schema(description = "SELLER or PROVIDER") String kind, String orgId, String slug,
+                                       Instant publishedAt) {
     }
 
-    @Operation(summary = "Published storefronts of approved sellers (no login)",
+    @Operation(summary = "Published storefronts of approved sellers and providers (no login)",
             description = "Up to 5000, by address. Used to build the sitemap.")
     @GetMapping("/v1/public/storefronts")
     List<PublishedStorefrontResponse> published() {
         return store.publishedStores(5000).stream()
-                .map(p -> new PublishedStorefrontResponse(p.orgId(), p.slug(), p.publishedAt())).toList();
+                .map(p -> new PublishedStorefrontResponse(p.kind(), p.orgId(), p.slug(), p.publishedAt())).toList();
     }
 
     private NotFoundException missing() {

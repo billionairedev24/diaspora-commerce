@@ -82,7 +82,7 @@ function Segmented<T extends string | number>({ label, value, options, onChange,
   );
 }
 
-/** Settings > Store page: the look of the seller's branded storefront, with a live preview, Publish and Unpublish. */
+/** Settings > Store page: the look of a seller's or provider's branded page, with a live preview, Publish and Unpublish. A provider's has its own sections (services, booking, schedule, team) and no product ones. */
 export function StorePageView() {
   const api = sellerApi();
   const qc = useQueryClient();
@@ -170,6 +170,7 @@ export function StorePageView() {
     return <SettingsPage section="store-page">{page.isError ? <ErrorState error={page.error} onRetry={() => void page.refetch()} /> : <Spinner />}</SettingsPage>;
   }
   const s = page.data;
+  const isProvider = s.kind === 'PROVIDER';
   const editable = s.canEdit;
   const patch = (fn: (d: StoreConfig) => StoreConfig) => setDraft((d) => (d ? fn(d) : d));
   const dirty = !sameConfig(draft, s.draft);
@@ -279,7 +280,7 @@ export function StorePageView() {
         </p>
       </Group>
 
-      <Group id="sp-sections" title="Sections" help="Switch sections on or off and move them. The header, top of the page and All products are always there.">
+      <Group id="sp-sections" title="Sections" help={isProvider ? 'Switch sections on or off and move them. The header and the top of the page are always there.' : 'Switch sections on or off and move them. The header, top of the page and All products are always there.'}>
         <ul className="m-0 flex list-none flex-col p-0" data-testid="section-list">
           {draft.sections.map((sec, i) => (
             <li key={sec.id} className="flex flex-wrap items-center gap-3 border-b border-border py-2 first:border-t" data-testid={`section-${sec.id}`}>
@@ -298,10 +299,12 @@ export function StorePageView() {
             </li>
           ))}
         </ul>
+        {isProvider ? null : (
         <div className="flex flex-col gap-3">
           <strong className="text-sm">Products grid</strong>
           <Segmented label="Products per row" value={draft.grid.columns} disabled={!editable} options={[{ id: 3 as const, name: '3 per row' }, { id: 4 as const, name: '4 per row' }]} onChange={(columns) => patch((d) => ({ ...d, grid: { columns } }))} />
         </div>
+        )}
       </Group>
 
       {draft.sections.find((x) => x.id === 'announcement')?.enabled ? (
@@ -311,6 +314,7 @@ export function StorePageView() {
         </Group>
       ) : null}
 
+      {isProvider ? null : (
       <Group id="sp-featured" title="Featured products" help={`Pick up to ${MAX_FEATURED} products. Only products shoppers can buy now are listed here, and a featured product that sells out or loses its photo drops off the page by itself.`}>
         <TextField label="Search your products" placeholder="Name of a product" value={find} onChange={(e) => setFind(e.target.value)} disabled={!editable} data-testid="featured-search" />
         {find.trim() ? (
@@ -351,7 +355,9 @@ export function StorePageView() {
           </ul>
         </div>
       </Group>
+      )}
 
+      {isProvider ? null : (
       <Group id="sp-categories" title="Shop by category" help="Categories come from your live products.">
         <Segmented label="Categories shown" value={draft.categories.mode} disabled={!editable} options={[{ id: 'auto' as const, name: 'All of mine' }, { id: 'chosen' as const, name: 'I choose' }]} onChange={(mode) => patch((d) => ({ ...d, categories: { ...d.categories, mode } }))} />
         {draft.categories.mode === 'chosen' ? (
@@ -367,6 +373,29 @@ export function StorePageView() {
           </div>
         ) : null}
       </Group>
+      )}
+
+      {isProvider ? (
+        <Group id="sp-provider" title="Services, hours and team" help="Your services and prices, weekly opening hours, service area and team come from Provider Hub, so they are always the ones customers can really book. Change them there.">
+          <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-sm">
+            <li>
+              <Link href="/services" className="text-link underline">
+                Services &amp; prices
+              </Link>
+            </li>
+            <li>
+              <Link href="/hours" className="text-link underline">
+                Working hours
+              </Link>
+            </li>
+            <li>
+              <Link href="/settings/team" className="text-link underline">
+                Team
+              </Link>
+            </li>
+          </ul>
+        </Group>
+      ) : null}
 
       <Group id="sp-about" title="Our story" help="Plain text. A blank line starts a new paragraph. No HTML.">
         <TextField label="Heading" value={draft.about.heading} placeholder="Our story" error={err('about.heading')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, about: { ...d.about, heading: e.target.value } }))} />
@@ -376,6 +405,7 @@ export function StorePageView() {
         <StoreImageField label="Story photo" help="JPG, PNG or WebP up to 8 MB, at least 900 x 675." value={draft.about.photoUrl} minWidth={900} minHeight={675} aspect="4 / 3" disabled={!editable} testId="about-photo-input" onChange={(photoUrl) => patch((d) => ({ ...d, about: { ...d.about, photoUrl } }))} />
       </Group>
 
+      {isProvider ? null : (
       <Group id="sp-policies" title="Shipping and returns" help="Your own words. Shoppers see them on your page, so say what you do.">
         <Field label="Shipping" help={`${draft.policies.shipping.length}/600`} error={err('policies.shipping')}>
           {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={3} value={draft.policies.shipping} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, policies: { ...d.policies, shipping: e.target.value } }))} />}
@@ -388,11 +418,12 @@ export function StorePageView() {
           Shown with your ZIP only when pickup is on in <Link href="/settings/pickup" className="text-link underline">Settings &gt; Pickup</Link>. Turning this on here never turns pickup on.
         </p>
       </Group>
+      )}
 
       <Group id="sp-contact" title="Contact and hours" help="Only what you switch on is shown.">
         <Switch label={`Show my email${s.contactEmail ? ` (${s.contactEmail})` : ''}`} checked={draft.contact.showEmail} disabled={!editable} onChange={(v) => patch((d) => ({ ...d, contact: { ...d.contact, showEmail: v } }))} />
         <TextField label="Phone (optional)" inputMode="tel" value={draft.contact.phone} error={err('contact.phone')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, contact: { ...d.contact, phone: e.target.value } }))} />
-        <TextField label="Hours (optional)" placeholder="Mon to Fri, 9 am to 5 pm" value={draft.contact.hours} error={err('contact.hours')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, contact: { ...d.contact, hours: e.target.value } }))} />
+        {isProvider ? null : <TextField label="Hours (optional)" placeholder="Mon to Fri, 9 am to 5 pm" value={draft.contact.hours} error={err('contact.hours')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, contact: { ...d.contact, hours: e.target.value } }))} />}
       </Group>
 
       <Group id="sp-social" title="Social links" help="Full https links to your own profiles.">

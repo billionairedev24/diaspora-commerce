@@ -59,6 +59,8 @@ type StaffServices struct {
 	// Invitations serves Settings > Staff accounts' invitations (invite, list, resend, revoke) and the invitee's two session-less
 	// pages; routes are registered when it and Access are set.
 	Invitations app.StaffInvitationsService
+	// AISpend serves Settings > AI and MCP spend cap: today's spend against the daily cap, by feature; routes are registered when set.
+	AISpend app.StaffAISpendService
 	// ContentPages serves Settings → Published pages (index, preview data, drafts, publication and rollback of legal
 	// documents and help pages); routes are registered when it is set.
 	ContentPages app.StaffContentPagesService
@@ -161,6 +163,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	if s.Identity != nil {
 		route("POST /v1/staff/identity/token-inspector", h.staffInspectToken)
 		route("GET /v1/staff/identity/documents", h.staffIdentityDocuments)
+	}
+	if s.AISpend != nil {
+		route("GET /v1/staff/ai/spend-today", h.staffAISpendToday)
 	}
 	if s.Access != nil {
 		h.registerStaffAccess(route)

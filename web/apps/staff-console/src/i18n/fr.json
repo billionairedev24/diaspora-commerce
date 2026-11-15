@@ -3123,7 +3123,7 @@
   "st.sx.ai.row.mcp": "Serveur MCP",
   "st.sx.ai.row.mcpValue": "Privé : accessible uniquement à l’intérieur de la plateforme, chaque appel exige un jeton authentifié. Ses outils qui appellent l’IA comptent dans la même limite.",
   "st.sx.ai.row.changed": "Qui peut la modifier",
-  "st.sx.ai.row.changedValue": "Un ingénieur, dans les réglages de déploiement du service d’IA (AI_GLOBAL_DAILY_COST_USD), puis un redémarrage. Le plus courant : l’augmenter pour un jour puis la remettre. Les valeurs ci-dessus sont celles par défaut du déploiement, pas la dépense du jour.",
+  "st.sx.ai.row.changedValue": "Un ingénieur, dans les réglages de déploiement du service d’IA (AI_GLOBAL_DAILY_COST_USD), puis un redémarrage. Le plus courant : l’augmenter pour un jour puis la remettre.",
   "st.sx.ai.runbook": "Fonctionnement et marche à suivre pour l’augmenter un jour : docs/runbooks/ai-spend-and-mcp-access.md.",
   "st.sx.staff.title": "Comptes du personnel",
   "st.sx.staff.description": "Toutes les personnes qui travaillent chez AfroTransact, leurs rôles, et les comptes désactivés.",
@@ -3365,5 +3365,17 @@
   "st.acc.mx.locked": "Super Admin garde toujours au moins Modifier sur Utilisateurs et rôles et sur Contrôle d'accès, pour que la console reste administrable.",
   "st.acc.mx.delay": "Un changement atteint la console du personnel en une minute environ.",
   "st.acc.mx.empty": "Aucun module ne correspond.",
-  "st.acc.mx.noneForPortal": "Ce portail n'a aucun module dans la matrice."
+  "st.acc.mx.noneForPortal": "Ce portail n'a aucun module dans la matrice.",
+  "st.sx.ai.today.title": "Aujourd'hui",
+  "st.sx.ai.today.spent": "{spent} sur {cap} utilisés ({percent} %)",
+  "st.sx.ai.today.spentNoCap": "{spent} utilisés (aucune limite quotidienne n'est définie)",
+  "st.sx.ai.today.meter": "{percent} % de la limite du jour utilisés",
+  "st.sx.ai.today.calls": "{calls} appels IA et {tokens} jetons depuis ce matin.",
+  "st.sx.ai.today.none": "Aucun appel IA n'a été enregistré aujourd'hui : la dépense est nulle.",
+  "st.sx.ai.today.resets": "La journée se termine à 00:00 UTC ({when}).",
+  "st.sx.ai.today.byFeature": "Dépense par fonctionnalité",
+  "st.sx.ai.today.featureCalls": "{calls, plural, one {# appel} other {# appels}}",
+  "st.sx.ai.today.estimate": "Le coût est une estimation d'après l'usage déclaré par le fournisseur après chaque appel : la journée peut dépasser la limite des appels en cours.",
+  "st.sx.ai.force.title": "Ce qui est en vigueur",
+  "st.sx.ai.row.totalUnlimited": "Aucune limite quotidienne n'est définie sur ce déploiement."
 }

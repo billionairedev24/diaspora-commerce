@@ -135,6 +135,19 @@ Secrets are **not** put in a cloud secret store on the OVH path: they are render
 re-render never changes it): you never type or copy it. Nothing is committed in clear. (`infra/tofu/scripts/secret-set.sh` is the cloud-secret-store path of the
 other clouds and is not used here.)
 
+**Media host per environment, and who reads it.** One value, `MEDIA_PUBLIC_URL`, is the public media base. The media service builds every asset URL from it,
+and gateway-bff uses the same value as the allowed image prefix of seller and provider storefronts (`STORE_MEDIA_PREFIXES` is only an optional extra list, it never
+replaces it). gateway-bff and seller-service get the variable from the `at-service` library chart like media does (derived from `global.mediaHost`); nothing
+sets it per chart. At startup gateway-bff logs `storefront media: allowed image prefixes` with the list (no secrets).
+
+| Environment | Public media base (`MEDIA_PUBLIC_URL`) | Where it is set |
+|---|---|---|
+| local | `http://localhost:9000/media` (MinIO behind media :8207; assets come back as `http://localhost:9000/media/<key>`) | `publicBaseUrl` of the public store in `go/services/media/config/local.yaml`; gateway-bff `platform.mediaPublicUrl` in `go/services/gateway-bff/config/local.yaml` (LAN mode adds the phone-reachable address via `LAN_MEDIA_URL`) |
+| trial | `https://media-test.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/trial/platform-values.yaml`; the Helm library derives `MEDIA_PUBLIC_URL` for every service |
+| dev | `https://media-dev.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/dev/platform-values.yaml` |
+| uat | `https://media-uat.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/uat/platform-values.yaml` |
+| prod | `https://media.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/prod/platform-values.yaml` |
+
 | Value | `secrets.local.env` key / Secret key | Notes |
 |---|---|---|
 | Account ID | `R2_ACCOUNT_ID` | builds `https://<id>.r2.cloudflarestorage.com`; or set `R2_ENDPOINT` to the full URL |

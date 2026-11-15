@@ -37,7 +37,7 @@ function useStatuses(): Partial<Record<SettingsKey, SettingsStatus>> {
   const compliance = useQuery({ ...sellerQueries.compliance(api, orgId), enabled: level('account-health') !== null || level('payouts') !== null });
   const team = useQuery({ ...sellerQueries.team(api, orgId), enabled: level('team') !== null });
   const page = useQuery({ ...sellerQueries.businessPage(api, orgId), enabled: level('team') !== null });
-  const storePage = useQuery({ ...sellerQueries.storePage(api, orgId), enabled: level('team') !== null && !isProvider });
+  const storePage = useQuery({ ...sellerQueries.storePage(api, orgId), enabled: level('team') !== null });
   const onboarding = useQuery({ ...sellerQueries.onboarding(api, orgId), enabled: level('payouts') !== null });
   const out: Partial<Record<SettingsKey, SettingsStatus>> = {
     notifications: { key: 'sc.settings.status.notifications', tone: 'neutral' },

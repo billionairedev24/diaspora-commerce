@@ -51,6 +51,12 @@ func (s *searchImpl) Search(ctx context.Context, p port.SearchParams) (port.Sear
 	if p.InStock {
 		q.Set("inStock", "true")
 	}
+	if len(p.ATINs) > 0 {
+		q.Set("atins", strings.Join(p.ATINs, ","))
+	}
+	if p.OnSale {
+		q.Set("onSale", "true")
+	}
 	if p.EligibleOnly {
 		q.Set("eligibleOnly", "true")
 	}

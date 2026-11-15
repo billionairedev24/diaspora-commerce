@@ -205,6 +205,22 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AiOrgUsageReport'
+  /v1/ai/usage/today:
+    get:
+      tags:
+      - AI usage
+      summary: Today's AI spend against the daily cap, by feature
+      description: Staff with ai:manage. Read from the usage ledger (cost is estimated from provider usage after each call, so
+        the day can overshoot the cap by the calls in flight). A day with no model call is zero with hasData false. UTC day;
+        resets at 00:00 UTC. The cap itself is deployment configuration (AI_GLOBAL_DAILY_COST_USD) and is not changed here.
+      operationId: today
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AiSpendToday'
   /v1/embeddings:
     post:
       tags:
@@ -821,6 +837,30 @@ components:
           type: integer
           format: int64
           description: AI credits (1 credit = 10,000 micro-dollars, rounded up per day)
+    AiFeatureSpend:
+      type: object
+      description: One feature's spend today
+      properties:
+        feature: {type: string, examples: [lola]}
+        calls: {type: integer, format: int64}
+        tokens: {type: integer, format: int64}
+        costMicros: {type: integer, format: int64, description: Estimated model cost in micro-dollars}
+    AiSpendToday:
+      type: object
+      description: Today's AI spend (UTC day) against the daily cap, by feature
+      properties:
+        day: {type: string, format: date, description: UTC day}
+        capMicros: {type: integer, format: int64, description: 'Gateway-wide daily cap in micro-dollars; 0 = unlimited. Set by AI_GLOBAL_DAILY_COST_USD on the ai-gateway deployment'}
+        callerCapMicros: {type: integer, format: int64, description: 'One caller''s daily share in micro-dollars; 0 = unlimited (AI_CALLER_DAILY_COST_USD)'}
+        spentMicros: {type: integer, format: int64, description: 'Estimated model cost so far today, micro-dollars (1,000,000 = USD 1)'}
+        calls: {type: integer, format: int64}
+        tokens: {type: integer, format: int64}
+        hasData: {type: boolean, description: 'False when no model call was recorded today: the zero is then nothing recorded, not an estimate'}
+        resetsAt: {type: string, format: date-time, description: 'Next UTC midnight, when the day''s total starts again'}
+        byFeature:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiFeatureSpend'
     AiOrgUsageReport:
       type: object
       properties:

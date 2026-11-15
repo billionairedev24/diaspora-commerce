@@ -29,12 +29,16 @@ type SearchQuery struct {
 	SellerID string
 	// EligibleOnly keeps live, in-stock products with a real photo (the storefront rule).
 	EligibleOnly bool
-	MinRating    *float64
-	Price        string
-	MaxDays      *int
-	Sort         string
-	Page         int
-	Size         int
+	// ATINs keeps only these products (a seller's featured picks); not a URL filter.
+	ATINs []string
+	// OnSale keeps products with a real was-price above the price.
+	OnSale    bool
+	MinRating *float64
+	Price     string
+	MaxDays   *int
+	Sort      string
+	Page      int
+	Size      int
 	// Ads blends sponsored products into the page (results pages; default on, ads=false opts out).
 	Ads bool
 }

@@ -31,13 +31,15 @@ Reported: "I do not see permission in staff console settings." The owner is a Su
 | Markets and locations `/settings/markets` | countries and states | Markets | "1 country live" |
 | Language and display (row, opens `/account/preferences`) | personal | none | the language |
 | Notification templates `/settings/notifications` | templates, preview, versions | Notifications | |
-| AI and MCP spend cap `/settings/ai` | what is in force (USD 2.00 per UTC day; 0.50 per caller; 20/120 calls per minute) | `ai:manage` | "USD 2.00 a day" |
+| AI and MCP spend cap `/settings/ai` | today's spend by feature against the cap, then what is in force (USD 2.00 per UTC day; 0.50 per caller; 20/120 calls per minute) | `ai:manage` | "USD 2.00 a day" |
 | Published pages, Site details and legal, Application review | as before | Site content / Applications | |
 | Payments, Credit, Membership, Referral, Fees, Flat delivery fee, Delivery fees, Run economics, Exchange rates, Plans | as before | their module | |
 | Sales tax review (row, opens `/tax?tab=tax-review-settings`) | link, not duplicated | Sales tax | "By risk" / "Every item reviewed" |
 
-The AI cap page is **informational**: the cap is set where ai-gateway is deployed (`AI_GLOBAL_DAILY_COST_USD`), there is no endpoint
-to read today's spend or change it, so it has no switch and shows the deployment defaults ([ai-spend-and-mcp-access.md](../runbooks/ai-spend-and-mcp-access.md)).
+The AI cap page shows **today's spend against the cap, by feature** (ai-gateway `GET /v1/ai/usage/today`, relayed as `GET /v1/staff/ai/spend-today`, needs
+`ai:manage`; read from the usage ledger, zero with "No AI call has been recorded today" when nothing was recorded, never an estimate of ours), then what is in force. The
+cap itself stays **deployment configuration** (`AI_GLOBAL_DAILY_COST_USD`, `AI_CALLER_DAILY_COST_USD` on ai-gateway; [ai-spend-and-mcp-access.md](../runbooks/ai-spend-and-mcp-access.md)):
+there is no endpoint that changes it, so the page has no switch or field and names where it is set. Cost is estimated by ai-gateway from provider usage after each call.
 Staff accounts are made by **invitation** (Staff accounts, "Invite a person"): see [staff-invitations.md](staff-invitations.md). There is no temporary password.
 Statuses come from saved state only; sections with nothing live to say show "View only" for read-only staff, or nothing.
 
@@ -123,11 +125,16 @@ one centre line; every permission row centres its switch; no sideways scroll).
 ![Change log, desktop](img/staff-settings-log-1280.png)
 ![Change log, phone](img/staff-settings-log-390.png)
 
+![AI and MCP spend cap, desktop](img/staff-ai-spend-1280.png)
+![AI and MCP spend cap, phone](img/staff-ai-spend-390.png)
 ![Module access, desktop](img/staff-modules-1280.png)
 ![Module access, phone](img/staff-modules-390.png)
 ![Confirm a module change with a reason, desktop](img/staff-modules-confirm-1280.png)
 
 ## Not verified
 
-Against a real identity service (only the contract-checked fake and the mock BFF were exercised): that identity accepts every permission key the catalogue lists
-for a direct grant, the exact `access-log` shapes for role entries (`subject`/`targetRole`), and the 5-minute propagation.
+Against a real identity, gateway-bff, ai-gateway and console running together: each side was exercised separately (identity and ai-gateway against a real PostgreSQL 16 with
+their full Spring application, gateway-bff against contract-checked fakes, the console against the mock BFF), so the exact JSON identity sends for the access log's role entries
+(`subject`/`targetRole`), the 5-minute propagation and the BFF's one-minute matrix cache were not seen end to end. Testcontainers integration tests (`StaffInvitationIT`, `ModuleAccessIT`,
+`SpendTodayIT`) are written for CI; they were run here only through a local PostgreSQL copy because there is no Docker. Email delivery and the Kafka hop for invitations are in
+[staff-invitations.md](staff-invitations.md#not-verified).

@@ -26,6 +26,8 @@ type BusinessPagesClient interface {
 
 // UpStorefront is seller's PublicStorefront: the published store settings of an approved seller (404 otherwise).
 type UpStorefront struct {
+	// Kind is SELLER or PROVIDER.
+	Kind         string          `json:"kind"`
 	OrgID        string          `json:"orgId"`
 	Slug         string          `json:"slug"`
 	Name         string          `json:"name"`
@@ -77,6 +79,7 @@ type StorePageClient interface {
 
 // UpPublishedStorefront is one published storefront of an approved seller.
 type UpPublishedStorefront struct {
+	Kind        string    `json:"kind"`
 	OrgID       string    `json:"orgId"`
 	Slug        string    `json:"slug"`
 	PublishedAt time.Time `json:"publishedAt"`

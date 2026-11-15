@@ -1,4 +1,4 @@
-import { resetSellerDb } from '@afrotransact/api-client/mocks/seller';
+import { PROVIDER_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { contrastRatio } from '@afrotransact/tokens';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -95,4 +95,55 @@ describe('Settings > Store page', () => {
     const r = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
     expect(r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id}: ${v.nodes[0]?.html.slice(0, 80)}`)).toEqual([]);
   });
+});
+
+describe('Settings > Store page for a provider', () => {
+  beforeEach(() => {
+    resetSellerDb(new Date());
+    asRole(null);
+  });
+
+  it('offers the provider sections and the builder, and none of the product sections', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<StorePageView />, PROVIDER_ORG);
+    await screen.findByTestId('store-editor');
+    const sections = screen.getByRole('region', { name: 'Sections' });
+    for (const title of ['Services', 'Book an appointment', 'Opening hours and area', 'Team', 'Our story', 'Customer reviews']) expect(within(sections).getByText(title)).toBeInTheDocument();
+    for (const gone of ['Featured products', 'Shop by category', 'Shipping and returns']) expect(screen.queryByRole('heading', { name: gone })).toBeNull();
+    expect(screen.queryByText('Products grid')).toBeNull();
+    // the builder: looks, hero, publish and live preview with the provider's own data
+    expect(await screen.findByTestId('storefront-root')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Services' })).toBeInTheDocument();
+    await user.click(screen.getByTestId('preset-heritage'));
+    await waitFor(() => expect(screen.getByTestId('storefront-root')).toHaveAttribute('data-preset', 'heritage'));
+    expect(screen.getByRole('link', { name: /Working hours/ })).toHaveAttribute('href', '/hours');
+  });
+
+  it('saves a draft, publishes and unpublishes the provider page with history', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<StorePageView />, PROVIDER_ORG);
+    await screen.findByTestId('store-editor');
+    await user.type(screen.getByLabelText('Tagline'), 'Braids by appointment');
+    await user.click(screen.getByTestId('save-draft'));
+    expect(await screen.findByText(/Your changes are saved/)).toBeInTheDocument();
+    await user.click(screen.getByTestId('publish'));
+    expect(await screen.findByText('Your store page is live.')).toBeInTheDocument();
+    await user.click(screen.getByTestId('unpublish'));
+    await waitFor(() => expect(screen.getByTestId('store-state')).toHaveTextContent('Not published'));
+    expect(await screen.findByTestId('store-audit')).toHaveTextContent(/Unpublished[\s\S]*Published[\s\S]*Saved a draft/);
+  }, 20_000);
+
+  it('a provider member without Team access cannot publish', async () => {
+    asRole('provider.practitioner');
+    await renderScreen(<StorePageView />, PROVIDER_ORG);
+    await screen.findByTestId('store-state').catch(() => undefined);
+    expect(screen.queryByTestId('publish')).toBeNull();
+  });
+
+  it('has no serious axe violations', async () => {
+    await renderScreen(<StorePageView />, PROVIDER_ORG);
+    await screen.findByTestId('storefront-root');
+    const r = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+    expect(r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id}: ${v.nodes[0]?.html.slice(0, 80)}`)).toEqual([]);
+  }, 20_000);
 });

@@ -57,7 +57,7 @@ To raise the ceiling for a day, set `AI_GLOBAL_DAILY_COST_USD` and restart ai-ga
   setting. The daily dollar caps are exact across replicas.
 * **The OpenRouter key credit limit is set separately by the owner** (OpenRouter dashboard, Keys, the key, Credit limit)
   and is the real backstop if the gateway is bypassed or the price table is wrong. Set it to a few dollars.
-* Check usage: `select * from ai_usage_daily where usage_day = current_date and scope = 'GLOBAL';` (cost in micro-dollars,
+* Check usage: Settings > AI and MCP spend cap in the staff console shows today's spend by feature (`GET /v1/ai/usage/today`, `ai:manage`); or `select * from ai_usage_daily where usage_day = current_date and scope = 'GLOBAL';` (cost in micro-dollars,
   2,000,000 = USD 2). Metrics: `ai_budget_decisions_total{verdict=~"deny_global|deny_caller|rate_limited"}`.
 
 ## 2. Private MCP server

@@ -131,4 +131,12 @@ type ReviewsClient interface {
 	Report(ctx context.Context, bearer, reviewID, reasonCode, details string) (UpReportResult, error)
 	SellerList(ctx context.Context, bearer string, unanswered bool, page, size int) (UpSellerReviewPage, error)
 	Reply(ctx context.Context, bearer, reviewID, text string) (UpSellerReview, error)
+	// SellerRating is the seller aggregate (catalog, public).
+	SellerRating(ctx context.Context, orgID string) (UpRating, error)
+}
+
+// SellerRatingsClient is catalog's public seller rating: the average and count over every published review of the seller's
+// products, computed by catalog (GET /v1/public/sellers/{orgId}/rating). Count 0 means no reviews.
+type SellerRatingsClient interface {
+	SellerRating(ctx context.Context, orgID string) (UpRating, error)
 }

@@ -27,30 +27,32 @@ var _ port.Index = (*indexImpl)(nil)
 func NewIndex(c *meili.Client) port.Index { return &indexImpl{c: c} }
 
 var retrieve = []string{"atin", "title", "brand", "department", "category_path", "seller_id", "seller_name", "seller_kind",
-	"fulfilment", "price_minor", "currency", "rating", "review_count", "in_stock", "available_qty", "delivery_days",
+	"fulfilment", "price_minor", "list_price_minor", "on_sale", "currency", "rating", "review_count", "in_stock", "available_qty", "delivery_days",
 	"image_url", "offer_count", "variant_atins"}
 
 type hitDoc struct {
-	ATIN         string   `json:"atin"`
-	Title        string   `json:"title"`
-	Brand        string   `json:"brand"`
-	Department   string   `json:"department"`
-	CategoryPath string   `json:"category_path"`
-	SellerID     string   `json:"seller_id"`
-	SellerName   string   `json:"seller_name"`
-	SellerKind   string   `json:"seller_kind"`
-	Fulfilment   string   `json:"fulfilment"`
-	PriceMinor   int64    `json:"price_minor"`
-	Currency     string   `json:"currency"`
-	Rating       float64  `json:"rating"`
-	ReviewCount  int      `json:"review_count"`
-	InStock      bool     `json:"in_stock"`
-	AvailableQty int      `json:"available_qty"`
-	DeliveryDays int      `json:"delivery_days"`
-	ImageURL     string   `json:"image_url"`
-	OfferCount   int      `json:"offer_count"`
-	VariantATINs []string `json:"variant_atins"`
-	Score        float64  `json:"_rankingScore"`
+	ATIN           string   `json:"atin"`
+	Title          string   `json:"title"`
+	Brand          string   `json:"brand"`
+	Department     string   `json:"department"`
+	CategoryPath   string   `json:"category_path"`
+	SellerID       string   `json:"seller_id"`
+	SellerName     string   `json:"seller_name"`
+	SellerKind     string   `json:"seller_kind"`
+	Fulfilment     string   `json:"fulfilment"`
+	PriceMinor     int64    `json:"price_minor"`
+	ListPriceMinor int64    `json:"list_price_minor"`
+	OnSale         bool     `json:"on_sale"`
+	Currency       string   `json:"currency"`
+	Rating         float64  `json:"rating"`
+	ReviewCount    int      `json:"review_count"`
+	InStock        bool     `json:"in_stock"`
+	AvailableQty   int      `json:"available_qty"`
+	DeliveryDays   int      `json:"delivery_days"`
+	ImageURL       string   `json:"image_url"`
+	OfferCount     int      `json:"offer_count"`
+	VariantATINs   []string `json:"variant_atins"`
+	Score          float64  `json:"_rankingScore"`
 }
 
 type searchResult struct {
@@ -70,7 +72,7 @@ func (r searchResult) total() int64 {
 
 func (h hitDoc) toHit() domain.Hit {
 	return domain.Hit{ATIN: h.ATIN, Title: h.Title, Brand: h.Brand, CategoryPath: h.CategoryPath, SellerName: h.SellerName,
-		SellerKind: h.SellerKind, Fulfilment: h.Fulfilment, PriceMinor: h.PriceMinor, Currency: h.Currency, Rating: h.Rating,
+		SellerKind: h.SellerKind, Fulfilment: h.Fulfilment, PriceMinor: h.PriceMinor, ListPriceMinor: listPrice(h.PriceMinor, h.ListPriceMinor, h.OnSale), Currency: h.Currency, Rating: h.Rating,
 		ReviewCount: h.ReviewCount, InStock: h.InStock, AvailableQty: h.AvailableQty, DeliveryDays: h.DeliveryDays,
 		ImageURL: h.ImageURL, OfferCount: h.OfferCount, Score: h.Score, SellerID: h.SellerID, Department: h.Department,
 		VariantATINs: h.VariantATINs}
@@ -95,6 +97,13 @@ func buildFilter(q domain.Query) string {
 	if q.SellerKind != "" {
 		f = append(f, "seller_kind = "+meili.Quote(q.SellerKind))
 	}
+	if len(q.ATINs) > 0 {
+		in := make([]string, len(q.ATINs))
+		for i, a := range q.ATINs {
+			in[i] = meili.Quote(a)
+		}
+		f = append(f, "atin IN ["+strings.Join(in, ", ")+"]")
+	}
 	if q.SellerID != "" {
 		f = append(f, "seller_id = "+meili.Quote(q.SellerID))
 	}
@@ -115,6 +124,9 @@ func buildFilter(q domain.Query) string {
 	}
 	if q.EligibleOnly {
 		f = append(f, "photo_ok = true")
+	}
+	if q.OnSale {
+		f = append(f, "on_sale = true")
 	}
 	if q.WithinMiles > 0 {
 		f = append(f, fmt.Sprintf("_geoRadius(%s, %s, %d)", strconv.FormatFloat(q.NearLat, 'f', -1, 64),
@@ -366,3 +378,11 @@ func (i *indexImpl) AdCandidates(ctx context.Context, q domain.Query, atins []st
 }
 
 func (i *indexImpl) Ping(ctx context.Context) error { return i.c.Health(ctx) }
+
+// listPrice is the was-price to show: only a stored list price above the price on a document flagged on sale.
+func listPrice(price, list int64, onSale bool) int64 {
+	if onSale && list > price && price > 0 {
+		return list
+	}
+	return 0
+}

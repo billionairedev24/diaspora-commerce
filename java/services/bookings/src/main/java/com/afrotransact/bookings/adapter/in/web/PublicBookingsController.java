@@ -1,8 +1,10 @@
 package com.afrotransact.bookings.adapter.in.web;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -17,9 +19,11 @@ import com.afrotransact.bookings.application.PublicBookingsService.SearchResult;
 import com.afrotransact.bookings.application.PublicBookingsService.Sort;
 import com.afrotransact.bookings.application.PublicBookingsService.Summary;
 import com.afrotransact.bookings.domain.Provider;
+import com.afrotransact.bookings.domain.ServiceArea;
 import com.afrotransact.bookings.domain.ServiceMode;
 import com.afrotransact.bookings.domain.ServiceOffering;
 import com.afrotransact.bookings.domain.TeamMember;
+import com.afrotransact.bookings.domain.WeeklyHours;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -146,7 +150,38 @@ class PublicBookingsController {
 
     @Schema(name = "PublicProvider")
     record ProviderPageDto(String orgId, String displayName, String timeZone, String location, PolicyDto policy,
-                           boolean instantBooking, List<ServiceDto> services, List<MemberDto> team) {
+                           boolean instantBooking, List<ServiceDto> services, List<MemberDto> team,
+                           @Schema(description = "Working hours per weekday (Monday first) in the provider's time zone: "
+                                   + "the bookable team's hours merged; a day with no ranges is closed")
+                           List<DayHoursDto> weeklyHours,
+                           @Schema(description = "Where the provider works; null until it has set a service area")
+                           ServiceAreaDto serviceArea) {
+    }
+
+    @Schema(name = "PublicDayHours")
+    record DayHoursDto(String day, List<RangeDto> ranges) {
+
+        static List<DayHoursDto> of(WeeklyHours hours) {
+            return Arrays.stream(DayOfWeek.values()).map(d -> new DayHoursDto(d.name(),
+                    hours.rangesFor(d).stream().map(r -> new RangeDto(r.start().toString(), r.end().toString()))
+                            .toList())).toList();
+        }
+    }
+
+    @Schema(name = "PublicTimeRange", description = "Local wall-clock HH:mm, end exclusive")
+    record RangeDto(String start, String end) {
+    }
+
+    @Schema(name = "PublicServiceArea", description = "Base city, travel radius and the named extra areas; no address, "
+            + "ZIP of the base or coordinates")
+    record ServiceAreaDto(String baseCity, String baseState, int radiusMiles, List<String> servedCities,
+                          List<String> extraAreas) {
+
+        static ServiceAreaDto of(ServiceArea a, List<String> extras) {
+            return a == null ? null : new ServiceAreaDto(a.baseCity(), a.baseState(), a.radiusMiles(),
+                    a.servedCities().stream().map(c -> c.state().equals(a.baseState()) ? c.city()
+                            : c.city() + ", " + c.state()).toList(), extras);
+        }
     }
 
     @Schema(name = "AvailableDay")
@@ -227,7 +262,8 @@ class PublicBookingsController {
         Provider p = page.provider();
         return new ProviderPageDto(p.orgId(), p.displayName(), p.timeZone().getId(), p.location(), PolicyDto.of(p),
                 p.rules().instantBooking(), page.services().stream().map(o -> ServiceDto.of(o, p, page.team()))
-                .toList(), MemberDto.of(page.team()));
+                .toList(), MemberDto.of(page.team()), DayHoursDto.of(page.hours()),
+                ServiceAreaDto.of(page.area(), page.extraAreas()));
     }
 
     @Operation(summary = "A service: duration, price, deposit, modes, add-ons, policy and who performs it")

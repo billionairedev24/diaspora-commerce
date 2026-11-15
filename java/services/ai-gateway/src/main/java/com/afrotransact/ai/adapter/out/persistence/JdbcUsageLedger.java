@@ -95,6 +95,21 @@ class JdbcUsageLedger implements UsageLedger {
                 .list();
     }
 
+    @Override
+    public List<FeatureDayUsage> dayUsageByFeature(LocalDate day) {
+        return jdbc.sql("""
+                select feature, count(*) as calls, sum(prompt_tokens + completion_tokens) as tokens, sum(cost_micros) as cost
+                from ai_usage
+                where usage_day = :day
+                group by feature
+                order by cost desc, feature
+                """)
+                .param("day", Date.valueOf(day))
+                .query((rs, n) -> new FeatureDayUsage(rs.getString("feature"), rs.getLong("calls"), rs.getLong("tokens"),
+                        rs.getLong("cost")))
+                .list();
+    }
+
     private void rollUp(LocalDate day, String scope, String key, long tokens, long cost) {
         jdbc.sql("""
                 insert into ai_usage_daily (usage_day, scope, scope_key, tokens, cost_micros)

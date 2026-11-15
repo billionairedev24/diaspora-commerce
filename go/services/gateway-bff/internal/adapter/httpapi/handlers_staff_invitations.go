@@ -94,3 +94,9 @@ func staffInviteOf(first, last, email, role, reason string) app.StaffInvite {
 func staffAcceptOf(token, password, confirm, phone, region string) app.StaffInviteAccept {
 	return app.StaffInviteAccept{Token: token, Password: password, ConfirmPassword: confirm, Phone: phone, PhoneRegion: region}
 }
+
+func (h *handlersImpl) staffAISpendToday(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.AISpend.Today(r.Context(), callerFrom(r.Context()))
+	w.Header().Set("Cache-Control", "no-store")
+	h.reply(w, r, http.StatusOK, v, err)
+}

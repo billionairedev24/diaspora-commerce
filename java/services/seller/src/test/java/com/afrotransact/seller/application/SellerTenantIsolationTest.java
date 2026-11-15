@@ -96,6 +96,18 @@ class SellerTenantIsolationTest {
     }
 
     @Test
+    void aProvidersStorePageRoutesRefuseAnotherOrganisation() {
+        // Providers use the same store-page endpoints as sellers, scoped by the organisation, never by the kind.
+        String b = TenantFixture.ORG_B;
+        fx.as(TenantFixture.providerOf(TenantFixture.ORG_A, "billing:read"));
+        CrossTenant.assertDenied(() -> storePage.get(b));
+        CrossTenant.assertDenied(() -> storePage.saveDraft(b, "{}", 0));
+        CrossTenant.assertDenied(() -> storePage.publish(b, 1));
+        CrossTenant.assertDenied(() -> storePage.unpublish(b));
+        CrossTenant.assertDenied(() -> storePage.audit(b));
+    }
+
+    @Test
     void orgScopedRoutesRefuseAnotherOrganisationsOwner() {
         String b = TenantFixture.ORG_B;
         fx.as(TenantFixture.sellerOf(TenantFixture.ORG_A, "billing:read"));
