@@ -135,7 +135,11 @@ func New(cfg Config, specs []Spec) (Host, error) {
 	modes := map[string]string{}
 	mounts := map[string]Mount{}
 	for _, s := range specs {
-		en, err := parseBool(cfg.Getenv, "AT_MODULES_"+EnvName(s.Name)+"_ENABLED", s.Default)
+		// MODULE_<NAME>_ENABLED is the name the Helm chart (go/apps/afrotransact-go/deploy/helm) writes; AT_MODULES_ wins.
+		en, err := parseBool(cfg.Getenv, "MODULE_"+EnvName(s.Name)+"_ENABLED", s.Default)
+		if err == nil {
+			en, err = parseBool(cfg.Getenv, "AT_MODULES_"+EnvName(s.Name)+"_ENABLED", en)
+		}
 		if err != nil {
 			return nil, err
 		}

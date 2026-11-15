@@ -12,7 +12,7 @@ GOLANGCI     ?= $(shell command -v golangci-lint 2>/dev/null || echo $(HOME)/go/
 # Same versions as CI (.github/workflows/_go-service.yml): golangci-lint must be built with the repo's Go toolchain.
 GO_TOOLCHAIN       := go1.27.4
 GOLANGCI_VERSION   := v2.14.0
-GO_MODULES   := $(sort $(wildcard go/services/*/go.mod) go/pkg/go.mod)
+GO_MODULES   := $(sort $(wildcard go/services/*/go.mod) go/apps/*/go.mod go/pkg/go.mod)
 HELM_CHARTS  := $(sort $(dir $(wildcard java/services/*/deploy/helm/Chart.yaml go/services/*/deploy/helm/Chart.yaml java/apps/*/deploy/helm/Chart.yaml go/apps/*/deploy/helm/Chart.yaml)))
 ENVS         := dev uat prod
 SERVICE      ?=
@@ -25,7 +25,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog tax-gate-sweep seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
-        mobile-ios-device mobile-apk mobile-brand mobile-hero db-release-1 release-1-check
+        mobile-ios-device mobile-apk mobile-brand mobile-hero db-release-1 release-1-check go-monolith go-monolith-run go-monolith-image
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -109,6 +109,15 @@ go-verify: ## Go: vet, test and golangci-lint for go/pkg and every go/services/*
 	  ( cd $$dir && go vet ./... && go test ./... ); \
 	  if [ $$lint = 1 ]; then ( cd $$dir && "$(GOLANGCI)" run --config $(CURDIR)/go/.golangci.yml ./... ); fi; \
 	done
+
+go-monolith: ## Release 1: build the single Go deployable bin/afrotransact-go (all Go modules in one process, ADR 0011)
+	mkdir -p bin && cd go/apps/afrotransact-go && go build -ldflags="-s -w" -o $(CURDIR)/bin/afrotransact-go ./cmd/afrotransact-go
+
+go-monolith-run: go-monolith ## Release 1: run afrotransact-go on :8250 (env names: docs/runbooks/release-1-local.md; every module also builds alone from go/services/<svc>/cmd)
+	APP_ENV=$${APP_ENV:-local} bin/afrotransact-go
+
+go-monolith-image: ## Release 1: build the afrotransact-go container image (go/Dockerfile.afrotransact-go, context go/)
+	docker build -f go/Dockerfile.afrotransact-go -t afrotransact-go:dev go
 
 verify: java-verify go-verify helm-lint ## Everything CI runs for back-end + deploy
 

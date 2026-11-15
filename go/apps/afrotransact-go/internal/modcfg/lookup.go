@@ -37,7 +37,7 @@ type Options struct {
 // New composes the lookup for one module.
 func New(o Options) Lookup {
 	prefix := Prefix(o.Module)
-	return func(name string) (string, bool) {
+	lookup := func(name string) (string, bool) {
 		if v, ok := o.Base(prefix + name); ok && v != "" {
 			return v, true
 		}
@@ -54,6 +54,32 @@ func New(o Options) Lookup {
 		}
 		return "", false
 	}
+	return func(name string) (string, bool) {
+		v, ok := lookup(name)
+		if !ok || name != "DB_URL" {
+			return v, ok
+		}
+		// <MODULE>_DB_MAX_CONNS (written by the Helm chart) sets the module's pool maximum; the modules also cap it themselves.
+		if n, set := o.Base(prefix + "DB_MAX_CONNS"); set && strings.TrimSpace(n) != "" {
+			if u, err := withParam(v, "pool_max_conns", strings.TrimSpace(n)); err == nil {
+				return u, true
+			}
+		}
+		return v, ok
+	}
+}
+
+func withParam(dsn, key, value string) (string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "", fmt.Errorf("modcfg: parse database url: %w", err)
+	}
+	q := u.Query()
+	if q.Get(key) == "" {
+		q.Set(key, value)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 // SchemaURL pins a module to its schema in the shared database: it adds search_path=<schema> to the connection URL

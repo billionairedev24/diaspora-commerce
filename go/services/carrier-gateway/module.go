@@ -34,6 +34,9 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/port"
 )
 
+// maxPoolConns is this service's share of the database server's connections.
+const maxPoolConns = 3
+
 // Name is the module name (config prefix, metrics label module="carrier-gateway").
 const Name = "carrier-gateway"
 
@@ -69,7 +72,17 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 	cfg.Resolve()
 	log := host.Log(Name, loader.Env())
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	// Explicit, small connection budget (the Go deployable shares one database server): pgx would otherwise default to
+	// max(4, NumCPU). A lower pool_max_conns in DB_URL is respected.
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return Module{}, fmt.Errorf("postgres config: %w", err)
+	}
+	if poolCfg.MaxConns > maxPoolConns {
+		poolCfg.MaxConns = maxPoolConns
+	}
+	poolCfg.MinConns = 0
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return Module{}, fmt.Errorf("postgres: %w", err)
 	}

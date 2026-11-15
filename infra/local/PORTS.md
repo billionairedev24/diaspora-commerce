@@ -28,6 +28,7 @@
 | notifications | Go | 8208 | email (Resend, SendGrid, SES), SMS (Twilio, Vonage), push, WhatsApp | Postgres `notifications` |
 | carrier-gateway | Go | 8209 | USPS, UPS, FedEx, DHL rates/labels/tracking | Postgres `carriers` |
 | authz-sync | Go | 8210 | identity/seller events → OpenFGA relationship tuples | OpenFGA |
+| afrotransact-go | Go | 8250 | release 1 (ADR 0011): every Go module in one process (`make go-monolith-run`); the per-service ports above keep working standalone | those of its modules |
 
 ### Pre-order wiring (local defaults)
 

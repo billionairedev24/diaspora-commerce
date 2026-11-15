@@ -57,3 +57,12 @@ func TestSchemaURLPinsTheSearchPath(t *testing.T) {
 		t.Errorf("SchemaURL = %q", got)
 	}
 }
+
+func TestDBMaxConnsBecomesPoolMaxConns(t *testing.T) {
+	l := modcfg.New(modcfg.Options{Module: "cart", Base: base(map[string]string{"CART_DB_URL": "postgres://u@db/go?search_path=cart", "CART_DB_MAX_CONNS": "2"})})
+	v, _ := l("DB_URL")
+	u, _ := url.Parse(v)
+	if u.Query().Get("pool_max_conns") != "2" || u.Query().Get("search_path") != "cart" {
+		t.Errorf("DB_URL = %q", v)
+	}
+}
