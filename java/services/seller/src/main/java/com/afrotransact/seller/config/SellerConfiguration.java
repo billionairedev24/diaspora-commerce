@@ -4,18 +4,16 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Set;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.adapter.out.billing.RruleBillingScheduler;
 import com.afrotransact.seller.adapter.out.catalog.HttpBakeryClaims;
 import com.afrotransact.seller.adapter.out.catalog.HttpDepartmentDirectory;
 import com.afrotransact.seller.adapter.out.crypto.AesGcmFieldCipher;
 import com.afrotransact.seller.adapter.out.geo.HttpGeoClient;
-import com.afrotransact.seller.port.BakeryClaims;
-import com.afrotransact.seller.port.DepartmentDirectory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import com.afrotransact.seller.adapter.out.identity.HttpStaffDirectory;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestPlanPayments;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeConnect;
-import com.afrotransact.seller.adapter.out.identity.HttpStaffDirectory;
 import com.afrotransact.seller.adapter.out.media.HttpMediaClient;
 import com.afrotransact.seller.adapter.out.payments.DisabledEarningsWithholding;
 import com.afrotransact.seller.adapter.out.payments.HttpConnectedAccountRegistry;
@@ -35,21 +33,24 @@ import com.afrotransact.seller.domain.DefaultApplicationRules;
 import com.afrotransact.seller.domain.DefaultLocalTestStripePolicy;
 import com.afrotransact.seller.domain.LocalTestStripePolicy;
 import com.afrotransact.seller.domain.PhoneNumbers;
-import com.afrotransact.seller.port.ConnectedAccountRegistry;
 import com.afrotransact.seller.port.AdSpendSource;
 import com.afrotransact.seller.port.AiUsageSource;
+import com.afrotransact.seller.port.BakeryClaims;
 import com.afrotransact.seller.port.BillingScheduler;
+import com.afrotransact.seller.port.ConnectedAccountRegistry;
+import com.afrotransact.seller.port.DepartmentDirectory;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.MediaClient;
+import com.afrotransact.seller.port.PlanPaymentsGateway;
 import com.afrotransact.seller.port.StaffDirectory;
 import com.afrotransact.seller.port.StorageUsageSource;
-import com.afrotransact.seller.port.PlanPaymentsGateway;
 import com.afrotransact.seller.port.StripeConnectGateway;
 import com.afrotransact.seller.port.StripeWebhookParser;
 import com.stripe.StripeClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -89,7 +90,7 @@ class SellerConfiguration {
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.catalog.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "catalog", value = ModuleMode.HTTP)
     DepartmentDirectory departmentDirectory(@Value("${at.seller.catalog.base-url:http://localhost:8101}") String baseUrl,
                                             @Value("${at.seller.catalog.timeout:3s}") Duration timeout,
                                             @Value("${at.seller.catalog.departments-ttl:60s}") Duration ttl, Clock clock) {
@@ -97,7 +98,7 @@ class SellerConfiguration {
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.catalog.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "catalog", value = ModuleMode.HTTP)
     BakeryClaims bakeryClaims(@Value("${at.seller.catalog.base-url:http://localhost:8101}") String baseUrl,
                               @Value("${at.seller.catalog.timeout:3s}") Duration timeout, ServiceTokens tokens) {
         return new HttpBakeryClaims(baseUrl, timeout, tokens);
@@ -194,7 +195,7 @@ class SellerConfiguration {
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.identity.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "identity", value = ModuleMode.HTTP)
     StaffDirectory staffDirectory(SellerProperties props, ServiceTokens tokens) {
         String tokenUri = props.metering().tokenUri();
         int cut = tokenUri.indexOf("/oauth2/token");
@@ -203,25 +204,25 @@ class SellerConfiguration {
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.inventory.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "inventory", value = ModuleMode.HTTP)
     StorageUsageSource storageUsageSource(SellerProperties props, ServiceTokens tokens) {
         return new HttpStorageUsageSource(props.metering().inventoryUrl(), props.metering().timeout(), tokens);
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.content.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "content", value = ModuleMode.HTTP)
     AdSpendSource adSpendSource(SellerProperties props, ServiceTokens tokens) {
         return new HttpAdSpendSource(props.metering().contentUrl(), props.metering().timeout(), tokens);
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.aigateway.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "ai-gateway", value = ModuleMode.HTTP)
     AiUsageSource aiUsageSource(SellerProperties props, ServiceTokens tokens) {
         return new HttpAiUsageSource(props.metering().aiUrl(), props.metering().timeout(), tokens);
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.payments.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "payments", value = ModuleMode.HTTP)
     ConnectedAccountRegistry connectedAccountRegistry(SellerProperties props, ServiceTokens tokens) {
         SellerProperties.Billing b = props.billing();
         if (b.paymentsUrl() == null || b.paymentsUrl().isBlank()) {
@@ -232,7 +233,7 @@ class SellerConfiguration {
 
     /** Collection of plan fees from earnings: off by default (at.seller.billing.collect-from-earnings). */
     @Bean
-    @ConditionalOnExpression("'${at.seller.payments.mode:${at.seller.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "payments", value = ModuleMode.HTTP)
     EarningsWithholdingGateway earningsWithholding(SellerProperties props, ServiceTokens tokens) {
         SellerProperties.Billing b = props.billing();
         if (!b.collectFromEarnings()) {

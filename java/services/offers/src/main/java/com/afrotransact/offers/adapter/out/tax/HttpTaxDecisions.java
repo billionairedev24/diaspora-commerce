@@ -5,11 +5,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.port.ServiceTokenProvider;
 import com.afrotransact.offers.port.TaxDecisions;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -21,7 +22,7 @@ import org.springframework.web.client.RestClientException;
  * the offer is held, never given the benefit of the doubt.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.taxreturns.mode:${at.offers.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "offers", callee = "tax-returns", value = ModuleMode.HTTP)
 class HttpTaxDecisions implements TaxDecisions {
 
     private final RestClient client;

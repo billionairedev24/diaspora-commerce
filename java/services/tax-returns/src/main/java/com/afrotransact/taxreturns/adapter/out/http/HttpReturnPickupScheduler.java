@@ -4,11 +4,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.port.ReturnPickupScheduler;
 import com.afrotransact.taxreturns.port.UpstreamException;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -16,7 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** fulfilment-service (contracts/openapi/fulfilment.yaml) return pickups with the tax-returns-service token. */
 @Component
-@ConditionalOnExpression("'${at.taxreturns.fulfilment.mode:${at.taxreturns.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "fulfilment", value = ModuleMode.HTTP)
 class HttpReturnPickupScheduler implements ReturnPickupScheduler {
 
     private final Upstream fulfilment;

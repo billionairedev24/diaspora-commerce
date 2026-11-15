@@ -7,6 +7,8 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.returns.DeliveryMethod;
 import com.afrotransact.taxreturns.domain.returns.FulfilmentType;
@@ -15,7 +17,6 @@ import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 import com.afrotransact.taxreturns.port.OrderLookup;
 import com.afrotransact.taxreturns.port.UpstreamException;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -23,7 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** orders-service (contracts/openapi/orders.yaml) {@code GET /v1/lookup/orders/{id}} with the service token. */
 @Component
-@ConditionalOnExpression("'${at.taxreturns.orders.mode:${at.taxreturns.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "orders", value = ModuleMode.HTTP)
 class HttpOrderLookup implements OrderLookup {
 
     private final Upstream orders;

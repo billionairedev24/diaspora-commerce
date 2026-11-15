@@ -8,9 +8,10 @@ import java.util.Optional;
 import com.afrotransact.catalog.domain.PurchaseProof;
 import com.afrotransact.catalog.port.PurchaseVerifier;
 import com.afrotransact.catalog.port.ServiceTokens;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -21,7 +22,7 @@ import org.springframework.web.client.RestClient;
  * {@link PurchaseCheckUnavailable}: a review is never accepted on a guess.
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.orders.mode:${at.catalog.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "catalog", callee = "orders", value = ModuleMode.HTTP)
 class HttpPurchaseVerifier implements PurchaseVerifier {
 
     private final RestClient orders;

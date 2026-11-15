@@ -4,10 +4,11 @@ import java.util.List;
 
 import com.afrotransact.catalog.api.CatalogLookupApi;
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.port.BakeryClaims;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Component;
  * refusal or failure propagates as it does over HTTP (the caller of the port handles it).
  */
 @Component
-@ConditionalOnExpression("'${at.seller.catalog.mode:${at.seller.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "seller", callee = "catalog", value = ModuleMode.IN_PROCESS)
 class InProcessBakeryClaims implements BakeryClaims {
 
     private final SellerModuleCalls<CatalogLookupApi> catalog;

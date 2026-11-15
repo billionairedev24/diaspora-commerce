@@ -2,11 +2,12 @@ package com.afrotransact.taxreturns.adapter.out.module;
 
 import com.afrotransact.inventory.api.ReturnsApi;
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.domain.returns.ItemCondition;
 import com.afrotransact.taxreturns.port.InventoryGateway;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  * HTTP adapter's {@code UpstreamException}s (status and problem code of the refusal).
  */
 @Component
-@ConditionalOnExpression("'${at.taxreturns.inventory.mode:${at.taxreturns.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "inventory", value = ModuleMode.IN_PROCESS)
 class InProcessInventoryGateway implements InventoryGateway {
 
     private final ModuleUpstreams<ReturnsApi> inventory;

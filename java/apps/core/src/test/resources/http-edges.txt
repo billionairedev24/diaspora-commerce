@@ -1,0 +1,4 @@
+# HTTP adapters that are always on in afrotransact-core, with the reason each is still HTTP.
+# ModuleEdgeGuardTest fails when an unconditional Http* adapter component under adapter.out is missing here, or when a line here
+# names a class that no longer exists (or became switchable by at.<caller>.<callee>.mode): convert the edge, then delete the line.
+# Name=reason

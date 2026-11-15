@@ -4,10 +4,11 @@ import com.afrotransact.catalog.port.SellerOffers;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.OffersApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Component;
  * {@link OffersUnavailable}, as over HTTP, so a request to change somebody else's page is refused (fail closed).
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.offers.mode:${at.catalog.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "catalog", callee = "offers", value = ModuleMode.IN_PROCESS)
 class InProcessSellerOffers implements SellerOffers {
 
     private final InProcessLink<OffersApi> offers;

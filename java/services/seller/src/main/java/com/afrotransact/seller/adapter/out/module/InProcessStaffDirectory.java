@@ -4,11 +4,12 @@ import java.util.List;
 
 import com.afrotransact.identity.api.StaffDirectoryApi;
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.StaffDirectory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
  * {@code seller.staff-directory-unavailable} {@link GatewayException}, as over HTTP.
  */
 @Component
-@ConditionalOnExpression("'${at.seller.identity.mode:${at.seller.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "seller", callee = "identity", value = ModuleMode.IN_PROCESS)
 class InProcessStaffDirectory implements StaffDirectory {
 
     private final SellerModuleCalls<StaffDirectoryApi> identity;

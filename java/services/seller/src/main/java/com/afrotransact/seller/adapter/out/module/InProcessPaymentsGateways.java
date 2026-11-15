@@ -2,7 +2,9 @@ package com.afrotransact.seller.adapter.out.module;
 
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.ModuleApiException;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.payments.api.SellerBillingApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.adapter.out.payments.DisabledEarningsWithholding;
 import com.afrotransact.seller.port.ConnectedAccountRegistry;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
@@ -11,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -25,7 +26,7 @@ import org.springframework.context.annotation.Configuration;
  * same.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnExpression("'${at.seller.payments.mode:${at.seller.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "seller", callee = "payments", value = ModuleMode.IN_PROCESS)
 class InProcessPaymentsGateways {
 
     private static final Logger LOG = LoggerFactory.getLogger(InProcessPaymentsGateways.class);

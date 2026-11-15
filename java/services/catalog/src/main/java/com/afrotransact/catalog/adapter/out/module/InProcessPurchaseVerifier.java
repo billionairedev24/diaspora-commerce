@@ -7,10 +7,11 @@ import com.afrotransact.catalog.port.PurchaseVerifier;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.api.OrderLookupApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Component;
  * is never accepted on a guess.
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.orders.mode:${at.catalog.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "catalog", callee = "orders", value = ModuleMode.IN_PROCESS)
 class InProcessPurchaseVerifier implements PurchaseVerifier {
 
     private final InProcessLink<OrderLookupApi> orders;

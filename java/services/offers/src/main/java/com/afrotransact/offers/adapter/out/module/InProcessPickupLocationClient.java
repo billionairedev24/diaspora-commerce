@@ -5,11 +5,12 @@ import java.util.Optional;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.port.PickupLocationClient;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.SellerLookupApi;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Component;
  * {@link SellerUnavailableException}.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.seller.mode:${at.offers.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "offers", callee = "seller", value = ModuleMode.IN_PROCESS)
 class InProcessPickupLocationClient implements PickupLocationClient {
 
     private final InProcessLink<SellerLookupApi> seller;

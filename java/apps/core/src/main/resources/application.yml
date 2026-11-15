@@ -146,6 +146,10 @@ at:
         - payments:service
         - inventory:adjust
         - shipping:label
+        - users:read
+        - inventory:returns
+        - orders:lookup
+        - delivery:returns
       datasource:
         url: ${TAX_RETURNS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
         username: ${TAX_RETURNS_DB_USER:tax_returns}
@@ -409,10 +413,21 @@ at:
         pool-size: ${MCP_SERVER_SCHEDULER_POOL_SIZE:2}
   # How a module reaches the other modules (in-process | http). In core the default is in-process; http keeps the module able
   # to run detached (needs its upstream URL and client credentials as in the standalone service).
+  # Per edge, AT_<CALLER>_<CALLEE>_MODE=http (property at.<caller>.<callee>.mode) detaches one edge; AT_<CALLER>_MODE sets the rest.
+  # catalog -> tax-returns, offers, seller, orders; offers -> catalog, seller, tax-returns; inventory -> catalog;
+  # seller -> catalog, identity, content, ai-gateway, inventory, payments; tax-returns -> catalog, inventory, orders, payments,
+  # fulfilment. Go callees (media, search, geo, carrier-gateway) stay HTTP. With -DnoAi (ai-gateway absent) set
+  # AT_SELLER_AIGATEWAY_MODE=http.
   catalog:
     mode: ${AT_CATALOG_MODE:in-process}
   taxreturns:
     mode: ${AT_TAXRETURNS_MODE:in-process}
+  offers:
+    mode: ${AT_OFFERS_MODE:in-process}
+  inventory:
+    mode: ${AT_INVENTORY_MODE:in-process}
+  seller:
+    mode: ${AT_SELLER_MODE:in-process}
   # payments -> seller (live membership) only; payments' other edges are still HTTP (core's old ports) until their adapters exist.
   payments:
     mode: ${AT_PAYMENTS_MODE:in-process}

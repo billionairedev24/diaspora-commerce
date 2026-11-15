@@ -4,11 +4,12 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.port.PickupLocationClient;
 import com.afrotransact.offers.port.ServiceTokenProvider;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -21,7 +22,7 @@ import org.springframework.web.client.RestClientException;
  * {@link SellerUnavailableException} (HTTP 503).
  */
 @Component
-@ConditionalOnExpression("'${at.offers.seller.mode:${at.offers.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "offers", callee = "seller", value = ModuleMode.HTTP)
 class HttpPickupLocationClient implements PickupLocationClient {
 
     private final RestClient client;

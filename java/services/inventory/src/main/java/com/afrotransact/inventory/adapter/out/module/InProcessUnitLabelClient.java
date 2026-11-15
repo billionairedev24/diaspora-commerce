@@ -14,9 +14,10 @@ import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
 import com.afrotransact.module.ModuleApiException;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Component;
  * 5xx, 401, 403 or 429 is retryable, another 4xx is a rejection.
  */
 @Component
-@ConditionalOnExpression("'${at.inventory.catalog.mode:${at.inventory.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "inventory", callee = "catalog", value = ModuleMode.IN_PROCESS)
 class InProcessUnitLabelClient implements UnitLabelClient {
 
     private static final Pattern AT_FN = Pattern.compile("(?<![0-9A-Z])ATF[0-9A-Z]{7}(?![0-9A-Z])");

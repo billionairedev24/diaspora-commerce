@@ -6,10 +6,11 @@ import com.afrotransact.catalog.port.SellingApprovals;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.SellerLookupApi;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Component;
  * refusal of the principal, is {@link SellingUnavailable}, so the catalog refuses (fail closed).
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.seller.mode:${at.catalog.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "catalog", callee = "seller", value = ModuleMode.IN_PROCESS)
 class InProcessSellingApprovals implements SellingApprovals {
 
     private final InProcessLink<SellerLookupApi> seller;

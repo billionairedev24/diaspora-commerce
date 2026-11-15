@@ -7,10 +7,11 @@ import com.afrotransact.catalog.api.CatalogLookupApi;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.port.CatalogClient;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Component;
  * else, including a refusal of the principal, is {@link CatalogUnavailableException}.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.catalog.mode:${at.offers.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "offers", callee = "catalog", value = ModuleMode.IN_PROCESS)
 class InProcessCatalogClient implements CatalogClient {
 
     private final InProcessLink<CatalogLookupApi> catalog;

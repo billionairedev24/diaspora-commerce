@@ -3,13 +3,14 @@ package com.afrotransact.offers.adapter.out.module;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.port.ListingEntitlementsClient;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.SellerLookupApi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
  * Not cached: there is no round trip to save. As over HTTP, a failure never blocks the seller: the listing is not limited.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.seller.mode:${at.offers.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "offers", callee = "seller", value = ModuleMode.IN_PROCESS)
 class InProcessListingEntitlementsClient implements ListingEntitlementsClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(InProcessListingEntitlementsClient.class);

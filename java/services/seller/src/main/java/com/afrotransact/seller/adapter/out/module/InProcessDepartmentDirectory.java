@@ -6,12 +6,13 @@ import java.util.Set;
 
 import com.afrotransact.catalog.api.CatalogLookupApi;
 import com.afrotransact.module.CallerPrincipals;
-import com.afrotransact.seller.domain.Department;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.domain.Department.Requirement;
+import com.afrotransact.seller.domain.Department;
 import com.afrotransact.seller.port.DepartmentDirectory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Component;
  * {@link DirectoryUnavailable}, as over HTTP when nothing is cached.
  */
 @Component
-@ConditionalOnExpression("'${at.seller.catalog.mode:${at.seller.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "seller", callee = "catalog", value = ModuleMode.IN_PROCESS)
 class InProcessDepartmentDirectory implements DepartmentDirectory {
 
     private final SellerModuleCalls<CatalogLookupApi> catalog;

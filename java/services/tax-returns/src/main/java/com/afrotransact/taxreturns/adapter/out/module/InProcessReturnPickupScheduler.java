@@ -4,12 +4,13 @@ import java.util.Optional;
 
 import com.afrotransact.fulfilment.api.ReturnPickupApi;
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.port.ReturnPickupScheduler;
 import com.afrotransact.taxreturns.port.UpstreamException;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Component;
  * {@code UpstreamException}s (status and problem code of the refusal).
  */
 @Component
-@ConditionalOnExpression("'${at.taxreturns.fulfilment.mode:${at.taxreturns.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "fulfilment", value = ModuleMode.IN_PROCESS)
 class InProcessReturnPickupScheduler implements ReturnPickupScheduler {
 
     private final ModuleUpstreams<ReturnPickupApi> fulfilment;

@@ -7,13 +7,14 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.port.ListingEntitlementsClient;
 import com.afrotransact.offers.port.ServiceTokenProvider;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -24,7 +25,7 @@ import org.springframework.web.client.RestClientException;
  * new listing). Failures are not cached and never block the seller.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.seller.mode:${at.offers.mode:http}}' == 'http'")
+@ConditionalOnModuleMode(caller = "offers", callee = "seller", value = ModuleMode.HTTP)
 class HttpListingEntitlementsClient implements ListingEntitlementsClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpListingEntitlementsClient.class);

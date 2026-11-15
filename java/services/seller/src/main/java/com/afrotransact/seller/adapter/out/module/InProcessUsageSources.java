@@ -7,12 +7,13 @@ import com.afrotransact.ai.api.AiUsageApi;
 import com.afrotransact.content.api.AdSpendApi;
 import com.afrotransact.inventory.api.StorageUsageApi;
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.port.AdSpendSource;
 import com.afrotransact.seller.port.AiUsageSource;
 import com.afrotransact.seller.port.StorageUsageSource;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -29,7 +30,7 @@ class InProcessUsageSources {
     private static final String CODE = "seller.usage-source";
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.inventory.mode:${at.seller.mode:http}}' == 'in-process'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "inventory", value = ModuleMode.IN_PROCESS)
     StorageUsageSource sellerInProcessStorageUsage(ObjectProvider<StorageUsageApi> api,
                                                    ObjectProvider<CallerPrincipals> callers, ListableBeanFactory beans) {
         SellerModuleCalls<StorageUsageApi> inventory = new SellerModuleCalls<>(StorageUsageApi.class, "inventory", api,
@@ -44,7 +45,7 @@ class InProcessUsageSources {
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.content.mode:${at.seller.mode:http}}' == 'in-process'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "content", value = ModuleMode.IN_PROCESS)
     AdSpendSource sellerInProcessAdSpend(ObjectProvider<AdSpendApi> api, ObjectProvider<CallerPrincipals> callers,
                                          ListableBeanFactory beans) {
         SellerModuleCalls<AdSpendApi> content = new SellerModuleCalls<>(AdSpendApi.class, "content", api, callers, beans);
@@ -58,7 +59,7 @@ class InProcessUsageSources {
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.seller.aigateway.mode:${at.seller.mode:http}}' == 'in-process'")
+    @ConditionalOnModuleMode(caller = "seller", callee = "ai-gateway", value = ModuleMode.IN_PROCESS)
     AiUsageSource sellerInProcessAiUsage(ObjectProvider<AiUsageApi> api, ObjectProvider<CallerPrincipals> callers,
                                          ListableBeanFactory beans) {
         SellerModuleCalls<AiUsageApi> ai = new SellerModuleCalls<>(AiUsageApi.class, "ai-gateway", api, callers, beans);

@@ -5,13 +5,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.payments.api.ReturnRefundApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.domain.returns.RefundLineAmount;
 import com.afrotransact.taxreturns.port.PaymentsGateway;
 import com.afrotransact.taxreturns.port.UpstreamException;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
  * failures are the HTTP adapter's {@code UpstreamException}s (status and problem code of the refusal).
  */
 @Component
-@ConditionalOnExpression("'${at.taxreturns.payments.mode:${at.taxreturns.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "payments", value = ModuleMode.IN_PROCESS)
 class InProcessPaymentsGateway implements PaymentsGateway {
 
     private final ModuleUpstreams<ReturnRefundApi> payments;

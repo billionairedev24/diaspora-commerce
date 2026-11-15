@@ -7,7 +7,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.api.OrderLookupApi;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.domain.returns.DeliveryMethod;
 import com.afrotransact.taxreturns.domain.returns.FulfilmentType;
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
@@ -17,7 +19,6 @@ import com.afrotransact.taxreturns.port.OrderLookup;
 import com.afrotransact.taxreturns.port.UpstreamException;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Component;
  * as the HTTP adapter builds it: cancelled shipments are left out, and an order without an id or placement time is not found.
  */
 @Component
-@ConditionalOnExpression("'${at.taxreturns.orders.mode:${at.taxreturns.mode:http}}' == 'in-process'")
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "orders", value = ModuleMode.IN_PROCESS)
 class InProcessOrderLookup implements OrderLookup {
 
     private final ModuleUpstreams<OrderLookupApi> orders;

@@ -21,7 +21,8 @@ import com.afrotransact.inventory.domain.ShelfLifePolicy;
 import com.afrotransact.inventory.port.CarrierGateway;
 import com.afrotransact.inventory.port.ServiceTokenProvider;
 import com.afrotransact.inventory.port.UnitLabelClient;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -79,7 +80,7 @@ class InventoryConfiguration {
     }
 
     @Bean
-    @ConditionalOnExpression("'${at.inventory.catalog.mode:${at.inventory.mode:http}}' == 'http'")
+    @ConditionalOnModuleMode(caller = "inventory", callee = "catalog", value = ModuleMode.HTTP)
     UnitLabelClient unitLabelClient(RestClient.Builder builder, InventoryProperties props,
                                     ServiceTokenProvider tokens, JsonMapper json) {
         return new HttpUnitLabelClient(builder.clone().baseUrl(props.catalog().baseUrl())
