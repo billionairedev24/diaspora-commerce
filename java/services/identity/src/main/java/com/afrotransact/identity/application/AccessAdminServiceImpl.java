@@ -70,6 +70,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
     private final PhoneNumberPolicy phones;
     private final PasswordHasher hasher;
     private final DomainEventPublisher events;
+    private final StaffInvitationSettings invitationSettings;
     private final Clock clock;
 
     AccessAdminServiceImpl(CurrentUser current, PermissionChecker permissions, UserAccountRepository users,
@@ -77,7 +78,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
                            AccessChangeLog changeLog, AccessProfileLoader profiles, AccessPolicy accessPolicy,
                            SessionStore sessions, MfaRepository mfa, SignUpPolicy signUpPolicy,
                            PasswordPolicy passwordPolicy, PhoneNumberPolicy phones, PasswordHasher hasher,
-                           DomainEventPublisher events, Clock clock) {
+                           DomainEventPublisher events, StaffInvitationSettings invitationSettings, Clock clock) {
         this.current = current;
         this.permissions = permissions;
         this.users = users;
@@ -94,6 +95,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
         this.phones = phones;
         this.hasher = hasher;
         this.events = events;
+        this.invitationSettings = invitationSettings;
         this.clock = clock;
     }
 
@@ -162,6 +164,11 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Transactional
     public UserAccessView createStaffUser(CreateStaffUserCommand c) {
         Actor actor = permissions.require(IdentityPermissions.ACCESS_ADMIN);
+        if (!invitationSettings.tempPasswordEnabled()) {
+            throw new ConflictException("identity.temp-password-disabled", "Staff accounts are created by invitation "
+                    + "(POST /v1/admin/staff-invitations): the person sets their own password. "
+                    + "at.identity.staff-invitations.temp-password-enabled turns this old path back on");
+        }
         Map<String, String> errors = new LinkedHashMap<>();
         if (!signUpPolicy.validName(trim(c.firstName()))) {
             errors.put("firstName", "Use letters, spaces, hyphens or apostrophes");

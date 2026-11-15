@@ -33,6 +33,10 @@ public interface AccessAdminService {
 
     UserAccessView user(UUID userId);
 
+    /**
+     * Provisions an account with a temporary password. Off by default (at.identity.staff-invitations.
+     * temp-password-enabled): StaffInvitationService replaces it, and this answers 409 identity.temp-password-disabled.
+     */
     UserAccessView createStaffUser(CreateStaffUserCommand command);
 
     /** People tab: toggle an account or platform role (platform-wide). */

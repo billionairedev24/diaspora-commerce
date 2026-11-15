@@ -52,7 +52,7 @@ class AccessAdminServiceImplTest {
             changeLog, mock(AccessProfileLoader.class), mock(AccessPolicy.class), mock(SessionStore.class),
             mock(MfaRepository.class), mock(SignUpPolicy.class), mock(PasswordPolicy.class),
             mock(PhoneNumberPolicy.class), mock(PasswordHasher.class), mock(DomainEventPublisher.class),
-            new MutableClock(NOW));
+            new StaffInvitationSettings(null, null, false, List.of()), new MutableClock(NOW));
 
     AccessAdminServiceImplTest() {
         when(current.actor()).thenReturn(READER);

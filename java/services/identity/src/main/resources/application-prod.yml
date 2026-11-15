@@ -14,6 +14,8 @@ at:
     home-url: ${HOME_URL:${PUBLIC_WEB_URL:https://afrotransact.com}}
     invitations:
       accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:https://seller.afrotransact.com}/invitations/accept}
+    staff-invitations:
+      accept-url: ${STAFF_INVITATION_ACCEPT_URL:${STAFF_CONSOLE_URL:https://admin.afrotransact.com}/invite}
     signing:
       generate-if-missing: false
     data-protection:

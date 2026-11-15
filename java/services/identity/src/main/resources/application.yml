@@ -108,6 +108,13 @@ at:
     invitations:
       # Seller Center page that accepts organisation invitations; ?token=… is appended (identity.invitation.created)
       accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:http://localhost:3010}/invitations/accept}
+    staff-invitations:
+      # Staff console page that accepts a staff invitation; the single-use token follows #token= (never sent to a server).
+      accept-url: ${STAFF_INVITATION_ACCEPT_URL:${STAFF_CONSOLE_URL:http://localhost:3002}/invite}
+      # How long an invitation (and each resend) stays valid.
+      ttl: ${STAFF_INVITATION_TTL:PT72H}
+      # POST /v1/admin/users (an account with a temporary password) is off: invitations replace it. Dev tooling only.
+      temp-password-enabled: ${STAFF_TEMP_PASSWORD_ENABLED:false}
     # Email domains reserved for staff (comma-separated; cannot self-register).
     staff-email-domains: ${IDENTITY_STAFF_EMAIL_DOMAINS:afrotransact.com}
     signing:
