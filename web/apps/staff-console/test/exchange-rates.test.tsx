@@ -9,7 +9,7 @@ import { checkCost, emptyCost } from '@/components/inventory/CostFields';
 import { OverviewPanel } from '@/components/inventory/OverviewPanel';
 import { ReceivingPanel } from '@/components/inventory/ReceivingPanel';
 import { LotSheet } from '@/components/inventory/StockPanel';
-import { SettingsHub } from '@/components/settings/SettingsHub';
+import { SettingsSectionScreen } from '@/components/settings/SettingsSectionScreen';
 import { ConsoleShell } from '@/components/shell/ConsoleShell';
 import { tEn } from '@/i18n/t';
 
@@ -155,10 +155,10 @@ describe('lots and valuation show what was paid and the USD value', () => {
 
 describe('Settings › Exchange rates', () => {
   it('lists the rates, newest first, and sets one with a reason', async () => {
-    nav.set('/settings?section=exchange-rates');
+    nav.set('/settings/exchange-rates');
     renderWithProviders(
       <ConsoleShell>
-        <SettingsHub />
+        <SettingsSectionScreen section="exchange-rates" />
       </ConsoleShell>
     );
     expect(await screen.findByRole('heading', { name: 'Exchange rates' })).toBeInTheDocument();
@@ -179,14 +179,14 @@ describe('Settings › Exchange rates', () => {
 
   it('is read only for finance: the rates are visible but cannot be changed', async () => {
     asRoles('platform.finance');
-    nav.set('/settings?section=exchange-rates');
+    nav.set('/settings/exchange-rates');
     renderWithProviders(
       <ConsoleShell>
-        <SettingsHub />
+        <SettingsSectionScreen section="exchange-rates" />
       </ConsoleShell>
     );
     expect(await screen.findByRole('heading', { name: 'Exchange rates' })).toBeInTheDocument();
-    expect(await screen.findByText(/Read only/)).toBeInTheDocument();
+    expect(await screen.findByText('Read-only')).toBeInTheDocument();
     await screen.findAllByText('Banxico FIX');
     expect(screen.queryByRole('button', { name: 'New' })).not.toBeInTheDocument();
   });

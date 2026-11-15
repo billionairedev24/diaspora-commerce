@@ -185,7 +185,7 @@ function Editor({ page, locale, setLocale, device, setDevice }: { page: ContentP
       <nav aria-label={t('st.pages.breadcrumb')} className="flex items-center gap-1 text-sm text-muted">
         <Link href="/settings">{t('st.pages.settings')}</Link>
         <CaretRight size={12} aria-hidden />
-        <Link href="/settings?section=published-pages">{t('st.pages.title')}</Link>
+        <Link href="/settings/published-pages">{t('st.pages.title')}</Link>
         <CaretRight size={12} aria-hidden />
         <span aria-current="page" className="text-text">{page.title}</span>
       </nav>

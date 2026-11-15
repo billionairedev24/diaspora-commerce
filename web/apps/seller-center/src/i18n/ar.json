@@ -2205,5 +2205,10 @@
   "sc.proof.receivedBy": "استلمها {name}",
   "sc.proof.byAfroTransact": "سلّمتها AfroTransact مع صورة",
   "sc.proof.photoN": "الصورة {n}",
-  "sc.proof.photoAltN": "الصورة {n} الملتقطة عند تسليم الطلب"
+  "sc.proof.photoAltN": "الصورة {n} الملتقطة عند تسليم الطلب",
+  "sc.settings.store-page.title": "صفحة المتجر",
+  "sc.settings.store-page.description": "مظهر صفحة متجرك العامة: السمة والواجهة والمنتجات المميزة وما يقرؤه المتسوقون.",
+  "sc.settings.status.storePublished": "منشورة",
+  "sc.settings.status.storeDraft": "غير منشورة",
+  "sc.settings.status.storeChanges": "تغييرات غير منشورة"
 }

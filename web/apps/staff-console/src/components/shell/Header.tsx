@@ -25,6 +25,8 @@ export function Header({ session, menuButton }: { session: StaffSession | null; 
       {menuButton}
       <a href="/" className="flex items-center gap-2 text-header-text no-underline hover:text-header-text hover:no-underline">
         <LogoMark size={28} />
+        {/* Below the sm breakpoint the wordmark is hidden: the link keeps its name for screen readers. */}
+        <span className="at-visually-hidden sm:hidden">afrotransact</span>
         <span className="hidden text-xl font-black sm:inline">afrotransact</span>
         <span className="ml-1 rounded-pill bg-gold-500 px-2 py-0.5 text-2xs font-bold whitespace-nowrap text-ink-1000 max-[399px]:hidden">{t('st.header.staffConsole')}</span>
       </a>

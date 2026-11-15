@@ -1992,6 +1992,174 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/access/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The permission catalogue
+         * @description identity `GET /v1/admin/permissions` (access:read). Read from identity on every call, so a permission added by an identity migration appears here with no change in the console.
+         */
+        get: operations["listAccessPermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The roles of one portal with their permissions
+         * @description identity `GET /v1/admin/roles?portal=` (access:read). `canAdmin` is whether this staff member may change roles (access:admin and Edit on Users & roles).
+         */
+        get: operations["listAccessRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/roles/{role}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The people who hold a role, by name
+         * @description identity `GET /v1/admin/users`, read page by page (at most 1,000 people) and filtered by role, because identity has no query for it; `partial` is true when the directory was longer than what was read.
+         */
+        get: operations["listAccessRoleMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/roles/{role}/permissions/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add a permission to a role
+         * @description identity `PUT /v1/admin/roles/{role}/permissions/{permission}?reason=` (access:admin). Holders get it on their next access token.
+         */
+        put: operations["addAccessRolePermission"];
+        post?: never;
+        /**
+         * Remove a permission from a role
+         * @description identity `DELETE /v1/admin/roles/{role}/permissions/{permission}?reason=` (access:admin). Holders lose it on their next access token. Super Admin keeps access:admin and access:read (409 ACCESS_LOCKOUT).
+         */
+        delete: operations["removeAccessRolePermission"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find people by name or email, with their access
+         * @description identity `GET /v1/admin/users` (access:read).
+         */
+        get: operations["searchAccessPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/people/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One person's roles, direct grants and effective permissions
+         * @description identity `GET /v1/admin/users/{id}` (access:read).
+         */
+        get: operations["getAccessPerson"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/people/{id}/permissions/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Grant a person a permission directly
+         * @description identity `PUT /v1/admin/users/{id}/permissions/{permission}?reason=` (access:admin). Takes effect on their next access token.
+         */
+        put: operations["grantAccessPersonPermission"];
+        post?: never;
+        /**
+         * Take a direct permission away from a person
+         * @description identity `DELETE /v1/admin/users/{id}/permissions/{permission}?reason=` (access:admin). Permissions that come from a role stay until the role changes.
+         */
+        delete: operations["revokeAccessPersonPermission"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The access change log, newest first
+         * @description identity `GET /v1/admin/access-log` (access:read, append-only). Identity filters by person; a role or permission filter is matched here over the newest 200 entries (`partial` when there were more). People are named, never shown as ids.
+         */
+        get: operations["listAccessLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/preorders": {
         parameters: {
             query?: never;
@@ -3577,6 +3745,26 @@ export interface paths {
          */
         put: operations["changeStaffTaxMethod"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/providers/{provider}/connection-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test the connection to a tax provider (Avalara: AvaTax Ping)
+         * @description tax-returns `POST /v1/tax/providers/{provider}/connection-test` (`tax:configure`). Asks the provider whether the configured credentials work before shadow mode runs. Calculates nothing and records nothing. Says authenticated yes or no, the account name and the environment; never the license key. 422 for an unknown provider.
+         */
+        post: operations["testStaffTaxProviderConnection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6918,6 +7106,96 @@ export interface components {
             /** @description Well formed, signature and issuer valid, and not expired */
             valid: boolean;
             problems: string[];
+        };
+        AccessPermission: {
+            /** @description For example `refunds:issue` */
+            key: string;
+            /** @description The catalogue group the permission belongs to (orders, delivery, access, ...) */
+            module: string;
+            /** @description What the permission lets someone do, in plain words */
+            description: string;
+        };
+        AccessPermissionList: {
+            items: components["schemas"]["AccessPermission"][];
+        };
+        AccessRole: {
+            /** @description For example `platform.finance` */
+            key: string;
+            portal: string;
+            name: string;
+            description: string;
+            permissions: string[];
+            permissionCount: number;
+        };
+        AccessRoleList: {
+            portal: string;
+            items: components["schemas"]["AccessRole"][];
+            canAdmin: boolean;
+        };
+        AccessRoleMember: {
+            id: string;
+            name: string;
+            email: string;
+            enabled: boolean;
+            /** @description Market codes the role is limited to for this person (empty = everywhere) */
+            markets: string[];
+        };
+        AccessRoleMembers: {
+            role: string;
+            items: components["schemas"]["AccessRoleMember"][];
+            partial: boolean;
+        };
+        AccessChangeRequest: {
+            /** @description Kept in the access change log */
+            reason: string;
+        };
+        AccessPersonRole: {
+            key: string;
+            name: string;
+        };
+        AccessPerson: {
+            id: string;
+            name: string;
+            email: string;
+            enabled: boolean;
+            principalType: string;
+            roles: components["schemas"]["AccessPersonRole"][];
+            /** @description Permissions granted to the person directly, apart from any role */
+            directGrants: string[];
+            /** @description Everything the person can do now (roles plus direct grants) */
+            effectivePermissions: string[];
+            roleMarkets?: {
+                [key: string]: string[];
+            };
+        };
+        AccessPersonPage: {
+            items: components["schemas"]["AccessPerson"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        AccessLogEntry: {
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** @description Who made the change */
+            actorName: string;
+            action: string;
+            actionLabel: string;
+            /** @description The person it was done to (empty when it was done to a role) */
+            targetName: string;
+            role: string;
+            roleName?: string;
+            /** @description What was granted or removed (a permission or role key) */
+            subject: string;
+            detail: string;
+        };
+        AccessLogPage: {
+            items: components["schemas"]["AccessLogEntry"][];
+            page: number;
+            size: number;
+            partial: boolean;
         };
         IdentityDocuments: {
             discovery: {
@@ -11141,6 +11419,23 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        StaffTaxConnectionTest: {
+            /** @enum {string} */
+            provider: "STRIPE" | "AVALARA";
+            label: string;
+            /** @enum {string} */
+            status: "OK" | "FAILED" | "NOT_CONFIGURED";
+            /** @description One plain sentence: accepted, not accepted, or not set up */
+            headline: string;
+            configured: boolean;
+            authenticated: boolean;
+            /** @description Account or user name the provider reported; empty when it did not */
+            accountName?: string;
+            /** @description sandbox or production */
+            environment?: string;
+            /** @description What worked or what to fix; never a credential */
+            message: string;
+        };
         StaffTaxMethod: {
             /** @enum {string} */
             method: "RULES" | "STRIPE_TAX" | "AVALARA";
@@ -14454,6 +14749,303 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    listAccessPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every permission with its module and a plain description */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPermissionList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listAccessRoles: {
+        parameters: {
+            query?: {
+                portal?: "platform" | "seller" | "provider" | "account";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The roles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRoleList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listAccessRoleMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The holders */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRoleMembers"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addAccessRolePermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description The role as it is now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRole"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removeAccessRolePermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description The role as it is now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRole"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchAccessPeople: {
+        parameters: {
+            query?: {
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of people */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPersonPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccessPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The person */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPerson"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    grantAccessPersonPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description The person as they are now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPerson"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    revokeAccessPersonPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description The person as they are now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessPerson"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listAccessLog: {
+        parameters: {
+            query?: {
+                userId?: string;
+                role?: string;
+                permission?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of changes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessLogPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listStaffPreorders: {
         parameters: {
             query?: {
@@ -17074,6 +17666,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffTaxMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    testStaffTaxProviderConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "STRIPE" | "AVALARA";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxConnectionTest"];
                 };
             };
             401: components["responses"]["Problem"];

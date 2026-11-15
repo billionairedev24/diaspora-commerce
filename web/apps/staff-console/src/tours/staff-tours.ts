@@ -213,12 +213,12 @@ export const STAFF_TOURS = [
     id: 'fees-plans',
     prefix: 'st.tour.feesPlans',
     journey: 'commerce',
-    route: '/settings?section=fees',
+    route: '/settings/fees',
     audience: { permissions: ['fees:view'] },
     steps: [
       ['schedules', 'table-staff.fee-schedule-versions', { placement: 'top' }],
-      ['commission', 'settings-section', { route: '/settings?section=fees&tab=commission' }],
-      ['negotiated', 'settings-section', { route: '/settings?section=fees&tab=negotiated' }],
+      ['commission', 'settings-section', { route: '/settings/fees?tab=commission' }],
+      ['negotiated', 'settings-section', { route: '/settings/fees?tab=negotiated' }],
       ['plans', 'table-staff.plans.catalogue', { route: '/plans', placement: 'top', when: 'can-plans' }],
       ['wrap']
     ]
@@ -292,10 +292,10 @@ export const STAFF_TOURS = [
     id: 'roles-permissions',
     prefix: 'st.tour.roles',
     journey: 'platform',
-    route: '/users',
+    route: '/settings/access',
     audience: { permissions: ['rbac:view'] },
-    autoStart: { routes: ['/users'] },
-    steps: [['page', 'page-rbac'], ['people', 'table-staff.users', { placement: 'top' }], ['levels'], ['tours']]
+    autoStart: { routes: ['/settings/access'] },
+    steps: [['page', 'page-settings-access'], ['roles', 'table-staff.access.roles', { placement: 'top' }], ['change'], ['tours']]
   }),
   defineChapter({
     id: 'settings',
@@ -305,21 +305,21 @@ export const STAFF_TOURS = [
     audience: { anyPermissions: ['plans:view', 'preorders:view', 'markets:view', 'fees:view', 'siteCfg:view'] },
     steps: [
       ['hub', 'settings-hub'],
-      ['membership', 'settings-section', { route: '/settings?section=membership', when: 'can-settings-membership' }],
-      ['shipping', 'settings-section', { route: '/settings?section=shipping', when: 'can-settings-shipping' }],
-      ['delivery-fees', 'settings-section', { route: '/settings?section=delivery-fees', when: 'can-settings-delivery-fees' }],
-      ['markets', 'settings-section', { route: '/settings?section=markets', when: 'can-settings-markets' }]
+      ['membership', 'settings-section', { route: '/settings/membership', when: 'can-settings-membership' }],
+      ['shipping', 'settings-section', { route: '/settings/shipping', when: 'can-settings-shipping' }],
+      ['delivery-fees', 'settings-section', { route: '/settings/delivery-fees', when: 'can-settings-delivery-fees' }],
+      ['markets', 'settings-section', { route: '/settings/markets', when: 'can-settings-markets' }]
     ]
   }),
   defineChapter({
     id: 'site-content',
     prefix: 'st.tour.siteContent',
     journey: 'platform',
-    route: '/settings?section=published-pages',
+    route: '/settings/published-pages',
     audience: { permissions: ['siteCfg:view'] },
     steps: [
       ['pages', 'table-staff.published-pages', { placement: 'top' }],
-      ['general', 'settings-section', { route: '/settings?section=general' }],
+      ['general', 'settings-section', { route: '/settings/general' }],
       ['wrap']
     ]
   }),
@@ -327,7 +327,7 @@ export const STAFF_TOURS = [
     id: 'notifications',
     prefix: 'st.tour.notifications',
     journey: 'platform',
-    route: '/settings?section=notifications',
+    route: '/settings/notifications',
     audience: { permissions: ['notifications:view'] },
     steps: [['page', 'settings-section'], ['templates', 'table-staff.notification-templates', { placement: 'top' }], ['wrap']]
   }),
@@ -335,12 +335,12 @@ export const STAFF_TOURS = [
     id: 'identity-access',
     prefix: 'st.tour.identity',
     journey: 'platform',
-    route: '/settings?section=identity',
+    route: '/settings/security',
     audience: { permissions: ['identity:view'] },
     steps: [
       ['page', 'settings-section'],
       ['clients', 'table-staff.oauth-clients', { placement: 'top' }],
-      ['sessions', 'table-staff.identity-sessions', { route: '/settings?section=identity&tab=identity-sessions', placement: 'top' }],
+      ['sessions', 'table-staff.identity-sessions', { route: '/settings/security?tab=identity-sessions', placement: 'top' }],
       ['wrap']
     ]
   }),

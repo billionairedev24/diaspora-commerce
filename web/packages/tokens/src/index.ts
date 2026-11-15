@@ -10,3 +10,4 @@ export type TokenName = keyof typeof cssVariables;
 export function cssVar(name: TokenName): `var(${TokenName})` {
   return `var(${name})`;
 }
+export * from './storefront-theme';

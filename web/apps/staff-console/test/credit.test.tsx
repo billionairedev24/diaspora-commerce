@@ -94,7 +94,7 @@ describe('AfroTransact credit and gift cards (S320, S321)', () => {
   it('keeps the limits in Settings with a reason on every change', async () => {
     asRoles('platform.finance');
     const user = userEvent.setup();
-    nav.set('/settings?section=credit&open=money');
+    nav.set('/settings/credit?open=money');
     await renderScreen(<ResourceTable resource="money-settings" urlPrefix="money-settings" />);
     expect(await screen.findByText('Gift card terms (shown on the buy page)')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Edit' }));

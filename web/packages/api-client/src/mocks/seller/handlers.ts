@@ -63,6 +63,7 @@ import {
   UploadRequestSchema,
   validatePickupHours
 } from '../../schemas/seller';
+import { defaultStoreConfig, StoreConfigSchema, type StorePageSettings } from '../../schemas/storefront';
 import { CandidateRequestSchema, ChangeRequestInputSchema, ChangeRequestStatusSchema, DecisionRequestSchema, MatchRequestSchema, type ProductImageSlot } from '../../seller-matching';
 import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
@@ -71,6 +72,7 @@ import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { SERVICE_PLACES } from '../shopper-state';
+import { buildStorefront, publishMockStore, searchStoreProducts, unpublishMockStore } from '../storefront';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import {
   applyStockRows,
@@ -142,6 +144,7 @@ import {
 import { applyToSell, resubmitSelling, sellingApplication, sellingApplications, sellingApprovals, sellingCapabilities, SellingMockError, sellingStatus } from './selling';
 import { sellerSettingsHandlers } from './settings';
 import { chartProblems, type MockSizeChart, readSizeChartCsv, sizeChartTemplateCsv, sizeProblems, suggestionsFor } from './size-charts';
+import { emptyStorePage, validateMockStoreConfig } from './store-page';
 
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
 
@@ -787,6 +790,23 @@ function businessPage(ctx: Ctx): BusinessPageSettings {
   const slug = ctx.org.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return { name: ctx.org.name, slug: slug || null, description: p?.description || null, brandColor: p?.brandColor || null, logoUrl: p?.logoUrl || null,
     contactEmail: ctx.db.user.email, canEdit: allows(ctx.org.kind, ctx.role, 'team', 'EDIT') };
+}
+
+
+const storeSlug = (ctx: Ctx) => ctx.org.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** Sellers only (a provider has no storefront); Team view reads, Team edit changes. */
+function storeAccess(ctx: Ctx, level: 'VIEW' | 'EDIT') {
+  require(ctx, 'team', level, 'SELLER');
+}
+
+function storePageView(ctx: Ctx): StorePageSettings {
+  const bp = businessPage(ctx);
+  const page = ctx.db.storePage[ctx.org.id] ?? emptyStorePage();
+  const canEdit = bp.canEdit;
+  return { slug: bp.slug, name: bp.name, logoUrl: bp.logoUrl, contactEmail: bp.contactEmail, draft: page.draft ?? defaultStoreConfig(), published: page.published, isPublished: page.published !== null,
+    version: page.version, publishedVersion: page.publishedVersion, hasUnpublishedChanges: page.published === null ? page.draft !== null : page.publishedVersion !== page.version,
+    updatedAt: page.updatedAt, publishedAt: page.publishedAt, approved: ctx.org.status === 'APPROVED', canEdit, canPublish: canEdit && ctx.org.status === 'APPROVED' && !!bp.slug };
 }
 
 function shipFromList(ctx: Ctx): ShipFromAddress[] {
@@ -2781,6 +2801,68 @@ export const sellerHandlers = [
       return businessPage(ctx);
     })
   ),
+  /* ── Store page: the branded storefront (/b/{slug}) ── */
+  http.get(`${W}/store-page`, route((ctx) => { storeAccess(ctx, 'VIEW'); return storePageView(ctx); })),
+  http.put(
+    `${W}/store-page`,
+    route(async (ctx) => {
+      storeAccess(ctx, 'EDIT');
+      const b = await body(ctx.request, z.object({ version: z.number().int(), config: StoreConfigSchema }));
+      const { errors, accentLow, clean } = validateMockStoreConfig(b.config);
+      if (Object.keys(errors).length) {
+        throw accentLow ? new SellerProblem(422, 'STORE_ACCENT_LOW_CONTRAST', 'That colour is hard to read', errors['theme.accent']!, errors) : invalid(errors);
+      }
+      const page = (ctx.db.storePage[ctx.org.id] ??= emptyStorePage());
+      if (b.version !== page.version) throw conflict('The storefront was changed by someone else. Reload and try again.');
+      page.draft = clean;
+      page.version += 1;
+      page.updatedAt = ctx.now.toISOString();
+      page.audit.unshift({ at: page.updatedAt, action: 'DRAFT_SAVED', actor: 'You', version: page.version });
+      return storePageView(ctx);
+    })
+  ),
+  http.post(
+    `${W}/store-page/publish`,
+    route(async (ctx) => {
+      storeAccess(ctx, 'EDIT');
+      const b = await body(ctx.request, z.object({ version: z.number().int() }));
+      const page = (ctx.db.storePage[ctx.org.id] ??= emptyStorePage());
+      if (!page.draft) throw invalid({ form: 'Save your changes before publishing.' });
+      if (b.version !== page.version) throw conflict('The storefront was changed by someone else. Reload and try again.');
+      page.published = page.draft;
+      page.publishedVersion = page.version;
+      page.publishedAt = ctx.now.toISOString();
+      page.audit.unshift({ at: page.publishedAt, action: 'PUBLISHED', actor: 'You', version: page.version });
+      const v = storePageView(ctx);
+      publishMockStore({ slug: v.slug!, name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: page.published, publishedAt: page.publishedAt });
+      return v;
+    })
+  ),
+  http.post(
+    `${W}/store-page/unpublish`,
+    route((ctx) => {
+      storeAccess(ctx, 'EDIT');
+      const page = (ctx.db.storePage[ctx.org.id] ??= emptyStorePage());
+      if (page.published) {
+        page.published = null;
+        page.publishedVersion = null;
+        page.publishedAt = null;
+        page.audit.unshift({ at: ctx.now.toISOString(), action: 'UNPUBLISHED', actor: 'You', version: page.version });
+        unpublishMockStore(storeSlug(ctx));
+      }
+      return storePageView(ctx);
+    })
+  ),
+  http.get(`${W}/store-page/audit`, route((ctx) => { storeAccess(ctx, 'VIEW'); return { items: (ctx.db.storePage[ctx.org.id]?.audit ?? []).slice(0, 50) }; })),
+  http.get(
+    `${W}/store-page/preview`,
+    route((ctx) => {
+      storeAccess(ctx, 'VIEW');
+      const v = storePageView(ctx);
+      return buildStorefront({ slug: v.slug!, name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: v.draft, preview: true }, ctx.now);
+    })
+  ),
+  http.get(`${W}/store-page/featured-search`, route((ctx) => { storeAccess(ctx, 'VIEW'); return { items: searchStoreProducts(storeSlug(ctx), new URL(ctx.request.url).searchParams.get('q') ?? '', ctx.now) }; })),
   /* ── Delivery run pick lists (S264) ── */
   http.get(
     `${W}/run-pickups`,

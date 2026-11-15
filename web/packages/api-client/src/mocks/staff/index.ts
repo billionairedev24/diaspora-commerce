@@ -1,3 +1,4 @@
+export { addMockPermission } from './access';
 export { getHubDb, resetHubDb } from '../inventory-hub';
 export { endMockSession, MOCK_SESSION_COOKIE, resetMockSession, setMockSessionPolicy, startMockSession } from '../session';
 export { getStaffDb, type MockRecord, type MockStaffDb, resetStaffDb } from './db';

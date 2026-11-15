@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -101,6 +102,10 @@ type Config struct {
 		// address (LocalMediaURL) are rewritten to it in JSON responses, so a phone on the Wi-Fi can load them.
 		// Ignored outside APP_ENV=local.
 		LANMediaURL string `yaml:"lanMediaUrl" env:"LAN_MEDIA_URL"`
+		// StoreMediaPrefixes are the URL prefixes a seller's storefront images may come from (AfroTransact media only), e.g.
+		// "https://media.afrotransact.example/". Default (StoreMediaPrefixes): the local media URL in local, and
+		// https://media.<the storefront's host> elsewhere; STORE_MEDIA_PREFIXES (comma-separated) replaces the list.
+		StoreMediaPrefixes []string `yaml:"storeMediaPrefixes" env:"STORE_MEDIA_PREFIXES"`
 	} `yaml:"web"`
 
 	Session struct {
@@ -399,4 +404,25 @@ func (c *Config) validateStripe(env string) error {
 		return fmt.Errorf("config: %s needs a Stripe test publishable key (pk_test_…)", env)
 	}
 	return nil
+}
+
+// StoreMediaPrefixes is where a storefront image may come from: the configured list, else the local media URL (local)
+// or https://media.<storefront host>/ (every other environment). The LAN rewrite address is allowed too, since stored
+// URLs may carry either.
+func (c *Config) StoreMediaPrefixes(env string) []string {
+	if len(c.Web.StoreMediaPrefixes) > 0 {
+		return c.Web.StoreMediaPrefixes
+	}
+	if env == "local" {
+		out := []string{LocalMediaURL}
+		if to := strings.TrimRight(strings.TrimSpace(c.Web.LANMediaURL), "/"); to != "" {
+			out = append(out, to+"/")
+		}
+		return out
+	}
+	u, err := url.Parse(strings.TrimSpace(c.Platform.PublicWebURL))
+	if err != nil || u.Hostname() == "" {
+		return nil
+	}
+	return []string{"https://media." + u.Hostname() + "/"}
 }

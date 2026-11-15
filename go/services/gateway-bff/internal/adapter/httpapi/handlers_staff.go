@@ -53,6 +53,9 @@ type StaffServices struct {
 	// Identity serves the token inspector and published documents of Identity & access (S291); routes are registered when
 	// it is set.
 	Identity app.StaffIdentityService
+	// Access serves Settings > Roles and permissions (catalogue, roles, who holds them, effective permissions, change log); routes
+	// are registered when it is set.
+	Access app.StaffAccessService
 	// ContentPages serves Settings → Published pages (index, preview data, drafts, publication and rollback of legal
 	// documents and help pages); routes are registered when it is set.
 	ContentPages app.StaffContentPagesService
@@ -155,6 +158,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	if s.Identity != nil {
 		route("POST /v1/staff/identity/token-inspector", h.staffInspectToken)
 		route("GET /v1/staff/identity/documents", h.staffIdentityDocuments)
+	}
+	if s.Access != nil {
+		h.registerStaffAccess(route)
 	}
 }
 

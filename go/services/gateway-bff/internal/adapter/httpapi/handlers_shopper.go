@@ -32,6 +32,8 @@ type ShopperServices struct {
 	PayLinks app.PayLinkService
 	// BusinessPages serves a business's plain public page (optional; public, read-only).
 	BusinessPages app.BusinessPageService
+	// Storefronts serves a seller's branded public page /b/{slug} (public, read-only; optional).
+	Storefronts app.StorefrontService
 	// Credit is AfroTransact credit and gift cards (S320, S321; optional).
 	Credit app.CreditService
 	// Membership is the shopper's membership: tiers, joining, changing plan, canceling (S323; optional).
@@ -68,6 +70,11 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 		route("POST /v1/me/help-requests", h.createHelpRequest)
 		route("GET /v1/me/help-requests", h.helpRequests)
 		route("GET /v1/me/help-requests/{id}", h.helpRequest)
+	}
+	if h.s.Shopper.Storefronts != nil {
+		route("GET /v1/storefronts", h.storefrontList)
+		route("GET /v1/storefronts/{slug}", h.storefront)
+		route("GET /v1/storefronts/{slug}/products", h.storefrontProducts)
 	}
 	if h.s.Shopper.BusinessPages != nil {
 		route("GET /v1/business-pages/{slug}", h.businessPage)

@@ -46,6 +46,15 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label", h.downloadLabel)
 	route("GET /v1/seller/business-page", h.businessPageGet)
 	route("PUT /v1/seller/business-page", h.businessPageUpdate)
+	if h.s.SellerStorePage != nil {
+		route("GET /v1/seller/store-page", h.storePageGet)
+		route("PUT /v1/seller/store-page", h.storePageSave)
+		route("POST /v1/seller/store-page/publish", h.storePagePublish)
+		route("POST /v1/seller/store-page/unpublish", h.storePageUnpublish)
+		route("GET /v1/seller/store-page/audit", h.storePageAudit)
+		route("GET /v1/seller/store-page/preview", h.storePagePreview)
+		route("GET /v1/seller/store-page/featured-search", h.storePageFind)
+	}
 	if h.s.SellerRunPickups != nil {
 		route("GET /v1/seller/run-pickups", h.sellerRunPickups)
 		route("GET /v1/seller/run-pickups/{runId}", h.sellerRunPickup)

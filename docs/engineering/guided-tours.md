@@ -231,7 +231,7 @@ screens with no chapter, or things the brief named that the product does not hav
 | Delivery dispatch `/dispatch` | dispatch (operations) | 5/5 | covered |
 | Pre-orders `/preorders`, `/preorders/[id]`, `/new`, `/runs`, `/settings` | preorders (operations) | 4/4 | covered for the list; the detail, new, runs and settings pages are not toured |
 | Exports `/exports` | exports (operations) | 3/3 | covered |
-| Users and roles `/users` | roles-permissions (platform) | 4/4 | covered |
+| Roles and permissions `/settings/access` (was Users and roles `/users`) | roles-permissions (platform) | 4/4 | covered |
 | Settings hub and sections (membership, shipping, delivery fees, markets) | settings (platform) | 5/5 | covered; other sections have their own chapters or none |
 | Site content and legal (Settings → Published pages, General) | site-content (platform) | 3/3 | covered |
 | Notification templates (Settings → Notifications) | notifications (platform) | 3/3 | covered |

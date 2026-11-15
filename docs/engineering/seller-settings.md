@@ -1,5 +1,7 @@
 # Seller Center settings
 
+The staff console follows the same pattern: [staff-settings.md](staff-settings.md).
+
 Settings are their own area (`/settings`), apart from Orders. Each section is **its own page with its own Save and its own
 permission**, and each setting lives in exactly one section. The area was introduced when the owner found that the pickup
 form lived under Orders > Ship-from & pickup ("we need to really isolate settings properly").

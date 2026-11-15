@@ -49,6 +49,7 @@ import {
 import { mockSessionEnded, mockSessionMembers, sessionHandlers } from './session';
 import { shopperSettingsHandlers } from './settings-shopper';
 import { shopperHandlers } from './shopper';
+import { storefrontHandlers } from './storefront';
 import { accountCounts } from './shopper-state';
 
 const cartOf = (ctx: Ctx) => json(buildCart(ctx.session, ctx.now));
@@ -336,6 +337,7 @@ export const handlers = [
   ...shopperSettingsHandlers,
   /* Addresses, payments, orders, help requests, checkout, services & bookings, Lola */
   ...shopperHandlers,
+  ...storefrontHandlers,
   ...helpRequestHandlers,
   ...creditHandlers,
   ...deliveryQuoteHandlers,

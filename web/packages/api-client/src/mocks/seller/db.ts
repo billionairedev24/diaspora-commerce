@@ -49,6 +49,7 @@ import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from
 import { type MockApplication } from './onboarding';
 import { seedRunPickups } from './run-pickups';
 import { type MockSizeChart, seedSizeCharts } from './size-charts';
+import { type MockStorePage } from './store-page';
 import { TAX_PRODUCT_TYPES, TAX_TREE } from './taxonomy';
 export interface MockOrg {
   id: string;
@@ -108,6 +109,8 @@ export interface MockSellerDb {
   pickupPrompt: Record<string, { state: 'NONE' | 'SNOOZED' | 'NEVER'; snoozedUntil: string | null }>;
   /** How each organisation's public page looks (seller service /v1/orgs/{orgId}/business-page). */
   businessPage: Record<string, { description: string; brandColor: string; logoUrl: string }>;
+  /** The branded storefront settings per organisation (seller service /v1/orgs/{orgId}/store-page). */
+  storePage: Record<string, MockStorePage>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
   offers: SellerOffer[];
   /** Seller-funded coupons (offers-service). */
@@ -702,6 +705,7 @@ function freshDb(now: Date): MockSellerDb {
     policy: { kind: 'MODERATE', freeHours: 48, partialRefund: true, partialFromHours: 24, partialPercent: 50, noShow: 'DEPOSIT', rescheduleHours: 48, maxReschedules: 2 },
     earnings: [],
     businessPage: {},
+    storePage: {},
     runPickups: { [SELLER_ORG]: seedRunPickups(now) },
     pickupPrompt: {},
     shipFrom: {

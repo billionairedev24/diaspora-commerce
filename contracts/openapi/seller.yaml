@@ -2497,6 +2497,66 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/BusinessPageSettings'
+  /v1/orgs/{orgId}/store-page:
+    get:
+      tags: [Store page]
+      summary: The storefront settings, draft and published
+      operationId: getStorePage
+      parameters: [{name: orgId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+    put:
+      tags: [Store page]
+      summary: Save the draft
+      description: 409 seller.store-page-stale when version is not the stored one (0 for the first save).
+      operationId: saveStorePageDraft
+      parameters: [{name: orgId, in: path, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageDraftRequest'}}}}
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+  /v1/orgs/{orgId}/store-page/publish:
+    post:
+      tags: [Store page]
+      summary: Publish the draft
+      description: 422 seller.store-not-approved until the organisation is approved; 409 when version is not the latest draft.
+      operationId: publishStorePage
+      parameters: [{name: orgId, in: path, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StorePageVersionRequest'}}}}
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+  /v1/orgs/{orgId}/store-page/unpublish:
+    post:
+      tags: [Store page]
+      summary: Take the page down
+      operationId: unpublishStorePage
+      parameters: [{name: orgId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {$ref: '#/components/schemas/StorePageSettings'}}}}
+  /v1/orgs/{orgId}/store-page/audit:
+    get:
+      tags: [Store page]
+      summary: Who saved, published and unpublished, newest first (last 50)
+      operationId: storePageAudit
+      parameters: [{name: orgId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {type: array, items: {$ref: '#/components/schemas/StorePageAuditEntry'}}}}}
+  /v1/public/storefronts:
+    get:
+      tags: [Storefronts]
+      summary: Published storefronts of approved sellers (no login)
+      description: Up to 5000, by address. Used to build the sitemap.
+      operationId: published
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {type: array, items: {$ref: '#/components/schemas/PublishedStorefront'}}}}}
+  /v1/public/storefronts/{slug}:
+    get:
+      tags: [Storefronts]
+      summary: A seller's published storefront settings (no login)
+      description: 404 when there is no page, it is not published, or the organisation is not approved.
+      operationId: storefront
+      parameters: [{name: slug, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {$ref: '#/components/schemas/PublicStorefront'}}}}
   /v1/orgs/{orgId}/ship-from-addresses:
     get:
       tags:
@@ -3662,6 +3722,54 @@ components:
           type: string
           description: https URL of an uploaded logo; blank removes it
           maxLength: 2048
+    StorePageSettings:
+      type: object
+      properties:
+        draft: {type: object, description: null until the first save}
+        published: {type: object, description: null while unpublished}
+        isPublished: {type: boolean}
+        version: {type: integer, format: int64, description: 0 until the first save}
+        publishedVersion: {type: integer, format: int64}
+        hasUnpublishedChanges: {type: boolean}
+        updatedAt: {type: string, format: date-time}
+        publishedAt: {type: string, format: date-time}
+        approved: {type: boolean}
+    StorePageDraftRequest:
+      type: object
+      required: [config]
+      properties:
+        config: {type: object}
+        version: {type: integer, format: int64}
+    StorePageVersionRequest:
+      type: object
+      properties:
+        version: {type: integer, format: int64}
+    StorePageAuditEntry:
+      type: object
+      properties:
+        at: {type: string, format: date-time}
+        action: {type: string}
+        actor: {type: string}
+        version: {type: integer, format: int64}
+    PublishedStorefront:
+      type: object
+      properties:
+        orgId: {type: string}
+        slug: {type: string}
+        publishedAt: {type: string, format: date-time}
+    PublicStorefront:
+      type: object
+      properties:
+        orgId: {type: string}
+        slug: {type: string}
+        name: {type: string}
+        description: {type: string}
+        logoUrl: {type: string}
+        brandColor: {type: string}
+        contactEmail: {type: string}
+        config: {type: object, description: The published settings document}
+        publishedAt: {type: string, format: date-time}
+        orgCreatedAt: {type: string, format: date-time}
     ShipFromAddress:
       type: object
       properties:

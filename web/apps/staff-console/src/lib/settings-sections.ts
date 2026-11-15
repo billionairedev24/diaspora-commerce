@@ -1,110 +1,143 @@
-import { type StaffModuleKey, type StaffSession } from '@afrotransact/api-client';
+import { type AccessLevel, type StaffModuleKey, type StaffSession } from '@afrotransact/api-client';
 
-import { type MessageKey } from '@/i18n/t';
+import { type MessageKey, type Vars } from '@/i18n/t';
 
 /**
- * Settings: everything that sets how AfroTransact runs, in one place. Each section is hosted by an existing console
- * module (its tables and forms are unchanged, and the module's access level still decides who may see or change it).
+ * Staff Settings, one section per page (the seller pattern, docs/engineering/staff-settings.md). Each setting lives in exactly one
+ * section; the section's `module` is the console module that gates it (View opens it, Edit saves; the BFF and the service behind
+ * it enforce the same), `permission` is a permission the staff member must also hold, and `module: null` is personal or
+ * informational. A section with `own: false` is a row that opens a page elsewhere (the audit log, sales tax review settings,
+ * the person's own language): it is listed here so there is one place to look, never duplicated.
  */
+export type SettingsKey =
+  | 'staff'
+  | 'access'
+  | 'security'
+  | 'sign-in'
+  | 'audit'
+  | 'markets'
+  | 'language'
+  | 'notifications'
+  | 'published-pages'
+  | 'general'
+  | 'ai'
+  | 'application-review'
+  | 'payments'
+  | 'credit'
+  | 'membership'
+  | 'referrals'
+  | 'fees'
+  | 'shipping'
+  | 'delivery-fees'
+  | 'run-economics'
+  | 'exchange-rates'
+  | 'plans'
+  | 'tax-review';
+
+export type SettingsGroup = 'people' | 'platform' | 'money';
+
 export interface SettingsSection {
-  key: string;
-  label: string;
-  description: string;
-  module: StaffModuleKey;
-  group: 'platform' | 'money';
-  /** Catalogue keys of sections translated into the five languages; the plain label and description are the English fallback. */
-  labelKey?: MessageKey;
-  descriptionKey?: MessageKey;
+  key: SettingsKey;
+  href: string;
+  group: SettingsGroup;
+  module: StaffModuleKey | null;
+  permission?: string;
+  /** The section is a page of its own under /settings (false: the row links to a page elsewhere). */
+  own: boolean;
 }
 
-export const SETTINGS_SECTIONS: SettingsSection[] = [
-  {
-    key: 'published-pages',
-    label: 'Published pages',
-    description: 'Every public page with its live link, when it was last changed and by whom: preview, edit and publish legal documents and help pages without a developer.',
-    labelKey: 'st.settings.pages.label',
-    descriptionKey: 'st.settings.pages.description',
-    module: 'siteCfg',
-    group: 'platform'
-  },
-  { key: 'general', label: 'General', description: 'Contact details, social links, help centre and the legal documents shown on the site.', module: 'siteCfg', group: 'platform' },
-  { key: 'markets', label: 'Markets & locations', description: 'Turn AfroTransact on or off by country and by state.', module: 'markets', group: 'platform' },
-  { key: 'notifications', label: 'Notifications', description: 'The email, SMS, push and WhatsApp messages the platform sends: preview, history and new versions.', module: 'notifications', group: 'platform' },
-  { key: 'signin', label: 'Sign-in & integrations', description: 'Which social sign-in buttons appear on sign-in.', module: 'dev', group: 'platform' },
-  { key: 'identity', label: 'Identity & access', description: 'OAuth clients, sign-ins and tokens, signing keys, the token inspector and the sign-in settings of the identity service.', module: 'identity', group: 'platform' },
-  { key: 'payments', label: 'Payments & payouts', description: 'How long money is held, the smallest payout, and which Stripe the platform uses.', module: 'payouts', group: 'money' },
-  { key: 'credit', label: 'Credit & gift cards', description: 'The smallest and largest gift card, the amounts offered, the gift card terms, and how much staff may add to a customer\'s credit before a second person must approve. Every change is kept with its reason.', module: 'payouts', group: 'money' },
-  {
-    key: 'membership',
-    label: 'Membership',
-    description: 'The tiers shoppers can join: price, free trial and the benefits each gives, plus the refund and retry rules. Every change is kept with its reason.',
-    labelKey: 'st.settings.membership.label',
-    descriptionKey: 'st.settings.membership.description',
-    module: 'payouts',
-    group: 'money'
-  },
-  {
-    key: 'referrals',
-    label: 'Referral program',
-    description: 'What the customer who shares and the friend who joins each earn, when it is earned, the limits, and every referral with the ones held for review. Every change is kept with its reason.',
-    labelKey: 'st.settings.referrals.label',
-    descriptionKey: 'st.settings.referrals.description',
-    module: 'payouts',
-    group: 'money'
-  },
-  { key: 'fees', label: 'Fees & commissions', description: 'Fee schedule versions, commission by category and plan, connection fees, negotiated rates and delivery pricing.', module: 'fees', group: 'money' },
-  {
-    key: 'shipping',
-    label: 'Flat delivery fee',
-    description: 'The one flat fee shoppers pay for Delivery by AfroTransact and for AfroTransact collecting from a store, free above an optional amount, and the switch for seller-shipped carrier options (off at launch). The cart and checkout and the amount charged both read it. Every change is kept with its reason.',
-    module: 'fees',
-    group: 'money'
-  },
-  { key: 'delivery-fees', label: 'Delivery fees', description: 'What customers pay for AfroTransact delivery by distance, carrier shipping beyond our coverage, and pickup, by currency, with a reason on every change.', module: 'preorders', group: 'money' },
-  {
-    key: 'run-economics',
-    label: 'Run economics',
-    description: 'The driver cost model every break-even and run profit is calculated from, with a reason on every change.',
-    labelKey: 'st.runs.settings.label',
-    descriptionKey: 'st.runs.settings.description',
-    module: 'preorders',
-    group: 'money'
-  },
-  {
-    key: 'exchange-rates',
-    label: 'Exchange rates',
-    description: 'Rates to US dollars for the currencies stock is received in, suggested when a receipt is counted. Every change is kept with its reason.',
-    labelKey: 'st.settings.exchangeRates.label',
-    descriptionKey: 'st.settings.exchangeRates.description',
-    module: 'inventory',
-    group: 'money'
-  },
-  {
-    key: 'application-review',
-    label: 'Application review: SLAs and escalation',
-    description: 'How long a seller or provider application may wait at each step, who is told when it is late, and how cases are handed out. Every change is kept with its reason.',
-    labelKey: 'st.settings.appReview.label',
-    descriptionKey: 'st.settings.appReview.description',
-    module: 'apps',
-    group: 'platform'
-  },
-  { key: 'plans', label: 'Plans & billing', description: 'How sellers pay their plan fee.', module: 'plans', group: 'money' }
+const S = (key: SettingsKey, group: SettingsGroup, module: StaffModuleKey | null, extra: Partial<SettingsSection> = {}): SettingsSection => ({
+  key,
+  href: `/settings/${key}`,
+  group,
+  module,
+  own: true,
+  ...extra
+});
+
+/** In the order the list shows them. */
+export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
+  S('staff', 'people', 'rbac', { permission: 'access:read' }),
+  S('access', 'people', 'rbac', { permission: 'access:read' }),
+  S('security', 'people', 'identity'),
+  S('sign-in', 'people', 'dev'),
+  S('audit', 'people', 'audit', { href: '/audit', own: false }),
+  S('markets', 'platform', 'markets'),
+  S('language', 'platform', null, { href: '/account/preferences', own: false }),
+  S('notifications', 'platform', 'notifications'),
+  S('ai', 'platform', null, { permission: 'ai:manage' }),
+  S('published-pages', 'platform', 'siteCfg'),
+  S('general', 'platform', 'siteCfg'),
+  S('application-review', 'platform', 'apps'),
+  S('payments', 'money', 'payouts'),
+  S('credit', 'money', 'payouts'),
+  S('membership', 'money', 'payouts'),
+  S('referrals', 'money', 'payouts'),
+  S('fees', 'money', 'fees'),
+  S('shipping', 'money', 'fees'),
+  S('delivery-fees', 'money', 'preorders'),
+  S('run-economics', 'money', 'preorders'),
+  S('exchange-rates', 'money', 'inventory'),
+  S('plans', 'money', 'plans'),
+  S('tax-review', 'money', 'tax', { href: '/tax?tab=tax-review-settings', own: false })
 ];
 
-export const SETTINGS_GROUPS: { key: SettingsSection['group']; label: string }[] = [
-  { key: 'platform', label: 'Platform' },
-  { key: 'money', label: 'Money' }
+export const SETTINGS_GROUPS: readonly { key: SettingsGroup; labelKey: MessageKey }[] = [
+  { key: 'people', labelKey: 'st.sx.group.people' },
+  { key: 'platform', labelKey: 'st.sx.group.platform' },
+  { key: 'money', labelKey: 'st.sx.group.money' }
 ];
 
 /** Modules whose own sidebar entry moved into Settings (their old addresses redirect to the section). */
-export const SETTINGS_HOSTED: StaffModuleKey[] = ['markets', 'siteCfg', 'dev', 'identity', 'notifications', 'fees'];
+export const SETTINGS_HOSTED: StaffModuleKey[] = ['markets', 'siteCfg', 'dev', 'identity', 'notifications', 'fees', 'rbac'];
 
 export const isSettingsPath = (pathname: string): boolean => pathname === '/settings' || pathname.startsWith('/settings/');
 
-/** The sections this staff member's roles can open (the BFF returns only the modules they may open). */
-export function visibleSections(session: StaffSession): SettingsSection[] {
-  const open = new Set(session.navGroups.flatMap((g) => g.modules.map((m) => m.key)));
-  return SETTINGS_SECTIONS.filter((s) => open.has(s.module));
+export const sectionOf = (key: SettingsKey): SettingsSection => SETTINGS_SECTIONS.find((s) => s.key === key) ?? SETTINGS_SECTIONS[0]!;
+
+/** The section a pathname is in (null on the Settings home, outside Settings, or on a page such as the page editor). */
+export function settingsSectionOf(pathname: string): SettingsSection | null {
+  const m = /^\/settings\/([a-z-]+)\/?$/.exec(pathname);
+  return SETTINGS_SECTIONS.find((s) => s.own && s.key === m?.[1]) ?? null;
 }
 
-export const settingsHref = (section: string): string => `/settings?section=${encodeURIComponent(section)}`;
+/** Where a section's page is (the `section` of the old `/settings?section=` addresses may be an old key). */
+export const settingsHref = (section: string): string => {
+  const key = LEGACY[section] ?? section;
+  return SETTINGS_SECTIONS.find((s) => s.key === key)?.href ?? '/settings';
+};
+
+/** Keys of the old `?section=` addresses that are called something else now. */
+export const LEGACY: Record<string, SettingsKey> = { identity: 'security', signin: 'sign-in' };
+
+const RANK: Record<AccessLevel, number> = { VIEW: 1, EDIT: 2, APPROVE: 3, FULL: 4 };
+
+/** The staff member's level on the section's module (personal and informational sections: full). */
+export function levelOn(session: StaffSession, s: SettingsSection): AccessLevel | null {
+  if (s.module === null) return 'FULL';
+  for (const g of session.navGroups) {
+    const m = g.modules.find((x) => x.key === s.module);
+    if (m) return m.level;
+  }
+  return null;
+}
+
+const holds = (session: StaffSession, s: SettingsSection): boolean => !s.permission || session.permissions.includes(s.permission);
+
+/** Whether the staff member may open the section (View on its module, and the permission it names). */
+export const canOpenSection = (session: StaffSession, s: SettingsSection): boolean => levelOn(session, s) !== null && holds(session, s);
+
+/** Whether they may save in it (Edit on the module; the BFF checks the permission the change needs). */
+export function canEditSection(session: StaffSession, s: SettingsSection): boolean {
+  const lv = levelOn(session, s);
+  return lv !== null && RANK[lv] >= RANK.EDIT && holds(session, s);
+}
+
+/** The sections this staff member may open. */
+export const visibleSections = (session: StaffSession): SettingsSection[] => SETTINGS_SECTIONS.filter((s) => canOpenSection(session, s));
+
+export interface SettingsStatus {
+  key: MessageKey;
+  vars?: Vars;
+  tone: 'good' | 'warn' | 'neutral';
+}

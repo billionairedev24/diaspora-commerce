@@ -652,6 +652,7 @@ type BusinessPageSettingsClient interface {
 type SellerServiceClient interface {
 	ShipFromClient
 	BusinessPageSettingsClient
+	StorePageClient
 	SellerBillingClient
 	Org(ctx context.Context, bearer, orgID string) (SellerOrg, error)
 	Application(ctx context.Context, bearer string) (SellerApplication, error)

@@ -166,6 +166,7 @@ function fakeApi(over: Partial<SeoApi> = {}): SeoApi {
         { href: '/communities/igbo', count: 8 }
       ]
     })),
+    listStorefronts: vi.fn(async () => ({ items: [{ slug: 'laserfeet', publishedAt: '2026-11-01T10:00:00Z' }] })),
     getNavigation: vi.fn(async () => ({
       bar: [],
       all: [],
@@ -203,7 +204,9 @@ describe('sitemap source: live data through the gateway', () => {
     expect(locs('services')).toEqual([`${ORIGIN}/services/s1`, `${ORIGIN}/services/s2`, `${ORIGIN}/services/providers/o1`]);
     expect(locs('content')).toEqual(expect.arrayContaining([ORIGIN, `${ORIGIN}/membership`, `${ORIGIN}/help`, `${ORIGIN}/help/shipping`, `${ORIGIN}/legal/privacy`]));
     expect(set.kinds['content']![0]!.urls.find((u) => u.loc.endsWith('/help/shipping'))!.lastmod).toBe('2026-10-05T00:00:00.000Z');
-    expect(set.kinds['stores']).toBeUndefined();
+    // Storefronts: only the stores the gateway lists (published, approved, with something to buy), lastmod = publish time.
+    expect(set.kinds['stores']?.[0]?.urls.map((u) => u.loc)).toEqual([`${ORIGIN}/b/laserfeet`]);
+    expect(set.kinds['stores']?.[0]?.urls[0]?.lastmod).toBe('2026-11-01T10:00:00.000Z');
     // every URL of every child passes the sitemap-protocol checks and none is a cart/checkout/account/search/filter/tracking URL
     for (const chunks of Object.values(set.kinds)) for (const c of chunks ?? []) expect(validateUrlset(c.xml, { origin: ORIGIN })).toEqual([]);
   });

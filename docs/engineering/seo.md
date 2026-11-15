@@ -61,9 +61,13 @@ The OVH test Workers (`ovh-web.yml`) and the trial (`trial.yml`) write their own
 |---|---|
 | S407 | Search index and sitemap feed carry no update time: real `lastmod` for products, categories, services; a keyset-paged `GET /v1/seo/sitemap-entries` feed beyond the search engine's result window (the current reader partitions by department and community and caps at 3,000 per partition) |
 | S408 | Product detail lacks a parent id (variant canonical), item condition (new / used / refurbished), structured shipping and return terms, and slug history (product URLs are ATIN-only, so moved slugs do not exist today; 301s for renamed items need a history table if slugs are introduced) |
-| S409 | No store / seller listing endpoint: the `stores` sitemap is empty; seller business pages (`/b/<slug>`) are indexable (approved only) but not discoverable from the sitemap; no physical-store pages, so `LocalBusiness` is built and tested but not wired |
+| S409 | Seller storefronts are now in the `stores` sitemap (S490); providers' pages are not; no physical-store pages, so `LocalBusiness` is built and tested but not wired |
 | S410 | Localised URLs (`/fr/...`) and hreflang; Review items from stored reviews |
 
 ## 5. Observability
 
 Worker logs (one JSON line each): `sitemap.generated` (URL counts per kind), `sitemap.kind_failed`, `sitemap.count_drop`; the last two also go to Sentry as warnings. `tools/ci/seo_probe.py` (workflow `seo-probe`, daily) probes the deployed hosts and fails when a non-prod host is indexable, a back office lacks noindex, prod robots / sitemap / a sampled URL is invalid, or the URL count falls below `SEO_MIN_SITEMAP_URLS`.
+
+## 6. Seller storefronts (`/b/<slug>`)
+
+[seller-storefront.md](seller-storefront.md). Indexable only when **prod + canonical host + the store is approved, published and has at least one sellable product**; filtered or sorted views are noindex with the plain page as canonical. Unpublished, unapproved, suspended or unknown stores are a real 404 (noindex), never a soft 404. `/b/<Slug>`, a trailing slash and the old aliases (`/store/x`, `/stores/x`, `/seller/x`, `/sellers/x`, `/shop/x`, `/business/x`) 301 to `/b/<lowercase>`. JSON-LD is `Store` (facts the seller published; `aggregateRating` only with real reviews). The `stores` sitemap kind is read from `GET /v1/storefronts` (published stores with sellable products only; `lastmod` = publish time); a failing source keeps the previous version like every other kind.

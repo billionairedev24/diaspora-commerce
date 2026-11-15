@@ -58,6 +58,8 @@ tags:
     description: Server-driven tables, detail sheets, create / edit forms and RBAC-gated actions
   - name: Identity & access
     description: 'Developer tools for the identity service (identity:admin): the token inspector and the published OIDC documents. Its tables (oauth-clients, identity-sessions, signing-keys, auth-settings, session-policy) are Resources. The identity-sessions table has a Device column (the User-Agent identity records at sign-in, parsed to a label such as `Chrome on macOS`; empty when none was recorded) and its sheet also shows the raw user agent. Step-up: the forms of the most dangerous actions (rotate the signing key, sign a user or a client out, disable a client, change the settings) end with a `stepUpPassword` field (type password, not required). The BFF checks it at identity (`POST /v1/admin/identity/step-up`) and relays the proof as `X-Step-Up`; a blank value is accepted when the person signed in within five minutes, otherwise the action answers 422 on `stepUpPassword`. A wrong password counts towards the account lockout. The password is never stored, cached or logged.'
+  - name: Access
+    description: 'Settings > Roles and permissions (access:read to look, access:admin to change). The permission catalogue, the roles of each portal with their permissions, who holds a role, a person''s direct grants and effective permissions, and the access change log. Identity owns the data and checks access:read / access:admin on every call with the staff member''s own token; the BFF also needs View (reads) or Edit (changes) on the Users & roles module and a reason of 3 to 300 characters on every change. A change reaches a person''s sign-in on their next access token (within about 5 minutes).'
   - name: Exports
     description: Server-side CSV / XLSX exports with signed, expiring download links
   - name: Support
@@ -2224,6 +2226,180 @@ paths:
         '200': {description: The documents, content: {application/json: {schema: {$ref: '#/components/schemas/IdentityDocuments'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── Settings > Roles and permissions
+  /v1/staff/access/permissions:
+    get:
+      tags: [Access]
+      operationId: listAccessPermissions
+      security: [{sessionCookie: []}]
+      summary: The permission catalogue
+      description: identity `GET /v1/admin/permissions` (access:read). Read from identity on every call, so a permission added by an identity migration appears here with no change in the console.
+      responses:
+        '200': {description: Every permission with its module and a plain description, content: {application/json: {schema: {$ref: '#/components/schemas/AccessPermissionList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/roles:
+    get:
+      tags: [Access]
+      operationId: listAccessRoles
+      security: [{sessionCookie: []}]
+      summary: The roles of one portal with their permissions
+      description: identity `GET /v1/admin/roles?portal=` (access:read). `canAdmin` is whether this staff member may change roles (access:admin and Edit on Users & roles).
+      parameters:
+        - {name: portal, in: query, schema: {type: string, enum: [platform, seller, provider, account], default: platform}}
+      responses:
+        '200': {description: The roles, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRoleList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/roles/{role}/members:
+    get:
+      tags: [Access]
+      operationId: listAccessRoleMembers
+      security: [{sessionCookie: []}]
+      summary: The people who hold a role, by name
+      description: identity `GET /v1/admin/users`, read page by page (at most 1,000 people) and filtered by role, because identity has no query for it; `partial` is true when the directory was longer than what was read.
+      parameters:
+        - {name: role, in: path, required: true, schema: {type: string, pattern: '^[a-z]+\.[a-z0-9_]+$'}}
+      responses:
+        '200': {description: The holders, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRoleMembers'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/roles/{role}/permissions/{permission}:
+    put:
+      tags: [Access]
+      operationId: addAccessRolePermission
+      security: [{sessionCookie: []}]
+      summary: Add a permission to a role
+      description: identity `PUT /v1/admin/roles/{role}/permissions/{permission}?reason=` (access:admin). Holders get it on their next access token.
+      parameters:
+        - {name: role, in: path, required: true, schema: {type: string, pattern: '^[a-z]+\.[a-z0-9_]+$'}}
+        - {name: permission, in: path, required: true, schema: {type: string, maxLength: 80}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessChangeRequest'}}}}
+      responses:
+        '200': {description: The role as it is now, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRole'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Access]
+      operationId: removeAccessRolePermission
+      security: [{sessionCookie: []}]
+      summary: Remove a permission from a role
+      description: identity `DELETE /v1/admin/roles/{role}/permissions/{permission}?reason=` (access:admin). Holders lose it on their next access token. Super Admin keeps access:admin and access:read (409 ACCESS_LOCKOUT).
+      parameters:
+        - {name: role, in: path, required: true, schema: {type: string, pattern: '^[a-z]+\.[a-z0-9_]+$'}}
+        - {name: permission, in: path, required: true, schema: {type: string, maxLength: 80}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessChangeRequest'}}}}
+      responses:
+        '200': {description: The role as it is now, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRole'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/people:
+    get:
+      tags: [Access]
+      operationId: searchAccessPeople
+      security: [{sessionCookie: []}]
+      summary: Find people by name or email, with their access
+      description: identity `GET /v1/admin/users` (access:read).
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: A page of people, content: {application/json: {schema: {$ref: '#/components/schemas/AccessPersonPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/people/{id}:
+    get:
+      tags: [Access]
+      operationId: getAccessPerson
+      security: [{sessionCookie: []}]
+      summary: One person's roles, direct grants and effective permissions
+      description: identity `GET /v1/admin/users/{id}` (access:read).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: The person, content: {application/json: {schema: {$ref: '#/components/schemas/AccessPerson'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/people/{id}/permissions/{permission}:
+    put:
+      tags: [Access]
+      operationId: grantAccessPersonPermission
+      security: [{sessionCookie: []}]
+      summary: Grant a person a permission directly
+      description: identity `PUT /v1/admin/users/{id}/permissions/{permission}?reason=` (access:admin). Takes effect on their next access token.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: permission, in: path, required: true, schema: {type: string, maxLength: 80}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessChangeRequest'}}}}
+      responses:
+        '200': {description: The person as they are now, content: {application/json: {schema: {$ref: '#/components/schemas/AccessPerson'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Access]
+      operationId: revokeAccessPersonPermission
+      security: [{sessionCookie: []}]
+      summary: Take a direct permission away from a person
+      description: identity `DELETE /v1/admin/users/{id}/permissions/{permission}?reason=` (access:admin). Permissions that come from a role stay until the role changes.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: permission, in: path, required: true, schema: {type: string, maxLength: 80}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessChangeRequest'}}}}
+      responses:
+        '200': {description: The person as they are now, content: {application/json: {schema: {$ref: '#/components/schemas/AccessPerson'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/log:
+    get:
+      tags: [Access]
+      operationId: listAccessLog
+      security: [{sessionCookie: []}]
+      summary: The access change log, newest first
+      description: identity `GET /v1/admin/access-log` (access:read, append-only). Identity filters by person; a role or permission filter is matched here over the newest 200 entries (`partial` when there were more). People are named, never shown as ids.
+      parameters:
+        - {name: userId, in: query, schema: {type: string, format: uuid}}
+        - {name: role, in: query, schema: {type: string, maxLength: 80}}
+        - {name: permission, in: query, schema: {type: string, maxLength: 80}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200': {description: A page of changes, content: {application/json: {schema: {$ref: '#/components/schemas/AccessLogPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── pre-orders (S270–S275)
@@ -7691,6 +7867,105 @@ components:
         issuerValid: {type: boolean}
         valid: {type: boolean, description: "Well formed, signature and issuer valid, and not expired"}
         problems: {type: array, items: {type: string}}
+    AccessPermission:
+      type: object
+      required: [key, module, description]
+      properties:
+        key: {type: string, description: 'For example `refunds:issue`'}
+        module: {type: string, description: 'The catalogue group the permission belongs to (orders, delivery, access, ...)'}
+        description: {type: string, description: 'What the permission lets someone do, in plain words'}
+    AccessPermissionList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AccessPermission'}}
+    AccessRole:
+      type: object
+      required: [key, portal, name, description, permissions, permissionCount]
+      properties:
+        key: {type: string, description: 'For example `platform.finance`'}
+        portal: {type: string}
+        name: {type: string}
+        description: {type: string}
+        permissions: {type: array, items: {type: string}}
+        permissionCount: {type: integer}
+    AccessRoleList:
+      type: object
+      required: [portal, items, canAdmin]
+      properties:
+        portal: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/AccessRole'}}
+        canAdmin: {type: boolean}
+    AccessRoleMember:
+      type: object
+      required: [id, name, email, enabled, markets]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        email: {type: string}
+        enabled: {type: boolean}
+        markets: {type: array, items: {type: string}, description: Market codes the role is limited to for this person (empty = everywhere)}
+    AccessRoleMembers:
+      type: object
+      required: [role, items, partial]
+      properties:
+        role: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/AccessRoleMember'}}
+        partial: {type: boolean}
+    AccessChangeRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 3, maxLength: 300, description: Kept in the access change log}
+    AccessPersonRole:
+      type: object
+      required: [key, name]
+      properties:
+        key: {type: string}
+        name: {type: string}
+    AccessPerson:
+      type: object
+      required: [id, name, email, enabled, principalType, roles, directGrants, effectivePermissions]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        email: {type: string}
+        enabled: {type: boolean}
+        principalType: {type: string}
+        roles: {type: array, items: {$ref: '#/components/schemas/AccessPersonRole'}}
+        directGrants: {type: array, items: {type: string}, description: 'Permissions granted to the person directly, apart from any role'}
+        effectivePermissions: {type: array, items: {type: string}, description: Everything the person can do now (roles plus direct grants)}
+        roleMarkets: {type: object, additionalProperties: {type: array, items: {type: string}}}
+    AccessPersonPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AccessPerson'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    AccessLogEntry:
+      type: object
+      required: [id, at, actorName, action, actionLabel, targetName, role, subject, detail]
+      properties:
+        id: {type: string}
+        at: {type: string, format: date-time}
+        actorName: {type: string, description: Who made the change}
+        action: {type: string}
+        actionLabel: {type: string}
+        targetName: {type: string, description: The person it was done to (empty when it was done to a role)}
+        role: {type: string}
+        roleName: {type: string}
+        subject: {type: string, description: What was granted or removed (a permission or role key)}
+        detail: {type: string}
+    AccessLogPage:
+      type: object
+      required: [items, page, size, partial]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AccessLogEntry'}}
+        page: {type: integer}
+        size: {type: integer}
+        partial: {type: boolean}
     IdentityDocuments:
       type: object
       required: [discovery, jwks]

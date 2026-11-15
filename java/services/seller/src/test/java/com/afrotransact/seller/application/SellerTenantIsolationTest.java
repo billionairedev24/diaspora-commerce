@@ -33,6 +33,7 @@ import com.afrotransact.seller.port.OrgSuspensionRepository;
 import com.afrotransact.seller.port.OrganisationRepository;
 import com.afrotransact.seller.port.PlanRepository;
 import com.afrotransact.seller.port.ShipFromAddressRepository;
+import com.afrotransact.seller.port.StorePageRepository;
 import com.afrotransact.seller.port.StorageUsageSource;
 import com.afrotransact.seller.port.SubscriptionRepository;
 import com.afrotransact.seller.port.UsageRepository;
@@ -60,6 +61,7 @@ class SellerTenantIsolationTest {
     private OrgService orgService;
     private ShipFromAddressService shipFrom;
     private BusinessBrandingService branding;
+    private StorePageService storePage;
     private EntitlementsService entitlements;
     private PlanService plans;
     private ComplianceService compliance;
@@ -77,6 +79,7 @@ class SellerTenantIsolationTest {
         shipFrom = new ShipFromAddressServiceImpl(addresses, orgs, guard, mock(Geocoder.class),
                 mock(DeliveryZones.class), mock(DomainEventPublisher.class), settings, clock);
         branding = new BusinessBrandingServiceImpl(apps, mock(BusinessPageRepository.class), orgs, guard, clock);
+        storePage = new StorePageServiceImpl(mock(StorePageRepository.class), orgs, guard, clock);
         entitlements = new EntitlementsServiceImpl(subs, mock(PlanRepository.class), guard, settings);
         plans = new PlanServiceImpl(mock(PlanRepository.class), subs, orgs, mock(TrialService.class), guard, clock);
         compliance = new ComplianceServiceImpl(accounts, orgs, mock(ComplianceSync.class), guard,
@@ -107,6 +110,11 @@ class SellerTenantIsolationTest {
         CrossTenant.assertDenied(() -> shipFrom.location(addressOfB));
         CrossTenant.assertDenied(() -> branding.get(b));
         CrossTenant.assertDenied(() -> branding.update(b, null));
+        CrossTenant.assertDenied(() -> storePage.get(b));
+        CrossTenant.assertDenied(() -> storePage.saveDraft(b, "{}", 0));
+        CrossTenant.assertDenied(() -> storePage.publish(b, 1));
+        CrossTenant.assertDenied(() -> storePage.unpublish(b));
+        CrossTenant.assertDenied(() -> storePage.audit(b));
         CrossTenant.assertDenied(() -> entitlements.forOrg(b));
         CrossTenant.assertDenied(() -> plans.listFor(b));
         CrossTenant.assertDenied(() -> compliance.accountHealth(b));
@@ -177,6 +185,7 @@ class SellerTenantIsolationTest {
                 "billing:read"));
         CrossTenant.assertDenied(() -> orgService.rename(TenantFixture.ORG_A, "Renamed"));
         CrossTenant.assertDenied(() -> branding.update(TenantFixture.ORG_A, null));
+        CrossTenant.assertDenied(() -> storePage.publish(TenantFixture.ORG_A, 1));
         // downgraded to a role without the required suffix
         when(orgs.findMember(TenantFixture.ORG_A, tokenOwner.subject())).thenReturn(Optional.of(new OrgMember(
                 TenantFixture.ORG_A, tokenOwner.subject(), "seller.support", NOW, NOW)));

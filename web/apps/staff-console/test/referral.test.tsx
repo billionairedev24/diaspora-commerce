@@ -82,7 +82,7 @@ describe('Referral program (S322)', () => {
   it('configures each side separately in two sections, and Save waits for a change and a reason', async () => {
     asRoles('platform.finance');
     const user = userEvent.setup();
-    nav.set('/settings?section=referrals&open=referral');
+    nav.set('/settings/referrals?open=referral');
     await renderScreen(<ResourceTable resource="referral-settings" urlPrefix="referral-settings" />);
     expect(await screen.findByText('What the program has cost so far')).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Edit' }));
@@ -113,6 +113,6 @@ describe('Referral program (S322)', () => {
   it('puts the settings under Money in Settings', async () => {
     const { SETTINGS_SECTIONS } = await import('@/lib/settings-sections');
     const section = SETTINGS_SECTIONS.find((s) => s.key === 'referrals');
-    expect(section).toMatchObject({ group: 'money', module: 'payouts', label: 'Referral program' });
+    expect(section).toMatchObject({ group: 'money', module: 'payouts' });
   });
 });

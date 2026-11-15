@@ -2024,32 +2024,46 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Data fix for stuck seller-shipped orders is idempotent
 - Playwright journey and screenshots at 1280 and 390
 - docs/engineering/delivery-fulfilment.md","E12","","Highest","8","delivery staff-console orders","delivery","To Do"
+"S489","Story","Staff Settings on the seller pattern; Roles and permissions screen","Staff Settings redesigned as a flat list of sections, each its own route and permission, one content column; Roles and permissions with the catalogue, switches, reasons, effective permissions and change log. See docs/engineering/staff-settings.md.","- Settings home is a flat list with live statuses and each section is its own route with a Settings back link
+- Roles and permissions lists roles by portal, permissions grouped by module from the catalogue, switches with confirmation and a required reason, role holders by name, effective permissions per person, direct grants, change log
+- New catalogue permissions appear with no console change
+- Read-only for staff without access:admin; Super Admin hidden nothing
+- Old routes redirect; tests, axe and 1280/390 alignment checks pass
+- Verified against a real identity service","E02","","High","8","staff-console rbac settings","identity","To Do"
+"S490","Story","Seller storefront at /b/<slug>: a branded mini-store driven by Settings > Store page","The seller's public page is their own store: its own header and footer (never the marketplace chrome), a hero, featured products, categories, All products with search/filters/sort, story, policies, pickup, contact, reviews (only real) and social links. A Settings > Store page editor (six looks, AA-safe accent, sections, featured picker, live preview, draft/publish/unpublish with audit) controls it. Unpublished or unapproved stores are a 404 page. Supersedes the 'no store builder' decision in business-pages.md for sellers.","- Own header (logo, name, store search, category tabs from live categories, cart and account links to the marketplace) and a minimal footer with a 'Sold on AfroTransact' link; no marketplace navbar or footer
+- Only sellable products (in stock, real photo, tax-resolved) appear; no 0 reviews, no invented claims, no carrier names
+- Settings > Store page: six looks, AA-enforced accent, sections on/off and order, featured picker, layout, uploads, live preview desktop/phone, draft vs published with audit, optimistic locking
+- Unpublished, unapproved, suspended or unknown stores answer a 404 page; 301 from old and mixed-case addresses
+- Sanitisation: plain text, https allowlist, own-media images, enforced in the BFF on write and on read
+- Indexable only in prod on the canonical host, Store JSON-LD, sitemap entry only with live products
+- Tests: theme contrast, section rendering, sellable-only rule, 404, axe, header/footer separation, editor flow, storefront journey; screenshots at 1280 and 390 for three presets
+- Verified against the real backend, Lighthouse and RTL (NOT yet: see docs/engineering/seller-storefront.md)","E16","","High","13","storefront seller-center seo","storefront","In Progress"
 "E37","Epic","Release 1 consolidation","Release 1 ships two deployables (afrotransact-core for Java, afrotransact-go for Go) with every service kept as a module. ADR 0011, docs/engineering/release-1-architecture.md. Branch release-1 only.","","","Release 1 consolidation","Highest","","release-1 platform","platform","To Do"
-"S489","Story","Release 1 Phase 0: ADR, architecture inventory and sync script","ADR 0011, docs/engineering/release-1-architecture.md (inventory of Java and Go services, call graph, collisions, grouping, risks, rollback, success criteria) and tools/release/sync-main.sh.","- ADR and architecture doc merged on release-1
+"S491","Story","Release 1 Phase 0: ADR, architecture inventory and sync script","ADR 0011, docs/engineering/release-1-architecture.md (inventory of Java and Go services, call graph, collisions, grouping, risks, rollback, success criteria) and tools/release/sync-main.sh.","- ADR and architecture doc merged on release-1
 - sync-main.sh --check runs and refuses a branch that does not track release-1
 - Success criteria S1-S8 are written before any build","E37","","High","3","release-1 docs","platform","Done"
-"S490","Story","Release 1 Phase 1: afrotransact-core spike with catalog and tax-returns","java/apps/core mounts catalog and tax-returns as modules: per-module DataSource, Flyway, outbox, scheduler; in-process adapters with an explicit caller principal; mode switch with the HTTP adapters kept; health groups, metrics tagging; ArchUnit boundary tests.","- Module enable flags work and a disabled module opens no connection
+"S492","Story","Release 1 Phase 1: afrotransact-core spike with catalog and tax-returns","java/apps/core mounts catalog and tax-returns as modules: per-module DataSource, Flyway, outbox, scheduler; in-process adapters with an explicit caller principal; mode switch with the HTTP adapters kept; health groups, metrics tagging; ArchUnit boundary tests.","- Module enable flags work and a disabled module opens no connection
 - catalog<->tax-returns calls run in-process with a SERVICE caller and return 403 without the scope
 - at.<module>.mode=http uses the existing adapter
 - Readiness lists each module and meters carry module and service tags
 - ArchUnit forbids cross-module access outside the api package
 - Old per-service apps still build and their tests pass","E37","","High","8","release-1 java","platform","To Do"
-"S491","Story","Release 1 Phase 2: measure core vs separate JVMs and decide the remaining Java batches","RSS, startup, image size, build and test time for catalog + tax-returns separate vs combined; GO/NO-GO for the other modules; Go plan.","- Table of measurements with what was simulated stated
+"S493","Story","Release 1 Phase 2: measure core vs separate JVMs and decide the remaining Java batches","RSS, startup, image size, build and test time for catalog + tax-returns separate vs combined; GO/NO-GO for the other modules; Go plan.","- Table of measurements with what was simulated stated
 - Recommendation and batches for the remaining Java modules
 - Go plan with exported entry points and shared pkg changes","E37","","High","3","release-1 java go","platform","To Do"
-"S492","Story","Release 1 batch 2: offers, inventory, content, seller in core","Move the four modules into afrotransact-core following the per-module checklist in the architecture doc.","- Each module passes its own tests and the in-process 403 tests
+"S494","Story","Release 1 batch 2: offers, inventory, content, seller in core","Move the four modules into afrotransact-core following the per-module checklist in the architecture doc.","- Each module passes its own tests and the in-process 403 tests
 - Route diff against contracts is empty
 - Old Deployments scaled to 0, not deleted","E37","","High","8","release-1 java","platform","To Do"
-"S493","Story","Release 1 batch 3: orders, payments, bookings, fulfilment, trust-ops in core","Money path modules into core; Temporal worker, Stripe client and the checkout saga verified in the monolith.","- Checkout SLO unchanged for one week
+"S495","Story","Release 1 batch 3: orders, payments, bookings, fulfilment, trust-ops in core","Money path modules into core; Temporal worker, Stripe client and the checkout saga verified in the monolith.","- Checkout SLO unchanged for one week
 - Payment webhook lag SLO unchanged
 - Outbox and consumer groups unchanged","E37","","High","13","release-1 java","platform","To Do"
-"S494","Story","Release 1 batch 4: ai-gateway and mcp-server detachable in core","Optional heavy modules behind a Maven profile and module flags, with their own pools and limits.","- Core boots with and without them
+"S496","Story","Release 1 batch 4: ai-gateway and mcp-server detachable in core","Optional heavy modules behind a Maven profile and module flags, with their own pools and limits.","- Core boots with and without them
 - Own thread pool and memory limits documented and tested","E37","","High","5","release-1 java","platform","To Do"
-"S495","Story","Release 1 batch 5: identity in core","Authorization Server moved last: own filter chains, JWKS, sessions.","- Token issue, refresh and JWKS rotation verified
+"S497","Story","Release 1 batch 5: identity in core","Authorization Server moved last: own filter chains, JWKS, sessions.","- Token issue, refresh and JWKS rotation verified
 - Every other module validates tokens against core's own issuer","E37","","High","8","release-1 java security","platform","To Do"
-"S496","Story","Release 1 Go: afrotransact-go single binary","Each Go service exports New(Deps); cmd/afrotransact-go wires them; gateway-bff stays the edge; per-module /healthz, /readyz, /metrics labels.","- cmd/<svc>/main.go still builds
+"S498","Story","Release 1 Go: afrotransact-go single binary","Each Go service exports New(Deps); cmd/afrotransact-go wires them; gateway-bff stays the edge; per-module /healthz, /readyz, /metrics labels.","- cmd/<svc>/main.go still builds
 - Duplicate route patterns fail at start naming both modules
 - Per-module metrics keep the old service label","E37","","High","13","release-1 go","platform","To Do"
-"S497","Story","Release 1 cutover: one image, one chart, one workflow, one Argo app per language","Helm chart, workflow and Argo Application for afrotransact-core and afrotransact-go; per-service deployables removed from release-1 only after two clean release cycles.","- Old per-service Applications scaled to 0 for one cycle before removal
+"S499","Story","Release 1 cutover: one image, one chart, one workflow, one Argo app per language","Helm chart, workflow and Argo Application for afrotransact-core and afrotransact-go; per-service deployables removed from release-1 only after two clean release cycles.","- Old per-service Applications scaled to 0 for one cycle before removal
 - CLAUDE.md deployability rule updated after owner approval
 - Rollback rehearsed","E37","","High","8","release-1 deploy","platform","To Do"

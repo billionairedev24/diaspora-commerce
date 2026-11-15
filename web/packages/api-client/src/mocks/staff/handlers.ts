@@ -50,6 +50,7 @@ import { exportFileOf, type MockExportColumn } from '../export-file';
 import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { parseSort, queryRows, type SortKey } from '../table';
+import { accessHandlers } from './access';
 import { contentPageHandlers } from './content-pages';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { departmentHandlers, pendingDepartmentRequests } from './departments';
@@ -1334,6 +1335,7 @@ export const staffHandlers = [
   ...runHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  ...accessHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...homeSettingsHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...departmentHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Published pages: the legal and help editors, drafts, publication and rollback */

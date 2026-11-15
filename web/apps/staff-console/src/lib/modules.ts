@@ -103,10 +103,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'delivery-quotes', label: 'Delivery quotes', statusFilter: true, defaultStatus: 'MY' },
     { resource: 'delivery-quote-settings', label: 'SLA, escalation and amounts' }
   ],
-  rbac: [
-    { resource: 'users', label: 'People' },
-    { resource: 'roles', label: 'Roles' }
-  ],
+  // People are Settings > Staff accounts; the roles table is replaced by Settings > Roles and permissions.
+  rbac: [{ resource: 'users', label: 'People' }],
   payouts: [
     { resource: 'payouts', label: 'Payout requests', statusFilter: true },
     { resource: 'reconciliation', label: 'Differences' },

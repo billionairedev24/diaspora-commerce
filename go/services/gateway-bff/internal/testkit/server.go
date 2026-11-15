@@ -209,6 +209,10 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: sellerCases, Shell: services.SellerShell, Dashboard: services.SellerDashboard,
 		Now: clock.Now})
 	services.Shopper = shopperServices(u, client, identity, store, services, estimator, clock, log)
+	storePolicy := domain.StorePolicy{MediaPrefixes: []string{"https://img.afrotransact.dev/"}}
+	storefronts := app.NewStorefrontService(upstreams.NewStorefronts(client("seller", base+ShopperPrefix)), services.Search, nil, storePolicy, clock.Now)
+	services.Shopper.Storefronts = storefronts
+	services.SellerStorePage = app.NewSellerStorePageService(sellerDeps, storefronts, storePolicy)
 	mux := http.NewServeMux()
 	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin, StaffConsoleOrigin}, CookieName: "at_session",
 		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000, ClientIPHeader: cfg.ClientIPHeader, ProxyToken: cfg.ProxyToken}, log).Register(mux)

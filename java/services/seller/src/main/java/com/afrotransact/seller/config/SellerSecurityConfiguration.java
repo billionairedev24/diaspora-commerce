@@ -49,6 +49,7 @@ class SellerSecurityConfiguration {
             a.requestMatchers(ManagementEndpoints.prometheusOnManagementPort(env)).permitAll();
             a.requestMatchers(HttpMethod.POST, PUBLIC_POSTS).permitAll();
             a.requestMatchers(HttpMethod.GET, "/v1/public/business-pages/*").permitAll();
+            a.requestMatchers(HttpMethod.GET, "/v1/public/storefronts", "/v1/public/storefronts/*").permitAll();
             if (publicGets.length > 0) {
                 a.requestMatchers(HttpMethod.GET, publicGets).permitAll();
             }

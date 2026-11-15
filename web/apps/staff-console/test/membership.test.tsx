@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ResourceTable } from '@/components/resources/ResourceTable';
-import { SettingsHub } from '@/components/settings/SettingsHub';
+import { SettingsSectionScreen } from '@/components/settings/SettingsSectionScreen';
 import { ConsoleShell } from '@/components/shell/ConsoleShell';
 import { CustomerPanel } from '@/components/support/CustomerPanel';
 
@@ -16,13 +16,13 @@ describe('membership tiers in Settings (S323)', () => {
   beforeEach(() => {
     resetStaffDb(new Date());
     asRoles(null);
-    nav.set('/settings?section=membership');
+    nav.set('/settings/membership');
   });
 
   it('is a Money section of Settings with the tiers and the billing rules', async () => {
     renderWithProviders(
       <ConsoleShell>
-        <SettingsHub />
+        <SettingsSectionScreen section="membership" />
       </ConsoleShell>
     );
     const tiers = await screen.findByRole('table', { name: 'Membership tiers' });
@@ -114,7 +114,7 @@ describe('membership tiers in Settings (S323)', () => {
   it('does not let an auditor change a tier', async () => {
     asRoles('platform.auditor');
     const user = userEvent.setup();
-    nav.set('/settings?section=membership');
+    nav.set('/settings/membership');
     await renderScreen(<ResourceTable resource="membership-tiers" />);
     await user.click((await screen.findAllByText('Plus'))[0]!);
     const sheet = await screen.findByRole('dialog', { name: 'Plus membership' });

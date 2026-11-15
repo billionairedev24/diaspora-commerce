@@ -23,3 +23,9 @@ h1, h2, h3 { text-wrap: balance; }
 
 /* An element marked hidden stays hidden even when a component class sets its display. */
 [hidden] { display: none; }
+
+/* A store that is not available (/b/{slug} unpublished, unapproved or unknown): one plain column on the white canvas. */
+.store-gone { max-width: 34rem; margin: 0 auto; padding: var(--at-space-16) var(--at-space-4); display: flex; flex-direction: column; gap: var(--at-space-3); }
+.store-gone h1 { margin: 0; font-family: var(--at-font-display); font-size: var(--at-text-3xl); }
+.store-gone p { margin: 0; color: var(--at-color-text-muted); }
+.store-gone-links { display: flex; flex-wrap: wrap; gap: var(--at-space-4); }

@@ -229,6 +229,7 @@ import {
   type UploadTicket,
   UploadTicketSchema,  type VariantTaxEvidence,
   VariantTaxEvidenceSchema} from './schemas/seller';
+import { type StoreConfig, type Storefront, StorefrontSchema,type StorePageAudit, StorePageAuditSchema, type StorePageProductList, StorePageProductListSchema, type StorePageSettings, StorePageSettingsSchema } from './schemas/storefront';
 import { createSellerMatchingApi } from './seller-matching';
 import { tableSearchParams } from './table-query';
 
@@ -380,6 +381,16 @@ export function createSellerApiClient(options: ApiClientOptions) {
     getBusinessPage: (signal?: AbortSignal): Promise<BusinessPageSettings> => request('/v1/seller/business-page', BusinessPageSettingsSchema, { signal }),
     updateBusinessPage: (input: BusinessPageSettingsInput): Promise<BusinessPageSettings> =>
       request('/v1/seller/business-page', BusinessPageSettingsSchema, { method: 'PUT', body: input }),
+    /* Store page: the branded storefront's draft, publish and preview */
+    getStorePage: (signal?: AbortSignal): Promise<StorePageSettings> => request('/v1/seller/store-page', StorePageSettingsSchema, { signal }),
+    saveStorePageDraft: (version: number, config: StoreConfig): Promise<StorePageSettings> =>
+      request('/v1/seller/store-page', StorePageSettingsSchema, { method: 'PUT', body: { version, config } }),
+    publishStorePage: (version: number): Promise<StorePageSettings> => request('/v1/seller/store-page/publish', StorePageSettingsSchema, { method: 'POST', body: { version } }),
+    unpublishStorePage: (): Promise<StorePageSettings> => request('/v1/seller/store-page/unpublish', StorePageSettingsSchema, { method: 'POST' }),
+    getStorePageAudit: (signal?: AbortSignal): Promise<StorePageAudit> => request('/v1/seller/store-page/audit', StorePageAuditSchema, { signal }),
+    previewStorePage: (signal?: AbortSignal): Promise<Storefront> => request('/v1/seller/store-page/preview', StorefrontSchema, { signal }),
+    searchStorePageProducts: (q: string, signal?: AbortSignal): Promise<StorePageProductList> =>
+      request('/v1/seller/store-page/featured-search', StorePageProductListSchema, { query: { q: q || undefined }, signal }),
     /* Delivery run pick lists (S264) */
     listRunPickups: async (signal?: AbortSignal, background?: boolean): Promise<SellerRunPickupList> =>
       request('/v1/seller/run-pickups', SellerRunPickupListSchema, { signal, background }),

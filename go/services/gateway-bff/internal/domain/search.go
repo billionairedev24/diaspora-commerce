@@ -26,13 +26,15 @@ type SearchQuery struct {
 	Fulfilment string
 	SellerKind string
 	// SellerID limits the page to one seller's products (a business's public page); not a URL filter.
-	SellerID  string
-	MinRating *float64
-	Price     string
-	MaxDays   *int
-	Sort      string
-	Page      int
-	Size      int
+	SellerID string
+	// EligibleOnly keeps live, in-stock products with a real photo (the storefront rule).
+	EligibleOnly bool
+	MinRating    *float64
+	Price        string
+	MaxDays      *int
+	Sort         string
+	Page         int
+	Size         int
 	// Ads blends sponsored products into the page (results pages; default on, ads=false opts out).
 	Ads bool
 }

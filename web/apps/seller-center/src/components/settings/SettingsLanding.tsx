@@ -37,6 +37,7 @@ function useStatuses(): Partial<Record<SettingsKey, SettingsStatus>> {
   const compliance = useQuery({ ...sellerQueries.compliance(api, orgId), enabled: level('account-health') !== null || level('payouts') !== null });
   const team = useQuery({ ...sellerQueries.team(api, orgId), enabled: level('team') !== null });
   const page = useQuery({ ...sellerQueries.businessPage(api, orgId), enabled: level('team') !== null });
+  const storePage = useQuery({ ...sellerQueries.storePage(api, orgId), enabled: level('team') !== null && !isProvider });
   const onboarding = useQuery({ ...sellerQueries.onboarding(api, orgId), enabled: level('payouts') !== null });
   const out: Partial<Record<SettingsKey, SettingsStatus>> = {
     notifications: { key: 'sc.settings.status.notifications', tone: 'neutral' },
@@ -53,6 +54,10 @@ function useStatuses(): Partial<Record<SettingsKey, SettingsStatus>> {
   }
   if (team.data) out.team = { key: 'sc.settings.status.team', vars: { count: team.data.members.filter((m) => m.status === 'ACTIVE').length }, tone: 'neutral' };
   if (page.data) out.business = page.data.description && page.data.logoUrl ? { key: 'sc.settings.status.businessDone', tone: 'good' } : { key: 'sc.settings.status.businessTodo', tone: 'warn' };
+  if (storePage.data) {
+    const sp = storePage.data;
+    out['store-page'] = sp.isPublished ? (sp.hasUnpublishedChanges ? { key: 'sc.settings.status.storeChanges', tone: 'warn' } : { key: 'sc.settings.status.storePublished', tone: 'good' }) : { key: 'sc.settings.status.storeDraft', tone: 'neutral' };
+  }
   const tax = onboarding.data?.form.details;
   if (tax) out.tax = tax.taxIdMasked ? { key: 'sc.settings.status.taxOnFile', vars: { type: tax.taxIdType ?? '', last: tax.taxIdMasked.slice(-4) }, tone: 'good' } : { key: 'sc.settings.status.taxMissing', tone: 'warn' };
   return out;

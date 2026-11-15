@@ -2205,5 +2205,10 @@
   "sc.proof.receivedBy": "Recibido por {name}",
   "sc.proof.byAfroTransact": "Entregado por AfroTransact, con una foto",
   "sc.proof.photoN": "Foto {n}",
-  "sc.proof.photoAltN": "Foto {n} tomada al entregar el pedido"
+  "sc.proof.photoAltN": "Foto {n} tomada al entregar el pedido",
+  "sc.settings.store-page.title": "Página de la tienda",
+  "sc.settings.store-page.description": "El aspecto de tu página pública: tema, portada, productos destacados y lo que leen los clientes.",
+  "sc.settings.status.storePublished": "Publicada",
+  "sc.settings.status.storeDraft": "Sin publicar",
+  "sc.settings.status.storeChanges": "Cambios sin publicar"
 }

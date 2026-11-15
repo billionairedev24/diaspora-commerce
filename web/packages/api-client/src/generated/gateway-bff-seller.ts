@@ -529,6 +529,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/store-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The storefront settings, draft and published (Settings > Store page)
+         * @description seller `GET /v1/orgs/{orgId}/store-page` for the active organisation (Team view). `canEdit` and `canPublish` are false for members who may only look.
+         */
+        get: operations["getStorePage"];
+        /**
+         * Save the draft (the live page does not change)
+         * @description Team edit (the seller service limits it to the owner and admins). The body is validated: 422 with `fieldErrors`
+         *     keyed by the config path (`hero.tagline`, `theme.accent`...); `STORE_ACCENT_LOW_CONTRAST` when an accent fails WCAG AA.
+         *     409 `CONFLICT` when `version` is stale: reload, merge, save again (optimistic locking).
+         */
+        put: operations["saveStorePageDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/store-page/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the draft (the page goes live at /b/{slug})
+         * @description Only an approved organisation can publish (422 `STORE_NOT_APPROVED`). 409 when `version` is not the latest draft. Writes an audit entry.
+         */
+        post: operations["publishStorePage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/store-page/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take the page down (/b/{slug} answers 404 until it is published again)
+         * @description The published version is kept in the audit trail. Writes an audit entry.
+         */
+        post: operations["unpublishStorePage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/store-page/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who saved, published and unpublished, newest first (last 50) */
+        get: operations["listStorePageAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/store-page/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The storefront built from the DRAFT, for the live preview
+         * @description Same shape as the public `GET /v1/storefronts/{slug}`, but from the draft and for the signed-in organisation only (works before publishing). Not cached.
+         */
+        get: operations["previewStorePage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/store-page/featured-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the organisation's sellable products to feature (by name)
+         * @description Only products that can be shown on the storefront (in stock, real photo, tax decided). Up to 20.
+         */
+        get: operations["searchStorePageProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/run-pickups": {
         parameters: {
             query?: never;
@@ -4015,6 +4138,184 @@ export interface components {
             brandColor?: string;
             /** @description https URL from POST /v1/seller/uploads (purpose storefront), or empty */
             logoUrl?: string;
+        };
+        /**
+         * @description How a seller's storefront (`/b/{slug}`) looks and which sections it has. Stored by the seller service as opaque
+         *     JSON (draft and published); gateway-bff validates and sanitises every field on the way in and again on the way out.
+         *     Plain text only (line breaks allowed, no HTML); image URLs must be AfroTransact media; links must be https on an allowed host.
+         */
+        StoreConfig: {
+            /** @enum {integer} */
+            schemaVersion: 1;
+            theme: {
+                /** @enum {string} */
+                preset: "clean" | "warm-market" | "bold" | "midnight" | "heritage" | "fresh";
+                /** @description Accent colour. Null uses the preset. Rejected (422 STORE_ACCENT_LOW_CONTRAST) when text on it, or it on the canvas, fails WCAG AA; the text colour on it is computed, never chosen. */
+                accent: string | null;
+            };
+            hero: {
+                /** @enum {string} */
+                style: "image" | "colour" | "split";
+                tagline: string;
+                bannerUrl: string | null;
+                /** @description Percent: where the banner stays in view when cropped */
+                focalX: number;
+                focalY: number;
+            };
+            announcement: {
+                text: string;
+                href: string | null;
+            };
+            grid: {
+                /** @enum {integer} */
+                columns: 3 | 4;
+            };
+            /** @description Order and visibility of the optional sections. The header, hero and All products are always present. */
+            sections: {
+                /** @enum {string} */
+                id: "announcement" | "featured" | "categories" | "about" | "policies" | "reviews";
+                enabled: boolean;
+            }[];
+            /** @description ATINs the seller picked; only the sellable ones are shown */
+            featured: string[];
+            categories: {
+                /** @enum {string} */
+                mode: "auto" | "chosen";
+                chosen: string[];
+            };
+            about: {
+                heading: string;
+                body: string;
+                photoUrl: string | null;
+            };
+            policies: {
+                shipping: string;
+                returns: string;
+            };
+            contact: {
+                showEmail: boolean;
+                phone: string;
+                hours: string;
+            };
+            pickup: {
+                /** @description Show that customers can collect orders, and the ZIP, when the seller has turned pickup on in Settings > Pickup */
+                show: boolean;
+            };
+            social: {
+                /** @enum {string} */
+                network: "instagram" | "facebook" | "tiktok" | "x" | "youtube" | "whatsapp" | "website";
+                url: string;
+            }[];
+        };
+        StorePageSettings: {
+            /** @description The address /b/{slug}; null until the page is first made */
+            slug: string | null;
+            name: string;
+            /** @description The logo from Business profile (one source) */
+            logoUrl: string | null;
+            contactEmail: string | null;
+            draft: components["schemas"]["StoreConfig"];
+            published: components["schemas"]["StoreConfig"] | null;
+            isPublished: boolean;
+            /**
+             * Format: int64
+             * @description Optimistic-lock version of the draft; send it back on save (409 when stale)
+             */
+            version: number;
+            /** Format: int64 */
+            publishedVersion: number | null;
+            hasUnpublishedChanges: boolean;
+            /** Format: date-time */
+            updatedAt: string | null;
+            /** Format: date-time */
+            publishedAt: string | null;
+            /** @description Only an approved organisation can publish; its draft can be edited before */
+            approved: boolean;
+            canEdit: boolean;
+            canPublish: boolean;
+        };
+        StorePageDraftInput: {
+            /** Format: int64 */
+            version: number;
+            config: components["schemas"]["StoreConfig"];
+        };
+        StorePageVersionInput: {
+            /** Format: int64 */
+            version: number;
+        };
+        StorePageAuditEntry: {
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            action: "DRAFT_SAVED" | "PUBLISHED" | "UNPUBLISHED";
+            /** @description The member's display name */
+            actor: string;
+            /** Format: int64 */
+            version: number;
+        };
+        StorePageAudit: {
+            items: components["schemas"]["StorePageAuditEntry"][];
+        };
+        StorefrontCategory: {
+            name: string;
+            count: number;
+        };
+        StorefrontProducts: {
+            hits: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            pageCount: number;
+            categories: components["schemas"]["StorefrontCategory"][];
+            prices: {
+                value: string;
+                label: string;
+                count: number;
+            }[];
+        };
+        /**
+         * @description A seller's public storefront: the published settings plus real data, in one response. Only sellable products
+         *     appear (in stock, a real photograph, a resolved tax decision). `reviews` is null when the products have no
+         *     reviews (never "0 reviews"). Carrier names and fulfilment details are never present.
+         */
+        Storefront: {
+            slug: string;
+            name: string;
+            logoUrl: string | null;
+            /** @description The business description (used when About has no text) */
+            description: string | null;
+            config: components["schemas"]["StoreConfig"];
+            /** @description True for the seller's draft preview */
+            preview: boolean;
+            /** @description Approved, published and at least one live product; the storefront adds the environment rules */
+            indexable: boolean;
+            /** @description True only for an approved organisation */
+            verified: boolean;
+            /** @description Year the organisation joined AfroTransact */
+            sellingSinceYear: number | null;
+            /** @description Only when the seller chose to show it */
+            contactEmail: string | null;
+            /** @description Only when the seller shows it AND pickup is on in Settings > Pickup */
+            pickup: {
+                zip: string;
+            } | null;
+            categories: components["schemas"]["StorefrontCategory"][];
+            featured: {
+                [key: string]: unknown;
+            }[];
+            reviews: {
+                average: number;
+                count: number;
+            } | null;
+            products: components["schemas"]["StorefrontProducts"];
+        };
+        StorePageProductList: {
+            items: {
+                [key: string]: unknown;
+            }[];
         };
         ShipFromAddress: {
             id: string;
@@ -8059,6 +8360,182 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStorePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Store page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorePageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveStorePageDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorePageDraftInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorePageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    publishStorePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorePageVersionInput"];
+            };
+        };
+        responses: {
+            /** @description Published */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorePageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    unpublishStorePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unpublished */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorePageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStorePageAudit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorePageAudit"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStorePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Storefront */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Storefront"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStorePageProducts: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorePageProductList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

@@ -94,6 +94,24 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	if sp := r.json(t); sp["indexable"] != false || len(sp["products"].([]any)) == 0 {
 		t.Fatalf("seller business page = %v", sp)
 	}
+	// A seller's branded storefront: published settings plus sellable products; unpublished or unknown is 404.
+	r = b.do("GET", "/v1/storefronts/ades-kitchen", nil)
+	mustStatus(t, r, 200)
+	if sf := r.json(t); sf["name"] != "Ade's Kitchen" || sf["verified"] != true || sf["sellingSinceYear"] != float64(2025) || sf["preview"] != false ||
+		sf["config"].(map[string]any)["theme"].(map[string]any)["preset"] != "warm-market" || sf["contactEmail"] != "ade@example.com" || sf["pickup"] != nil {
+		t.Fatalf("storefront = %v", sf)
+	}
+	if cc := r.header.Get("Cache-Control"); !strings.Contains(cc, "public") {
+		t.Fatalf("storefront must be cacheable, got %q", cc)
+	}
+	mustStatus(t, b.do("GET", "/v1/storefronts/ades-kitchen/products?sort=price_asc&price=u10&page=1", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/storefronts/ades-kitchen/products?price=bogus", nil), 400)
+	if l := b.do("GET", "/v1/storefronts", nil); l.status != 200 || len(l.json(t)["items"].([]any)) != 1 {
+		t.Fatalf("storefront list = %d %s", l.status, l.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/storefronts/nobody", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/storefronts/nobody/products", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/storefronts/Not%20A%20Slug", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/business-pages/nobody", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/business-pages/Not%20A%20Slug", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/account/security", nil), 401)
