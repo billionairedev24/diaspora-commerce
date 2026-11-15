@@ -38,8 +38,9 @@ public class ModuleUpstream {
         } catch (ModuleApiException e) {
             throw new UpstreamFailure(service, e.status(), e.code(), e.getMessage(), e.retryable(), e);
         } catch (RuntimeException e) {
-            LOG.warn("In-process call to {} failed: {}", service, e.toString());
-            throw new UpstreamFailure(service, 0, service + ".unavailable", service + " failed: " + e.getMessage(), true, e);
+            // The detail stays in the log: over HTTP a callee crash arrives as a bare 5xx, and this message is shown on.
+            LOG.warn("In-process call to {} failed", service, e);
+            throw new UpstreamFailure(service, 0, service + ".unavailable", service + " did not answer", true, e);
         }
     }
 

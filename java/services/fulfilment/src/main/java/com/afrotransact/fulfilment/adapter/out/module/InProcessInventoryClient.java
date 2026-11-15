@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.afrotransact.fulfilment.port.InventoryClient;
+import com.afrotransact.fulfilment.port.UpstreamFailure;
 import com.afrotransact.inventory.api.ReservationApi;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleMode;
@@ -34,7 +35,15 @@ class InProcessInventoryClient implements InventoryClient {
 
     @Override
     public Optional<List<ReservedLine>> reservation(String orderId) {
-        return upstream.call(SERVICE, () -> api.getObject().find(orderId)).map(r -> r.lines().stream()
-                .map(l -> new ReservedLine(l.sku(), l.nodeId(), l.qty(), l.lotIds())).toList());
+        try {
+            return upstream.call(SERVICE, () -> api.getObject().find(orderId)).map(r -> r.lines().stream()
+                    .map(l -> new ReservedLine(l.sku(), l.nodeId(), l.qty(), l.lotIds())).toList());
+        } catch (UpstreamFailure f) {
+            // The HTTP client reads a 404 as "no reservation"; so does this one when the callee says so.
+            if (f.status() == 404) {
+                return Optional.empty();
+            }
+            throw f;
+        }
     }
 }

@@ -7,6 +7,8 @@ import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleApiException;
 import com.afrotransact.trustops.port.UpstreamException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,8 @@ import org.springframework.stereotype.Component;
 public class ModuleUpstream {
 
     static final String MODULE = "trust-ops";
+
+    private static final Logger LOG = LoggerFactory.getLogger(ModuleUpstream.class);
 
     private final ObjectProvider<CallerPrincipals> callers;
 
@@ -33,7 +37,9 @@ public class ModuleUpstream {
         } catch (ModuleApiException e) {
             throw new UpstreamException(service, e.status(), e.code(), service + ": " + e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new UpstreamException(service, 0, null, service + " unavailable: " + e.getMessage(), e);
+            // The detail goes to the log, not to the caller: over HTTP a callee crash arrives as a bare 5xx.
+            LOG.warn("In-process call to {} failed", service, e);
+            throw new UpstreamException(service, 0, null, service + " unavailable", e);
         }
     }
 

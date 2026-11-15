@@ -7,6 +7,8 @@ import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
 import com.afrotransact.module.ModuleApiException;
 import com.afrotransact.taxreturns.port.UpstreamException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -16,6 +18,8 @@ import org.springframework.beans.factory.ObjectProvider;
  * all is one with status 0.
  */
 final class ModuleUpstreams<A> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ModuleUpstreams.class);
 
     private final InProcessLink<A> link;
     private final String name;
@@ -36,7 +40,9 @@ final class ModuleUpstreams<A> {
         } catch (UpstreamException e) {
             throw e;
         } catch (RuntimeException e) {
-            throw new UpstreamException(name, 0, null, name + " unavailable: " + e.getMessage(), e);
+            // The detail goes to the log, not to the caller: over HTTP a callee crash arrives as a bare 5xx.
+            LOG.warn("In-process call to {} failed", name, e);
+            throw new UpstreamException(name, 0, null, name + " unavailable", e);
         }
     }
 }
