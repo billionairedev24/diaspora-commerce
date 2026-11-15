@@ -2090,7 +2090,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S608","Story","Release 1 cutover: one image, one chart, one workflow, one Argo app per language","Helm chart, workflow and Argo Application for afrotransact-core and afrotransact-go; per-service deployables removed from release-1 only after two clean release cycles.","- Old per-service Applications scaled to 0 for one cycle before removal
 - CLAUDE.md deployability rule updated after owner approval
 - Rollback rehearsed","E37","","High","8","release-1 deploy","platform","To Do"
-"- Tests pass""","E02","","Medium","3","staff-console ai","identity","Done","","","",""
+- Tests pass","E02","","Medium","3","staff-console ai","identity","Done"
 "S495","Story","Provider storefront at /b/<slug>, On sale filter, real seller rating aggregate, media host from MEDIA_PUBLIC_URL","Providers get the same branded mini-store builder as sellers (shared StorefrontView, themes, publish, preview, history) plus bookable sections: services with durations and prices, a booker over real availability, weekly schedule and service area, team, reviews only when real. Sellers get an On sale filter (real was-prices only), the in-stock line is removed, the rating is a catalog-computed aggregate, and storefront image prefixes default to MEDIA_PUBLIC_URL.","- Provider page published and edited in Seller Center Settings > Store page with provider sections only
 - Booker uses the existing booking flow and real availability; no virtual services
 - Schedule shows only real hours, empty hours show nothing; reviews only when count >= 1 from backend aggregates
