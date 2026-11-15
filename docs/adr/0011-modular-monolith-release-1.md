@@ -95,7 +95,7 @@ on an advice, `resources` entries in the service pom), release-1-only code lives
 `java/libs/module-*`, `java/libs/module-api/*`, `go/apps`), and migrations are never moved in the source tree. Conflict rules are in the
 script header and in the architecture doc.
 
-## Proposed CLAUDE.md change (NOT applied; needs the owner's approval)
+## CLAUDE.md change (approved by the owner 2026-11-15; applied on release-1 only)
 
 Replace in "Deployability":
 
