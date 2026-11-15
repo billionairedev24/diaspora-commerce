@@ -94,7 +94,7 @@ jobs:
           # Build the linter with the job's Go 1.27.4 so it understands the modules' go directive.
           install-mode: goinstall
           install-only: true
-      - name: Release 1 databases (afrotransact_go; schema + role per module)
+      - name: Release 1 databases (go; schema + role per module)
         run: |
           command -v psql >/dev/null || sudo apt-get install -y --no-install-recommends postgresql-client >/dev/null
           tools/ci/core_ci_db.sh

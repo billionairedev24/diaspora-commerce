@@ -133,8 +133,8 @@ helm-lint: ## Helm: dependency build + lint + template every chart for every env
 launch-set-check: ## Argo CD: list the Applications each env produces (release-1: the two deployables, their modules, the per-service Applications scaled to 0); fail if uat/prod differ from the 21-service launch set or release-1.yaml and cutover.services disagree
 	python3 infra/argocd/scripts/check_launch_set.py
 
-db-release-1: ## Local: create afrotransact_core / afrotransact_go with one schema + role per module on the running compose Postgres (idempotent; a fresh volume does it by itself), then verify
-	$(COMPOSE) exec -T -e PASSWORD_MODE=name -e ROLE_SUFFIX= -e CONN_LIMITS=false -e PGUSER=postgres -e PGPASSWORD=postgres postgres bash /release-1/release-1-bootstrap.sh
+db-release-1: ## Local: create core / go with one schema + role per module on the running compose Postgres (idempotent; a fresh volume does it by itself), then verify
+	$(COMPOSE) exec -T -e PASSWORD_MODE=name -e ROLE_SUFFIX= -e CONN_LIMITS=false -e EXTRA_CORE_MODULES=retail:3,delivery_runs:3 -e PGUSER=postgres -e PGPASSWORD=postgres postgres bash /release-1/release-1-bootstrap.sh
 
 release-1-check: ## Release 1 delivery files, offline: workflows generated, launch set vs cutover, pools vs SQL, route-diff tests, shellcheck, action pins
 	python3 tools/ci/gen_workflows.py --check

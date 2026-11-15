@@ -12,7 +12,8 @@
 #                                      directory up OFFLINE, separately from the database dumps (docs/runbooks/ovh-production.md section 6).
 #   PASSWORD_MODE=name                 password = the schema name: LOCAL AND CI ONLY (infra/local, the CI Postgres service).
 # Other variables: ROLE_SUFFIX (default _app; local and CI use "" or what their init uses), EXTENSIONS (default postgis,btree_gist),
-#   CONN_LIMITS=false for no per-role CONNECTION LIMIT (local), VERIFY=false to skip the verification, plus the usual libpq variables (PGSSLROOTCERT, PGPORT ...).
+#   CONN_LIMITS=false for no per-role CONNECTION LIMIT (local), EXTRA_CORE_MODULES=retail:3,delivery_runs:3 for modules outside the launch set,
+#   VERIFY=false to skip the verification, plus the usual libpq variables (PGSSLROOTCERT, PGPORT ...).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,6 +23,7 @@ suffix="${ROLE_SUFFIX-_app}"
 vars=(-v "role_suffix=$suffix")
 [[ -z "${EXTENSIONS:-}" ]] || vars+=(-v "extensions=$EXTENSIONS")
 [[ -z "${CONN_LIMITS:-}" ]] || vars+=(-v "conn_limits=$CONN_LIMITS")
+[[ -z "${EXTRA_CORE_MODULES:-}" ]] || vars+=(-v "extra_core_modules=$EXTRA_CORE_MODULES")
 
 die() { echo "release-1-bootstrap: $*" >&2; exit 1; }
 command -v psql >/dev/null || die "psql is required"
@@ -34,6 +36,7 @@ fi
 # The module lists live in ONE place, the SQL file.
 list() { sed -n "s/^\\\\set $1 '\\(.*\\)'\$/\\1/p" "$sql" | head -1 | tr ',' '\n' | cut -d: -f1; }
 modules="$(list core_modules; list go_modules)"
+if [[ -n "${EXTRA_CORE_MODULES:-}" ]]; then modules+=$'\n'"$(tr ',' '\n' <<<"$EXTRA_CORE_MODULES" | cut -d: -f1)"; fi
 [[ -n "$modules" ]] || die "cannot read the module lists from $sql"
 
 echo "==> roles, databases, schemas (release-1-bootstrap.sql)"

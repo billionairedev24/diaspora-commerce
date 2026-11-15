@@ -2,21 +2,23 @@
 -- again whenever a module is added; it is idempotent and holds NO secret (roles are created without a password: release-1-bootstrap.sh
 -- sets them, so nothing sensitive is ever in a file or in git).
 --
---   afrotransact_core   ONE database for the Java deployable: one schema AND one login role per module (13 with a database; mcp-server has none)
---   afrotransact_go     ONE database for the Go deployable: cart, geo, media, notifications
+--   core   ONE database for the Java deployable: one schema AND one login role per module (13 with a database; mcp-server has none).
+--          Schema = the module name with '-' as '_' (tax_returns, trust_ops, ai_gateway), what module-core derives (at.modules.<m>.database.schema)
+--   go     ONE database for the Go deployable: cart, geo, media, notifications
 --   temporal, temporal_visibility   separate, owned by temporal_app (Temporal uses one credential for both)
 --
 -- Isolation is what separate databases gave: a module role owns its schema and nothing else (USAGE on no other module's schema, REVOKE
 -- from PUBLIC), has CONNECTION LIMIT 2 x its pool + 2 (the Helm budget, see below) and a role-level search_path "<schema>, public" so
 -- Flyway and the application create and read their objects in their own schema without a prefix. `public` only carries the extensions
 -- (postgis, btree_gist, created here as the admin because a managed server does not let the service roles) and is read-only for the
--- module roles. The same roles work for the old per-service build (it only needs its DB_URL to point at afrotransact_core with
--- currentSchema=<schema>), which is what makes the rollback in docs/runbooks/release-1-deploy.md possible.
+-- module roles. The same roles work for the old per-service build (it only needs its DB_URL to point at core with
+-- currentSchema=<schema> or just the role's search_path), which is what makes the rollback in docs/runbooks/release-1-deploy.md possible.
 --
 -- Run:   psql -v ON_ERROR_STOP=1 -h <host> -U <admin> -d postgres -f release-1-bootstrap.sql
 -- Variables (psql -v name=value), all optional:
 --   role_suffix   '_app' (default; Layerbase/prod). The local stack uses '' because its roles are named after the module.
 --   extensions    'postgis,btree_gist' (default). A server without PostGIS: -v extensions=btree_gist (fulfilment and geo then fail to migrate).
+--   extra_core_modules  more 'schema:pool' pairs appended to core_modules (the local stack adds retail and delivery_runs, not in the launch set).
 --   conn_limits   'true' (default) sets CONNECTION LIMIT 2 x pool + 2 per role; 'false' = unlimited (the local stack, where the old
 --                 per-service containers and core share one Postgres with pools of 10).
 -- To add a module: add `schema:pool` to core_modules or go_modules below, re-run, then run release-1-bootstrap.sh to set its password.
@@ -37,12 +39,18 @@
 \else
   \set conn_limits 'true'
 \endif
+\if :{?extra_core_modules}
+\else
+  \set extra_core_modules ''
+\endif
 
 -- schema:pool (the pool is the Hikari / pgx maximum of ONE pod; a rolling update runs two pods, hence the 2x in the role limit).
-\set core_db 'afrotransact_core'
-\set go_db 'afrotransact_go'
-\set core_modules 'identity:4,catalog:8,offers:3,inventory:3,orders:6,payments:5,seller:3,fulfilment:3,bookings:3,trustops:2,taxreturns:4,content:2,ai:2'
+\set core_db 'core'
+\set go_db 'go'
+\set core_modules 'identity:4,catalog:8,offers:3,inventory:3,orders:6,payments:5,seller:3,fulfilment:3,bookings:3,trust_ops:2,tax_returns:4,content:2,ai_gateway:2'
 \set go_modules 'cart:5,geo:5,media:5,notifications:5'
+-- Optional extras (psql -v extra_core_modules=retail:3,delivery_runs:3), appended to the list above.
+SELECT CASE WHEN :'extra_core_modules' = '' THEN :'core_modules' ELSE :'core_modules' || ',' || :'extra_core_modules' END AS core_modules \gset
 
 -- 1. Roles (no password: infrastructure code sets it) --------------------------------------------------------------------------
 CREATE TEMP TABLE r1_roles AS
@@ -123,4 +131,4 @@ SELECT format('ALTER SCHEMA public OWNER TO %I', 'temporal' || :'role_suffix') \
 \connect temporal_visibility
 SELECT format('ALTER SCHEMA public OWNER TO %I', 'temporal' || :'role_suffix') \gexec
 \connect postgres
-\echo release-1 bootstrap done: databases afrotransact_core, afrotransact_go, temporal, temporal_visibility
+\echo release-1 bootstrap done: databases core, go, temporal, temporal_visibility

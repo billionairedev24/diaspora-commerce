@@ -35,7 +35,8 @@ monitoring:
   serviceMonitor: true
   prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
 # Secret afrotransact-core-secrets (infra/ovh-vps/secrets.sh with DB_LAYOUT=schema; names only here):
-#   per enabled module <NAME>_DB_URL, <NAME>_DB_USER, <NAME>_DB_PASSWORD  (one database afrotransact_core, schema and role per module)
+#   CORE_DB_URL (the ONE database `core`, sslmode and CA in the URL) and per enabled module <NAME>_DB_USER and <NAME>_DB_PASSWORD (one schema
+#   and one role <schema>_app per module; a module may also set <NAME>_DB_URL to detach to its own database)
 #   KAFKA_BOOTSTRAP, FGA_API_TOKEN (not in prod), every module's <X>_CLIENT_SECRET, IDENTITY_DATA_KEY, SIGNING_KEY_PEM,
 #   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_WEBHOOK_SECRET, FIELD_ENCRYPTION_KEY, OPENROUTER_API_KEY, TEMPORAL_TARGET,
 #   REDIS_URL, NEWSLETTER_TOKEN_KEY, HANDOVER_CODE_KEY, PAY_LINK_KEY ... the union of the per-service Secrets' keys.
@@ -62,7 +63,7 @@ dbBudget:
 # Modules. enabled: this environment runs the module in core (default false; the env files and the cutover list turn them on).
 # mode: how the module calls the OTHER modules (in-process | http; http needs its upstream URL and client credentials as the standalone
 # service). pool / schedulerPool: per-module Hikari maximum and @Scheduled threads. schema: database schema and role stem
-# (role <schema>_app) in the ONE database afrotransact_core. envPrefix overrides the NAME of the environment variables.
+# (role <schema>_app) in the ONE database core. envPrefix overrides the NAME of the environment variables.
 modules:
   identity:      {enabled: false, schema: identity,    pool: 4, schedulerPool: 2, modeEnv: AT_IDENTITY_MODE,    mode: in-process}
   catalog:       {enabled: false, schema: catalog,     pool: 8, schedulerPool: 3, modeEnv: AT_CATALOG_MODE,     mode: in-process}
@@ -73,15 +74,15 @@ modules:
   seller:        {enabled: false, schema: seller,      pool: 3, schedulerPool: 2, modeEnv: AT_SELLER_MODE,      mode: in-process}
   fulfilment:    {enabled: false, schema: fulfilment,  pool: 3, schedulerPool: 2, modeEnv: AT_FULFILMENT_MODE,  mode: in-process}
   bookings:      {enabled: false, schema: bookings,    pool: 3, schedulerPool: 2, modeEnv: AT_BOOKINGS_MODE,    mode: in-process}
-  trust-ops:     {enabled: false, schema: trustops,    pool: 2, schedulerPool: 2, modeEnv: AT_TRUSTOPS_MODE,    mode: in-process}
-  tax-returns:   {enabled: false, schema: taxreturns,  pool: 4, schedulerPool: 2, modeEnv: AT_TAXRETURNS_MODE,  mode: in-process}
+  trust-ops:     {enabled: false, schema: trust_ops,    pool: 2, schedulerPool: 2, modeEnv: AT_TRUSTOPS_MODE,    mode: in-process}
+  tax-returns:   {enabled: false, schema: tax_returns,  pool: 4, schedulerPool: 2, modeEnv: AT_TAXRETURNS_MODE,  mode: in-process}
   content:       {enabled: false, schema: content,     pool: 2, schedulerPool: 2, modeEnv: AT_CONTENT_MODE,     mode: in-process}
-  ai-gateway:    {enabled: false, schema: ai,          pool: 2, schedulerPool: 1, modeEnv: AT_AI_MODE,          mode: in-process}
+  ai-gateway:    {enabled: false, schema: ai_gateway,         pool: 2, schedulerPool: 1, modeEnv: AT_AI_MODE,          mode: in-process}
   mcp-server:    {enabled: false,                                schedulerPool: 2, modeEnv: AT_MCP_MODE,         mode: in-process}   # no database
   # Not in the launch set (the module is built, switched off): enable when the business needs it, and add its schema to
   # infra/ops/postgres/release-1-bootstrap.sql first. no pool is set, so it adds nothing to the budget until then.
   retail:        {enabled: false, schema: retail,                schedulerPool: 1, modeEnv: AT_RETAIL_MODE,      mode: in-process}
-  delivery-runs: {enabled: false, schema: deliveryruns,          schedulerPool: 2, modeEnv: AT_DELIVERY_RUNS_MODE, mode: in-process}
+  delivery-runs: {enabled: false, schema: delivery_runs,          schedulerPool: 2, modeEnv: AT_DELIVERY_RUNS_MODE, mode: in-process}
 extraEnv:
   # One JVM for every module, so a bigger heap share than a single-service pod: 50 % of the 2 GiB limit = 1 GiB heap, the rest is
   # metaspace, a 128 MB code cache, thread stacks (virtual threads for requests), direct buffers and Kafka/TLS native memory,

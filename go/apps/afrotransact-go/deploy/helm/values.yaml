@@ -35,7 +35,8 @@ monitoring:
   serviceMonitor: true
   prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
 # Secret afrotransact-go-secrets (infra/ovh-vps/secrets.sh with DB_LAYOUT=schema; names only here):
-#   CART_DB_URL, GEO_DB_URL, MEDIA_DB_URL, NOTIFICATIONS_DB_URL (one database afrotransact_go, schema and role per module),
+#   CART_DB_URL, GEO_DB_URL, MEDIA_DB_URL, NOTIFICATIONS_DB_URL (one database `go`; each URL carries its module's role and password, the role's
+#   search_path puts the module's own schema first),
 #   REDIS_URL, KAFKA_BOOTSTRAP, MEILISEARCH_URL, MEILISEARCH_API_KEY, SEARCH_PROVIDER, OIDC_CLIENT_SECRET, SESSION_SIGNING_KEY,
 #   STRIPE_PUBLISHABLE_KEY, <X>_CLIENT_SECRET (cart, media, notifications, search, indexer), LINK_SIGNING_KEY, R2_* (media),
 #   RESEND_API_KEY, RESEND_WEBHOOK_SECRET, UNSUBSCRIBE_SIGNING_KEY, ADS_TOKEN_KEY, GOOGLE_*, SMARTY_* ...

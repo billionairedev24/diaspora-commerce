@@ -11,14 +11,19 @@
 \else
   \set extensions 'postgis,btree_gist'
 \endif
+\if :{?extra_core_modules}
+\else
+  \set extra_core_modules ''
+\endif
 \if :{?conn_limits}
 \else
   \set conn_limits 'true'
 \endif
-\set core_db 'afrotransact_core'
-\set go_db 'afrotransact_go'
-\set core_modules 'identity:4,catalog:8,offers:3,inventory:3,orders:6,payments:5,seller:3,fulfilment:3,bookings:3,trustops:2,taxreturns:4,content:2,ai:2'
+\set core_db 'core'
+\set go_db 'go'
+\set core_modules 'identity:4,catalog:8,offers:3,inventory:3,orders:6,payments:5,seller:3,fulfilment:3,bookings:3,trust_ops:2,tax_returns:4,content:2,ai_gateway:2'
 \set go_modules 'cart:5,geo:5,media:5,notifications:5'
+SELECT CASE WHEN :'extra_core_modules' = '' THEN :'core_modules' ELSE :'core_modules' || ',' || :'extra_core_modules' END AS core_modules \gset
 
 \connect :core_db
 \set cur_modules :core_modules
