@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Selling approvals: a listing that cannot go live answers 409 {@code catalog.selling-approval-required} with a plain message,
  * what is missing and the seller-center path where the seller applies; seller-service being down answers 503 (fail closed).
  */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.catalog")
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 class SellingErrorAdvice {
 

@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps return / tax rule violations, invalid transitions and upstream failures to RFC 9457 problems. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.taxreturns")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class TaxReturnsErrorAdvice {
 

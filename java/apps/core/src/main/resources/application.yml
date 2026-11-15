@@ -1,0 +1,157 @@
+# afrotransact-core (Release 1, ADR 0011): the process-wide settings of the Java deployable. A module's own settings (at.<module>.*)
+# come from its own application*.yml, copied into its jar under modules/<name>/ and loaded by module-core at the lowest
+# precedence; its process-wide settings (datasource, Kafka group, server, metrics, security chain) are ignored there and set here.
+spring:
+  application:
+    name: afrotransact-core
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  servlet:
+    multipart:
+      # The largest of the modules' limits (catalog bulk upload: 25 MB, checked per mode in its controller).
+      max-file-size: 25MB
+      max-request-size: 26MB
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      # NO group-id here on purpose: every @KafkaListener names its own group (${spring.kafka.consumer.group-id:<module>-service}),
+      # so each module keeps the consumer group it has today and committed offsets carry over. Setting this property would
+      # move every module into one group.
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      # Component names and statuses (no details): readiness lists every module, the module groups list its database.
+      show-components: always
+      group:
+        # Readiness shows every module's start state. The live database check is not in readiness: a database blip must not
+        # take the whole application out of rotation. It is in the module's own group.
+        readiness:
+          include: readinessState,catalogModule,taxreturnsModule
+        catalog:
+          include: catalogModule,catalogDatabase
+        tax-returns:
+          include: taxreturnsModule,taxreturnsDatabase
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      # NOT "service": module-core tags every meter with module and service (a module's short service name, or afrotransact-core
+      # for process-level meters).
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  consumers:
+    enabled: ${CONSUMERS_ENABLED:true}
+  api-docs:
+    title: AfroTransact Core API
+    description: Every Java module of Release 1; one tag group per module.
+    version: v1
+  security:
+    fga:
+      enabled: ${FGA_ENABLED:false}
+      enforce: ${FGA_ENFORCE:true}
+      api-url: ${FGA_API_URL:http://localhost:8091}
+      store-id: ${FGA_STORE_ID:}
+      store-name: ${FGA_STORE_NAME:afrotransact}
+      model-id: ${FGA_MODEL_ID:}
+      api-token: ${FGA_API_TOKEN:}
+      timeout: ${FGA_TIMEOUT:500ms}
+      cache-ttl: ${FGA_CACHE_TTL:5s}
+    # public-paths: the union of the modules' lists (module-core merges them).
+  events:
+    # module-core runs one outbox relay and one retention job per module (at.modules.<m>.events.*); the platform's single
+    # relay and retention job stay off. The retention settings (cron, ages) are still read from at.events.retention.*.
+    relay-enabled: false
+    retention:
+      enabled: false
+  modules:
+    core-service: afrotransact-core
+    core-scheduler-pool-size: 1
+    # Per module: enabled, its own database and pool, scheduler pool, and the authority it has when it calls another module
+    # in-process (the scopes identity grants its OAuth client; one place, reviewed like identity's client list).
+    catalog:
+      enabled: ${MODULE_CATALOG_ENABLED:true}
+      client-id: catalog-service
+      caller-scopes:
+        - media:import
+        - orders:purchase-check
+        - sellers:catalog-scope.read
+        - tax:classify
+        - offers:read
+        - offers:write
+      datasource:
+        url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/catalog}
+        username: ${CATALOG_DB_USER:catalog}
+        password: ${CATALOG_DB_PASSWORD}
+        maximum-pool-size: ${CATALOG_DB_POOL_SIZE:8}
+      scheduler:
+        pool-size: ${CATALOG_SCHEDULER_POOL_SIZE:3}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/catalog/db/migration
+    tax-returns:
+      enabled: ${MODULE_TAX_RETURNS_ENABLED:true}
+      client-id: tax-returns-service
+      caller-scopes:
+        - payments:service
+        - inventory:adjust
+        - shipping:label
+      datasource:
+        url: ${TAX_RETURNS_DB_URL:jdbc:postgresql://localhost:5432/taxreturns}
+        username: ${TAX_RETURNS_DB_USER:taxreturns}
+        password: ${TAX_RETURNS_DB_PASSWORD}
+        maximum-pool-size: ${TAX_RETURNS_DB_POOL_SIZE:6}
+      scheduler:
+        pool-size: ${TAX_RETURNS_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/tax-returns/db/migration
+  # How a module reaches the other modules (in-process | http). In core the default is in-process; http keeps the module able
+  # to run detached (needs its upstream URL and client credentials as in the standalone service).
+  catalog:
+    mode: ${AT_CATALOG_MODE:in-process}
+  taxreturns:
+    mode: ${AT_TAXRETURNS_MODE:in-process}

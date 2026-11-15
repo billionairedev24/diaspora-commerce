@@ -16,7 +16,7 @@ ARG SERVICE
 WORKDIR /src
 COPY . .
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q -pl services/${SERVICE} -am package -DskipTests \
-    && cp services/${SERVICE}/target/*-service-*.jar /app.jar \
+    && cp "$(ls services/${SERVICE}/target/*-service-*.jar | grep -v -- '-plain.jar' | head -1)" /app.jar \
     && java -Djarmode=tools -jar /app.jar extract --destination /x \
     && mv /x/*-service-*.jar /x/app.jar
 

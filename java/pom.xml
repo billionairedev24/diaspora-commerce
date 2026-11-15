@@ -17,6 +17,10 @@
         <module>libs/platform-events</module>
         <module>libs/platform-security</module>
         <module>libs/platform-test</module>
+        <module>libs/module-contract</module>
+        <module>libs/module-api/catalog-api</module>
+        <module>libs/module-api/tax-returns-api</module>
+        <module>libs/module-core</module>
         <module>services/ai-gateway</module>
         <module>services/bookings</module>
         <module>services/catalog</module>
@@ -33,5 +37,6 @@
         <module>services/seller</module>
         <module>services/tax-returns</module>
         <module>services/trust-ops</module>
+        <module>apps/core</module>
     </modules>
 </project>

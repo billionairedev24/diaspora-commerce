@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps domain rule violations to RFC 9457 problems with per-field errors for the product form and bulk upload. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.catalog")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class CatalogErrorAdvice {
 

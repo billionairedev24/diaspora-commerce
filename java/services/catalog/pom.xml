@@ -46,6 +46,19 @@
             <groupId>com.afrotransact</groupId>
             <artifactId>platform-events</artifactId>
         </dependency>
+        <!-- Release 1 (ADR 0011): the in-process caller principal and the published API of the module this one calls. -->
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>module-contract</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>tax-returns-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>catalog-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -125,6 +138,19 @@
             <resource>
                 <directory>src/main/resources</directory>
             </resource>
+            <!-- Release 1 (ADR 0011): a copy of the service's config and migrations under modules/catalog/, so that two modules in one
+                 JVM do not share one application.yml or one db/migration. The plain jar carries only these copies. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <targetPath>modules/catalog</targetPath>
+                <includes>
+                    <include>application*.yml</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources/db/migration</directory>
+                <targetPath>modules/catalog/db/migration</targetPath>
+            </resource>
             <!-- The category tax dataset is the single source of the tree and the tax questions (tools/taxonomy). -->
             <resource>
                 <directory>${project.basedir}/../../../tools/taxonomy</directory>
@@ -149,6 +175,29 @@
             </testResource>
         </testResources>
         <plugins>
+            <!-- Release 1 (ADR 0011): the classes without the process-wide files (application*.yml, logback, db/migration at the root),
+                 for afrotransact-core. The executable jar and the image are unchanged. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>plain-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>plain</classifier>
+                            <excludes>
+                                <exclude>application*.yml</exclude>
+                                <exclude>logback-spring.xml</exclude>
+                                <exclude>db/migration/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

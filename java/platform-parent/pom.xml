@@ -109,6 +109,26 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>module-contract</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>module-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>catalog-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>tax-returns-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>

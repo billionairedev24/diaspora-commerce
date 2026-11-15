@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.afrotransact</groupId>
+        <artifactId>platform-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../platform-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>afrotransact-core</artifactId>
+    <name>AfroTransact :: afrotransact-core</name>
+    <description>Release 1: every Java service as a module of one Spring Boot application (ADR 0011). Spike: catalog and tax-returns.</description>
+
+    <properties>
+        <wiremock.version>3.13.2</wiremock.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Same pin as catalog-service: poi and its commons-compress disagree on commons-io (dependency convergence). -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.22.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>module-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>platform-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>platform-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>platform-events</artifactId>
+        </dependency>
+
+        <!-- The modules. Their plain jars hold the classes and a copy of their config and migrations under modules/<name>/. -->
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>catalog-service</artifactId>
+            <version>${project.version}</version>
+            <classifier>plain</classifier>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>tax-returns-service</artifactId>
+            <version>${project.version}</version>
+            <classifier>plain</classifier>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>platform-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>afrotransact-core</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

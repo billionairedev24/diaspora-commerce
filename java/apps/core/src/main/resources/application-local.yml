@@ -1,0 +1,18 @@
+# Local developer profile for afrotransact-core: docker compose stack from infra/local, security off, readable logs.
+# The module-level local settings (taxonomy import, tax resolver ...) come from each module's own application-local.yml.
+at:
+  security:
+    enabled: false
+    fga:
+      enabled: ${FGA_ENABLED:false}
+  modules:
+    catalog:
+      datasource:
+        # F15: the local database passwords live in this profile, so a missing password in uat or prod fails the start.
+        password: ${CATALOG_DB_PASSWORD:catalog}
+    tax-returns:
+      datasource:
+        password: ${TAX_RETURNS_DB_PASSWORD:taxreturns}
+logging:
+  level:
+    com.afrotransact: DEBUG

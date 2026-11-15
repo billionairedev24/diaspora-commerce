@@ -12,6 +12,7 @@ import com.afrotransact.taxreturns.port.ProductFacts;
 import com.afrotransact.taxreturns.port.UpstreamException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -23,6 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Missing or failing answers are left out.
  */
 @Component
+@ConditionalOnProperty(prefix = "at.taxreturns", name = "mode", havingValue = "http", matchIfMissing = true)
 class HttpProductFacts implements ProductFacts {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpProductFacts.class);

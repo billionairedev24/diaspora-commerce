@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.afrotransact.catalog.adapter.out.module.InProcessTaxDecisionAuthority;
+import com.afrotransact.catalog.adapter.out.module.InProcessTaxResolver;
 import com.afrotransact.catalog.adapter.out.tax.DisabledTaxDecisionAuthority;
 import com.afrotransact.catalog.adapter.out.tax.HttpTaxDecisionAuthority;
 import com.afrotransact.catalog.adapter.out.tax.HttpTaxResolver;
@@ -38,7 +40,13 @@ import com.afrotransact.catalog.port.ServiceTokens;
 import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxResolver;
 import com.afrotransact.catalog.port.TaxonomySource;
+import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleCallException;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.taxreturns.api.TaxClassificationApi;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ListableBeanFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -50,14 +58,25 @@ import org.springframework.web.client.RestClient;
 @EnableConfigurationProperties(ProductDataProperties.class)
 class CatalogConfiguration {
 
-    /** tax-returns' resolve endpoint, or the local fake built from the dataset (`at.catalog.tax.resolver=local`). */
+    /**
+     * tax-returns' resolve endpoint (mode {@code http}), its published API inside this JVM (mode {@code in-process}, see
+     * {@code at.catalog.mode}), or the local fake built from the dataset (`at.catalog.tax.resolver=local`).
+     */
     @Bean
     TaxResolver taxResolver(RestClient.Builder builder, ServiceTokens tokens, TaxonomySource source,
+                            ListableBeanFactory beans, ObjectProvider<TaxClassificationApi> taxApi,
+                            ObjectProvider<CallerPrincipals> callers,
+                            @Value("${at.catalog.mode:http}") String moduleMode,
                             @Value("${at.catalog.tax.resolver:http}") String mode,
                             @Value("${at.catalog.tax.base-url:http://localhost:8111}") String baseUrl,
                             @Value("${at.catalog.tax.timeout:5s}") Duration timeout) {
-        return "local".equals(mode) ? new LocalDatasetTaxResolver(source)
-                : new HttpTaxResolver(builder, tokens, baseUrl, timeout);
+        if ("local".equals(mode)) {
+            return new LocalDatasetTaxResolver(source);
+        }
+        if (inProcess(moduleMode, beans)) {
+            return new InProcessTaxResolver(taxApi, callers);
+        }
+        return new HttpTaxResolver(builder, tokens, baseUrl, timeout);
     }
 
     /**
@@ -67,6 +86,9 @@ class CatalogConfiguration {
      */
     @Bean
     TaxDecisionAuthority taxDecisionAuthority(RestClient.Builder builder, ServiceTokens tokens,
+                                              ListableBeanFactory beans, ObjectProvider<TaxClassificationApi> taxApi,
+                                              ObjectProvider<CallerPrincipals> callers,
+                                              @Value("${at.catalog.mode:http}") String moduleMode,
                                               @Value("${at.catalog.tax.authority:tax-returns}") String mode,
                                               @Value("${at.catalog.tax.base-url:http://localhost:8111}") String baseUrl,
                                               @Value("${at.catalog.tax.authority-timeout:4s}") Duration timeout) {
@@ -75,7 +97,26 @@ class CatalogConfiguration {
                     + "checked against tax-returns' stored decisions. Never use this outside tests.");
             return new DisabledTaxDecisionAuthority();
         }
+        if (inProcess(moduleMode, beans)) {
+            return new InProcessTaxDecisionAuthority(taxApi, callers);
+        }
         return new HttpTaxDecisionAuthority(builder, tokens, baseUrl, timeout);
+    }
+
+    /**
+     * True for {@code at.catalog.mode=in-process}. Fails the start, naming both modules, when tax-returns is not part of this
+     * application: the alternative is a first request that fails at run time.
+     */
+    private static boolean inProcess(String moduleMode, ListableBeanFactory beans) {
+        if (ModuleMode.parse(moduleMode, ModuleMode.HTTP) != ModuleMode.IN_PROCESS) {
+            return false;
+        }
+        if (beans.getBeanNamesForType(TaxClassificationApi.class, true, false).length == 0) {
+            throw new ModuleCallException("Module 'catalog' is configured at.catalog.mode=in-process but module "
+                    + "'tax-returns' is not running in this JVM: enable it (at.modules.tax-returns.enabled=true) or set "
+                    + "at.catalog.mode=http");
+        }
+        return true;
     }
 
     @Bean
