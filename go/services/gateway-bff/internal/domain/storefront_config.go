@@ -50,7 +50,7 @@ var storeSectionIDs = []string{"announcement", "featured", "categories", "about"
 
 // Sections a provider can order and switch: its services, the appointment booker, the weekly schedule with the service area,
 // its team and reviews (the header and hero are always there). A provider has no product sections.
-var providerSectionIDs = []string{"announcement", "about", "services", "book", "schedule", "team", "reviews"}
+var providerSectionIDs = []string{"announcement", "services", "book", "schedule", "team", "about", "reviews"}
 
 // Organisation kinds a storefront belongs to (the same values as seller-service's OrgKind).
 const (

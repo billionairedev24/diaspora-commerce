@@ -646,7 +646,7 @@ func TestSellerContractConformance(t *testing.T) {
 	// A provider's page: the same builder, the provider's sections. Own organisation only (an orgId in the query is ignored), and its
 	// own draft: the seller's draft saved earlier is not visible here.
 	pp := b.do("GET", "/v1/seller/store-page?orgId="+testkit.SellerOrgID, nil)
-	if pp.status != 200 || pp.json(t)["kind"] != "PROVIDER" || pp.json(t)["version"] != float64(0) || pp.json(t)["draft"].(map[string]any)["sections"].([]any)[2].(map[string]any)["id"] != "services" {
+	if pp.status != 200 || pp.json(t)["kind"] != "PROVIDER" || pp.json(t)["version"] != float64(0) || pp.json(t)["draft"].(map[string]any)["sections"].([]any)[1].(map[string]any)["id"] != "services" {
 		t.Fatalf("provider store page = %d %s", pp.status, pp.body)
 	}
 	provCfg := pp.json(t)["draft"].(map[string]any)

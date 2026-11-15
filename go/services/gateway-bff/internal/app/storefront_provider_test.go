@@ -100,7 +100,7 @@ func TestProviderPageIsBuiltOnlyFromRealBookingData(t *testing.T) {
 	if len(got.Products.Hits) != 0 || len(got.Featured) != 0 || !got.Indexable {
 		t.Fatalf("a provider has no products and is indexable with services: %+v", got)
 	}
-	if got.Config.Sections[2].ID != "services" {
+	if got.Config.Sections[1].ID != "services" {
 		t.Fatalf("provider sections expected: %+v", got.Config.Sections)
 	}
 }
