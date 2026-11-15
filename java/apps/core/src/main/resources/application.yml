@@ -411,3 +411,6 @@ at:
     mode: ${AT_CATALOG_MODE:in-process}
   taxreturns:
     mode: ${AT_TAXRETURNS_MODE:in-process}
+  # payments -> seller (live membership) only; payments' other edges are still HTTP (core's old ports) until their adapters exist.
+  payments:
+    mode: ${AT_PAYMENTS_MODE:in-process}

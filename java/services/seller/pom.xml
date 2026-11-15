@@ -40,6 +40,10 @@
             <artifactId>module-contract</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>seller-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.stripe</groupId>
             <artifactId>stripe-java</artifactId>
         </dependency>

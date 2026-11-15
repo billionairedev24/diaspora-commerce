@@ -92,6 +92,15 @@ apps-down: ## Stop only the containerised services
 	$(COMPOSE) --profile apps stop catalog search log-shipper
 
 # ------------------------------------------------------------------------------------------------ build / test
+core-db: ## Release 1: create the single `core` database with one schema + role per Java module (idempotent; Docker Postgres or local psql)
+	bash tools/release/core-db.sh
+
+core-build: ## Release 1: build afrotransact-core (every Java module in one jar; CORE_MVN_ARGS=-DnoAi leaves ai-gateway and mcp-server out)
+	cd java && ./mvnw -B -q -pl apps/core -am -DskipTests $(CORE_MVN_ARGS) package
+
+core-run: ## Release 1: run afrotransact-core against the local infra (make up-infra, make core-db first): every module on :8120, old ports 8100-8115 too (docs/runbooks/release-1-local.md)
+	bash tools/release/core-run.sh
+
 java-verify: ## Java: checkstyle + unit + ArchUnit + Testcontainers ITs for the whole reactor
 	cd java && ./mvnw -B verify
 

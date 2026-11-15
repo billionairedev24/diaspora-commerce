@@ -1,5 +1,7 @@
 # Local developer profile for afrotransact-core: docker compose stack from infra/local, security off, readable logs.
 # The module-level local settings (taxonomy import, tax resolver ...) come from each module's own application-local.yml.
+server:
+  port: ${PORT:8120}   # afrotransact-core, every module's paths on this one port (docs/runbooks/release-1-local.md)
 at:
   core:
     # Old standalone ports served by this one JVM (local only): a module left in http mode, a script or gateway-bff configured as

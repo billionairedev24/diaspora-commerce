@@ -32,6 +32,14 @@ import com.afrotransact.payments.port.StripeGateway;
 import com.stripe.StripeClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.ModuleCallException;
+import com.afrotransact.payments.adapter.out.module.InProcessOrgMembershipDirectory;
+import com.afrotransact.payments.port.OrgMembershipDirectory;
+import com.afrotransact.seller.api.OrgMembershipApi;
+import org.springframework.beans.factory.ListableBeanFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -56,6 +64,22 @@ class PaymentsConfiguration {
     @Bean
     RefundAllocator refundAllocator() {
         return new DefaultRefundAllocator();
+    }
+
+    /**
+     * Live membership through seller's published API (core: {@code at.payments.mode=in-process}). Fails the start, naming both
+     * modules, when seller is not part of this application; the alternative is a first money action that fails at run time.
+     */
+    @Bean
+    @ConditionalOnExpression("'${at.payments.mode:http}' == 'in-process' and '${at.payments.membership-check.mode:live}' == 'live'")
+    OrgMembershipDirectory inProcessOrgMembershipDirectory(ListableBeanFactory beans,
+                                                           ObjectProvider<OrgMembershipApi> api,
+                                                           ObjectProvider<CallerPrincipals> callers) {
+        if (beans.getBeanNamesForType(OrgMembershipApi.class, true, false).length == 0) {
+            throw new ModuleCallException("Module 'payments' is configured at.payments.mode=in-process but module 'seller' is "
+                    + "not running in this JVM: enable it (at.modules.seller.enabled=true) or set at.payments.mode=http");
+        }
+        return new InProcessOrgMembershipDirectory(api, callers);
     }
 
     @Bean("paymentsReconciler")

@@ -1,12 +1,14 @@
 package com.afrotransact.module.core;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,6 +73,7 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
             }
             String module = matcher.group(1);
             if (!environment.getProperty("at.modules." + module + ".enabled", Boolean.class, true)) {
+                switchOffLibraries(environment, resolver, module);
                 continue;
             }
             Map<String, Object> merged = new LinkedHashMap<>(load(base));
@@ -111,6 +114,28 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
                 }
             });
             environment.getPropertySources().addLast(new MapPropertySource("moduleConfig[merged]", merged));
+        }
+    }
+
+    /**
+     * A disabled module whose jar is still on the classpath (the optional ones) may bring auto-configuration that fails without its
+     * settings (Spring AI models without an API key). Such a module ships {@code modules/<name>/module-disabled.properties} with the
+     * properties that switch its libraries off; they apply only while the module is disabled.
+     */
+    private static void switchOffLibraries(ConfigurableEnvironment environment, PathMatchingResourcePatternResolver resolver,
+                                           String module) {
+        Resource off = resolver.getResource("classpath:modules/" + module + "/module-disabled.properties");
+        if (!off.exists()) {
+            return;
+        }
+        try (InputStream in = off.getInputStream()) {
+            Properties properties = new Properties();
+            properties.load(in);
+            Map<String, Object> values = new LinkedHashMap<>();
+            properties.forEach((k, v) -> values.put(String.valueOf(k), v));
+            environment.getPropertySources().addLast(new MapPropertySource("moduleDisabled[" + module + "]", values));
+        } catch (IOException ex) {
+            throw new IllegalStateException("Cannot read " + off, ex);
         }
     }
 

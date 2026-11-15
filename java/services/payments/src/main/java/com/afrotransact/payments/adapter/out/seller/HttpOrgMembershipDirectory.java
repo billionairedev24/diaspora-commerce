@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.afrotransact.payments.port.OrgMembershipDirectory;
 import com.afrotransact.payments.port.OrgMembershipUnavailableException;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -25,8 +25,7 @@ import tools.jackson.databind.JsonNode;
  * timeout, 4xx, 5xx) throws {@link OrgMembershipUnavailableException}: the action is refused, not allowed.
  */
 @Component
-@ConditionalOnProperty(prefix = "at.payments.membership-check", name = "mode", havingValue = "live",
-        matchIfMissing = true)
+@ConditionalOnExpression("'${at.payments.mode:http}' == 'http' and '${at.payments.membership-check.mode:live}' == 'live'")
 class HttpOrgMembershipDirectory implements OrgMembershipDirectory {
 
     static final String SCOPE = "sellers:membership.read";

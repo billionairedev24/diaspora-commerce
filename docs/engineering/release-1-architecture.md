@@ -395,3 +395,96 @@ Per service, in `go/services/<svc>` root package (which already exports `Files`)
 `func New(ctx context.Context, d Deps) (*Module, error)`; `type Module struct{ Name string; Handler http.Handler; Checks []httpserver.ReadinessCheck; Run func(context.Context) error; Close func(context.Context) error }`. `cmd/<svc>/main.go` shrinks to `config -> New -> httpserver.New(Handler) -> Run`, so the standalone binary and the combined one share the code. `Deps` carries the shared things (logger with `module` attr, tracer provider, `prometheus.Registerer`, `auth.Verifier`, HTTP client, `ModuleCaller` for in-process calls) and the module's own env lookup (`<MODULE>_DB_URL` first, then `DB_URL`).
 
 Shared `go/pkg` changes (all additive): `pkg/config` prefixed lookup helper; `pkg/httpserver` mount mode (register a module on a parent mux under its paths and expose `/modules/<m>/healthz|readyz`, aggregate `/healthz`, `/readyz`, `/metrics` merged from per-module registries with `module` and the old `service` label); `pkg/telemetry` single provider with a `module` span processor; `pkg/logging` returns a logger with `module`; `pkg/auth` gains an in-process transport: an `http.RoundTripper` that serves the request through the called module's `Handler` and still carries the bearer token, so the same middleware and scopes run (no per-call adapter code, the Go analogue of the Java principal rule). `cmd/afrotransact-go/main.go`: explicit wiring list with enable flags, duplicate-route check at start naming both modules, aggregate readiness. Order: cart, promise, geo; search + indexer; notifications, media; carrier-gateway, authz-sync; gateway-bff last. A tiny proof was NOT built (disk is the constraint: the Go build cache of 11 modules is the largest item in this sandbox).
+
+## 12. Batches 2 to 5 and later: status on `release-1` (2026-11-15)
+
+Owner decisions applied: schema-per-module Postgres, the module grouping above, "each deployable" wording in CLAUDE.md, a Postgres service
+container in CI (the CI agent owns `.github`, Helm and Argo). **Every module is mounted in `afrotransact-core`**; cross-module calls
+are in-process only where marked below, everywhere else the module keeps its HTTP adapter and calls the other module on its old
+port, which core serves itself (`at.core.module-ports`, local profile) or at `/modules/<name>/` (see 12.3).
+
+### 12.1 Schema-per-module (`at.modules.<m>.database.mode=schema|database`)
+
+One Postgres database `core` for the Java modules, one schema and one login role per module (`tax-returns` -> schema/role `tax_returns`),
+`search_path` pinned twice (role setting and `SET search_path TO "<schema>", public` on every pooled connection; `public` only so
+extensions resolve), Flyway per module with `schemas`/`defaultSchema` = the module's schema (so `flyway_schema_history` lives in that
+schema) and `createSchemas=false`, migrations unchanged. `database` keeps today's behaviour (own database via `<M>_DB_URL`), per module,
+so standalone, the spike and mixed set-ups work. Temporal stays on its own databases. Provisioning: `infra/local/postgres/provision-core.sql`
+(`make core-db`; production: the database owner runs the same statements once with real passwords) or, in the local profile only,
+core creates roles and schemas itself through `at.modules.schema-admin.*`. Extensions (`postgis`, `btree_gist`, `pg_trgm`) must exist in
+the database before start: migrations say `create extension if not exists`, which a non-superuser role passes only when it already exists.
+
+Verified on a real Postgres 16 (module-core `ModuleSchemaPostgresTest`, and a full boot of the modules): two modules migrate into their own
+schemas, each has its own history table, the role of one cannot read the other's table (`permission denied`), a second run is idempotent.
+
+### 12.2 Connection budget (stated in the Helm values by the CI agent's chart; here is the arithmetic)
+
+Per-module Hikari maximum, minimum idle 0 (`<M>_DB_POOL_SIZE` overrides). Hikari opens connections only when used.
+
+| Module | max | | Module | max |
+|---|---|---|---|---|
+| catalog | 8 | | identity | 4 |
+| orders | 8 | | offers, inventory, content, seller | 4 each |
+| payments | 8 | | fulfilment, bookings, trust-ops, tax-returns | 4 each |
+| ai-gateway | 4 | | mcp-server (no database) | 0 |
+| retail, delivery-runs (disabled) | 2 each | | **Total enabled (13 modules with a database)** | **64** |
+
+Worst case 64 plus Flyway at start (one connection per module at a time) and the platform Kafka/outbox jobs, which use the module pools.
+Well under 100 for the core JVM and well under Layerbase's 500 (also with two replicas: 128). Observed idle after start with all
+modules up: 26 connections (section 12.6).
+
+### 12.3 What it took to put 16 modules in one Spring context (new findings, all fixed)
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | Module configuration classes were registered after Spring Boot's auto-configuration was parsed, so `@ConditionalOnMissingBean` auto-configured beans (`authorizationServerSettings`, Clock...) won or collided | `ModuleMounts` is now a first `BeanDefinitionRegistryPostProcessor` (installed through `spring.factories`), module scanning runs before any configuration class is parsed |
+| 2 | Three routes exist in two modules: `POST /v1/returns` (inventory, tax-returns), `POST /v1/receipts` (inventory, retail), `POST /v1/reconciliation/runs` (inventory, payments); one MVC mapping table refuses duplicates | every handler method carries a `ModuleRouteCondition` (its module). A request prefers the module it was addressed to: the module's old port (`at.core.module-ports`) or the `/modules/<name>/...` path prefix (stripped by a filter before security and MVC); otherwise the module mounted first. Both modules stay reachable. Retail is disabled by default, so the retail/inventory collision is dormant |
+| 3 | `@Bean` name collisions between modules (`reconciler`, `serviceTokenProvider`, `catalogClient`, `geoClient`, `mediaClient`) | explicit unique bean names in payments, retail, delivery-runs (`paymentsReconciler`, ...); found by a static scan and by the boot of all 16 modules |
+| 4 | A module's own `TransactionTemplate`/`DataSource` bean was visible to every other module (ambiguity) and core's per-module infra bean duplicated the module's own | beans of persistence types (`javax.sql`, `org.springframework.transaction`, `org.springframework.jdbc`, Spring Data JDBC) declared by a module's `@Bean` method are private to the module; core's infrastructure beans are `fallback` so a module's own bean of the same type wins |
+| 5 | **orders' Kafka listeners used `${spring.application.name}` as group id**: in core that is `afrotransact-core`, which would have moved all three orders consumers to a new group and lost their committed offsets | `${at.orders.kafka-group:orders-service}` (the standalone value). Every other listener already defaulted to `<module>-service`; observed groups at start: `orders-service`, `bookings-service`, `seller-service`, ... |
+| 6 | Security: seller, content, identity and mcp-server define their own `SecurityFilterChain`; two "any request" chains fail the start, and a module chain would shadow the others' public paths | one shared chain in core applies the union of `at.security.public-paths`/`public-post-paths` and every module's `SecurityPermits` bean (module-contract): seller storefront reads (`/v1/public/storefronts[/*]`, `/v1/public/business-pages/*`), Stripe webhooks and the launch list, content visitor forms, identity sign-up/password-reset/invitation endpoints and `/v1/identity-providers`. The modules' own chains are switched off in core (seller, content, identity `/v1`) or scoped with a `securityMatcher` (identity authorization server and hosted pages, mcp `/mcp` and its RFC 9728 metadata) and ordered before the shared chain. Checked with security on: storefront permits answer 200/404/400, `/v1/offers` and `/v1/seller/applications` 401 |
+| 7 | Spring Session JDBC (identity) injects the single `DataSource` | core-only `CoreSessionConfiguration` names identity's DataSource and transaction manager (`@SpringSessionDataSource`, `@SpringSessionTransactionManager`) |
+| 8 | Library settings that are not `at.*` (`spring.temporal.*`, `spring.data.redis.*`, `spring.ai.*`, `spring.session.*`) were dropped by the config loader | allow-listed in the loader; `spring.mvc.problemdetails` and the 30 min async timeout set once in core |
+| 9 | Static health groups named modules that may be off | generated per mounted module (readiness lists each module's start state; `/actuator/health/<module>` adds its database) |
+| 10 | Dependency convergence in one classpath (guava, errorprone, okio, okhttp, swagger annotations, victools, json-schema-validator 3.0.1/3.0.6/3.0.8) | pins in `apps/core/pom.xml` copied from orders and ai-gateway, plus `json-schema-validator` 3.0.8 (content's version; Spring AI and the MCP SDK ask for lower ones). **Not exercised at run time by ai-gateway/mcp-server** |
+| 11 | Orders' Temporal worker fails the start without a Temporal server | not a core issue (same as standalone); `TEMPORAL_START_WORKERS=false` to run without |
+| 12 | `tenant-isolation-matrix` of identity lacked the staff-invitation controllers (main merge); the test failed | two class entries added (`StaffInvitationController` staff-only, `StaffInvitationPublicController` public) |
+
+`ai-gateway` and `mcp-server` sit in the Maven profile `ai-modules` of `apps/core` (active unless `-DnoAi`); with the jars absent the module is
+skipped with a warning, with them present `MODULE_AI_GATEWAY_ENABLED=false` / `MODULE_MCP_SERVER_ENABLED=false` switch them off.
+Retail and delivery-runs are mounted with `enabled=false`.
+
+### 12.4 Per-batch status
+
+| Batch | Modules | Mounted in core | Boots on Postgres | Unit + ArchUnit | In-process edges | Gate (SLO, route diff, detach) |
+|---|---|---|---|---|---|---|
+| 1 | catalog, tax-returns | yes | yes | yes | catalog <-> tax-returns | not run |
+| 2 | offers, inventory, content, seller | yes | yes | yes (all pass) | none yet except payments -> seller (below) | not run |
+| 3 | orders, payments, bookings, fulfilment, trust-ops | yes | orders, payments, bookings, trust-ops yes; **fulfilment not booted here (needs PostGIS, not installed in the sandbox)** | see 12.5 | payments -> seller (live membership) | not run |
+| 4 | ai-gateway, mcp-server | yes, profile `ai-modules` | yes (no provider key; MCP and AI paths not exercised) | see 12.5 | none | not run |
+| 5 | identity | yes | yes: `/login`, `/oauth2/jwks`, `/.well-known/openid-configuration` answer 200 in core | see 12.5 | none | token issue/refresh and signed-JWT validation across modules **not verified** |
+| later | retail, delivery-runs | mounted, `enabled=false`; both booted once enabled to prove no bean or route collision | yes | see 12.5 | none | n/a |
+
+In-process adapters (pattern of catalog and tax-returns, `<m>-api` jar, provider adapter in `adapter/in/module`, consumer in `adapter/out/module`,
+explicit caller principal): catalog <-> tax-returns (spike) and **payments -> seller `OrgMembershipApi`** (scope `sellers:membership.read`,
+`at.payments.mode=in-process`, fails the start naming both modules when seller is disabled). **The other ~65 Java-to-Java HTTP adapters (section 2.2)
+are not converted**: those modules call each other over HTTP on the old ports, which core serves. That works (and keeps detach trivial) but
+is not the in-process design target; converting them is mechanical per edge and is the main remaining work. The principal registry
+(`at.modules.<m>.caller-scopes`, copied from identity's client list) already holds every module's scopes.
+
+### 12.5 What was and was not verified
+
+Verified here: module-core unit tests and the real-Postgres schema test; unit and ArchUnit tests of offers, inventory, content, seller (and,
+per the test log of this session, the other modules, see the commit message of the batch); full boot of all modules but fulfilment against a
+throw-away Postgres 16 with Valkey, security off and on (public permits and 401s), route disambiguation by port and prefix, consumer group ids in the log.
+
+**Not verified**: Docker/Testcontainers ITs (none run), Kafka (no broker: consumers retried), signed JWTs end to end (identity issuing, other modules
+validating through core's issuer), Temporal workflows and the checkout saga, Stripe, OpenRouter/Spring AI and MCP at run time, fulfilment/PostGIS,
+the route diff against `contracts/` (only the static duplicate scan of the OpenAPI paths, 3 collisions), the in-process 403 test per API method
+(unit-level only for payments -> seller), load, checkout SLO, the detach procedure of the runbook (written, not rehearsed), the identity hosted-page chain
+under a real browser flow, Helm/Argo (other agent).
+
+### 12.6 Measurement (this sandbox, 2026-11-15; not comparable to the Phase 2 table)
+
+See the measurement note at the end of the Phase 2 section if the run completed; otherwise this paragraph says so. Boot of 13 modules (no fulfilment) with
+`-Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1`: started in about 16 to 22 s, RSS about 530 to 610 MB, 22 to 26 database connections idle.
