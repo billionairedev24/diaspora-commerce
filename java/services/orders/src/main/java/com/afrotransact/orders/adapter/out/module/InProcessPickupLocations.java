@@ -1,11 +1,13 @@
 package com.afrotransact.orders.adapter.out.module;
 
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.port.PickupLocations;
+import com.afrotransact.orders.port.UpstreamFailure;
 import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.ShipFromAddressApi;
 import org.springframework.beans.factory.ListableBeanFactory;
@@ -40,12 +42,25 @@ class InProcessPickupLocations implements PickupLocations {
         if (offerId == null || offerId.isBlank()) {
             return Optional.empty();
         }
-        Optional<String> locationId = upstream.call("offers", () -> offers.getObject().shipFromLocationId(offerId))
+        Optional<String> locationId = notFoundIsEmpty(
+                () -> upstream.call("offers", () -> offers.getObject().shipFromLocationId(offerId)))
                 .filter(id -> !id.isBlank());
         if (locationId.isEmpty()) {
             return Optional.empty();
         }
-        return upstream.call("seller", () -> sellers.getObject().location(locationId.get()))
+        return notFoundIsEmpty(() -> upstream.call("seller", () -> sellers.getObject().location(locationId.get())))
                 .map(l -> new PickupLocation(locationId.get(), l.orgId(), l.pickupEnabled(), l.lat(), l.lng()));
+    }
+
+    /** A 404 is "none" for the HTTP adapter (both of its calls); any other failure goes up. */
+    private static <T> Optional<T> notFoundIsEmpty(Supplier<Optional<T>> call) {
+        try {
+            return call.get();
+        } catch (UpstreamFailure f) {
+            if (f.status() == 404) {
+                return Optional.empty();
+            }
+            throw f;
+        }
     }
 }

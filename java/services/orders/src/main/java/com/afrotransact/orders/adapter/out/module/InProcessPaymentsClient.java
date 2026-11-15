@@ -9,6 +9,7 @@ import java.util.Optional;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.port.PaymentsClient;
+import com.afrotransact.orders.port.UpstreamFailure;
 import com.afrotransact.payments.api.OrderPaymentsApi;
 import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
@@ -68,7 +69,15 @@ class InProcessPaymentsClient implements PaymentsClient {
 
     @Override
     public Optional<Intent> findByOrder(String orderId) {
-        return upstream.call(SERVICE, () -> api.getObject().findByOrder(orderId)).map(InProcessPaymentsClient::intent);
+        try {
+            return upstream.call(SERVICE, () -> api.getObject().findByOrder(orderId)).map(InProcessPaymentsClient::intent);
+        } catch (UpstreamFailure f) {
+            // The HTTP client reads a 404 as "no payment for this order"; so does this one when the callee says so.
+            if (f.status() == 404) {
+                return Optional.empty();
+            }
+            throw f;
+        }
     }
 
     @Override

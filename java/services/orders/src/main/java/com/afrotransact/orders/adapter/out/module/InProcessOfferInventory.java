@@ -6,6 +6,7 @@ import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.port.OfferInventory;
+import com.afrotransact.orders.port.UpstreamFailure;
 import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -33,7 +34,15 @@ class InProcessOfferInventory implements OfferInventory {
         if (offerId == null || offerId.isBlank()) {
             return Optional.empty();
         }
-        return upstream.call(SERVICE, () -> api.getObject().inventorySku(offerId)).map(String::trim)
-                .filter(sku -> !sku.isEmpty());
+        try {
+            return upstream.call(SERVICE, () -> api.getObject().inventorySku(offerId)).map(String::trim)
+                    .filter(sku -> !sku.isEmpty());
+        } catch (UpstreamFailure f) {
+            // 404 = unknown offer, as for the HTTP adapter.
+            if (f.status() == 404) {
+                return Optional.empty();
+            }
+            throw f;
+        }
     }
 }
