@@ -306,3 +306,76 @@ Merged into release-1 (d1368b31b): seller storefront (`seller` V92, `StorePage*`
 - **seller (batch 2)**: the new public storefront endpoints are permitted in `SellerSecurityConfiguration` itself (`GET /v1/public/storefronts[/*]`), not in `at.security.public-paths`. This confirms hazard 10: when seller mounts, its custom chain must become a `securityMatcher` chain ahead of the shared one, and its permit list must be carried over, or the storefront returns 401. V92 is a new migration in seller's own history (no renumbering).
 - No new `@Scheduled`, `@KafkaListener`, `@RestControllerAdvice`, static singleton or pom dependency appeared in the merged Java code.
 - **Not re-verifiable yet**: the coordinator also names orders V13/V14, fulfilment V6, identity V49 (admin delivery and proof), staff Settings roles, Avalara shadow mode and in-flight identity/ai-gateway work. Those are not on `origin/main` as of this merge; they come in with the next `sync-main.sh` run and the per-batch checklist (section 9) covers them. Orders, fulfilment, identity and ai-gateway collisions in section 3 were derived from the code at 26d74f64f and must be re-read at their batch.
+
+## 11. Phase 1 and 2 results: catalog + tax-returns in `afrotransact-core` (2026-11-15)
+
+### 11.1 What was built and proved
+
+| Claim | Evidence |
+|---|---|
+| Both modules start in one JVM, each on its own database, Flyway history and Hikari pool | `CoreModulesTest` (12 tests) on a real PostgreSQL 17.5, plus a reflection test that every `JdbcClient` held by a catalog or tax-returns class is that module's own (more than 20 classes) |
+| In-process calls with an explicit principal; scope enforced | `catalogCallsTaxReturnsInProcess...`, `aModuleWithoutTheScopeIsRefusedExactlyAsOverHttp` (the call fails like the HTTP 403), `thePublishedApiFailsClosedWithoutACallerAndForTheWrongPrincipal`, `InProcessCallsTest` (7) |
+| `at.<module>.mode=http` keeps the HTTP adapters | `httpModeKeepsTheHttpAdapters...`; standalone default stays `http` |
+| Target module off: start fails naming both modules; off module is not in readiness, opens no pool | `inProcessModeWithTheTargetModuleOff...`, `aSwitchedOffModuleIsNotInReadiness`, `aDisabledModuleOpensNoPool...` |
+| A failed migration stops the start and names the module | `aFailedMigrationStopsTheStartAndNamesTheModule`; `ModuleStartupFailureAnalyzer` prints it without a stack trace |
+| Readiness lists each module; each module has its own health group; no database check in readiness | `readinessListsBothModules...` |
+| Every meter has `module` and `service`; per-module Hikari pools; per-module scheduler pools | `everyMeterCarriesModuleAndServiceAnd...`, `ModuleMeterFilterTest`, `ModuleSchedulerTest` |
+| ArchUnit boundaries with teeth | `ModuleBoundaryRulesTest` (violating fixtures must fail); rules run in every service's `ArchitectureTest`; both spike modules pass |
+| Old per-service apps still build and their tests pass | catalog 953 and tax-returns 387 surefire tests, 0 failures, 70 s with the libraries (`./mvnw -pl services/catalog,services/tax-returns -am test`) |
+
+**Not verified**: Docker is not available, so every Testcontainers integration test (`*IT`) of catalog and tax-returns was NOT run; Kafka was not running (listeners and relays were off, so consumer group ids, the outbox relay and retention job are covered by construction and unit tests only, not by a live broker); no OAuth/JWT run (the context tests use the `local` profile, security off, so the JWT path of the in-process actor is covered by `InProcessCallsTest` against the real `Actor` and permission model, not by a signed token); no load test; no image was built.
+
+### 11.2 Measurements (this sandbox: 4 vCPU, JDK 25.0.5, real PostgreSQL 17.5 on localhost, no Kafka, consumers off)
+
+Production JVM flags (`java/Dockerfile`): serial GC, C1 only, `-Xss512k`, `-XX:-UsePerfData`, 64 MB code cache, heap capped at 448 MB (70 % of the 640 Mi limit). RSS is `VmRSS` after readiness + 300 health and 300 api-docs requests + 15 s idle.
+
+| Measure | catalog alone | tax-returns alone | Sum of the two | One JVM, both modules | Change |
+|---|---|---|---|---|---|
+| RSS after ready | 276 MB | 257 MB | 533 MB | 287 MB | -46 % |
+| RSS warm (hwm) | 321 MB | 296 MB | **617 MB** | **334-337 MB** (3 runs) | **-45 %** |
+| Time to readiness (cold) | 9.3 s | 8.4 s | 17.7 s sequential | 9.7-10.5 s | -45 % of total start work |
+| Time to readiness with AppCDS (92 MB archive, JDK 25 auto-archive) | not measured | not measured | | 9.1 s | -10 % (class loading is not the bottleneck: Flyway, bean creation and the first Hikari connections are) |
+| Threads | 43 | 42 | 85 | 55-57 | |
+| Executable jar | 92.2 MB | 72.6 MB | 164.8 MB | 95.6 MB | -42 %; 157 library jars vs 290 |
+| Image (jlinked JRE + distroless) | not built | not built | | | the jar numbers are the estimate; each image would also carry a JRE copy (about 60 MB per image), so 2 images save about 60 MB more |
+| Build, 2 modules + libraries (`package -DskipTests`, checkstyle on) | 55 s (both together) | | | 12 s for core when the modules are already built | the cost is compiling the modules once either way |
+| Unit and slice tests | | | 70 s (1,340 tests) | core context tests 12 in 34 s (real DB) | |
+
+What this extrapolates to, honestly: the JVM floor (class metadata of Spring, Tomcat, Hibernate-free Spring JDBC, Kafka, Micrometer, OTel) is paid once instead of per module. Adding a module costs about 40-50 MB RSS here (core 335 MB vs 290 MB for catalog + tax-returns' own state), against about 300 MB for a separate JVM. For the 14 launch modules that points at roughly 14 x 300 = 4.2 GB separate (the cloud-cost table budgets 14 x 384 Mi requests = 5.25 GiB) versus about 300 + 13 x 45 = 0.9 GB to 1.2 GB for one JVM, before real traffic. **This is an extrapolation from two modules; the S1 target (core at most 55 % of the sum, hard cap 2.0 GiB) is met for the pair (54 %) and must be re-measured per batch.** The ports/containers/charts/workflows/Argo apps in S8 change only at cutover: today 14 Java services = 14 ports, 14 containers, 14 charts, 14 workflows, 14 Argo apps; target 1 each.
+
+### 11.3 Problems hit (all fixed unless marked open)
+
+1. **tax-returns-service does not start on `main` (and so not on release-1 as branched):** `AvalaraTaxCalculator` has two constructors and no `@Autowired`; Spring finds no default constructor. Introduced with the Avalara SDK commit (8fa787653). Fixed in release-1 with `@Autowired` on the production constructor. Main still has the bug: **a production-blocking fix that should also land on `main`.**
+2. Java 21 is the default `JAVA_HOME` in the sandbox; the enforcer requires 25 (`JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64`).
+3. Spring Boot 4 / Spring 7 API differences: `org.springframework.boot.EnvironmentPostProcessor`, health classes in `org.springframework.boot.health.contributor`, Flyway `Flyway.configure(ClassLoader)`, `DependencyDescriptor` has no containing-class accessor.
+4. **Spring 7 wraps every `@Scheduled` runnable** in a private `Task$OutcomeTrackingRunnable`; routing by the method owner silently sent every job to the core pool until the wrapper was opened. Caught only by the context test (thread names). Covered by `ModuleSchedulerTest`.
+5. **Boot refuses to start when a health group names a contributor that does not exist**, so a static `readiness.include` list breaks "switch a module off". Groups are now generated per mounted module.
+6. **Repeated command-line options are joined with a comma by Spring** (a test harness detail that hid as a Flyway "driver" error).
+7. `platform-events`' retention job, outbox relay and inbox beans are single-instance and package-private in places: added the public `EventRetentionServices.jdbc(...)` factory (additive) and per-module relay, publisher (the platform class's `@Transactional(MANDATORY)` cannot tell which module's transaction manager it belongs to) and retention wrappers.
+8. `@Qualifier("productWriterImpl")` in catalog means bean names must stay as in the standalone service; the module bean-name generator keeps default names and prefixes only on a collision.
+9. The module's own `local` profile carries process-wide settings that matter (`at.security.enabled=false`, DB passwords, log level); core has its own `application-local.yml`. A module's `at.security.*` is ignored, so security on/off is one switch for the whole JVM.
+10. `ModuleConfigPostProcessor` mimics Boot's profile semantics for lists (a profile list replaces the base list); verified by test.
+11. **Open: autoconfiguration ordering.** Beans a module defines to override Boot defaults (`corsConfigurationSource`, `SecurityFilterChain`) are registered in the second configuration-parse round, after Boot's `@ConditionalOnMissingBean` auto-configurations were evaluated. Not an issue for catalog and tax-returns; it will bite seller, content, identity and mcp-server (they define their own filter chains). Mitigation planned in batch 2: modules declare such overrides in a `ModuleSecurity` hook that module-core registers in the first round.
+12. **Open: per-module meters of platform classes** (`events.consumer.*`) are not module-tagged (they carry a `consumer` tag holding the listener id; the filter attributes by the module's Kafka-id prefix, which works for `catalog-` and `taxreturns-`).
+13. **Open: Kafka and logging context.** Listener threads and scheduler threads do not set the MDC `module`; only HTTP requests do. Span attribute `module` exists for HTTP server spans only.
+14. **Open: one JVM, one `at.security.enabled`, one multipart limit, one set of JWT validation settings**; fine for the launch set, flagged for identity (batch 5).
+15. Disk: each module's `target/` is 80-100 MB; `~/.m2` was updated by an `install` early on (platform libraries only, additive); no other agent's artifacts were touched.
+
+### 11.4 Recommendation: **GO-WITH-CHANGES** for the remaining Java modules
+
+Go, because the design held up on the hardest pair (two-way cycle, shared Kafka topics, own Flyway histories, scope checks kept), the saving is real (-45 % RSS, -45 % start work for two modules), the old builds are untouched and their tests pass, and every failure that surfaced was caught by a test, not in production. With these changes before batch 2:
+
+1. Land the `AvalaraTaxCalculator` constructor fix on `main`.
+2. Add the `ModuleSecurity` hook (problem 11) before seller, content, identity, mcp-server join.
+3. Add the Kafka/scheduler MDC `module` (problem 13) and a per-module Kafka-container concurrency setting.
+4. Add a Postgres service container to CI so `CoreModulesTest` and the services' `*IT` run (this sandbox cannot).
+5. Re-measure after each batch against S1/S2; stop and re-plan if a batch adds more than 80 MB RSS per module or core startup passes 60 s.
+
+Batches as in section 5: batch 2 offers, inventory, content, seller; batch 3 orders, payments, bookings, fulfilment, trust-ops; batch 4 ai-gateway and mcp-server (detachable); batch 5 identity. **NO-GO today for identity and for the money path**: not because of the pattern, but because their risks (token issuance, Temporal, Stripe) need the CI Postgres/Kafka environment first.
+
+### 11.5 Go plan (not built; only analysed)
+
+Per service, in `go/services/<svc>` root package (which already exports `Files`):
+`func New(ctx context.Context, d Deps) (*Module, error)`; `type Module struct{ Name string; Handler http.Handler; Checks []httpserver.ReadinessCheck; Run func(context.Context) error; Close func(context.Context) error }`. `cmd/<svc>/main.go` shrinks to `config -> New -> httpserver.New(Handler) -> Run`, so the standalone binary and the combined one share the code. `Deps` carries the shared things (logger with `module` attr, tracer provider, `prometheus.Registerer`, `auth.Verifier`, HTTP client, `ModuleCaller` for in-process calls) and the module's own env lookup (`<MODULE>_DB_URL` first, then `DB_URL`).
+
+Shared `go/pkg` changes (all additive): `pkg/config` prefixed lookup helper; `pkg/httpserver` mount mode (register a module on a parent mux under its paths and expose `/modules/<m>/healthz|readyz`, aggregate `/healthz`, `/readyz`, `/metrics` merged from per-module registries with `module` and the old `service` label); `pkg/telemetry` single provider with a `module` span processor; `pkg/logging` returns a logger with `module`; `pkg/auth` gains an in-process transport: an `http.RoundTripper` that serves the request through the called module's `Handler` and still carries the bearer token, so the same middleware and scopes run (no per-call adapter code, the Go analogue of the Java principal rule). `cmd/afrotransact-go/main.go`: explicit wiring list with enable flags, duplicate-route check at start naming both modules, aggregate readiness. Order: cart, promise, geo; search + indexer; notifications, media; carrier-gateway, authz-sync; gateway-bff last. A tiny proof was NOT built (disk is the constraint: the Go build cache of 11 modules is the largest item in this sandbox).
