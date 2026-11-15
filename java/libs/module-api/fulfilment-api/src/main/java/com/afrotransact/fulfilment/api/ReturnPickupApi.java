@@ -1,6 +1,6 @@
 package com.afrotransact.fulfilment.api;
 
-import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Optional;
 
 /**
@@ -23,12 +23,12 @@ public interface ReturnPickupApi {
 
     /**
      * @param depotNodeId the return centre, null for the default
-     * @param readyFrom   earliest collection time, null for now
-     * @param collectBy   latest collection time, null for no deadline
+     * @param readyFrom   first day the customer is ready, null for today
+     * @param collectBy   last day of the pickup window
      */
     record PickupRequest(String rmaId, String rmaNumber, String orderId, String orderNumber, String shipmentId,
-                         String customerId, String sellerOrgId, Address address, String depotNodeId, Instant readyFrom,
-                         Instant collectBy, int units) {
+                         String customerId, String sellerOrgId, Address address, String depotNodeId, LocalDate readyFrom,
+                         LocalDate collectBy, int units) {
     }
 
     record Address(String name, String phone, String line1, String line2, String city, String state, String postalCode,
