@@ -3,11 +3,13 @@
 #   docker build -f go/Dockerfile.afrotransact-go go
 # The deployable (go/apps/afrotransact-go) and the service modules it imports are modules of go/go.work; the build uses the workspace
 # (the per-service Dockerfiles use GOWORK=off because each service is a leaf). Same pins, base image and runtime as services/*/Dockerfile.
-# MAIN_PKG is the main package inside the deployable's module; the Go batch owns that path (default: cmd/afrotransact-go).
+# MAIN_PKG is the main package inside the deployable's module (go/apps/afrotransact-go/cmd/afrotransact-go).
 FROM golang:1.27.4@sha256:5e8afd493a7124a8586e134d9b532731161d4b9becf9dee5a5956b107426f93d AS build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOFLAGS="-trimpath -buildvcs=false" GOTOOLCHAIN=local
 COPY . .
+# go.work also lists the kafka-replay tool, which lives outside the build context (go/); the deployable does not import it.
+RUN go work edit -dropuse=../tools/ops/kafka-replay
 ARG MAIN_PKG=./apps/afrotransact-go/cmd/afrotransact-go
 ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
