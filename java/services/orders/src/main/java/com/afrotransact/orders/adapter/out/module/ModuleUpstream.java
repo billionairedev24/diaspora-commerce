@@ -39,8 +39,10 @@ public class ModuleUpstream {
         } catch (ModuleApiException e) {
             throw new UpstreamFailure(service, e.status(), e.code(), e.getMessage(), e.retryable(), e.details(), e);
         } catch (RuntimeException e) {
-            LOG.warn("In-process call to {} failed: {}", service, e.toString());
-            throw new UpstreamFailure(service, 0, service + ".unavailable", service + " failed: " + e.getMessage(), true,
+            // The detail stays in the log: over HTTP a callee crash reaches orders as a bare 5xx ("Internal Server Error"),
+            // and this message ends up on the checkout request and in the problem the shopper sees.
+            LOG.warn("In-process call to {} failed", service, e);
+            throw new UpstreamFailure(service, 0, service + ".unavailable", service + " did not answer", true,
                     List.of(), e);
         }
     }
