@@ -91,14 +91,17 @@ def service_workflow(name: str, runtime: str) -> str:
     path_yaml = "\n".join(f"      - {p}" for p in paths)
     budget = f'      image-max-mb: "{IMAGE_BUDGET_MB[name]}"\n' if runtime == "java" and name in IMAGE_BUDGET_MB else ""
     return f"""{HEADER}# {name} ({runtime}): build, test, scan, sign on every change to this service only; deploy to dev on main.
+# Release 1 (ADR 0011): triggers only on main and develop (and PRs into them). The release-1 branch builds the deployables instead
+# (core.yml, afrotransact-go.yml), so release-1 CI stays cheap; run this one by hand with workflow_dispatch when needed.
 name: {runtime}-{name}
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
 {path_yaml}
   pull_request:
+    branches: [main, develop]
     paths:
 {path_yaml}
   workflow_dispatch:
