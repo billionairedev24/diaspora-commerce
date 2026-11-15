@@ -418,3 +418,6 @@ at:
   # one). orders -> cart, promise, geo, carrier-gateway (Go), delivery-runs (disabled in core), identity and content stay HTTP.
   orders:
     mode: ${AT_ORDERS_MODE:in-process}
+  # bookings -> payments in-process; bookings -> geo (Go) stays HTTP.
+  bookings:
+    mode: ${AT_BOOKINGS_MODE:in-process}
