@@ -29,4 +29,17 @@ public final class InProcessCalls {
         return current().orElseThrow(() -> new IllegalStateException(
                 "In-process module API called without a caller principal: use InProcessCalls.as(principal, ...)"));
     }
+
+    /**
+     * Start-up check for an in-process adapter: the called module's API bean must exist in this JVM.
+     *
+     * @throws ModuleCallException naming both modules and the two ways out (enable the module or use http mode)
+     */
+    public static void requireRunning(boolean apiPresent, String caller, String callee, String modeProperty) {
+        if (!apiPresent) {
+            throw new ModuleCallException("Module '" + caller + "' is configured " + modeProperty + "=in-process but module '"
+                    + callee + "' is not running in this JVM: enable it (at.modules." + callee + ".enabled=true) or set "
+                    + modeProperty + "=http");
+        }
+    }
 }
