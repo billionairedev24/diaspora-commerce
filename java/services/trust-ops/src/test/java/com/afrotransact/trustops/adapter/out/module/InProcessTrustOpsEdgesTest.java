@@ -4,13 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.bookings.api.ReviewModerationApi;
 import com.afrotransact.module.CallerPrincipal;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleApiException;
+import com.afrotransact.offers.api.SellerStandingApi;
 import com.afrotransact.payments.api.ClaimRefundApi;
 import com.afrotransact.seller.api.SellerEnforcementApi;
 import com.afrotransact.trustops.domain.SuspensionReason;
@@ -70,5 +73,21 @@ class InProcessTrustOpsEdgesTest {
                 .reinstate("org", "ok");
         assertThatThrownBy(() -> client.reinstate("org", "ok")).isInstanceOfSatisfying(UpstreamException.class,
                 e -> assertThat(e.status()).isEqualTo(403));
+    }
+
+    @Test
+    void reviewModerationAndSellerStandingGoThroughTheirModules() {
+        ReviewModerationApi reviews = Mockito.mock(ReviewModerationApi.class);
+        SellerStandingApi standing = Mockito.mock(SellerStandingApi.class);
+        beans.registerSingleton("reviews", reviews);
+        beans.registerSingleton("standing", standing);
+        UUID booking = UUID.randomUUID();
+        new InProcessBookingsReviewClient(beans.getBeanProvider(ReviewModerationApi.class),
+                upstream, beans).approve(booking, "n".repeat(1500));
+        Mockito.verify(reviews).approve(Mockito.eq(booking), Mockito.argThat(note -> note.length() == 1000));
+        Mockito.when(standing.rating("org")).thenReturn(Optional.of(4.5));
+        new InProcessOffersClient(beans.getBeanProvider(SellerStandingApi.class), upstream, beans)
+                .pushPerformance("org", 0.9, 0.01, false);
+        Mockito.verify(standing).updatePerformance("org", 4.5, 0.9, 0.01, false);
     }
 }

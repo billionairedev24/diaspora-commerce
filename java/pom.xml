@@ -29,6 +29,7 @@
         <module>libs/module-api/inventory-api</module>
         <module>libs/module-api/payments-api</module>
         <module>libs/module-api/offers-api</module>
+        <module>libs/module-api/bookings-api</module>
         <module>libs/module-core</module>
         <module>services/ai-gateway</module>
         <module>services/bookings</module>

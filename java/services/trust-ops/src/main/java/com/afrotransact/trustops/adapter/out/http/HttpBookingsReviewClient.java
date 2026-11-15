@@ -8,12 +8,14 @@ import com.afrotransact.trustops.config.TrustOpsProperties;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.port.BookingsReviewClient;
 import org.springframework.http.MediaType;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** bookings-service {@code POST /v1/reviews/{bookingId}/approve} and {@code /reject} (contracts/openapi/bookings.yaml). */
 @Component
+@ConditionalOnExpression("'${at.trust-ops.bookings.mode:${at.trust-ops.mode:http}}' == 'http'")
 class HttpBookingsReviewClient implements BookingsReviewClient {
 
     private static final String SERVICE = "bookings";

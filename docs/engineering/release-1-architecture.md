@@ -512,6 +512,8 @@ which maps `ModuleApiException` back to the failure type the HTTP adapter raised
 | fulfilment -> orders | `OrdersClient` | `orders-api` `ShipmentApi` | `delivery:relay`, step rules of `ShipmentService` | in-process |
 | fulfilment -> inventory | `InventoryClient` | `ReservationApi.find` | `inventory:reserve` (a service) or staff `inventory:read` | in-process |
 | trust-ops -> payments | `PaymentsClient` | `payments-api` `ClaimRefundApi` | `payments:service` | in-process |
+| trust-ops -> bookings | `BookingsReviewClient` | `bookings-api` `ReviewModerationApi` | `bookings:reviews:moderate` | in-process |
+| trust-ops -> offers | `OffersClient` | `offers-api` `SellerStandingApi` | `offers:write` | in-process |
 | trust-ops -> seller | `SellerEnforcementClient` | `seller-api` `SellerEnforcementApi` | `sellers:enforce` | in-process |
 | identity -> seller | `SellerOrgSource` | `seller-api` `OrgMirrorApi` | `sellers:directory` (added to identity's caller scopes) | in-process (a plain data call; identity's token validation, JWKS and login chains are untouched) |
 
@@ -523,7 +525,7 @@ Still HTTP in core, and why:
 | orders -> delivery-runs (`HttpDeliveryRunSlots`, `HttpPreorderEligibility`, `HttpDeliveryFeeRules`), fulfilment -> delivery-runs | delivery-runs is `enabled=false` in core by default; an in-process default would fail the start naming it. Convert when delivery-runs is enabled in core |
 | orders -> identity (`HttpStaffDirectory`, `HttpAddressBook`) | not converted yet (no provider on release-1 when this was written; `StaffDirectoryApi` is the other agent's); `HttpAddressBook` reads the signed-in customer's own addresses, so it needs the end-user actor rather than a service principal |
 | fulfilment -> geo, bookings -> geo | Go callee |
-| trust-ops -> catalog (moderation, reviews), bookings (review moderation), offers (seller performance), orders (lookup), ai-gateway (triage) | not converted yet in this pass |
+| trust-ops -> catalog (product moderation, review moderation), orders (lookup; `OrderLookupApi` is the other agent's), ai-gateway (triage) | not converted yet in this pass |
 | ai-gateway -> catalog, offers, orders, bookings, tax-returns readers and search/promise/cart | not converted yet; the Go ones stay HTTP |
 | mcp-server -> catalog, inventory, orders, seller, payments, bookings | not converted yet: the tools relay the end user's token, so an in-process version must run the callee as that user (the actor already on the request thread), not as a service principal, and keep the AI/MCP spend cap path unchanged |
 | retail -> catalog, inventory; delivery-runs -> orders, catalog | retail and delivery-runs are disabled in core by default; the callers are converted when they are enabled |

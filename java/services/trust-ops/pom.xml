@@ -39,6 +39,14 @@
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
+            <artifactId>offers-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>bookings-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
             <artifactId>seller-api</artifactId>
         </dependency>
         <dependency>
