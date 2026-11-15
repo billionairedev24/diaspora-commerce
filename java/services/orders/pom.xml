@@ -76,10 +76,6 @@
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
-            <artifactId>orders-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.afrotransact</groupId>
             <artifactId>tax-returns-api</artifactId>
         </dependency>
         <dependency>
