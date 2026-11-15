@@ -2,7 +2,6 @@ package com.afrotransact.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -14,6 +13,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import com.afrotransact.ai.api.AiUsageApi;
 import com.afrotransact.catalog.api.CatalogLookupApi;
 import com.afrotransact.catalog.api.LabelApi;
 import com.afrotransact.content.api.AdSpendApi;
@@ -32,6 +32,7 @@ import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.SellerLookupApi;
 import com.afrotransact.taxreturns.api.ListingDecisionApi;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -39,12 +40,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
-import org.springframework.core.type.filter.AnnotationTypeFilter;
-import org.springframework.stereotype.Component;
 
 /**
  * Boots afrotransact-core on a real PostgreSQL (the same environment as {@link CoreBootTest}: {@code AT_TEST_PG_ADMIN_URL},
@@ -94,12 +91,9 @@ class ModuleEdgesInCoreTest {
 
     @Test
     void everyInProcessAdapterOfARunningCalleeIsTheBeanAndNoUnlistedHttpAdapterIs() throws Exception {
-        ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
-        scanner.addIncludeFilter(new AnnotationTypeFilter(Component.class));
         List<String> wrong = new ArrayList<>();
         int inProcessChecked = 0;
-        for (BeanDefinition definition : scanner.findCandidateComponents("com.afrotransact")) {
-            Class<?> type = Class.forName(definition.getBeanClassName());
+        for (Class<?> type : ModuleEdgeGuardTest.components()) {
             ConditionalOnModuleMode edge = type.getAnnotation(ConditionalOnModuleMode.class);
             if (edge == null) {
                 continue;
@@ -129,8 +123,14 @@ class ModuleEdgesInCoreTest {
                     || type.isAnnotationPresent(ConditionalOnModuleMode.class)) {
                 continue;
             }
-            if (!staysHttp.containsKey(type.getSimpleName())) {
+            String reason = staysHttp.get(type.getSimpleName());
+            if (reason == null) {
                 unlisted.add(type.getName());
+            } else if (reason.startsWith("@off:")) {
+                String callee = reason.substring("@off:".length(), reason.indexOf(' '));
+                if (!OFF.contains(callee)) {
+                    unlisted.add(type.getName() + " (selected while " + callee + " is running)");
+                }
             }
         }
         assertThat(unlisted).as("HTTP adapters selected in core that are not on the stay-HTTP list").isEmpty();
@@ -202,6 +202,8 @@ class ModuleEdgesInCoreTest {
                         c -> c.getBean(SellerBillingApi.class).withhold("org_x", "inv-1", "N-1", 100L, "USD", "plan-fee-inv-1")),
                 method("SellerBillingApi.release", "payments", "payments:plan-fees",
                         c -> c.getBean(SellerBillingApi.class).release("org_x", "inv-1", 100L, "test", "plan-fee-release-1")),
+                method("AiUsageApi.usage", "ai-gateway", "ai:usage.read",
+                        c -> c.getBean(AiUsageApi.class).usage(DAY, DAY)),
                 method("OrderLookupApi.lookup", "orders", "orders:lookup",
                         c -> c.getBean(OrderLookupApi.class).lookup(UUID.randomUUID().toString())),
                 method("OrderLookupApi.purchase", "orders", "orders:purchase-check",
@@ -212,7 +214,7 @@ class ModuleEdgesInCoreTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("apiMethods")
     void aCallerWithoutTheScopeIsRefusedWith403AndOneWithItIsNot(Method m) {
-        assumeTrue(!OFF.contains(m.module()), "module " + m.module() + " is not started in this run");
+        Assumptions.assumeTrue(!OFF.contains(m.module()), "module " + m.module() + " is not started in this run");
         CallerPrincipal without = new CallerPrincipal("scope-test", "scope-test-service", Set.of("unrelated:scope"));
         assertThatThrownBy(() -> InProcessCalls.as(without, () -> {
             m.call().accept(ctx);

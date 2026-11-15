@@ -2,3 +2,54 @@
 # ModuleEdgeGuardTest fails when an unconditional Http* adapter component under adapter.out is missing here, or when a line here
 # names a class that no longer exists (or became switchable by at.<caller>.<callee>.mode): convert the edge, then delete the line.
 # Name=reason
+# --- catalog, offers, inventory, seller, content, tax-returns: edges to Go services (not Java modules)
+HttpCandidateRecall=catalog -> search (Go service, stays HTTP: not a Java module)
+HttpCarrierLabels=tax-returns -> carrier-gateway (Go service, stays HTTP: not a Java module)
+HttpImageImporter=catalog -> media (Go service, stays HTTP: not a Java module)
+HttpImageLibraryLookup=catalog -> media (Go service, stays HTTP: not a Java module)
+HttpImageVerifier=catalog -> media (Go service, stays HTTP: not a Java module)
+HttpCarrierGateway=@bean inventory -> carrier-gateway (Go service, stays HTTP: not a Java module)
+HttpMediaClient=@bean seller -> media (Go service, stays HTTP: not a Java module)
+# @bean = declared by a @Bean method (not a component, so the static check cannot see it; ModuleEdgesInCoreTest checks the running context)
+# @off:<module> = a bean-declared HTTP adapter that may be selected only while <module> is switched off in the application
+HttpAiUsageSource=@off:ai-gateway seller -> ai-gateway: in-process when ai-gateway runs (core default), HTTP only when it is switched off
+# --- other callers (owned by the other in-process batch; remove the line when the edge is converted)
+HttpAccountReader=ai-gateway -> Java modules (catalog, offers, orders, bookings, tax-returns): ai-gateway batch, not converted yet
+HttpAddressBook=orders -> identity (address book): orders batch, not converted yet
+HttpApplicationsApi=mcp-server relays the caller token to the module APIs: mcp-server batch, not converted yet
+HttpBookingsApi=mcp-server batch, not converted yet
+HttpBookingsReviewClient=trust-ops batch, not converted yet
+HttpCartApi=mcp-server -> cart (Go service, stays HTTP)
+HttpCartClient=orders -> cart (Go service, stays HTTP)
+HttpCatalogApi=mcp-server batch, not converted yet
+HttpCatalogModerationClient=trust-ops batch, not converted yet
+HttpCatalogReader=ai-gateway -> catalog: ai-gateway batch, not converted yet
+HttpCatalogReviewClient=trust-ops batch, not converted yet
+HttpDeliveryFeeRules=orders batch, not converted yet
+HttpDeliveryPromises=ai-gateway -> promise (Go service, stays HTTP)
+HttpDeliveryRunSlots=orders -> delivery-runs (module disabled in core, stays HTTP)
+HttpDeliveryRunsClient=fulfilment -> delivery-runs (module disabled in core, stays HTTP)
+HttpDistanceClient=orders -> geo (Go service, stays HTTP)
+HttpGeoApi=mcp-server -> geo (Go service, stays HTTP)
+HttpGeoClient=bookings, fulfilment -> geo (Go service, stays HTTP)
+HttpInventoryApi=mcp-server batch, not converted yet
+HttpMarketEligibility=orders batch, not converted yet
+HttpOfferReader=ai-gateway -> offers: ai-gateway batch, not converted yet
+HttpOffersClient=trust-ops batch, not converted yet
+HttpOrderTracker=ai-gateway -> orders: ai-gateway batch, not converted yet
+HttpOrdersApi=mcp-server batch, not converted yet
+HttpOrdersClient=trust-ops batch, not converted yet
+HttpPaymentsApi=mcp-server batch, not converted yet
+HttpPickupPoints=orders batch, not converted yet
+HttpPreorderEligibility=orders batch, not converted yet
+HttpProductSearch=ai-gateway -> search (Go service, stays HTTP)
+HttpPromiseApi=mcp-server -> promise (Go service, stays HTTP)
+HttpPromiseClient=orders -> promise (Go service, stays HTTP)
+HttpSearchApi=mcp-server -> search (Go service, stays HTTP)
+HttpSellerApi=mcp-server batch, not converted yet
+HttpSellerPlanDirectory=payments -> seller (plan directory): payments batch, not converted yet
+HttpSellerOrgSource=@bean identity -> seller (organisation sync): identity batch, not converted yet
+HttpServiceDirectory=ai-gateway -> bookings / service directory: ai-gateway batch, not converted yet
+HttpStaffDirectory=orders -> identity (staff directory): orders batch, not converted yet
+HttpTaxApi=mcp-server batch, not converted yet
+HttpTriageClient=trust-ops -> ai-gateway: trust-ops batch, not converted yet

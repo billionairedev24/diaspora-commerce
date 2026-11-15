@@ -17,7 +17,9 @@ import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.classreading.MetadataReader;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.stereotype.Component;
 
@@ -26,8 +28,9 @@ import org.springframework.stereotype.Component;
  * selected in core when an in-process one exists. Two parts, both run without a database:
  *
  * <ul>
- *   <li>every HTTP adapter that is switched by {@link ConditionalOnModuleMode} has an in-process partner for the same edge
- *   (caller and callee), and the other way round, so exactly one of the two is a bean for each edge and mode;</li>
+ *   <li>every HTTP adapter component that is switched by {@link ConditionalOnModuleMode} has an in-process partner for the same
+ *   edge (caller and callee), so exactly one of the two is a bean for each edge and mode (HTTP adapters declared by
+ *   {@code @Bean} methods are covered by the running-context check in {@link ModuleEdgesInCoreTest});</li>
  *   <li>every other {@code Http*} adapter component under {@code adapter.out} is on the list of edges that stay HTTP
  *   ({@code http-edges.txt}, with the reason), so a new HTTP adapter to another module cannot slip in unnoticed, and a listed
  *   edge that disappeared or was converted is removed from the list.</li>
@@ -53,8 +56,6 @@ class ModuleEdgeGuardTest {
         Set<String> httpEdges = edges(http);
         Set<String> inProcessEdges = edges(inProcess);
         assertThat(httpEdges).as("HTTP adapters whose edge has no in-process adapter").isSubsetOf(inProcessEdges);
-        assertThat(inProcessEdges).as("in-process adapters whose edge has no HTTP adapter (detach would be lost)")
-                .isSubsetOf(httpEdges);
 
         Map<String, String> staysHttp = allowList();
         Set<String> unlisted = new TreeSet<>();
@@ -72,14 +73,22 @@ class ModuleEdgeGuardTest {
         }
         assertThat(unlisted).as("HTTP adapters that are always on in core but are not on the list of edges that stay HTTP "
                 + "(convert them to an in-process adapter, or list them in http-edges.txt with the reason)").isEmpty();
-        assertThat(staysHttp.keySet()).as("edges on the stay-HTTP list that no longer exist as unconditional HTTP adapters")
-                .isSubsetOf(seen);
+        Set<String> staleCandidates = new TreeSet<>(staysHttp.keySet());
+        staysHttp.forEach((name, reason) -> {
+            if (reason.startsWith("@off:") || reason.startsWith("@bean ")) {
+                staleCandidates.remove(name);
+            }
+        });
+        assertThat(seen).as("edges on the stay-HTTP list that no longer exist as unconditional HTTP adapters")
+                .containsAll(staleCandidates);
     }
 
-    /** A hand-written switch on {@code at.<caller>.<callee>.mode}, as orders uses. */
+    /** A hand-written switch on {@code at.<caller>.<callee>.mode} (an expression or a property condition). */
     private static boolean switchedByExpression(Class<?> c) {
         ConditionalOnExpression expression = c.getAnnotation(ConditionalOnExpression.class);
-        return expression != null && expression.value().contains(".mode");
+        ConditionalOnProperty property = c.getAnnotation(ConditionalOnProperty.class);
+        return expression != null && expression.value().contains(".mode")
+                || property != null && Set.of(property.name()).contains("mode");
     }
 
     private static Set<String> edges(Set<String> described) {
@@ -90,9 +99,15 @@ class ModuleEdgeGuardTest {
         return out;
     }
 
-    private static List<Class<?>> components() throws ClassNotFoundException {
-        ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
-        scanner.addIncludeFilter(new AnnotationTypeFilter(Component.class));
+    /** Every {@code @Component} class, whatever its conditions say in this environment. */
+    static List<Class<?>> components() throws ClassNotFoundException {
+        AnnotationTypeFilter component = new AnnotationTypeFilter(Component.class);
+        ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false) {
+            @Override
+            protected boolean isCandidateComponent(MetadataReader reader) throws IOException {
+                return component.match(reader, getMetadataReaderFactory());
+            }
+        };
         List<Class<?>> out = new ArrayList<>();
         for (BeanDefinition definition : scanner.findCandidateComponents("com.afrotransact")) {
             out.add(Class.forName(definition.getBeanClassName(), false, ModuleEdgeGuardTest.class.getClassLoader()));
