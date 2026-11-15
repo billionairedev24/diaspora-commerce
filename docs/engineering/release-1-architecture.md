@@ -484,6 +484,55 @@ the route diff against `contracts/` (only the static duplicate scan of the OpenA
 (unit-level only for payments -> seller), load, checkout SLO, the detach procedure of the runbook (written, not rehearsed), the identity hosted-page chain
 under a real browser flow, Helm/Argo (other agent).
 
+### 12.7 Module-to-module edges from orders, payments, fulfilment, trust-ops, bookings and identity (in-process conversion)
+
+Owner requirement: a monolith makes no HTTP call to itself. Each converted edge follows the pattern of 4 above: a published interface in
+`java/libs/module-api/<callee>-api`, a provider adapter in the callee's `adapter/in/module` (uses the shared `ModuleEntry` guard of
+`platform-security`: refuses to run without an in-process caller or when the actor in force is not that caller, then runs the callee's
+application service, whose own permission check decides; the callee's error types leave as `ModuleApiException` with the status and code
+its `@RestControllerAdvice` gives), and a consumer adapter behind the existing `port/` interface in the caller's `adapter/out/module`,
+which maps `ModuleApiException` back to the failure type the HTTP adapter raised (`UpstreamFailure`, `UpstreamException`,
+`PaymentsClientException`), so the caller's behaviour does not depend on the mode. Switch: `at.<caller>.<callee>.mode`, falling back to
+`at.<caller>.mode`, default `http` (standalone) and `in-process` in core (`application.yml`: `at.orders.mode`, `at.bookings.mode`,
+`at.fulfilment.mode`, `at.trust-ops.mode`, `at.identity.mode`, `at.payments.mode`). The HTTP adapter is kept and carries the opposite
+`@ConditionalOnExpression`. Each in-process adapter checks at start that the callee's API bean exists and fails naming both modules.
+
+| Caller -> callee | Port (HTTP adapter kept) | Published API | Scope the callee checks | State |
+|---|---|---|---|---|
+| orders -> inventory | `InventoryClient` | `inventory-api` `ReservationApi` | `inventory:reserve` | in-process |
+| orders -> payments | `PaymentsClient`, `MemberBenefits` | `payments-api` `OrderPaymentsApi`, `MembershipBenefitsApi` | `payments:service` | in-process |
+| orders -> catalog | `ProductFactsClient` | `catalog-api` `ProductListingApi` | none (public read) | in-process |
+| orders -> tax-returns | `TaxQuoteClient` | `tax-returns-api` `TaxQuoteApi` | `tax:quote` | in-process |
+| orders -> offers | `CouponsClient`, `OfferInventory` | `offers-api` `CheckoutOffersApi` | coupons: service principal; offer read `offers:read` | in-process |
+| orders -> offers + seller | `PickupLocations` | `CheckoutOffersApi`, `seller-api` `ShipFromAddressApi` | `sellers:ship-from.read` | in-process when both edges are |
+| orders -> inventory + seller | `ShipFromAddresses` | `inventory-api` `NodeAddressApi`, `ShipFromAddressApi` | `inventory:read`, `sellers:ship-from.read` | in-process when both edges are |
+| payments -> seller (plan) | `SellerPlanDirectory` | `seller-api` `BillingPlanApi` | `seller:billing` | in-process |
+| bookings -> payments | `PaymentsClient` | `payments-api` `BookingPaymentsApi` | `payments:service` | in-process |
+| fulfilment -> orders | `OrdersClient` | `orders-api` `ShipmentApi` | `delivery:relay`, step rules of `ShipmentService` | in-process |
+| fulfilment -> inventory | `InventoryClient` | `ReservationApi.find` | `inventory:read` | in-process |
+| trust-ops -> payments | `PaymentsClient` | `payments-api` `ClaimRefundApi` | `payments:service` | in-process |
+| trust-ops -> seller | `SellerEnforcementClient` | `seller-api` `SellerEnforcementApi` | `sellers:enforce` | in-process |
+| identity -> seller | `SellerOrgSource` | `seller-api` `OrgMirrorApi` | `sellers:directory` (added to identity's caller scopes) | in-process (a plain data call; identity's token validation, JWKS and login chains are untouched) |
+
+Still HTTP in core, and why:
+
+| Caller -> callee | Why |
+|---|---|
+| orders -> cart, promise, geo, carrier-gateway | Go callees stay HTTP (afrotransact-go is its own deployable) |
+| orders -> delivery-runs (`HttpDeliveryRunSlots`, `HttpPreorderEligibility`, `HttpDeliveryFeeRules`), fulfilment -> delivery-runs | delivery-runs is `enabled=false` in core by default; an in-process default would fail the start naming it. Convert when delivery-runs is enabled in core |
+| orders -> identity (`HttpStaffDirectory`, `HttpAddressBook`), orders -> content (`HttpMarketEligibility`) | not converted yet (no provider); `HttpAddressBook` reads the signed-in customer's own addresses, so it needs the end-user actor rather than a service principal |
+| fulfilment -> geo, bookings -> geo | Go callee |
+| trust-ops -> catalog (moderation, reviews), bookings (review moderation), offers (seller performance), orders (lookup), ai-gateway (triage) | not converted yet in this pass |
+| ai-gateway -> catalog, offers, orders, bookings, tax-returns readers and search/promise/cart | not converted yet; the Go ones stay HTTP |
+| mcp-server -> catalog, inventory, orders, seller, payments, bookings | not converted yet: the tools relay the end user's token, so an in-process version must run the callee as that user (the actor already on the request thread), not as a service principal, and keep the AI/MCP spend cap path unchanged |
+| retail -> catalog, inventory; delivery-runs -> orders, catalog | retail and delivery-runs are disabled in core by default; the callers are converted when they are enabled |
+
+Tests per converted edge: a consumer test (principal passed, failure mapping, defaults of the HTTP adapter kept), a provider test per API method
+that a caller without the scope is refused with 403 (`InProcessKit` in `platform-test`; the application service is stood in by a mock that requires the
+permission through the real `DefaultPermissionChecker`, so it proves the guard, the actor and the 403 mapping, not the production service's own
+permission string), `ArchitectureTest` of every module, and `CoreBootTest` for the modules that boot without Valkey and Temporal (orders and fulfilment
+are off in that test, so their in-process wiring is not exercised by a boot here).
+
 ### 12.6 Measurement (this sandbox, 2026-11-15; one run, not comparable to the Phase 2 table)
 
 Core with 13 modules enabled (identity, catalog, tax-returns, offers, inventory, content, seller, orders, payments, bookings, trust-ops, ai-gateway,
