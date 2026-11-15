@@ -27,7 +27,8 @@ func TestAccentContrastIsEnforcedPerPreset(t *testing.T) {
 	}{
 		{PresetClean, "#1a7f4b", true},
 		{PresetClean, "#ffd400", false}, // yellow on white: 1.4:1
-		{PresetClean, "#767676", true},  // 4.54:1
+		{PresetClean, "#666666", true},
+		{PresetClean, "#767676", false}, // 4.54:1 on white but not on the raised surface
 		{PresetClean, "#777777", false}, // 4.48:1
 		{PresetMidnight, "#ffd400", true},
 		{PresetMidnight, "#1a7f4b", false}, // dark green on near-black
