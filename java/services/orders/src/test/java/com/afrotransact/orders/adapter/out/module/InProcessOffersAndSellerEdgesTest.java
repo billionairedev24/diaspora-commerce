@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.afrotransact.content.api.MarketEligibilityApi;
 import com.afrotransact.inventory.api.NodeAddressApi;
 import com.afrotransact.module.CallerPrincipal;
 import com.afrotransact.module.CallerPrincipals;
@@ -14,6 +15,7 @@ import com.afrotransact.module.ModuleApiException;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.PickupLocations;
 import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.TaxQuoteClient;
@@ -93,5 +95,19 @@ class InProcessOffersAndSellerEdgesTest {
                 .isEqualTo(new TaxQuoteClient.ShipFrom("1 Dock", "Newark", "NJ", "07101", "US", "FULFILMENT_CENTRE"));
         assertThat(addresses.forShipment(FulfilmentType.FBA_AFROTRANSACT, "org", "FC2", null)).isEmpty();
         assertThat(addresses.forShipment(FulfilmentType.SELLER_FULFILLED, "org", null, null)).isEmpty();
+    }
+
+    @Test
+    void marketEligibilityIsAdvisory() {
+        MarketEligibilityApi content = Mockito.mock(MarketEligibilityApi.class);
+        beans.registerSingleton("content", content);
+        Mockito.when(content.check("US", "TX", null)).thenReturn(new MarketEligibilityApi
+                .Eligibility(false, "region-disabled", "not yet"));
+        Mockito.when(content.check("NG", null, null)).thenThrow(new ModuleApiException(404, "content.country-not-found", "x"));
+        InProcessMarketEligibility eligibility = new InProcessMarketEligibility(
+                beans.getBeanProvider(MarketEligibilityApi.class), upstream, beans);
+        assertThat(eligibility.check(null, "TX", " ")).get().extracting(MarketEligibility.Result::reason)
+                .isEqualTo("region-disabled");
+        assertThat(eligibility.check("NG", null, null)).isEmpty();
     }
 }

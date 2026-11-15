@@ -416,8 +416,8 @@ at:
   # payments -> seller (live membership) only; payments' other edges are still HTTP (core's old ports) until their adapters exist.
   payments:
     mode: ${AT_PAYMENTS_MODE:in-process}
-  # orders -> inventory, payments, catalog, offers, tax-returns, seller in-process (per edge: AT_ORDERS_<CALLEE>_MODE=http detaches
-  # one). orders -> cart, promise, geo, carrier-gateway (Go), delivery-runs (disabled in core), identity and content stay HTTP.
+  # orders -> inventory, payments, catalog, offers, tax-returns, seller, content in-process (per edge: AT_ORDERS_<CALLEE>_MODE=http detaches
+  # one). orders -> cart, promise, geo, carrier-gateway (Go), delivery-runs (disabled in core) and identity stay HTTP.
   orders:
     mode: ${AT_ORDERS_MODE:in-process}
   # bookings -> payments in-process; bookings -> geo (Go) stays HTTP.

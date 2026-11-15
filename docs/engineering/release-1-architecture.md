@@ -505,6 +505,7 @@ which maps `ModuleApiException` back to the failure type the HTTP adapter raised
 | orders -> tax-returns | `TaxQuoteClient` | `tax-returns-api` `TaxQuoteApi` | `tax:quote` | in-process |
 | orders -> offers | `CouponsClient`, `OfferInventory` | `offers-api` `CheckoutOffersApi` | coupons: service principal; offer read `offers:read` | in-process |
 | orders -> offers + seller | `PickupLocations` | `CheckoutOffersApi`, `seller-api` `ShipFromAddressApi` | `sellers:ship-from.read` | in-process when both edges are |
+| orders -> content | `MarketEligibility` | `content-api` `MarketEligibilityApi` | none (public read) | in-process |
 | orders -> inventory + seller | `ShipFromAddresses` | `inventory-api` `NodeAddressApi`, `ShipFromAddressApi` | `inventory:read`, `sellers:ship-from.read` | in-process when both edges are |
 | payments -> seller (plan) | `SellerPlanDirectory` | `seller-api` `BillingPlanApi` | `seller:billing` | in-process |
 | bookings -> payments | `PaymentsClient` | `payments-api` `BookingPaymentsApi` | `payments:service` | in-process |
@@ -520,7 +521,7 @@ Still HTTP in core, and why:
 |---|---|
 | orders -> cart, promise, geo, carrier-gateway | Go callees stay HTTP (afrotransact-go is its own deployable) |
 | orders -> delivery-runs (`HttpDeliveryRunSlots`, `HttpPreorderEligibility`, `HttpDeliveryFeeRules`), fulfilment -> delivery-runs | delivery-runs is `enabled=false` in core by default; an in-process default would fail the start naming it. Convert when delivery-runs is enabled in core |
-| orders -> identity (`HttpStaffDirectory`, `HttpAddressBook`), orders -> content (`HttpMarketEligibility`) | not converted yet (no provider); `HttpAddressBook` reads the signed-in customer's own addresses, so it needs the end-user actor rather than a service principal |
+| orders -> identity (`HttpStaffDirectory`, `HttpAddressBook`) | not converted yet (no provider on release-1 when this was written; `StaffDirectoryApi` is the other agent's); `HttpAddressBook` reads the signed-in customer's own addresses, so it needs the end-user actor rather than a service principal |
 | fulfilment -> geo, bookings -> geo | Go callee |
 | trust-ops -> catalog (moderation, reviews), bookings (review moderation), offers (seller performance), orders (lookup), ai-gateway (triage) | not converted yet in this pass |
 | ai-gateway -> catalog, offers, orders, bookings, tax-returns readers and search/promise/cart | not converted yet; the Go ones stay HTTP |
