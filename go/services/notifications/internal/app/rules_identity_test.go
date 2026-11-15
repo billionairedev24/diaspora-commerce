@@ -47,3 +47,25 @@ func TestPasswordResetNotifications(t *testing.T) {
 		t.Fatalf("changed body = %q", body)
 	}
 }
+
+// A staff invitation goes to the address in the payload only (the invitee has no account to look up), as the staff
+// invitation email with the link; a resend carries the new link; a missing inviter name and expiry get safe defaults.
+func TestStaffInvitationEmail(t *testing.T) {
+	store := newFakeStore()
+	ing := newIngest(store, owners(), "firstName", "roleName", "acceptUrl", "expiresInHours", "inviterName")
+	payload := func(resent bool, link string, inviter any) map[string]any {
+		return map[string]any{"invitationId": "5b0c7d2e-8a41-4f0e-b3c2-9d6e1a2f4b01", "email": "ada@afrotransact.com", "firstName": "Ada", "lastName": "Obi",
+			"roleKey": "platform.customer_support", "roleName": "Customer Support", "acceptUrl": link, "expiresAt": "2026-10-13T10:00:00Z",
+			"expiresInHours": nil, "resent": resent, "invitedBy": "u-1", "inviterName": inviter,
+			"recipient": map[string]any{"id": nil, "email": "ada@afrotransact.com", "phone": nil}, "transactional": true}
+	}
+	handle(t, ing, "identity.staff-invitation.created", payload(false, "https://one.example.com/invite#token=first", "Ifeoma Okafor"))
+	handle(t, ing, "identity.staff-invitation.created", payload(true, "https://two.example.com/invite#token=second", nil))
+	if got := strings.Join(summary(store.enqueued), ","); got != "account.staff_invitation|email|ada@afrotransact.com,account.staff_invitation|email|ada@afrotransact.com" {
+		t.Fatalf("staff invitation = %v", got)
+	}
+	body := emailBody(t, store.enqueued, "account.staff_invitation")
+	if !strings.Contains(body, "acceptUrl=https://one.example.com/invite#token=first") || !strings.Contains(body, "expiresInHours=72") || !strings.Contains(body, "roleName=Customer Support") {
+		t.Fatalf("body = %q", body)
+	}
+}

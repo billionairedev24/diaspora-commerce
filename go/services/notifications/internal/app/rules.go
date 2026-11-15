@@ -203,6 +203,10 @@ var DefaultEventRules = map[string][]EventRule{
 	// The invitee usually has no account: recipient.email from the payload only, never looked up.
 	"identity.invitation.created": {{Topic: TopicIdentity, Template: "org.invitation", Channels: chEmail,
 		Recipient: RecipientPayload, Security: true, Enrich: enrichInvitation}},
+	// Staff invitation: the invitee has no account yet, so the address comes from the payload only. The link carries the
+	// single-use token in its fragment; nothing here stores or logs the payload beyond the rendered email.
+	"identity.staff-invitation.created": {{Topic: TopicIdentity, Template: "account.staff_invitation", Channels: chEmail,
+		Recipient: RecipientPayload, Security: true, Enrich: enrichStaffInvitation}},
 	"identity.user.registered": {{Topic: TopicIdentity, Template: "account.welcome", Channels: chEmail,
 		Recipient: RecipientPayload, IDField: "userId",
 		When:   func(d map[string]any) bool { return str(d, "intent") != "STAFF" },
@@ -741,6 +745,15 @@ func enrichInvitation(d map[string]any, l Links) {
 	setDefault(d, "orgName", "your team")
 	if _, ok := integer(d, "expiresInDays"); !ok {
 		d["expiresInDays"] = 7
+	}
+}
+
+func enrichStaffInvitation(d map[string]any, _ Links) {
+	nullable(d, "inviterName")
+	setDefault(d, "inviterName", "A colleague")
+	setDefault(d, "firstName", "there")
+	if _, ok := integer(d, "expiresInHours"); !ok {
+		d["expiresInHours"] = 72
 	}
 }
 
