@@ -22,6 +22,7 @@
         <module>libs/module-api/tax-returns-api</module>
         <module>libs/module-api/seller-api</module>
         <module>libs/module-api/inventory-api</module>
+        <module>libs/module-api/payments-api</module>
         <module>libs/module-core</module>
         <module>services/ai-gateway</module>
         <module>services/bookings</module>

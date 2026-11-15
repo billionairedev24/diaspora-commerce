@@ -18,6 +18,10 @@
     <dependencies>
         <dependency>
             <groupId>com.afrotransact</groupId>
+            <artifactId>module-contract</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
             <artifactId>platform-security</artifactId>
             <version>${project.version}</version>
         </dependency>
