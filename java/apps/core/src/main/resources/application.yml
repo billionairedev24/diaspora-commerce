@@ -421,3 +421,6 @@ at:
   # bookings -> payments in-process; bookings -> geo (Go) stays HTTP.
   bookings:
     mode: ${AT_BOOKINGS_MODE:in-process}
+  # fulfilment -> orders, inventory in-process; fulfilment -> delivery-runs (disabled in core) and geo (Go) stay HTTP.
+  fulfilment:
+    mode: ${AT_FULFILMENT_MODE:in-process}

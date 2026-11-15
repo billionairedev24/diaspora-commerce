@@ -9,12 +9,14 @@ import com.afrotransact.fulfilment.port.InventoryClient;
 import com.afrotransact.fulfilment.port.ServiceTokenProvider;
 import com.afrotransact.fulfilment.port.UpstreamFailure;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** inventory-service (port 8103): reservation of an order (node and FEFO lots per SKU). */
 @Component
+@ConditionalOnExpression("'${at.fulfilment.inventory.mode:${at.fulfilment.mode:http}}' == 'http'")
 class HttpInventoryClient implements InventoryClient {
 
     private final Upstream inventory;
