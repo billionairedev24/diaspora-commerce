@@ -56,6 +56,9 @@ type StaffServices struct {
 	// Access serves Settings > Roles and permissions (catalogue, roles, who holds them, effective permissions, change log); routes
 	// are registered when it is set.
 	Access app.StaffAccessService
+	// Invitations serves Settings > Staff accounts' invitations (invite, list, resend, revoke) and the invitee's two session-less
+	// pages; routes are registered when it and Access are set.
+	Invitations app.StaffInvitationsService
 	// ContentPages serves Settings → Published pages (index, preview data, drafts, publication and rollback of legal
 	// documents and help pages); routes are registered when it is set.
 	ContentPages app.StaffContentPagesService
@@ -67,7 +70,7 @@ type StaffServices struct {
 	Files port.LocalExportFiles
 }
 
-func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerFunc)) {
+func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerFunc), limited func(http.HandlerFunc) http.HandlerFunc) {
 	s := h.s.Staff
 	if s.Shell == nil {
 		return
@@ -161,6 +164,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Access != nil {
 		h.registerStaffAccess(route)
+		if s.Invitations != nil {
+			h.registerStaffInvitations(route, limited)
+		}
 	}
 }
 
