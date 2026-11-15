@@ -297,3 +297,12 @@ Findings that decide the Go design:
 5. Core config: module env vars (`<M>_DB_URL`...), pool size, scheduler pool size.
 6. Tests: the module's own suite, ArchUnit, the in-process 403 test, route diff.
 7. Dashboards: only what the label rules in 6.1 change.
+
+## 10. Re-check after merging main (2026-11-15, main at 72ae69796)
+
+Merged into release-1 (d1368b31b): seller storefront (`seller` V92, `StorePage*`, `PublicStorefrontController`), gateway-bff storefront/staff-access/seller store-page work (Go), sitemap stores. One conflict, `docs/backlog/backlog.csv` (both sides appended), resolved by taking main's file and re-appending the release-1 epic E37 and stories S491-S499 (renumbered).
+
+- **No consolidated module was touched** (catalog and tax-returns have no changes from main in this merge), so nothing needed adapting. `tools/release/sync-main.sh` now lists, after every merge, any change main made to the outbound adapters, config or pom of a mounted module under "ADAPT", and `--require-current` fails when release-1 is behind main.
+- **seller (batch 2)**: the new public storefront endpoints are permitted in `SellerSecurityConfiguration` itself (`GET /v1/public/storefronts[/*]`), not in `at.security.public-paths`. This confirms hazard 10: when seller mounts, its custom chain must become a `securityMatcher` chain ahead of the shared one, and its permit list must be carried over, or the storefront returns 401. V92 is a new migration in seller's own history (no renumbering).
+- No new `@Scheduled`, `@KafkaListener`, `@RestControllerAdvice`, static singleton or pom dependency appeared in the merged Java code.
+- **Not re-verifiable yet**: the coordinator also names orders V13/V14, fulfilment V6, identity V49 (admin delivery and proof), staff Settings roles, Avalara shadow mode and in-flight identity/ai-gateway work. Those are not on `origin/main` as of this merge; they come in with the next `sync-main.sh` run and the per-batch checklist (section 9) covers them. Orders, fulfilment, identity and ai-gateway collisions in section 3 were derived from the code at 26d74f64f and must be re-read at their batch.

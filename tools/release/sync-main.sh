@@ -3,6 +3,7 @@
 # tracking origin/release-1). Never pushes: it prints the push command, so a person reads the merge first.
 #
 #   tools/release/sync-main.sh            merge origin/main, run the cheap checks, print what to review
+#   tools/release/sync-main.sh --require-current   exit 1 when release-1 is behind main (CI, checkpoints)
 #   tools/release/sync-main.sh --check    only report how far release-1 is behind main and which files would conflict
 #
 # Conflict guidance (docs/engineering/release-1-architecture.md, "Keeping main in release-1"):
@@ -46,7 +47,12 @@ else
   echo "No conflicts predicted."
 fi
 
-[[ "${1:-}" == "--check" ]] && exit 0
+if [[ "${1:-}" == "--check" ]]; then exit 0; fi
+if [[ "${1:-}" == "--require-current" ]]; then
+  # For CI and checkpoints: release-1 must contain all of main.
+  [[ "$behind" -eq 0 ]] || die "release-1 is ${behind} commit(s) behind ${BASE_BRANCH}: run tools/release/sync-main.sh"
+  exit 0
+fi
 
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || die "work tree has uncommitted changes; commit or stash them first"
 
@@ -62,6 +68,15 @@ bash -n tools/release/sync-main.sh && echo "  script syntax ok"
 if [[ -f java/apps/core/pom.xml ]]; then
   echo "  new migrations from main (check each module has its own V<n>, none renumbered):"
   git diff --name-status "ORIG_HEAD" HEAD -- 'java/services/*/src/main/resources/db/migration/*' | sed 's/^/    /' || true
+fi
+# Consolidated modules (the ones java/apps/core mounts) whose wiring main touched must be adapted, not just merged.
+mounted="$(sed -n 's/.*basePackage = "com.afrotransact.\([a-z]*\)".*/\1/p' java/apps/core/src/main/java/com/afrotransact/core/CoreApplication.java 2>/dev/null | tr '\n' ' ')"
+if [[ -n "$mounted" ]]; then
+  echo "  mounted modules: $mounted"
+  for pkg in $mounted; do
+    changed="$(git diff --name-only ORIG_HEAD HEAD -- "java/services/*/src/main/java/com/afrotransact/${pkg}/adapter/out" "java/services/*/src/main/java/com/afrotransact/${pkg}/config" 'java/services/*/pom.xml' 2>/dev/null || true)"
+    [[ -z "$changed" ]] || { echo "  ADAPT: main changed outbound adapters, config or pom of '${pkg}' (add the in-process adapter or keep mode=http):"; echo "$changed" | sed 's/^/    /'; }
+  done
 fi
 echo
 echo "Review with: git log --oneline ORIG_HEAD..HEAD | head"
