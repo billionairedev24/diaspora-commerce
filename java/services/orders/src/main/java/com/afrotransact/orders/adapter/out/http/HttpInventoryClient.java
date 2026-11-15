@@ -9,12 +9,14 @@ import java.util.Map;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** inventory-service (port 8103) reservations; Idempotency-Key = order id on every call. */
 @Component
+@ConditionalOnExpression("'${at.orders.inventory.mode:${at.orders.mode:http}}' == 'http'")
 class HttpInventoryClient implements InventoryClient {
 
     private static final String IDEMPOTENCY_KEY = "Idempotency-Key";

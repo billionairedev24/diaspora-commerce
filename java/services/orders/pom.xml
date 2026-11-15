@@ -59,6 +59,10 @@
             <artifactId>module-contract</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>inventory-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.temporal</groupId>
             <artifactId>temporal-spring-boot-starter</artifactId>
         </dependency>
