@@ -11,8 +11,8 @@ nothing below changes that.
 ### Run it
 
 ```bash
-make go-monolith-run                 # builds bin/afrotransact-go and runs it on :8250
-APP_ENV=local AFROTRANSACT_GO_PORT=8250 bin/afrotransact-go
+make go-monolith-run                 # builds go/bin/afrotransact-go and runs it on :8250
+APP_ENV=local AFROTRANSACT_GO_PORT=8250 go/bin/afrotransact-go
 make go-monolith-image               # container image (go/Dockerfile.afrotransact-go)
 ```
 

@@ -110,11 +110,11 @@ go-verify: ## Go: vet, test and golangci-lint for go/pkg and every go/services/*
 	  if [ $$lint = 1 ]; then ( cd $$dir && "$(GOLANGCI)" run --config $(CURDIR)/go/.golangci.yml ./... ); fi; \
 	done
 
-go-monolith: ## Release 1: build the single Go deployable bin/afrotransact-go (all Go modules in one process, ADR 0011)
-	mkdir -p bin && cd go/apps/afrotransact-go && go build -ldflags="-s -w" -o $(CURDIR)/bin/afrotransact-go ./cmd/afrotransact-go
+go-monolith: ## Release 1: build the single Go deployable go/bin/afrotransact-go (all Go modules in one process, ADR 0011)
+	mkdir -p go/bin && cd go/apps/afrotransact-go && go build -ldflags="-s -w" -o $(CURDIR)/go/bin/afrotransact-go ./cmd/afrotransact-go
 
 go-monolith-run: go-monolith ## Release 1: run afrotransact-go on :8250 (env names: docs/runbooks/release-1-local.md; every module also builds alone from go/services/<svc>/cmd)
-	APP_ENV=$${APP_ENV:-local} bin/afrotransact-go
+	APP_ENV=$${APP_ENV:-local} go/bin/afrotransact-go
 
 go-monolith-image: ## Release 1: build the afrotransact-go container image (go/Dockerfile.afrotransact-go, context go/)
 	docker build -f go/Dockerfile.afrotransact-go -t afrotransact-go:dev go
