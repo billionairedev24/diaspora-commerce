@@ -67,6 +67,50 @@ export type AccessLogEntry = z.infer<typeof AccessLogEntrySchema>;
 export const AccessLogPageSchema = z.object({ items: z.array(AccessLogEntrySchema), page: z.number().int(), size: z.number().int(), total: z.number().int() });
 export type AccessLogPage = z.infer<typeof AccessLogPageSchema>;
 
+/** An invitation to be staff, as the console lists it: names and emails (the id only keys resend and revoke, and is never shown). */
+export const StaffInvitationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+  email: z.string(),
+  roleKey: z.string(),
+  roleName: z.string(),
+  status: z.enum(['PENDING', 'EXPIRED']),
+  reason: z.string(),
+  invitedByName: z.string(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  lastSentAt: z.string(),
+  sendCount: z.number().int()
+});
+export type StaffInvitation = z.infer<typeof StaffInvitationSchema>;
+export const StaffInvitationPageSchema = z.object({ items: z.array(StaffInvitationSchema), total: z.number().int(), page: z.number().int(), size: z.number().int(), canAdmin: z.boolean() });
+export type StaffInvitationPage = z.infer<typeof StaffInvitationPageSchema>;
+
+export interface StaffInviteInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  roleKey: string;
+  reason: string;
+}
+
+/** What an invite link is for: name, email, role and whether it can still be used. The token never comes back. */
+export const StaffInvitationPreviewSchema = z.object({
+  firstName: z.string(),
+  lastName: z.string(),
+  name: z.string(),
+  email: z.string(),
+  roleName: z.string(),
+  status: z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']),
+  expiresAt: z.string()
+});
+export type StaffInvitationPreview = z.infer<typeof StaffInvitationPreviewSchema>;
+export const StaffInvitationAcceptedSchema = z.object({ email: z.string(), roleName: z.string() });
+export type StaffInvitationAccepted = z.infer<typeof StaffInvitationAcceptedSchema>;
+const NoBodySchema = z.unknown();
+
 export interface AccessLogQuery {
   userId?: string;
   role?: string;
@@ -92,6 +136,16 @@ export function createStaffAccessApi(request: Requester) {
     person: (id: string, signal?: AbortSignal): Promise<AccessPerson> => request(`${A}/people/${enc(id)}`, AccessPersonSchema, { signal }),
     setPersonPermission: (id: string, permission: string, on: boolean, reason: string): Promise<AccessPerson> =>
       request(`${A}/people/${enc(id)}/permissions/${enc(permission)}`, AccessPersonSchema, { method: on ? 'PUT' : 'DELETE', body: { reason } }),
+    invitations: (page: number, size: number, signal?: AbortSignal): Promise<StaffInvitationPage> =>
+      request(`${A}/invitations`, StaffInvitationPageSchema, { query: { page: String(page), size: String(size) }, signal }),
+    invite: (body: StaffInviteInput): Promise<StaffInvitation> => request(`${A}/invitations`, StaffInvitationSchema, { method: 'POST', body }),
+    resendInvitation: (id: string): Promise<StaffInvitation> => request(`${A}/invitations/${enc(id)}/resend`, StaffInvitationSchema, { method: 'POST', body: {} }),
+    revokeInvitation: (id: string, reason: string): Promise<unknown> => request(`${A}/invitations/${enc(id)}/revoke`, NoBodySchema, { method: 'POST', body: { reason } }),
+    /** The invitee's two pages need no session: the token goes in the body, never the address. */
+    previewInvitation: (token: string, signal?: AbortSignal): Promise<StaffInvitationPreview> =>
+      request('/v1/staff/invitations/preview', StaffInvitationPreviewSchema, { method: 'POST', body: { token }, signal }),
+    acceptInvitation: (body: { token: string; password: string; confirmPassword: string }): Promise<StaffInvitationAccepted> =>
+      request('/v1/staff/invitations/accept', StaffInvitationAcceptedSchema, { method: 'POST', body }),
     log: (q: AccessLogQuery, signal?: AbortSignal): Promise<AccessLogPage> =>
       request(`${A}/log`, AccessLogPageSchema, {
         query: { userId: q.userId || undefined, role: q.role || undefined, permission: q.permission || undefined, page: String(q.page ?? 0), size: String(q.size ?? 50) },
@@ -108,7 +162,8 @@ export const staffAccessKeys = {
   members: (role: string, page: number, size: number) => [...staffAccessKeys.all, 'members', role, page, size] as const,
   people: (q: string, page: number, size: number) => [...staffAccessKeys.all, 'people', q, page, size] as const,
   person: (id: string) => [...staffAccessKeys.all, 'person', id] as const,
-  log: (q: AccessLogQuery) => [...staffAccessKeys.all, 'log', q] as const
+  log: (q: AccessLogQuery) => [...staffAccessKeys.all, 'log', q] as const,
+  invitations: (page: number, size: number) => [...staffAccessKeys.all, 'invitations', page, size] as const
 };
 
 export const staffAccessQueries = {
@@ -119,5 +174,7 @@ export const staffAccessQueries = {
   people: (api: StaffAccessApi, q: string, page: number, size: number) =>
     queryOptions({ queryKey: staffAccessKeys.people(q, page, size), queryFn: ({ signal }) => api.people(q, page, size, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
   person: (api: StaffAccessApi, id: string) => queryOptions({ queryKey: staffAccessKeys.person(id), queryFn: ({ signal }) => api.person(id, signal), staleTime: 5_000 }),
+  invitations: (api: StaffAccessApi, page: number, size: number) =>
+    queryOptions({ queryKey: staffAccessKeys.invitations(page, size), queryFn: ({ signal }) => api.invitations(page, size, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
   log: (api: StaffAccessApi, q: AccessLogQuery) => queryOptions({ queryKey: staffAccessKeys.log(q), queryFn: ({ signal }) => api.log(q, signal), placeholderData: keepPreviousData, staleTime: 5_000 })
 };

@@ -265,23 +265,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       },
       { key: 'disable', label: 'Disable account', tone: 'danger', permission: 'access:admin', when: (r) => (r.fields.enabled ? null : 'Already disabled.'), form: reasonForm('Disable the account', 'Disable'), apply: (r, v, ctx) => { r.fields.enabled = false; r.fields.status = 'DISABLED'; log(r, ctx, `Disabled — ${str(v.reason)}`); } },
       { key: 'enable', label: 'Enable account', tone: 'neutral', permission: 'access:admin', when: (r) => (r.fields.enabled ? 'Already enabled.' : null), confirm: 'Re-enable this account?', apply: (r, _v, ctx) => { r.fields.enabled = true; r.fields.status = 'ACTIVE'; log(r, ctx, 'Enabled'); } }
-    ],
-    create: {
-      permission: 'access:admin',
-      form: form('New staff account', 'Create account', [
-        field('firstName', 'First name', 'text', true, { maxLength: 80 }),
-        field('lastName', 'Last name', 'text', true, { maxLength: 80 }),
-        field('email', 'Work email', 'email', true, { pattern: '^[^@\\s]+@afrotransact\\.com$', help: 'Staff accounts use an @afrotransact.com address' }),
-        field('phone', 'Mobile', 'text', true, { pattern: '^\\+[1-9][0-9]{7,14}$', placeholder: '+18325550100' }),
-        field('password', 'Temporary password', 'password', true, { maxLength: 128 }),
-        field('roles', 'Roles', 'multiselect', true, { options: options('platform.customer_support', 'platform.finance', 'platform.trust_safety', 'platform.marketing', 'platform.auditor') })
-      ]),
-      build: (v, id, ctx) => ({
-        id,
-        fields: { name: `${str(v.firstName)} ${str(v.lastName)}`, email: str(v.email), principalType: 'STAFF', roles: (Array.isArray(v.roles) ? v.roles : []).join(', '), enabled: true, status: 'ACTIVE', emailVerified: false, driverAppAccess: false },
-        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Staff account provisioned' }]
-      })
-    }
+    ]
   },
   roles: {
     title: 'Roles',
