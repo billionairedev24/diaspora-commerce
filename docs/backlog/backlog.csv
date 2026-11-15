@@ -2051,3 +2051,13 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Every step audited without token or password; temporary-password path off by default
 - Contracts, docs, unit, PostgreSQL integration, BFF contract, console and Playwright 1280/390 tests pass
 - Verified against a real identity, notifications and mail provider together","E02","","High","8","staff-console rbac identity notifications","identity","In Progress"
+"S493","Story","Module access matrix tab in Settings > Roles and permissions","A fourth tab shows the module access matrix (none, view, edit, approve, full) per role per module, editable by access:admin holders with a required reason and confirmation, read-only for access:read. Super Admin keeps Edit on Users & roles and Access control. docs/engineering/staff-settings.md.","- Identity PUT module-access takes a reason, logs it, and refuses taking Super Admin below Edit on Users & roles or Access control (409)
+- BFF GET and PUT /v1/staff/access/modules with the same guard, reason rules and a dropped matrix cache; contract updated
+- Tab shows modules and roles by name, a level select per cell, confirmation with a reason, read-only text for access:read
+- Alignment measured in Playwright at 1280 and 390 (filters, rows, columns, no sideways page scroll); axe clean
+- Unit, PostgreSQL integration, BFF contract, console and Playwright tests pass","E02","","High","5","staff-console rbac identity","identity","Done"
+"S494","Story","AI spend today on the AI and MCP spend cap setting","ai-gateway reports today's spend in USD against the daily cap by feature; the staff console shows it read-only next to the deployment-configured cap. See docs/runbooks/ai-spend-and-mcp-access.md.","- ai-gateway read endpoint returns today's UTC spend by feature against the cap, permission-gated, with no data reported as zero and no invented numbers
+- BFF route and contract
+- Settings > AI and MCP spend cap shows spend today, the cap and where it is set (read-only)
+- No new MCP tool; docs/engineering/mcp-tool-proposals.md notes the endpoint exists
+- Tests pass","E02","","Medium","3","staff-console ai","identity","To Do"

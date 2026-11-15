@@ -111,6 +111,22 @@ export const StaffInvitationAcceptedSchema = z.object({ email: z.string(), roleN
 export type StaffInvitationAccepted = z.infer<typeof StaffInvitationAcceptedSchema>;
 const NoBodySchema = z.unknown();
 
+/** The module access levels, lowest first. */
+export const ACCESS_MODULE_LEVELS = ['none', 'view', 'edit', 'approve', 'full'] as const;
+export const AccessModuleLevelSchema = z.enum(ACCESS_MODULE_LEVELS);
+export type AccessModuleLevel = z.infer<typeof AccessModuleLevelSchema>;
+export const AccessModuleMatrixSchema = z.object({
+  portal: z.string(),
+  levels: z.array(AccessModuleLevelSchema),
+  roles: z.array(z.object({ key: z.string(), name: z.string() })),
+  modules: z.array(z.object({ key: z.string(), label: z.string(), levels: z.record(z.string(), AccessModuleLevelSchema) })),
+  locked: z.array(z.object({ role: z.string(), module: z.string(), minimum: z.literal('edit') })),
+  canAdmin: z.boolean()
+});
+export type AccessModuleMatrix = z.infer<typeof AccessModuleMatrixSchema>;
+export const AccessModuleCellSchema = z.object({ portal: z.string(), module: z.string(), role: z.string(), level: AccessModuleLevelSchema });
+export type AccessModuleCell = z.infer<typeof AccessModuleCellSchema>;
+
 export interface AccessLogQuery {
   userId?: string;
   role?: string;
@@ -136,6 +152,9 @@ export function createStaffAccessApi(request: Requester) {
     person: (id: string, signal?: AbortSignal): Promise<AccessPerson> => request(`${A}/people/${enc(id)}`, AccessPersonSchema, { signal }),
     setPersonPermission: (id: string, permission: string, on: boolean, reason: string): Promise<AccessPerson> =>
       request(`${A}/people/${enc(id)}/permissions/${enc(permission)}`, AccessPersonSchema, { method: on ? 'PUT' : 'DELETE', body: { reason } }),
+    modules: (portal: AccessPortal, signal?: AbortSignal): Promise<AccessModuleMatrix> => request(`${A}/modules`, AccessModuleMatrixSchema, { query: { portal }, signal }),
+    setModuleLevel: (portal: AccessPortal, module: string, role: string, level: AccessModuleLevel, reason: string): Promise<AccessModuleCell> =>
+      request(`${A}/modules/${enc(portal)}/${enc(module)}/${enc(role)}`, AccessModuleCellSchema, { method: 'PUT', body: { level, reason } }),
     invitations: (page: number, size: number, signal?: AbortSignal): Promise<StaffInvitationPage> =>
       request(`${A}/invitations`, StaffInvitationPageSchema, { query: { page: String(page), size: String(size) }, signal }),
     invite: (body: StaffInviteInput): Promise<StaffInvitation> => request(`${A}/invitations`, StaffInvitationSchema, { method: 'POST', body }),
@@ -163,7 +182,8 @@ export const staffAccessKeys = {
   people: (q: string, page: number, size: number) => [...staffAccessKeys.all, 'people', q, page, size] as const,
   person: (id: string) => [...staffAccessKeys.all, 'person', id] as const,
   log: (q: AccessLogQuery) => [...staffAccessKeys.all, 'log', q] as const,
-  invitations: (page: number, size: number) => [...staffAccessKeys.all, 'invitations', page, size] as const
+  invitations: (page: number, size: number) => [...staffAccessKeys.all, 'invitations', page, size] as const,
+  modules: (portal: AccessPortal) => [...staffAccessKeys.all, 'modules', portal] as const
 };
 
 export const staffAccessQueries = {
@@ -174,6 +194,7 @@ export const staffAccessQueries = {
   people: (api: StaffAccessApi, q: string, page: number, size: number) =>
     queryOptions({ queryKey: staffAccessKeys.people(q, page, size), queryFn: ({ signal }) => api.people(q, page, size, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
   person: (api: StaffAccessApi, id: string) => queryOptions({ queryKey: staffAccessKeys.person(id), queryFn: ({ signal }) => api.person(id, signal), staleTime: 5_000 }),
+  modules: (api: StaffAccessApi, portal: AccessPortal) => queryOptions({ queryKey: staffAccessKeys.modules(portal), queryFn: ({ signal }) => api.modules(portal, signal), staleTime: 10_000 }),
   invitations: (api: StaffAccessApi, page: number, size: number) =>
     queryOptions({ queryKey: staffAccessKeys.invitations(page, size), queryFn: ({ signal }) => api.invitations(page, size, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
   log: (api: StaffAccessApi, q: AccessLogQuery) => queryOptions({ queryKey: staffAccessKeys.log(q), queryFn: ({ signal }) => api.log(q, signal), placeholderData: keepPreviousData, staleTime: 5_000 })
