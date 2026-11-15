@@ -2264,9 +2264,11 @@ paths:
       operationId: listAccessRoleMembers
       security: [{sessionCookie: []}]
       summary: The people who hold a role, by name
-      description: identity `GET /v1/admin/users`, read page by page (at most 1,000 people) and filtered by role, because identity has no query for it; `partial` is true when the directory was longer than what was read.
+      description: identity `GET /v1/admin/users?role=` (filtered and paged by identity, so `total` is exact). Server-driven paging.
       parameters:
         - {name: role, in: path, required: true, schema: {type: string, pattern: '^[a-z]+\.[a-z0-9_]+$'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
       responses:
         '200': {description: The holders, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRoleMembers'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -2388,7 +2390,7 @@ paths:
       operationId: listAccessLog
       security: [{sessionCookie: []}]
       summary: The access change log, newest first
-      description: identity `GET /v1/admin/access-log` (access:read, append-only). Identity filters by person; a role or permission filter is matched here over the newest 200 entries (`partial` when there were more). People are named, never shown as ids.
+      description: identity `GET /v1/admin/access-log` (access:read, append-only). Identity filters by person, role and permission (exact, indexed) and pages the result; `total` is the number of matching entries. People are named, never shown as ids.
       parameters:
         - {name: userId, in: query, schema: {type: string, format: uuid}}
         - {name: role, in: query, schema: {type: string, maxLength: 80}}
@@ -7907,11 +7909,13 @@ components:
         markets: {type: array, items: {type: string}, description: Market codes the role is limited to for this person (empty = everywhere)}
     AccessRoleMembers:
       type: object
-      required: [role, items, partial]
+      required: [role, items, total, page, size]
       properties:
         role: {type: string}
         items: {type: array, items: {$ref: '#/components/schemas/AccessRoleMember'}}
-        partial: {type: boolean}
+        total: {type: integer, format: int64, description: People who hold the role}
+        page: {type: integer}
+        size: {type: integer}
     AccessChangeRequest:
       type: object
       required: [reason]
@@ -7960,12 +7964,12 @@ components:
         detail: {type: string}
     AccessLogPage:
       type: object
-      required: [items, page, size, partial]
+      required: [items, page, size, total]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/AccessLogEntry'}}
         page: {type: integer}
         size: {type: integer}
-        partial: {type: boolean}
+        total: {type: integer, format: int64, description: Entries that match the filter}
     IdentityDocuments:
       type: object
       required: [discovery, jwks]

@@ -46,7 +46,7 @@ func TestStaffAccessConformance(t *testing.T) {
 	}
 	roles := map[string][]string{"platform.finance": {"refunds:issue"}, "platform.super_admin": {"access:read", "access:admin"}}
 	direct := []string{}
-	var reasons []string
+	var reasons, identityQueries []string
 	f := &fakePlatform{payoutSt: "REQUESTED"}
 	f.override = func(w http.ResponseWriter, r *http.Request, _ map[string]any) bool {
 		mu.Lock()
@@ -74,6 +74,16 @@ func TestStaffAccessConformance(t *testing.T) {
 			}
 			writeJ(w, 200, map[string]any{"key": role, "portal": "platform", "name": "x", "description": "d", "permissions": roles[role]})
 		case p == "/v1/admin/users" && r.Method == http.MethodGet:
+			identityQueries = append(identityQueries, r.URL.RawQuery)
+			if role := r.URL.Query().Get("role"); role != "" {
+				holders := []any{}
+				if role == "platform.finance" {
+					holders = append(holders, map[string]any{"id": accessAda, "name": "Ada Obi", "email": "ada@afrotransact.com", "enabled": true, "principalType": "STAFF", "roles": []string{"platform.finance"},
+						"directGrants": []string{}, "effectivePermissions": []string{"refunds:issue"}, "roleMarkets": map[string]any{"platform.finance": []string{"GB"}}})
+				}
+				writeJ(w, 200, map[string]any{"items": holders, "page": 0, "size": 50, "total": len(holders)})
+				return true
+			}
 			writeJ(w, 200, map[string]any{"items": []any{
 				map[string]any{"id": accessAda, "name": "Ada Obi", "email": "ada@afrotransact.com", "enabled": true, "principalType": "STAFF", "roles": []string{"platform.finance"},
 					"directGrants": direct, "effectivePermissions": append([]string{"refunds:issue"}, direct...), "roleMarkets": map[string]any{"platform.finance": []string{"GB"}}},
@@ -91,9 +101,15 @@ func TestStaffAccessConformance(t *testing.T) {
 			writeJ(w, 200, map[string]any{"id": accessAda, "name": "Ada Obi", "email": "ada@afrotransact.com", "enabled": true, "principalType": "STAFF", "roles": []string{"platform.finance"},
 				"directGrants": direct, "effectivePermissions": []string{"refunds:issue"}})
 		case p == "/v1/admin/access-log":
+			identityQueries = append(identityQueries, r.URL.RawQuery)
+			if r.URL.Query().Get("role") == "platform.finance" {
+				writeJ(w, 200, map[string]any{"items": []any{
+					map[string]any{"id": 2, "at": "2026-11-01T10:00:00Z", "actorId": accessKofi, "action": "ROLE_PERMISSION_ADDED", "targetRole": "platform.finance", "subject": "refunds:issue", "detail": "Quarter close"}}, "page": 0, "size": 50, "total": 1})
+				return true
+			}
 			writeJ(w, 200, map[string]any{"items": []any{
 				map[string]any{"id": 2, "at": "2026-11-01T10:00:00Z", "actorId": accessKofi, "action": "ROLE_PERMISSION_ADDED", "targetRole": "platform.finance", "subject": "refunds:issue", "detail": "Quarter close"},
-				map[string]any{"id": 1, "at": "2026-10-30T10:00:00Z", "actorId": accessKofi, "action": "ROLE_ASSIGNED", "targetUserId": accessAda, "targetRole": "platform.auditor", "subject": "platform.auditor", "detail": ""}}, "page": 0, "size": 50})
+				map[string]any{"id": 1, "at": "2026-10-30T10:00:00Z", "actorId": accessKofi, "action": "ROLE_ASSIGNED", "targetUserId": accessAda, "targetRole": "platform.auditor", "subject": "platform.auditor", "detail": ""}}, "page": 0, "size": 50, "total": 2})
 		default:
 			return false
 		}
@@ -171,10 +187,20 @@ func TestStaffAccessConformance(t *testing.T) {
 	// Members are named; the market a role is limited to comes along.
 	mem := do("admin", "GET", "/v1/staff/access/roles/platform.finance/members", nil, 200)
 	items := mem["items"].([]any)
-	if len(items) != 1 || items[0].(map[string]any)["name"] != "Ada Obi" || items[0].(map[string]any)["markets"].([]any)[0] != "GB" || mem["partial"] != false {
+	if len(items) != 1 || items[0].(map[string]any)["name"] != "Ada Obi" || items[0].(map[string]any)["markets"].([]any)[0] != "GB" || mem["total"].(float64) != 1 {
 		t.Fatalf("members = %v", mem)
 	}
 	do("admin", "GET", "/v1/staff/access/roles/NOT_A_ROLE/members", nil, 404)
+	// The role filter is identity's own (exact, paged): no directory scan, no "partial" in the answer.
+	if _, has := mem["partial"]; has {
+		t.Fatalf("members still carry partial: %v", mem)
+	}
+	if empty := do("admin", "GET", "/v1/staff/access/roles/platform.auditor/members?page=0&size=10", nil, 200); empty["total"].(float64) != 0 || len(empty["items"].([]any)) != 0 {
+		t.Fatalf("auditor members = %v", empty)
+	}
+	if last := identityQueries[len(identityQueries)-1]; last != "page=0&role=platform.auditor&size=10" {
+		t.Fatalf("identity saw %q", last)
+	}
 
 	// Changing a role needs a reason, and reaches identity with it.
 	path := "/v1/staff/access/roles/platform.finance/permissions/delivery:read"
@@ -222,6 +248,17 @@ func TestStaffAccessConformance(t *testing.T) {
 	if len(byRole) != 1 || byRole[0].(map[string]any)["detail"] != "Quarter close" {
 		t.Fatalf("log by role = %v", byRole)
 	}
+	if _, has := do("admin", "GET", "/v1/staff/access/log?role=platform.finance", nil, 200)["partial"]; has {
+		t.Fatal("log still carries partial")
+	}
+	if last := identityQueries[len(identityQueries)-1]; last != "page=0&role=platform.finance&size=50" {
+		t.Fatalf("identity saw %q for the log role filter", last)
+	}
+	do("admin", "GET", "/v1/staff/access/log?permission=refunds:issue&role=platform.finance&userId="+accessAda, nil, 200)
+	if last := identityQueries[len(identityQueries)-1]; last != "page=0&permission=refunds%3Aissue&role=platform.finance&size=50&userId="+accessAda {
+		t.Fatalf("identity saw %q for the combined filter", last)
+	}
+	do("admin", "GET", "/v1/staff/access/log?role=BAD", nil, 422)
 	do("admin", "GET", "/v1/staff/access/log?userId="+accessAda, nil, 200)
 	do("admin", "GET", "/v1/staff/access/log?userId=not-a-uuid", nil, 422)
 }

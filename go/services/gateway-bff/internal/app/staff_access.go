@@ -24,8 +24,8 @@ type StaffAccessService interface {
 	Permissions(ctx context.Context, c *domain.Caller) (map[string]any, error)
 	// Roles lists a portal's roles (platform, seller, provider, account) with their permissions.
 	Roles(ctx context.Context, c *domain.Caller, portal string) (map[string]any, error)
-	// RoleMembers names the people who hold a role.
-	RoleMembers(ctx context.Context, c *domain.Caller, role string) (map[string]any, error)
+	// RoleMembers names the people who hold a role, a page at a time (identity filters by role, so the total is exact).
+	RoleMembers(ctx context.Context, c *domain.Caller, role string, page, size int) (map[string]any, error)
 	// ChangeRolePermission adds or removes one permission of a role; the reason is kept in identity's change log.
 	ChangeRolePermission(ctx context.Context, c *domain.Caller, role, permission string, grant bool, reason string) (map[string]any, error)
 	// People searches people by name or email, each with roles, direct grants and effective permissions.
@@ -38,7 +38,7 @@ type StaffAccessService interface {
 	Log(ctx context.Context, c *domain.Caller, f StaffAccessLogFilter) (map[string]any, error)
 }
 
-// StaffAccessLogFilter narrows the change log. Identity filters by person; the role and permission are matched here.
+// StaffAccessLogFilter narrows the change log. Identity filters by person, role and permission (exact, indexed) and pages it.
 type StaffAccessLogFilter struct {
 	UserID, Role, Permission string
 	Page, Size               int
@@ -47,9 +47,6 @@ type StaffAccessLogFilter struct {
 const (
 	accessReasonMin  = 3
 	accessReasonMax  = 300
-	accessScanPage   = 100
-	accessScanPages  = 10
-	accessLogScan    = 200
 	accessLogMaxSize = 100
 )
 
@@ -173,7 +170,7 @@ func userView(u jobj) jobj {
 		"principalType": jstr(u, "principalType"), "roles": roles, "directGrants": direct, "effectivePermissions": eff, "roleMarkets": markets}
 }
 
-func (s *staffAccessImpl) RoleMembers(ctx context.Context, c *domain.Caller, role string) (map[string]any, error) {
+func (s *staffAccessImpl) RoleMembers(ctx context.Context, c *domain.Caller, role string, page, size int) (map[string]any, error) {
 	sc, err := s.read(ctx, c)
 	if err != nil {
 		return nil, err
@@ -181,27 +178,24 @@ func (s *staffAccessImpl) RoleMembers(ctx context.Context, c *domain.Caller, rol
 	if !accessRoleRE.MatchString(role) {
 		return nil, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such role.")
 	}
-	// Identity has no "people with this role" query, so read the directory page by page (bounded) and keep the holders.
-	members, total, scanned := []any{}, int64(0), 0
-	for page := 0; page < accessScanPages; page++ {
-		var res jobj
-		if err := sc.get(ctx, sc.up.Identity, "/v1/admin/users", url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(accessScanPage)}}, &res); err != nil {
-			return nil, err
-		}
-		rows := objs(res, "items")
-		total = int64(numberOf(res, "total"))
-		for _, u := range rows {
-			scanned++
-			if slices.Contains(strs(u, "roles"), role) {
-				v := userView(u)
-				members = append(members, jobj{"id": v["id"], "name": v["name"], "email": v["email"], "enabled": v["enabled"], "markets": markets(u, role)})
-			}
-		}
-		if len(rows) < accessScanPage || int64(scanned) >= total {
-			break
-		}
+	if size < 1 || size > accessLogMaxSize {
+		size = 50
 	}
-	return jobj{"role": role, "items": members, "partial": int64(scanned) < total}, nil
+	if page < 0 {
+		page = 0
+	}
+	// Identity filters the directory by role (GET /v1/admin/users?role=), so the page and the total are exact.
+	var res jobj
+	q := url.Values{"role": {role}, "page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
+	if err := sc.get(ctx, sc.up.Identity, "/v1/admin/users", q, &res); err != nil {
+		return nil, err
+	}
+	members := []any{}
+	for _, u := range objs(res, "items") {
+		v := userView(u)
+		members = append(members, jobj{"id": v["id"], "name": v["name"], "email": v["email"], "enabled": v["enabled"], "markets": markets(u, role)})
+	}
+	return jobj{"role": role, "items": members, "total": int64(numberOf(res, "total")), "page": page, "size": size}, nil
 }
 
 func markets(u jobj, role string) []string {
@@ -326,31 +320,24 @@ func (s *staffAccessImpl) Log(ctx context.Context, c *domain.Caller, f StaffAcce
 	if f.Page < 0 {
 		f.Page = 0
 	}
-	filtered := f.Role != "" || f.Permission != ""
-	// Identity filters by person only: for a role or permission read a bounded window of the newest entries and match here.
-	page, size := f.Page, f.Size
-	if filtered {
-		page, size = 0, accessLogScan
+	if f.Role != "" && !accessRoleRE.MatchString(f.Role) {
+		return nil, domain.ValidationProblem(map[string]string{"role": "Not a role key"})
 	}
-	v := url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
-	if f.UserID != "" {
-		v.Set("userId", f.UserID)
+	if f.Permission != "" && !accessPermRE.MatchString(f.Permission) {
+		return nil, domain.ValidationProblem(map[string]string{"permission": "Not a permission key"})
+	}
+	// Identity filters by person, role and permission and pages the result, so nothing is scanned or cut off here.
+	v := url.Values{"page": {strconv.Itoa(f.Page)}, "size": {strconv.Itoa(f.Size)}}
+	for k, val := range map[string]string{"userId": f.UserID, "role": f.Role, "permission": f.Permission} {
+		if val != "" {
+			v.Set(k, val)
+		}
 	}
 	var res jobj
 	if err := sc.get(ctx, sc.up.Identity, "/v1/admin/access-log", v, &res); err != nil {
 		return nil, err
 	}
 	rows := objs(res, "items")
-	if filtered {
-		kept := rows[:0:0]
-		for _, e := range rows {
-			text := jstr(e, "subject") + " " + jstr(e, "detail") + " " + jstr(e, "targetRole")
-			if (f.Role == "" || jstr(e, "targetRole") == f.Role || strings.Contains(text, f.Role)) && (f.Permission == "" || strings.Contains(text, f.Permission)) {
-				kept = append(kept, e)
-			}
-		}
-		rows = kept
-	}
 	nameAll(ctx, sc, rows, personRef("actorId", "Actor"), personRef("targetUserId", "Person"))
 	items := []any{}
 	for _, e := range rows {
@@ -362,5 +349,5 @@ func (s *staffAccessImpl) Log(ctx context.Context, c *domain.Caller, f StaffAcce
 		}
 		items = append(items, item)
 	}
-	return jobj{"items": items, "page": f.Page, "size": f.Size, "partial": filtered && len(objs(res, "items")) >= accessLogScan}, nil
+	return jobj{"items": items, "page": f.Page, "size": f.Size, "total": int64(numberOf(res, "total"))}, nil
 }
