@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps seller domain errors to RFC 9457 problems with stable {@code seller.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.seller")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class SellerErrorAdvice {
 

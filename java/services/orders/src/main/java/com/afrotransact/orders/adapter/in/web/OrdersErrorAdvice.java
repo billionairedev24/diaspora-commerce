@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps orders errors to RFC 9457 problems with stable {@code orders.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.orders")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class OrdersErrorAdvice {
 

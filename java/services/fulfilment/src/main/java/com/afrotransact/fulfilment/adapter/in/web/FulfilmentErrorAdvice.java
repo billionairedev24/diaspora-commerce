@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps fulfilment errors to RFC 9457 problems with stable {@code fulfilment.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.fulfilment")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class FulfilmentErrorAdvice {
 

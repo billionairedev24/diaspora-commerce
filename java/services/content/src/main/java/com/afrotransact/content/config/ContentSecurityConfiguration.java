@@ -1,7 +1,11 @@
 package com.afrotransact.content.config;
 
+import java.util.List;
+
+import com.afrotransact.module.SecurityPermits;
 import com.afrotransact.platform.security.ManagementEndpoints;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -26,6 +30,23 @@ class ContentSecurityConfiguration {
     };
 
     @Bean
+    SecurityPermits contentSecurityPermits(ContentProperties content) {
+        return new SecurityPermits() {
+            @Override
+            public List<String> publicGets() {
+                return List.of();
+            }
+
+            @Override
+            public List<String> publicPosts() {
+                return content.publicPostPaths();
+            }
+        };
+    }
+
+    /** Standalone only: in core the shared chain (afrotransact-core) applies every module's SecurityPermits. */
+    @Bean
+    @ConditionalOnExpression("'${at.modules.core-service:}'.isEmpty()")
     SecurityFilterChain contentSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties security,
                                                    ContentProperties content, Environment env) throws Exception {
         http.csrf(csrf -> csrf.disable())

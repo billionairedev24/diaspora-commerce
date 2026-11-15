@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Maps identity rule violations (422 with field errors), failed sign-in steps (401), rate limits and sign-in lockouts
  * (429 + Retry-After) and lost updates (409).
  */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.identity")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class IdentityErrorAdvice {
 

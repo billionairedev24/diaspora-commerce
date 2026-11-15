@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps content domain errors to RFC 9457 problems with stable {@code content.*} codes and per-field errors. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.content")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class ContentErrorAdvice {
 

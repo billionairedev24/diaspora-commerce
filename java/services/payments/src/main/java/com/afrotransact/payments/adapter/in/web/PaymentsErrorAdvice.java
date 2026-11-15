@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps payments domain errors to RFC 9457 problems with stable {@code payments.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.payments")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class PaymentsErrorAdvice {
 

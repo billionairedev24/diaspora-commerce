@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps trust-ops rule violations, invalid transitions and upstream failures to RFC 9457 problems. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.trustops")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class TrustOpsErrorAdvice {
 

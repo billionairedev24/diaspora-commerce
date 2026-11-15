@@ -18,6 +18,18 @@ at:
     tax-returns:
       datasource:
         password: ${TAX_RETURNS_DB_PASSWORD:tax_returns}
+    offers:
+      datasource:
+        password: ${OFFERS_DB_PASSWORD:offers}
+    inventory:
+      datasource:
+        password: ${INVENTORY_DB_PASSWORD:inventory}
+    content:
+      datasource:
+        password: ${CONTENT_DB_PASSWORD:content}
+    seller:
+      datasource:
+        password: ${SELLER_DB_PASSWORD:seller}
 logging:
   level:
     com.afrotransact: DEBUG

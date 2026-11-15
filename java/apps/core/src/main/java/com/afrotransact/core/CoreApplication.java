@@ -28,7 +28,15 @@ import org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration
             application = "com.afrotransact.catalog.CatalogApplication", meterPrefixes = {"catalog.", "catalog-"}),
     @ModuleSpec(name = "tax-returns", service = "tax-returns", basePackage = "com.afrotransact.taxreturns",
             application = "com.afrotransact.taxreturns.TaxReturnsApplication",
-            meterPrefixes = {"tax.", "taxreturns-"})})
+            meterPrefixes = {"tax.", "taxreturns-"}),
+    @ModuleSpec(name = "offers", service = "offers", basePackage = "com.afrotransact.offers",
+            application = "com.afrotransact.offers.OffersApplication", meterPrefixes = {"offers.", "offers-"}),
+    @ModuleSpec(name = "inventory", service = "inventory", basePackage = "com.afrotransact.inventory",
+            application = "com.afrotransact.inventory.InventoryApplication", meterPrefixes = {"inventory.", "inventory-"}),
+    @ModuleSpec(name = "content", service = "content", basePackage = "com.afrotransact.content",
+            application = "com.afrotransact.content.ContentApplication", meterPrefixes = {"content.", "content-"}),
+    @ModuleSpec(name = "seller", service = "seller", basePackage = "com.afrotransact.seller",
+            application = "com.afrotransact.seller.SellerApplication", meterPrefixes = {"seller.", "seller-"})})
 public class CoreApplication {
 
     public static void main(String[] args) {

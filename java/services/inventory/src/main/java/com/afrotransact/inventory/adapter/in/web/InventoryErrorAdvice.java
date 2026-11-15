@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps inventory domain errors to RFC 9457 problems with stable {@code inventory.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.inventory")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class InventoryErrorAdvice {
 

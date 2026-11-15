@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps bookings' domain and payments errors to RFC 9457 problems with stable {@code bookings.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.bookings")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class BookingsErrorAdvice {
 

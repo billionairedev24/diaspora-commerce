@@ -94,7 +94,46 @@
     </dependencies>
 
     <build>
+        <!-- Release 1 (ADR 0011): a copy of the service's config and migrations under modules/mcp-server/, so that several modules in one
+             JVM do not share one application.yml or one db/migration. The plain jar carries only these copies. -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <targetPath>modules/mcp-server</targetPath>
+                <includes>
+                    <include>application*.yml</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources/db/migration</directory>
+                <targetPath>modules/mcp-server/db/migration</targetPath>
+            </resource>
+        </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>plain-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>plain</classifier>
+                            <excludes>
+                                <exclude>application*.yml</exclude>
+                                <exclude>logback-spring.xml</exclude>
+                                <exclude>db/migration/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

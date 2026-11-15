@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps offers rule violations to RFC 9457 problems with stable {@code offers.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.offers")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class OffersErrorAdvice {
 

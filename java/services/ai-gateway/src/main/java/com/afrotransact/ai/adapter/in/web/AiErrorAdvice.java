@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Maps ai-gateway errors to RFC 9457 problems with stable {@code ai.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.ai")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class AiErrorAdvice {
 

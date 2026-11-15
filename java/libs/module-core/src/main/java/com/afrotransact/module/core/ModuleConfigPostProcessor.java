@@ -40,6 +40,13 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
     private static final Pattern MODULE_FILE = Pattern.compile(".*/modules/([^/]+)/application\\.yml$");
     /** {@code at.<group>} sub-trees that are process-wide, not the module's. */
     private static final Set<String> PROCESS_WIDE_AT = Set.of("consumers", "security", "events", "api-docs", "modules");
+    /**
+     * Library settings only one module uses (Temporal and Redis for orders, Spring AI for ai-gateway and mcp-server, the session
+     * store for identity); they are kept so the module's client library is configured as it is standalone. Nothing here is
+     * shared by two modules with different values.
+     */
+    private static final List<String> MODULE_LIBRARY_PREFIXES = List.of("spring.ai.", "spring.temporal.",
+            "spring.data.redis.", "spring.session.");
     private static final Set<String> UNIONED_LISTS = Set.of("at.security.public-paths", "at.security.public-post-paths");
     private static final Pattern LIST_ITEM = Pattern.compile("^(.*)\\[\\d+]$");
 
@@ -136,6 +143,9 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
     }
 
     static boolean belongsToModule(String key) {
+        if (MODULE_LIBRARY_PREFIXES.stream().anyMatch(key::startsWith)) {
+            return true;
+        }
         if (!key.startsWith("at.")) {
             return false;
         }

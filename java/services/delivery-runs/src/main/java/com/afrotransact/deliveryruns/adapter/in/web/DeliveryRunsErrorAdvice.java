@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /** Maps delivery-runs domain and port errors to RFC 9457 problems with stable {@code delivery-runs.*} codes. */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.afrotransact.deliveryruns")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class DeliveryRunsErrorAdvice {
 

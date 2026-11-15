@@ -9,6 +9,11 @@ spring:
   threads:
     virtual:
       enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+    async:
+      request-timeout: 30m   # fulfilment dispatch stream; ai-gateway SSE sets its own per request
   servlet:
     multipart:
       # The largest of the modules' limits (catalog bulk upload: 25 MB, checked per mode in its controller).
@@ -152,6 +157,81 @@ at:
         locations:
           - classpath:db/platform
           - classpath:modules/tax-returns/db/migration
+    offers:
+      enabled: ${MODULE_OFFERS_ENABLED:true}
+      client-id: offers-service
+      caller-scopes:
+        - catalog:read
+        - sellers:ship-from.read
+        - sellers:entitlements.read
+        - tax:read
+        - tax:classify
+      datasource:
+        url: ${OFFERS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${OFFERS_DB_USER:offers}
+        password: ${OFFERS_DB_PASSWORD}
+        maximum-pool-size: ${OFFERS_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${OFFERS_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/offers/db/migration
+    inventory:
+      enabled: ${MODULE_INVENTORY_ENABLED:true}
+      client-id: inventory-service
+      caller-scopes:
+        - catalog:read
+        - catalog:write
+        - shipping:label
+      datasource:
+        url: ${INVENTORY_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${INVENTORY_DB_USER:inventory}
+        password: ${INVENTORY_DB_PASSWORD}
+        maximum-pool-size: ${INVENTORY_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${INVENTORY_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/inventory/db/migration
+    content:
+      enabled: ${MODULE_CONTENT_ENABLED:true}
+      client-id: content-service
+      datasource:
+        url: ${CONTENT_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${CONTENT_DB_USER:content}
+        password: ${CONTENT_DB_PASSWORD}
+        maximum-pool-size: ${CONTENT_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${CONTENT_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/content/db/migration
+    seller:
+      enabled: ${MODULE_SELLER_ENABLED:true}
+      client-id: seller-service
+      caller-scopes:
+        - orgs:manage
+        - users:read
+        - inventory:storage.read
+        - ads:spend.read
+        - ai:usage.read
+        - payments:plan-fees
+        - payments:connected-accounts
+        - catalog:bakery-claims.read
+      datasource:
+        url: ${SELLER_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${SELLER_DB_USER:seller}
+        password: ${SELLER_DB_PASSWORD}
+        maximum-pool-size: ${SELLER_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${SELLER_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/seller/db/migration
   # How a module reaches the other modules (in-process | http). In core the default is in-process; http keeps the module able
   # to run detached (needs its upstream URL and client credentials as in the standalone service).
   catalog:
