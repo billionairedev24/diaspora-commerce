@@ -2386,6 +2386,43 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/modules:
+    get:
+      tags: [Access]
+      operationId: getAccessModules
+      security: [{sessionCookie: []}]
+      summary: The module access matrix of a portal
+      description: identity `GET /v1/admin/module-access?portal=` (access:read). Rows are modules (by their staff-facing label), columns are roles (by name); each cell is a level, `none`, `view`, `edit`, `approve` or `full`. `locked` lists the cells that cannot be lowered below Edit (Super Admin on Users & roles and Access control). `canAdmin` says the caller may change cells.
+      parameters:
+        - {name: portal, in: query, schema: {type: string, enum: [platform, seller, provider, account], default: platform}}
+      responses:
+        '200': {description: The matrix, content: {application/json: {schema: {$ref: '#/components/schemas/AccessModuleMatrix'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/access/modules/{portal}/{module}/{role}:
+    put:
+      tags: [Access]
+      operationId: setAccessModuleLevel
+      security: [{sessionCookie: []}]
+      summary: Set one cell of the module access matrix
+      description: Needs Edit on Users & roles, access:admin and a reason of 3 to 300 characters, kept in the access change log with the staff member's name. 409 `ACCESS_LOCKOUT` when it would take Super Admin below Edit on Users & roles or Access control. The matrix reaches the staff console within about a minute (it is cached), and a person's next page load.
+      parameters:
+        - {name: portal, in: path, required: true, schema: {type: string, enum: [platform, seller, provider, account]}}
+        - {name: module, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z][A-Za-z0-9]{0,40}$'}}
+        - {name: role, in: path, required: true, schema: {type: string, pattern: '^[a-z]+\.[a-z0-9_]+$'}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessModuleChange'}}}}
+      responses:
+        '200': {description: The cell now, content: {application/json: {schema: {$ref: '#/components/schemas/AccessModuleCell'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/access/log:
     get:
       tags: [Access]
@@ -8047,6 +8084,50 @@ components:
         total: {type: integer, format: int64}
         page: {type: integer}
         size: {type: integer}
+    AccessModuleMatrix:
+      type: object
+      required: [portal, levels, roles, modules, locked, canAdmin]
+      properties:
+        portal: {type: string}
+        levels: {type: array, items: {type: string, enum: [none, view, edit, approve, full]}, description: 'The levels in order, lowest first'}
+        roles: {type: array, items: {$ref: '#/components/schemas/AccessModuleRole'}}
+        modules: {type: array, items: {$ref: '#/components/schemas/AccessModuleRow'}}
+        locked: {type: array, items: {$ref: '#/components/schemas/AccessModuleLock'}}
+        canAdmin: {type: boolean}
+    AccessModuleRole:
+      type: object
+      required: [key, name]
+      properties:
+        key: {type: string}
+        name: {type: string}
+    AccessModuleRow:
+      type: object
+      required: [key, label, levels]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        levels: {type: object, additionalProperties: {type: string, enum: [none, view, edit, approve, full]}, description: 'Level by role key; a role with no entry has none'}
+    AccessModuleLock:
+      type: object
+      required: [role, module, minimum]
+      properties:
+        role: {type: string}
+        module: {type: string}
+        minimum: {type: string, enum: [edit]}
+    AccessModuleChange:
+      type: object
+      required: [level, reason]
+      properties:
+        level: {type: string, enum: [none, view, edit, approve, full]}
+        reason: {type: string, minLength: 3, maxLength: 300, description: Kept in the access change log}
+    AccessModuleCell:
+      type: object
+      required: [portal, module, role, level]
+      properties:
+        portal: {type: string}
+        module: {type: string}
+        role: {type: string}
+        level: {type: string, enum: [none, view, edit, approve, full]}
     AccessLogEntry:
       type: object
       required: [id, at, actorName, action, actionLabel, targetName, role, subject, detail]

@@ -47,8 +47,10 @@ func TestStaffAccessConformance(t *testing.T) {
 	roles := map[string][]string{"platform.finance": {"refunds:issue"}, "platform.super_admin": {"access:read", "access:admin"}}
 	direct := []string{}
 	var reasons, identityQueries []string
+	matrix := map[string]string{"payouts|platform.finance": "VIEW", "rbac|platform.super_admin": "FULL"}
+	var moduleCalls []map[string]any
 	f := &fakePlatform{payoutSt: "REQUESTED"}
-	f.override = func(w http.ResponseWriter, r *http.Request, _ map[string]any) bool {
+	f.override = func(w http.ResponseWriter, r *http.Request, body map[string]any) bool {
 		mu.Lock()
 		defer mu.Unlock()
 		p := r.URL.Path
@@ -100,6 +102,26 @@ func TestStaffAccessConformance(t *testing.T) {
 		case p == "/v1/admin/users/"+accessAda:
 			writeJ(w, 200, map[string]any{"id": accessAda, "name": "Ada Obi", "email": "ada@afrotransact.com", "enabled": true, "principalType": "STAFF", "roles": []string{"platform.finance"},
 				"directGrants": direct, "effectivePermissions": []string{"refunds:issue"}})
+		case p == "/v1/admin/module-access" && r.Method == http.MethodGet:
+			lv := func(m string) map[string]any {
+				out := map[string]any{}
+				for _, role := range []string{"platform.finance", "platform.super_admin"} {
+					if v, ok := matrix[m+"|"+role]; ok {
+						out[role] = v
+					}
+				}
+				return out
+			}
+			writeJ(w, 200, map[string]any{"portal": "platform", "modules": []any{
+				map[string]any{"key": "payouts", "label": "Payouts & ledger", "levels": lv("payouts")},
+				map[string]any{"key": "rbac", "label": "Users & roles", "levels": lv("rbac")}},
+				"roles": []any{map[string]any{"key": "platform.finance", "portal": "platform", "name": "From identity", "description": "d", "permissions": []string{}},
+					map[string]any{"key": "platform.super_admin", "portal": "platform", "name": "From identity", "description": "d", "permissions": []string{}}}})
+		case strings.HasPrefix(p, "/v1/admin/module-access/") && r.Method == http.MethodPut:
+			parts := strings.Split(strings.TrimPrefix(p, "/v1/admin/module-access/"), "/")
+			moduleCalls = append(moduleCalls, body)
+			matrix[parts[1]+"|"+parts[2]] = strings.ToUpper(body["level"].(string))
+			writeJ(w, 200, map[string]any{"portal": parts[0], "module": parts[1], "role": parts[2], "level": body["level"]})
 		case p == "/v1/admin/access-log":
 			identityQueries = append(identityQueries, r.URL.RawQuery)
 			if r.URL.Query().Get("role") == "platform.finance" {
@@ -238,6 +260,46 @@ func TestStaffAccessConformance(t *testing.T) {
 	if g := do("admin", "DELETE", grant, map[string]any{"reason": "Back from cover"}, 200)["directGrants"].([]any); len(g) != 0 {
 		t.Fatalf("after revoke = %v", g)
 	}
+
+	// Module access: a matrix by label and role name, changes with a reason, and the lock-out guard.
+	mx := do("admin", "GET", "/v1/staff/access/modules", nil, 200)
+	if mx["canAdmin"] != true || len(mx["modules"].([]any)) != 2 || len(mx["roles"].([]any)) != 2 || len(mx["locked"].([]any)) != 2 {
+		t.Fatalf("matrix = %v", mx)
+	}
+	row := mx["modules"].([]any)[0].(map[string]any)
+	if row["label"] != "Payouts & ledger" || row["levels"].(map[string]any)["platform.finance"] != "view" {
+		t.Fatalf("row = %v", row)
+	}
+	for _, r := range mx["roles"].([]any) {
+		if r.(map[string]any)["key"] == "platform.finance" && r.(map[string]any)["name"] != "Finance" {
+			t.Fatalf("role not named by the console: %v", r)
+		}
+	}
+	do("admin", "GET", "/v1/staff/access/modules?portal=nonsense", nil, 422)
+	do("support", "GET", "/v1/staff/access/modules", nil, 403)
+	cell := "/v1/staff/access/modules/platform/payouts/platform.finance"
+	do("admin", "PUT", cell, map[string]any{"level": "edit"}, 422)                  // no reason
+	do("admin", "PUT", cell, map[string]any{"level": "edit", "reason": "no"}, 422)  // too short
+	do("admin", "PUT", cell, map[string]any{"level": "god", "reason": why}, 422)    // not a level
+	do("support", "PUT", cell, map[string]any{"level": "edit", "reason": why}, 403) // no access:admin
+	do("admin", "PUT", "/v1/staff/access/modules/platform/pay-outs/platform.finance", map[string]any{"level": "edit", "reason": why}, 404)
+	changed := do("admin", "PUT", cell, map[string]any{"level": "edit", "reason": why}, 200)
+	if changed["level"] != "edit" || len(moduleCalls) != 1 || moduleCalls[0]["reason"] != why {
+		t.Fatalf("changed = %v, identity saw %v", changed, moduleCalls)
+	}
+	if after := do("admin", "GET", "/v1/staff/access/modules", nil, 200)["modules"].([]any)[0].(map[string]any); after["levels"].(map[string]any)["platform.finance"] != "edit" {
+		t.Fatalf("matrix after = %v", after)
+	}
+	// Nobody locks Super Admin out: Users & roles stays at Edit or above; raising it, or lowering other roles, is fine.
+	lock := "/v1/staff/access/modules/platform/rbac/platform.super_admin"
+	do("admin", "PUT", lock, map[string]any{"level": "view", "reason": why}, 409)
+	do("admin", "PUT", lock, map[string]any{"level": "none", "reason": why}, 409)
+	do("admin", "PUT", "/v1/staff/access/modules/platform/access/platform.super_admin", map[string]any{"level": "view", "reason": why}, 409)
+	if len(moduleCalls) != 1 {
+		t.Fatalf("a refused lock-out reached identity: %v", moduleCalls)
+	}
+	do("admin", "PUT", lock, map[string]any{"level": "edit", "reason": why}, 200)
+	do("admin", "PUT", "/v1/staff/access/modules/platform/rbac/platform.finance", map[string]any{"level": "none", "reason": why}, 200)
 
 	// The change log names the actor and the person; a role filter keeps that role's entries.
 	lg := do("admin", "GET", "/v1/staff/access/log", nil, 200)["items"].([]any)

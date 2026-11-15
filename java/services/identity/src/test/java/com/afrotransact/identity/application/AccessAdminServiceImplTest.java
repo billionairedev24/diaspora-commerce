@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -17,7 +18,12 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.identity.domain.AccessChange;
+import com.afrotransact.identity.domain.AccessLevel;
 import com.afrotransact.identity.domain.AccessLogFilter;
+import com.afrotransact.identity.domain.IdentityRuleViolation;
+import com.afrotransact.identity.domain.ModuleDefinition;
+import com.afrotransact.identity.domain.Portal;
+import com.afrotransact.identity.domain.Role;
 import com.afrotransact.identity.domain.AccessPolicy;
 import com.afrotransact.identity.port.AccessChangeLog;
 import com.afrotransact.identity.port.MfaRepository;
@@ -34,7 +40,9 @@ import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
+import com.afrotransact.platform.web.error.NotFoundException;
 import org.junit.jupiter.api.Test;
 
 class AccessAdminServiceImplTest {
@@ -46,9 +54,15 @@ class AccessAdminServiceImplTest {
 
     private final CurrentUser current = mock(CurrentUser.class);
     private final UserAccountRepository users = mock(UserAccountRepository.class);
+    private static final Actor ADMIN = new Actor("admin-1", PrincipalType.STAFF, Optional.empty(), Set.of(),
+            Set.of("access:admin", "access:read"));
+
     private final AccessChangeLog changeLog = mock(AccessChangeLog.class);
-    private final AccessAdminServiceImpl service = new AccessAdminServiceImpl(current, mock(PermissionChecker.class),
-            users, mock(UserAccessRepository.class), mock(RoleRepository.class), mock(ModuleAccessRepository.class),
+    private final PermissionChecker permissions = mock(PermissionChecker.class);
+    private final RoleRepository roles = mock(RoleRepository.class);
+    private final ModuleAccessRepository modules = mock(ModuleAccessRepository.class);
+    private final AccessAdminServiceImpl service = new AccessAdminServiceImpl(current, permissions,
+            users, mock(UserAccessRepository.class), roles, modules,
             changeLog, mock(AccessProfileLoader.class), mock(AccessPolicy.class), mock(SessionStore.class),
             mock(MfaRepository.class), mock(SignUpPolicy.class), mock(PasswordPolicy.class),
             mock(PhoneNumberPolicy.class), mock(PasswordHasher.class), mock(DomainEventPublisher.class),
@@ -56,6 +70,47 @@ class AccessAdminServiceImplTest {
 
     AccessAdminServiceImplTest() {
         when(current.actor()).thenReturn(READER);
+        when(permissions.require(IdentityPermissions.ACCESS_ADMIN)).thenReturn(ADMIN);
+        when(roles.role("platform.super_admin")).thenReturn(Optional.of(new Role("platform.super_admin",
+                Portal.PLATFORM, "Super Admin", "", Set.of())));
+        when(roles.role("platform.finance")).thenReturn(Optional.of(new Role("platform.finance", Portal.PLATFORM,
+                "Finance", "", Set.of())));
+        when(modules.modules(Portal.PLATFORM)).thenReturn(List.of(new ModuleDefinition(Portal.PLATFORM, "rbac",
+                "Users & roles", 11), new ModuleDefinition(Portal.PLATFORM, "access", "Access control", 25),
+                new ModuleDefinition(Portal.PLATFORM, "payouts", "Payouts & ledger", 6)));
+        when(modules.set(any(), anyString(), anyString(), any())).thenReturn(AccessLevel.VIEW);
+    }
+
+    @Test
+    void aModuleAccessChangeIsLoggedWithItsReasonAndBothLevels() {
+        service.setModuleAccess(Portal.PLATFORM, "payouts", "platform.finance", AccessLevel.EDIT, " Quarter close ");
+
+        verify(changeLog).append("admin-1", "module.access.changed", null, "platform.finance", "platform:payouts",
+                "view → edit: Quarter close");
+    }
+
+    @Test
+    void superAdminCannotBeLockedOutOfUsersAndRolesOrAccessControl() {
+        for (String module : List.of("rbac", "access")) {
+            for (AccessLevel level : List.of(AccessLevel.NONE, AccessLevel.VIEW)) {
+                assertThatThrownBy(() -> service.setModuleAccess(Portal.PLATFORM, module, "platform.super_admin",
+                        level, "tidy up")).isInstanceOf(ConflictException.class).hasMessageContaining("Edit");
+            }
+        }
+        verify(modules, never()).set(any(), anyString(), anyString(), any());
+        // Edit and above stays allowed, and other roles may lose these modules
+        service.setModuleAccess(Portal.PLATFORM, "rbac", "platform.super_admin", AccessLevel.EDIT, "keep edit");
+        service.setModuleAccess(Portal.PLATFORM, "rbac", "platform.finance", AccessLevel.NONE, "not theirs");
+        verify(modules).set(Portal.PLATFORM, "rbac", "platform.super_admin", AccessLevel.EDIT);
+        verify(modules).set(Portal.PLATFORM, "rbac", "platform.finance", AccessLevel.NONE);
+    }
+
+    @Test
+    void aRoleOfAnotherPortalOrAnUnknownModuleIsRefused() {
+        assertThatThrownBy(() -> service.setModuleAccess(Portal.SELLER, "sTeam", "platform.finance", AccessLevel.VIEW,
+                "x")).isInstanceOf(IdentityRuleViolation.class);
+        assertThatThrownBy(() -> service.setModuleAccess(Portal.PLATFORM, "nope", "platform.finance", AccessLevel.VIEW,
+                "x")).isInstanceOf(NotFoundException.class);
     }
 
     @Test

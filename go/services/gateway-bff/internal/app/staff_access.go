@@ -36,6 +36,10 @@ type StaffAccessService interface {
 	ChangePersonPermission(ctx context.Context, c *domain.Caller, id, permission string, grant bool, reason string) (map[string]any, error)
 	// Log is the access change log, newest first, optionally for one person, role or permission.
 	Log(ctx context.Context, c *domain.Caller, f StaffAccessLogFilter) (map[string]any, error)
+	// Modules is a portal's module access matrix: what each role may do in each module (none, view, edit, approve, full).
+	Modules(ctx context.Context, c *domain.Caller, portal string) (map[string]any, error)
+	// ChangeModuleAccess sets one cell of the matrix; the reason is kept in identity's change log.
+	ChangeModuleAccess(ctx context.Context, c *domain.Caller, portal, module, role, level, reason string) (map[string]any, error)
 }
 
 // StaffAccessLogFilter narrows the change log. Identity filters by person, role and permission (exact, indexed) and pages it.
@@ -56,6 +60,10 @@ var (
 	accessRoleRE     = regexp.MustCompile(`^[a-z]+\.[a-z0-9_]+$`)
 	accessUserIDRE   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	accessLockedPerm = map[string][]string{"platform.super_admin": {"access:admin", "access:read"}}
+	// accessLockedModules are the platform modules a role must keep Edit on, so this screen stays reachable and changeable.
+	accessLockedModules = map[string][]string{"platform.super_admin": {"rbac", "access"}}
+	accessLevels        = []string{"none", "view", "edit", "approve", "full"}
+	accessModuleRE      = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,40}$`)
 )
 
 type staffAccessImpl struct{ r *staffResolver }
@@ -350,4 +358,81 @@ func (s *staffAccessImpl) Log(ctx context.Context, c *domain.Caller, f StaffAcce
 		items = append(items, item)
 	}
 	return jobj{"items": items, "page": f.Page, "size": f.Size, "total": int64(numberOf(res, "total"))}, nil
+}
+
+func (s *staffAccessImpl) Modules(ctx context.Context, c *domain.Caller, portal string) (map[string]any, error) {
+	sc, err := s.read(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	if portal == "" {
+		portal = "platform"
+	}
+	if !slices.Contains(accessPortals, portal) {
+		return nil, domain.ValidationProblem(map[string]string{"portal": "Choose platform, seller, provider or account"})
+	}
+	var res jobj
+	if err := sc.get(ctx, sc.up.Identity, "/v1/admin/module-access", url.Values{"portal": {portal}}, &res); err != nil {
+		return nil, err
+	}
+	roles := []any{}
+	for _, r := range objs(res, "roles") {
+		v := roleView(r)
+		roles = append(roles, jobj{"key": v["key"], "name": v["name"]})
+	}
+	mods := []any{}
+	for _, m := range objs(res, "modules") {
+		levels := jobj{}
+		if raw, ok := m["levels"].(map[string]any); ok {
+			for role, l := range raw {
+				if lv, ok := l.(string); ok {
+					levels[role] = strings.ToLower(lv)
+				}
+			}
+		}
+		mods = append(mods, jobj{"key": jstr(m, "key"), "label": jstr(m, "label"), "levels": levels})
+	}
+	locked := []any{}
+	if portal == "platform" {
+		for role, modules := range accessLockedModules {
+			for _, m := range modules {
+				locked = append(locked, jobj{"role": role, "module": m, "minimum": "edit"})
+			}
+		}
+	}
+	return jobj{"portal": portal, "levels": accessLevels, "roles": roles, "modules": mods, "locked": locked,
+		"canAdmin": sc.access.Can("access:admin") && sc.access.Allows("rbac", domain.LevelEdit)}, nil
+}
+
+func (s *staffAccessImpl) ChangeModuleAccess(ctx context.Context, c *domain.Caller, portal, module, role, level, reason string) (map[string]any, error) {
+	sc, err := s.write(ctx, c, reason)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(accessPortals, portal) {
+		return nil, domain.ValidationProblem(map[string]string{"portal": "Choose platform, seller, provider or account"})
+	}
+	if !accessModuleRE.MatchString(module) {
+		return nil, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such module.")
+	}
+	if !accessRoleRE.MatchString(role) {
+		return nil, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such role.")
+	}
+	level = strings.ToLower(strings.TrimSpace(level))
+	if !slices.Contains(accessLevels, level) {
+		return nil, domain.ValidationProblem(map[string]string{"level": "Choose none, view, edit, approve or full"})
+	}
+	// Nobody locks Super Admin out of this screen: it keeps at least Edit on Users & roles and Access control.
+	if portal == "platform" && slices.Contains(accessLockedModules[role], module) && (level == "none" || level == "view") {
+		return nil, domain.NewProblem(http.StatusConflict, "ACCESS_LOCKOUT", "Can't lower this", "Super Admin keeps at least Edit on this module so the console can always be administered.")
+	}
+	var out jobj
+	call := port.StaffCall{Method: http.MethodPut, Path: "/v1/admin/module-access/" + url.PathEscape(portal) + "/" + url.PathEscape(module) + "/" + url.PathEscape(role),
+		Body: jobj{"level": level, "reason": strings.TrimSpace(reason)}}
+	if err := sc.call(ctx, sc.up.Identity, call, &out); err != nil {
+		return nil, err
+	}
+	// The BFF keeps the platform matrix for a minute (module checks on every staff call): drop it so the change shows at once here.
+	s.r.forgetMatrix()
+	return jobj{"portal": jstr(out, "portal"), "module": jstr(out, "module"), "role": jstr(out, "role"), "level": strings.ToLower(jstr(out, "level"))}, nil
 }

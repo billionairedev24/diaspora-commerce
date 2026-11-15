@@ -60,6 +60,12 @@ public interface AccessAdminService {
 
     ModuleAccess setModuleAccess(Portal portal, String moduleKey, String roleKey, AccessLevel level);
 
+    /**
+     * Module access matrix cell with the reason kept in the change log. Super Admin cannot drop below Edit on
+     * {@code rbac} (Users & roles) or {@code access} (Access control): 409 {@code identity.access-lockout}.
+     */
+    ModuleAccess setModuleAccess(Portal portal, String moduleKey, String roleKey, AccessLevel level, String reason);
+
     PageView<AccessChange> changeLog(UUID userId, int page, int size);
 
     /** Change log narrowed by person, role and/or permission; the page carries the exact total. */
