@@ -1,6 +1,6 @@
 # Seller storefront (`/b/<slug>`)
 
-The seller's public page is their own branded mini-store, not a marketplace page. Story S488. It replaces the plain
+The seller's public page is their own branded mini-store, not a marketplace page. Story S490. It replaces the plain
 page of [business-pages.md](business-pages.md) **for sellers** (a provider keeps the plain page, inside the marketplace chrome).
 
 ## What a shopper gets
@@ -69,4 +69,4 @@ Tests: `tokens/test/storefront-theme.test.ts`, `gateway-bff` domain/app/httpapi 
 
 ## Not done / decisions
 
-See the report in the pull request; the open items are in S488 and S409 (physical-store `LocalBusiness`).
+See the report in the pull request; the open items are in S490 and S409 (physical-store `LocalBusiness`).

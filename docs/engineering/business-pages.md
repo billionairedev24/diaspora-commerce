@@ -1,6 +1,6 @@
 # Business pages
 
-> **Sellers now have a branded storefront at the same address** ([seller-storefront.md](seller-storefront.md), S488): the plain page described below remains for providers, and a seller's page is the storefront once it is published (unpublished: a 404 page).
+> **Sellers now have a branded storefront at the same address** ([seller-storefront.md](seller-storefront.md), S490): the plain page described below remains for providers, and a seller's page is the storefront once it is published (unpublished: a 404 page).
 
 The plain page: AfroTransact has no provider page editor. Every seller and provider gets one plain public page, made from
 their application. It exists so that Stripe always has a website to look at: nobody is asked for one.

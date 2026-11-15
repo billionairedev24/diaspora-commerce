@@ -61,7 +61,7 @@ The OVH test Workers (`ovh-web.yml`) and the trial (`trial.yml`) write their own
 |---|---|
 | S407 | Search index and sitemap feed carry no update time: real `lastmod` for products, categories, services; a keyset-paged `GET /v1/seo/sitemap-entries` feed beyond the search engine's result window (the current reader partitions by department and community and caps at 3,000 per partition) |
 | S408 | Product detail lacks a parent id (variant canonical), item condition (new / used / refurbished), structured shipping and return terms, and slug history (product URLs are ATIN-only, so moved slugs do not exist today; 301s for renamed items need a history table if slugs are introduced) |
-| S409 | Seller storefronts are now in the `stores` sitemap (S488); providers' pages are not; no physical-store pages, so `LocalBusiness` is built and tested but not wired |
+| S409 | Seller storefronts are now in the `stores` sitemap (S490); providers' pages are not; no physical-store pages, so `LocalBusiness` is built and tested but not wired |
 | S410 | Localised URLs (`/fr/...`) and hreflang; Review items from stored reviews |
 
 ## 5. Observability
