@@ -12,6 +12,7 @@ import com.afrotransact.orders.port.UpstreamFailure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -21,6 +22,7 @@ import tools.jackson.databind.JsonNode;
  * commission category. Missing answers are left out (callers treat them as non-perishable, default commission).
  */
 @Component
+@ConditionalOnExpression("'${at.orders.catalog.mode:${at.orders.mode:http}}' == 'http'")
 class HttpProductFactsClient implements ProductFactsClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpProductFactsClient.class);

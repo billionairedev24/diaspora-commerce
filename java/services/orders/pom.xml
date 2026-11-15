@@ -60,6 +60,14 @@
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
+            <artifactId>tax-returns-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>catalog-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
             <artifactId>payments-api</artifactId>
         </dependency>
         <dependency>
