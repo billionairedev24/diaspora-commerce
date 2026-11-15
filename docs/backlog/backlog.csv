@@ -2061,3 +2061,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Settings > AI and MCP spend cap shows spend today, the cap and where it is set (read-only)
 - No new MCP tool; docs/engineering/mcp-tool-proposals.md notes the endpoint exists
 - Tests pass","E02","","Medium","3","staff-console ai","identity","To Do"
+"S495","Story","Provider storefront at /b/<slug>, On sale filter, real seller rating aggregate, media host from MEDIA_PUBLIC_URL","Providers get the same branded mini-store builder as sellers (shared StorefrontView, themes, publish, preview, history) plus bookable sections: services with durations and prices, a booker over real availability, weekly schedule and service area, team, reviews only when real. Sellers get an On sale filter (real was-prices only), the in-stock line is removed, the rating is a catalog-computed aggregate, and storefront image prefixes default to MEDIA_PUBLIC_URL.","- Provider page published and edited in Seller Center Settings > Store page with provider sections only
+- Booker uses the existing booking flow and real availability; no virtual services
+- Schedule shows only real hours, empty hours show nothing; reviews only when count >= 1 from backend aggregates
+- Provider tenant isolation tests pass
+- On sale filter returns only real discounts; index field on_sale from variant compareAt above price
+- Seller rating from GET /v1/public/sellers/{orgId}/rating; featured picks resolved by ATIN
+- Allowed image prefixes default to MEDIA_PUBLIC_URL, logged at startup, documented per environment
+- Testcontainers ITs, helm render, Meilisearch/Elasticsearch integration and native translations verified","E16","","High","8","storefront providers search","storefront","In Progress"

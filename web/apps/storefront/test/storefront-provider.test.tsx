@@ -75,11 +75,11 @@ describe('a provider page is a bookable mini-store', () => {
   });
 
   it('hands the chosen service to the booker; the booker renders only in live pages', () => {
-    const booker = vi.fn(() => <div data-testid="booker">booking panel</div>);
+    const booker = vi.fn((_ctx: { selectedId: string | null }) => <div data-testid="booker">booking panel</div>);
     const { unmount } = render(provider(), { renderBooker: booker });
     fireEvent.click(screen.getAllByRole('button', { name: /^Book/ })[1]!);
     expect(screen.getByTestId('booker')).toBeInTheDocument();
-    const last = booker.mock.calls.at(-1)![0] as unknown as { selectedId: string | null };
+    const last = booker.mock.calls.at(-1)![0];
     expect(last.selectedId).toBe(provider().provider!.services[1]!.id);
     unmount();
     render(provider(), { renderBooker: booker, preview: true });

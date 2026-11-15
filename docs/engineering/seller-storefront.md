@@ -1,7 +1,7 @@
 # Seller storefront (`/b/<slug>`)
 
 The seller's public page is their own branded mini-store, not a marketplace page. Story S490. It replaces the plain
-page of [business-pages.md](business-pages.md) **for sellers** (a provider keeps the plain page, inside the marketplace chrome).
+page of [business-pages.md](business-pages.md) for sellers, and since S493 **providers have the same builder** (see below). A provider who has not published keeps the old plain page (Stripe always has a website); an unpublished seller is a 404.
 
 ## What a shopper gets
 
@@ -63,6 +63,21 @@ An unknown, unpublished, unapproved or suspended store is a 404 page (`store-not
 never a filtered or sorted view (canonical is the plain page). JSON-LD `Store` (name, url, logo, description, social profiles, `aggregateRating` only with real reviews). The sitemap `stores` kind lists
 `/b/<slug>` for published stores with live products (`lastmod` = publish time).
 
+## Provider page (S493)
+
+Same route, same `StorefrontView`, themes, accent rules, publish/unpublish, preview and history; the BFF picks the sections by organisation kind (`StorePolicy.Kind`):
+a provider has `announcement, services, book, schedule, team, about, reviews` and none of the product sections (featured, categories, policies, grid, pickup, search, cart).
+A seller config with provider sections (or the reverse) is 422. `Storefront.kind` and `Storefront.provider` carry the data, all from bookings' public provider view: services (in person or at home, no virtual),
+weekly hours (the bookable team's hours merged; empty = none set, the schedule is hidden, never "closed all week"), the service area (base city, radius, served cities; no address, ZIP or coordinates), the bookable team, the cancellation policy.
+**Booker**: pick a service, then the marketplace's own booking panel (real free days and times, add-ons, in person or at home, deposit now, Stripe); availability needs no ZIP; staff pick is not offered because the booking flow does not offer it today. The preview shows an inert description.
+Reviews: bookings' aggregate over approved reviews, shown only when count >= 1. Indexing: only a published page with at least one service; JSON-LD is `ProfessionalService` with no invented hours or rating. Seller Center: Settings > Store page for provider orgs (Team view reads, Team edit changes), with a link to Provider Hub for services, hours and team.
+
+## On sale, ratings, featured (S493)
+
+- **On sale**: the index has `list_price_minor` and `on_sale` (variant `compareAtMinor` above the price of the variant the indexed price comes from); `onSale=true` on search and `/v1/storefronts/{slug}/products`. Tiles show the was-price only when above the price. The filter uses the catalog's value and the tile the offer's list price, so a rare mismatch shows a sale item without a was-price. Existing documents get the fields when re-projected: reindex after deploy. Elasticsearch gets the mapping through `LateMappings`; Meilisearch through its settings. Providers have no products, so it does not apply.
+- **Rating**: catalog `GET /v1/public/sellers/{orgId}/rating` (average, count, breakdown over every published review of the seller's products); the page reads no products for it. Never shown below one review.
+- **Featured** picks are looked up by ATIN (search `atins`, still the seller's own, sellable products), so none is lost beyond the first pages. The "Showing products in stock now" line is gone; in-stock-only stays.
+
 ## Seller Center: Settings > Store page
 
 Own route, own save, one column on narrow screens (preview as a tab), editor and sticky preview side by side from 1280. The preview renders the real `StorefrontView` with the unsaved draft and
@@ -74,7 +89,7 @@ The banner has a focal point (what stays in view when each screen crops) rather 
 Mock BFF (`api-client/src/mocks/storefront.ts`): the demo seller **Laserfeet** (`/b/laserfeet`, mock data only, registered as unlisted products so cart and checkout work) and stand-in "studio shots" as SVG drawn by the mock BFF
 (`/v1/mock-photos/...`); nothing of this exists outside the mock runtime. `MOCK_STOREFRONT_STATE_FILE` lets the Seller Center mock and the storefront mock share published stores across processes.
 Tests: `tokens/test/storefront-theme.test.ts`, `gateway-bff` domain/app/httpapi tests, seller `StorePageServiceTest` and tenant matrix, `storefront/test/storefront.test.tsx`, `seller-center/test/store-page.test.tsx`,
-`storefront/e2e/storefront.spec.ts`. Screenshots (viewed and fixed): `img/storefront-{warm-market,bold,midnight,heritage}-{1280,390}.png`.
+`storefront/e2e/storefront.spec.ts`. Screenshots (viewed and fixed): `img/provider-storefront-{1280,390}.png`, `img/storefront-{warm-market,bold,midnight,heritage}-{1280,390}.png`.
 
 ## Not done / decisions
 

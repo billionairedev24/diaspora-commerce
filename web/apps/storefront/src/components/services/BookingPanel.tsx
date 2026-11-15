@@ -173,7 +173,7 @@ export function BookingPanel({ service: s }: { service: ServiceDetail }) {
                   {quote.data ? t('bk.bookCta', { amount: fmt.money(quote.data.depositNowMinor) }) : t('bk.book')}
                 </Button>
               ) : (
-                <a href={signInHref(pathname)} className={buttonClassName({ block: true })}>
+                <a href={signInHref(pathname)} className={buttonClassName({ block: true, variant: 'secondary' })}>
                   {t('bk.signInToBook')}
                 </a>
               )}

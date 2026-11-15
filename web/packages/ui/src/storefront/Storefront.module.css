@@ -68,8 +68,9 @@
 .heroCta { display: inline-flex; align-items: center; min-block-size: 48px; padding-inline: var(--at-space-6); border-radius: var(--sf-radius); background: var(--sf-accent); color: var(--sf-on-accent); text-decoration: none; font-weight: var(--at-weight-semibold); margin-block-start: var(--at-space-2); }
 .heroCta:hover { background: var(--sf-accent-strong); }
 
-.heroColour { background: var(--sf-accent); color: var(--sf-on-accent); padding: clamp(40px, 9cqi, 112px) var(--sf-gutter); }
-.heroColour > .heroText { max-inline-size: var(--sf-max); margin-inline: auto; }
+.heroColour { background: var(--sf-accent); color: var(--sf-on-accent); padding-block: clamp(40px, 9cqi, 112px); }
+/* The text box is as wide as the page (max and gutters included), so its left edge is the page's content edge (measured in e2e). */
+.heroColour > .heroText { max-inline-size: var(--sf-max); inline-size: 100%; box-sizing: border-box; margin-inline: auto; padding-inline: var(--sf-gutter); }
 .heroColour .heroText > * { max-inline-size: 640px; }
 .heroColour .heroCta { background: var(--sf-on-accent); color: var(--sf-accent); }
 .heroColour .heroCta:hover { background: var(--sf-on-accent); filter: brightness(.94); }

@@ -9,7 +9,7 @@ import { ProductSummarySchema } from './catalog';
 export const THEME_PRESET_IDS = ['clean', 'warm-market', 'bold', 'midnight', 'heritage', 'fresh'] as const;
 export const SELLER_SECTION_IDS = ['announcement', 'featured', 'categories', 'about', 'policies', 'reviews'] as const;
 /** A provider's page: no product sections; its services, the appointment booker, the weekly schedule with the service area, its team and reviews. */
-export const PROVIDER_SECTION_IDS = ['announcement', 'about', 'services', 'book', 'schedule', 'team', 'reviews'] as const;
+export const PROVIDER_SECTION_IDS = ['announcement', 'services', 'book', 'schedule', 'team', 'about', 'reviews'] as const;
 export const StoreSectionIdSchema = z.enum(['announcement', 'featured', 'categories', 'about', 'policies', 'reviews', 'services', 'book', 'schedule', 'team']);
 export type StoreSectionId = z.infer<typeof StoreSectionIdSchema>;
 export const StoreSocialNetworkSchema = z.enum(['instagram', 'facebook', 'tiktok', 'x', 'youtube', 'whatsapp', 'website']);
