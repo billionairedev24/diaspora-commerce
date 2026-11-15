@@ -2140,6 +2140,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/access/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The module access matrix of a portal
+         * @description identity `GET /v1/admin/module-access?portal=` (access:read). Rows are modules (by their staff-facing label), columns are roles (by name); each cell is a level, `none`, `view`, `edit`, `approve` or `full`. `locked` lists the cells that cannot be lowered below Edit (Super Admin on Users & roles and Access control). `canAdmin` says the caller may change cells.
+         */
+        get: operations["getAccessModules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/modules/{portal}/{module}/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set one cell of the module access matrix
+         * @description Needs Edit on Users & roles, access:admin and a reason of 3 to 300 characters, kept in the access change log with the staff member's name. 409 `ACCESS_LOCKOUT` when it would take Super Admin below Edit on Users & roles or Access control. The matrix reaches the staff console within about a minute (it is cached), and a person's next page load.
+         */
+        put: operations["setAccessModuleLevel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/ai/spend-today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Today's AI spend against the daily cap, by feature
+         * @description ai-gateway `GET /v1/ai/usage/today`. Needs the ai:manage permission. Amounts are micro-dollars (1,000,000 = USD 1); `capMicros` 0 means unlimited. Not cached.
+         */
+        get: operations["getAiSpendToday"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/access/log": {
         parameters: {
             query?: never;
@@ -7284,6 +7344,93 @@ export interface components {
             total: number;
             page: number;
             size: number;
+        };
+        AiSpendToday: {
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            /**
+             * Format: int64
+             * @description The daily cap for the whole gateway in micro-dollars; 0 is unlimited
+             */
+            capMicros: number;
+            /**
+             * Format: int64
+             * @description One caller's daily share in micro-dollars; 0 is unlimited
+             */
+            callerCapMicros: number;
+            /**
+             * Format: int64
+             * @description Estimated model cost so far today
+             */
+            spentMicros: number;
+            /** Format: int64 */
+            calls: number;
+            /** Format: int64 */
+            tokens: number;
+            /** @description False when no model call was recorded today: the zero is nothing recorded, not an estimate */
+            hasData: boolean;
+            /**
+             * Format: date-time
+             * @description The next UTC midnight
+             */
+            resetsAt: string;
+            /** @description The ai-gateway environment variable that sets the cap */
+            capSetBy: string;
+            byFeature: components["schemas"]["AiSpendFeature"][];
+        };
+        AiSpendFeature: {
+            feature: string;
+            /** @description The feature named for people */
+            label: string;
+            /** Format: int64 */
+            calls: number;
+            /** Format: int64 */
+            tokens: number;
+            /** Format: int64 */
+            costMicros: number;
+        };
+        AccessModuleMatrix: {
+            portal: string;
+            /** @description The levels in order, lowest first */
+            levels: ("none" | "view" | "edit" | "approve" | "full")[];
+            roles: components["schemas"]["AccessModuleRole"][];
+            modules: components["schemas"]["AccessModuleRow"][];
+            locked: components["schemas"]["AccessModuleLock"][];
+            canAdmin: boolean;
+        };
+        AccessModuleRole: {
+            key: string;
+            name: string;
+        };
+        AccessModuleRow: {
+            key: string;
+            label: string;
+            /** @description Level by role key; a role with no entry has none */
+            levels: {
+                [key: string]: "none" | "view" | "edit" | "approve" | "full";
+            };
+        };
+        AccessModuleLock: {
+            role: string;
+            module: string;
+            /** @enum {string} */
+            minimum: "edit";
+        };
+        AccessModuleChange: {
+            /** @enum {string} */
+            level: "none" | "view" | "edit" | "approve" | "full";
+            /** @description Kept in the access change log */
+            reason: string;
+        };
+        AccessModuleCell: {
+            portal: string;
+            module: string;
+            role: string;
+            /** @enum {string} */
+            level: "none" | "view" | "edit" | "approve" | "full";
         };
         AccessLogEntry: {
             id: string;
@@ -15202,6 +15349,92 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccessModules: {
+        parameters: {
+            query?: {
+                portal?: "platform" | "seller" | "provider" | "account";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matrix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessModuleMatrix"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setAccessModuleLevel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portal: "platform" | "seller" | "provider" | "account";
+                module: string;
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessModuleChange"];
+            };
+        };
+        responses: {
+            /** @description The cell now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessModuleCell"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAiSpendToday: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Today's spend */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSpendToday"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

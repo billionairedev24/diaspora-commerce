@@ -3123,7 +3123,7 @@
   "st.sx.ai.row.mcp": "Olupin MCP",
   "st.sx.ai.row.mcpValue": "Ti ara ẹni: a lè dé ọ̀dọ̀ rẹ̀ nínú pẹpẹ nìkan, ìpè kọ̀ọ̀kan nílò àmì ìwọlé. Àwọn irinṣẹ́ rẹ̀ tó ń pe AI ń ka sí ààlà kan náà.",
   "st.sx.ai.row.changed": "Ẹni tó lè yí i padà",
-  "st.sx.ai.row.changedValue": "Onímọ̀-ẹ̀rọ, nínú ètò ìfisílẹ̀ iṣẹ́ AI (AI_GLOBAL_DAILY_COST_USD), lẹ́yìn náà ìtúnbẹ̀rẹ̀. Ọ̀nà tó wọ́pọ̀ ni láti gbé e sókè fún ọjọ́ kan kí a sì dá a padà. Àwọn iye òkè jẹ́ ti ìfisílẹ̀, kì í ṣe ìnáwó òní.",
+  "st.sx.ai.row.changedValue": "Onímọ̀-ẹ̀rọ, nínú ètò ìfisílẹ̀ iṣẹ́ AI (AI_GLOBAL_DAILY_COST_USD), lẹ́yìn náà ìtúnbẹ̀rẹ̀. Ọ̀nà tó wọ́pọ̀ ni láti gbé e sókè fún ọjọ́ kan kí a sì dá a padà.",
   "st.sx.ai.runbook": "Bí ó ṣe ń ṣiṣẹ́ àti bí a ṣe ń gbé e sókè fún ọjọ́ kan: docs/runbooks/ai-spend-and-mcp-access.md.",
   "st.sx.staff.title": "Àkọọ́lẹ̀ òṣìṣẹ́",
   "st.sx.staff.description": "Gbogbo ẹni tó ń ṣiṣẹ́ ní AfroTransact, ipa wọn, àti ẹni tí a pa àkọọ́lẹ̀ rẹ̀.",
@@ -3365,5 +3365,17 @@
   "st.acc.mx.locked": "Super Admin máa ní Ṣàtúnṣe o kéré tán nínú Àwọn olùlò àti iṣẹ́ àti Ìṣàkóso àǹfààní, kí a lè máa ṣàkóso ojú-ìṣàkóso nígbà gbogbo.",
   "st.acc.mx.delay": "Àyípadà máa dé ojú-ìṣàkóso òṣìṣẹ́ láàárín ìṣẹ́jú kan tàbí bẹ́ẹ̀.",
   "st.acc.mx.empty": "Kò sí ẹ̀ka tó bá a mu.",
-  "st.acc.mx.noneForPortal": "Ọ̀nà àbáwọlé yìí kò ní ẹ̀ka nínú àkójọ."
+  "st.acc.mx.noneForPortal": "Ọ̀nà àbáwọlé yìí kò ní ẹ̀ka nínú àkójọ.",
+  "st.sx.ai.today.title": "Òní",
+  "st.sx.ai.today.spent": "A ti lo {spent} nínú {cap} ({percent}%)",
+  "st.sx.ai.today.spentNoCap": "A ti lo {spent} (kò sí ààlà ojoojúmọ́)",
+  "st.sx.ai.today.meter": "A ti lo {percent}% ààlà òní",
+  "st.sx.ai.today.calls": "{calls} ìpè AI àti {tokens} tokens títí di báyìí lónìí.",
+  "st.sx.ai.today.none": "A kò gbà ìpè AI kankan sílẹ̀ lónìí, nítorí náà ìnáwó jẹ́ òfo.",
+  "st.sx.ai.today.resets": "Ọjọ́ náà parí ní 00:00 UTC ({when}).",
+  "st.sx.ai.today.byFeature": "Ìnáwó nípa ẹ̀yà",
+  "st.sx.ai.today.featureCalls": "{calls, plural, one {ìpè #} other {ìpè #}}",
+  "st.sx.ai.today.estimate": "Iye owó jẹ́ àfojúsùn láti lílò tí olùpèsè sọ lẹ́yìn ìpè kọ̀ọ̀kan, nítorí náà ọjọ́ lè kọjá ààlà nípasẹ̀ àwọn ìpè tó ń lọ lọ́wọ́.",
+  "st.sx.ai.force.title": "Ohun tó wà ní ipa",
+  "st.sx.ai.row.totalUnlimited": "Kò sí ààlà ojoojúmọ́ lórí ìfilọ́lẹ̀ yìí."
 }

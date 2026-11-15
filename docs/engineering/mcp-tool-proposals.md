@@ -89,7 +89,7 @@ Proposal 0 below.
 | A11 | `duplicate_candidates_queue` | read | Possible duplicate product pages from matching |
 | A12 | `search_index_status` | read | Why a product does or does not appear in search (live, photo, variant, tax, index lag) |
 | A13 | `service_health` | read | Services up, sweeps running, identity client scope drift |
-| A14 | `ai_spend_today` | read | AI spend against the USD 2/day cap, by feature |
+| A14 | `ai_spend_today` | read | AI spend against the USD 2/day cap, by feature. The REST endpoint it would call now exists (ai-gateway `GET /v1/ai/usage/today`, `ai:manage`; the staff console shows it); the tool is still not built or approved |
 | A15 | `propose_tax_decision` | propose | Prepare approving or rejecting a tax review item (`tax:review`); a person confirms |
 
 ## For anyone integrating (all audiences)

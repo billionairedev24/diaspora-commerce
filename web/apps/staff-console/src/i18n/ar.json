@@ -3123,7 +3123,7 @@
   "st.sx.ai.row.mcp": "خادم MCP",
   "st.sx.ai.row.mcpValue": "خاص: لا يمكن الوصول إليه إلا من داخل المنصة، وكل طلب يحتاج رمزًا موثقًا. أدواته التي تستدعي الذكاء الاصطناعي تُحتسب ضمن الحد نفسه.",
   "st.sx.ai.row.changed": "من يغيّره",
-  "st.sx.ai.row.changedValue": "مهندس، من إعدادات نشر خدمة الذكاء الاصطناعي (AI_GLOBAL_DAILY_COST_USD) ثم إعادة تشغيل. الطريقة المعتادة رفعه ليوم واحد ثم إعادته. القيم أعلاه هي الافتراضية للنشر وليست قراءة لإنفاق اليوم.",
+  "st.sx.ai.row.changedValue": "مهندس، من إعدادات نشر خدمة الذكاء الاصطناعي (AI_GLOBAL_DAILY_COST_USD) ثم إعادة تشغيل. الطريقة المعتادة رفعه ليوم واحد ثم إعادته.",
   "st.sx.ai.runbook": "طريقة العمل وكيفية رفعه ليوم واحد: docs/runbooks/ai-spend-and-mcp-access.md.",
   "st.sx.staff.title": "حسابات الموظفين",
   "st.sx.staff.description": "كل من يعمل في AfroTransact وأدوارهم ومن أُوقف حسابه.",
@@ -3365,5 +3365,17 @@
   "st.acc.mx.locked": "يحتفظ المشرف الأعلى دائمًا بـ«تعديل» على الأقل في المستخدمين والأدوار والتحكم بالوصول، ليظل بالإمكان إدارة وحدة التحكم.",
   "st.acc.mx.delay": "يصل التغيير إلى وحدة تحكم الموظفين خلال دقيقة تقريبًا.",
   "st.acc.mx.empty": "لا توجد وحدات مطابقة.",
-  "st.acc.mx.noneForPortal": "لا توجد وحدات لهذه البوابة في المصفوفة."
+  "st.acc.mx.noneForPortal": "لا توجد وحدات لهذه البوابة في المصفوفة.",
+  "st.sx.ai.today.title": "اليوم",
+  "st.sx.ai.today.spent": "استُخدم {spent} من {cap} ({percent}٪)",
+  "st.sx.ai.today.spentNoCap": "استُخدم {spent} (لا يوجد حد يومي)",
+  "st.sx.ai.today.meter": "استُخدم {percent}٪ من حد اليوم",
+  "st.sx.ai.today.calls": "{calls} استدعاء للذكاء الاصطناعي و{tokens} رمزًا حتى الآن اليوم.",
+  "st.sx.ai.today.none": "لم يُسجَّل أي استدعاء للذكاء الاصطناعي اليوم، فالإنفاق صفر.",
+  "st.sx.ai.today.resets": "ينتهي اليوم عند 00:00 بالتوقيت العالمي ({when}).",
+  "st.sx.ai.today.byFeature": "الإنفاق حسب الميزة",
+  "st.sx.ai.today.featureCalls": "{calls, plural, one {استدعاء واحد} other {# استدعاءات}}",
+  "st.sx.ai.today.estimate": "التكلفة تقدير يستند إلى استخدام المزوّد بعد كل استدعاء، لذا قد يتجاوز اليوم الحد بقدر الاستدعاءات الجارية.",
+  "st.sx.ai.force.title": "ما هو ساري المفعول",
+  "st.sx.ai.row.totalUnlimited": "لا يوجد حد يومي في هذا النشر."
 }

@@ -51,6 +51,7 @@ import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { accessHandlers } from './access';
+import { aiSpendHandlers } from './ai-spend';
 import { contentPageHandlers } from './content-pages';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { departmentHandlers, pendingDepartmentRequests } from './departments';
@@ -1336,6 +1337,7 @@ export const staffHandlers = [
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...accessHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  ...aiSpendHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...homeSettingsHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...departmentHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Published pages: the legal and help editors, drafts, publication and rollback */

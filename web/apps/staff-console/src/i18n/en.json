@@ -3116,7 +3116,7 @@
   "st.sx.ai.row.mcp": "MCP server",
   "st.sx.ai.row.mcpValue": "Private: reachable only inside the platform, every call needs a signed-in token. Its AI-calling tools count against the same limit.",
   "st.sx.ai.row.changed": "Who changes it",
-  "st.sx.ai.row.changedValue": "An engineer, in the AI service’s deployment settings (AI_GLOBAL_DAILY_COST_USD), then a restart. To raise it for one day and put it back is the usual way. The values above are the deployment defaults, not a reading of today’s spend.",
+  "st.sx.ai.row.changedValue": "An engineer, in the AI service’s deployment settings (AI_GLOBAL_DAILY_COST_USD), then a restart. To raise it for one day and put it back is the usual way.",
   "st.sx.ai.runbook": "How it works and how to raise it for a day: docs/runbooks/ai-spend-and-mcp-access.md.",
   "st.sx.staff.title": "Staff accounts",
   "st.sx.staff.description": "Everyone who works at AfroTransact, their roles, and who is switched off.",
@@ -3358,5 +3358,17 @@
   "st.acc.mx.locked": "Super Admin always keeps at least Edit on Users & roles and Access control, so the console can always be administered.",
   "st.acc.mx.delay": "A change reaches the staff console within about a minute.",
   "st.acc.mx.empty": "No modules match.",
-  "st.acc.mx.noneForPortal": "This portal has no modules in the matrix."
+  "st.acc.mx.noneForPortal": "This portal has no modules in the matrix.",
+  "st.sx.ai.today.title": "Today",
+  "st.sx.ai.today.spent": "{spent} of {cap} used ({percent}%)",
+  "st.sx.ai.today.spentNoCap": "{spent} used (no daily limit is set)",
+  "st.sx.ai.today.meter": "{percent}% of today's limit used",
+  "st.sx.ai.today.calls": "{calls} AI calls and {tokens} tokens so far today.",
+  "st.sx.ai.today.none": "No AI call has been recorded today, so the spend is zero.",
+  "st.sx.ai.today.resets": "The day ends at 00:00 UTC ({when}).",
+  "st.sx.ai.today.byFeature": "Spend by feature",
+  "st.sx.ai.today.featureCalls": "{calls, plural, one {# call} other {# calls}}",
+  "st.sx.ai.today.estimate": "The cost is an estimate from the provider's usage after each call, so the day can pass the limit by the calls in flight.",
+  "st.sx.ai.force.title": "What is in force",
+  "st.sx.ai.row.totalUnlimited": "No daily limit is set on this deployment."
 }
