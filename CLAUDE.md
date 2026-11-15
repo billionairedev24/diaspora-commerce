@@ -50,6 +50,7 @@ design/         the Claude Design prototypes (read-only reference)
 - Hexagonal packages per service: `com.afrotransact.<svc>.{domain,application,port,adapter.{in.web,out.persistence,...},config}`.
   `domain` imports no Spring/Jakarta. ArchUnit test `ArchitectureTest` in every service verifies it.
 - Constructor injection only. No `@Autowired` fields, no static singletons, no Lombok.
+- A module never injects another module's DataSource or repository; cross-module calls use the published `api` package and run as an explicit caller principal.
 - Records for DTOs/value objects. Errors are RFC 9457 `ProblemDetail`.
 - Persistence: Spring Data JDBC or JPA + Flyway migrations (`db/migration`), optimistic locking with `@Version`.
 - Every service exposes: `/v3/api-docs` (springdoc), Swagger UI `/swagger-ui.html`, Scalar `/docs`,
@@ -73,15 +74,20 @@ design/         the Claude Design prototypes (read-only reference)
 - No visible scrollbars anywhere (global CSS), white canvas, Inter (UI) and Fraunces (headings) set only in `web/packages/tokens/src/fonts.config.json`.
 
 ## Deployability
-Every service is independently buildable, testable, containerised and deployable to Kubernetes:
-its own Dockerfile, its own Helm chart (`deploy/helm`, depends on `infra/helm/library/at-service`),
-its own GitHub Actions workflow (path-filtered) and its own Argo CD Application per environment.
+**Release 1 (this branch, ADR 0011).** Each **deployable** (`afrotransact-core`, `afrotransact-go`, each web app) is independently buildable, testable,
+containerised and deployable to Kubernetes: its own Dockerfile, Helm chart, workflow (`.github/workflows/core.yml`, `afrotransact-go.yml`) and Argo CD
+Application per environment. **Each module** inside a deployable keeps its own hexagonal packages, schema and role (one database per deployable,
+`infra/ops/postgres`), Flyway history, Kafka consumer group and OpenAPI contract, is enabled by `at.modules.<name>.enabled`, may call another module only
+through that module's `api` package (ArchUnit), and must still build and test on its own (`./mvnw -pl services/<name> -am verify`) until the owner approves
+removing the standalone build. The per-service workflows trigger only on `main` and `develop`.
 Target cloud (aws | gcp | azure | ovh) is a deploy-time variable only.
 
 Every service keeps its Dockerfile, chart, workflow and ApplicationSet-generated Argo CD Application. An environment may deploy only
 its **launch set**: the explicit list in `infra/argocd/launch-set` (uat and prod; dev runs everything). A service outside it has no
 Application and no pods there. Production is OVH Managed Kubernetes (one node, one replica of everything, prod profile) with
 PostgreSQL on Layerbase (ADR 0004, `docs/runbooks/ovh-production.md`); `make launch-set-check` lists what each environment deploys.
+Release 1 adds `infra/argocd/launch-set/release-1.yaml` (the modules each environment runs inside a deployable, mirrored by `cutover.services` in
+`infra/argocd/envs/<env>/platform-values.yaml`); build, deploy, per-batch cutover and rollback: `docs/runbooks/release-1-deploy.md`.
 
 ## Ports (local)
 See `infra/local/PORTS.md` — every service has a fixed local port so the stack runs side by side.
