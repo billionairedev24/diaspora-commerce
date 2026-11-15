@@ -19,6 +19,11 @@ type Shutdown func(context.Context) error
 // Setup installs a global tracer provider. When endpoint is empty, tracing is a no-op.
 // endpoint is host:port of the collector's OTLP/HTTP receiver, sampleRatio in [0,1].
 func Setup(ctx context.Context, service, env, endpoint string, sampleRatio float64) (Shutdown, error) {
+	return SetupWith(ctx, service, env, endpoint, sampleRatio)
+}
+
+// SetupWith is Setup with extra tracer provider options. afrotransact-go uses it to add the module span processor.
+func SetupWith(ctx context.Context, service, env, endpoint string, sampleRatio float64, extra ...sdktrace.TracerProviderOption) (Shutdown, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	if endpoint == "" {
 		return func(context.Context) error { return nil }, nil
@@ -33,11 +38,12 @@ func Setup(ctx context.Context, service, env, endpoint string, sampleRatio float
 	if err != nil {
 		return nil, fmt.Errorf("otel resource: %w", err)
 	}
-	tp := sdktrace.NewTracerProvider(
+	opts := append([]sdktrace.TracerProviderOption{
 		sdktrace.WithBatcher(exp),
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleRatio))),
-	)
+	}, extra...)
+	tp := sdktrace.NewTracerProvider(opts...)
 	otel.SetTracerProvider(tp)
 	return tp.Shutdown, nil
 }
