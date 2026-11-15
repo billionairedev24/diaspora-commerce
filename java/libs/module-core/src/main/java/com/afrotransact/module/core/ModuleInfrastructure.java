@@ -60,11 +60,14 @@ final class ModuleInfrastructure {
             return;
         }
         BeanDefinition dataSource = owned(BeanDefinitionBuilder.genericBeanDefinition(DataSource.class,
-                () -> ModuleDataSources.create(module, properties.datasource())).getBeanDefinition());
+                () -> ModuleDataSources.create(module, properties)).getBeanDefinition());
         ((AbstractBeanDefinition) dataSource).setDestroyMethodName("close");
         registry.registerBeanDefinition(module.bean("dataSource"), dataSource);
 
-        add("status", ModuleStatus.class, () -> ModuleMigration.run(module, properties, ds(), classLoader), null);
+        add("status", ModuleStatus.class, () -> {
+            ModuleSchemaProvisioner.provisionIfConfigured(module, properties, environment);
+            return ModuleMigration.run(module, properties, ds(), classLoader);
+        }, null);
         String status = module.bean("status");
         add("jdbcClient", JdbcClient.class, () -> JdbcClient.create(ds()), status);
         add("jdbcTemplate", JdbcTemplate.class, () -> new JdbcTemplate(ds()), status);

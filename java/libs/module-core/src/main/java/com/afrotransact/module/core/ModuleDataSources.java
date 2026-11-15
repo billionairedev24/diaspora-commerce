@@ -10,7 +10,8 @@ final class ModuleDataSources {
     private ModuleDataSources() {
     }
 
-    static HikariDataSource create(ModuleDefinition module, ModuleProperties.Database db) {
+    static HikariDataSource create(ModuleDefinition module, ModuleProperties properties) {
+        ModuleProperties.Database db = properties.datasource();
         HikariDataSource dataSource = new HikariDataSource();
         dataSource.setPoolName(module.name());
         dataSource.setJdbcUrl(db.url());
@@ -21,7 +22,15 @@ final class ModuleDataSources {
         dataSource.setConnectionTimeout(millis(db.connectionTimeout()));
         dataSource.setIdleTimeout(millis(db.idleTimeout()));
         dataSource.setRegisterMbeans(false);
+        if (properties.schemaMode()) {
+            // Pinned on every connection: the module's schema first; public only so extensions (postgis, btree_gist) resolve.
+            dataSource.setConnectionInitSql(searchPathSql(properties.schemaName(module.name())));
+        }
         return dataSource;
+    }
+
+    static String searchPathSql(String schema) {
+        return "SET search_path TO \"" + schema + "\", public";
     }
 
     /** The database name of a JDBC URL, without host, credentials or parameters: what an operator recognises. */

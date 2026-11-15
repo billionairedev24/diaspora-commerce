@@ -6,13 +6,18 @@ at:
     fga:
       enabled: ${FGA_ENABLED:false}
   modules:
+    schema-admin:
+      # Local only: core creates each module's role and schema on start (idempotent). make core-db does the same up front.
+      url: ${CORE_DB_ADMIN_URL:jdbc:postgresql://localhost:5432/core}
+      username: ${CORE_DB_ADMIN_USER:postgres}
+      password: ${CORE_DB_ADMIN_PASSWORD:postgres}
     catalog:
       datasource:
         # F15: the local database passwords live in this profile, so a missing password in uat or prod fails the start.
         password: ${CATALOG_DB_PASSWORD:catalog}
     tax-returns:
       datasource:
-        password: ${TAX_RETURNS_DB_PASSWORD:taxreturns}
+        password: ${TAX_RETURNS_DB_PASSWORD:tax_returns}
 logging:
   level:
     com.afrotransact: DEBUG

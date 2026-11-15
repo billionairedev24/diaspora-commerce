@@ -102,6 +102,15 @@ at:
   modules:
     core-service: afrotransact-core
     core-scheduler-pool-size: 1
+    # Data isolation per module (at.modules.<m>.database.mode): `schema` (default here) = ONE database (CORE_DB_URL) with one
+    # schema and one role per module, search_path pinned, own Flyway history in its schema; `database` = the module's own
+    # database (set <M>_DB_URL), as the standalone services and the spike. Provisioning: infra/local/postgres/provision-core.sql.
+    # CONNECTION BUDGET (max-pool per module, minimum-idle 0; the Layerbase limit is 500): see docs/engineering/release-1-architecture.md.
+    schema-admin:
+      # Optional: when set, core creates each module's role and schema itself at start (local development). Never set in prod.
+      url: ${CORE_DB_ADMIN_URL:}
+      username: ${CORE_DB_ADMIN_USER:}
+      password: ${CORE_DB_ADMIN_PASSWORD:}
     # Per module: enabled, its own database and pool, scheduler pool, and the authority it has when it calls another module
     # in-process (the scopes identity grants its OAuth client; one place, reviewed like identity's client list).
     catalog:
@@ -115,7 +124,7 @@ at:
         - offers:read
         - offers:write
       datasource:
-        url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/catalog}
+        url: ${CATALOG_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
         username: ${CATALOG_DB_USER:catalog}
         password: ${CATALOG_DB_PASSWORD}
         maximum-pool-size: ${CATALOG_DB_POOL_SIZE:8}
@@ -133,10 +142,10 @@ at:
         - inventory:adjust
         - shipping:label
       datasource:
-        url: ${TAX_RETURNS_DB_URL:jdbc:postgresql://localhost:5432/taxreturns}
-        username: ${TAX_RETURNS_DB_USER:taxreturns}
+        url: ${TAX_RETURNS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${TAX_RETURNS_DB_USER:tax_returns}
         password: ${TAX_RETURNS_DB_PASSWORD}
-        maximum-pool-size: ${TAX_RETURNS_DB_POOL_SIZE:6}
+        maximum-pool-size: ${TAX_RETURNS_DB_POOL_SIZE:4}
       scheduler:
         pool-size: ${TAX_RETURNS_SCHEDULER_POOL_SIZE:2}
       flyway:
