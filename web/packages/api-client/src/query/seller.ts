@@ -27,6 +27,10 @@ export const sellerKeys = {
   runPickups: (orgId: string) => [...sellerKeys.org(orgId), 'run-pickups'] as const,
   runPickup: (orgId: string, runId: string) => [...sellerKeys.runPickups(orgId), runId] as const,
   businessPage: (orgId: string) => [...sellerKeys.org(orgId), 'business-page'] as const,
+  storePage: (orgId: string) => [...sellerKeys.org(orgId), 'store-page'] as const,
+  storePreview: (orgId: string) => [...sellerKeys.org(orgId), 'store-page', 'preview'] as const,
+  storePageAudit: (orgId: string) => [...sellerKeys.org(orgId), 'store-page', 'audit'] as const,
+  storePageProducts: (orgId: string, q: string) => [...sellerKeys.org(orgId), 'store-page', 'products', q] as const,
   listings: (orgId: string) => [...sellerKeys.org(orgId), 'listings'] as const,
   offers: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'offers', productId] as const,
   listingPage: (orgId: string, q: ListingsQuery) => [...sellerKeys.listings(orgId), 'page', q] as const,
@@ -124,6 +128,11 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.order(orgId, orderNumber), queryFn: ({ signal }) => api.getOrder(orderNumber, signal), staleTime: 15_000 }),
   offers: (api: SellerApiClient, orgId: string, productId: string) =>
     queryOptions({ queryKey: sellerKeys.offers(orgId, productId), queryFn: ({ signal }) => api.listOffers(productId, signal), staleTime: 30_000 }),
+  storePage: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.storePage(orgId), queryFn: ({ signal }) => api.getStorePage(signal), staleTime: 0 }),
+  storePreview: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.storePreview(orgId), queryFn: ({ signal }) => api.previewStorePage(signal), staleTime: MINUTE }),
+  storePageAudit: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.storePageAudit(orgId), queryFn: ({ signal }) => api.getStorePageAudit(signal), staleTime: 0 }),
+  storePageProducts: (api: SellerApiClient, orgId: string, q: string) =>
+    queryOptions({ queryKey: sellerKeys.storePageProducts(orgId, q), queryFn: ({ signal }) => api.searchStorePageProducts(q, signal), staleTime: MINUTE }),
   businessPage: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.businessPage(orgId), queryFn: ({ signal }) => api.getBusinessPage(signal), staleTime: MINUTE }),
   runPickups: (api: SellerApiClient, orgId: string) =>

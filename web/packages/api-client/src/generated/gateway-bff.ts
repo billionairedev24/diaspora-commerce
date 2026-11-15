@@ -3022,6 +3022,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefronts/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A seller's public storefront (/b/{slug})
+         * @description Public, cached for a minute. 404 when there is no such page, the seller has not published it, or the organisation
+         *     is not approved (or suspended): the storefront shows a 404 page. Everything is sanitised: plain text, https links on
+         *     an allowed host, images only from AfroTransact media.
+         */
+        get: operations["getStorefront"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/storefronts/{slug}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The storefront's All products grid (search within the store, filters, sort, pages)
+         * @description Same rules as the storefront (only sellable products). 404 like the storefront.
+         */
+        get: operations["getStorefrontProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/business-pages/{slug}": {
         parameters: {
             query?: never;
@@ -6540,6 +6582,126 @@ export interface components {
                 priceMinor: number;
                 currency: string;
             }[];
+        };
+        /**
+         * @description How a seller's storefront (`/b/{slug}`) looks and which sections it has. Stored by the seller service as opaque
+         *     JSON (draft and published); gateway-bff validates and sanitises every field on the way in and again on the way out.
+         *     Plain text only (line breaks allowed, no HTML); image URLs must be AfroTransact media; links must be https on an allowed host.
+         */
+        StoreConfig: {
+            /** @enum {integer} */
+            schemaVersion: 1;
+            theme: {
+                /** @enum {string} */
+                preset: "clean" | "warm-market" | "bold" | "midnight" | "heritage" | "fresh";
+                /** @description Accent colour. Null uses the preset. Rejected (422 STORE_ACCENT_LOW_CONTRAST) when text on it, or it on the canvas, fails WCAG AA; the text colour on it is computed, never chosen. */
+                accent: string | null;
+            };
+            hero: {
+                /** @enum {string} */
+                style: "image" | "colour" | "split";
+                tagline: string;
+                bannerUrl: string | null;
+                /** @description Percent: where the banner stays in view when cropped */
+                focalX: number;
+                focalY: number;
+            };
+            announcement: {
+                text: string;
+                href: string | null;
+            };
+            grid: {
+                /** @enum {integer} */
+                columns: 3 | 4;
+            };
+            /** @description Order and visibility of the optional sections. The header, hero and All products are always present. */
+            sections: {
+                /** @enum {string} */
+                id: "announcement" | "featured" | "categories" | "about" | "policies" | "reviews";
+                enabled: boolean;
+            }[];
+            /** @description ATINs the seller picked; only the sellable ones are shown */
+            featured: string[];
+            categories: {
+                /** @enum {string} */
+                mode: "auto" | "chosen";
+                chosen: string[];
+            };
+            about: {
+                heading: string;
+                body: string;
+                photoUrl: string | null;
+            };
+            policies: {
+                shipping: string;
+                returns: string;
+            };
+            contact: {
+                showEmail: boolean;
+                phone: string;
+                hours: string;
+            };
+            pickup: {
+                /** @description Show that customers can collect orders, and the ZIP, when the seller has turned pickup on in Settings > Pickup */
+                show: boolean;
+            };
+            social: {
+                /** @enum {string} */
+                network: "instagram" | "facebook" | "tiktok" | "x" | "youtube" | "whatsapp" | "website";
+                url: string;
+            }[];
+        };
+        StorefrontCategory: {
+            name: string;
+            count: number;
+        };
+        StorefrontProducts: {
+            hits: components["schemas"]["ProductSummary"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            pageCount: number;
+            categories: components["schemas"]["StorefrontCategory"][];
+            prices: {
+                value: string;
+                label: string;
+                count: number;
+            }[];
+        };
+        /**
+         * @description A seller's public storefront: the published settings plus real data, in one response. Only sellable products
+         *     appear (in stock, a real photograph, a resolved tax decision). `reviews` is null when the products have no
+         *     reviews (never "0 reviews"). Carrier names and fulfilment details are never present.
+         */
+        Storefront: {
+            slug: string;
+            name: string;
+            logoUrl: string | null;
+            /** @description The business description (used when About has no text) */
+            description: string | null;
+            config: components["schemas"]["StoreConfig"];
+            /** @description True for the seller's draft preview */
+            preview: boolean;
+            /** @description Approved, published and at least one live product; the storefront adds the environment rules */
+            indexable: boolean;
+            /** @description True only for an approved organisation */
+            verified: boolean;
+            /** @description Year the organisation joined AfroTransact */
+            sellingSinceYear: number | null;
+            /** @description Only when the seller chose to show it */
+            contactEmail: string | null;
+            /** @description Only when the seller shows it AND pickup is on in Settings > Pickup */
+            pickup: {
+                zip: string;
+            } | null;
+            categories: components["schemas"]["StorefrontCategory"][];
+            featured: components["schemas"]["ProductSummary"][];
+            reviews: {
+                average: number;
+                count: number;
+            } | null;
+            products: components["schemas"]["StorefrontProducts"];
         };
         ProviderPage: {
             orgId: string;
@@ -11283,6 +11445,62 @@ export interface operations {
                     "application/json": components["schemas"]["ProviderPage"];
                 };
             };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStorefront: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Storefront */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Storefront"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStorefrontProducts: {
+        parameters: {
+            query?: {
+                q?: string;
+                category?: string;
+                price?: "u10" | "10-25" | "25-50" | "o50";
+                sort?: "relevance" | "price_asc" | "price_desc" | "rating" | "newest";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontProducts"];
+                };
+            };
+            400: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

@@ -60,6 +60,7 @@ export * from './schemas/seller';
 export * from './schemas/session';
 export * from './schemas/settings';
 export * from './schemas/shopper';
+export * from './schemas/storefront';
 export * from './schemas/site';
 export * from './schemas/site-nav';
 export * from './schemas/staff';

@@ -73,6 +73,7 @@ import {
   type TotpSetup,
   TotpSetupSchema
 } from './schemas/shopper';
+import { type Storefront, type StorefrontProducts, StorefrontProductsSchema, type StorefrontQuery, StorefrontSchema } from './schemas/storefront';
 
 const Void = z.undefined();
 const enc = encodeURIComponent;
@@ -198,6 +199,15 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     getBookingQuote: (id: string, q: SlotQuery = {}, signal?: AbortSignal): Promise<BookingQuote> =>
       request(`/v1/services/${enc(id)}/summary`, BookingQuoteSchema, { query: slotQuery(q), signal }),
     getProviderPage: (orgId: string, signal?: AbortSignal): Promise<ProviderPage> => request(`/v1/service-providers/${enc(orgId)}`, ProviderPageSchema, { signal }),
+    /** A seller's branded storefront (/b/{slug}); 404 when unpublished, unknown or the seller is not approved. */
+    getStorefront: (slug: string, signal?: AbortSignal): Promise<Storefront> => request(`/v1/storefronts/${enc(slug)}`, StorefrontSchema, { signal }),
+    /** The storefront's All products grid: search in the store, filters, sort, pages (1-based). */
+    getStorefrontProducts: (slug: string, q: StorefrontQuery = {}, signal?: AbortSignal): Promise<StorefrontProducts> =>
+      request(`/v1/storefronts/${enc(slug)}/products`, StorefrontProductsSchema, {
+        query: { q: q.q || undefined, category: q.category || undefined, price: q.price || undefined, sort: q.sort && q.sort !== 'relevance' ? q.sort : undefined,
+          page: q.page && q.page > 1 ? String(q.page) : undefined, size: q.size ? String(q.size) : undefined },
+        signal
+      }),
     getBusinessPage: (slug: string, signal?: AbortSignal): Promise<BusinessPage> => request(`/v1/business-pages/${enc(slug)}`, BusinessPageSchema, { signal }),
     bookService: (body: BookingRequest, idempotencyKey?: string): Promise<BookingCreated> =>
       request('/v1/services/bookings', BookingCreatedSchema, { method: 'POST', body, headers: idem(idempotencyKey) }),
