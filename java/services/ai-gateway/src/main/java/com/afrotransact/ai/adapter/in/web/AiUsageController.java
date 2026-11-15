@@ -1,9 +1,12 @@
 package com.afrotransact.ai.adapter.in.web;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
 import com.afrotransact.ai.application.OrgUsageService;
+import com.afrotransact.ai.application.SpendTodayService;
+import com.afrotransact.ai.application.SpendTodayService.SpendToday;
 import com.afrotransact.ai.domain.AiCredits;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -21,10 +24,12 @@ import org.springframework.web.bind.annotation.RestController;
 class AiUsageController {
 
     private final OrgUsageService usage;
+    private final SpendTodayService spendToday;
     private final CallerResolver callers;
 
-    AiUsageController(OrgUsageService usage, CallerResolver callers) {
+    AiUsageController(OrgUsageService usage, SpendTodayService spendToday, CallerResolver callers) {
         this.usage = usage;
+        this.spendToday = spendToday;
         this.callers = callers;
     }
 
@@ -42,6 +47,41 @@ class AiUsageController {
 
     @Schema(name = "AiOrgUsageReport")
     record UsageResponse(LocalDate from, LocalDate to, long microsPerCredit, List<OrgDayUsageResponse> items) {
+    }
+
+    @Schema(name = "AiFeatureSpend", description = "One feature's spend today")
+    record FeatureSpendResponse(@Schema(examples = "lola") String feature, long calls, long tokens,
+                                @Schema(description = "Estimated model cost in micro-dollars") long costMicros) {
+    }
+
+    @Schema(name = "AiSpendToday", description = "Today's AI spend (UTC day) against the daily cap, by feature")
+    record SpendTodayResponse(@Schema(description = "UTC day") LocalDate day,
+                              @Schema(description = "Gateway-wide daily cap in micro-dollars; 0 = unlimited. Set by "
+                                      + "AI_GLOBAL_DAILY_COST_USD on the ai-gateway deployment") long capMicros,
+                              @Schema(description = "One caller's daily share in micro-dollars; 0 = unlimited "
+                                      + "(AI_CALLER_DAILY_COST_USD)") long callerCapMicros,
+                              @Schema(description = "Estimated model cost so far today, micro-dollars (1,000,000 = USD 1)")
+                              long spentMicros, long calls, long tokens,
+                              @Schema(description = "False when no model call was recorded today: the zero is then "
+                                      + "'nothing recorded', not an estimate") boolean hasData,
+                              @Schema(description = "Next UTC midnight, when the day's total starts again")
+                              Instant resetsAt, List<FeatureSpendResponse> byFeature) {
+
+        static SpendTodayResponse of(SpendToday s) {
+            return new SpendTodayResponse(s.day(), s.capMicros(), s.callerCapMicros(), s.spentMicros(), s.calls(),
+                    s.tokens(), s.hasData(), s.resetsAt(), s.byFeature().stream().map(f -> new FeatureSpendResponse(
+                            f.feature(), f.calls(), f.tokens(), f.costMicros())).toList());
+        }
+    }
+
+    @Operation(summary = "Today's AI spend against the daily cap, by feature",
+            description = "Staff with ai:manage. Read from the usage ledger (cost is estimated from provider usage "
+                    + "after each call, so the day can overshoot the cap by the calls in flight). A day with no model "
+                    + "call is zero with hasData false. UTC day; resets at 00:00 UTC.")
+    @GetMapping("/v1/ai/usage/today")
+    ResponseEntity<SpendTodayResponse> today(HttpServletRequest request) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(SpendTodayResponse.of(spendToday.today(callers.current(request))));
     }
 
     @Operation(summary = "AI credits per organisation and UTC day (metered billing, S206)",

@@ -45,7 +45,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Bookings: upstreams.NewStaffUpstream(client("bookings", up.Bookings)), DeliveryRuns: upstreams.NewStaffUpstream(sc.deliveryRuns),
 			Media: upstreams.NewStaffUpstream(media), Geo: upstreams.NewStaffUpstream(client("geo", up.Geo)),
 			Offers: upstreams.NewStaffUpstream(sc.offers), Search: upstreams.NewStaffUpstream(client("search", up.Search)),
-			Carrier: upstreams.NewStaffUpstream(client("carrier-gateway", up.Carrier)),
+			Carrier: upstreams.NewStaffUpstream(client("carrier-gateway", up.Carrier)), AI: upstreams.NewStaffUpstream(client("ai-gateway", up.AIGateway)),
 			Proof:   sc.proofLinks,
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
@@ -96,6 +96,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Identity = app.NewStaffIdentityService(d)
 	out.Access = app.NewStaffAccessService(d)
 	out.Invitations = app.NewStaffInvitationsService(d)
+	out.AISpend = app.NewStaffAISpendService(d)
 	// Lola for staff: read-only lookups through the console's own use cases, one model turn at ai-gateway per round.
 	out.Assistant = app.NewStaffAssistantService(d, app.StaffAssistantDeps{Tax: out.Tax, Model: upstreams.NewStaffAssistantModel(client("ai-gateway", up.AIGateway)),
 		Counter: counter, Records: out.Records, Dashboard: out.Dashboard})

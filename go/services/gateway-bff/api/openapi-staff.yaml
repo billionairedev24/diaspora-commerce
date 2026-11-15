@@ -60,6 +60,8 @@ tags:
     description: 'Developer tools for the identity service (identity:admin): the token inspector and the published OIDC documents. Its tables (oauth-clients, identity-sessions, signing-keys, auth-settings, session-policy) are Resources. The identity-sessions table has a Device column (the User-Agent identity records at sign-in, parsed to a label such as `Chrome on macOS`; empty when none was recorded) and its sheet also shows the raw user agent. Step-up: the forms of the most dangerous actions (rotate the signing key, sign a user or a client out, disable a client, change the settings) end with a `stepUpPassword` field (type password, not required). The BFF checks it at identity (`POST /v1/admin/identity/step-up`) and relays the proof as `X-Step-Up`; a blank value is accepted when the person signed in within five minutes, otherwise the action answers 422 on `stepUpPassword`. A wrong password counts towards the account lockout. The password is never stored, cached or logged.'
   - name: Access
     description: 'Settings > Roles and permissions (access:read to look, access:admin to change). The permission catalogue, the roles of each portal with their permissions, who holds a role, a person''s direct grants and effective permissions, and the access change log. Identity owns the data and checks access:read / access:admin on every call with the staff member''s own token; the BFF also needs View (reads) or Edit (changes) on the Users & roles module and a reason of 3 to 300 characters on every change. A change reaches a person''s sign-in on their next access token (within about 5 minutes).'
+  - name: AI spend
+    description: 'Settings > AI and MCP spend cap: today''s AI spend (UTC day) against the daily cap, by feature, read from ai-gateway''s usage ledger with the staff member''s own token (ai:manage). Cost is estimated by ai-gateway from provider usage after each call. A day with no model call is zero with `hasData: false`: nothing is estimated or invented here. The cap is deployment configuration (`AI_GLOBAL_DAILY_COST_USD` on ai-gateway, see docs/runbooks/ai-spend-and-mcp-access.md) and cannot be changed from the console.'
   - name: Staff invitations
     description: 'Settings > Staff accounts: staff with access:admin invite a person by name, work email and role with a reason (replacing accounts with a temporary password). The open invitations (pending, and expired ones never used) are listed with names and emails, can be sent again (a new link; the old one stops working) or revoked. The invitee opens the emailed link, which carries a single-use token (72 hours by default, kept hashed by identity) after `#token=` so it never reaches a server log; the two session-less routes (`preview`, `accept`) take the token in the body, are rate limited like sign-in, and never log, cache or return it or the password. Identity creates the account (enabled, email verified, the invited role), applies the password policy, and audits every step. At first sign-in the usual two-step verification enrolment for staff applies.'
   - name: Exports
@@ -2421,6 +2423,19 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/ai/spend-today:
+    get:
+      tags: [AI spend]
+      operationId: getAiSpendToday
+      security: [{sessionCookie: []}]
+      summary: Today's AI spend against the daily cap, by feature
+      description: ai-gateway `GET /v1/ai/usage/today`. Needs the ai:manage permission. Amounts are micro-dollars (1,000,000 = USD 1); `capMicros` 0 means unlimited. Not cached.
+      responses:
+        '200': {description: Today's spend, content: {application/json: {schema: {$ref: '#/components/schemas/AiSpendToday'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/access/log:
@@ -8084,6 +8099,31 @@ components:
         total: {type: integer, format: int64}
         page: {type: integer}
         size: {type: integer}
+    AiSpendToday:
+      type: object
+      required: [day, capMicros, callerCapMicros, spentMicros, calls, tokens, hasData, resetsAt, capSetBy, byFeature]
+      properties:
+        day: {type: string, format: date, description: The UTC day}
+        capMicros: {type: integer, format: int64, description: 'The daily cap for the whole gateway in micro-dollars; 0 is unlimited'}
+        callerCapMicros: {type: integer, format: int64, description: 'One caller''s daily share in micro-dollars; 0 is unlimited'}
+        spentMicros: {type: integer, format: int64, description: Estimated model cost so far today}
+        calls: {type: integer, format: int64}
+        tokens: {type: integer, format: int64}
+        hasData: {type: boolean, description: 'False when no model call was recorded today: the zero is nothing recorded, not an estimate'}
+        resetsAt: {type: string, format: date-time, description: The next UTC midnight}
+        capSetBy: {type: string, description: 'The ai-gateway environment variable that sets the cap'}
+        byFeature:
+          type: array
+          items: {$ref: '#/components/schemas/AiSpendFeature'}
+    AiSpendFeature:
+      type: object
+      required: [feature, label, calls, tokens, costMicros]
+      properties:
+        feature: {type: string}
+        label: {type: string, description: The feature named for people}
+        calls: {type: integer, format: int64}
+        tokens: {type: integer, format: int64}
+        costMicros: {type: integer, format: int64}
     AccessModuleMatrix:
       type: object
       required: [portal, levels, roles, modules, locked, canAdmin]
