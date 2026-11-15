@@ -60,6 +60,8 @@ paths:
         - {name: maxPrice, in: query, schema: {type: integer, format: int64, minimum: 0}, description: Minor units}
         - {name: maxDays, in: query, schema: {type: integer, minimum: 1}, description: Delivery within N days}
         - {name: inStock, in: query, schema: {type: boolean}}
+        - {name: atins, in: query, schema: {type: string}, description: 'Comma-separated product ATINs (at most 20): only these products, still subject to every other filter (a seller''s featured picks).'}
+        - {name: onSale, in: query, schema: {type: boolean, default: false}, description: 'Only products whose price has a real was-price above it (index flag on_sale, from the variant''s compareAt/list price). Same on Meilisearch and Elasticsearch.'}
         - name: eligibleOnly
           in: query
           schema: {type: boolean, default: false}
@@ -219,6 +221,7 @@ components:
         sellerKind: {type: string, enum: [PLATFORM, SELLER]}
         fulfilment: {type: string, enum: [AFROTRANSACT, SELLER]}
         priceMinor: {type: integer, format: int64}
+        listPriceMinor: {type: integer, format: int64, description: 'The was-price: present only when it is above priceMinor (a real discount); absent otherwise.'}
         currency: {type: string}
         rating: {type: number}
         reviewCount: {type: integer}

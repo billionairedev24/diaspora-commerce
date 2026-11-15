@@ -97,6 +97,13 @@ func buildFilter(q domain.Query) string {
 	if q.SellerKind != "" {
 		f = append(f, "seller_kind = "+meili.Quote(q.SellerKind))
 	}
+	if len(q.ATINs) > 0 {
+		in := make([]string, len(q.ATINs))
+		for i, a := range q.ATINs {
+			in[i] = meili.Quote(a)
+		}
+		f = append(f, "atin IN ["+strings.Join(in, ", ")+"]")
+	}
 	if q.SellerID != "" {
 		f = append(f, "seller_id = "+meili.Quote(q.SellerID))
 	}

@@ -32,8 +32,10 @@ type StorefrontQuery struct {
 	Category string
 	Price    string
 	Sort     string
-	Page     int
-	Size     int
+	// OnSale keeps products with a real was-price above the price.
+	OnSale bool
+	Page   int
+	Size   int
 }
 
 // StorefrontPickup is shown only when the seller shows it AND pickup is on at one of their places.

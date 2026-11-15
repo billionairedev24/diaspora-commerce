@@ -7,9 +7,11 @@ import java.util.UUID;
 
 import com.afrotransact.bookings.domain.Provider;
 import com.afrotransact.bookings.domain.RatingSummary;
+import com.afrotransact.bookings.domain.ServiceArea;
 import com.afrotransact.bookings.domain.ServiceMode;
 import com.afrotransact.bookings.domain.ServiceOffering;
 import com.afrotransact.bookings.domain.TeamMember;
+import com.afrotransact.bookings.domain.WeeklyHours;
 
 /** Anonymous shopper reads: find services, see a provider, pick a day and a time, read the summary. */
 public interface PublicBookingsService {
@@ -84,7 +86,8 @@ public interface PublicBookingsService {
     }
 
     /** A provider's public booking page. */
-    record ProviderPage(Provider provider, List<ServiceOffering> services, List<TeamMember> team) {
+    record ProviderPage(Provider provider, List<ServiceOffering> services, List<TeamMember> team, WeeklyHours hours,
+                        ServiceArea area, List<String> extraAreas) {
     }
 
     /** A service page. */

@@ -199,6 +199,7 @@ func filterNames(q domain.Query) []string {
 	add(q.MaxDays > 0, "maxDays")
 	add(q.InStockOnly, "inStock")
 	add(q.OnSale, "onSale")
+	add(len(q.ATINs) > 0, "atins")
 	add(q.EligibleOnly, "eligibleOnly")
 	add(q.WithinMiles > 0, "distance")
 	return out

@@ -143,10 +143,10 @@ func clampPage(q domain.StorefrontQuery) domain.StorefrontQuery {
 // search filters (eligibleOnly) and the same photo rule is applied again here.
 func (s *storefrontServiceImpl) page(ctx context.Context, orgID string, q domain.StorefrontQuery) (domain.StorefrontProducts, error) {
 	q = clampPage(q)
-	key := orgID + "|" + q.Q + "|" + q.Category + "|" + q.Price + "|" + q.Sort + "|" + itoa(q.Page) + "|" + itoa(q.Size)
+	key := orgID + "|" + q.Q + "|" + q.Category + "|" + q.Price + "|" + strconv.FormatBool(q.OnSale) + "|" + q.Sort + "|" + itoa(q.Page) + "|" + itoa(q.Size)
 	v, _, err := s.products.get(key, s.clock.now(), func() (domain.StorefrontProducts, error) {
 		res, err := s.search.Search(ctx, &domain.Caller{}, domain.SearchQuery{Q: q.Q, Department: q.Category, Price: q.Price, Sort: q.Sort,
-			Page: q.Page - 1, Size: q.Size, SellerID: orgID, EligibleOnly: true})
+			Page: q.Page - 1, Size: q.Size, SellerID: orgID, EligibleOnly: true, OnSale: q.OnSale})
 		if err != nil {
 			return domain.StorefrontProducts{}, err
 		}

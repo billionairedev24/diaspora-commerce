@@ -69,6 +69,13 @@ func (h *handlersImpl) search(w http.ResponseWriter, r *http.Request) {
 		Track:        v.Get("track") != "false",
 		CustomerID:   customerID(r),
 	}
+	if a := strings.TrimSpace(v.Get("atins")); a != "" {
+		for _, one := range strings.Split(a, ",") {
+			if one = strings.TrimSpace(one); one != "" && len(q.ATINs) < 20 {
+				q.ATINs = append(q.ATINs, one)
+			}
+		}
+	}
 	if c := v.Get("community"); c != "" {
 		q.Communities = strings.Split(c, ",")
 	}

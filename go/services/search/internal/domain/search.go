@@ -32,6 +32,8 @@ type Query struct {
 	MaxPrice    int64
 	MaxDays     int // delivery speed filter, e.g. 1 = tomorrow
 	InStockOnly bool
+	// ATINs keeps only these products (at most 20), e.g. a seller's featured picks; combined with the other filters.
+	ATINs []string
 	// OnSale keeps products whose price has a real was-price above it (the index flag on_sale).
 	OnSale bool
 	// EligibleOnly restricts hits and facet counts to what a shopper may be shown: live, in stock and with a real photo

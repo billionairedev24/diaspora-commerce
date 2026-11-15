@@ -181,6 +181,9 @@ func buildFilters(q domain.Query) []any {
 	if q.SellerKind != "" {
 		f = append(f, object{"term": object{"seller_kind": q.SellerKind}})
 	}
+	if len(q.ATINs) > 0 {
+		f = append(f, object{"terms": object{"atin": q.ATINs}})
+	}
 	if q.SellerID != "" {
 		f = append(f, object{"term": object{"seller_id": q.SellerID}})
 	}

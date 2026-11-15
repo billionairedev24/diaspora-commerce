@@ -23,7 +23,7 @@ func (h *handlersImpl) storefrontProducts(w http.ResponseWriter, r *http.Request
 	v := r.URL.Query()
 	page, _ := strconv.Atoi(v.Get("page"))
 	size, _ := strconv.Atoi(v.Get("size"))
-	q := domain.StorefrontQuery{Q: v.Get("q"), Category: v.Get("category"), Price: v.Get("price"), Sort: v.Get("sort"), Page: page, Size: size}
+	q := domain.StorefrontQuery{Q: v.Get("q"), Category: v.Get("category"), Price: v.Get("price"), Sort: v.Get("sort"), OnSale: v.Get("onSale") == "true", Page: page, Size: size}
 	if q.Price != "" {
 		if _, ok := domain.PriceBucketByID(q.Price); !ok {
 			h.reply(w, r, 0, nil, domain.NewProblem(http.StatusBadRequest, domain.CodeInvalidQuery, "Invalid query", "Unknown price range."))
