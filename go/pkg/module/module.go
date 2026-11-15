@@ -16,6 +16,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -62,6 +63,8 @@ type Module struct {
 	Start func(ctx context.Context) error
 	// Close releases connections and stops what Start launched. It may be nil.
 	Close func(ctx context.Context) error
+	// Fatal delivers an unrecoverable failure of background work. Nil when the module has none.
+	Fatal <-chan error
 	// Server is the standalone listener (Main). Nil when the host owns the listener.
 	Server    httpserver.Server
 	Logger    *slog.Logger
@@ -138,18 +141,57 @@ func (c *Closers) Close(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Starters collects background work launched by Start.
-type Starters struct{ fs []func(context.Context) }
+// Background runs a module's long-lived work (consumers, schedulers, syncs). A function that returns an error while its
+// context is still live is fatal: the host stops, as the standalone process did when its errgroup failed.
+type Background struct {
+	fns   []func(context.Context) error
+	fatal chan error
+	wg    sync.WaitGroup
+	once  sync.Once
+}
 
-// Go registers a background function; Start launches each one in its own goroutine.
-func (s *Starters) Go(f func(context.Context)) { s.fs = append(s.fs, f) }
+// Go registers a function; Start launches each one in its own goroutine.
+func (b *Background) Go(f func(context.Context) error) { b.fns = append(b.fns, f) }
 
-// Start launches the registered functions.
-func (s *Starters) Start(ctx context.Context) error {
-	for _, f := range s.fs {
-		go f(ctx)
+// GoQuiet registers a function that cannot fail.
+func (b *Background) GoQuiet(f func(context.Context)) {
+	b.fns = append(b.fns, func(ctx context.Context) error { f(ctx); return nil })
+}
+
+// Fatal delivers the first fatal error of a background function.
+func (b *Background) Fatal() <-chan error {
+	b.once.Do(func() { b.fatal = make(chan error, 8) })
+	return b.fatal
+}
+
+// Start launches the registered functions and returns.
+func (b *Background) Start(ctx context.Context) error {
+	b.Fatal()
+	for _, f := range b.fns {
+		b.wg.Add(1)
+		go func() {
+			defer b.wg.Done()
+			if err := f(ctx); err != nil && ctx.Err() == nil {
+				select {
+				case b.fatal <- err:
+				default:
+				}
+			}
+		}()
 	}
 	return nil
+}
+
+// Wait blocks until every function returned or ctx is done.
+func (b *Background) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() { b.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("background work still running: %w", ctx.Err())
+	}
 }
 
 // Constructor is the shape every service exports as New.
@@ -163,16 +205,39 @@ func Serve(ctx context.Context, m Module) error {
 	if m.Server == nil {
 		return ErrNoServer
 	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	if m.Start != nil {
-		if err := m.Start(ctx); err != nil {
+		if err := m.Start(runCtx); err != nil {
 			return fmt.Errorf("start %s: %w", m.Name, err)
 		}
 	}
-	err := m.Server.Run(ctx)
+	fatalCh := make(chan error, 1)
+	if m.Fatal != nil {
+		go func() {
+			select {
+			case err := <-m.Fatal:
+				fatalCh <- err
+				cancel()
+			case <-runCtx.Done():
+			}
+		}()
+	}
+	err := m.Server.Run(runCtx)
+	cancel()
 	if m.Close != nil {
-		if cerr := m.Close(context.WithoutCancel(ctx)); cerr != nil && err == nil {
+		closeCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+		defer stop()
+		if cerr := m.Close(closeCtx); cerr != nil && err == nil {
 			err = fmt.Errorf("close %s: %w", m.Name, cerr)
 		}
+	}
+	select {
+	case fatal := <-fatalCh:
+		if err == nil {
+			err = fmt.Errorf("%s: %w", m.Name, fatal)
+		}
+	default:
 	}
 	return err
 }

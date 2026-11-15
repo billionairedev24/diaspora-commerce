@@ -17,10 +17,12 @@ import (
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
+	"github.com/billionairedev24/diaspora-commerce/go/services/indexer"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/catalog"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/sources"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/config"
+	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/wiring"
 )
 
 // reindexCommand is the subcommand: `indexer reindex [flags]`.
@@ -143,28 +145,28 @@ func runReindex(args []string) error {
 	if err != nil {
 		return err
 	}
-	log := logging.New(serviceName, env)
+	log := logging.New(indexer.Name, env)
 	slog.SetDefault(log)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	be, err := newBackend(cfg)
+	be, err := wiring.NewBackend(cfg)
 	if err != nil {
 		return err
 	}
-	log.Info("reindex", "provider", be.name, "markets", a.Markets, "dry_run", a.DryRun, "batch", a.Batch,
+	log.Info("reindex", "provider", be.Name, "markets", a.Markets, "dry_run", a.DryRun, "batch", a.Batch,
 		"concurrency", a.Concurrency, "statuses", a.Statuses, "since", a.Since, "after", a.After)
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	directory := newSellerDirectory(cfg, httpClient, log)
+	directory := wiring.NewSellerDirectory(cfg, httpClient, log)
 	// The same seller names the live indexer holds: warmed from seller-service before any product is projected.
 	if !a.DryRun {
-		warmDirectory(ctx, directory, cfg.SellerDirectory.WarmTimeout, log)
+		wiring.WarmDirectory(ctx, directory, cfg.SellerDirectory.WarmTimeout, log)
 	}
 	categories := catalog.NewClient(cfg.CatalogURL, httpClient)
 	handlers := map[string]events.Handler{}
 	for _, m := range a.Markets {
-		handlers[m] = app.NewProjector(be.index, categories, directory, m, log)
+		handlers[m] = app.NewProjector(be.Index, categories, directory, m, log)
 	}
 	sd := cfg.SellerDirectory
 	if sd.TokenURL != "" && sd.ClientSecret == "" {
@@ -175,14 +177,14 @@ func runReindex(args []string) error {
 			ClientSecret: sd.ClientSecret, Scopes: cfg.Reindex.Scopes}, httpClient),
 		BuyBoxes:    sources.NewOffers(cfg.Reindex.OffersURL, httpClient),
 		Stock:       sources.NewInventory(cfg.Reindex.InventoryURL, httpClient),
-		EnsureIndex: be.ensureIndex,
+		EnsureIndex: be.EnsureIndex,
 		Handlers:    handlers,
 		Log:         log,
 	})
 
 	sum, runErr := reindexer.Run(ctx, app.ReindexOptions{Markets: a.Markets, Batch: a.Batch, Concurrency: a.Concurrency,
 		DryRun: a.DryRun, Since: a.Since, After: a.After, Statuses: a.Statuses})
-	printReindexSummary(os.Stdout, be.name, sum)
+	printReindexSummary(os.Stdout, be.Name, sum)
 	if runErr != nil {
 		return fmt.Errorf("reindex stopped (resume with --after %q): %w", sum.ResumeAfter, runErr)
 	}
@@ -201,14 +203,14 @@ func runReindex(args []string) error {
 }
 
 // backfillEmbeddings runs one pass of the indexer's own embedding backfill for each market.
-func backfillEmbeddings(ctx context.Context, cfg config.Config, be backend, markets []string, log *slog.Logger) error {
-	embedder := newEmbedder(cfg, log)
+func backfillEmbeddings(ctx context.Context, cfg config.Config, be wiring.Backend, markets []string, log *slog.Logger) error {
+	embedder := wiring.NewEmbedder(cfg, log)
 	if embedder == nil {
 		log.Warn("--backfill-embeddings ignored: embeddings are off (EMBEDDINGS_ENABLED, AI_GATEWAY_URL)")
 		return nil
 	}
 	for _, m := range markets {
-		backfill := app.NewEmbeddingBackfill(be.index, embedder, m, cfg.Embeddings.BackfillBatch, cfg.Embeddings.Timeout, log)
+		backfill := app.NewEmbeddingBackfill(be.Index, embedder, m, cfg.Embeddings.BackfillBatch, cfg.Embeddings.Timeout, log)
 		n, err := backfill.RunOnce(ctx)
 		log.Info("embedding backfill", "market", m, "stored", n)
 		if err != nil {
