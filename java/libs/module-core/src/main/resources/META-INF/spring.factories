@@ -1,2 +1,3 @@
 org.springframework.boot.diagnostics.FailureAnalyzer=com.afrotransact.module.core.ModuleStartupFailureAnalyzer
 org.springframework.boot.EnvironmentPostProcessor=com.afrotransact.module.core.ModuleConfigPostProcessor
+org.springframework.context.ApplicationContextInitializer=com.afrotransact.module.core.ModuleMountsInitializer

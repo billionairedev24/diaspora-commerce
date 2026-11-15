@@ -8,6 +8,7 @@ import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -35,10 +36,16 @@ class McpSecurityConfiguration {
     };
 
     @Bean
+    @Order(10)
     SecurityFilterChain mcpSecurityFilterChain(HttpSecurity http, PlatformSecurityProperties security,
                                                McpProperties props, Environment env,
                                                @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
                                                String issuer) throws Exception {
+        if (!env.getProperty("at.modules.core-service", "").isEmpty()) {
+            // In core this chain owns the MCP endpoint and its RFC 9728 metadata; everything else goes to the shared chain.
+            http.securityMatcher("/mcp", "/mcp/**", "/.well-known/oauth-protected-resource",
+                    "/.well-known/oauth-protected-resource/**");
+        }
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(Customizer.withDefaults());

@@ -65,6 +65,18 @@ at:
     trust-ops:
       datasource:
         password: ${TRUST_OPS_DB_PASSWORD:trust_ops}
+    identity:
+      datasource:
+        password: ${IDENTITY_DB_PASSWORD:identity}
+    retail:
+      datasource:
+        password: ${RETAIL_DB_PASSWORD:retail}
+    delivery-runs:
+      datasource:
+        password: ${DELIVERY_RUNS_DB_PASSWORD:delivery_runs}
+    ai-gateway:
+      datasource:
+        password: ${AI_GATEWAY_DB_PASSWORD:ai_gateway}
 logging:
   level:
     com.afrotransact: DEBUG

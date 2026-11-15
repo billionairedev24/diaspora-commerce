@@ -17,6 +17,11 @@
 
     <properties>
         <wiremock.version>3.13.2</wiremock.version>
+        <!-- Same pins as ai-gateway-service / mcp-server-service (Spring AI, OpenAI SDK and OpenTelemetry converge on these). -->
+        <victools.version>5.0.0</victools.version>
+        <okhttp.version>5.5.1</okhttp.version>
+        <okio.version>3.18.2</okio.version>
+        <swagger-annotations.version>2.2.55</swagger-annotations.version>
     </properties>
 
     <dependencyManagement>
@@ -42,6 +47,48 @@
                 <groupId>org.jetbrains</groupId>
                 <artifactId>annotations</artifactId>
                 <version>26.1.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.victools</groupId>
+                <artifactId>jsonschema-generator</artifactId>
+                <version>${victools.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.victools</groupId>
+                <artifactId>jsonschema-module-jackson</artifactId>
+                <version>${victools.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.victools</groupId>
+                <artifactId>jsonschema-module-swagger-2</artifactId>
+                <version>${victools.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>${swagger-annotations.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okio</groupId>
+                <artifactId>okio</artifactId>
+                <version>${okio.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okio</groupId>
+                <artifactId>okio-jvm</artifactId>
+                <version>${okio.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp-jvm</artifactId>
+                <version>${okhttp.version}</version>
+            </dependency>
+            <!-- content-service uses 3.0.8; Spring AI (3.0.1) and the MCP SDK (3.0.6) converge on it. Risk: not exercised at run time by
+                 ai-gateway and mcp-server in core (see docs/engineering/release-1-architecture.md, status). -->
+            <dependency>
+                <groupId>com.networknt</groupId>
+                <artifactId>json-schema-validator</artifactId>
+                <version>3.0.8</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -131,6 +178,24 @@
             <version>${project.version}</version>
             <classifier>plain</classifier>
         </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>identity-service</artifactId>
+            <version>${project.version}</version>
+            <classifier>plain</classifier>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>retail-service</artifactId>
+            <version>${project.version}</version>
+            <classifier>plain</classifier>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>delivery-runs-service</artifactId>
+            <version>${project.version}</version>
+            <classifier>plain</classifier>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -160,6 +225,33 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <!-- ai-gateway and mcp-server (Spring AI, okhttp, MCP server) are optional and detachable: build the core without them with
+             -DnoAi, or keep them in the image and switch them off with MODULE_AI_GATEWAY_ENABLED / MODULE_MCP_SERVER_ENABLED=false. -->
+        <profile>
+            <id>ai-modules</id>
+            <activation>
+                <property>
+                    <name>!noAi</name>
+                </property>
+            </activation>
+            <dependencies>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>ai-gateway-service</artifactId>
+                <version>${project.version}</version>
+                <classifier>plain</classifier>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>mcp-server-service</artifactId>
+                <version>${project.version}</version>
+                <classifier>plain</classifier>
+            </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 
     <build>
         <finalName>afrotransact-core</finalName>

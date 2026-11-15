@@ -1,5 +1,7 @@
 package com.afrotransact.module.core;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinitionHolder;
@@ -16,6 +18,14 @@ import org.springframework.core.type.MethodMetadata;
  * rule is what lets a module keep injecting a plain {@code JdbcClient} and never see another module's database.
  */
 final class ModuleAwareAutowireCandidateResolver extends ContextAnnotationAutowireCandidateResolver {
+
+    /**
+     * Types that belong to a module's database (connection pool, transaction manager and template, JDBC helpers). A module's own
+     * {@code @Bean} of one of these is private to the module. Other platform types (Clock, JSON mappers, HTTP builders) stay
+     * shared: a module that defines one replaces the application default for everybody, as it would standalone.
+     */
+    private static final List<String> PER_MODULE_TYPES = List.of("javax.sql.", "org.springframework.transaction.",
+            "org.springframework.jdbc.", "org.springframework.data.jdbc.");
 
     private final ModuleRegistry modules;
 
@@ -53,7 +63,8 @@ final class ModuleAwareAutowireCandidateResolver extends ContextAnnotationAutowi
         }
         if (definition instanceof AnnotatedBeanDefinition annotated && annotated.getFactoryMethodMetadata() != null) {
             MethodMetadata method = annotated.getFactoryMethodMetadata();
-            if (modules.moduleOfClassName(method.getReturnTypeName()).isEmpty()) {
+            if (modules.moduleOfClassName(method.getReturnTypeName()).isEmpty()
+                    && PER_MODULE_TYPES.stream().anyMatch(method.getReturnTypeName()::startsWith)) {
                 return modules.moduleOfClassName(method.getDeclaringClassName()).map(ModuleDefinition::name)
                         .orElse(null);
             }

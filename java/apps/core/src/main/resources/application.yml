@@ -335,6 +335,76 @@ at:
         locations:
           - classpath:db/platform
           - classpath:modules/trust-ops/db/migration
+    identity:
+      enabled: ${MODULE_IDENTITY_ENABLED:true}
+      client-id: identity-service
+      datasource:
+        url: ${IDENTITY_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${IDENTITY_DB_USER:identity}
+        password: ${IDENTITY_DB_PASSWORD}
+        maximum-pool-size: ${IDENTITY_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${IDENTITY_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/identity/db/migration
+    retail:
+      enabled: ${MODULE_RETAIL_ENABLED:false}
+      client-id: retail-service
+      caller-scopes:
+        - catalog:read
+        - inventory:receive
+        - inventory:read
+        - media:write
+      datasource:
+        url: ${RETAIL_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${RETAIL_DB_USER:retail}
+        password: ${RETAIL_DB_PASSWORD}
+        maximum-pool-size: ${RETAIL_DB_POOL_SIZE:2}
+      scheduler:
+        pool-size: ${RETAIL_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/retail/db/migration
+    delivery-runs:
+      enabled: ${MODULE_DELIVERY_RUNS_ENABLED:false}
+      client-id: delivery-runs-service
+      caller-scopes:
+        - geo:zones:write
+        - orders:on-behalf
+        - media:read
+      datasource:
+        url: ${DELIVERY_RUNS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${DELIVERY_RUNS_DB_USER:delivery_runs}
+        password: ${DELIVERY_RUNS_DB_PASSWORD}
+        maximum-pool-size: ${DELIVERY_RUNS_DB_POOL_SIZE:2}
+      scheduler:
+        pool-size: ${DELIVERY_RUNS_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/delivery-runs/db/migration
+    ai-gateway:
+      enabled: ${MODULE_AI_GATEWAY_ENABLED:true}
+      client-id: ai-gateway-service
+      datasource:
+        url: ${AI_GATEWAY_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${AI_GATEWAY_DB_USER:ai_gateway}
+        password: ${AI_GATEWAY_DB_PASSWORD}
+        maximum-pool-size: ${AI_GATEWAY_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${AI_GATEWAY_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/ai-gateway/db/migration
+    mcp-server:
+      enabled: ${MODULE_MCP_SERVER_ENABLED:true}
+      client-id: mcp-server-service
+      scheduler:
+        pool-size: ${MCP_SERVER_SCHEDULER_POOL_SIZE:2}
   # How a module reaches the other modules (in-process | http). In core the default is in-process; http keeps the module able
   # to run detached (needs its upstream URL and client credentials as in the standalone service).
   catalog:

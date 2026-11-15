@@ -46,7 +46,17 @@ import org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration
     @ModuleSpec(name = "fulfilment", service = "fulfilment", basePackage = "com.afrotransact.fulfilment",
             application = "com.afrotransact.fulfilment.FulfilmentApplication", meterPrefixes = {"fulfilment.", "fulfilment-"}),
     @ModuleSpec(name = "trust-ops", service = "trust-ops", basePackage = "com.afrotransact.trustops",
-            application = "com.afrotransact.trustops.TrustOpsApplication", meterPrefixes = {"trustops.", "trustops-"})})
+            application = "com.afrotransact.trustops.TrustOpsApplication", meterPrefixes = {"trustops.", "trustops-"}),
+    @ModuleSpec(name = "identity", service = "identity", basePackage = "com.afrotransact.identity",
+            application = "com.afrotransact.identity.IdentityApplication", meterPrefixes = {"identity.", "identity-"}),
+    @ModuleSpec(name = "retail", service = "retail", basePackage = "com.afrotransact.retail",
+            application = "com.afrotransact.retail.RetailApplication", meterPrefixes = {"retail.", "retail-"}),
+    @ModuleSpec(name = "delivery-runs", service = "delivery-runs", basePackage = "com.afrotransact.deliveryruns",
+            application = "com.afrotransact.deliveryruns.DeliveryRunsApplication", meterPrefixes = {"deliveryruns.", "delivery-runs-"}),
+    @ModuleSpec(name = "ai-gateway", service = "ai-gateway", basePackage = "com.afrotransact.ai",
+            application = "com.afrotransact.ai.AiGatewayApplication", meterPrefixes = {"ai.", "ai-"}),
+    @ModuleSpec(name = "mcp-server", service = "mcp-server", basePackage = "com.afrotransact.mcp",
+            application = "com.afrotransact.mcp.McpServerApplication", meterPrefixes = {"mcp.", "mcp-"})})
 public class CoreApplication {
 
     public static void main(String[] args) {

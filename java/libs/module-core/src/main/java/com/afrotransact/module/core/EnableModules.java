@@ -8,11 +8,14 @@ import java.lang.annotation.Target;
 
 import org.springframework.context.annotation.Import;
 
-/** Mounts the listed modules in this application: scans their packages and gives each its own infrastructure. */
+/**
+ * Mounts the listed modules in this application: scans their packages and gives each its own infrastructure. The mounting itself
+ * is done by {@link ModuleMounts}, installed by {@link ModuleMountsInitializer} (spring.factories) so that it runs first.
+ */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 @Documented
-@Import({ModuleMounts.class, ModuleCoreConfiguration.class})
+@Import(ModuleCoreConfiguration.class)
 public @interface EnableModules {
 
     ModuleSpec[] value();

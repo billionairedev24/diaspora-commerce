@@ -38,9 +38,11 @@ import com.afrotransact.identity.port.PasskeyAssertions;
 import com.afrotransact.identity.port.PasskeyRegistrations;
 import com.afrotransact.platform.security.ManagementEndpoints;
 import jakarta.servlet.http.HttpServletRequest;
+import com.afrotransact.module.SecurityPermits;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
@@ -146,8 +148,31 @@ class SecurityConfiguration {
         return http.build();
     }
 
+    /**
+     * Anonymous endpoints of the {@code /v1} API: sign-up, verification, password reset, invitations. In core the shared chain
+     * reads them (this chain would otherwise claim every {@code /v1/**} path of every module).
+     */
+    @Bean
+    SecurityPermits identitySecurityPermits() {
+        return new SecurityPermits() {
+            @Override
+            public List<String> publicGets() {
+                return List.of("/v1/identity-providers");
+            }
+
+            @Override
+            public List<String> publicPosts() {
+                return List.of("/v1/accounts", "/v1/accounts/verification", "/v1/accounts/verification/resend",
+                        "/v1/invitations/lookup", "/v1/password-reset", "/v1/password-reset/confirm",
+                        "/v1/staff-invitations/preview", "/v1/staff-invitations/accept");
+            }
+        };
+    }
+
+    /** Standalone only: in core the shared chain of afrotransact-core serves identity's {@code /v1} API. */
     @Bean
     @Order(2)
+    @ConditionalOnExpression("'${at.modules.core-service:}'.isEmpty()")
     SecurityFilterChain apiChain(HttpSecurity http, HostedPageContentSecurityPolicy csp) throws Exception {
         IdentitySecurityHeaders.apply(http, csp);
         http.securityMatcher("/v1/**")
@@ -175,6 +200,12 @@ class SecurityConfiguration {
                                      Clock clock, HostedPageContentSecurityPolicy csp, Environment env)
             throws Exception {
         IdentitySecurityHeaders.apply(http, csp);
+        if (!env.getProperty("at.modules.core-service", "").isEmpty()) {
+            // In core this chain only owns the hosted sign-in pages and their endpoints; every other path belongs to the other
+            // modules' (resource-server) chain, which comes after it.
+            http.securityMatcher("/", "/login", "/login/**", "/signup", "/signup/**", "/assets/**", "/logout",
+                    "/oauth2/authorization/**", "/webauthn/**", "/favicon.ico", "/.well-known/appspecific/**");
+        }
         HostedLoginProtection hostedProtection = new HostedLoginProtection(protection);
         MfaAwareAuthenticationSuccessHandler success = new MfaAwareAuthenticationSuccessHandler(signIn,
                 hostedProtection, trustedBrowser, contexts, props.homeUrl());
