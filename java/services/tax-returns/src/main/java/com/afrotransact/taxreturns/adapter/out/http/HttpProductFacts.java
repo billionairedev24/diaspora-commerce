@@ -7,12 +7,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.port.ProductFacts;
 import com.afrotransact.taxreturns.port.UpstreamException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -24,7 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Missing or failing answers are left out.
  */
 @Component
-@ConditionalOnProperty(prefix = "at.taxreturns", name = "mode", havingValue = "http", matchIfMissing = true)
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "catalog", value = ModuleMode.HTTP)
 class HttpProductFacts implements ProductFacts {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpProductFacts.class);

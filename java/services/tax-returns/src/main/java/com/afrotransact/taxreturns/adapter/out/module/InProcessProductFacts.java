@@ -9,11 +9,12 @@ import com.afrotransact.catalog.api.VariantFactsApi;
 import com.afrotransact.module.CallerPrincipal;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.InProcessCalls;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.taxreturns.port.ProductFacts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,7 +24,7 @@ import org.springframework.stereotype.Component;
  * a missing or failing answer is left out. The API is looked up per call (catalog and tax-returns call each other).
  */
 @Component
-@ConditionalOnProperty(prefix = "at.taxreturns", name = "mode", havingValue = "in-process")
+@ConditionalOnModuleMode(caller = "tax-returns", callee = "catalog", value = ModuleMode.IN_PROCESS)
 class InProcessProductFacts implements ProductFacts {
 
     private static final Logger LOG = LoggerFactory.getLogger(InProcessProductFacts.class);

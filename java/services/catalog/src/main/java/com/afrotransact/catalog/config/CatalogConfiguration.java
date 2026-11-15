@@ -60,13 +60,13 @@ class CatalogConfiguration {
 
     /**
      * tax-returns' resolve endpoint (mode {@code http}), its published API inside this JVM (mode {@code in-process}, see
-     * {@code at.catalog.mode}), or the local fake built from the dataset (`at.catalog.tax.resolver=local`).
+     * {@code at.catalog.taxreturns.mode} and {@code at.catalog.mode}), or the local fake built from the dataset (`at.catalog.tax.resolver=local`).
      */
     @Bean
     TaxResolver taxResolver(RestClient.Builder builder, ServiceTokens tokens, TaxonomySource source,
                             ListableBeanFactory beans, ObjectProvider<TaxClassificationApi> taxApi,
                             ObjectProvider<CallerPrincipals> callers,
-                            @Value("${at.catalog.mode:http}") String moduleMode,
+                            @Value("${at.catalog.taxreturns.mode:${at.catalog.mode:http}}") String moduleMode,
                             @Value("${at.catalog.tax.resolver:http}") String mode,
                             @Value("${at.catalog.tax.base-url:http://localhost:8111}") String baseUrl,
                             @Value("${at.catalog.tax.timeout:5s}") Duration timeout) {
@@ -88,7 +88,7 @@ class CatalogConfiguration {
     TaxDecisionAuthority taxDecisionAuthority(RestClient.Builder builder, ServiceTokens tokens,
                                               ListableBeanFactory beans, ObjectProvider<TaxClassificationApi> taxApi,
                                               ObjectProvider<CallerPrincipals> callers,
-                                              @Value("${at.catalog.mode:http}") String moduleMode,
+                                              @Value("${at.catalog.taxreturns.mode:${at.catalog.mode:http}}") String moduleMode,
                                               @Value("${at.catalog.tax.authority:tax-returns}") String mode,
                                               @Value("${at.catalog.tax.base-url:http://localhost:8111}") String baseUrl,
                                               @Value("${at.catalog.tax.authority-timeout:4s}") Duration timeout) {
