@@ -25,7 +25,7 @@ import org.springframework.web.client.RestClientException;
  * variant"; other failures raise {@link CatalogUnavailableException} (HTTP 503).
  */
 @Component
-@ConditionalOnExpression("'${at.offers.mode:http}' == 'http'")
+@ConditionalOnExpression("'${at.offers.catalog.mode:${at.offers.mode:http}}' == 'http'")
 class HttpCatalogClient implements CatalogClient {
 
     private final RestClient client;

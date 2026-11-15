@@ -17,7 +17,7 @@ import org.springframework.web.client.RestClient;
  * never guessed: it is {@link OffersUnavailable}, so a request to change somebody else's page is refused.
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.mode:http}' == 'http'")
+@ConditionalOnExpression("'${at.catalog.offers.mode:${at.catalog.mode:http}}' == 'http'")
 class HttpSellerOffers implements SellerOffers {
 
     private final RestClient offers;

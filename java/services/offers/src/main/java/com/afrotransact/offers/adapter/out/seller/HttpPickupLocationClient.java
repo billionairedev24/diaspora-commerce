@@ -21,7 +21,7 @@ import org.springframework.web.client.RestClientException;
  * {@link SellerUnavailableException} (HTTP 503).
  */
 @Component
-@ConditionalOnExpression("'${at.offers.mode:http}' == 'http'")
+@ConditionalOnExpression("'${at.offers.seller.mode:${at.offers.mode:http}}' == 'http'")
 class HttpPickupLocationClient implements PickupLocationClient {
 
     private final RestClient client;

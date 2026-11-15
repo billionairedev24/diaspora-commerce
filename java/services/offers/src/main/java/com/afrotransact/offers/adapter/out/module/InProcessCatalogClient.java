@@ -5,8 +5,10 @@ import java.util.function.Function;
 
 import com.afrotransact.catalog.api.CatalogLookupApi;
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
 import com.afrotransact.offers.port.CatalogClient;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
@@ -18,12 +20,15 @@ import org.springframework.stereotype.Component;
  * else, including a refusal of the principal, is {@link CatalogUnavailableException}.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.mode:http}' == 'in-process'")
+@ConditionalOnExpression("'${at.offers.catalog.mode:${at.offers.mode:http}}' == 'in-process'")
 class InProcessCatalogClient implements CatalogClient {
 
     private final InProcessLink<CatalogLookupApi> catalog;
 
-    InProcessCatalogClient(ObjectProvider<CatalogLookupApi> api, ObjectProvider<CallerPrincipals> callers) {
+    InProcessCatalogClient(ObjectProvider<CatalogLookupApi> api, ObjectProvider<CallerPrincipals> callers,
+                           ListableBeanFactory beans) {
+        InProcessCalls.requireRunning(beans.getBeanNamesForType(CatalogLookupApi.class, true, false).length > 0, "offers", "catalog",
+                "at.offers.catalog.mode");
         this.catalog = new InProcessLink<>("offers", api::getObject, callers::getObject);
     }
 

@@ -3,9 +3,11 @@ package com.afrotransact.offers.adapter.out.module;
 import java.util.Map;
 
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
 import com.afrotransact.offers.port.TaxDecisions;
 import com.afrotransact.taxreturns.api.ListingDecisionApi;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
@@ -17,12 +19,15 @@ import org.springframework.stereotype.Component;
  * {@link TaxUnavailable}: the offer is held, never given the benefit of the doubt.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.mode:http}' == 'in-process'")
+@ConditionalOnExpression("'${at.offers.taxreturns.mode:${at.offers.mode:http}}' == 'in-process'")
 class InProcessTaxDecisions implements TaxDecisions {
 
     private final InProcessLink<ListingDecisionApi> tax;
 
-    InProcessTaxDecisions(ObjectProvider<ListingDecisionApi> api, ObjectProvider<CallerPrincipals> callers) {
+    InProcessTaxDecisions(ObjectProvider<ListingDecisionApi> api, ObjectProvider<CallerPrincipals> callers,
+                          ListableBeanFactory beans) {
+        InProcessCalls.requireRunning(beans.getBeanNamesForType(ListingDecisionApi.class, true, false).length > 0, "offers", "tax-returns",
+                "at.offers.taxreturns.mode");
         this.tax = new InProcessLink<>("offers", api::getObject, callers::getObject);
     }
 

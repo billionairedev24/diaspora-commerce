@@ -24,7 +24,7 @@ import org.springframework.web.client.RestClientException;
  * new listing). Failures are not cached and never block the seller.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.mode:http}' == 'http'")
+@ConditionalOnExpression("'${at.offers.seller.mode:${at.offers.mode:http}}' == 'http'")
 class HttpListingEntitlementsClient implements ListingEntitlementsClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpListingEntitlementsClient.class);

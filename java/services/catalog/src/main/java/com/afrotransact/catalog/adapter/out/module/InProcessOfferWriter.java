@@ -6,8 +6,10 @@ import java.util.function.Supplier;
 
 import com.afrotransact.catalog.port.OfferWriter;
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.InProcessLink;
 import com.afrotransact.offers.api.OffersApi;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
@@ -19,12 +21,15 @@ import org.springframework.stereotype.Component;
  * {@link OffersUnavailable}, as over HTTP: the rows stay pending and the upload is resumed.
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.mode:http}' == 'in-process'")
+@ConditionalOnExpression("'${at.catalog.offers.mode:${at.catalog.mode:http}}' == 'in-process'")
 class InProcessOfferWriter implements OfferWriter {
 
     private final InProcessLink<OffersApi> offers;
 
-    InProcessOfferWriter(ObjectProvider<OffersApi> api, ObjectProvider<CallerPrincipals> callers) {
+    InProcessOfferWriter(ObjectProvider<OffersApi> api, ObjectProvider<CallerPrincipals> callers,
+                         ListableBeanFactory beans) {
+        InProcessCalls.requireRunning(beans.getBeanNamesForType(OffersApi.class, true, false).length > 0, "catalog", "offers",
+                "at.catalog.offers.mode");
         this.offers = new InProcessLink<>("catalog", api::getObject, callers::getObject);
     }
 

@@ -25,7 +25,7 @@ import org.springframework.web.client.RestClient;
  * {@link SellingUnavailable}, so the catalog refuses (fail closed).
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.mode:http}' == 'http'")
+@ConditionalOnExpression("'${at.catalog.seller.mode:${at.catalog.mode:http}}' == 'http'")
 class HttpSellingApprovals implements SellingApprovals {
 
     private final RestClient seller;

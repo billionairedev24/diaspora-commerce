@@ -21,7 +21,7 @@ import org.springframework.web.client.RestClientException;
  * the offer is held, never given the benefit of the doubt.
  */
 @Component
-@ConditionalOnExpression("'${at.offers.mode:http}' == 'http'")
+@ConditionalOnExpression("'${at.offers.taxreturns.mode:${at.offers.mode:http}}' == 'http'")
 class HttpTaxDecisions implements TaxDecisions {
 
     private final RestClient client;

@@ -23,7 +23,7 @@ import org.springframework.web.client.RestClient;
  * {@link OffersUnavailable}, the rows stay pending and the upload is resumed (both calls are safe to repeat).
  */
 @Component
-@ConditionalOnExpression("'${at.catalog.mode:http}' == 'http'")
+@ConditionalOnExpression("'${at.catalog.offers.mode:${at.catalog.mode:http}}' == 'http'")
 class HttpOfferWriter implements OfferWriter {
 
     private final RestClient offers;
