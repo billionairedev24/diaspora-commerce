@@ -2038,3 +2038,16 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Indexable only in prod on the canonical host, Store JSON-LD, sitemap entry only with live products
 - Tests: theme contrast, section rendering, sellable-only rule, 404, axe, header/footer separation, editor flow, storefront journey; screenshots at 1280 and 390 for three presets
 - Verified against the real backend, Lighthouse and RTL (NOT yet: see docs/engineering/seller-storefront.md)","E16","","High","13","storefront seller-center seo","storefront","In Progress"
+"S491","Story","Exact role and permission filters for staff access screens","Identity filters its people search by role and its access log by person, role and permission (exact, indexed, with totals) so the BFF and Settings > Roles and permissions stop scanning 1,000 people or the newest 200 log entries. docs/engineering/staff-settings.md.","- GET /v1/admin/users?role= returns exactly the holders of a role with an exact total
+- GET /v1/admin/access-log accepts userId, role and permission as exact matches and returns total; V50 adds the indexes
+- BFF role members and change log pass the filters to identity (no scan, no partial) and page server-side
+- Console shows Showing x to y of total, a Permission filter on the change log and no may-be-incomplete notice
+- OpenAPI (identity, gateway-bff-staff) updated; unit, SQL on PostgreSQL 16, contract and console tests pass","E02","","High","3","staff-console rbac identity","identity","Done"
+"S492","Story","Staff invitations replace temporary-password accounts","Staff are invited by name, work email and role with a reason; identity keeps a single-use, expiring, hashed token; the invitee sets their own password from an emailed link and the account activates. Resend, revoke, expiry, list in Settings > Staff accounts. docs/engineering/staff-invitations.md.","- Invite by name, work email, role and reason (access:admin); only a Super Admin invites a Super Admin
+- Single-use token that expires (72 h) and is stored hashed; never logged or returned
+- Invitation email goes through the existing notification path (outbox, notifications template account.staff_invitation); local mail catcher documented
+- Standalone /invite page (no staff navigation) sets the invitee's own password under the password policy and activates the account; MFA enrolment rules unchanged
+- Resend (new token, old link dead), revoke with a reason, expiry; open invitations listed by name and email
+- Every step audited without token or password; temporary-password path off by default
+- Contracts, docs, unit, PostgreSQL integration, BFF contract, console and Playwright 1280/390 tests pass
+- Verified against a real identity, notifications and mail provider together","E02","","High","8","staff-console rbac identity notifications","identity","In Progress"
