@@ -120,6 +120,15 @@ class ProductReviewController {
                 .body(RatingResponse.of(reviews.rating(atin)));
     }
 
+    @Operation(summary = "A seller's rating: average, count and star breakdown over every published review of its products",
+            description = "Computed from the reviews themselves. count 0 means no reviews: callers show no rating then.")
+    @SecurityRequirements
+    @GetMapping("/v1/public/sellers/{orgId}/rating")
+    ResponseEntity<RatingResponse> sellerRating(@PathVariable String orgId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(60)).cachePublic())
+                .body(RatingResponse.of(reviews.sellerRating(orgId)));
+    }
+
     private OwnReviewResponse own(ProductReview review) {
         return OwnReviewResponse.of(review, window(), Instant.now(clock));
     }

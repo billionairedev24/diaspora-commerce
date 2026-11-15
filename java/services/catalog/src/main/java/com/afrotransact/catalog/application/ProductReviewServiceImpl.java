@@ -179,6 +179,12 @@ class ProductReviewServiceImpl implements ProductReviewService {
 
     @Override
     @Transactional(readOnly = true)
+    public RatingSummary sellerRating(String orgId) {
+        return reviews.sellerRating(orgId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public RatingSummary ratingOf(UUID productId) {
         return reviews.rating(productId).orElse(RatingSummary.NONE);
     }

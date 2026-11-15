@@ -108,6 +108,7 @@ GET /v1/listing-rules | PUBLIC | marketplace listing rules, no tenant data | -
 @CatalogSettingsController | STAFF_ONLY | CatalogSettingsServiceImpl: catalog:moderate [principal-guard] | -
 @BakeryClaimController | SERVICE_ONLY | BakeryClaimServiceImpl: service-read permission | -
 GET /v1/public/products/{atin}/rating | PUBLIC | aggregate rating of a live product | -
+GET /v1/public/sellers/{orgId}/rating | PUBLIC | aggregate rating over a seller's published reviews (no per-person data) | -
 GET /v1/public/products/{atin}/reviews | PUBLIC | published reviews of a live product | -
 GET /v1/products/{atin}/reviews/mine | CUSTOMER_SELF | ProductReviewServiceImpl.mine: customer principal, findLive(product, token subject) | CatalogTenantIsolationTest
 POST /v1/products/{atin}/reviews | CUSTOMER_SELF | ProductReviewServiceImpl.write: customer principal, review stored under token subject | CatalogTenantIsolationTest

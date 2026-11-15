@@ -2038,6 +2038,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProductRating'
       security: []
+  /v1/public/sellers/{orgId}/rating:
+    get:
+      tags:
+      - Product reviews
+      summary: 'A seller''s rating: average, count and star breakdown over every published review of its products'
+      description: Computed from the reviews themselves. count 0 means no reviews; callers show no rating then.
+      operationId: sellerRating
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductRating'
+      security: []
   /v1/public/products/{atin}/reports:
     post:
       tags:

@@ -51,6 +51,12 @@ public interface ProductReviewService {
     /** The rating of a live product (zeros when it has no published review). */
     RatingSummary rating(String atin);
 
+    /**
+     * A seller's rating: the average and count over all published reviews of its products (never zero-filled: callers
+     * show it only when the count is at least 1).
+     */
+    RatingSummary sellerRating(String orgId);
+
     /** The stored rating of a product, for the public product page. */
     RatingSummary ratingOf(UUID productId);
 

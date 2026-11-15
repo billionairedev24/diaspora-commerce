@@ -198,6 +198,19 @@ class JdbcProductReviewRepository implements ProductReviewRepository {
     }
 
     @Override
+    public RatingSummary sellerRating(String orgId) {
+        int[] stars = new int[5];
+        jdbc.sql("select rating, count(*) as n from product_review where seller_org_id = :org and status = 'PUBLISHED' "
+                        + "group by rating")
+                .param("org", orgId)
+                .query((rs, row) -> {
+                    stars[rs.getInt("rating") - 1] = rs.getInt("n");
+                    return rs.getInt("n");
+                }).list();
+        return RatingSummary.ofCounts(stars[0], stars[1], stars[2], stars[3], stars[4]);
+    }
+
+    @Override
     public Optional<RatingSummary> rating(UUID productId) {
         return jdbc.sql("select * from product_rating where product_id = :p").param("p", productId)
                 .query(JdbcProductReviewRepository::summary).optional();
