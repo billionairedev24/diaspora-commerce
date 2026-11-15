@@ -20,8 +20,18 @@
 #   tools/dev/local.sh reindex [flags]         # rebuild the search index from catalog, offers and inventory (--dry-run, --since 48h …)
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
 #
-# Make targets: make up (= dev-up), make down, make dev-status, make dev-links, make dev-logs SERVICE=x, make repair-orgs,
-# make dev-restart SERVICE=x, make seed. Works with macOS's bash 3.2.
+# Make targets: make up (= dev-up), make down, make status (= dev-status), make dev-links, make logs SERVICE=x (= dev-logs),
+# make restart SERVICE=x (= dev-restart), make repair-orgs, make seed. Works with macOS's bash 3.2.
+#
+# STACK (release 1): `monolith` (the default on this branch) runs the TWO deployables instead of the 16 Java and 10 Go services:
+# afrotransact-core (Java, every module, :8120, the old ports 8100-8115 too) and afrotransact-go (every Go module, :8200, so the
+# web apps' BFF_ORIGIN=http://localhost:8200 is unchanged). `make up` does everything in one go: preflight, infra, the `core`
+# database, core, search wait, afrotransact-go, web apps, docs, mobile apps, demo data, links. STACK=services starts the old
+# per-service processes as before. SERVICES= still selects: any Java name starts core, any Go name starts afrotransact-go.
+# DRYRUN=1 prints the plan (and the preflight) and starts nothing.
+#   tools/dev/local.sh core-db                 # provision the `core` database on YOUR Postgres or the Docker one (make core-db)
+#   tools/dev/local.sh core-run                # core in the foreground (make core-run); builds the jar when missing
+#   tools/dev/local.sh preflight               # only the checks (make preflight)
 #
 # `up` seeds the demo dataset when the catalog is empty (tools/seed/seed.py --if-empty; SEED=0 skips it).
 #
@@ -55,11 +65,15 @@ pick_jdk25() {
   echo "  ! Java 25 not found (brew install openjdk@25 / apt install openjdk-25-jdk, or set JAVA_HOME); Java builds will fail" >&2
 }
 pick_jdk25
-STATE="$ROOT/.local"
+STATE="${AT_STATE_DIR:-$ROOT/.local}"
 LOGS="$STATE/logs"
 PIDS="$STATE/pids"
 BIN="$STATE/bin"
 COMPOSE_FILE="$ROOT/infra/local/docker-compose.yml"
+# Release 1: `monolith` runs afrotransact-core + afrotransact-go, `services` the old standalone processes.
+STACK="${STACK:-monolith}"
+case "$STACK" in monolith | services) ;; *) echo "STACK must be monolith or services (got: $STACK)" >&2; exit 2 ;; esac
+MONO_SERVICES="core afrotransact-go"
 OVERRIDE="$STATE/compose.external-postgres.yml"
 
 INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal temporal-ui minio minio-init mailpit openfga-migrate openfga"
@@ -152,6 +166,7 @@ port_of() {
     gateway-bff) echo 8200 ;; search) echo 8201 ;; indexer) echo 8202 ;; cart) echo 8203 ;; promise) echo 8204 ;;
     geo) echo 8205 ;; media) echo 8207 ;; notifications) echo 8208 ;;
     carrier-gateway) echo 8209 ;; authz-sync) echo 8210 ;;
+    core) echo "${CORE_PORT:-8120}" ;; afrotransact-go) echo "${AFROTRANSACT_GO_PORT:-8200}" ;;
     *) echo "unknown service: $1 (see infra/local/PORTS.md)" >&2; exit 2 ;;
   esac
 }
@@ -179,12 +194,26 @@ compose() {
 }
 
 runtime_of() {
+  if [[ "$1" == core ]]; then echo java; return 0; fi
+  if [[ "$1" == afrotransact-go ]]; then echo go; return 0; fi
   if [[ -f "$ROOT/java/services/$1/pom.xml" ]]; then echo java
   elif [[ -f "$ROOT/go/services/$1/go.mod" ]]; then echo go
   else echo "unknown service: $1 (see infra/local/PORTS.md)" >&2; exit 2; fi
 }
 
+is_mono() { [[ "$1" == core || "$1" == afrotransact-go ]]; }
+
+# In the monolith stack an old service name (identity, search ...) is served by core or afrotransact-go: asking for its health asks them.
+mono_of() {
+  if is_mono "$1"; then echo "$1"; elif [[ "$(runtime_of "$1")" == java ]]; then echo core; else echo afrotransact-go; fi
+}
+
 health_url() {
+  local svc=$1
+  if [[ "$STACK" == monolith ]]; then svc=$(mono_of "$svc"); fi
+  if [[ "$svc" == core ]]; then echo "http://localhost:$(port_of core)/actuator/health/readiness"; return 0; fi
+  if [[ "$svc" == afrotransact-go ]]; then echo "http://localhost:$(port_of afrotransact-go)/readyz"; return 0; fi
+  set -- "$svc"
   if [[ "$(runtime_of "$1")" == java ]]; then echo "http://localhost:$(port_of "$1")/actuator/health"
   else echo "http://localhost:$(port_of "$1")/readyz"; fi
 }
@@ -238,7 +267,7 @@ resolve_web_ports() {
   # Services started with other addresses would send sign-in back to the old ports: restart them with the new ones.
   if [[ "$before" != "$(grep -vE '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true)" ]]; then
     # The web apps link to each other too (storefront "Sell on AfroTransact" → Seller Center).
-    for svc in identity gateway-bff notifications web-storefront web-seller-center web-staff-console; do
+    for svc in identity gateway-bff notifications core afrotransact-go web-storefront web-seller-center web-staff-console; do
       if running "$svc"; then echo "  · web app ports changed: restarting $svc"; stop "$svc"; fi
     done
   fi
@@ -259,6 +288,8 @@ external() {
 # your login over the local socket (Homebrew, Postgres.app, or Ubuntu after `sudo -u postgres createuser -s $USER`);
 # your login over TCP; Ubuntu/Debian's packaged server via `sudo -u postgres` (asks for your sudo password once).
 PSQL_MODE=""
+# Which Postgres this run uses: `docker` (the compose service) or `host` (yours on localhost:5432); set by infra_up / core_pg_detect.
+PG_VIA=""
 # -w: never prompt for a password (a prompt would hang make up); PGPASSWORD / ~/.pgpass still apply.
 psql_su() {
   case "$PSQL_MODE" in
@@ -384,8 +415,10 @@ infra_up() {
   fi
   if [[ "$(external "${PG_EXTERNAL:-}" 5432 postgres)" == 1 ]]; then
     echo "==> using your Postgres on localhost:5432"
+    PG_VIA=host
     setup_host_postgres
   else
+    PG_VIA=docker
     rm -f "$OVERRIDE"
     infra="postgres $infra"; waitfor="postgres $waitfor"
   fi
@@ -442,6 +475,7 @@ wait_kafka_topics() {
 build() {
   local java="" go="" svc
   for svc in "$@"; do
+    case "$svc" in core) build_core; continue ;; afrotransact-go) build_gomono; continue ;; esac
     if [[ "$(runtime_of "$svc")" == java ]]; then java="$java${java:+,}services/$svc"; else go="$go $svc"; fi
   done
   mkdir -p "$BIN"
@@ -486,6 +520,8 @@ pool_env() {
 # Fingerprint of a service's build (the Java jar or the Go binary): `up` restarts a running service whose build
 # changed since it started, so new code and routes (a pull, another branch) are never served by an old process.
 artifact_of() {
+  if [[ "$1" == core ]]; then core_jar; return 0; fi
+  if [[ "$1" == afrotransact-go ]]; then echo "$BIN/afrotransact-go"; return 0; fi
   if [[ "$(runtime_of "$1")" == java ]]; then
     { ls "$ROOT"/java/services/"$1"/target/"$1"-service-*.jar 2>/dev/null || true; } | grep -v -- '-plain' | head -1 || true
   else
@@ -545,6 +581,13 @@ start() {
   fi
   free_port_for "$svc" || return 1
   telemetry_env
+  if is_mono "$svc"; then
+    start_mono "$svc" || return 1
+    build_sig "$svc" >"$PIDS/$svc.sig"
+    env_sig >"$PIDS/$svc.env"
+    telemetry_on >"$PIDS/$svc.otel"
+    return 0
+  fi
   pool_env "$svc"
   # media signs uploads for this stack's MinIO (infra/local/docker-compose.yml root credentials).
   export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
@@ -589,6 +632,399 @@ stop() {
     echo "  · stopped $svc"
   fi
   rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode" "$PIDS/$svc.env" "$PIDS/$svc.otel"
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Release 1 (STACK=monolith): the two deployables. afrotransact-core is every Java module in one JVM (:8120, and the old ports
+# 8100-8115 in the local profile), afrotransact-go every Go module in one process (:8200 locally, so BFF_ORIGIN is unchanged).
+# ---------------------------------------------------------------------------------------------------------------------
+CORE_JAVA_DEFAULT="-Xmx1536m -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+
+core_jar() { echo "$ROOT/java/apps/core/target/afrotransact-core.jar"; }
+
+# Is the core jar current: built, REBUILD / CORE_REBUILD not set, and nothing under java/ (outside target/) newer than it?
+core_jar_fresh() {
+  local jar; jar=$(core_jar)
+  [[ "${REBUILD:-0}" != 1 && "${CORE_REBUILD:-0}" != 1 && -f "$jar" ]] || return 1
+  [[ -z "$(find "$ROOT/java" -name target -prune -o -type f -newer "$jar" -print -quit 2>/dev/null)" ]]
+}
+
+build_core() {
+  if core_jar_fresh; then echo "  · core: the jar is current (REBUILD=1 to force a rebuild)"; return 0; fi
+  echo "==> building Java: afrotransact-core (every Java module in one jar${CORE_MVN_ARGS:+; CORE_MVN_ARGS=$CORE_MVN_ARGS})"
+  # A migration renumbered in git must not live on in target/classes (see build()).
+  local d
+  for d in "$ROOT"/java/services/*/target/classes/db/migration "$ROOT"/java/apps/core/target/classes/db/migration; do
+    rm -rf "$d" 2>/dev/null || true
+  done
+  # shellcheck disable=SC2086 # CORE_MVN_ARGS is a word list (-DnoAi ...)
+  (cd "$ROOT/java" && ./mvnw -q -B -DskipTests -pl apps/core -am ${CORE_MVN_ARGS:-} package)
+  [[ -f "$(core_jar)" ]] || { echo "  ✗ the build did not produce java/apps/core/target/afrotransact-core.jar" >&2; return 1; }
+}
+
+build_gomono() {
+  mkdir -p "$BIN"
+  echo "==> building Go: afrotransact-go (every Go module in one binary)"
+  (cd "$ROOT/go/apps/afrotransact-go" && go build -ldflags="-s -w" -o "$BIN/afrotransact-go" ./cmd/afrotransact-go)
+}
+
+# How the Java modules reach the Go modules: the old per-service URLs become afrotransact-go's. geo, media, notifications and promise
+# are mounted flat, cart, search and carrier-gateway under /modules/<name> (docs/runbooks/release-1-local.md). A value you set wins.
+# The seeder reads the same names.
+mono_peer_env() {
+  local go; go="http://localhost:$(port_of afrotransact-go)"
+  export GEO_URL="${GEO_URL:-$go}" MEDIA_URL="${MEDIA_URL:-$go}" MEDIA_BASE_URL="${MEDIA_BASE_URL:-$go}"
+  export NOTIFICATIONS_URL="${NOTIFICATIONS_URL:-$go}" PROMISE_URL="${PROMISE_URL:-$go}"
+  export CART_URL="${CART_URL:-$go/modules/cart}" SEARCH_URL="${SEARCH_URL:-$go/modules/search}"
+  export CARRIER_GATEWAY_URL="${CARRIER_GATEWAY_URL:-$go/modules/carrier-gateway}" CARRIER_URL="${CARRIER_URL:-$go/modules/carrier-gateway}"
+}
+
+# The environment of the core JVM. Call it in the process that starts core (a subshell for `up`). Pools stay core's own (small by
+# design): the per-service pool_env is not applied. Provider keys are already exported by load_secrets.
+core_env() {
+  local core_port; core_port=$(port_of core)
+  export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-local}" PORT="$core_port"
+  # retail and delivery-runs are off in core's defaults (not in the launch set); the local stack runs them as before.
+  export MODULE_RETAIL_ENABLED="${MODULE_RETAIL_ENABLED:-true}" MODULE_DELIVERY_RUNS_ENABLED="${MODULE_DELIVERY_RUNS_ENABLED:-true}"
+  export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
+  export VERIFICATION_SENDER; VERIFICATION_SENDER=$(verification_sender)
+  unset DB_URL SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+  mono_peer_env
+}
+
+# The environment of the Go process. promise and carrier-gateway ran in the old local stack, so they run here too
+# (AT_MODULES_<NAME>_ENABLED=false turns one off). authz-sync stays off as before.
+gomono_env() {
+  local go_port; go_port=$(port_of afrotransact-go)
+  export APP_ENV=local AFROTRANSACT_GO_PORT="$go_port"
+  export AT_MODULES_PROMISE_ENABLED="${AT_MODULES_PROMISE_ENABLED:-true}"
+  export AT_MODULES_CARRIER_GATEWAY_ENABLED="${AT_MODULES_CARRIER_GATEWAY_ENABLED:-true}"
+  export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
+  unset PORT DB_URL
+}
+
+start_mono() {
+  local svc=$1 jar
+  mkdir -p "$LOGS" "$PIDS" "$BIN"
+  : >"$LOGS/$svc.log"
+  if [[ "$svc" == core ]]; then
+    jar=$(core_jar)
+    [[ -f "$jar" ]] || { echo "no jar for core; run: tools/dev/local.sh restart core" >&2; return 1; }
+    # A copy, as for the services: a later `mvnw package` rewrites target/*.jar in place under a running JVM.
+    cp "$jar" "$BIN/core.jar"
+    (cd "$ROOT" || exit 1
+      core_env
+      # shellcheck disable=SC2086 # CORE_JAVA_OPTS is a word list
+      nohup java ${CORE_JAVA_OPTS:-$CORE_JAVA_DEFAULT} -jar "$BIN/core.jar" >>"$LOGS/core.log" 2>&1 &
+      echo $! >"$PIDS/core.pid")
+  else
+    [[ -x "$BIN/afrotransact-go" ]] || { echo "no binary for afrotransact-go; run: tools/dev/local.sh restart afrotransact-go" >&2; return 1; }
+    (cd "$ROOT" || exit 1
+      gomono_env
+      nohup "$BIN/afrotransact-go" >>"$LOGS/afrotransact-go.log" 2>&1 &
+      echo $! >"$PIDS/afrotransact-go.pid")
+  fi
+}
+
+# ---- the `core` database ---------------------------------------------------------------------------------------------
+# Which Postgres: the same decision infra_up makes (your own on localhost:5432, or the compose one).
+core_pg_detect() {
+  if [[ -n "$PG_VIA" ]]; then return 0; fi
+  if [[ "$(external "${PG_EXTERNAL:-}" 5432 postgres)" == 1 ]]; then PG_VIA=host; else PG_VIA=docker; fi
+}
+
+core_db_fail() {
+  echo "  ✗ core database: $1" >&2
+  shift
+  local line
+  for line in "$@"; do echo "      $line" >&2; done
+  return 1
+}
+
+# Creates (or repairs) the `core` database with one schema and one role per Java module (infra/local/postgres/provision-core.sql,
+# idempotent) on the Postgres the stack uses, and exports what core needs: CORE_DB_URL and CORE_DB_ADMIN_URL / _USER / _PASSWORD
+# (values you set win; CORE_DB_PROVISION=0 skips all of it for a database you manage yourself).
+core_db() {
+  local sql="$ROOT/infra/local/postgres/provision-core.sql" out="" port url admin_url admin_user admin_pass
+  if [[ "${CORE_DB_PROVISION:-1}" == 0 ]]; then echo "  · core database: CORE_DB_PROVISION=0, not provisioning"; return 0; fi
+  [[ -f "$sql" ]] || core_db_fail "$sql is missing (is this the release-1 branch?)" || return 1
+  core_pg_detect
+  if [[ "$PG_VIA" == docker ]]; then
+    command -v docker >/dev/null 2>&1 || { core_db_fail "Docker is not installed and nothing answers on localhost:5432" "Install Docker Desktop and run: make up   (or run your own Postgres 17 + PostGIS on :5432)"; return 1; }
+    if ! ours_running postgres; then
+      core_db_fail "no Postgres is running: nothing listens on localhost:5432 and the Docker postgres of this stack is stopped" \
+        "Run: make up-infra   (starts it), then: make core-db      or simply: make up (does everything)" \
+        "Your own Postgres on another port is not detected; PG_EXTERNAL=1 uses localhost:5432 only."
+      return 1
+    fi
+    port="${POSTGRES_HOST_PORT:-5432}"
+    out=$(compose exec -T postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q <"$sql" 2>&1) || {
+      core_db_fail "provisioning on the Docker postgres failed:" "$(printf '%s\n' "$out" | tail -n 8)" \
+        "Run: docker compose -f infra/local/docker-compose.yml logs postgres"; return 1; }
+    url="jdbc:postgresql://localhost:$port/core"; admin_url="$url"; admin_user=postgres; admin_pass=postgres
+    echo "  ✓ core database provisioned on the Docker Postgres (localhost:$port; schema and role per module)"
+  else
+    command -v psql >/dev/null 2>&1 || { core_db_fail "your Postgres on localhost:5432 is used but psql is not installed" \
+      "Run: brew install libpq   (and put it on PATH), or use the Docker Postgres: PG_EXTERNAL=0 POSTGRES_HOST_PORT=5433 make up"; return 1; }
+    pick_psql_mode || { core_db_fail "cannot reach your Postgres on localhost:5432 as a superuser (the same login make up used before)" \
+      "Run one of: PG_SUPERUSER=<superuser> PGPASSWORD=<password> make core-db" \
+      "            sudo -u postgres createuser -s \$USER     # Ubuntu: lets your login in over the local socket" \
+      "            PG_EXTERNAL=0 POSTGRES_HOST_PORT=5433 make up   # the Docker Postgres next to yours"; return 1; }
+    [[ "$(psql_su -d postgres -c "select count(*) from pg_available_extensions where name = 'postgis'")" == 1 ]] || {
+      core_db_fail "your Postgres on localhost:5432 (connected via $PSQL_MODE) has no PostGIS, which the core database needs" \
+        "Run: brew install postgis   (it must match that server's major version), restart Postgres, then make core-db" \
+        "Or:  PG_EXTERNAL=0 POSTGRES_HOST_PORT=5433 make up   # the Docker Postgres ships PostGIS"; return 1; }
+    # Read through stdin: with `sudo -u postgres` the file may not be readable by the postgres user.
+    out=$(psql_su -d postgres <"$sql" 2>&1) || { core_db_fail "provisioning on your Postgres failed (connected via $PSQL_MODE):" \
+      "$(printf '%s\n' "$out" | tail -n 8)"; return 1; }
+    url="jdbc:postgresql://localhost:5432/core"
+    if [[ "$PSQL_MODE" == tcp ]]; then admin_url="$url"; admin_user="${PG_SUPERUSER:-$(whoami)}"; admin_pass="${PGPASSWORD:-}"
+    else
+      # No password login known for the superuser: core's own start-up provisioning is switched off, the roles and schemas exist now.
+      admin_url=""; admin_user=""; admin_pass=""
+    fi
+    echo "  ✓ core database provisioned on your Postgres (localhost:5432, via $PSQL_MODE; schema and role per module)"
+  fi
+  if [[ "$PG_VIA" == docker ]]; then
+    [[ "$(compose exec -T postgres psql -U postgres -d postgres -qtA -c "select count(*) from pg_database where datname = 'core'" 2>/dev/null | tr -d '[:space:]')" == 1 ]] \
+      || { core_db_fail "the provisioning ran but database 'core' is still not there" "Run: docker compose -f infra/local/docker-compose.yml exec postgres psql -U postgres -l"; return 1; }
+  else
+    [[ "$(psql_su -d postgres -c "select count(*) from pg_database where datname = 'core'" 2>/dev/null | tr -d '[:space:]')" == 1 ]] \
+      || { core_db_fail "the provisioning ran but database 'core' is still not there" "Run: psql -l   against the same server"; return 1; }
+  fi
+  export CORE_DB_URL="${CORE_DB_URL:-$url}"
+  export CORE_DB_ADMIN_URL="${CORE_DB_ADMIN_URL-$admin_url}" CORE_DB_ADMIN_USER="${CORE_DB_ADMIN_USER-$admin_user}" \
+    CORE_DB_ADMIN_PASSWORD="${CORE_DB_ADMIN_PASSWORD-$admin_pass}"
+}
+
+# GO_DB=single: ONE `go` database, schema and role per Go module, from the production SQL (infra/ops/postgres; make db-release-1).
+# Default (unset): every Go service keeps its own database (cart, geo, media, notifications, carriers), as always.
+go_db() {
+  [[ "${GO_DB:-}" == single ]] || return 0
+  core_pg_detect
+  echo "==> Go database: one database named go, a schema per module (GO_DB=single)"
+  if [[ "$PG_VIA" == docker ]]; then
+    compose exec -T -e PASSWORD_MODE=name -e ROLE_SUFFIX= -e CONN_LIMITS=false -e EXTRA_CORE_MODULES=retail:3,delivery_runs:3 \
+      -e PGUSER=postgres -e PGPASSWORD=postgres postgres bash /release-1/release-1-bootstrap.sh >/dev/null \
+      || { echo "  ✗ the go database could not be provisioned: make db-release-1 shows why" >&2; return 1; }
+    export AT_GO_DB_URL="${AT_GO_DB_URL:-postgres://postgres:postgres@localhost:${POSTGRES_HOST_PORT:-5432}/go?sslmode=disable}"
+  else
+    if [[ "$PSQL_MODE" != tcp ]]; then pick_psql_mode || true; fi
+    [[ "$PSQL_MODE" == tcp ]] || { echo "  ✗ GO_DB=single on your own Postgres needs a password login: PG_SUPERUSER=<superuser> PGPASSWORD=<password> make up" >&2; return 1; }
+    PASSWORD_MODE=name ROLE_SUFFIX="" CONN_LIMITS=false EXTRA_CORE_MODULES=retail:3,delivery_runs:3 PGHOST=localhost PGPORT=5432 \
+      PGUSER="${PG_SUPERUSER:-$(whoami)}" bash "$ROOT/infra/ops/postgres/release-1-bootstrap.sh" >/dev/null \
+      || { echo "  ✗ the go database could not be provisioned (infra/ops/postgres/release-1-bootstrap.sh)" >&2; return 1; }
+    export AT_GO_DB_URL="${AT_GO_DB_URL:-postgres://${PG_SUPERUSER:-$(whoami)}:${PGPASSWORD:-}@localhost:5432/go?sslmode=disable}"
+  fi
+  echo "  ✓ go database provisioned (names only here: AT_GO_DB_URL is set for afrotransact-go)"
+}
+
+# ---- search wait (afrotransact-go's search and indexer need the engine up) -------------------------------------------------
+search_url() {
+  case "${SEARCH_PROVIDER:-meilisearch}" in
+    elasticsearch) local u="${ES_URLS:-http://localhost:9200}"; echo "${u%%,*}/_cluster/health" ;;
+    *) echo "${MEILISEARCH_URL:-http://localhost:7700}/health" ;;
+  esac
+}
+
+wait_search() {
+  local url i; url=$(search_url)
+  echo "==> waiting for search (${SEARCH_PROVIDER:-meilisearch}: $url)"
+  for ((i = 0; i < 180; i += 2)); do
+    if curl -fs -o /dev/null --max-time 2 "$url"; then echo "  ✓ search engine is up"; return 0; fi
+    sleep 2
+  done
+  echo "  ✗ the search engine did not answer on $url within 3 minutes; afrotransact-go (search, indexer) needs it." >&2
+  echo "    Check: docker compose -f infra/local/docker-compose.yml ps   and   make up-infra" >&2
+  return 1
+}
+
+# ---- preflight --------------------------------------------------------------------------------------------------------------
+PREFLIGHT_PROBLEMS=""
+pf_problem() { PREFLIGHT_PROBLEMS="$PREFLIGHT_PROBLEMS$1"$'\n'; }
+
+path_java_major() { java -version 2>&1 | awk -F'"' '/version/ {split($2, v, "."); print v[1]; exit}'; }
+
+# Who holds a port, for one message: "pid 123 (java -jar …)". Empty without lsof/ss.
+port_holder() {
+  local pid cmd
+  pid=$(listener_pid "$1")
+  [[ -n "$pid" ]] || return 0
+  cmd=$(ps -o command= -p "$pid" 2>/dev/null || true)
+  echo "pid $pid (${cmd:0:70})"
+}
+
+# preflight <core 0|1> <go 0|1>: one actionable line per problem; PREFLIGHT_PROBLEMS holds them, the return code says whether any.
+preflight() {
+  local want_core=$1 want_go=$2 m p holder cmd gv minor tc
+  PREFLIGHT_PROBLEMS=""
+  echo "==> preflight"
+  if [[ "$want_core" == 1 ]]; then
+    m=$(path_java_major 2>/dev/null || true)
+    if [[ -n "$m" && "$m" -ge 25 ]] 2>/dev/null; then echo "  ✓ JDK $m (JAVA_HOME ${JAVA_HOME:-from PATH})"
+    else pf_problem "JDK 25 is required for core (found: ${m:-no java}). Install it: brew install openjdk@25 (macOS) or apt install openjdk-25-jdk, or set JAVA_HOME to a JDK 25."; fi
+  fi
+  if [[ "$want_go" == 1 ]]; then
+    if ! command -v go >/dev/null 2>&1; then pf_problem "Go is required for afrotransact-go: brew install go (any 1.21+ fetches the pinned 1.27.4 toolchain itself)."
+    else
+      gv=$(go version | awk '{print $3}'); minor=$(echo "$gv" | sed -E 's/^go1\.([0-9]+).*/\1/'); tc=$(go env GOTOOLCHAIN 2>/dev/null || echo auto)
+      if [[ "$minor" =~ ^[0-9]+$ && "$minor" -ge 27 ]]; then echo "  ✓ Go $gv (go.mod wants toolchain go1.27.4)"
+      elif [[ "$tc" == local ]]; then pf_problem "Go $gv is too old and GOTOOLCHAIN=local blocks the pinned 1.27.4 toolchain: unset it (go env -u GOTOOLCHAIN) or install Go 1.27."
+      elif [[ "$minor" =~ ^[0-9]+$ && "$minor" -ge 21 ]]; then echo "  ✓ Go $gv (will fetch toolchain go1.27.4 on the first build; needs network once)"
+      else pf_problem "Go $gv is too old to fetch the pinned toolchain: install Go 1.27 (brew install go)."; fi
+    fi
+  fi
+  if ! command -v docker >/dev/null 2>&1; then pf_problem "Docker is required for the infrastructure: install Docker Desktop."
+  elif ! docker info >/dev/null 2>&1; then pf_problem "Docker is not running: start Docker Desktop, wait for the whale to settle, then run make up again."
+  else echo "  ✓ Docker is running"; fi
+  # Ports. The ones of a core / afrotransact-go this script started are ours; a stray process of this repository on core's or Go's
+  # own port is replaced at start; anything else is a problem with the owner named.
+  local ports="" gp; gp=$(port_of afrotransact-go)
+  if [[ "$want_core" == 1 ]]; then ports="$(port_of core) $(seq 8100 8115 | tr '\n' ' ')"; fi
+  if [[ "$want_go" == 1 ]]; then ports="$ports $gp"; fi
+  for p in $ports; do
+    port_open "$p" || continue
+    if [[ "$p" == "$(port_of core)" || "$p" == 81[01][0-9] ]] && running core; then continue; fi
+    if [[ "$p" == "$gp" ]] && running afrotransact-go; then continue; fi
+    holder=$(port_holder "$p"); cmd=$(ps -o command= -p "$(listener_pid "$p")" 2>/dev/null || true)
+    if [[ ( "$p" == "$gp" || "$p" == "$(port_of core)" ) && "$cmd" == *"$ROOT"* ]]; then continue; fi
+    if [[ "$cmd" == *"$ROOT"* ]]; then
+      pf_problem "port $p is held by an old process of this repository ${holder:+$holder }(an earlier per-service run): run make down, then make up."
+    else
+      pf_problem "port $p is in use by ${holder:-another program}: stop it (core needs 8100-8115 and 8120, afrotransact-go ${gp}), or move ours with AFROTRANSACT_GO_PORT / CORE_PORT."
+    fi
+  done
+  if port_open 8250; then echo "  ! port 8250 is in use (a manual make go-monolith-run?): harmless, make up serves Go on :$gp"; fi
+  if [[ -z "$PREFLIGHT_PROBLEMS" ]]; then echo "  ✓ ports free:${ports:+ $(echo "$ports" | xargs)}"; fi
+  echo "  · web ports 3000/3010/3002, docs 3100, Storybook 6006, Expo 8081/8082: each moves to the next free port by itself"
+  if [[ -n "$PREFLIGHT_PROBLEMS" ]]; then
+    printf '%s' "$PREFLIGHT_PROBLEMS" | while IFS= read -r m; do [[ -z "$m" ]] || echo "  ✗ $m" >&2; done
+    return 1
+  fi
+  return 0
+}
+
+# STACK=monolith: which of the two deployables the arguments (SERVICES=…) ask for. No arguments: both. An old service name starts
+# the deployable that contains it.
+WANT_CORE=1
+WANT_GO=1
+mono_select() {
+  local s rt ignored=""
+  if [[ $# -eq 0 ]]; then WANT_CORE=1; WANT_GO=1; return 0; fi
+  WANT_CORE=0; WANT_GO=0
+  for s in "$@"; do
+    case "$s" in
+      core) WANT_CORE=1 ;;
+      afrotransact-go) WANT_GO=1 ;;
+      *) rt=$(runtime_of "$s"); if [[ "$rt" == java ]]; then WANT_CORE=1; else WANT_GO=1; fi; ignored="$ignored $s" ;;
+    esac
+  done
+  if [[ -n "$ignored" ]]; then
+    echo "  · STACK=monolith: $(echo "$ignored" | sed 's/^ //') run inside core / afrotransact-go: starting the deployable that holds them (STACK=services for single services)"
+  fi
+}
+
+# The other stack's processes must not hold the ports: stop what is tracked in .local/pids.
+retire_other_stack() {
+  local svc list
+  if [[ "$STACK" == monolith ]]; then list="$ALL_SERVICES"; else list="$MONO_SERVICES"; fi
+  for svc in $list; do
+    if [[ -f "$PIDS/$svc.pid" ]]; then
+      if running "$svc"; then echo "  · STACK=$STACK: stopping $svc of the other stack"; fi
+      stop "$svc"
+    fi
+  done
+}
+
+# DRYRUN=1: the plan, the preflight, nothing started.
+plan_mono() {
+  echo "==> DRYRUN: STACK=monolith plan (nothing is started or changed)"
+  echo "  1. preflight: JDK 25$([[ $WANT_GO == 1 ]] && echo ', Go 1.27 toolchain'), Docker, ports $([[ $WANT_CORE == 1 ]] && echo "$(port_of core) 8100-8115 ")$([[ $WANT_GO == 1 ]] && port_of afrotransact-go)"
+  echo "  2. secrets: $SECRETS_FILE (names only)"
+  echo "  3. infrastructure (docker compose; observability $([[ "${OBS:-1}" == 0 ]] && echo off || echo on)), search engine ${SEARCH_PROVIDER:-meilisearch}, Postgres $(external "${PG_EXTERNAL:-}" 5432 postgres | sed 's/^1$/yours on localhost:5432/; s/^0$/the Docker one/'), Kafka topics wait"
+  if [[ $WANT_CORE == 1 ]]; then
+    echo "  4. database: infra/local/postgres/provision-core.sql on that Postgres (CORE_DB_PROVISION=0 skips)"
+    echo "  5. core: build $(core_jar | sed "s|^$ROOT/||") ($(if core_jar_fresh; then echo 'current'; else echo 'will be built'; fi)), start on :$(port_of core), wait $(health_url core)"
+  fi
+  if [[ $WANT_GO == 1 ]]; then
+    echo "  6. search: wait for $(search_url)"
+    echo "  7. afrotransact-go: go build -> ${BIN#"$ROOT"/}/afrotransact-go, start on :$(port_of afrotransact-go), wait $(health_url afrotransact-go)${GO_DB:+ (GO_DB=$GO_DB)}"
+  fi
+  echo "  8. web apps ($(web_mode), BFF_ORIGIN=$(bff_origin)), docs portal, Storybook, mobile apps (unless WEB=0 / DOCS=0 / STORYBOOK=0 / MOBILE=0)"
+  echo "  9. demo data (SEED=0 skips), then every link"
+  echo "  Logs ${LOGS#"$ROOT"/}/{core,afrotransact-go}.log, pids ${PIDS#"$ROOT"/}; make down | status | logs SERVICE=core | restart SERVICE=core"
+}
+
+cmd_up_mono() {
+  local failed=""
+  mono_select "$@"
+  load_secrets
+  secrets_summary
+  if [[ "${DRYRUN:-0}" == 1 ]]; then
+    plan_mono
+    preflight "$WANT_CORE" "$WANT_GO" || echo "  (DRYRUN: the problems above would stop make up)"
+    return 0
+  fi
+  mkdir -p "$LOGS" "$PIDS" "$BIN"
+  retire_other_stack
+  preflight "$WANT_CORE" "$WANT_GO" || { echo "Fix the above and run make up again (nothing was started)." >&2; exit 1; }
+  if [[ "${WEB:-1}" != 0 ]]; then resolve_web_ports; fi
+  infra_up
+  if [[ $WANT_CORE == 1 ]]; then core_db || { echo "make up stopped before starting core: the infrastructure is up, fix the above and run make up again." >&2; exit 1; }; fi
+  if [[ $WANT_GO == 1 ]]; then go_db || exit 1; fi
+  if [[ $WANT_CORE == 1 ]]; then
+    build_core || exit 1
+    echo "==> starting afrotransact-core (every Java module; logs: .local/logs/core.log)"
+    start core || failed="$failed core"
+    wait_healthy core 360 || failed="$failed core"
+  fi
+  if [[ $WANT_GO == 1 ]]; then
+    if wait_search; then
+      build_gomono || exit 1
+      echo "==> starting afrotransact-go (every Go module; logs: .local/logs/afrotransact-go.log)"
+      start afrotransact-go || failed="$failed afrotransact-go"
+      wait_healthy afrotransact-go 90 || failed="$failed afrotransact-go"
+    else
+      failed="$failed afrotransact-go"
+    fi
+  fi
+  echo
+  if [[ -n "$failed" ]]; then
+    echo "Started with problems:$failed — see: make logs SERVICE=<name>  (core, afrotransact-go)" >&2
+  fi
+  web_up
+  docs_up
+  storybook_up
+  mobile_up
+  mono_peer_env
+  seed_if_empty
+  links
+}
+
+cmd_core_db() {
+  load_secrets
+  core_db || exit 1
+  echo "core-db: database 'core' is ready (CORE_DB_URL=${CORE_DB_URL:-?})"
+}
+
+# `core-run`: core in the foreground (Ctrl-C stops it) against the running infrastructure; provisions the database first.
+cmd_core_run() {
+  mkdir -p "$LOGS" "$PIDS" "$BIN"
+  load_secrets
+  platform_env
+  telemetry_env
+  core_db || exit 1
+  build_core || exit 1
+  core_env
+  cd "$ROOT"
+  # shellcheck disable=SC2086 # CORE_JAVA_OPTS is a word list
+  exec java ${CORE_JAVA_OPTS:-$CORE_JAVA_DEFAULT} -jar "$(core_jar)" "$@"
+}
+
+cmd_preflight() {
+  load_secrets >/dev/null
+  mono_select "$@"
+  preflight "$WANT_CORE" "$WANT_GO"
 }
 
 # The web apps run as production builds by default (next build + next start, output in .next-prod so the dev cache
@@ -655,7 +1091,7 @@ web_up() {
       else
         echo "  … building $app"
         if ! (cd "$ROOT/web/apps/$app" && NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 \
-          NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 ./node_modules/.bin/next build >>"$LOGS/$name.log" 2>&1); then
+          NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN="$(bff_origin)" ./node_modules/.bin/next build >>"$LOGS/$name.log" 2>&1); then
           echo "  ✗ $app build failed; last log lines:" >&2; tail -n 25 "$LOGS/$name.log" >&2; continue
         fi
         env_sig >"$ROOT/web/apps/$app/.next-prod/.local-sig"
@@ -663,18 +1099,18 @@ web_up() {
       port=$(web_port_of "$app")
       (cd "$ROOT/web/apps/$app" || exit 1
         NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_MOCKS=0 \
-          BFF_ORIGIN=http://localhost:8200 nohup ./node_modules/.bin/next start --port "$port" >>"$LOGS/$name.log" 2>&1 &
+          BFF_ORIGIN="$(bff_origin)" nohup ./node_modules/.bin/next start --port "$port" >>"$LOGS/$name.log" 2>&1 &
         echo $! >"$PIDS/$name.pid")
       echo prod >"$PIDS/$name.mode"; env_sig >"$PIDS/$name.env"
     done
   else
-    echo "==> starting web apps (Next.js dev against the local BFF on :8200; the first page load compiles for a minute)"
+    echo "==> starting web apps (Next.js dev against the local BFF on :$(bff_port); the first page load compiles for a minute)"
     for app in $WEB_APPS; do
       name="web-$app"; port=$(web_port_of "$app")
       if running "$name"; then echo "  · $app already running"; continue; fi
       : >"$LOGS/$name.log"
       (cd "$ROOT/web/apps/$app" || exit 1
-        NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 \
+        NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN="$(bff_origin)" \
           nohup ./node_modules/.bin/next dev --port "$port" >>"$LOGS/$name.log" 2>&1 &
         echo $! >"$PIDS/$name.pid")
       echo dev >"$PIDS/$name.mode"; env_sig >"$PIDS/$name.env"
@@ -798,11 +1234,22 @@ links() {
   echo "  Try it               npx @modelcontextprotocol/inspector  → Transport Type \"Streamable HTTP\" (not SSE), URL http://localhost:8114/mcp"
   echo "  CLI check            npx @modelcontextprotocol/inspector --cli http://localhost:8114/mcp --transport http --method tools/list"
   echo "  Claude Code          claude mcp add --transport http afrotransact http://localhost:8114/mcp"
+  if [[ "$STACK" == monolith ]]; then
+    echo "Backend (release 1: two deployables, STACK=services for the old per-service processes)"
+    printf '  %-20s %-30s %s\n' "afrotransact-core" "http://localhost:$(port_of core)" "every Java module; health $(health_url core)"
+    printf '  %-20s %-30s %s\n' "afrotransact-go" "http://localhost:$(port_of afrotransact-go)" "every Go module (gateway-bff, geo, media, ...); /readyz; cart, search, carrier-gateway under /modules/<name>"
+    echo "  Old ports            8100 identity 8101 catalog 8102 offers 8103 inventory 8104 orders 8105 payments 8106 seller 8107 retail"
+    echo "                       8108 fulfilment 8109 bookings 8110 trust-ops 8111 tax-returns 8112 content 8113 ai-gateway 8114 mcp-server"
+    echo "                       8115 delivery-runs: all served by core (the Go services' old 8201-8209 ports are not served; use :$(port_of afrotransact-go))"
+  fi
   echo "API docs per service (Scalar at /docs; also /swagger-ui.html, /redoc and /v3/api-docs or /openapi.yaml)"
-  for svc in $ALL_SERVICES; do
+  for svc in $MONO_SERVICES $ALL_SERVICES; do
     [[ -f "$PIDS/$svc.pid" ]] || continue
     printf '  %-20s http://localhost:%s/docs\n' "$svc" "$(port_of "$svc")"
   done
+  if [[ "$STACK" == monolith && -f "$PIDS/core.pid" ]]; then
+    echo "                       each Java module also on its old port (http://localhost:8101/docs for catalog, ...); Go modules: /modules/<name>/docs"
+  fi
   monitoring_links
   echo "Infrastructure"
   echo "  Mailpit (mail, SMS)  http://localhost:8025"
@@ -811,7 +1258,7 @@ links() {
   echo "  Kafka                localhost:9092                 Temporal gRPC localhost:7233 · UI http://localhost:8088"
   echo "  Postgres             localhost:5432                 Valkey   localhost:6379"
   echo "Manage"
-  echo "  make dev-status | make dev-logs SERVICE=orders (or web-storefront) | make dev-links | make down"
+  echo "  make status | make logs SERVICE=core (afrotransact-go, web-storefront, ...) | make restart SERVICE=core | make dev-links | make down"
   echo "Secrets (.local/secrets.env; make secrets-check; docs/engineering/secrets-and-configuration.md)"
   secrets_summary
   echo "  Payments: without STRIPE_SECRET_KEY a local stand-in authorises every card like test card 4242 (no money moves)."
@@ -943,7 +1390,14 @@ public_host() {
 
 # What a process was started with (.local/pids/<name>.env): `up` restarts services, web apps and Metro whose
 # addresses differ, so switching LAN mode on or off restarts what depends on it and rebuilds nothing.
-env_sig() { public_host; }
+env_sig() {
+  # The web apps bake BFF_ORIGIN in: a non-default afrotransact-go port is part of what they were built for.
+  if [[ "$(bff_port)" == 8200 ]]; then public_host; else echo "$(public_host)+bff$(bff_port)"; fi
+}
+
+# gateway-bff: its own port in the old stack; a module of afrotransact-go (AFROTRANSACT_GO_PORT, default 8200) in the monolith.
+bff_port() { if [[ "$STACK" == monolith ]]; then port_of afrotransact-go; else echo 8200; fi; }
+bff_origin() { echo "http://localhost:$(bff_port)"; }
 
 LAN_WARNED=0
 
@@ -983,6 +1437,11 @@ platform_env() {
   fi
   export AT_SECURITY_CORS_ALLOWED_ORIGINS="$mobile_origins"
   export WEB_ORIGINS="$sf,$sc,$st,$mobile_origins"
+  # The driver app signs uploads at media (:8207 in the old stack); in the monolith media is a flat module of afrotransact-go.
+  # A value of your own (secrets.env) wins; the one set here follows the host.
+  if [[ "$STACK" == monolith && ( -z "${EXPO_PUBLIC_MEDIA_URL:-}" || "$EXPO_PUBLIC_MEDIA_URL" == "${AT_AUTO_MEDIA_URL:-}" ) ]]; then
+    AT_AUTO_MEDIA_URL="http://$h:$(port_of afrotransact-go)"; export EXPO_PUBLIC_MEDIA_URL="$AT_AUTO_MEDIA_URL"
+  fi
 }
 
 # `lan-env`: the addresses the current MOBILE_HOST gives (no side effects; make lan-env MOBILE_HOST=…).
@@ -1151,6 +1610,12 @@ cmd_apk() {
 
 cmd_up() {
   local services="$DEFAULT_SERVICES" svc failed=""
+  if [[ "$STACK" == monolith ]]; then cmd_up_mono "$@"; return 0; fi
+  retire_other_stack
+  if [[ "${DRYRUN:-0}" == 1 ]]; then
+    echo "==> DRYRUN: STACK=services plan (nothing is started): infra, then ${*:-$DEFAULT_SERVICES}, web apps, docs, mobile, demo data"
+    return 0
+  fi
   if [[ $# -gt 0 ]]; then services="$*"; fi
   for svc in $services; do runtime_of "$svc" >/dev/null; done
   load_secrets
@@ -1234,7 +1699,7 @@ cmd_reindex() {
 cmd_status() {
   local svc app state
   printf '%-18s %-6s %-9s %s\n' SERVICE PORT STATE URL
-  for svc in $ALL_SERVICES; do
+  for svc in $MONO_SERVICES $ALL_SERVICES; do
     [[ -f "$PIDS/$svc.pid" ]] || continue
     state=down
     if running "$svc"; then state=starting; if healthy "$svc"; then state=healthy; fi; fi
@@ -1270,7 +1735,7 @@ cmd_down() {
     for f in "$PIDS"/*.pid; do [[ -e "$f" ]] && stop "$(basename "$f" .pid)"; done
   fi
   # Leftovers this script no longer tracks (older runs): stop any of this repository's services still on their ports.
-  for svc in $ALL_SERVICES; do free_port_for "$svc" >/dev/null 2>&1 || true; done
+  for svc in $MONO_SERVICES $ALL_SERVICES; do free_port_for "$svc" >/dev/null 2>&1 || true; done
   # An emulator that was killed rather than shut down leaves its crash handler behind, reparented to init. It then
   # polls a crash database under /tmp that the system cleaner has since deleted, and logs the failure to whatever
   # terminal it inherited — forever. Nothing owns it any more, so down takes it with the rest.
@@ -1308,13 +1773,30 @@ cmd_db_reset() {
   echo "==> recreating them empty: infra/local/postgres/create-local-databases.sql"
   PGOPTIONS="-c afrotransact.su_password=${PGPASSWORD:-}" psql_su -d postgres \
     <"$ROOT/infra/local/postgres/create-local-databases.sql" >/dev/null
-  rm -rf "$STATE/bin" "$STATE/seed"
+  rm -rf "${STATE:?}/bin" "${STATE:?}/seed"
   echo "  removed old service jars (.local/bin) and the seed state (.local/seed)"
   echo "Done. Next: make reset (Docker volumes: Kafka, search, MinIO), make up, make seed, make reindex-search."
 }
 
+# The old name of a service the monolith stack serves from core or afrotransact-go (restart, logs): the deployable that holds it.
+mono_target() {
+  local rt
+  if [[ "$STACK" == monolith ]] && ! is_mono "$1" && rt=$(runtime_of "$1" 2>/dev/null); then
+    echo "  · STACK=monolith: $1 runs inside $(mono_of "$1")" >&2
+    mono_of "$1"
+  else
+    echo "$1"
+  fi
+}
+
+# Sourced by tools/dev/test (LOCAL_SH_LIB=1): the functions only.
+if [[ "${LOCAL_SH_LIB:-0}" == 1 ]]; then return 0 2>/dev/null || exit 0; fi
+
 case "${1:-}" in
   up) shift; cmd_up "$@" ;;
+  core-db) cmd_core_db ;;
+  core-run) shift; cmd_core_run "$@" ;;
+  preflight) shift; cmd_preflight "$@" ;;
   down) cmd_down ;;
   db-reset) cmd_db_reset ;;
   status) cmd_status ;;
@@ -1327,11 +1809,14 @@ case "${1:-}" in
     fi
     mobile_up; links ;;
   docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
-  logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
+  logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }
+    target="$2"; [[ -f "$LOGS/$target.log" ]] || target=$(mono_target "$target")
+    tail -n 200 -f "$LOGS/$target.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   repair-orgs) cmd_repair_orgs ;;
   reindex) shift; cmd_reindex "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
+    target=$(mono_target "$2")
     load_secrets
     # Keep the address the stack runs on: a service restarted without MOBILE_HOST while the rest runs in LAN mode would
     # validate tokens against http://localhost:8100 and reject every phone's (iss = the LAN address): sign-in works,
@@ -1344,7 +1829,8 @@ case "${1:-}" in
       fi
     fi
     platform_env
-    stop "$2"; build "$2"; start "$2"; wait_healthy "$2" 240 ;;
+    if [[ "$target" == core ]]; then core_db || exit 1; fi
+    stop "$target"; build "$target"; start "$target"; wait_healthy "$target" 240 ;;
   lan-env) cmd_lan_env ;;
   adb-reverse) cmd_adb_reverse ;;
   device) shift; cmd_device "$@" ;;

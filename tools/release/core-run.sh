@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# Run afrotransact-core (every Java module in one JVM) against the local infrastructure (make up-infra). Builds the jar when missing
-# (CORE_REBUILD=1 forces it). Needs JDK 25. Settings are environment variables (names only here, values never printed):
-#   PORT (8120), CORE_DB_URL, MODULE_<NAME>_ENABLED (e.g. MODULE_AI_GATEWAY_ENABLED=false), <NAME>_MODE for http mode,
-#   REDIS_URL, TEMPORAL_TARGET, KAFKA_BOOTSTRAP, provider keys from .local/secrets.env (loaded when present).
+# Run afrotransact-core (every Java module in one JVM) in the foreground against the local infrastructure (make up-infra or make up).
+# The same code path `make up` uses (tools/dev/local.sh core-run): provisions the `core` database on the Postgres the stack uses
+# (host or Docker), builds the jar when missing or stale (REBUILD=1 or CORE_REBUILD=1 forces it, CORE_MVN_ARGS=-DnoAi leaves
+# ai-gateway and mcp-server out), loads .local/secrets.env, and starts core with the `local` profile on :8120. Needs JDK 25.
+# Settings are environment variables (names only here, values never printed): PORT via CORE_PORT (8120), CORE_DB_URL,
+# CORE_DB_ADMIN_URL / _USER / _PASSWORD, CORE_DB_PROVISION=0 (a database you manage), CORE_JAVA_OPTS (default
+# -Xmx1536m -XX:+UseSerialGC -XX:TieredStopAtLevel=1), MODULE_<NAME>_ENABLED, <NAME>_MODE, REDIS_URL, TEMPORAL_TARGET, KAFKA_BOOTSTRAP.
+# Arguments are passed to the JVM's application (Spring properties).
 set -euo pipefail
-cd "$(dirname "$0")/../.."
-JAR=java/apps/core/target/afrotransact-core.jar
-if [[ ! -f "$JAR" || "${CORE_REBUILD:-0}" == "1" ]]; then
-  (cd java && ./mvnw -B -q -pl apps/core -am -DskipTests ${CORE_MVN_ARGS:-} package)
-fi
-if [[ -f .local/secrets.env ]]; then set -a; . .local/secrets.env; set +a; fi
-export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-local}"
-exec java ${CORE_JAVA_OPTS:--Xmx1g -XX:+UseSerialGC -XX:TieredStopAtLevel=1} -jar "$JAR" "$@"
+exec "$(dirname "$0")/../dev/local.sh" core-run "$@"
