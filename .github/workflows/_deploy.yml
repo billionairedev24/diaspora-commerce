@@ -63,10 +63,12 @@ jobs:
       CLOUD: ${{ inputs.cloud || vars.CLOUD }}
       TAG: ${{ inputs.tag }}
       REGISTRY_URL: ${{ vars.REGISTRY_URL }}
-      GITOPS_BRANCH: ${{ vars.GITOPS_BRANCH || 'main' }}
+      # Release 1: the deployables' pins live on the release-1 branch (their Applications track it); per-service pins stay on the GitOps branch.
+      GITOPS_BRANCH: ${{ (inputs.service == 'afrotransact-core' || inputs.service == 'afrotransact-go') && 'release-1' || vars.GITOPS_BRANCH || 'main' }}
       HAS_GITOPS_APP: ${{ secrets.GITOPS_APP_ID != '' }}
       # Keyless certs from reusable workflows carry the called workflow as identity.
-      SIGNER: ^https://github\.com/${{ github.repository }}/\.github/workflows/_(java|go)-service\.yml@refs/heads/main$
+      # Per-service images are signed by the reusable pipelines on main; the deployables by their own workflows on release-1.
+      SIGNER: ^https://github\.com/${{ github.repository }}/\.github/workflows/(_(java|go)-service\.yml@refs/heads/main|(core|afrotransact-go)\.yml@refs/heads/release-1)$
     steps:
       - name: Validate inputs
         run: |
@@ -199,7 +201,11 @@ jobs:
           DIGEST: ${{ steps.src.outputs.digest }}
         run: |
           set -euo pipefail
-          if [[ -d "java/services/$SERVICE" ]]; then dir="java/services/$SERVICE"; else dir="go/services/$SERVICE"; fi
+          case "$SERVICE" in
+            afrotransact-core) dir="java/apps/core" ;;
+            afrotransact-go) dir="go/apps/afrotransact-go" ;;
+            *) if [[ -d "java/services/$SERVICE" ]]; then dir="java/services/$SERVICE"; else dir="go/services/$SERVICE"; fi ;;
+          esac
           values="$dir/deploy/helm/values-$ENVIRONMENT.yaml"
           [[ -f "$values" ]] || { echo "::error::$values not found"; exit 1; }
           git config user.name "afrotransact-deploy[bot]"

@@ -1,0 +1,212 @@
+# afrotransact-go (Release 1, ADR 0011): ONE pipeline for the Go deployable (go/apps/afrotransact-go) and every Go module it mounts.
+#   verify    : gofmt/go vet/golangci-lint (go/.golangci.yml) and go test -race for the deployable AND each module of go/go.work, with a
+#               Postgres 17 service container (schema per module, the production layout) for the integration tests
+#   security  : gitleaks, Trivy filesystem scan (HIGH/CRITICAL), govulncheck of the deployable
+#   helm      : chart lint + template + kubeconform, and the cutover and connection-budget render tests
+#   image     : ONE image afrotransact-go (go/Dockerfile.afrotransact-go) -> GHCR, Trivy image scan, SBOM, cosign keyless sign
+#   deploy-dev: pins the signed digest in values-dev.yaml on release-1 (Argo CD syncs afrotransact-go-dev automatically)
+# Triggers only on release-1: go-<service>.yml run on main and develop. Every job is skipped until go/apps/afrotransact-go/go.mod exists.
+name: afrotransact-go
+
+on:
+  push:
+    branches: [release-1]
+    paths:
+      - go/**
+      - contracts/openapi/**
+      - infra/helm/library/**
+      - infra/ops/postgres/**
+      - tools/ci/core_ci_db.sh
+      - tools/release/test_cutover_render.sh
+      - .github/workflows/afrotransact-go.yml
+      - .github/workflows/_deploy.yml
+      - .github/actions/publish-image/**
+      - .github/actions/helm-check/**
+  pull_request:
+    branches: [release-1]
+    paths:
+      - go/**
+      - contracts/openapi/**
+      - infra/helm/library/**
+      - infra/ops/postgres/**
+      - tools/ci/core_ci_db.sh
+      - tools/release/test_cutover_render.sh
+      - .github/workflows/afrotransact-go.yml
+      - .github/workflows/_deploy.yml
+      - .github/actions/publish-image/**
+      - .github/actions/helm-check/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: afrotransact-go-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GO_VERSION: "1.27.4"
+  GOTOOLCHAIN: local
+  # Service container Postgres (PostGIS 17, as the local stack); CI only, passwords are the module names (tools/ci/core_ci_db.sh).
+  PGHOST: localhost
+  PGPORT: "5432"
+  PGUSER: postgres
+  PGPASSWORD: postgres
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: check
+        run: |
+          if [[ -f go/apps/afrotransact-go/go.mod ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"
+          else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "::notice::go/apps/afrotransact-go does not exist yet - nothing to build."; fi
+
+  verify:
+    name: verify (lint, vet, unit, integration)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: imresamu/postgis:17-3.5.4-alpine3.22
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go/**/go.sum
+      - name: golangci-lint (installed once, run per module)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          version: v2.14.0
+          # Build the linter with the job's Go 1.27.4 so it understands the modules' go directive.
+          install-mode: goinstall
+          install-only: true
+      - name: Release 1 databases (afrotransact_go; schema + role per module)
+        run: |
+          command -v psql >/dev/null || sudo apt-get install -y --no-install-recommends postgresql-client >/dev/null
+          tools/ci/core_ci_db.sh
+      - name: Modules of go.work
+        id: mods
+        working-directory: go
+        run: |
+          # The deployable first, then every workspace module (shared pkg and the services it mounts).
+          { echo "dirs<<EOF"; go list -m -f '{{.Dir}}' | sed "s#^$PWD/##" | sort; echo EOF; } >> "$GITHUB_OUTPUT"
+      - name: gofmt, go vet, golangci-lint, go test -race (every module)
+        working-directory: go
+        env:
+          DIRS: ${{ steps.mods.outputs.dirs }}
+          GO_IT_DB_HOST: localhost:5432
+        run: |
+          set -euo pipefail
+          fail=0
+          for d in $DIRS; do
+            echo "::group::$d"
+            ( cd "$d"
+              test -z "$(gofmt -l .)" || { echo "::error::gofmt differs in $d"; gofmt -l .; exit 1; }
+              go vet ./...
+              golangci-lint run --config "$GITHUB_WORKSPACE/go/.golangci.yml" --timeout 5m ./...
+              go test -race -count=1 ./... ) || fail=1
+            echo "::endgroup::"
+          done
+          exit "$fail"
+
+  security:
+    name: security (gitleaks, trivy fs, govulncheck)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go/apps/afrotransact-go/go.sum
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            dir /repo/go --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          scan-type: fs
+          scan-ref: go
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: govulncheck (reachable vulnerabilities, stdlib included)
+        working-directory: go/apps/afrotransact-go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+  helm:
+    name: helm (lint, template, kubeconform, cutover and budget tests)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/helm-check
+        with:
+          chart: go/apps/afrotransact-go/deploy/helm
+      - name: Cutover routing, module switches and connection budget
+        run: tools/release/test_cutover_render.sh
+
+  image:
+    name: image (build${{ github.event_name == 'push' && github.ref == 'refs/heads/release-1' && ', push, SBOM, sign' || '' }})
+    needs: [meta, verify, security, helm]
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+      tag: ${{ steps.publish.outputs.tag }}
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: publish
+        uses: ./.github/actions/publish-image
+        with:
+          service: afrotransact-go
+          context: go
+          dockerfile: go/Dockerfile.afrotransact-go
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/release-1' }}
+          # A guard rail: distroless/static (~2 MB) + ONE static binary for seven modules (a service binary is ~15-25 MB). Tighten after the first build.
+          max-size-mb: "120"
+          required-env: APP_ENV=prod PORT=8080
+
+  deploy-dev:
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release-1'
+    uses: ./.github/workflows/_deploy.yml
+    permissions:
+      contents: write
+      packages: read
+      id-token: write
+    with:
+      service: afrotransact-go
+      environment: dev
+      tag: ${{ needs.image.outputs.tag }}
+    secrets: inherit

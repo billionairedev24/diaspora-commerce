@@ -197,8 +197,11 @@ jobs:
 """
 
 
+DEPLOYABLES = ["afrotransact-core", "afrotransact-go"]   # Release 1 (ADR 0011): .github/workflows/core.yml, afrotransact-go.yml
+
+
 def promote_workflow(services: list[tuple[str, str]]) -> str:
-    options = ", ".join(name for name, _ in services)
+    options = ", ".join(DEPLOYABLES + [name for name, _ in services])
     return f"""{HEADER}# Promote an already-built, signed image of ONE service to uat, trial or prod (prod waits for the
 # `production` reviewers configured on the GitHub environment `prod`). Only launch-set services can be promoted
 # (infra/argocd/launch-set). uat: empty tag = what dev runs now. trial and prod: the tag is REQUIRED (the full sha of a build that
@@ -239,11 +242,16 @@ jobs:
           TARGET: ${{{{ inputs.environment }}}}
           TAG: ${{{{ inputs.tag }}}}
         run: |
-          dir=$([[ -d "java/services/$SERVICE" ]] && echo "java/services/$SERVICE" || echo "go/services/$SERVICE")
-          # uat, trial and prod run the launch set only; a service outside it has no Application there.
-          if ! grep -qx " *- path: $dir/deploy/helm" infra/argocd/launch-set/kustomization.yaml; then
-            echo "::error::$SERVICE is not in the launch set (infra/argocd/launch-set): nothing deploys it to $TARGET"; exit 1
-          fi
+          case "$SERVICE" in
+            afrotransact-core) dir="java/apps/core" ;;      # Release 1 deployables: always deployed (infra/argocd/applicationsets/deployables.yaml)
+            afrotransact-go) dir="go/apps/afrotransact-go" ;;
+            *)
+              dir=$([[ -d "java/services/$SERVICE" ]] && echo "java/services/$SERVICE" || echo "go/services/$SERVICE")
+              # uat, trial and prod run the launch set only; a service outside it has no Application there.
+              if ! grep -qx " *- path: $dir/deploy/helm" infra/argocd/launch-set/kustomization.yaml; then
+                echo "::error::$SERVICE is not in the launch set (infra/argocd/launch-set): nothing deploys it to $TARGET"; exit 1
+              fi ;;
+          esac
           if [[ -z "$TAG" ]]; then
             [[ "$TARGET" == uat ]] || {{ echo "::error::$TARGET needs an explicit tag (full git sha of a green main build)"; exit 1; }}
             TAG="$(yq '.image.tag // ""' "$dir/deploy/helm/values-dev.yaml")"

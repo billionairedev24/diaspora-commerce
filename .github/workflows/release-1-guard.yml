@@ -1,0 +1,39 @@
+# release-1 guard (ADR 0011): fails when the release-1 branch is behind main, so main's fixes and migrations never silently drift away
+# from the release. Read-only: it never merges or pushes; the fix is `tools/release/sync-main.sh` on a release-1 worktree, then
+# `git push origin HEAD:release-1` (docs/runbooks/release-1-deploy.md, "Keeping main in release-1").
+# Runs on every push to release-1, on pull requests into it, daily (main moves without release-1 moving) and by hand.
+name: release-1-guard
+
+on:
+  push:
+    branches: [release-1]
+  pull_request:
+    branches: [release-1]
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-1-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  current:
+    name: release-1 contains main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: release-1       # the branch tip itself, also when the trigger is a pull request or the schedule
+          fetch-depth: 0
+      - name: sync-main.sh --require-current
+        run: |
+          # The script wants a local branch that tracks release-1 (it never touches the work tree in this mode).
+          git checkout -B release-1 origin/release-1
+          git config branch.release-1.remote origin
+          git config branch.release-1.merge refs/heads/release-1
+          tools/release/sync-main.sh --require-current
