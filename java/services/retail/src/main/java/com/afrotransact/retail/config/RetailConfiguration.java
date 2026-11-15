@@ -137,7 +137,7 @@ class RetailConfiguration {
                 EdiProtocol.AS2, new As2EdiTransport(edi.as2From(), edi.as2KeystorePath())));
     }
 
-    @Bean
+    @Bean("retailServiceTokenProvider")
     ServiceTokenProvider serviceTokenProvider(RestClient.Builder builder, RetailProperties props, JsonMapper json,
                                               Clock clock) {
         RetailProperties.Auth auth = props.auth();
@@ -145,7 +145,7 @@ class RetailConfiguration {
                 .build(), auth.tokenUri(), auth.clientId(), auth.clientSecret(), auth.scopes(), json, clock);
     }
 
-    @Bean
+    @Bean("retailCatalogClient")
     CatalogClient catalogClient(RestClient.Builder builder, RetailProperties props, ServiceTokenProvider tokens,
                                 JsonMapper json) {
         return new HttpCatalogClient(builder.clone().baseUrl(props.catalog().baseUrl())

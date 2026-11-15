@@ -232,6 +232,109 @@ at:
         locations:
           - classpath:db/platform
           - classpath:modules/seller/db/migration
+    orders:
+      enabled: ${MODULE_ORDERS_ENABLED:true}
+      client-id: orders-service
+      caller-scopes:
+        - payments:service
+        - inventory:reserve
+        - cart:service
+        - orders:manage
+        - users:read
+        - tax:quote
+        - sellers:ship-from.read
+        - offers:read
+        - delivery-runs:reserve
+      datasource:
+        url: ${ORDERS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${ORDERS_DB_USER:orders}
+        password: ${ORDERS_DB_PASSWORD}
+        maximum-pool-size: ${ORDERS_DB_POOL_SIZE:8}
+      scheduler:
+        pool-size: ${ORDERS_SCHEDULER_POOL_SIZE:3}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/orders/db/migration
+    payments:
+      enabled: ${MODULE_PAYMENTS_ENABLED:true}
+      client-id: payments-service
+      caller-scopes:
+        - orgs:read
+        - seller:billing
+        - sellers:membership.read
+      datasource:
+        url: ${PAYMENTS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${PAYMENTS_DB_USER:payments}
+        password: ${PAYMENTS_DB_PASSWORD}
+        maximum-pool-size: ${PAYMENTS_DB_POOL_SIZE:8}
+      scheduler:
+        pool-size: ${PAYMENTS_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/payments/db/migration
+    bookings:
+      enabled: ${MODULE_BOOKINGS_ENABLED:true}
+      client-id: bookings-service
+      caller-scopes:
+        - payments:service
+        - users:read
+      datasource:
+        url: ${BOOKINGS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${BOOKINGS_DB_USER:bookings}
+        password: ${BOOKINGS_DB_PASSWORD}
+        maximum-pool-size: ${BOOKINGS_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${BOOKINGS_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/bookings/db/migration
+    fulfilment:
+      enabled: ${MODULE_FULFILMENT_ENABLED:true}
+      client-id: fulfilment-service
+      caller-scopes:
+        - orders:update-status
+        - inventory:reserve
+        - delivery:relay
+        - delivery-runs:read
+        - delivery-runs:manage
+      datasource:
+        url: ${FULFILMENT_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${FULFILMENT_DB_USER:fulfilment}
+        password: ${FULFILMENT_DB_PASSWORD}
+        maximum-pool-size: ${FULFILMENT_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${FULFILMENT_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/fulfilment/db/migration
+    trust-ops:
+      enabled: ${MODULE_TRUST_OPS_ENABLED:true}
+      client-id: trust-ops-service
+      caller-scopes:
+        - catalog:moderate
+        - payments:service
+        - compliance:hold
+        - offers:write
+        - ai:triage
+        - users:read
+        - orders:lookup
+        - sellers:enforce
+        - bookings:reviews:moderate
+      datasource:
+        url: ${TRUST_OPS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
+        username: ${TRUST_OPS_DB_USER:trust_ops}
+        password: ${TRUST_OPS_DB_PASSWORD}
+        maximum-pool-size: ${TRUST_OPS_DB_POOL_SIZE:4}
+      scheduler:
+        pool-size: ${TRUST_OPS_SCHEDULER_POOL_SIZE:2}
+      flyway:
+        locations:
+          - classpath:db/platform
+          - classpath:modules/trust-ops/db/migration
   # How a module reaches the other modules (in-process | http). In core the default is in-process; http keeps the module able
   # to run detached (needs its upstream URL and client credentials as in the standalone service).
   catalog:

@@ -36,7 +36,17 @@ import org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration
     @ModuleSpec(name = "content", service = "content", basePackage = "com.afrotransact.content",
             application = "com.afrotransact.content.ContentApplication", meterPrefixes = {"content.", "content-"}),
     @ModuleSpec(name = "seller", service = "seller", basePackage = "com.afrotransact.seller",
-            application = "com.afrotransact.seller.SellerApplication", meterPrefixes = {"seller.", "seller-"})})
+            application = "com.afrotransact.seller.SellerApplication", meterPrefixes = {"seller.", "seller-"}),
+    @ModuleSpec(name = "orders", service = "orders", basePackage = "com.afrotransact.orders",
+            application = "com.afrotransact.orders.OrdersApplication", meterPrefixes = {"orders.", "orders-"}),
+    @ModuleSpec(name = "payments", service = "payments", basePackage = "com.afrotransact.payments",
+            application = "com.afrotransact.payments.PaymentsApplication", meterPrefixes = {"payments.", "payments-"}),
+    @ModuleSpec(name = "bookings", service = "bookings", basePackage = "com.afrotransact.bookings",
+            application = "com.afrotransact.bookings.BookingsApplication", meterPrefixes = {"bookings.", "bookings-"}),
+    @ModuleSpec(name = "fulfilment", service = "fulfilment", basePackage = "com.afrotransact.fulfilment",
+            application = "com.afrotransact.fulfilment.FulfilmentApplication", meterPrefixes = {"fulfilment.", "fulfilment-"}),
+    @ModuleSpec(name = "trust-ops", service = "trust-ops", basePackage = "com.afrotransact.trustops",
+            application = "com.afrotransact.trustops.TrustOpsApplication", meterPrefixes = {"trustops.", "trustops-"})})
 public class CoreApplication {
 
     public static void main(String[] args) {

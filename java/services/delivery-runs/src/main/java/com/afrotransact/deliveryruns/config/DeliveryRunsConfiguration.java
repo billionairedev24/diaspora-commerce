@@ -60,7 +60,7 @@ class DeliveryRunsConfiguration {
         return new DefaultCutoffDecisionPolicy();
     }
 
-    @Bean
+    @Bean("deliveryRunsGeoClient")
     HttpGeoClient geoClient(DeliveryRunsProperties p, Clock clock) {
         DeliveryRunsProperties.Geo g = p.geo();
         return new HttpGeoClient(g.baseUrl(), g.timeout(), g.zoneType(), g.tokenUri(), g.clientId(), g.clientSecret(),
@@ -80,7 +80,7 @@ class DeliveryRunsConfiguration {
                 o.retentionDays(), o.seedDemoAreas(), o.supportPhone(), o.defaultMinOrders());
     }
 
-    @Bean
+    @Bean("deliveryRunsMediaClient")
     HttpMediaClient mediaClient(DeliveryRunsProperties p, Clock clock) {
         DeliveryRunsProperties.Geo g = p.geo();
         return new HttpMediaClient(p.media().baseUrl(), p.media().timeout(), g.tokenUri(), g.clientId(),
@@ -94,7 +94,7 @@ class DeliveryRunsConfiguration {
                 g.clientSecret(), clock, json);
     }
 
-    @Bean
+    @Bean("deliveryRunsCatalogClient")
     HttpCatalogClient catalogClient(DeliveryRunsProperties p) {
         return new HttpCatalogClient(p.catalog().baseUrl(), p.catalog().timeout());
     }

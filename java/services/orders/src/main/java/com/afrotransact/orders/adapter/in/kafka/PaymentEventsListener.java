@@ -27,7 +27,7 @@ class PaymentEventsListener {
     }
 
     @KafkaListener(id = "orders-payment-events", topics = "${at.orders.topics.payment-events:at.payment.events}",
-            groupId = "${spring.application.name}", autoStartup = "${at.orders.consumers.enabled:true}")
+            groupId = "${at.orders.kafka-group:orders-service}", autoStartup = "${at.orders.consumers.enabled:true}")
     void onMessage(ConsumerRecord<String, String> record) {
         EventHeaders headers = EventHeaders.of(record);
         if (headers.type() == null || !headers.type().startsWith("payments.intent.")) {

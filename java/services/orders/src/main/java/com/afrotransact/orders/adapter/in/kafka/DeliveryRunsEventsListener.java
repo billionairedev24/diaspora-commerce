@@ -38,7 +38,7 @@ class DeliveryRunsEventsListener {
 
     @KafkaListener(id = "orders-delivery-runs-events",
             topics = "${at.orders.topics.delivery-runs-events:at.delivery-runs.events}",
-            groupId = "${spring.application.name}", autoStartup = "${at.orders.consumers.enabled:true}")
+            groupId = "${at.orders.kafka-group:orders-service}", autoStartup = "${at.orders.consumers.enabled:true}")
     void onMessage(ConsumerRecord<String, String> record) {
         handle(record);
     }

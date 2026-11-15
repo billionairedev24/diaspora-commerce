@@ -50,6 +50,21 @@ at:
     seller:
       datasource:
         password: ${SELLER_DB_PASSWORD:seller}
+    orders:
+      datasource:
+        password: ${ORDERS_DB_PASSWORD:orders}
+    payments:
+      datasource:
+        password: ${PAYMENTS_DB_PASSWORD:payments}
+    bookings:
+      datasource:
+        password: ${BOOKINGS_DB_PASSWORD:bookings}
+    fulfilment:
+      datasource:
+        password: ${FULFILMENT_DB_PASSWORD:fulfilment}
+    trust-ops:
+      datasource:
+        password: ${TRUST_OPS_DB_PASSWORD:trust_ops}
 logging:
   level:
     com.afrotransact: DEBUG

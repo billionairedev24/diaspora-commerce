@@ -58,7 +58,7 @@ class PaymentsConfiguration {
         return new DefaultRefundAllocator();
     }
 
-    @Bean
+    @Bean("paymentsReconciler")
     Reconciler reconciler() {
         return new DefaultReconciler();
     }
