@@ -1,7 +1,7 @@
 -- Read-only check of what release-1-bootstrap.sql built. Exits non-zero (psql ON_ERROR_STOP) with a message naming the first problem,
 -- and prints a summary table. Run it after the bootstrap, after a restore (docs/runbooks/restore-drill.md) and before a deploy:
 --   psql -v ON_ERROR_STOP=1 -h <host> -U <admin> -d postgres -f release-1-verify.sql
--- Same optional variables as the bootstrap (role_suffix, extensions); keep core_modules / go_modules equal to it.
+-- Same optional variables as the bootstrap (role_suffix, extensions, conn_limits); keep core_modules / go_modules equal to it.
 \set ON_ERROR_STOP on
 \if :{?role_suffix}
 \else
@@ -10,6 +10,10 @@
 \if :{?extensions}
 \else
   \set extensions 'postgis,btree_gist'
+\endif
+\if :{?conn_limits}
+\else
+  \set conn_limits 'true'
 \endif
 \set core_db 'afrotransact_core'
 \set go_db 'afrotransact_go'

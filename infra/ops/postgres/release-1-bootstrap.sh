@@ -12,7 +12,7 @@
 #                                      directory up OFFLINE, separately from the database dumps (docs/runbooks/ovh-production.md section 6).
 #   PASSWORD_MODE=name                 password = the schema name: LOCAL AND CI ONLY (infra/local, the CI Postgres service).
 # Other variables: ROLE_SUFFIX (default _app; local and CI use "" or what their init uses), EXTENSIONS (default postgis,btree_gist),
-#   VERIFY=false to skip the verification, plus the usual libpq variables (PGSSLROOTCERT, PGPORT ...).
+#   CONN_LIMITS=false for no per-role CONNECTION LIMIT (local), VERIFY=false to skip the verification, plus the usual libpq variables (PGSSLROOTCERT, PGPORT ...).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,6 +21,7 @@ mode="${PASSWORD_MODE:-generated}"
 suffix="${ROLE_SUFFIX-_app}"
 vars=(-v "role_suffix=$suffix")
 [[ -z "${EXTENSIONS:-}" ]] || vars+=(-v "extensions=$EXTENSIONS")
+[[ -z "${CONN_LIMITS:-}" ]] || vars+=(-v "conn_limits=$CONN_LIMITS")
 
 die() { echo "release-1-bootstrap: $*" >&2; exit 1; }
 command -v psql >/dev/null || die "psql is required"

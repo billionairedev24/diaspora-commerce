@@ -1,18 +1,19 @@
 -- Included by release-1-verify.sql for the CURRENT database (variables: cur_modules, role_suffix, extensions). Not standalone.
 -- psql does not substitute :variables inside $$ bodies, so the DO block reads them from settings.
 SELECT set_config('r1.suffix', :'role_suffix', false) AS a, set_config('r1.modules', :'cur_modules', false) AS b,
-       set_config('r1.extensions', :'extensions', false) AS c \gset
+       set_config('r1.extensions', :'extensions', false) AS c, set_config('r1.limits', :'conn_limits', false) AS d \gset
 DO $verify$
 DECLARE
-  m record; other record; ext text; n int;
+  m record; other record; ext text; n int; expected int;
 BEGIN
   FOR m IN SELECT split_part(x, ':', 1) AS s, split_part(x, ':', 1) || current_setting('r1.suffix') AS r, 2 * split_part(x, ':', 2)::int + 2 AS lim
              FROM unnest(string_to_array(current_setting('r1.modules'), ',')) AS x LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = m.r AND rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole) THEN
       RAISE EXCEPTION 'role % is missing or too powerful (needs LOGIN, no SUPERUSER/CREATEDB/CREATEROLE)', m.r;
     END IF;
-    IF (SELECT rolconnlimit FROM pg_roles WHERE rolname = m.r) <> m.lim THEN
-      RAISE EXCEPTION 'role % has CONNECTION LIMIT %, expected % (2 x pool + 2)', m.r, (SELECT rolconnlimit FROM pg_roles WHERE rolname = m.r), m.lim;
+    expected := CASE WHEN current_setting('r1.limits') = 'true' THEN m.lim ELSE -1 END;
+    IF (SELECT rolconnlimit FROM pg_roles WHERE rolname = m.r) <> expected THEN
+      RAISE EXCEPTION 'role % has CONNECTION LIMIT %, expected % (2 x pool + 2)', m.r, (SELECT rolconnlimit FROM pg_roles WHERE rolname = m.r), expected;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_namespace n JOIN pg_roles o ON o.oid = n.nspowner WHERE n.nspname = m.s AND o.rolname = m.r) THEN
       RAISE EXCEPTION 'schema % in % is missing or not owned by %', m.s, current_database(), m.r;

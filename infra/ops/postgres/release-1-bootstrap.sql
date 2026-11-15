@@ -17,6 +17,8 @@
 -- Variables (psql -v name=value), all optional:
 --   role_suffix   '_app' (default; Layerbase/prod). The local stack uses '' because its roles are named after the module.
 --   extensions    'postgis,btree_gist' (default). A server without PostGIS: -v extensions=btree_gist (fulfilment and geo then fail to migrate).
+--   conn_limits   'true' (default) sets CONNECTION LIMIT 2 x pool + 2 per role; 'false' = unlimited (the local stack, where the old
+--                 per-service containers and core share one Postgres with pools of 10).
 -- To add a module: add `schema:pool` to core_modules or go_modules below, re-run, then run release-1-bootstrap.sh to set its password.
 -- The pools MUST equal modules.<name>.pool in java/apps/core/deploy/helm/values.yaml and go/apps/afrotransact-go/deploy/helm/values.yaml:
 -- `python3 tools/release/check_delivery.py` fails when they drift.
@@ -30,6 +32,10 @@
 \if :{?extensions}
 \else
   \set extensions 'postgis,btree_gist'
+\endif
+\if :{?conn_limits}
+\else
+  \set conn_limits 'true'
 \endif
 
 -- schema:pool (the pool is the Hikari / pgx maximum of ONE pod; a rolling update runs two pods, hence the 2x in the role limit).
@@ -49,7 +55,7 @@ CREATE TEMP TABLE r1_roles AS
 
 SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT', role)
   FROM r1_roles WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r1_roles.role) \gexec
-SELECT format('ALTER ROLE %I CONNECTION LIMIT %s', role, conn_limit) FROM r1_roles \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT %s', role, CASE WHEN :'conn_limits' = 'true' THEN conn_limit ELSE -1 END) FROM r1_roles \gexec
 -- Temporal: one role for both of its databases, its own pools (Temporal's SQL persistence config; 10 connections planned).
 SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE', 'temporal' || :'role_suffix')
   WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'temporal' || :'role_suffix') \gexec

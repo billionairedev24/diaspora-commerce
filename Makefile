@@ -13,7 +13,7 @@ GOLANGCI     ?= $(shell command -v golangci-lint 2>/dev/null || echo $(HOME)/go/
 GO_TOOLCHAIN       := go1.27.4
 GOLANGCI_VERSION   := v2.14.0
 GO_MODULES   := $(sort $(wildcard go/services/*/go.mod) go/pkg/go.mod)
-HELM_CHARTS  := $(sort $(dir $(wildcard java/services/*/deploy/helm/Chart.yaml go/services/*/deploy/helm/Chart.yaml)))
+HELM_CHARTS  := $(sort $(dir $(wildcard java/services/*/deploy/helm/Chart.yaml go/services/*/deploy/helm/Chart.yaml java/apps/*/deploy/helm/Chart.yaml go/apps/*/deploy/helm/Chart.yaml)))
 ENVS         := dev uat prod
 SERVICE      ?=
 ENV          ?= dev
@@ -25,7 +25,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog tax-gate-sweep seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
-        mobile-ios-device mobile-apk mobile-brand mobile-hero
+        mobile-ios-device mobile-apk mobile-brand mobile-hero db-release-1 release-1-check
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -130,8 +130,19 @@ helm-lint: ## Helm: dependency build + lint + template every chart for every env
 	done
 	@$(MAKE) --no-print-directory launch-set-check gitops-render observability-check
 
-launch-set-check: ## Argo CD: list the Applications each env produces; fail if uat/prod differ from the 21-service launch set
+launch-set-check: ## Argo CD: list the Applications each env produces (release-1: the two deployables, their modules, the per-service Applications scaled to 0); fail if uat/prod differ from the 21-service launch set or release-1.yaml and cutover.services disagree
 	python3 infra/argocd/scripts/check_launch_set.py
+
+db-release-1: ## Local: create afrotransact_core / afrotransact_go with one schema + role per module on the running compose Postgres (idempotent; a fresh volume does it by itself), then verify
+	$(COMPOSE) exec -T -e PASSWORD_MODE=name -e ROLE_SUFFIX= -e CONN_LIMITS=false -e PGUSER=postgres -e PGPASSWORD=postgres postgres bash /release-1/release-1-bootstrap.sh
+
+release-1-check: ## Release 1 delivery files, offline: workflows generated, launch set vs cutover, pools vs SQL, route-diff tests, shellcheck, action pins
+	python3 tools/ci/gen_workflows.py --check
+	python3 tools/ci/check_action_pins.py
+	python3 infra/argocd/scripts/check_launch_set.py
+	python3 tools/release/check_delivery.py
+	python3 tools/release/test_route_diff.py
+	shellcheck -S warning infra/ops/postgres/release-1-bootstrap.sh infra/local/postgres/20-release-1.sh tools/ci/core_ci_db.sh
 
 gitops-render: ## Argo CD: emulate the ApplicationSets per env, render each app and kubeconform it (incl. CRDs)
 	python3 infra/argocd/scripts/render_apps.py
