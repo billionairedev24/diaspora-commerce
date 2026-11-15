@@ -2,8 +2,8 @@ package com.afrotransact.taxreturns.adapter.in.module;
 
 import java.util.Map;
 
-import com.afrotransact.module.InProcessProvider;
 import com.afrotransact.platform.security.ActorResolver;
+import com.afrotransact.platform.security.ModuleEntry;
 import com.afrotransact.taxreturns.api.ListingDecisionApi;
 import com.afrotransact.taxreturns.application.SellerListingDecisionService;
 import org.springframework.stereotype.Component;
@@ -18,23 +18,21 @@ import org.springframework.stereotype.Component;
 class ListingDecisionApiAdapter implements ListingDecisionApi {
 
     private final SellerListingDecisionService decisions;
-    private final ActorResolver actors;
+    private final ModuleEntry entry;
 
     ListingDecisionApiAdapter(SellerListingDecisionService decisions, ActorResolver actors) {
         this.decisions = decisions;
-        this.actors = actors;
+        this.entry = new ModuleEntry(actors);
     }
 
     @Override
     public DecisionState find(String atin, String sellerOrgId) {
-        InProcessProvider.requireActing(actors.current().subject());
-        return state(decisions.find(atin, sellerOrgId));
+        return entry.run(() -> state(decisions.find(atin, sellerOrgId)));
     }
 
     @Override
     public DecisionState request(String atin, String sellerOrgId, Map<String, Object> sellerBehaviour) {
-        InProcessProvider.requireActing(actors.current().subject());
-        return state(decisions.request(atin, sellerOrgId, sellerBehaviour));
+        return entry.run(() -> state(decisions.request(atin, sellerOrgId, sellerBehaviour)));
     }
 
     private static DecisionState state(SellerListingDecisionService.State s) {

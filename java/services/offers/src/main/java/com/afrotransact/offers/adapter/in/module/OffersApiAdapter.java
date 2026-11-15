@@ -3,7 +3,6 @@ package com.afrotransact.offers.adapter.in.module;
 import java.util.List;
 import java.util.UUID;
 
-import com.afrotransact.module.InProcessProvider;
 import com.afrotransact.offers.api.OffersApi;
 import com.afrotransact.offers.application.OfferBatchService;
 import com.afrotransact.offers.application.OfferService;
@@ -12,6 +11,7 @@ import com.afrotransact.offers.domain.OfferCondition;
 import com.afrotransact.offers.domain.OfferPackage;
 import com.afrotransact.offers.domain.ShipFrom;
 import com.afrotransact.platform.security.ActorResolver;
+import com.afrotransact.platform.security.ModuleEntry;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,35 +25,32 @@ class OffersApiAdapter implements OffersApi {
 
     private final OfferBatchService batches;
     private final OfferService offers;
-    private final ActorResolver actors;
+    private final ModuleEntry entry;
 
     OffersApiAdapter(OfferBatchService batches, OfferService offers, ActorResolver actors) {
         this.batches = batches;
         this.offers = offers;
-        this.actors = actors;
+        this.entry = new ModuleEntry(actors);
     }
 
     @Override
     public List<RowResult> upsert(String sellerOrgId, UUID importId, String uploadedBy, List<OfferTerms> rows) {
-        InProcessProvider.requireActing(actors.current().subject());
-        return batches.upsert(new OfferBatchService.UpsertBatch(sellerOrgId, importId, uploadedBy,
-                rows.stream().map(OffersApiAdapter::row).toList())).stream().map(OffersApiAdapter::result).toList();
+        return entry.run(() -> batches.upsert(new OfferBatchService.UpsertBatch(sellerOrgId, importId, uploadedBy,
+                rows.stream().map(OffersApiAdapter::row).toList())).stream().map(OffersApiAdapter::result).toList());
     }
 
     @Override
     public List<RowResult> setPricesAndStock(String sellerOrgId, UUID importId, String uploadedBy,
                                              List<PriceStock> rows) {
-        InProcessProvider.requireActing(actors.current().subject());
-        return batches.setPricesAndStock(new OfferBatchService.PriceStockBatch(sellerOrgId, importId, uploadedBy,
-                rows.stream().map(r -> new OfferBatchService.PriceStockRow(r.rowKey(), r.sellerSku(), r.atin(),
-                        r.priceMinor(), r.listPriceMinor(), r.quantity(), r.gtin())).toList()))
-                .stream().map(OffersApiAdapter::result).toList();
+        return entry.run(() -> batches.setPricesAndStock(new OfferBatchService.PriceStockBatch(sellerOrgId, importId,
+                uploadedBy, rows.stream().map(r -> new OfferBatchService.PriceStockRow(r.rowKey(), r.sellerSku(),
+                        r.atin(), r.priceMinor(), r.listPriceMinor(), r.quantity(), r.gtin())).toList()))
+                .stream().map(OffersApiAdapter::result).toList());
     }
 
     @Override
     public boolean hasOpenOffer(String sellerOrgId, String atin) {
-        InProcessProvider.requireActing(actors.current().subject());
-        return offers.hasOpenOffer(sellerOrgId, atin);
+        return entry.run(() -> offers.hasOpenOffer(sellerOrgId, atin));
     }
 
     private static OfferBatchService.UpsertRow row(OfferTerms t) {

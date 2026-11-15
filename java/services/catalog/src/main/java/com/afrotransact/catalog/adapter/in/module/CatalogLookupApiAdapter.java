@@ -12,8 +12,8 @@ import com.afrotransact.catalog.application.PublicCatalogService;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.Variant;
-import com.afrotransact.module.InProcessProvider;
 import com.afrotransact.platform.security.ActorResolver;
+import com.afrotransact.platform.security.ModuleEntry;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Component;
 
@@ -31,7 +31,7 @@ class CatalogLookupApiAdapter implements CatalogLookupApi {
     private final OfferEligibilityService eligibility;
     private final CategoryService categories;
     private final BakeryClaimService bakery;
-    private final ActorResolver actors;
+    private final ModuleEntry entry;
 
     CatalogLookupApiAdapter(PublicCatalogService catalog, IdentifierService identifiers,
                             OfferEligibilityService eligibility, CategoryService categories, BakeryClaimService bakery,
@@ -41,66 +41,63 @@ class CatalogLookupApiAdapter implements CatalogLookupApi {
         this.eligibility = eligibility;
         this.categories = categories;
         this.bakery = bakery;
-        this.actors = actors;
+        this.entry = new ModuleEntry(actors);
     }
 
     @Override
     public Optional<LiveVariant> liveVariant(String variantAtin) {
-        entered();
-        try {
-            PublicCatalogService.LiveVariant live = catalog.liveVariant(variantAtin);
-            return Optional.of(variant(live.product(), live.variant()));
-        } catch (NotFoundException ex) {
-            return Optional.empty();
-        }
+        return entry.run(() -> {
+            try {
+                PublicCatalogService.LiveVariant live = catalog.liveVariant(variantAtin);
+                return Optional.of(variant(live.product(), live.variant()));
+            } catch (NotFoundException ex) {
+                return Optional.<LiveVariant>empty();
+            }
+        });
     }
 
     @Override
     public Optional<LiveVariant> liveVariantByGtin(String gtin) {
-        entered();
-        try {
-            IdentifierService.GtinCheck check = identifiers.check(gtin, false);
-            if (!check.valid() || check.existingAtin() == null) {
-                return Optional.empty();
+        return entry.run(() -> {
+            try {
+                IdentifierService.GtinCheck check = identifiers.check(gtin, false);
+                if (!check.valid() || check.existingAtin() == null) {
+                    return Optional.<LiveVariant>empty();
+                }
+                Product product = catalog.liveProduct(check.existingAtin());
+                String wanted = stripZeros(gtin);
+                return product.variants().stream().filter(v -> v.gtin() != null && stripZeros(v.gtin()).equals(wanted))
+                        .findFirst().map(v -> variant(product, v));
+            } catch (NotFoundException ex) {
+                return Optional.<LiveVariant>empty();
             }
-            Product product = catalog.liveProduct(check.existingAtin());
-            String wanted = stripZeros(gtin);
-            return product.variants().stream().filter(v -> v.gtin() != null && stripZeros(v.gtin()).equals(wanted))
-                    .findFirst().map(v -> variant(product, v));
-        } catch (NotFoundException ex) {
-            return Optional.empty();
-        }
+        });
     }
 
     @Override
     public Optional<OfferEligibility> offerEligibility(String variantAtin, String sellerOrgId) {
-        entered();
-        try {
-            OfferEligibilityService.Eligibility e = eligibility.eligibility(variantAtin, sellerOrgId);
-            return Optional.of(new OfferEligibility(e.canOffer(), e.blockers().stream()
-                    .map(b -> new Blocker(b.code(), b.message())).toList(),
-                    e.allowedConditions().stream().map(Enum::name).toList()));
-        } catch (NotFoundException ex) {
-            return Optional.empty();
-        }
+        return entry.run(() -> {
+            try {
+                OfferEligibilityService.Eligibility e = eligibility.eligibility(variantAtin, sellerOrgId);
+                return Optional.of(new OfferEligibility(e.canOffer(), e.blockers().stream()
+                        .map(b -> new Blocker(b.code(), b.message())).toList(),
+                        e.allowedConditions().stream().map(Enum::name).toList()));
+            } catch (NotFoundException ex) {
+                return Optional.<OfferEligibility>empty();
+            }
+        });
     }
 
     @Override
     public List<Department> departments() {
-        entered();
-        return categories.tree(false).stream()
+        return entry.run(() -> categories.tree(false).stream()
                 .filter(n -> n.level() == CategoryLevel.DEPARTMENT && n.code() != null && !n.code().isBlank())
-                .map(n -> new Department(n.code(), n.name(), n.compliance())).toList();
+                .map(n -> new Department(n.code(), n.name(), n.compliance())).toList());
     }
 
     @Override
     public List<String> bakeryClaimOrganisations() {
-        entered();
-        return bakery.organisations();
-    }
-
-    private void entered() {
-        InProcessProvider.requireActing(actors.current().subject());
+        return entry.run(bakery::organisations);
     }
 
     private static LiveVariant variant(Product product, Variant variant) {
