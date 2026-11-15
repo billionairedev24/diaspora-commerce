@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ResourceTable } from '@/components/resources/ResourceTable';
-import { SettingsHub } from '@/components/settings/SettingsHub';
+import { SettingsSectionScreen } from '@/components/settings/SettingsSectionScreen';
 
 import { asRoles, interceptStaff } from './mock-api';
 import { renderScreen } from './render';
@@ -108,8 +108,8 @@ describe('Application review workflow', () => {
 
   it('the settings screen shows the SLAs and chains and refuses level 2 without level 1', async () => {
     const user = userEvent.setup();
-    nav.set('/settings?section=application-review&open=current');
-    await renderScreen(<SettingsHub />);
+    nav.set('/settings/application-review?open=current');
+    await renderScreen(<SettingsSectionScreen section="application-review" />);
     const sheet = await screen.findByRole('dialog');
     expect(await within(sheet).findByText('Service levels')).toBeInTheDocument();
     expect((await within(sheet).findAllByText(/everyone with the role application supervisor/)).length).toBeGreaterThan(0);

@@ -31,9 +31,9 @@ describe('Developer tools › Identity & access (S291)', () => {
   });
 
   it('is a Settings section for identity:admin only', async () => {
-    expect(visibleSections(await mockApi().getSession()).map((x) => x.key)).toContain('identity');
+    expect(visibleSections(await mockApi().getSession()).map((x) => x.key)).toContain('security');
     asRoles('platform.developer');
-    expect(visibleSections(await mockApi().getSession()).map((x) => x.key)).not.toContain('identity');
+    expect(visibleSections(await mockApi().getSession()).map((x) => x.key)).not.toContain('security');
   });
 
   it('lists the clients, with the platform’s own client locked against disabling', async () => {

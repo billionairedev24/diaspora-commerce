@@ -196,7 +196,7 @@ describe('Pre-orders back office (S274)', () => {
     nav.set('/preorders/settings');
     await renderScreen(<PreordersView screen={{ kind: 'settings' }} />);
     const moved = await screen.findByTestId('fees-moved');
-    expect(within(moved).getByRole('link', { name: 'Open Delivery fees' })).toHaveAttribute('href', '/settings?section=delivery-fees');
+    expect(within(moved).getByRole('link', { name: 'Open Delivery fees' })).toHaveAttribute('href', '/settings/delivery-fees');
     expect(screen.queryByRole('textbox', { name: 'USD door delivery fee' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save payment & fees' })).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Master switch' })).toBeDisabled();

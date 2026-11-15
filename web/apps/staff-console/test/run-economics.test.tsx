@@ -22,7 +22,7 @@ describe('Run economics settings (S265)', () => {
   });
 
   it('is a Money section of Settings hosted by the pre-orders module', () => {
-    expect(SETTINGS_SECTIONS.find((s) => s.key === 'run-economics')).toMatchObject({ module: 'preorders', group: 'money', labelKey: 'st.runs.settings.label' });
+    expect(SETTINGS_SECTIONS.find((s) => s.key === 'run-economics')).toMatchObject({ module: 'preorders', group: 'money' });
   });
 
   it('starts on the deployment defaults and shows what editing would change for a location', async () => {

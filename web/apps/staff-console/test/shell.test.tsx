@@ -32,9 +32,9 @@ describe('staff console shell', () => {
     );
     const hrefs = await navHrefs();
     expect(hrefs[0]).toBe('/');
-    expect(hrefs).toEqual(expect.arrayContaining(['/users', '/support', '/payouts', '/settings']));
-    // Fees, markets, site content, developers and notifications live in Settings now, not in the sidebar.
-    for (const moved of ['/fees', '/markets', '/site-content', '/developers', '/notifications']) expect(hrefs).not.toContain(moved);
+    expect(hrefs).toEqual(expect.arrayContaining(['/support', '/payouts', '/settings']));
+    // Fees, markets, site content, developers, notifications and Users & roles (Staff accounts, Roles and permissions) live in Settings now, not in the sidebar.
+    for (const moved of ['/fees', '/markets', '/site-content', '/developers', '/notifications', '/users']) expect(hrefs).not.toContain(moved);
     const groups = screen.getAllByRole('button', { expanded: false }).map((b) => b.textContent);
     expect(groups.join(' ')).toMatch(/Commerce/);
     expect(screen.getByRole('button', { name: /overview/i })).toHaveAttribute('aria-expanded', 'true');
