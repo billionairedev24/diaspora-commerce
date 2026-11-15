@@ -48,6 +48,24 @@ var presetSurface = map[string]string{
 // Sections a seller can order and switch (the header, hero and All products are always there).
 var storeSectionIDs = []string{"announcement", "featured", "categories", "about", "policies", "reviews"}
 
+// Sections a provider can order and switch: its services, the appointment booker, the weekly schedule with the service area,
+// its team and reviews (the header and hero are always there). A provider has no product sections.
+var providerSectionIDs = []string{"announcement", "about", "services", "book", "schedule", "team", "reviews"}
+
+// Organisation kinds a storefront belongs to (the same values as seller-service's OrgKind).
+const (
+	StoreKindSeller   = "SELLER"
+	StoreKindProvider = "PROVIDER"
+)
+
+// SectionIDsFor is the sections an organisation kind can have, in their default order.
+func SectionIDsFor(kind string) []string {
+	if kind == StoreKindProvider {
+		return providerSectionIDs
+	}
+	return storeSectionIDs
+}
+
 // Social networks a link can point to, and the hosts each may use (www. and m. prefixes are ignored).
 var socialHosts = map[string][]string{
 	"instagram": {"instagram.com"},
@@ -148,14 +166,27 @@ type StoreSocialLink struct {
 
 // StorePolicy is what a config is checked against: where images may come from.
 type StorePolicy struct {
+	// Kind is the organisation kind the config belongs to (StoreKindSeller, the default, or StoreKindProvider): it decides
+	// which sections exist.
+	Kind string
 	// MediaPrefixes are the URL prefixes of AfroTransact media ("https://media.example.com/", "http://localhost:9000/media/").
 	MediaPrefixes []string
 }
 
-// DefaultStoreConfig is the starting point: the Clean preset, every optional section on, nothing invented.
-func DefaultStoreConfig() StoreConfig {
-	secs := make([]StoreSection, 0, len(storeSectionIDs))
-	for _, id := range storeSectionIDs {
+// ForKind is the policy for one organisation kind.
+func (p StorePolicy) ForKind(kind string) StorePolicy {
+	p.Kind = kind
+	return p
+}
+
+// DefaultStoreConfig is the starting point for a seller: the Clean preset, every optional section on, nothing invented.
+func DefaultStoreConfig() StoreConfig { return DefaultStoreConfigFor(StoreKindSeller) }
+
+// DefaultStoreConfigFor is the starting point for an organisation kind.
+func DefaultStoreConfigFor(kind string) StoreConfig {
+	ids := SectionIDsFor(kind)
+	secs := make([]StoreSection, 0, len(ids))
+	for _, id := range ids {
 		secs = append(secs, StoreSection{ID: id, Enabled: id != "announcement"})
 	}
 	return StoreConfig{
@@ -315,7 +346,8 @@ func AccentOK(preset, accent string) bool {
 // config paths ("hero.tagline"). The returned config is normalised (trimmed, colours lower-cased, sections complete).
 func ValidateStoreConfig(in StoreConfig, p StorePolicy) (StoreConfig, map[string]string) {
 	errs := map[string]string{}
-	out := DefaultStoreConfig()
+	out := DefaultStoreConfigFor(p.Kind)
+	ids := SectionIDsFor(p.Kind)
 	text := func(path, v string, max int, line bool) string {
 		var s string
 		var ok bool
@@ -394,16 +426,16 @@ func ValidateStoreConfig(in StoreConfig, p StorePolicy) (StoreConfig, map[string
 		errs["grid.columns"] = "Choose 3 or 4"
 	}
 	seen := map[string]bool{}
-	ordered := make([]StoreSection, 0, len(storeSectionIDs))
+	ordered := make([]StoreSection, 0, len(ids))
 	for _, s := range in.Sections {
-		if !contains(storeSectionIDs, s.ID) || seen[s.ID] {
+		if !contains(ids, s.ID) || seen[s.ID] {
 			errs["sections"] = "Each section can appear once"
 			continue
 		}
 		seen[s.ID] = true
 		ordered = append(ordered, s)
 	}
-	for _, id := range storeSectionIDs {
+	for _, id := range ids {
 		if !seen[id] {
 			ordered = append(ordered, StoreSection{ID: id})
 		}
@@ -483,7 +515,7 @@ func SanitizeStoreConfig(in StoreConfig, p StorePolicy) StoreConfig {
 	if len(errs) == 0 {
 		return out
 	}
-	def := DefaultStoreConfig()
+	def := DefaultStoreConfigFor(p.Kind)
 	// Re-run field by field: copy each part that passed, default the rest.
 	res := def
 	if errs["theme.preset"] == "" {

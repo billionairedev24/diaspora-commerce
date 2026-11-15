@@ -13,7 +13,7 @@ import (
 
 // SellerStorePageService is Settings > Store page: the draft of the seller's storefront, its live preview, Publish and
 // Unpublish, and the audit trail. Reading needs Team view; changing needs Team edit (the seller service further limits it
-// to the owner and admins). Sellers only: providers have no storefront.
+// to the owner and admins). Sellers and providers: each organisation edits its own page, with the sections of its kind.
 type SellerStorePageService interface {
 	Get(ctx context.Context, c *domain.Caller) (domain.StorePageSettings, error)
 	SaveDraft(ctx context.Context, c *domain.Caller, in domain.StorePageDraftInput) (domain.StorePageSettings, error)
@@ -42,24 +42,29 @@ func (s *sellerStorePageImpl) access(ctx context.Context, c *domain.Caller, leve
 	if err != nil {
 		return sc, err
 	}
-	if sc.kind() == domain.OrgKindProvider {
-		return sc, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", "A storefront is for sellers.")
-	}
 	if !sc.access.Allows("team", level) {
 		return sc, domain.AccessDenied(sc.org.Role, level)
 	}
 	return sc, nil
 }
 
-func (s *sellerStorePageImpl) decode(raw json.RawMessage) domain.StoreConfig {
+// storeKind is the kind of storefront the caller's organisation has: a provider's, or (anything else) a seller's.
+func storeKind(sc sellerCtx) string {
+	if sc.kind() == domain.OrgKindProvider {
+		return domain.StoreKindProvider
+	}
+	return domain.StoreKindSeller
+}
+
+func (s *sellerStorePageImpl) decode(raw json.RawMessage, kind string) domain.StoreConfig {
 	if len(raw) == 0 || string(raw) == "null" {
-		return domain.DefaultStoreConfig()
+		return domain.DefaultStoreConfigFor(kind)
 	}
 	var in domain.StoreConfig
 	if json.Unmarshal(raw, &in) != nil {
-		return domain.DefaultStoreConfig()
+		return domain.DefaultStoreConfigFor(kind)
 	}
-	return domain.SanitizeStoreConfig(in, s.policy)
+	return domain.SanitizeStoreConfig(in, s.policy.ForKind(kind))
 }
 
 func (s *sellerStorePageImpl) settings(ctx context.Context, c *domain.Caller, sc sellerCtx, up port.UpStorePage) (domain.StorePageSettings, error) {
@@ -68,12 +73,13 @@ func (s *sellerStorePageImpl) settings(ctx context.Context, c *domain.Caller, sc
 		return domain.StorePageSettings{}, mapErr("seller", err)
 	}
 	canEdit := domain.AtLeast(sc.access.Level("team"), domain.LevelEdit)
-	out := domain.StorePageSettings{Slug: strPtr(bp.Slug), Name: bp.Name, LogoURL: strPtr(bp.LogoURL), ContactEmail: strPtr(bp.ContactEmail),
-		Draft: s.decode(up.Draft), IsPublished: up.IsPublished, Version: up.Version, PublishedVersion: up.PublishedVersion,
+	kind := storeKind(sc)
+	out := domain.StorePageSettings{Kind: kind, Slug: strPtr(bp.Slug), Name: bp.Name, LogoURL: strPtr(bp.LogoURL), ContactEmail: strPtr(bp.ContactEmail),
+		Draft: s.decode(up.Draft, kind), IsPublished: up.IsPublished, Version: up.Version, PublishedVersion: up.PublishedVersion,
 		HasUnpublishedChanges: up.HasUnpublishedChanges, UpdatedAt: up.UpdatedAt, PublishedAt: up.PublishedAt,
 		Approved: up.Approved, CanEdit: canEdit, CanPublish: canEdit && up.Approved && bp.Slug != ""}
 	if len(up.Published) > 0 && string(up.Published) != "null" {
-		p := s.decode(up.Published)
+		p := s.decode(up.Published, kind)
 		out.Published = &p
 	}
 	return out, nil
@@ -92,8 +98,8 @@ func (s *sellerStorePageImpl) Get(ctx context.Context, c *domain.Caller) (domain
 }
 
 // validate checks the config and turns a failure into the 422 the editor shows next to the field.
-func (s *sellerStorePageImpl) validate(in domain.StoreConfig) (domain.StoreConfig, error) {
-	clean, errs := domain.ValidateStoreConfig(in, s.policy)
+func (s *sellerStorePageImpl) validate(in domain.StoreConfig, kind string) (domain.StoreConfig, error) {
+	clean, errs := domain.ValidateStoreConfig(in, s.policy.ForKind(kind))
 	if len(errs) == 0 {
 		return clean, nil
 	}
@@ -112,7 +118,7 @@ func (s *sellerStorePageImpl) SaveDraft(ctx context.Context, c *domain.Caller, i
 	if err != nil {
 		return domain.StorePageSettings{}, err
 	}
-	clean, err := s.validate(in.Config)
+	clean, err := s.validate(in.Config, storeKind(sc))
 	if err != nil {
 		return domain.StorePageSettings{}, err
 	}
@@ -144,7 +150,7 @@ func (s *sellerStorePageImpl) Publish(ctx context.Context, c *domain.Caller, in 
 	if json.Unmarshal(cur.Draft, &draft) != nil {
 		return domain.StorePageSettings{}, domain.ValidationProblem(map[string]string{"form": "The saved draft cannot be read. Save it again."})
 	}
-	if _, err := s.validate(draft); err != nil {
+	if _, err := s.validate(draft, storeKind(sc)); err != nil {
 		return domain.StorePageSettings{}, err
 	}
 	up, err := s.r.d.Sellers.PublishStorePage(ctx, c.BearerToken, sc.org.ID, in.Version)
@@ -213,14 +219,17 @@ func (s *sellerStorePageImpl) Preview(ctx context.Context, c *domain.Caller) (do
 	if bp.Slug == "" {
 		return domain.Storefront{}, storefrontNotFound(nil)
 	}
-	return s.store.Build(ctx, StorefrontSource{OrgID: sc.org.ID, Slug: bp.Slug, Name: bp.Name, Description: bp.Description, LogoURL: bp.LogoURL,
-		ContactEmail: bp.ContactEmail, Config: s.decode(up.Draft), Preview: true})
+	return s.store.Build(ctx, StorefrontSource{Kind: storeKind(sc), OrgID: sc.org.ID, Slug: bp.Slug, Name: bp.Name, Description: bp.Description, LogoURL: bp.LogoURL,
+		ContactEmail: bp.ContactEmail, Config: s.decode(up.Draft, storeKind(sc)), Preview: true})
 }
 
 func (s *sellerStorePageImpl) FindProducts(ctx context.Context, c *domain.Caller, text string) (domain.StorePageProductList, error) {
 	sc, err := s.access(ctx, c, domain.LevelView)
 	if err != nil {
 		return domain.StorePageProductList{}, err
+	}
+	if storeKind(sc) == domain.StoreKindProvider {
+		return domain.StorePageProductList{Items: []domain.ProductSummary{}}, nil // a provider has no products to feature
 	}
 	items, err := s.store.FindProducts(ctx, sc.org.ID, text)
 	if err != nil {

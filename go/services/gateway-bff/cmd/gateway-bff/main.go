@@ -257,7 +257,8 @@ func run() error {
 	if !up.Carrier.Disabled {
 		storePickup = upstreams.NewDeliveryFacts(nil, client("carrier-gateway", up.Carrier), client("geo", up.Geo), serviceTokens)
 	}
-	storefronts := app.NewStorefrontService(upstreams.NewStorefronts(client("seller", up.Seller)), services.Search, storePickup, storePolicy, nil)
+	storefronts := app.NewStorefrontService(upstreams.NewStorefronts(client("seller", up.Seller)), services.Search, storePickup, storePolicy, nil,
+		app.WithSellerRatings(upstreams.NewReviews(client("catalog", up.Catalog))), app.WithProviders(upstreams.NewCustomerBookings(client("bookings", up.Bookings))))
 	services.Shopper.Storefronts = storefronts
 	services.SellerStorePage = app.NewSellerStorePageService(sellerDeps, storefronts, storePolicy)
 	// Staff console (cmd/gateway-bff/staff.go).

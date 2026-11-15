@@ -531,6 +531,7 @@ type UpBkService struct {
 	Policy          UpBkPolicy            `json:"policy"`
 	InstantBooking  bool                  `json:"instantBooking"`
 	Team            []UpBkMember          `json:"team"`
+	ImageURL        string                `json:"imageUrl"`
 }
 
 // UpBkProvider is bookings' PublicProvider.
@@ -543,6 +544,33 @@ type UpBkProvider struct {
 	InstantBooking bool          `json:"instantBooking"`
 	Services       []UpBkService `json:"services"`
 	Team           []UpBkMember  `json:"team"`
+	// WeeklyHours is Monday first; a day with no ranges is closed. ServiceArea is nil until the provider has set one.
+	WeeklyHours []UpBkDayHours   `json:"weeklyHours"`
+	ServiceArea *UpBkServiceArea `json:"serviceArea"`
+}
+
+// UpBkDayHours is bookings' PublicDayHours.
+type UpBkDayHours struct {
+	Day    string `json:"day"`
+	Ranges []struct {
+		Start string `json:"start"`
+		End   string `json:"end"`
+	} `json:"ranges"`
+}
+
+// UpBkServiceArea is bookings' PublicServiceArea.
+type UpBkServiceArea struct {
+	BaseCity     string   `json:"baseCity"`
+	BaseState    string   `json:"baseState"`
+	RadiusMiles  int      `json:"radiusMiles"`
+	ServedCities []string `json:"servedCities"`
+	ExtraAreas   []string `json:"extraAreas"`
+}
+
+// UpBkRating is the rating of a PublicReviewPage: the average over approved reviews and how many there are.
+type UpBkRating struct {
+	Rating      float64 `json:"rating"`
+	RatingCount int     `json:"ratingCount"`
 }
 
 // UpBkListing is bookings' PublicServiceListing.
@@ -688,6 +716,8 @@ type CustomerBookingsClient interface {
 	SubscribeAlert(ctx context.Context, email, zip, category, locale string) error
 	Service(ctx context.Context, id string) (UpBkService, error)
 	Provider(ctx context.Context, orgID string) (UpBkProvider, error)
+	// ProviderRating is bookings' own aggregate over the provider's approved reviews (count 0 = none yet).
+	ProviderRating(ctx context.Context, orgID string) (UpBkRating, error)
 	Days(ctx context.Context, serviceID string, q SlotQuery) ([]domain.AvailableDay, error)
 	Slots(ctx context.Context, serviceID string, q SlotQuery) ([]domain.AvailableSlot, error)
 	Summary(ctx context.Context, serviceID string, q SlotQuery) (domain.BookingQuote, error)

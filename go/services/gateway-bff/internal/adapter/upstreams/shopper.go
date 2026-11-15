@@ -417,6 +417,12 @@ func (b *customerBookingsImpl) Provider(ctx context.Context, orgID string) (port
 	return out, err
 }
 
+func (b *customerBookingsImpl) ProviderRating(ctx context.Context, orgID string) (port.UpBkRating, error) {
+	var out port.UpBkRating
+	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/public/providers/" + esc(orgID) + "/reviews", Query: url.Values{"size": {"1"}}}, &out)
+	return out, err
+}
+
 func (b *customerBookingsImpl) Days(ctx context.Context, serviceID string, q port.SlotQuery) ([]domain.AvailableDay, error) {
 	var out []domain.AvailableDay
 	_, err := call(ctx, b.c, httpclient.Request{Path: "/v1/public/services/" + esc(serviceID) + "/days", Query: slotQuery(q)}, &out)

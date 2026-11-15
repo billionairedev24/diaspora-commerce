@@ -802,6 +802,11 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/orgs/{id}/business-page", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
+		if r.PathValue("id") == ProviderOrgID {
+			writeJSON(w, 200, map[string]any{"orgId": ProviderOrgID, "slug": "amas-braiding-studio", "kind": "PROVIDER", "name": "Ama's Braiding Studio",
+				"description": "Braids by appointment.", "brandColor": "", "logoUrl": "", "contactEmail": "ama@example.com", "approved": true})
+			return
+		}
 		if r.PathValue("id") != SellerOrgID {
 			problem(w, 403, "seller.org-role-required", "not your organisation", nil)
 			return
@@ -821,23 +826,33 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, page)
 	})
 	// Store page (the seller's branded storefront): a draft, a published copy, a version for optimistic locking, an audit trail.
-	store := struct {
+	// One page per organisation: a provider's page never mixes with a seller's.
+	type storeState struct {
 		draft, published any
 		version          int64
 		audit            []map[string]any
-	}{}
-	storeView := func() map[string]any {
+	}
+	stores := map[string]*storeState{}
+	storeOf := func(r *http.Request) *storeState {
+		id := r.PathValue("id")
+		if stores[id] == nil {
+			stores[id] = &storeState{}
+		}
+		return stores[id]
+	}
+	storeView := func(store *storeState) map[string]any {
 		return map[string]any{"draft": store.draft, "published": store.published, "isPublished": store.published != nil, "version": store.version,
 			"publishedVersion": nil, "hasUnpublishedChanges": store.draft != nil, "updatedAt": nil, "publishedAt": nil, "approved": true}
 	}
 	mux.HandleFunc("GET /v1/orgs/{id}/store-page", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
-		writeJSON(w, 200, storeView())
+		writeJSON(w, 200, storeView(storeOf(r)))
 	})
 	mux.HandleFunc("PUT /v1/orgs/{id}/store-page", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
+		store := storeOf(r)
 		var b struct {
 			Config  any   `json:"config"`
 			Version int64 `json:"version"`
@@ -849,11 +864,12 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		store.draft, store.version = b.Config, store.version+1
 		store.audit = append([]map[string]any{{"at": "2026-11-14T10:00:00Z", "action": "DRAFT_SAVED", "actor": "someone-else", "version": store.version}}, store.audit...)
-		writeJSON(w, 200, storeView())
+		writeJSON(w, 200, storeView(store))
 	})
 	mux.HandleFunc("POST /v1/orgs/{id}/store-page/publish", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
+		store := storeOf(r)
 		var b struct {
 			Version int64 `json:"version"`
 		}
@@ -864,19 +880,20 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		store.published = store.draft
 		store.audit = append([]map[string]any{{"at": "2026-11-14T10:05:00Z", "action": "PUBLISHED", "actor": "someone-else", "version": store.version}}, store.audit...)
-		writeJSON(w, 200, storeView())
+		writeJSON(w, 200, storeView(store))
 	})
 	mux.HandleFunc("POST /v1/orgs/{id}/store-page/unpublish", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
+		store := storeOf(r)
 		store.published = nil
 		store.audit = append([]map[string]any{{"at": "2026-11-14T10:10:00Z", "action": "UNPUBLISHED", "actor": "someone-else", "version": store.version}}, store.audit...)
-		writeJSON(w, 200, storeView())
+		writeJSON(w, 200, storeView(store))
 	})
 	mux.HandleFunc("GET /v1/orgs/{id}/store-page/audit", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
-		writeJSON(w, 200, store.audit)
+		writeJSON(w, 200, storeOf(r).audit)
 	})
 	mux.HandleFunc("GET /v1/orgs/{id}/ship-from-addresses", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()

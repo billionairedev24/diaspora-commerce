@@ -643,6 +643,23 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/bookings/requests", nil), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/bookings/24018/actions", map[string]any{"action": "CONFIRM"}), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/bookings/24018/actions", map[string]any{"action": "DECLINE"}), 422)
+	// A provider's page: the same builder, the provider's sections. Own organisation only (an orgId in the query is ignored), and its
+	// own draft: the seller's draft saved earlier is not visible here.
+	pp := b.do("GET", "/v1/seller/store-page?orgId="+testkit.SellerOrgID, nil)
+	if pp.status != 200 || pp.json(t)["kind"] != "PROVIDER" || pp.json(t)["version"] != float64(0) || pp.json(t)["draft"].(map[string]any)["sections"].([]any)[2].(map[string]any)["id"] != "services" {
+		t.Fatalf("provider store page = %d %s", pp.status, pp.body)
+	}
+	provCfg := pp.json(t)["draft"].(map[string]any)
+	mustStatus(t, b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": withSections(provCfg, "featured", "policies")}), 422) // seller sections
+	provCfg["hero"] = map[string]any{"style": "colour", "tagline": "Braids by appointment", "bannerUrl": nil, "focalX": 50, "focalY": 50}
+	if r := b.do("PUT", "/v1/seller/store-page", map[string]any{"version": 0, "config": provCfg}); r.status != 200 || r.json(t)["version"] != float64(1) || r.json(t)["kind"] != "PROVIDER" {
+		t.Fatalf("provider save = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/store-page/publish", map[string]any{"version": 1}), 200)
+	if r := b.do("GET", "/v1/seller/store-page/featured-search?q=braids", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 0 {
+		t.Fatalf("a provider has no products to feature = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/store-page/unpublish", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/provider/hours", nil), 200)
 	week := []map[string]any{}
 	for _, d := range []string{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"} {
@@ -942,5 +959,19 @@ func withAbout(cfg map[string]any, body string) map[string]any {
 		out[k] = v
 	}
 	out["about"] = map[string]any{"heading": "", "body": body, "photoUrl": nil}
+	return out
+}
+
+// withSections returns the config with its sections replaced by these ids (all enabled): a section list the page's kind does not have.
+func withSections(cfg map[string]any, ids ...string) map[string]any {
+	out := map[string]any{}
+	for k, v := range cfg {
+		out[k] = v
+	}
+	secs := []any{}
+	for _, id := range ids {
+		secs = append(secs, map[string]any{"id": id, "enabled": true})
+	}
+	out["sections"] = secs
 	return out
 }
