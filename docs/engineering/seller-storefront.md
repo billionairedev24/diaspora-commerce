@@ -1,0 +1,72 @@
+# Seller storefront (`/b/<slug>`)
+
+The seller's public page is their own branded mini-store, not a marketplace page. Story S488. It replaces the plain
+page of [business-pages.md](business-pages.md) **for sellers** (a provider keeps the plain page, inside the marketplace chrome).
+
+## What a shopper gets
+
+Own header (logo, name, search in the store, category tabs from the seller's live categories, cart and account links that go to the
+marketplace `/cart` and `/account`), a hero, then the sections the seller switched on in the order they chose (featured, categories,
+story, shipping and returns, reviews), **All products** (search, category, price, sort, "Show more"), quick view, **Add to cart** and
+**Buy now** on every tile (same cart and checkout as everywhere), and a minimal footer (contact, social, "Sold on AfroTransact" linking
+home). The marketplace navbar, department bar, deliver-to picker, big footer and support chat are not rendered: the `(store)` route group
+has its own layout (`web/apps/storefront/src/app/(store)`), and a test fails if it imports them.
+
+Rules kept from the owner: flat (no cards), only in-stock products with a real photo, never "0 reviews" (no rating row, no summary without
+reviews), no invented claims (the facts are "Verified seller" for an approved seller and "On AfroTransact since <year>" from the organisation's
+creation date; the review summary is a weighted average of real product reviews), no carrier names, nothing about AfroTransact collecting or
+delivering, white canvas by default, fonts only Inter and Fraunces (heading font per look).
+
+## Data model
+
+One JSON document, `StoreConfig` (`contracts/openapi/gateway-bff*.yaml`, schema version 1): `theme {preset, accent}`, `hero {style image|colour|split,
+tagline, bannerUrl, focal}`, `announcement`, `grid {3|4}`, `sections` (order + enabled of announcement, featured, categories, about, policies,
+reviews), `featured` (ATINs, at most 8), `categories {auto|chosen}`, `about`, `policies {shipping, returns}`, `contact {showEmail, phone, hours}`,
+`pickup {show}`, `social` (at most 6). The logo and brand colour stay in Business profile (one source).
+
+Stored by the seller service (`V92__store_page.sql`): `store_page` (draft, published, `version` for optimistic locking, who/when) and
+`store_page_audit` (DRAFT_SAVED, PUBLISHED, UNPUBLISHED, actor, version). The seller service stores opaque JSON (max 32 KB); **gateway-bff owns the schema**.
+Saves send the draft `version`; a stale one is 409. Publishing needs an approved organisation (422 `STORE_NOT_APPROVED`) and copies the draft to the
+published slot. Seller endpoints `/v1/seller/store-page` (GET, PUT draft), `/publish`, `/unpublish`, `/audit`, `/preview` (the storefront built from the
+draft), `/featured-search`; public `GET /v1/storefronts/{slug}`, `/products`, and `GET /v1/storefronts` (sitemap list). Members read with Team view; the
+owner and admins change (Team edit; the seller service re-checks). Sellers only.
+
+## Themes (`@afrotransact/tokens`, `storefront-theme.ts`)
+
+Six looks, each a token set: Clean, Warm market, Bold, Midnight, Heritage, Fresh (palette, radius, heading font and weight, default hero and grid, tile ratio).
+The page root gets CSS variables (`--sf-*`, and the platform `--at-color-*` re-pointed so shared pieces re-theme); no component holds a colour.
+The seller's accent is **data**: the picker outputs `nearestSafeAccent` (same hue, darker or lighter until AA, 4.5:1) against the look's canvas **and** raised
+surface; text on the accent (`onAccent`) is computed, never chosen; the business brand colour is the default accent (made safe). The BFF refuses an accent that
+fails (422 `STORE_ACCENT_LOW_CONTRAST`) using the same palette numbers (`presetCanvas`/`presetSurface` in Go; a test fails if they drift from TypeScript).
+
+## Security
+
+- **Text**: plain text only (line breaks; blank line = paragraph), length-capped; text that looks like markup is refused on write (422) and dropped on read; React escapes it anyway. No rich text.
+- **Links**: https only, no credentials, no IP/localhost, social links on the network's own hosts; the announcement may link to a page of the store or an https URL.
+- **Images**: only AfroTransact media. The allowed prefixes are config (`STORE_MEDIA_PREFIXES`; default local media URL in local, `https://media.<storefront host>/` elsewhere). Anything else is refused on write and removed on read.
+- **Both directions**: the BFF validates on save and re-sanitises the stored config before every public response (a bad stored value is replaced by its default, never an error).
+- Public responses are cached 60 s; preview and seller endpoints are never cached. No per-person data (the BFF searches as an anonymous caller).
+
+## 404, redirects, SEO
+
+An unknown, unpublished, unapproved or suspended store is a 404 page (`store-not-found`) with links home and to search. `/b/<Slug>`, `/b/<slug>/`, `/store|stores|seller|sellers|shop|business/<slug>`
+301 to `/b/<lowercase slug>` (middleware). Indexing follows [seo.md](seo.md): only prod on the canonical host, only when the store is approved, published **and has at least one sellable product**,
+never a filtered or sorted view (canonical is the plain page). JSON-LD `Store` (name, url, logo, description, social profiles, `aggregateRating` only with real reviews). The sitemap `stores` kind lists
+`/b/<slug>` for published stores with live products (`lastmod` = publish time).
+
+## Seller Center: Settings > Store page
+
+Own route, own save, one column on narrow screens (preview as a tab), editor and sticky preview side by side from 1280. The preview renders the real `StorefrontView` with the unsaved draft and
+the seller's own sellable products (desktop or 390 px phone; the layout answers to the storefront's own width via container queries). Status, Save changes, Publish (changes), Unpublish, View store page and History.
+The banner has a focal point (what stays in view when each screen crops) rather than a server crop; pictures are validated (type, 8 MB, minimum size) before upload.
+
+## Mock stack and tests
+
+Mock BFF (`api-client/src/mocks/storefront.ts`): the demo seller **Laserfeet** (`/b/laserfeet`, mock data only, registered as unlisted products so cart and checkout work) and stand-in "studio shots" as SVG drawn by the mock BFF
+(`/v1/mock-photos/...`); nothing of this exists outside the mock runtime. `MOCK_STOREFRONT_STATE_FILE` lets the Seller Center mock and the storefront mock share published stores across processes.
+Tests: `tokens/test/storefront-theme.test.ts`, `gateway-bff` domain/app/httpapi tests, seller `StorePageServiceTest` and tenant matrix, `storefront/test/storefront.test.tsx`, `seller-center/test/store-page.test.tsx`,
+`storefront/e2e/storefront.spec.ts`. Screenshots (viewed and fixed): `img/storefront-{warm-market,bold,midnight,heritage}-{1280,390}.png`.
+
+## Not done / decisions
+
+See the report in the pull request; the open items are in S488 and S409 (physical-store `LocalBusiness`).
