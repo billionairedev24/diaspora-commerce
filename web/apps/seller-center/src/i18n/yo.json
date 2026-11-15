@@ -2205,5 +2205,10 @@
   "sc.proof.receivedBy": "{name} ló gbà á",
   "sc.proof.byAfroTransact": "AfroTransact fi jíṣẹ́, pẹ̀lú fọ́tò",
   "sc.proof.photoN": "Fọ́tò {n}",
-  "sc.proof.photoAltN": "Fọ́tò {n} tí a yà nígbà tí a fi ìbéèrè jíṣẹ́"
+  "sc.proof.photoAltN": "Fọ́tò {n} tí a yà nígbà tí a fi ìbéèrè jíṣẹ́",
+  "sc.settings.store-page.title": "Ojú ìwé ṣọ́ọ̀bù",
+  "sc.settings.store-page.description": "Ìrísí ojú ìwé ṣọ́ọ̀bù rẹ: àwòrán, àwọn ọjà àyànfẹ́ àti ohun tí àwọn oníbàárà ń kà níbẹ̀.",
+  "sc.settings.status.storePublished": "A ti tẹ̀ jáde",
+  "sc.settings.status.storeDraft": "A kò tíì tẹ̀ jáde",
+  "sc.settings.status.storeChanges": "Àwọn àtúnṣe tí a kò tíì tẹ̀ jáde"
 }

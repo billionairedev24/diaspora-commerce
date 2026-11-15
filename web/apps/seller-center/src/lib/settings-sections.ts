@@ -7,7 +7,7 @@ import { type MessageKey, type Vars } from '@/i18n/t';
  * permission that gates it (the access matrix is unchanged: a section needs at least View on its module to open and Edit
  * to save), and `null` means a personal setting any signed-in member may change.
  */
-export type SettingsKey = 'business' | 'locations' | 'shipping' | 'pickup' | 'payouts' | 'team' | 'notifications' | 'tax' | 'documents' | 'language';
+export type SettingsKey = 'business' | 'store-page' | 'locations' | 'shipping' | 'pickup' | 'payouts' | 'team' | 'notifications' | 'tax' | 'documents' | 'language';
 
 export interface SettingsSection {
   key: SettingsKey;
@@ -20,6 +20,7 @@ export interface SettingsSection {
 /** In the order the list and the sub-nav show them: the business, where it is, how orders reach customers, money, people, personal. */
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { key: 'business', href: '/settings/business', module: 'team', sellerOnly: false },
+  { key: 'store-page', href: '/settings/store-page', module: 'team', sellerOnly: true },
   { key: 'locations', href: '/settings/locations', module: 'orders', sellerOnly: true },
   { key: 'shipping', href: '/settings/shipping', module: 'orders', sellerOnly: true },
   { key: 'pickup', href: '/settings/pickup', module: 'orders', sellerOnly: true },
