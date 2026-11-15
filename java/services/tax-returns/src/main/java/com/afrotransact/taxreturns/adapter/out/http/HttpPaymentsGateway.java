@@ -11,6 +11,7 @@ import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.returns.RefundLineAmount;
 import com.afrotransact.taxreturns.port.PaymentsGateway;
 import com.afrotransact.taxreturns.port.UpstreamException;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -24,6 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
  * transfer reversal for them, so this service needs no Retail special case.
  */
 @Component
+@ConditionalOnExpression("'${at.taxreturns.payments.mode:${at.taxreturns.mode:http}}' == 'http'")
 class HttpPaymentsGateway implements PaymentsGateway {
 
     private final Upstream payments;

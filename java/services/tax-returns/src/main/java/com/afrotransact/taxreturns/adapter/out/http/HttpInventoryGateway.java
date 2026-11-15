@@ -6,6 +6,7 @@ import java.util.Map;
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.returns.ItemCondition;
 import com.afrotransact.taxreturns.port.InventoryGateway;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -13,6 +14,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** inventory-service {@code POST /v1/returns} (inventory:adjust): RETURN_RESTOCK or RETURN_DAMAGED (lot -DMG). */
 @Component
+@ConditionalOnExpression("'${at.taxreturns.inventory.mode:${at.taxreturns.mode:http}}' == 'http'")
 class HttpInventoryGateway implements InventoryGateway {
 
     private final Upstream inventory;
