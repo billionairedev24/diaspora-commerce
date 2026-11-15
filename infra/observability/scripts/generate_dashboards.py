@@ -483,6 +483,53 @@ def slo():
     return b
 
 
+# --------------------------------------------------------------------------------------------- Release 1: modules inside a deployable
+def release1_modules():
+    """Release 1 (ADR 0011): afrotransact-core and afrotransact-go run many modules in one process. Per-module readiness, the shared
+    process, and one connection pool per module. The per-module RED panels select on the `module` label (the app tags every meter with
+    `module` and `service`, the module's old short name, so the existing rules and boards keep working)."""
+    core = 'job="afrotransact-core", env=~"$env"'
+    gob = 'job="afrotransact-go", env=~"$env"'
+    mod = 'env=~"$env", module=~"$module"'
+    b = Board("at-release-1-modules", "AfroTransact / Release 1 modules (core and Go deployables)", ["release-1", "modules"],
+              "Readiness per module, process memory against the 2 GiB cap, and the database connection pool of every module inside "
+              "afrotransact-core and afrotransact-go (docs/runbooks/release-1-deploy.md, section What to watch).",
+              [ENV_VAR, var_query("module", "label_values(at_module_up, module)", "Module")])
+    b.row("Module readiness")
+    b.stat("Modules ready", 'count(at_module_up{env=~"$env"} == 1) or vector(0)', w=4, thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}])
+    b.stat("Modules NOT ready", 'count(at_module_up{env=~"$env"} == 0) or vector(0)', w=4, thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}])
+    b.stat("Deployables up", f'count(up{{job=~"afrotransact-core|afrotransact-go", env=~"$env"}} == 1) or vector(0)', w=4,
+           thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 2}])
+    b.stat("Deployable restarts (1 h)", 'sum(increase(kube_pod_container_status_restarts_total{namespace=~"afrotransact-.*", pod=~"afrotransact-(core|go)-.*"}[1h])) or vector(0)', w=6,
+           thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 1}, {"color": "red", "value": 3}])
+    b.table("Module readiness (at_module_up: 1 = UP)", 'max by (env, service, module) (at_module_up{env=~"$env"})', w=24, h=7,
+            mappings=[{"type": "value", "options": {"0": {"text": "NOT READY", "color": "red"}, "1": {"text": "UP", "color": "green"}}}])
+    b.row("Process (one JVM / one binary)")
+    b.ts("core resident memory vs the 2.0 GiB cap (ADR 0011 S1)",
+         [(f'max(process_resident_memory_bytes{{{core}}})', "RSS"), ('vector(2147483648)', "cap 2 GiB (container limit)")], unit="bytes",
+         description="The container limit is the cap: the kernel OOM-kills above it. Alert: CoreMemoryNearCap.")
+    b.ts("core heap used vs max", [(f'sum(jvm_memory_used_bytes{{{core}, area="heap"}})', "used"), (f'sum(jvm_memory_max_bytes{{{core}, area="heap"}})', "max")], unit="bytes")
+    b.ts("Process CPU", [(f'process_cpu_usage{{{core}}}', "core"), (f'process_cpu_usage{{{gob}}}', "go")], unit="percentunit", min_=0)
+    b.ts("Go deployable memory", [(f'max(process_resident_memory_bytes{{{gob}}})', "RSS")], unit="bytes")
+    b.row("Database connections (one pool per module)")
+    b.ts("Active connections by module pool (core)", [(f'sum by (pool) (hikaricp_connections_active{{{core}}})', "{{pool}}")],
+         description="One HikariCP pool per module, named after the module.")
+    b.ts("Pool saturation (active / max)", [(f'max by (pool) (hikaricp_connections_active{{{core}}} / hikaricp_connections_max{{{core}}})', "{{pool}}")],
+         unit="percentunit", min_=0, max_=1, thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 0.9}])
+    b.ts("Pending threads and acquire p95 by pool", [(f'sum by (pool) (hikaricp_connections_pending{{{core}}})', "pending {{pool}}"),
+         (f'histogram_quantile(0.95, sum by (pool, le) (rate(hikaricp_connections_acquire_seconds_bucket{{{core}}}[{RI}])))', "acquire p95 {{pool}}")])
+    b.stat("Sum of pool maximums (budget 48 per pod)", f'sum(hikaricp_connections_max{{{core}}})', w=6, h=6,
+           thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 48}, {"color": "red", "value": 49}],
+           description="Java budget: under 100 connections with a rolling-update surge of two pods (2 x 48). Pools are set in java/apps/core/deploy/helm/values.yaml.")
+    b.stat("Pool connections open now", f'sum(hikaricp_connections_active{{{core}}} + hikaricp_connections_idle{{{core}}})', w=6, h=6)
+    b.row("Traffic per module")
+    b.ts("Requests / s by module", [(f'sum by (module) (rate(http_server_requests_seconds_count{{{mod}}}[{RI}])) or sum by (module) (rate(http_server_requests_total{{{mod}}}[{RI}]))', "{{module}}")], unit="reqps")
+    b.ts("5xx ratio by module", [(f'(sum by (module) (rate(http_server_requests_seconds_count{{{mod}, status=~"5.."}}[{RI}])) or sum by (module) (rate(http_server_requests_total{{{mod}, status=~"5.."}}[{RI}]))) / (sum by (module) (rate(http_server_requests_seconds_count{{{mod}}}[{RI}])) or sum by (module) (rate(http_server_requests_total{{{mod}}}[{RI}])))', "{{module}}")],
+         unit="percentunit", thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 0.05}])
+    b.ts("p95 latency by module", [(f'histogram_quantile(0.95, sum by (module, le) (rate(http_server_requests_seconds_bucket{{{mod}}}[{RI}]))) or histogram_quantile(0.95, sum by (module, le) (rate(http_server_request_duration_seconds_bucket{{{mod}}}[{RI}])))', "{{module}}")], unit="s")
+    return b
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     boards = {
@@ -495,6 +542,7 @@ def main():
         "business-slo.json": slo(),
         "launch-platform.json": launch_platform(),
         "launch-payments.json": launch_payments(),
+        "release-1-modules.json": release1_modules(),
     }
     K8S.mkdir(parents=True, exist_ok=True)
     for name, board in boards.items():

@@ -1,0 +1,55 @@
+# Release 1 (ADR 0011): alerts for the two deployables, afrotransact-core (every Java module in one JVM) and afrotransact-go (every
+# Go module in one binary). The per-service alerts of services.yaml keep working unchanged: the application tags every meter with
+# `module` and `service` (the module's old short name), and Alloy scrapes the deployables with honor_labels
+# (infra/k8s/platform/lean/alloy/config.alloy), so http_server_requests_*{service="orders"} and hikaricp_*{service=...} still exist.
+# What changes: process-level series (jvm_*, process_*, up) carry service/job afrotransact-core or afrotransact-go; ServiceDown lists them.
+#
+# METRIC STATUS: at_module_up{module} is the gauge module-core exports (1 when the module's readiness is UP); UNCONFIRMED in code on
+# this branch until the Java batch that adds it lands (release-1-architecture.md section 6.1), so ModuleNotReady stays silent until the
+# series exists. The rest are standard Micrometer / process metrics.
+groups:
+  - name: afrotransact-release-1
+    rules:
+      - alert: ModuleNotReady
+        expr: max by (env, service, module) (at_module_up) == 0
+        for: 3m
+        labels:
+          severity: page
+        annotations:
+          summary: "Module {{ $labels.module }} is not ready in {{ $labels.env }}"
+          description: "The module's readiness inside {{ $labels.service }} has been DOWN for 3 minutes (a failed migration, an unreachable database, a startup error). The other modules keep serving. Look at /actuator/health/{{ $labels.module }} and the pod log filtered by module."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
+          dashboard: /d/at-release-1-modules
+
+      - alert: CoreMemoryNearCap
+        expr: max by (env) (process_resident_memory_bytes{job="afrotransact-core"}) > 1.8 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "afrotransact-core RSS is {{ $value | humanize1024 }}B in {{ $labels.env }}"
+          description: "Resident memory above 1.8 GiB for 10 minutes; the container limit and the ADR 0011 hard cap (S1) are 2.0 GiB, above which the kernel OOM-kills the pod (every Java module restarts). Find the module that grew (jvm and Hikari panels on /d/at-release-1-modules) or detach a heavy one (ai-gateway, mcp-server)."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
+          dashboard: /d/at-release-1-modules
+
+      - alert: CorePoolBudgetExceeded
+        expr: sum by (env) (hikaricp_connections_max{job="afrotransact-core"}) > 48
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "afrotransact-core pools add up to {{ $value }} connections (budget 48 per pod)"
+          description: "The Java budget is under 100 database connections including a rolling-update surge of two pods (2 x 48). Someone raised a pool above java/apps/core/deploy/helm/values.yaml (helm template refuses it, so this is an env var override). Lower it or move the budget deliberately: docs/runbooks/release-1-deploy.md, Connections."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
+          dashboard: /d/at-release-1-modules
+
+      - alert: DeployableRolloutOverlap
+        expr: count by (env, job) (up{job=~"afrotransact-core|afrotransact-go"} == 1) > 1
+        for: 20m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.job }} has {{ $value }} pods running for 20 minutes in {{ $labels.env }}"
+          description: "A rolling update normally overlaps for a minute. Two pods for 20 minutes mean a stuck rollout (the new pod is not Ready) or a manual scale-up: the second pod doubles the module schedulers, outbox relays and database connections."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
+          dashboard: /d/at-release-1-modules

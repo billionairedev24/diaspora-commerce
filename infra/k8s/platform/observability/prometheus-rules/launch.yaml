@@ -158,7 +158,8 @@ spec:
         severity: ticket
       annotations:
         summary: '{{ $labels.service }} heap is {{ $value | humanizePercentage }} of its maximum'
-        description: 'Heap above 90% of -Xmx (70% of the container limit) for 10 minutes: GC thrash or an OutOfMemoryError (the JVM exits on OOM, ExitOnOutOfMemoryError).'
+        description: 'Heap above 90% of -Xmx (70% of the container limit; 50% in afrotransact-core, which runs every module in one JVM) for 10 minutes: GC thrash or an OutOfMemoryError (the JVM exits on
+          OOM, ExitOnOutOfMemoryError).'
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
         dashboard: /d/at-jvm
     - alert: HikariPoolExhausted

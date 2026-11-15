@@ -62,5 +62,14 @@ for dep, chart in CHARTS.items():
             if f"MODULE_{stem}_ENABLED" not in text:
                 print(f"  note: {name} has no MODULE_{stem}_ENABLED in core's application.yml yet (its batch has not landed)")
 
+# 6. Monitoring parity: every service="..." value the alert rules select on must still exist as a series: a module short name (the app
+#    keeps tagging meters with it inside a deployable), a deployable, or a platform component.
+known = set(plan["deployables"]["afrotransact-core"]["modules"]) | set(plan["deployables"]["afrotransact-go"]["modules"]) | set(CHARTS) | {"alloy"}
+for rules in sorted((ROOT / "infra/observability/rules").glob("*.yaml")):
+    for m in re.finditer(r'service(?:=~|=)\\?"([^"]+)\\?"', rules.read_text()):
+        for v in m.group(1).replace("\\", "").split("|"):
+            if v not in known and not v.startswith("$"):
+                fail(f"{rules.name}: service label value {v!r} is not a module, a deployable or a platform component")
+
 print("release-1 delivery check: " + ("FAILED" if bad else "OK"))
 sys.exit(1 if bad else 0)

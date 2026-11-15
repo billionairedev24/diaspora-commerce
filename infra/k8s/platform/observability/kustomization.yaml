@@ -12,6 +12,7 @@ resources:
   - prometheus-rules/kafka.yaml
   - prometheus-rules/launch.yaml
   - prometheus-rules/postgres.yaml
+  - prometheus-rules/release-1.yaml
   - prometheus-rules/services.yaml
   - prometheus-rules/slo-checkout.yaml
   - prometheus-rules/slo-notification-delivery.yaml
@@ -27,3 +28,4 @@ resources:
   - dashboards/launch-payments.yaml
   - dashboards/launch-platform.yaml
   - dashboards/platform-overview.yaml
+  - dashboards/release-1-modules.yaml

@@ -47,6 +47,13 @@ discovery.relabel "annotated_pods" {
 		action        = "keep"
 	}
 
+	// Release 1: the two deployables are scraped by their own job below (honor_labels, bigger sample limit).
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		regex         = "afrotransact-core|afrotransact-go"
+		action        = "drop"
+	}
+
 	rule {
 		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
 		regex         = "(.+)"
@@ -89,6 +96,82 @@ prometheus.scrape "annotated_pods" {
 	// Runaway guard: a target that exposes more samples than this fails its scrape (up = 0 and the alert ScrapeTargetFailing
 	// fires) instead of silently eating the Grafana Cloud series budget.
 	sample_limit = 4000
+}
+
+// Release 1 (ADR 0011): afrotransact-core and afrotransact-go. ONE target per deployable, so:
+//   * honor_labels = true: the application tags every meter with `module` and `service` (the module's old short name: catalog, orders,
+//     gateway-bff, ...), and the rules and dashboards select on that `service`. Without honor_labels the target's own service label
+//     (afrotransact-core) would win and the app's value would be renamed exported_service, breaking every per-service alert.
+//     Process-level series (jvm_*, process_*, up) carry service=afrotransact-core / afrotransact-go.
+//   * sample_limit is higher: one target exposes what 14 (or 7) targets did; the allowlist below still decides what is sent.
+discovery.relabel "deployable_pods" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		regex         = "afrotransact-.*"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		regex         = "afrotransact-core|afrotransact-go"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+		regex         = "true"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_phase"]
+		regex         = "Running"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+		regex         = "(.+)"
+		target_label  = "__metrics_path__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_ip", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+		separator     = ":"
+		regex         = "(.+:[0-9]+)"
+		target_label  = "__address__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "service"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+}
+
+prometheus.scrape "deployable_pods" {
+	targets         = discovery.relabel.deployable_pods.output
+	forward_to      = [prometheus.relabel.guard.receiver]
+	scrape_interval = "60s"
+	scrape_timeout  = "30s"
+	honor_labels    = true
+	sample_limit    = 40000
 }
 
 // ------------------------------------------------------------------------------------------------ metrics: Kafka, Valkey, Meilisearch
@@ -284,6 +367,8 @@ prometheus.relabel "guard" {
 			// AfroTransact business meters (Micrometer name with . -> _ ; counters get _total)
 			"payments_.*", "inventory_.*", "tax_.*", "ai_.*", "mcp_tool_calls_seconds_(count|sum)", "events_.*", "outbox_.*",
 			"checkout_.*", "payouts_.*", "notifications_.*", "indexer_.*", "search_events_total", "bff_upstream_.*", "catalog_.*",
+			// Release 1: a module's readiness inside a deployable (1 = UP), label module
+			"at_module_(up|ready)",
 			// Kafka (exporter), Valkey (exporter), Meilisearch, Temporal server
 			"kafka_brokers", "kafka_topic_partitions", "kafka_consumergroup_(lag|lag_sum|current_offset)", "kafka_topic_partition_current_offset",
 			"redis_(up|memory_used_bytes|memory_max_bytes|connected_clients|evicted_keys_total|keyspace_hits_total|keyspace_misses_total|commands_processed_total|db_keys|rejected_connections_total)",
