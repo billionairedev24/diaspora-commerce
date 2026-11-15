@@ -45,7 +45,7 @@ networkPolicy:
 argocd:
   env: uat
   destinationServer: https://kubernetes.default.svc
-  targetRevision: HEAD             # prod may pin a release tag, e.g. v2026.10.1
+  targetRevision: release-1             # release-1 branch (ADR 0011); a release tag for prod once a release is cut
   autoSync: true                  # automated sync with prune + selfHeal (Rollouts canary + analysis gate traffic)
   prune: true
   selfHeal: true

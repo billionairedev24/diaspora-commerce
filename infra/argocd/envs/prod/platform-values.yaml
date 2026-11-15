@@ -64,7 +64,7 @@ imagePullSecrets:
 argocd:
   env: prod
   destinationServer: https://kubernetes.default.svc
-  targetRevision: HEAD             # prod may pin a release tag, e.g. v2026.10.1
+  targetRevision: release-1             # release-1 branch (ADR 0011); a release tag for prod once a release is cut
   autoSync: false                  # MANUAL sync: a human approves every prod sync (S187). No Rollouts on the lean footprint: rolling update, maxUnavailable 0
   prune: false
   selfHeal: false

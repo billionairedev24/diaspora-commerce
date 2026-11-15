@@ -1,0 +1,23 @@
+# RELEASE 1 ONLY (this directory does not exist on main). Makes the `services` and `deployables` ApplicationSets read their generator
+# inputs (platform-values.yaml, the chart directories) from the release-1 branch instead of the repository's default branch, which is
+# what `revision: HEAD` means to Argo CD. Without it the cutover map and the deployables would be invisible to Argo CD.
+# The Applications' own chart source follows `argocd.targetRevision` of each environment's platform-values.yaml (release-1 there too);
+# the root Applications (bootstrap/root-<env>.yaml) are applied with targetRevision release-1. The platform ApplicationSets are untouched:
+# release-1 changes nothing in the platform layer, so they keep following HEAD. Going back to main = remove this component from the env
+# kustomizations, set argocd.targetRevision back to HEAD and re-apply the root with targetRevision HEAD.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target: {kind: ApplicationSet, name: services}
+    patch: |-
+      - op: replace
+        path: /spec/generators/0/matrix/generators/0/git/revision
+        value: release-1
+      - op: replace
+        path: /spec/generators/0/matrix/generators/1/git/revision
+        value: release-1
+  - target: {kind: ApplicationSet, name: deployables}
+    patch: |-
+      - op: replace
+        path: /spec/generators/0/matrix/generators/0/git/revision
+        value: release-1

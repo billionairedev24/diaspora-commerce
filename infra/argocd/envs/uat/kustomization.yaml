@@ -7,6 +7,7 @@ resources:
   - ../../projects
   - ../../applicationsets
 components:
+  - ../../release-branch    # release-1 only: generators read the release-1 branch
   - ../../launch-set          # only the launch-set services get an Application (launch-set/kustomization.yaml)
 patches:
   - target: {kind: ApplicationSet}

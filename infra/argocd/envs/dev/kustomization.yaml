@@ -6,6 +6,8 @@ nameSuffix: -dev
 resources:
   - ../../projects
   - ../../applicationsets
+components:
+  - ../../release-branch    # release-1 only: generators read the release-1 branch
 patches:
   - target: {kind: ApplicationSet}
     patch: |-

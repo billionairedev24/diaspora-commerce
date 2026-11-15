@@ -34,7 +34,7 @@ imagePullSecrets:
 argocd:
   env: trial
   destinationServer: https://kubernetes.default.svc
-  targetRevision: HEAD             # the trial may pin the promoted commit, e.g. targetRevision: <sha>
+  targetRevision: release-1             # release-1 branch (ADR 0011); a release tag for prod once a release is cut
   autoSync: false                  # MANUAL sync, as in prod: the owner approves every sync
   prune: false
   selfHeal: false

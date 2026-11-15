@@ -10,7 +10,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/billionairedev24/diaspora-commerce.git
-    targetRevision: HEAD
+    targetRevision: release-1
     path: infra/argocd/envs/trial
   destination:
     server: https://kubernetes.default.svc
