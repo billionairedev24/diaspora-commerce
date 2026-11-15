@@ -68,7 +68,7 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
                 Resource overlay = resolver.getResource(
                         "classpath:modules/" + module + "/application-" + profile + ".yml");
                 if (overlay.exists()) {
-                    merged.putAll(load(overlay));
+                    overlay(merged, load(overlay));
                 }
             }
             Map<String, Object> kept = new LinkedHashMap<>();
@@ -97,6 +97,18 @@ class ModuleConfigPostProcessor implements EnvironmentPostProcessor {
             });
             environment.getPropertySources().addLast(new MapPropertySource("moduleConfig[merged]", merged));
         }
+    }
+
+    /** Applies a profile file over the base the way Spring Boot does: a list in the profile replaces the whole base list. */
+    static void overlay(Map<String, Object> base, Map<String, Object> profile) {
+        for (String key : profile.keySet()) {
+            Matcher m = LIST_ITEM.matcher(key);
+            if (m.matches()) {
+                String prefix = m.group(1) + "[";
+                base.keySet().removeIf(k -> k.startsWith(prefix));
+            }
+        }
+        base.putAll(profile);
     }
 
     static boolean belongsToModule(String key) {

@@ -1,0 +1,7 @@
+at:
+  security:
+    enabled: false
+    public-paths:
+      - /v1/alpha/local-only
+  alpha:
+    limit: 9

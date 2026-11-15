@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: alpha-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/alpha}
+  kafka:
+    consumer:
+      group-id: ${KAFKA_GROUP:alpha-service}
+server:
+  port: 8101
+management:
+  metrics:
+    tags:
+      service: alpha-service
+at:
+  consumers:
+    enabled: true
+  events:
+    relay-enabled: true
+  security:
+    public-paths:
+      - /v1/alpha/open
+      - /v1/shared/**
+  alpha:
+    limit: 7
+    mode: ${ALPHA_MODE:http}
