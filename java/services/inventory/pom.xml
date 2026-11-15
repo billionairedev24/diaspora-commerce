@@ -39,6 +39,10 @@
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
+            <artifactId>catalog-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
             <artifactId>inventory-api</artifactId>
         </dependency>
         <dependency>
