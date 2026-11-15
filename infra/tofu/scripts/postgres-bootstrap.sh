@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# (Release 1: DB_LAYOUT=schema, see below.)
 # Per-service database bootstrap for a managed PostgreSQL 17 server (Layerbase on the OVH launch path; also Aurora, Cloud SQL
 # and Azure Flexible Server). Run it ONCE as the admin BEFORE the first deploy, and again whenever a database is added.
 #
@@ -26,6 +27,14 @@
 # The admin credential comes from `tofu output postgres` -> admin_secret_ref (cloud-managed) or from the Layerbase console.
 # libpq variables (PGSSLROOTCERT, PGSSLCERT, PGSSLKEY, PGPORT) work as usual if Layerbase requires verify-full / mTLS.
 set -euo pipefail
+
+# RELEASE 1 (ADR 0011, owner decision: schema per module): DB_LAYOUT=schema provisions ONE database `core` (Java) and ONE `go` (Go), a
+# schema and a role per module, plus temporal and temporal_visibility, from infra/ops/postgres/release-1-bootstrap.sql. It prints NO
+# passwords: they are generated into $STATE_DIR/generated.env (the file infra/ovh-vps/secrets.sh reads). Default `database` keeps the
+# one-database-per-service layout below (main, and the old per-service build).
+if [[ "${DB_LAYOUT:-database}" == schema ]]; then
+  exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../ops/postgres/release-1-bootstrap.sh"
+fi
 
 # The launch databases. Keep in step with: infra/ops (backup CronJob DATABASES), infra/ovh-vps/services.launch.conf,
 # docs/runbooks/ovh-production.md, and infra/tofu/envs/*/main.tf `services`.

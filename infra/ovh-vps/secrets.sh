@@ -15,6 +15,15 @@
 #   - SECRETS_OUT writes the Secrets as YAML files for SOPS instead of applying them (infra/ops/secrets/README.md)
 #   - STATE_DIR holds the generated values (IDENTITY_DATA_KEY, signing key ...): back it up OFFLINE, separately from the database
 #   - `databases` is for a self-hosted Postgres only in dev; for Layerbase run infra/tofu/scripts/postgres-bootstrap.sh
+#
+# DB_LAYOUT=schema (RELEASE 1, ADR 0011; default `database` keeps main's one-database-per-service layout):
+#   - databases: ONE database `core` for the Java modules and ONE `go` for the Go modules, one schema and one role per module, built by
+#     infra/ops/postgres/release-1-bootstrap.sh (needs DB_MODE=external; the role passwords are the same DBPW_<schema> values kept in
+#     $STATE_DIR/generated.env, so nothing is typed or printed)
+#   - services: the per-service Secrets as before (their DB_URL now points at the module's schema, so the old Applications that are not
+#     moved yet, and a rollback after a cutover, read and write the same tables), PLUS afrotransact-core-secrets and
+#     afrotransact-go-secrets: the union of the modules' keys, with CORE_DB_URL and <MODULE>_DB_USER / <MODULE>_DB_PASSWORD for Java and
+#     <MODULE>_DB_URL for Go (docs/runbooks/release-1-deploy.md)
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_config
@@ -55,12 +64,22 @@ psql_admin() { # psql_admin DB SQL...   through the Postgres pod (cluster) or fr
   fi
 }
 
+DB_LAYOUT="${DB_LAYOUT:-database}"
+case "$DB_LAYOUT" in database|schema) ;; *) die "DB_LAYOUT must be database or schema" ;; esac
 is_java() { services | awk -v s="$1" '$1==s && $2=="java"{f=1} END{exit !f}'; }
 role_of() { printf '%s_app' "$1"; }
 db_password() { gen "DBPW_$1" 27; }
+# Release 1 (DB_LAYOUT=schema): a service's data is the schema named after its module ('-' as '_', as module-core derives it) in the
+# database `core` (Java) or `go` (Go); its role is <schema>_app and its password DBPW_<schema>. In the database layout all three are the
+# old per-service database name.
+schema_of() { printf '%s' "${1//-/_}"; }
+layout_db() { # layout_db SERVICE DB
+  if [[ "$DB_LAYOUT" == schema ]]; then if is_java "$1"; then printf core; else printf go; fi; else printf '%s' "$2"; fi
+}
+layout_name() { if [[ "$DB_LAYOUT" == schema ]]; then schema_of "$1"; else printf '%s' "$2"; fi; }   # the role / password stem
 pg_ssl_params() { printf 'sslmode=%s' "$PG_SSL"; [[ -z "$PG_SSLROOTCERT" ]] || printf '&sslrootcert=%s' "$PG_SSLROOTCERT"; }
 jdbc_url() { printf 'jdbc:postgresql://%s:5432/%s?%s' "$PG_HOST" "$1" "$(pg_ssl_params)"; }
-go_url() { printf 'postgres://%s:%s@%s:5432/%s?%s' "$(role_of "$1")" "$(db_password "$1")" "$PG_HOST" "$1" "$(pg_ssl_params)"; }
+go_url() { printf 'postgres://%s:%s@%s:5432/%s?%s' "$(role_of "$1")" "$(db_password "$1")" "$PG_HOST" "${2:-$1}" "$(pg_ssl_params)"; }
 
 ensure_namespaces() {
   [[ -z "${SECRETS_OUT:-}" ]] || return 0   # render-only mode: no cluster
@@ -116,6 +135,13 @@ platform() {
 }
 
 databases() {
+  if [[ "$DB_LAYOUT" == schema ]]; then
+    [[ "$DB_MODE" == external ]] || die "DB_LAYOUT=schema needs DB_MODE=external (the release-1 bootstrap runs against a managed Postgres)"
+    log "release-1 databases: core, go, temporal, temporal_visibility (schema and role per module)"
+    PGHOST="$PG_HOST" PGUSER="$PG_ADMIN" PGPASSWORD="$(pg_admin_password)" PGSSLMODE="$PG_SSL" ${EXTERNAL_PG_CA_FILE:+PGSSLROOTCERT="$EXTERNAL_PG_CA_FILE"} \
+      STATE_DIR="$STATE_DIR" "$HERE/../ops/postgres/release-1-bootstrap.sh"
+    return 0
+  fi
   log "databases and roles"
   local db role pw
   local names=(temporal temporal_visibility)
@@ -146,10 +172,11 @@ service_keys() {
   local common=("APP_ENV=$PROFILE" "KAFKA_BOOTSTRAP=$KAFKA")
   local out=()
   if [[ "$db" != "-" ]]; then
+    local stem; stem="$(layout_name "$svc" "$db")"
     if is_java "$svc"; then
-      out+=("DB_NAME=$db" "DB_URL=$(jdbc_url "$db")" "DB_USER=$(role_of "$db")" "DB_PASSWORD=$(db_password "$db")")
+      out+=("DB_NAME=$stem" "DB_URL=$(jdbc_url "$(layout_db "$svc" "$db")")" "DB_USER=$(role_of "$stem")" "DB_PASSWORD=$(db_password "$stem")")
     else
-      out+=("DB_NAME=$db" "DB_URL=$(go_url "$db")")
+      out+=("DB_NAME=$stem" "DB_URL=$(go_url "$stem" "$(layout_db "$svc" "$db")")")
     fi
   fi
   case "$svc" in
@@ -213,6 +240,44 @@ signing_key() { # an RSA 3072 PKCS#8 key (identity signs RS256 and refuses any o
   cat "$f"
 }
 
+# Release 1: afrotransact-core-secrets and afrotransact-go-secrets, the union of the modules' keys (a later module wins on a duplicate name;
+# the shared ones, KAFKA_BOOTSTRAP, REDIS_URL, FGA_API_TOKEN, have one value). Database credentials are renamed per module: Java gets
+# CORE_DB_URL once and <MODULE>_DB_USER / <MODULE>_DB_PASSWORD (MODULE = the module name upper-cased, '-' as '_', what the chart's
+# MODULE_<NAME>_ENABLED uses); Go gets <MODULE>_DB_URL. Values are never printed.
+deployable_secrets() {
+  local svc rt db line k v stem
+  local -A core_kv go_kv
+  local core_order=() go_order=()
+  while read -r svc rt db wave; do
+    stem="$(printf '%s' "${svc//-/_}" | tr '[:lower:]' '[:upper:]')"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      k="${line%%=*}"; v="${line#*=}"
+      if [[ "$rt" == java ]]; then
+        case "$k" in
+          DB_NAME) continue ;;
+          DB_URL) k="CORE_DB_URL" ;;
+          DB_USER) k="${stem}_DB_USER" ;;
+          DB_PASSWORD) k="${stem}_DB_PASSWORD" ;;
+        esac
+        [[ -v core_kv[$k] ]] || core_order+=("$k"); core_kv[$k]="$v"
+      else
+        case "$k" in
+          DB_NAME) continue ;;
+          DB_URL) k="${stem}_DB_URL" ;;
+        esac
+        [[ -v go_kv[$k] ]] || go_order+=("$k"); go_kv[$k]="$v"
+      fi
+    done < <(service_keys "$svc" "$db")
+  done < <(services)
+  local core_args=() go_args=()
+  for k in "${core_order[@]}"; do core_args+=("$k=${core_kv[$k]}"); done
+  for k in "${go_order[@]}"; do go_args+=("$k=${go_kv[$k]}"); done
+  secret "$NS" afrotransact-core-secrets "${core_args[@]}"
+  secret "$NS" afrotransact-go-secrets "${go_args[@]}"
+  echo "  afrotransact-core: ${#core_args[@]} keys, afrotransact-go: ${#go_args[@]} keys"
+}
+
 services_secrets() {
   log "service secrets in namespace $NS"
   if [[ "$PROFILE" == prod ]]; then
@@ -225,11 +290,12 @@ services_secrets() {
   # F11: the CA bundle every service mounts (chart value postgresCA.enabled=true in infra/argocd/envs/<env>/platform-values.yaml).
   [[ -z "$PG_SSLROOTCERT" ]] || secret "$NS" pg-ca "ca.crt=$(cat "$EXTERNAL_PG_CA_FILE")"
   local svc rt db wave kv
-  while read -r svc rt db wave; do
+  while read -r svc rt db _; do
     mapfile -t kv < <(service_keys "$svc" "$db")
     secret "$NS" "${svc}-secrets" "${kv[@]}"
     echo "  $svc: ${#kv[@]} keys"
   done < <(services)
+  if [[ "$DB_LAYOUT" == schema ]]; then deployable_secrets; fi
   if [[ -n "${GHCR_USER:-}" && -n "${GHCR_TOKEN:-}" ]]; then
     if [[ -n "${SECRETS_OUT:-}" ]]; then
       install -d -m 700 "$SECRETS_OUT"

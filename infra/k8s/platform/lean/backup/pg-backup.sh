@@ -19,7 +19,7 @@
 #   B2_ENDPOINT           the bucket's S3 endpoint from the B2 console, s3.<region>.backblazeb2.com (https:// is added when missing)
 #   B2_REGION             optional; default = the <region> part of B2_ENDPOINT
 #   (generic alternative, used by tests and for another S3 vendor: BACKUP_REMOTE=<rclone path> plus RCLONE_CONFIG_BACKUP_* variables)
-#   DATABASES             optional, space separated; default = the 19 launch databases below
+#   DATABASES             optional, space separated; default = the 4 Release 1 databases below (core go temporal temporal_visibility)
 #   RETENTION_DAYS        days of backups kept, default 14, accepted 3..365 (the owner may set 7)
 #   RETENTION_MODE        sweep (default: the job deletes objects older than RETENTION_DAYS) | lifecycle (the bucket's lifecycle rule
 #                         does it, the job deletes nothing) | off. On B2 a delete only HIDES the object: the bucket also needs the
@@ -31,7 +31,10 @@
 #   SKIP_APK=1            do not run apk add (tests with a stub environment)
 set -eu
 
-DEFAULT_DATABASES="identity catalog offers inventory orders payments seller fulfilment bookings trustops taxreturns content ai cart geo media notifications temporal temporal_visibility"
+# RELEASE 1 (ADR 0011): four databases carry everything: `core` (every Java module, one schema each), `go` (every Go module, one schema each)
+# and Temporal's two. One pg_dump per database is one consistent snapshot of all modules in it; a single module is restored from it
+# with `pg-restore.sh restore-schema`. The old per-service layout (main) sets DATABASES to the 19 names instead.
+DEFAULT_DATABASES="core go temporal temporal_visibility"
 DATABASES="${DATABASES:-$DEFAULT_DATABASES}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 RETENTION_MODE="${RETENTION_MODE:-sweep}"
