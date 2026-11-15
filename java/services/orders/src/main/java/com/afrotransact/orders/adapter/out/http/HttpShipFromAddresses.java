@@ -12,6 +12,7 @@ import com.afrotransact.orders.port.UpstreamFailure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -23,6 +24,7 @@ import tools.jackson.databind.JsonNode;
  * line, which tax-returns reports plainly instead of guessing one.
  */
 @Component
+@ConditionalOnExpression("'${at.orders.inventory.mode:${at.orders.mode:http}}' != 'in-process' or '${at.orders.seller.mode:${at.orders.mode:http}}' != 'in-process'")
 class HttpShipFromAddresses implements ShipFromAddresses {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpShipFromAddresses.class);

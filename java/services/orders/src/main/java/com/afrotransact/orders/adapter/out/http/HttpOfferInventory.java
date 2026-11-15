@@ -7,12 +7,14 @@ import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.UpstreamFailure;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** offers-service {@code GET /v1/offers/{id}} with the orders-service token ({@code offers:read}). 404 = unknown. */
 @Component
+@ConditionalOnExpression("'${at.orders.offers.mode:${at.orders.mode:http}}' == 'http'")
 class HttpOfferInventory implements OfferInventory {
 
     private final Upstream offers;

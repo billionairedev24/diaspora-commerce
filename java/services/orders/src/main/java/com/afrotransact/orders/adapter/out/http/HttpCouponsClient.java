@@ -9,12 +9,14 @@ import java.util.Map;
 import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** offers-service coupons (port 8102) with the orders-service client-credentials token (SERVICE principal). */
 @Component
+@ConditionalOnExpression("'${at.orders.offers.mode:${at.orders.mode:http}}' == 'http'")
 class HttpCouponsClient implements CouponsClient {
 
     private final Upstream offers;
