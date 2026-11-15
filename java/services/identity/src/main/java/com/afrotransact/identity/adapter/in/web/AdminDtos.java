@@ -123,7 +123,8 @@ final class AdminDtos {
     }
 
     @Schema(name = "AccessChangePage")
-    record AccessChangePageResponse(List<AccessChangeResponse> items, int page, int size) {
+    record AccessChangePageResponse(List<AccessChangeResponse> items, int page, int size,
+                                    @Schema(description = "Entries matching the filter") long total) {
     }
 
     @Schema(name = "IdentityProviderAdmin")

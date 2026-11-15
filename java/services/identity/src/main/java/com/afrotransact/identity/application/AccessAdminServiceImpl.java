@@ -17,6 +17,7 @@ import com.afrotransact.identity.application.IdentityEventPayloads.UserRegistere
 import com.afrotransact.identity.application.IdentityEventPayloads.UserStatusChanged;
 import com.afrotransact.identity.domain.AccessChange;
 import com.afrotransact.identity.domain.AccessLevel;
+import com.afrotransact.identity.domain.AccessLogFilter;
 import com.afrotransact.identity.domain.AccessPolicy;
 import com.afrotransact.identity.domain.AccessProfile;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
@@ -135,12 +136,19 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Override
     @Transactional(readOnly = true)
     public PageView<UserAccessView> users(String query, int page, int size) {
+        return users(query, null, page, size);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageView<UserAccessView> users(String query, String roleKey, int page, int size) {
         requirePeopleRead();
         int s = Math.max(1, Math.min(size, MAX_PAGE));
         int p = Math.max(0, page);
         String q = query == null ? "" : query.trim();
-        List<UserAccessView> items = users.search(q, s, p * s).stream().map(this::view).toList();
-        return new PageView<>(items, p, s, users.count(q));
+        String role = roleKey == null || roleKey.isBlank() ? null : roleKey.trim();
+        List<UserAccessView> items = users.search(q, role, s, p * s).stream().map(this::view).toList();
+        return new PageView<>(items, p, s, users.count(q, role));
     }
 
     @Override
@@ -341,6 +349,15 @@ class AccessAdminServiceImpl implements AccessAdminService {
         int p = Math.max(0, page);
         List<AccessChange> items = changeLog.recent(userId, s, p * s);
         return new PageView<>(items, p, s, -1);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageView<AccessChange> changeLog(AccessLogFilter filter, int page, int size) {
+        requireRead();
+        int s = Math.max(1, Math.min(size, MAX_PAGE));
+        int p = Math.max(0, page);
+        return new PageView<>(changeLog.search(filter, s, p * s), p, s, changeLog.count(filter));
     }
 
     /** Grants {@code roleKey} for one market (adds the role, scoped, when the user does not hold it yet). */

@@ -16,6 +16,13 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcUserAccountRepository implements UserAccountRepository {
 
+    /** Name or email match, and (when a role is given) holders of that role; uses user_role_role_idx. */
+    private static final String WHERE = """
+             where (:q = '' or lower(u.email) like :like or lower(u.first_name || ' ' || u.last_name) like :like)
+               and (cast(:role as varchar) is null
+                    or exists (select 1 from user_role ur where ur.user_id = u.id and ur.role_key = :role))
+            """;
+
     private final JdbcClient jdbc;
 
     JdbcUserAccountRepository(JdbcClient jdbc) {
@@ -95,28 +102,39 @@ class JdbcUserAccountRepository implements UserAccountRepository {
 
     @Override
     public List<UserAccount> search(String query, int limit, int offset) {
-        return jdbc.sql("""
-                select * from user_account
-                where :q = '' or lower(email) like :like or lower(first_name || ' ' || last_name) like :like
-                order by lower(last_name), lower(first_name), id
-                limit :limit offset :offset
+        return search(query, null, limit, offset);
+    }
+
+    @Override
+    public long count(String query) {
+        return count(query, null);
+    }
+
+    @Override
+    public List<UserAccount> search(String query, String roleKey, int limit, int offset) {
+        return jdbc.sql("select * from user_account u" + WHERE + """
+                 order by lower(last_name), lower(first_name), id
+                 limit :limit offset :offset
                 """)
                 .param("q", query)
                 .param("like", "%" + query.toLowerCase(Locale.ROOT) + "%")
+                .param("role", blankToNull(roleKey))
                 .param("limit", limit)
                 .param("offset", offset)
                 .query(JdbcUserAccountRepository::map).list();
     }
 
     @Override
-    public long count(String query) {
-        return jdbc.sql("""
-                select count(*) from user_account
-                where :q = '' or lower(email) like :like or lower(first_name || ' ' || last_name) like :like
-                """)
+    public long count(String query, String roleKey) {
+        return jdbc.sql("select count(*) from user_account u" + WHERE)
                 .param("q", query)
                 .param("like", "%" + query.toLowerCase(Locale.ROOT) + "%")
+                .param("role", blankToNull(roleKey))
                 .query(Long.class).single();
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     private static UserAccount map(ResultSet rs, int n) throws SQLException {
