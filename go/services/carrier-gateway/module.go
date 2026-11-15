@@ -1,0 +1,232 @@
+package carriergateway
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
+	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/module"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/accounts"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/dhl"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/fedex"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/localtest"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/ups"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/usps"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/httpapi"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/objectstore/fsstore"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/objectstore/s3store"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/pgstore"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/quotecache"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/app"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/config"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/port"
+)
+
+// Name is the module name (config prefix, metrics label module="carrier-gateway").
+const Name = "carrier-gateway"
+
+// Deps and Module are the shared module contract (go/pkg/module).
+type (
+	Deps   = module.Deps
+	Module = module.Module
+)
+
+// New builds the service without touching process-wide state (see go/pkg/module).
+func New(host Deps) (Module, error) {
+	ctx := context.Background()
+	var closers module.Closers
+	m, err := build(host, ctx, &closers)
+	if err != nil {
+		_ = closers.Close(ctx)
+		return Module{}, err
+	}
+	m.Close = closers.Close
+	return m, nil
+}
+
+func build(host Deps, ctx context.Context, closers *module.Closers) (Module, error) {
+	loader := host.Loader(Files)
+	var cfg config.Config
+	cfg.USPS.Paths, cfg.UPS.Paths, cfg.FedEx.Paths, cfg.DHL.Paths = usps.DefaultPaths(), ups.DefaultPaths(), fedex.DefaultPaths(), dhl.DefaultPaths()
+	if err := loader.Load(&cfg); err != nil {
+		return Module{}, fmt.Errorf("load config: %w", err)
+	}
+	if err := pkgconfig.RequireAuthOutsideLocal(loader.Env(), cfg.Auth.Enabled); err != nil {
+		return Module{}, err
+	}
+	cfg.Resolve()
+	log := host.Log(Name, loader.Env())
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return Module{}, fmt.Errorf("postgres: %w", err)
+	}
+	closers.AddFunc(pool.Close)
+	if err := pgstore.Migrate(ctx, pool, Files); err != nil {
+		return Module{}, fmt.Errorf("migrate: %w", err)
+	}
+	store := pgstore.New(pool)
+
+	ropts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		return Module{}, fmt.Errorf("redis url: %w", err)
+	}
+	rdb := redis.NewClient(ropts)
+	closers.AddFunc(func() { _ = rdb.Close() })
+
+	carrierHTTP := &http.Client{Timeout: cfg.CarrierHTTP.Timeout}
+	carriers := buildCarriers(cfg, carrierHTTP, log)
+	enabled := make([]domain.CarrierCode, 0, len(carriers))
+	for code := range carriers {
+		enabled = append(enabled, code)
+	}
+	resolver := accounts.New(cfg.Accounts, enabled)
+
+	var objects port.ObjectStore
+	if cfg.LabelStore.Kind == "s3" {
+		s3c := cfg.LabelStore.S3
+		objects = s3store.New(s3store.Options{Endpoint: s3c.Endpoint, Region: s3c.Region, Bucket: s3c.Bucket,
+			AccessKey: s3c.AccessKey, SecretKey: s3c.SecretKey, PathStyle: s3c.PathStyle})
+	} else {
+		objects = fsstore.New(cfg.LabelStore.Dir)
+	}
+
+	pollCarriers := make([]domain.CarrierCode, 0, len(cfg.Polling.Carriers))
+	for _, c := range cfg.Polling.Carriers {
+		code, err := domain.ParseCarrier(c)
+		if err != nil {
+			return Module{}, fmt.Errorf("polling carriers: %w", err)
+		}
+		pollCarriers = append(pollCarriers, code)
+	}
+	tracking := app.NewTrackingService(carriers, store, app.PollPolicy{Carriers: pollCarriers, Interval: cfg.Polling.Interval,
+		MaxBackoff: cfg.Polling.MaxBackoff, Lease: cfg.Polling.Lease, Batch: cfg.Polling.Batch}, log, time.Now)
+	rates := app.NewRateService(carriers, resolver, quotecache.New(rdb, "carrier-gateway:"), cfg.Rates.Budget, cfg.Rates.QuoteTTL, log)
+	billing := cfg.LabelBilling()
+	if err := billing.Validate(); err != nil {
+		return Module{}, fmt.Errorf("label billing: %w", err)
+	}
+	labels := app.NewLabelService(carriers, resolver, store, objects, billing, log, time.Now)
+	services := httpapi.Services{
+		Rates:     rates,
+		Labels:    labels,
+		Returns:   app.NewReturnLabelService(carriers, rates, labels),
+		Tracking:  tracking,
+		Pickups:   app.NewPickupService(carriers, resolver, store, store, time.Now),
+		Prompt:    app.NewPickupPromptService(store, time.Now),
+		Addresses: app.NewAddressService(carriers),
+		Billing:   billing,
+	}
+
+	var bg module.Background
+	if cfg.Kafka.Enabled {
+		publisher, err := events.NewKafkaPublisher(cfg.Kafka.Brokers)
+		if err != nil {
+			return Module{}, fmt.Errorf("kafka: %w", err)
+		}
+		closers.AddFunc(publisher.Close)
+		bg.GoQuiet(app.NewDispatcher(store, publisher, cfg.Outbox.Batch, cfg.Outbox.Interval, log).Run)
+	} else {
+		log.Warn("kafka disabled: events stay in the outbox until a dispatcher runs")
+	}
+	if cfg.Polling.Enabled {
+		bg.GoQuiet(func(ctx context.Context) { app.RunPoller(ctx, tracking, cfg.Polling.Tick, log) })
+	}
+
+	var verifier auth.Verifier
+	if cfg.Auth.Enabled {
+		verifier = auth.NewJWKSVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, &http.Client{Timeout: 3 * time.Second})
+	}
+	if err := auth.RequireVerifier(loader.Env(), verifier); err != nil {
+		return Module{}, fmt.Errorf("auth: %w", err)
+	}
+	openapi, err := Files.ReadFile("api/openapi.yaml")
+	if err != nil {
+		return Module{}, fmt.Errorf("read openapi: %w", err)
+	}
+	srv := httpserver.New(httpserver.Options{
+		Name: "Carrier Gateway API", Addr: ":" + strconv.Itoa(cfg.Port), OpenAPI: openapi, DocsOn: cfg.DocsEnabled,
+		Checks: []httpserver.ReadinessCheck{
+			check{name: "postgres", fn: store.Ping},
+			check{name: "valkey", fn: func(ctx context.Context) error { return quotecache.Ping(ctx, rdb) }},
+		},
+		Logger: log,
+	})
+	httpapi.New(services).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
+	closers.Add(bg.Wait)
+	m := module.FromServer(Name, srv, log, loader.Env(), module.Telemetry{OTLPEndpoint: cfg.Telemetry.OTLPEndpoint, SampleRatio: cfg.Telemetry.SampleRatio}, openapi)
+	m.Start = bg.Start
+	return m, nil
+}
+
+// buildCarriers wires every enabled carrier that has credentials; a carrier without credentials is skipped with
+// a warning instead of failing every call at runtime.
+func buildCarriers(cfg config.Config, client *http.Client, log *slog.Logger) app.Carriers {
+	carriers := app.Carriers{}
+	webhookBase := strings.TrimSuffix(cfg.PublicBaseURL, "/") + "/v1/webhooks/"
+	retries := cfg.CarrierHTTP.MaxRetries
+	add := func(code domain.CarrierCode, enabled bool, creds []string, build func() port.Carrier) {
+		if !enabled {
+			return
+		}
+		for _, c := range creds {
+			if c == "" {
+				if cfg.LocalTestCarriers {
+					log.Warn("carrier has no credentials; using the local test carrier (labels are marked TEST)", "carrier", code)
+					carriers[code] = localtest.New(code, nil)
+					return
+				}
+				log.Warn("carrier enabled but credentials missing; skipping", "carrier", code)
+				return
+			}
+		}
+		carriers[code] = build()
+	}
+	add(domain.USPS, cfg.USPS.Enabled, []string{cfg.USPS.ClientID, cfg.USPS.ClientSecret}, func() port.Carrier {
+		return usps.New(usps.Options{BaseURL: cfg.USPS.BaseURL, ClientID: cfg.USPS.ClientID, ClientSecret: cfg.USPS.ClientSecret,
+			PaymentToken: cfg.USPS.PaymentToken, Paths: cfg.USPS.Paths, MailClasses: cfg.USPS.MailClasses,
+			PriceType: cfg.USPS.PriceType, ImageType: cfg.USPS.ImageType, HTTP: client, MaxRetries: retries})
+	})
+	add(domain.UPS, cfg.UPS.Enabled, []string{cfg.UPS.ClientID, cfg.UPS.ClientSecret}, func() port.Carrier {
+		return ups.New(ups.Options{BaseURL: cfg.UPS.BaseURL, ClientID: cfg.UPS.ClientID, ClientSecret: cfg.UPS.ClientSecret,
+			AccountNumber: cfg.UPS.Account, Paths: cfg.UPS.Paths, WebhookURL: webhookBase + "ups",
+			WebhookCredential: cfg.UPS.WebhookCredential, HTTP: client, MaxRetries: retries})
+	})
+	add(domain.FedEx, cfg.FedEx.Enabled, []string{cfg.FedEx.ClientID, cfg.FedEx.ClientSecret}, func() port.Carrier {
+		return fedex.New(fedex.Options{BaseURL: cfg.FedEx.BaseURL, ClientID: cfg.FedEx.ClientID, ClientSecret: cfg.FedEx.ClientSecret,
+			AccountNumber: cfg.FedEx.Account, Paths: cfg.FedEx.Paths, ImageType: cfg.FedEx.ImageType,
+			WebhookSecret: cfg.FedEx.WebhookSecret, SignatureHeader: cfg.FedEx.SignatureHeader, HTTP: client, MaxRetries: retries})
+	})
+	add(domain.DHL, cfg.DHL.Enabled, []string{cfg.DHL.Username, cfg.DHL.Password}, func() port.Carrier {
+		return dhl.New(dhl.Options{BaseURL: cfg.DHL.BaseURL, Username: cfg.DHL.Username, Password: cfg.DHL.Password,
+			AccountNumber: cfg.DHL.Account, Paths: cfg.DHL.Paths, LabelFormat: cfg.DHL.LabelFormat,
+			WebhookSecret: cfg.DHL.WebhookSecret, SignatureHeader: cfg.DHL.SignatureHeader, HTTP: client, MaxRetries: retries})
+	})
+	return carriers
+}
+
+type check struct {
+	name string
+	fn   func(ctx context.Context) error
+}
+
+func (c check) Name() string { return c.name }
+
+func (c check) Check(ctx context.Context) error {
+	if err := c.fn(ctx); err != nil {
+		return fmt.Errorf("%s: %w", c.name, err)
+	}
+	return nil
+}
