@@ -134,6 +134,11 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.afrotransact</groupId>
+                <artifactId>inventory-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
