@@ -403,12 +403,12 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `POST /v1/auth/password`, `/v1/auth/mfa/sms`, `/v1/auth/mfa/verify`, `/v1/auth/passkey/options`, `/v1/auth/passkey/verify` | SERVICE `gateway-bff` + `auth:first-party` | First-party sign-in (S209), see below |
 | `GET /v1/admin/permissions`, `GET /v1/admin/roles?portal=` | `access:read` | Permission catalogue, roles with permissions |
 | `PUT/DELETE /v1/admin/roles/{role}/permissions/{perm}` | `access:admin` | Capabilities tab |
-| `GET /v1/admin/users?q=`, `GET /v1/admin/users/{id}`, `POST /v1/admin/users` | read / admin | People tab, provision staff/driver accounts |
+| `GET /v1/admin/users?q=&role=`, `GET /v1/admin/users/{id}`, `POST /v1/admin/users` | read / admin | People tab, provision staff/driver accounts |
 | `PUT/DELETE /v1/admin/users/{id}/roles/{role}?market=` | `access:admin` | Assign/remove account and platform roles; `market` scopes a staff role (S248) |
 | `PUT/DELETE /v1/admin/users/{id}/permissions/{perm}` | `access:admin` | Direct grants (e.g. `delivery:operate`) |
 | `POST /v1/admin/users/{id}/disable`, `…/enable` | `access:admin` | Disable ends every session immediately |
 | `GET /v1/admin/module-access?portal=`, `PUT /v1/admin/module-access/{portal}/{module}/{role}` | read / admin | Module access matrix |
-| `GET /v1/admin/access-log?userId=` | `access:read` | Append-only change log |
+| `GET /v1/admin/access-log?userId=&role=&permission=&page=&size=` | `access:read` | Append-only change log; the three filters are exact, indexed matches (V50) and combine with AND; the page carries `total` |
 | `GET /v1/admin/identity-providers`, `PUT /v1/admin/identity-providers/{id}` | read / admin | Identity provider switches |
 | `GET /v1/admin/data-protection`, `POST /v1/admin/data-protection/rotate` | STAFF + `platform.super_admin` | Encryption-key status, re-encrypt MFA secrets under the current key ([Data protection](#data-protection-s202)) |
 | `/v1/admin/identity/**` (clients, sessions, signing-keys, token-inspector, discovery, settings) | `identity:admin` | Identity admin console (S291): OAuth clients, sign-ins, JWKS key rotation, token inspector, auth settings; every change needs a reason and is audited ([guide](../../../docs/engineering/identity-admin.md)) |

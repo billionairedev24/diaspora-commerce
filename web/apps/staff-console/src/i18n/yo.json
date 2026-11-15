@@ -3202,7 +3202,6 @@
   "st.acc.members.none": "Kò sí ẹni tó ní ipa yìí síbẹ̀.",
   "st.acc.members.markets": "ó wà fún {markets} nìkan",
   "st.acc.members.disabled": "àkọọ́lẹ̀ ti wà ní pípa",
-  "st.acc.members.partial": "A ṣàyẹ̀wò àwọn ènìyàn àkọ́kọ́ nínú àkọsílẹ̀ nìkan, nítorí náà àtòjọ yìí lè má pé. Wá ẹnìkan pàtó nínú Àwọn ènìyàn.",
   "st.acc.permissions.title": "Ohun tí ipa yìí lè ṣe",
   "st.acc.permissions.none": "Kò sí àṣẹ tó bá a mu.",
   "st.acc.filter.search": "Wá àwọn àṣẹ",
@@ -3271,5 +3270,11 @@
   "st.tour.roles.roles.title": "Àwọn ipa, nípa pọ́tà",
   "st.tour.roles.roles.body": "Yan òṣìṣẹ́ pẹpẹ, olùtajà, olùpèsè tàbí àkọọ́lẹ̀, lẹ́yìn náà ṣí ipa kan láti rí ẹni tó ní i kí o sì tan tàbí pa àwọn àṣẹ rẹ̀.",
   "st.tour.roles.change.title": "Ìyípadà kọ̀ọ̀kan ní ìdí",
-  "st.tour.roles.change.body": "Yíyí àṣẹ padà ń béèrè ìfọwọ́sí àti ìdí. A ó kọ ìdí àti orúkọ rẹ sínú àkọsílẹ̀, ìyípadà náà yóò sì dé ìwọlé àwọn ènìyàn láàárín nǹkan bí ìṣẹ́jú 5. Táàbù Àwọn ènìyàn fi ohun tí ẹnìkan lè ṣe àti ibi tí àṣẹ kọ̀ọ̀kan ti wá hàn."
+  "st.tour.roles.change.body": "Yíyí àṣẹ padà ń béèrè ìfọwọ́sí àti ìdí. A ó kọ ìdí àti orúkọ rẹ sínú àkọsílẹ̀, ìyípadà náà yóò sì dé ìwọlé àwọn ènìyàn láàárín nǹkan bí ìṣẹ́jú 5. Táàbù Àwọn ènìyàn fi ohun tí ẹnìkan lè ṣe àti ibi tí àṣẹ kọ̀ọ̀kan ti wá hàn.",
+  "st.acc.members.paging": "Àwọn ènìyàn tó ní iṣẹ́ yìí, àwọn ojú-ìwé",
+  "st.acc.members.range": "{from} sí {to} nínú {total}",
+  "st.acc.members.prev": "Ti tẹ́lẹ̀",
+  "st.acc.members.next": "Tókàn",
+  "st.acc.log.permission": "Àṣẹ",
+  "st.acc.log.anyPermission": "Àṣẹ èyíkéyìí"
 }

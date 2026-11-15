@@ -2041,7 +2041,7 @@ export interface paths {
         };
         /**
          * The people who hold a role, by name
-         * @description identity `GET /v1/admin/users`, read page by page (at most 1,000 people) and filtered by role, because identity has no query for it; `partial` is true when the directory was longer than what was read.
+         * @description identity `GET /v1/admin/users?role=` (filtered and paged by identity, so `total` is exact). Server-driven paging.
          */
         get: operations["listAccessRoleMembers"];
         put?: never;
@@ -2149,7 +2149,7 @@ export interface paths {
         };
         /**
          * The access change log, newest first
-         * @description identity `GET /v1/admin/access-log` (access:read, append-only). Identity filters by person; a role or permission filter is matched here over the newest 200 entries (`partial` when there were more). People are named, never shown as ids.
+         * @description identity `GET /v1/admin/access-log` (access:read, append-only). Identity filters by person, role and permission (exact, indexed) and pages the result; `total` is the number of matching entries. People are named, never shown as ids.
          */
         get: operations["listAccessLog"];
         put?: never;
@@ -7143,7 +7143,13 @@ export interface components {
         AccessRoleMembers: {
             role: string;
             items: components["schemas"]["AccessRoleMember"][];
-            partial: boolean;
+            /**
+             * Format: int64
+             * @description People who hold the role
+             */
+            total: number;
+            page: number;
+            size: number;
         };
         AccessChangeRequest: {
             /** @description Kept in the access change log */
@@ -7195,7 +7201,11 @@ export interface components {
             items: components["schemas"]["AccessLogEntry"][];
             page: number;
             size: number;
-            partial: boolean;
+            /**
+             * Format: int64
+             * @description Entries that match the filter
+             */
+            total: number;
         };
         IdentityDocuments: {
             discovery: {
@@ -14802,7 +14812,10 @@ export interface operations {
     };
     listAccessRoleMembers: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                size?: number;
+            };
             header?: never;
             path: {
                 role: string;

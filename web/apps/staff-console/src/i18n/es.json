@@ -3202,7 +3202,6 @@
   "st.acc.members.none": "Nadie tiene este rol todavía.",
   "st.acc.members.markets": "limitado a {markets}",
   "st.acc.members.disabled": "cuenta desactivada",
-  "st.acc.members.partial": "Solo se revisó a las primeras personas del directorio, así que la lista puede estar incompleta. Busque a una persona concreta en Personas.",
   "st.acc.permissions.title": "Lo que puede hacer este rol",
   "st.acc.permissions.none": "Ningún permiso coincide.",
   "st.acc.filter.search": "Buscar permisos",
@@ -3271,5 +3270,11 @@
   "st.tour.roles.roles.title": "Los roles, por portal",
   "st.tour.roles.roles.body": "Elija personal de la plataforma, vendedor, proveedor o cuenta y abra un rol para ver quién lo tiene y activar o desactivar sus permisos.",
   "st.tour.roles.change.title": "Cada cambio tiene un motivo",
-  "st.tour.roles.change.body": "Cambiar un permiso pide confirmar y dar un motivo. El motivo y su nombre quedan en el registro, y el cambio llega a los inicios de sesión en unos 5 minutos. La pestaña Personas muestra qué puede hacer una persona y de dónde viene cada permiso."
+  "st.tour.roles.change.body": "Cambiar un permiso pide confirmar y dar un motivo. El motivo y su nombre quedan en el registro, y el cambio llega a los inicios de sesión en unos 5 minutos. La pestaña Personas muestra qué puede hacer una persona y de dónde viene cada permiso.",
+  "st.acc.members.paging": "Personas con este rol, páginas",
+  "st.acc.members.range": "{from} a {to} de {total}",
+  "st.acc.members.prev": "Anterior",
+  "st.acc.members.next": "Siguiente",
+  "st.acc.log.permission": "Permiso",
+  "st.acc.log.anyPermission": "Cualquier permiso"
 }
