@@ -1,8 +1,11 @@
 package com.afrotransact.module.core;
 
+import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinitionHolder;
 import org.springframework.beans.factory.config.DependencyDescriptor;
 import org.springframework.context.annotation.ContextAnnotationAutowireCandidateResolver;
+import org.springframework.core.type.MethodMetadata;
 
 /**
  * Makes by-type injection work with one DataSource, JdbcClient, transaction manager, outbox store ... per module.
@@ -25,7 +28,7 @@ final class ModuleAwareAutowireCandidateResolver extends ContextAnnotationAutowi
         if (!super.isAutowireCandidate(holder, descriptor)) {
             return false;
         }
-        Object owner = holder.getBeanDefinition().getAttribute(ModuleAttributes.MODULE);
+        Object owner = ownerOf(holder.getBeanDefinition());
         if (owner == null) {
             return true;
         }
@@ -36,6 +39,26 @@ final class ModuleAwareAutowireCandidateResolver extends ContextAnnotationAutowi
             return consumerModule == null;
         }
         return consumerModule == null || consumerModule.equals(owner);
+    }
+
+    /**
+     * The module a bean belongs to: the infrastructure attribute, or, for a module's own {@code @Bean} method that returns a
+     * platform or framework type (a {@code TransactionTemplate}, an {@code ObjectMapper}), the module that declares the method.
+     * Beans of the module's own types stay shared on purpose: they are the module's published API adapters.
+     */
+    private Object ownerOf(BeanDefinition definition) {
+        Object attribute = definition.getAttribute(ModuleAttributes.MODULE);
+        if (attribute != null) {
+            return attribute;
+        }
+        if (definition instanceof AnnotatedBeanDefinition annotated && annotated.getFactoryMethodMetadata() != null) {
+            MethodMetadata method = annotated.getFactoryMethodMetadata();
+            if (modules.moduleOfClassName(method.getReturnTypeName()).isEmpty()) {
+                return modules.moduleOfClassName(method.getDeclaringClassName()).map(ModuleDefinition::name)
+                        .orElse(null);
+            }
+        }
+        return null;
     }
 
     private static Class<?> consumerOf(DependencyDescriptor descriptor) {

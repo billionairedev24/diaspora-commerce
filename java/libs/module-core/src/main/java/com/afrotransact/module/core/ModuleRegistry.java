@@ -42,6 +42,18 @@ public final class ModuleRegistry {
         return found;
     }
 
+    /** Position of the module in mount order (used to pick between two modules that map the same route). */
+    public int indexOf(String name) {
+        int i = 0;
+        for (String key : modules.keySet()) {
+            if (key.equals(name)) {
+                return i;
+            }
+            i++;
+        }
+        return Integer.MAX_VALUE;
+    }
+
     public boolean mounted(String name) {
         return modules.containsKey(name);
     }

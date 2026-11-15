@@ -1,6 +1,8 @@
 package com.afrotransact.module.core;
 
+import java.lang.reflect.Method;
 import java.util.Locale;
+import java.util.Map;
 
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.platform.security.ActingAsActorResolver;
@@ -10,6 +12,14 @@ import com.afrotransact.platform.security.LocalActorResolver;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
 import io.micrometer.core.instrument.config.MeterFilter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.boot.webmvc.autoconfigure.WebMvcRegistrations;
+import org.springframework.core.Ordered;
+import org.springframework.core.env.Environment;
+import org.springframework.web.servlet.mvc.condition.RequestCondition;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.server.observation.ServerRequestObservationConvention;
@@ -42,6 +52,33 @@ public class ModuleCoreConfiguration {
     @Bean(name = "taskScheduler")
     TaskScheduler taskScheduler(ModuleRegistry modules, @Value("${at.modules.core-scheduler-pool-size:1}") int corePool) {
         return new ModuleRoutingTaskScheduler(modules, corePool);
+    }
+
+    /** Gives every handler method its module as a route condition so identical routes of two modules can coexist. */
+    @Bean
+    WebMvcRegistrations moduleWebMvcRegistrations(ModuleRegistry modules) {
+        return new WebMvcRegistrations() {
+            @Override
+            public RequestMappingHandlerMapping getRequestMappingHandlerMapping() {
+                return new RequestMappingHandlerMapping() {
+                    @Override
+                    protected RequestCondition<?> getCustomMethodCondition(Method method) {
+                        return modules.moduleOf(method.getDeclaringClass())
+                                .map(m -> new ModuleRouteCondition(m.name(), modules.indexOf(m.name()))).orElse(null);
+                    }
+                };
+            }
+        };
+    }
+
+    @Bean
+    FilterRegistrationBean<ModuleRouteFilter> moduleRouteFilter(ModuleRegistry modules, Environment environment) {
+        Map<Integer, String> ports = Binder.get(environment).bind("at.core.module-ports",
+                Bindable.mapOf(Integer.class, String.class)).orElse(Map.of());
+        FilterRegistrationBean<ModuleRouteFilter> registration = new FilterRegistrationBean<>(
+                new ModuleRouteFilter(modules, ports));
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 5);
+        return registration;
     }
 
     @Bean

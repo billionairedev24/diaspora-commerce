@@ -115,6 +115,9 @@ final class ModuleInfrastructure {
 
     private BeanDefinition owned(BeanDefinition definition) {
         definition.setAttribute(ModuleAttributes.MODULE, module.name());
+        // A module that declares its own bean of the same type (a TransactionTemplate with its own settings) keeps it: the
+        // infrastructure bean is only the fallback.
+        definition.setFallback(true);
         return definition;
     }
 

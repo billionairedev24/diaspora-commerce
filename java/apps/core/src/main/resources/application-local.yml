@@ -1,6 +1,26 @@
 # Local developer profile for afrotransact-core: docker compose stack from infra/local, security off, readable logs.
 # The module-level local settings (taxonomy import, tax resolver ...) come from each module's own application-local.yml.
 at:
+  core:
+    # Old standalone ports served by this one JVM (local only): a module left in http mode, a script or gateway-bff configured as
+    # before keeps working. A request on a module's port prefers that module where two modules map the same route.
+    module-ports:
+      8100: identity
+      8101: catalog
+      8102: offers
+      8103: inventory
+      8104: orders
+      8105: payments
+      8106: seller
+      8107: retail
+      8108: fulfilment
+      8109: bookings
+      8110: trust-ops
+      8111: tax-returns
+      8112: content
+      8113: ai-gateway
+      8114: mcp-server
+      8115: delivery-runs
   security:
     enabled: false
     fga:
