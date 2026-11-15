@@ -175,3 +175,39 @@ export function serviceJsonLd(i: ServiceLdInput): JsonLdObject | undefined {
   if (rating) ld['aggregateRating'] = { '@type': 'AggregateRating', ratingValue: Number(rating.value.toFixed(1)), reviewCount: rating.count, bestRating: 5, worstRating: 1 };
   return ld;
 }
+
+/**
+ * A seller's storefront: schema.org Store (an Organization subtype) with the facts the seller published and the page holds:
+ * name, address of the page, logo, description, social profiles. Nothing invented: no rating unless real reviews exist, no
+ * address, no opening hours, no price range, no carriers.
+ */
+export function storefrontJsonLd(i: {
+  origin: string;
+  store: {
+    slug: string;
+    name: string;
+    logoUrl: string | null;
+    description: string | null;
+    config: { hero: { tagline: string; bannerUrl: string | null }; social: readonly { url: string }[] };
+    reviews: { average: number; count: number } | null;
+  };
+}): JsonLdObject {
+  const url = `${i.origin}/b/${i.store.slug}`;
+  const description = i.store.config.hero.tagline || i.store.description || '';
+  const logo = [i.store.logoUrl].find((u): u is string => !!u && /^https?:\/\//.test(u));
+  const image = [i.store.config.hero.bannerUrl, i.store.logoUrl].find((u): u is string => !!u && /^https?:\/\//.test(u));
+  const sameAs = i.store.config.social.map((s) => s.url).filter((u) => u.startsWith('https://'));
+  const r = i.store.reviews;
+  return {
+    '@context': CONTEXT,
+    '@type': 'Store',
+    '@id': `${url}#store`,
+    name: i.store.name,
+    url,
+    ...(description ? { description } : {}),
+    ...(logo ? { logo } : {}),
+    ...(image ? { image } : {}),
+    ...(sameAs.length > 0 ? { sameAs } : {}),
+    ...(r && r.count > 0 && r.average > 0 ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: r.average, reviewCount: r.count, bestRating: 5, worstRating: 1 } } : {})
+  };
+}

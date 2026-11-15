@@ -8,6 +8,7 @@ import { type NextRequest,NextResponse } from 'next/server';
 import { CONSENT_COOKIE } from '@/lib/consent/consent';
 import { planVisit } from '@/lib/home/visit';
 import { indexingPolicy, robotsHeaderFor, seoEnvFromProcess, wwwRedirectTarget } from '@/lib/seo/policy';
+import { storefrontRedirectPath } from '@/lib/store/redirects';
 
 /** Crawler directives on EVERY response this middleware sees (pages, 404s, route handlers, the BFF proxy): a non-prod host,
     or a private path anywhere, always carries X-Robots-Tag: noindex (docs/engineering/seo.md, test/seo-env-safety.test.ts). */
@@ -21,6 +22,13 @@ export function middleware(request: NextRequest): NextResponse {
   // One canonical host: www.<canonical> (not in the host map; a stray DNS record) 301s to the canonical origin.
   const www = wwwRedirectTarget(seoEnvFromProcess(), request.nextUrl);
   if (www) return NextResponse.redirect(www, 301);
+  // Old and alternative addresses of a seller's storefront (/store/x, /sellers/x, /b/X, /b/x/) 301 to /b/<slug>.
+  const store = storefrontRedirectPath(request.nextUrl.pathname);
+  if (store) {
+    const to = request.nextUrl.clone();
+    to.pathname = store;
+    return NextResponse.redirect(to, 301);
+  }
   const visit = planVisit({
     visitor: request.cookies.get(VISITOR_COOKIE)?.value,
     window: request.cookies.get(VISIT_COOKIE)?.value,
