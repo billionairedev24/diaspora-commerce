@@ -87,8 +87,10 @@ type VariantPayload struct {
 	SellerSKU  string `json:"sellerSku"`
 	GTIN       string `json:"gtin"`
 	PriceMinor int64  `json:"priceMinor"`
-	Currency   string `json:"currency"`
-	Quantity   int    `json:"quantity"`
+	// CompareAtMinor is the seller's "was" price (offers' list price); nil or not above the price means no sale.
+	CompareAtMinor *int64 `json:"compareAtMinor"`
+	Currency       string `json:"currency"`
+	Quantity       int    `json:"quantity"`
 }
 
 // AvailabilityEvent mirrors inventory-service's inventory.availability.changed payload.

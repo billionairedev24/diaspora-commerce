@@ -36,7 +36,7 @@ func MeiliSettings(synonyms map[string][]string) map[string]any {
 	settings := map[string]any{
 		"searchableAttributes": []string{"title", "brand", "keywords", "category_path", "description"},
 		"filterableAttributes": []string{"status", "department", "communities", "fulfilment", "seller_kind", "seller_id", "rating",
-			"price_minor", "delivery_days", "in_stock", "photo_ok", "atin", "variant_atins", "has_embedding", "seller_name", "_geo"},
+			"price_minor", "delivery_days", "in_stock", "photo_ok", "on_sale", "atin", "variant_atins", "has_embedding", "seller_name", "_geo"},
 		"sortableAttributes": []string{"price_minor", "rating", "review_count", "updated_ts", "atin"},
 		"rankingRules":       []string{"sort", "words", "in_stock_rank:desc", "typo", "proximity", "attribute", "exactness", "rank_boost:desc"},
 		// Words of 4-7 letters may be one edit off, 8+ two. (Elasticsearch uses 3 and 6 with the first letter fixed;

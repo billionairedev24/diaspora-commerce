@@ -62,6 +62,7 @@ func (h *handlersImpl) search(w http.ResponseWriter, r *http.Request) {
 		SellerKind:   strings.ToUpper(v.Get("sellerKind")),
 		SellerID:     strings.TrimSpace(v.Get("sellerId")),
 		InStockOnly:  v.Get("inStock") == "true",
+		OnSale:       v.Get("onSale") == "true",
 		EligibleOnly: v.Get("eligibleOnly") == "true",
 		Sort:         domain.Sort(v.Get("sort")),
 		Ads:          v.Get("ads") == "true",

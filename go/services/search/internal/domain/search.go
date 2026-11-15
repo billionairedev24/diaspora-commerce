@@ -32,6 +32,8 @@ type Query struct {
 	MaxPrice    int64
 	MaxDays     int // delivery speed filter, e.g. 1 = tomorrow
 	InStockOnly bool
+	// OnSale keeps products whose price has a real was-price above it (the index flag on_sale).
+	OnSale bool
 	// EligibleOnly restricts hits and facet counts to what a shopper may be shown: live, in stock and with a real photo
 	// (photo_ok). It also asks for DistinctSellers. Used by the home, nav, footer and sitemap counts (S415).
 	EligibleOnly bool
@@ -95,20 +97,22 @@ func (q Query) Normalize() (Query, error) {
 
 // Hit is one product card.
 type Hit struct {
-	ATIN         string  `json:"atin"`
-	Title        string  `json:"title"`
-	Brand        string  `json:"brand,omitempty"`
-	CategoryPath string  `json:"categoryPath"`
-	SellerName   string  `json:"sellerName"`
-	SellerKind   string  `json:"sellerKind"`
-	Fulfilment   string  `json:"fulfilment"`
-	PriceMinor   int64   `json:"priceMinor"`
-	Currency     string  `json:"currency"`
-	Rating       float64 `json:"rating"`
-	ReviewCount  int     `json:"reviewCount"`
-	InStock      bool    `json:"inStock"`
-	LowStock     bool    `json:"lowStock"`
-	AvailableQty int     `json:"availableQty"`
+	ATIN         string `json:"atin"`
+	Title        string `json:"title"`
+	Brand        string `json:"brand,omitempty"`
+	CategoryPath string `json:"categoryPath"`
+	SellerName   string `json:"sellerName"`
+	SellerKind   string `json:"sellerKind"`
+	Fulfilment   string `json:"fulfilment"`
+	PriceMinor   int64  `json:"priceMinor"`
+	// ListPriceMinor is the was-price, only when it is above PriceMinor (a real discount); absent otherwise.
+	ListPriceMinor int64   `json:"listPriceMinor,omitempty"`
+	Currency       string  `json:"currency"`
+	Rating         float64 `json:"rating"`
+	ReviewCount    int     `json:"reviewCount"`
+	InStock        bool    `json:"inStock"`
+	LowStock       bool    `json:"lowStock"`
+	AvailableQty   int     `json:"availableQty"`
 	// Availability is IN_STOCK, LOW_STOCK ("Only N left", N = AvailableQty) or OUT_OF_STOCK ("Currently unavailable").
 	Availability Availability `json:"availability"`
 	DeliveryDays int          `json:"deliveryDays"`

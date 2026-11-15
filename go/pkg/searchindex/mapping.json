@@ -79,6 +79,8 @@
       "seller_kind":   { "type": "keyword" },
       "fulfilment":    { "type": "keyword" },
       "price_minor":   { "type": "long" },
+      "list_price_minor": { "type": "long" },
+      "on_sale":       { "type": "boolean" },
       "currency":      { "type": "keyword" },
       "rating":        { "type": "float" },
       "review_count":  { "type": "integer" },
