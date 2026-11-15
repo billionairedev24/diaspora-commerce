@@ -207,9 +207,7 @@
   .primary, .secondary, .heroCta, .searchBtn, .tab, .catTile, .iconLink { transition: background-color var(--at-duration-fast) var(--at-ease), color var(--at-duration-fast) var(--at-ease), border-color var(--at-duration-fast) var(--at-ease); }
   .tileMedia:not(.tileLoaded)::after, .skelImg::after, .skelLine::after { animation: sf-shimmer 1.4s infinite; }
   .skelImg::after, .skelLine::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, var(--sf-canvas) 50%, transparent 70%); opacity: 0.55; transform: translateX(-100%); }
-  .section { animation: sf-rise 520ms var(--at-ease) both; animation-timeline: view(); animation-range: entry 0% entry 35%; }
   @keyframes sf-shimmer { to { transform: translateX(100%); } }
-  @keyframes sf-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 }
 @media (prefers-reduced-motion: reduce) {
   .tileMedia::after { display: none; }

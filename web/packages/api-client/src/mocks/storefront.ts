@@ -132,10 +132,10 @@ function photoFor(atin: string): string | null {
 function catalogOf(slug: string, now: Date): ProductSummary[] {
   ensureDemoStore();
   const metro = 'Houston, TX';
-  const fixtures = slug === LASERFEET_PROFILE.slug ? LASERFEET_PRODUCTS.map((d) => getDb().products.get(demoAtin(d.id))!) : PRODUCTS.filter((p) => p.cat === 'Groceries' && !p.unlisted && !p.variantOf).slice(0, 12);
+  const fixtures = slug.startsWith(LASERFEET_PROFILE.slug) ? LASERFEET_PRODUCTS.map((d) => getDb().products.get(demoAtin(d.id))!) : PRODUCTS.filter((p) => p.cat === 'Groceries' && !p.unlisted && !p.variantOf).slice(0, 12);
   return fixtures.map((f) => {
     const s = summarize(f, metro, now);
-    return { ...s, imageUrl: photoFor(s.atin), sellerName: slug === LASERFEET_PROFILE.slug ? LASERFEET_PROFILE.name : s.sellerName === PLATFORM_SELLER ? 'Ade’s Kitchen' : s.sellerName };
+    return { ...s, imageUrl: photoFor(s.atin), sellerName: slug.startsWith(LASERFEET_PROFILE.slug) ? LASERFEET_PROFILE.name : s.sellerName === PLATFORM_SELLER ? 'Ade’s Kitchen' : s.sellerName };
   });
 }
 
@@ -195,7 +195,7 @@ export function buildStorefront(src: StorefrontSource, now: Date): Storefront {
   return {
     slug: src.slug, name: src.name, logoUrl: src.logoUrl, description: src.description, config: src.config, preview: src.preview, indexable: !src.preview && first.hits.length > 0,
     verified: true, sellingSinceYear: src.sinceYear, contactEmail: src.config.contact.showEmail ? src.contactEmail : null,
-    pickup: src.config.pickup.show && src.slug === LASERFEET_PROFILE.slug ? { zip: '77002' } : null, categories: first.categories, featured, reviews: reviewsOf(all), products: first
+    pickup: src.config.pickup.show && src.slug.startsWith(LASERFEET_PROFILE.slug) ? { zip: '77002' } : null, categories: first.categories, featured, reviews: reviewsOf(all), products: first
   };
 }
 

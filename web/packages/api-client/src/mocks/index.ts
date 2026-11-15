@@ -16,3 +16,4 @@ export { endMockSession, MOCK_SESSION_COOKIE, MOCK_SESSION_DEFAULTS, resetMockSe
 export { deliveryFee, getShippingSettings, type MockShippingSettings, resetShippingSettings, setShippingSettings } from './shipping-settings';
 export { MOCK_STRIPE_KEY_COOKIE } from './shopper';
 export { MOCK_PAY_LINK } from './shopper';
+export { buildStorefront, storefrontHandlers } from './storefront';

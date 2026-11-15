@@ -10,7 +10,7 @@ export const SECTION_COPY: Record<StoreSectionId, { title: string; hint: string 
   featured: { title: 'Featured products', hint: 'Up to eight products you pick, shown first.' },
   categories: { title: 'Shop by category', hint: 'Tiles for the categories you sell in.' },
   about: { title: 'Our story', hint: 'Your text and a photo.' },
-  policies: { title: 'Shipping and returns', hint: 'Your own words about both, and pickup if you offer it.' },
+  policies: { title: 'Shipping and returns', hint: 'Your own words about both, and pickup if you have it.' },
   reviews: { title: 'Customer reviews', hint: 'Appears only when your products have real reviews.' }
 };
 
