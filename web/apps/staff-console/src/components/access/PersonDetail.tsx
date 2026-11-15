@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
-import { groupPermissions, indexRoles, logSubject, moduleLabel, permissionLabel, permissionMatches, sourceOf } from '@/lib/access';
+import { groupPermissions, indexRoles, logSubject, permissionLabel, permissionMatches, sourceOf } from '@/lib/access';
 import { staffApi } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 import { useStaff } from '@/lib/session';
@@ -92,7 +92,7 @@ function Effective({ person }: { person: AccessPerson }) {
       .filter((g) => g.items.length > 0);
   }, [catalogue.data, person.effectivePermissions, search]);
   const grantable = useMemo(
-    () => (catalogue.data?.items ?? []).filter((p) => !person.directGrants.includes(p.key)).map((p) => ({ value: p.key, label: `${moduleLabel(p.module)}: ${p.description || permissionLabel(p.key)}` })),
+    () => (catalogue.data?.items ?? []).filter((p) => !person.directGrants.includes(p.key)).map((p) => ({ value: p.key, label: permissionLabel(p.key) })),
     [catalogue.data, person.directGrants]
   );
   const askPermission = ask ? (catalogue.data?.items.find((p) => p.key === ask.permission) ?? null) : null;
@@ -128,7 +128,7 @@ function Effective({ person }: { person: AccessPerson }) {
       )}
       {canAdmin ? (
         <Toolbar data-testid="grant-direct">
-          <Select label={t('st.acc.grant.label')} value={grant} onChange={(e) => setGrant(e.currentTarget.value)} options={[{ value: '', label: t('st.acc.grant.choose') }, ...grantable]} />
+          <Select className="w-full sm:w-80" label={t('st.acc.grant.label')} value={grant} onChange={(e) => setGrant(e.currentTarget.value)} options={[{ value: '', label: t('st.acc.grant.choose') }, ...grantable]} />
           <Button variant="secondary" disabled={!grant} onClick={() => { setError(null); setAsk({ permission: grant, on: true }); }}>
             {t('st.acc.grant.button')}
           </Button>

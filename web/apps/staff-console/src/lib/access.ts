@@ -5,7 +5,8 @@ import { type AccessLogEntry, type AccessPermission, type AccessPerson, type Acc
    example delivery:read and delivery:manage) appears with no change in the console. */
 
 const WORD_SPLIT = /[:.\-_]+/;
-const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+/** Capitalises; a two-letter word is an acronym ("ai" -> "AI"). */
+const cap = (s: string): string => (s.length <= 2 ? s.toUpperCase() : s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 /** "refunds:issue" -> "Refunds: issue"; "delivery:dispatch:read" -> "Delivery: dispatch read"; "content:site.view" -> "Content: site view". */
 export function permissionLabel(key: string): string {

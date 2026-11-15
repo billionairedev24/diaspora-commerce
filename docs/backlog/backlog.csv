@@ -2024,3 +2024,9 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Data fix for stuck seller-shipped orders is idempotent
 - Playwright journey and screenshots at 1280 and 390
 - docs/engineering/delivery-fulfilment.md","E12","","Highest","8","delivery staff-console orders","delivery","To Do"
+"S489","Story","Staff Settings on the seller pattern; Roles and permissions screen","Staff Settings redesigned as a flat list of sections, each its own route and permission, one content column; Roles and permissions with the catalogue, switches, reasons, effective permissions and change log. See docs/engineering/staff-settings.md.","- Settings home is a flat list with live statuses and each section is its own route with a Settings back link
+- Roles and permissions lists roles by portal, permissions grouped by module from the catalogue, switches with confirmation and a required reason, role holders by name, effective permissions per person, direct grants, change log
+- New catalogue permissions appear with no console change
+- Read-only for staff without access:admin; Super Admin hidden nothing
+- Old routes redirect; tests, axe and 1280/390 alignment checks pass
+- Verified against a real identity service","E02","","High","8","staff-console rbac settings","identity","To Do"
