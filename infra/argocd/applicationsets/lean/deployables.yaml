@@ -1,0 +1,84 @@
+# Release 1 (ADR 0011): ONE Application per DEPLOYABLE per environment, next to the per-service Applications of services.yaml, which stay
+# until the last batch of modules has moved (docs/runbooks/release-1-deploy.md). The charts live in java/apps/core/deploy/helm and
+# go/apps/afrotransact-go/deploy/helm; which modules each runs is cutover.services in infra/argocd/envs/<env>/platform-values.yaml
+# (mirrored in launch-set/release-1.yaml, checked by check_launch_set.py). The image is the deployable's own (afrotransact-core,
+# afrotransact-go), built by .github/workflows/core.yml / afrotransact-go.yml on release-1. Value precedence as in services.yaml.
+# Sync: automated where platform-values sets argocd.autoSync (dev, uat); MANUAL in prod.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: deployables
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+              revision: HEAD
+              files:
+                - path: infra/argocd/envs/ENV/platform-values.yaml     # patched per env
+          - list:
+              elements:
+                - {deployable: afrotransact-core, runtime: java, path: java/apps/core/deploy/helm}
+                - {deployable: afrotransact-go, runtime: go, path: go/apps/afrotransact-go/deploy/helm}
+  template:
+    metadata:
+      name: '{{ .deployable }}-{{ .argocd.env }}'
+      labels:
+        app.kubernetes.io/part-of: afrotransact
+        afrotransact.com/service: '{{ .deployable }}'
+        afrotransact.com/runtime: '{{ .runtime }}'
+        afrotransact.com/env: '{{ .argocd.env }}'
+        afrotransact.com/kind: deployable
+      annotations:
+        # wave 10 as the services: a deployable and its callers are one environment, and the services in a cutover route to it.
+        argocd.argoproj.io/sync-wave: "10"
+        notifications.argoproj.io/subscribe.on-sync-failed.slack: afrotransact-deploys
+        notifications.argoproj.io/subscribe.on-health-degraded.slack: afrotransact-deploys
+    spec:
+      project: 'afrotransact-{{ .argocd.env }}'
+      sources:
+        - repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+          targetRevision: '{{ .argocd.targetRevision }}'
+          path: '{{ .path }}'
+          helm:
+            releaseName: '{{ .deployable }}'
+            parameters:
+              - {name: image.repository, value: '{{ .deployable }}', forceString: true}
+            valueFiles:
+              - values.yaml
+              - 'values-{{ .argocd.env }}.yaml'
+              - '$values/infra/argocd/envs/{{ .argocd.env }}/platform-values.yaml'
+        - repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+          targetRevision: '{{ .argocd.targetRevision }}'
+          ref: values
+      destination:
+        server: '{{ .argocd.destinationServer }}'
+        namespace: 'afrotransact-{{ .argocd.env }}'
+      revisionHistoryLimit: 10
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - SkipDryRunOnMissingResource=true
+          - PruneLast=true
+        managedNamespaceMetadata:
+          labels:
+            app.kubernetes.io/part-of: afrotransact
+            afrotransact.com/env: '{{ .argocd.env }}'
+        retry:
+          limit: 5
+          backoff: {duration: 10s, factor: 2, maxDuration: 3m}
+  templatePatch: |
+    {{- if .argocd.autoSync }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: {{ .argocd.prune }}
+          selfHeal: {{ .argocd.selfHeal }}
+    {{- end }}

@@ -1,0 +1,72 @@
+# RELEASE 1 LAUNCH SET (release-1 branch only; ADR 0011, docs/runbooks/release-1-deploy.md). On `main` the per-service list in
+# kustomization.yaml in this directory is the whole truth; on release-1 it stays (the services not yet moved still run from it) and
+# this file adds the two deployables and the modules each runs per environment.
+#
+# Read by: infra/argocd/scripts/check_launch_set.py (make launch-set-check), which fails when `modules` below and
+# cutover.services in infra/argocd/envs/<env>/platform-values.yaml disagree, when a module is neither in core nor in the Go
+# deployable, or when a module is listed for an environment that does not run its deployable.
+#
+# To move a module: add it under the environment in `enabled`, add the same `service: deployable` line to cutover.services in that
+# environment's platform-values.yaml (that line scales the old Application to 0 and routes its Service to the deployable), run
+# `make launch-set-check`, sync. To roll back: remove both lines. One module per line, in batch order.
+version: 1
+deployables:
+  afrotransact-core:
+    runtime: java
+    chart: java/apps/core/deploy/helm
+    workflow: .github/workflows/core.yml
+    modules:        # every Java module; the launch set is the first 14, retail and delivery-runs are built but never enabled in uat/prod
+      - identity
+      - catalog
+      - offers
+      - inventory
+      - orders
+      - payments
+      - seller
+      - fulfilment
+      - bookings
+      - trust-ops
+      - tax-returns
+      - content
+      - ai-gateway
+      - mcp-server
+      - retail
+      - delivery-runs
+  afrotransact-go:
+    runtime: go
+    chart: go/apps/afrotransact-go/deploy/helm
+    workflow: .github/workflows/afrotransact-go.yml
+    modules:
+      - gateway-bff
+      - cart
+      - search
+      - indexer
+      - geo
+      - media
+      - notifications
+      - promise
+      - carrier-gateway
+      - authz-sync
+# Which modules each environment runs INSIDE a deployable (the rest of the launch set still runs as its own per-service Application).
+# Every environment runs both deployables (their Applications exist from the first sync); a deployable with no modules enabled is an
+# idle pod: set its chart's replicas to 0 in values-<env>.yaml until its first batch if the memory is needed.
+enabled:
+  dev:
+    afrotransact-core: []     # first batch: catalog, tax-returns (the spike modules) once core's first image is pinned in values-dev.yaml
+    afrotransact-go: []
+  uat:
+    afrotransact-core: []
+    afrotransact-go: []
+  prod:
+    afrotransact-core: []
+    afrotransact-go: []
+  trial:
+    afrotransact-core: []
+    afrotransact-go: []
+# Batches (release-1-architecture.md section 5), the order modules move in. A batch ships to prod on its own.
+batches:
+  - {id: 1, core: [catalog, tax-returns], go: [cart, geo]}
+  - {id: 2, core: [offers, inventory, content, seller], go: [search, indexer, notifications, media]}
+  - {id: 3, core: [orders, payments, bookings, fulfilment, trust-ops], go: []}
+  - {id: 4, core: [ai-gateway, mcp-server], go: []}
+  - {id: 5, core: [identity], go: [gateway-bff]}

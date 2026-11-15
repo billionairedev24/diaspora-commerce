@@ -1,13 +1,3 @@
-# afrotransact-go in trial (image.tag / image.digest are written by the deploy / promote workflow). The modules it mounts are the
-# cutover.services entries of infra/argocd/envs/trial/platform-values.yaml, listed in infra/argocd/launch-set/release-1.yaml.
-env: prod
-replicas: 1
-autoscaling:
-  enabled: false
-rollout:
-  enabled: false
-monitoring:
-  serviceMonitor: false     # no in-cluster Prometheus on the lean footprint: Alloy scrapes the pod annotations
-telemetry:
-  otlpEndpoint: otel-collector.observability:4318
-  sampling: "0.1"
+# TRIAL image pin: the promote workflow (environment = trial) writes image.tag and image.digest here. Read after values-prod.yaml by the
+# trial Applications only (infra/argocd/envs/trial), so the trial and prod pins never touch each other.
+image: {}

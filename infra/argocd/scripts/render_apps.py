@@ -51,7 +51,12 @@ def eval_expr(expr, params):
     """Tiny subset of Go templates used by our ApplicationSets: .a.b, index .a.b N, and | replace "X" .y."""
     stages = [s.strip() for s in expr.split("|")]
     head = stages[0]
-    if head.startswith("index "):
+    m = re.fullmatch(r"get\s+(\.\S+)\s+\(index\s+(\.\S+)\s+(\d+)\)", head)
+    if m:   # sprig get: a missing key is "" (release-1 cutover: get .cutover.services (index .chart.path.segments 2))
+        key = lookup(params, m.group(2))[int(m.group(3))]
+        val = lookup(params, m.group(1)).get(str(key), "")
+        head = None
+    elif head.startswith("index "):
         _, ref, idx = head.split()
         val = lookup(params, ref)[int(idx)]
     else:
@@ -177,7 +182,8 @@ def main():
     failures = 0
     crds = not args.no_crd_schemas
 
-    charts = sorted(glob.glob(str(ROOT / "java/services/*/deploy/helm")) + glob.glob(str(ROOT / "go/services/*/deploy/helm")))
+    charts = sorted(glob.glob(str(ROOT / "java/services/*/deploy/helm")) + glob.glob(str(ROOT / "go/services/*/deploy/helm"))
+                    + glob.glob(str(ROOT / "java/apps/*/deploy/helm")) + glob.glob(str(ROOT / "go/apps/*/deploy/helm")))   # + release-1 deployables
     for chart in charts:
         r = run([HELM, "dependency", "build", chart])
         if r.returncode:

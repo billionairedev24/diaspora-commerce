@@ -53,6 +53,10 @@ spec:
               # CI publishes ghcr.io/<repo>/<service> (the workflow name); the Java charts' values.yaml still say
               # <service>-service. The directory name IS the published image name, so it wins here.
               - {name: image.repository, value: '{{ index .chart.path.segments 2 }}', forceString: true}
+              # Release 1 cutover (docs/runbooks/release-1-deploy.md): platform-values cutover.services maps a service to the deployable
+              # that now runs its module (afrotransact-core | afrotransact-go); '' = still its own Deployment. The library chart scales
+              # a mapped service to 0 replicas and points its Service (same name, same URL) at the deployable's pods.
+              - {name: cutover.movedTo, value: '{{ get .cutover.services (index .chart.path.segments 2) }}', forceString: true}
             valueFiles:
               - values.yaml
               - 'values-{{ .argocd.env }}.yaml'

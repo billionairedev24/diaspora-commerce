@@ -7,6 +7,8 @@
 # (gateway-bff and orders degrade without it), carrier-gateway, retail, delivery-runs, authz-sync.
 # Adding a service to the environment = add its chart path here (and its database in infra/tofu/scripts/postgres-bootstrap.sh).
 # The services ApplicationSet normally globs every chart; this replaces the glob with the explicit list.
+# release-1 only: the deployables ApplicationSet (applicationsets/deployables.yaml) has no glob and always lists the two deployables
+# (afrotransact-core, afrotransact-go); which modules they run is release-1.yaml next to this file.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 patches:

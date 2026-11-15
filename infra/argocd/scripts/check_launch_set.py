@@ -8,6 +8,11 @@ render_apps.py uses, and compares the service Applications with the expected set
   uat, prod    exactly the 21 launch-set services (launch-set/kustomization.yaml)
   trial        the same 21 services and the same 5 lean platform Applications as prod (a values overlay of prod)
 
+Release 1 (release-1 branch; infra/argocd/launch-set/release-1.yaml exists): every environment also gets the two deployable
+Applications (afrotransact-core, afrotransact-go), the per-service Applications stay, and the check prints for each environment
+which modules run inside a deployable (cutover.services in platform-values.yaml) and which per-service Applications are therefore
+scaled to 0. It fails when release-1.yaml and cutover.services disagree.
+
 It also fails when prod (lean) would create an Application for something that must not run there (OpenFGA, cert-manager,
 Kyverno, Rollouts, Prometheus, Loki, Tempo, Elasticsearch, External Secrets).
 
@@ -34,6 +39,49 @@ FORBIDDEN_PLATFORM = ["openfga", "cert-manager", "external-secrets", "kyverno", 
 EXPECTED_PLATFORM_PROD = ["edge", "envoy-gateway", "lean", "namespaces", "opentelemetry-collector-gateway"]
 
 
+RELEASE1 = ra.ROOT / "infra/argocd/launch-set/release-1.yaml"
+DEPLOYABLE_RUNTIME = {"afrotransact-core": "java", "afrotransact-go": "go"}
+
+
+def release1_plan():
+    return yaml.safe_load(RELEASE1.read_text()) if RELEASE1.exists() else None
+
+
+def check_release1(env, apps, pv, plan):
+    """Release 1: deployables present, cutover.services == release-1.yaml `enabled`, every mapped service exists. Returns (failures, summary lines)."""
+    bad, lines = 0, []
+    deployables = sorted(a["metadata"]["labels"]["afrotransact.com/service"] for a in apps
+                         if a["metadata"]["labels"].get("afrotransact.com/kind") == "deployable")
+    if deployables != sorted(DEPLOYABLE_RUNTIME):
+        bad += 1
+        lines.append(f"  FAIL [{env}] deployable Applications are {deployables}, expected {sorted(DEPLOYABLE_RUNTIME)}")
+    cut = (pv.get("cutover") or {}).get("services") or {}
+    modules = {d: set(v["modules"]) for d, v in plan["deployables"].items()}
+    want = (plan.get("enabled") or {}).get(env, {})
+    for dep, mods in want.items():
+        for m in mods:
+            if m not in modules.get(dep, set()):
+                bad += 1
+                lines.append(f"  FAIL [{env}] release-1.yaml enables {m!r} in {dep}, which has no such module")
+            if cut.get(m) != dep:
+                bad += 1
+                lines.append(f"  FAIL [{env}] {m} is enabled in {dep} (release-1.yaml) but cutover.services says {cut.get(m)!r} in envs/{env}/platform-values.yaml")
+    for m, dep in cut.items():
+        if m not in want.get(dep, []):
+            bad += 1
+            lines.append(f"  FAIL [{env}] cutover.services maps {m} to {dep} but release-1.yaml does not enable it there")
+        if dep not in DEPLOYABLE_RUNTIME:
+            bad += 1
+            lines.append(f"  FAIL [{env}] cutover.services: {m} -> {dep!r} is not a deployable")
+        elif env != "dev" and m not in LAUNCH:
+            bad += 1
+            lines.append(f"  FAIL [{env}] cutover.services: {m} is not a launch-set service, so there is no Application to scale down")
+    for dep in sorted(DEPLOYABLE_RUNTIME):
+        on = sorted(m for m, d in cut.items() if d == dep)
+        lines.append(f"[{env}] {dep}-{env}: runs {len(on)} module(s) {', '.join(on) if on else '(none yet: idle pod)'}")
+    return bad, lines, cut
+
+
 def apps_for(env):
     built, err = ra.kustomize_build(ra.ROOT / "infra/argocd/envs" / env)
     if built is None:
@@ -58,13 +106,22 @@ def main():
     bad = 0
     for env in args.env or ra.ENVS:
         apps, pv = apps_for(env)
-        svc = sorted(a["metadata"]["labels"]["afrotransact.com/service"] for a in apps if a["spec"]["project"].startswith("afrotransact-"))
+        svc = sorted(a["metadata"]["labels"]["afrotransact.com/service"] for a in apps
+                     if a["spec"]["project"].startswith("afrotransact-") and a["metadata"]["labels"].get("afrotransact.com/kind") != "deployable")
         platform = sorted(a["metadata"]["name"].removesuffix(f"-{env}") for a in apps if a["spec"]["project"].startswith("platform-"))
         expected = all_charts if env == "dev" else LAUNCH
         sync = "automated" if pv["argocd"].get("autoSync") else "MANUAL"
         print(f"[{env}] {len(svc)} service Applications, sync {sync}")
+        plan = release1_plan()
+        cut = {}
+        if plan:
+            nbad, lines, cut = check_release1(env, apps, pv, plan)
+            bad += nbad
         for name in svc:
-            print(f"    {name}-{env}")
+            tail = f"   scaled to 0, Service routed to {cut[name]}" if name in cut else ""
+            print(f"    {name}-{env}{tail}")
+        if plan:
+            print("\n".join(lines))
         print(f"[{env}] {len(platform)} platform Applications: {', '.join(platform)}")
         if svc != expected:
             bad += 1
@@ -101,6 +158,14 @@ def main():
                     print(f"  FAIL [trial] global.{key} {h!r} must be ONE label under the zone {z!r} (free Cloudflare certificate)")
     if args.require_tags:
         import re
+        if release1_plan():
+            for env in [e for e in (args.env or ra.ENVS) if e != "dev"]:
+                for dep, spec in release1_plan()["deployables"].items():
+                    values = yaml.safe_load((ra.ROOT / spec["chart"] / f"values-{env}.yaml").read_text()) or {}
+                    img = values.get("image", {})
+                    if not re.fullmatch(r"[0-9a-f]{40}", str(img.get("tag", ""))) or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(img.get("digest", ""))):
+                        bad += 1
+                        print(f"  FAIL [{env}] {dep}: image.tag / image.digest are not pinned (run the promote workflow for {dep})")
         for env in [e for e in (args.env or ra.ENVS) if e != "dev"]:
             for svc in LAUNCH:
                 chart = next(iter(glob.glob(str(ra.ROOT / f"*/services/{svc}/deploy/helm"))))

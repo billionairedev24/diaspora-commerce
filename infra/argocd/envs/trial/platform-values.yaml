@@ -38,3 +38,12 @@ argocd:
   autoSync: false                  # MANUAL sync, as in prod: the owner approves every sync
   prune: false
   selfHeal: false
+
+# Release 1 cutover (ADR 0011, docs/runbooks/release-1-deploy.md). service -> the deployable that now runs its module:
+# afrotransact-core (Java) or afrotransact-go (Go). One edit moves a module AND rolls it back:
+#   - the deployable turns the module on (modules.<name>.enabled is derived from this map),
+#   - the service's own Application is scaled to 0 (not deleted) and its Service keeps its name, so callers' URLs do not change but
+#     route to the deployable's pods.
+# Remove the entry to roll back. Mirrored in infra/argocd/launch-set/release-1.yaml; check_launch_set.py fails on a mismatch.
+cutover:
+  services: {}
