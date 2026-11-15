@@ -97,6 +97,8 @@ Each Java module calls others with its own client-credentials token. Scopes held
 | mcp-server | search, cart, promise, geo (Go); catalog, inventory, orders, seller, payments, bookings | relays the caller's token (`mcp:shopper`, `mcp:seller`) |
 | identity | seller (`HttpSellerOrgSource`) | `at.identity.seller-sync` |
 
+Status of each edge (converted, or still HTTP and why): sections 12.7 and 12.8.
+
 **What the checks really are (finding).** The controllers only require an authenticated JWT (`PlatformSecurityAutoConfiguration`:
 `anyRequest().authenticated()`). The scope is folded into the actor's permissions (`JwtActorResolver`) and enforced inside the
 application services (`Access.staffAny(TAX_CLASSIFY, ...)` and `PermissionChecker`). So an in-process call that skips the controller but
@@ -458,8 +460,8 @@ Retail and delivery-runs are mounted with `enabled=false`.
 
 | Batch | Modules | Mounted in core | Boots on Postgres | Unit + ArchUnit | In-process edges | Gate (SLO, route diff, detach) |
 |---|---|---|---|---|---|---|
-| 1 | catalog, tax-returns | yes | yes | yes | catalog <-> tax-returns | not run |
-| 2 | offers, inventory, content, seller | yes | yes | yes (all pass) | none yet except payments -> seller (below) | not run |
+| 1 | catalog, tax-returns | yes | yes | yes | catalog <-> tax-returns, and the edges of 12.8 | not run |
+| 2 | offers, inventory, content, seller | yes | yes | yes (all pass) | the outbound edges of offers, inventory and seller (12.8); content has none | not run |
 | 3 | orders, payments, bookings, fulfilment, trust-ops | yes | orders, payments, bookings, trust-ops yes; **fulfilment not booted here (needs PostGIS, not installed in the sandbox)** | see 12.5 | payments -> seller (live membership) | not run |
 | 4 | ai-gateway, mcp-server | yes, profile `ai-modules` | yes (no provider key; MCP and AI paths not exercised) | see 12.5 | none | not run |
 | 5 | identity | yes | yes: `/login`, `/oauth2/jwks`, `/.well-known/openid-configuration` answer 200 in core | see 12.5 | none | token issue/refresh and signed-JWT validation across modules **not verified** |
@@ -467,10 +469,10 @@ Retail and delivery-runs are mounted with `enabled=false`.
 
 In-process adapters (pattern of catalog and tax-returns, `<m>-api` jar, provider adapter in `adapter/in/module`, consumer in `adapter/out/module`,
 explicit caller principal): catalog <-> tax-returns (spike) and **payments -> seller `OrgMembershipApi`** (scope `sellers:membership.read`,
-`at.payments.mode=in-process`, fails the start naming both modules when seller is disabled). **The other ~65 Java-to-Java HTTP adapters (section 2.2)
-are not converted**: those modules call each other over HTTP on the old ports, which core serves. That works (and keeps detach trivial) but
-is not the in-process design target; converting them is mechanical per edge and is the main remaining work. The principal registry
-(`at.modules.<m>.caller-scopes`, copied from identity's client list) already holds every module's scopes.
+`at.payments.mode=in-process`, fails the start naming both modules when seller is disabled). **The Java-to-Java HTTP adapters of section 2.2 are being
+converted in two passes, listed edge by edge in 12.7 (orders, payments, fulfilment, trust-ops, bookings, identity) and 12.8 (catalog, offers,
+inventory, seller, content, tax-returns)**; what stays HTTP is listed there with the reason, and `ModuleEdgeGuardTest` keeps that list honest.
+The principal registry (`at.modules.<m>.caller-scopes`, copied from identity's client list) holds every module's scopes.
 
 ### 12.5 What was and was not verified
 
@@ -535,6 +537,69 @@ that a caller without the scope is refused with 403 (`InProcessKit` in `platform
 permission through the real `DefaultPermissionChecker`, so it proves the guard, the actor and the 403 mapping, not the production service's own
 permission string), `ArchitectureTest` of every module, and `CoreBootTest` for the modules that boot without Valkey and Temporal (orders and fulfilment
 are off in that test, so their in-process wiring is not exercised by a boot here).
+
+### 12.8 Module-to-module edges from catalog, offers, inventory, seller, content and tax-returns (in-process conversion)
+
+Same pattern as 12.7 (published `<callee>-api` interface, provider adapter in the callee's `adapter/in/module` behind the shared `ModuleEntry`
+guard, consumer adapter in the caller's `adapter/out/module` behind the existing `port/` interface that maps `ModuleApiException` back to the
+failure the HTTP adapter raised, HTTP adapter kept). Differences and additions of this pass:
+
+* **One annotation selects the adapter**: `@ConditionalOnModuleMode(caller, callee, IN_PROCESS|HTTP)` (`platform-web`). The mode of an edge is
+  `at.<caller>.<callee>.mode`, else `at.<caller>.mode`, else `http` (module names without dashes: `at.taxreturns.aigateway.mode`). A mode that
+  comes only from the caller-level default gives way to `http` when the callee is switched off (`at.modules.<callee>.enabled=false`), so a start that
+  left a module out on purpose (as `CoreBootTest` leaves out orders, fulfilment and ai-gateway) still starts; an edge set explicitly to in-process
+  with the callee off fails the start naming both modules (each in-process adapter checks `InProcessCalls.requireRunning`, unit-tested).
+* Core defaults (`application.yml`): `at.catalog.mode`, `at.taxreturns.mode`, `at.offers.mode`, `at.inventory.mode`, `at.seller.mode` are `in-process`
+  (`AT_<CALLER>_<CALLEE>_MODE=http` detaches one edge). Tax-returns' caller scopes in the registry gained `users:read`, `inventory:returns`,
+  `orders:lookup`, `delivery:returns` (identity's client has them; the spike's list was incomplete for the edges converted here).
+* Provider adapters answer "not found" as an empty result where the HTTP caller treated a 404 as "none" (live variant, ship-from location, payment of an
+  order, order lookup), and everything else as `ModuleApiException` with the endpoint's status and code.
+
+| Caller -> callee | Port (HTTP adapter kept) | Published API | Scope the callee checks | State |
+|---|---|---|---|---|
+| catalog -> tax-returns | `TaxResolver`, `TaxDecisionAuthority` | `TaxClassificationApi` | `tax:classify` | in-process (spike) |
+| tax-returns -> catalog | `ProductFacts` | `VariantFactsApi` | none (public read) | in-process (spike) |
+| catalog -> offers | `OfferWriter`, `SellerOffers` | `offers-api` `OffersApi` | `offers:write` (batch, prices and stock); `offers:read` (presence) | in-process |
+| catalog -> seller | `SellingApprovals` | `seller-api` `SellerLookupApi.sellingStatus` | `sellers:catalog-scope.read` | in-process (no 10 s cache: nothing to save) |
+| catalog -> orders | `PurchaseVerifier` | `orders-api` `OrderLookupApi.purchase` | `orders:purchase-check` | in-process |
+| offers -> catalog | `CatalogClient` | `catalog-api` `CatalogLookupApi` (`liveVariant`, `liveVariantByGtin`, `offerEligibility`) | none (live variant); `catalog:read` or `catalog:write` | in-process |
+| offers -> seller | `ListingEntitlementsClient`, `PickupLocationClient` | `SellerLookupApi.listingEntitlements`, `.shipFromLocation` | `sellers:entitlements.read`; `sellers:ship-from.read` | in-process (no 60 s cache) |
+| offers -> tax-returns | `TaxDecisions` | `tax-returns-api` `ListingDecisionApi` | `tax:read` (find); `tax:classify` (request) | in-process |
+| inventory -> catalog | `UnitLabelClient` | `catalog-api` `LabelApi` | `catalog:read` or `catalog:write` | in-process |
+| seller -> catalog | `DepartmentDirectory`, `BakeryClaims` | `CatalogLookupApi.departments`, `.bakeryClaimOrganisations` | none (public tree); `catalog:bakery-claims.read` | in-process |
+| seller -> identity | `StaffDirectory` | `identity-api` `StaffDirectoryApi` | `users:read` (service principal) | in-process |
+| seller -> content | `AdSpendSource` | `content-api` `AdSpendApi` | `ads:spend.read` | in-process |
+| seller -> ai-gateway | `AiUsageSource` | `ai-gateway-api` `AiUsageApi` | `ai:usage.read` | in-process when ai-gateway runs; HTTP when it is switched off (a `-DnoAi` build also needs `MODULE_AI_GATEWAY_ENABLED=false`) |
+| seller -> inventory | `StorageUsageSource` | `inventory-api` `StorageUsageApi` | `inventory:storage.read` | in-process |
+| seller -> payments | `ConnectedAccountRegistry`, `EarningsWithholdingGateway` | `payments-api` `SellerBillingApi` | `payments:connected-accounts`; `payments:plan-fees` | in-process (the collection kill switch `at.seller.billing.collect-from-earnings` is unchanged) |
+| tax-returns -> inventory | `InventoryGateway` | `inventory-api` `ReturnsApi` | `inventory:adjust` (or a service with `inventory:returns`) | in-process |
+| tax-returns -> orders | `OrderLookup` | `orders-api` `OrderLookupApi.lookup` | `orders:lookup` | in-process |
+| tax-returns -> payments | `PaymentsGateway` | `payments-api` `ReturnRefundApi` | `payments:service` | in-process |
+| tax-returns -> fulfilment | `ReturnPickupScheduler` | `fulfilment-api` `ReturnPickupApi` | none beyond "staff or service" (the HTTP controller's `@StaffOrServiceOnly`; the service checks nothing more) | in-process |
+
+Count: 21 port adapters in 14 API interfaces (30 methods) converted in this pass, plus the 3 edges of the spike. Content calls no other Java module.
+
+Still HTTP in core, and why:
+
+| Caller -> callee | Why |
+|---|---|
+| catalog -> media (`HttpImageImporter`, `HttpImageVerifier`, `HttpImageLibraryLookup`), catalog -> search (`HttpCandidateRecall`) | Go callees (afrotransact-go is its own deployable) |
+| catalog -> GS1 and Open Food Facts | external services |
+| seller -> media, seller -> geo; inventory -> carrier-gateway; tax-returns -> carrier-gateway (`HttpCarrierLabels`) | Go callees |
+| seller -> ai-gateway while ai-gateway is switched off | the default gives way to http; the HTTP call then fails at run time as it did before |
+
+Tests: a consumer test per module (principal passed, mapping of 404 / refusal / failure to the port's own result, start check naming both modules);
+`OnModuleModeConditionTest` (the mode rules above); `ModuleEdgeGuardTest` (no database: every HTTP adapter component switched by mode has an
+in-process partner for its edge, and every other always-on `Http*` adapter is in `apps/core/src/test/resources/http-edges.txt` with its reason, so a
+new module-to-module HTTP adapter or a stale line fails the build); `ModuleEdgesInCoreTest` (real PostgreSQL, same environment as `CoreBootTest`:
+in a running core every in-process adapter of a running callee is the bean and no HTTP adapter outside the list is, and **one parametrised case per
+API method** proves a caller without the scope gets 403 and one with it does not; 23 of 26 cases ran, the three that need orders or ai-gateway are
+skipped without `AT_TEST_CORE_FULL=true`); the unit and ArchUnit suites of catalog (958), offers, seller, tax-returns (392) and inventory (145).
+The one existing test touched: `TaxGateArchitectureTest` in catalog allow-listed `HttpOfferWriter` as the only class besides the bulk job that may
+depend on `OfferWriter`; the in-process writer is the same role, so its name is added (one `doNotHaveSimpleName` line). **Not verified**: Docker ITs,
+Kafka, Temporal, Stripe, a signed JWT (the in-process actor is the real `Actor` model, not a token), orders / fulfilment / ai-gateway booted in core
+with these edges (their providers are covered by the unit tests only; `OrderLookupApi`, `AiUsageApi` and `ReturnPickupApi` were not called in a
+running context), the detached (`mode=http`) run of an edge against a live second process, and the `*IT` tests of these modules.
 
 ### 12.6 Measurement (this sandbox, 2026-11-15; one run, not comparable to the Phase 2 table)
 

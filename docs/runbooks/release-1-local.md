@@ -63,9 +63,11 @@ Pools: 4 connections per module (orders, payments, catalog 8), minimum idle 0. E
 | identity, catalog, tax-returns, offers, inventory, content, seller, orders, payments, bookings, fulfilment, trust-ops, ai-gateway, mcp-server | on | `MODULE_<NAME>_ENABLED=false` (`MODULE_TRUST_OPS_ENABLED`, `MODULE_AI_GATEWAY_ENABLED`, ...) |
 | retail, delivery-runs | **off** (not in the launch set) | `MODULE_RETAIL_ENABLED=true`, `MODULE_DELIVERY_RUNS_ENABLED=true` |
 
-A disabled module is not scanned, opens no connection and has no health component. Core fails at start with a message naming both
-modules when an `in-process` module needs one that is off (catalog and tax-returns: `AT_CATALOG_MODE`, `AT_TAXRETURNS_MODE`:
-`in-process` | `http`).
+A disabled module is not scanned, opens no connection and has no health component. How a module reaches the others is
+`at.<caller>.mode` (`AT_CATALOG_MODE`, `AT_TAXRETURNS_MODE`, `AT_OFFERS_MODE`, `AT_INVENTORY_MODE`, `AT_SELLER_MODE`, ...: `in-process` | `http`),
+and per edge `at.<caller>.<callee>.mode` (`AT_SELLER_PAYMENTS_MODE=http` detaches seller -> payments only). A callee that is switched off makes the
+caller-level default fall back to `http` for that edge; an edge set explicitly to `in-process` whose callee is off fails the start with a message
+naming both modules. Which edges are in-process and which stay HTTP: `docs/engineering/release-1-architecture.md` sections 12.7 and 12.8.
 
 #### Detach one module (run it as its own process again)
 
@@ -74,7 +76,7 @@ modules when an `in-process` module needs one that is off (catalog and tax-retur
    its data: either `<NAME>_DB_URL` pointing at the `core` database with the role `<name>` and its schema (standalone services read
    `DB_URL`, `DB_USER`, `DB_PASSWORD`; add `?currentSchema=<schema>` to the URL), or keep the module in `database` mode from the
    start. Its Kafka consumer group is unchanged, so no events are replayed or lost.
-3. Modules that call it in-process (catalog <-> tax-returns only) need `AT_CATALOG_MODE=http` / `AT_TAXRETURNS_MODE=http`.
+3. Modules that call it in-process need that edge set to `http`: `AT_<CALLER>_<NAME>_MODE=http` for each caller (for tax-returns that is `AT_CATALOG_TAXRETURNS_MODE`, `AT_OFFERS_TAXRETURNS_MODE`), or the caller-level `AT_<CALLER>_MODE=http`.
 4. ai-gateway, mcp-server: also leave them out of the build with `-DnoAi` (`CORE_MVN_ARGS=-DnoAi make core-build`).
 
 #### What to know
