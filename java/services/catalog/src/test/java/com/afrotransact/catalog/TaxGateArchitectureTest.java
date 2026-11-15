@@ -144,6 +144,7 @@ class TaxGateArchitectureTest {
         ArchRule onlyTheJob = ArchRuleDefinition.noClasses()
                 .that().doNotHaveSimpleName("OfferRowProcessorImpl")
                 .and().doNotHaveSimpleName("HttpOfferWriter")
+                .and().doNotHaveSimpleName("InProcessOfferWriter")
                 .and().resideOutsideOfPackage("..port..")
                 .should().dependOnClassesThat().haveSimpleNameStartingWith("OfferWriter")
                 .allowEmptyShould(true);

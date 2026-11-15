@@ -7,6 +7,7 @@ import com.afrotransact.catalog.port.SellerOffers;
 import com.afrotransact.catalog.port.ServiceTokens;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -16,6 +17,7 @@ import org.springframework.web.client.RestClient;
  * never guessed: it is {@link OffersUnavailable}, so a request to change somebody else's page is refused.
  */
 @Component
+@ConditionalOnExpression("'${at.catalog.mode:http}' == 'http'")
 class HttpSellerOffers implements SellerOffers {
 
     private final RestClient offers;

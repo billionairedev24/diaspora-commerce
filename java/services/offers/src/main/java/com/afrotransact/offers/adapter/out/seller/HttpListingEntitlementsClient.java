@@ -13,6 +13,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,6 +24,7 @@ import org.springframework.web.client.RestClientException;
  * new listing). Failures are not cached and never block the seller.
  */
 @Component
+@ConditionalOnExpression("'${at.offers.mode:http}' == 'http'")
 class HttpListingEntitlementsClient implements ListingEntitlementsClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpListingEntitlementsClient.class);

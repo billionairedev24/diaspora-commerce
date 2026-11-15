@@ -10,6 +10,7 @@ import com.afrotransact.offers.port.CatalogClient;
 import com.afrotransact.offers.port.ServiceTokenProvider;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -24,6 +25,7 @@ import org.springframework.web.client.RestClientException;
  * variant"; other failures raise {@link CatalogUnavailableException} (HTTP 503).
  */
 @Component
+@ConditionalOnExpression("'${at.offers.mode:http}' == 'http'")
 class HttpCatalogClient implements CatalogClient {
 
     private final RestClient client;

@@ -11,6 +11,7 @@ import com.afrotransact.catalog.port.ServiceTokens;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ import org.springframework.web.client.RestClient;
  * {@link OffersUnavailable}, the rows stay pending and the upload is resumed (both calls are safe to repeat).
  */
 @Component
+@ConditionalOnExpression("'${at.catalog.mode:http}' == 'http'")
 class HttpOfferWriter implements OfferWriter {
 
     private final RestClient offers;
