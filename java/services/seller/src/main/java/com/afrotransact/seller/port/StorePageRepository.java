@@ -27,4 +27,10 @@ public interface StorePageRepository {
     void audit(String orgId, String action, String actor, long version, Instant at);
 
     List<StorePageAuditEntry> audit(String orgId, int limit);
+
+    /** Published storefronts of approved sellers (organisation, address, when published), by address. */
+    List<PublishedStore> published(int limit);
+
+    record PublishedStore(String orgId, String slug, Instant publishedAt) {
+    }
 }

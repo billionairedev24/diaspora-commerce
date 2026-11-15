@@ -72,6 +72,7 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 		route("GET /v1/me/help-requests/{id}", h.helpRequest)
 	}
 	if h.s.Shopper.Storefronts != nil {
+		route("GET /v1/storefronts", h.storefrontList)
 		route("GET /v1/storefronts/{slug}", h.storefront)
 		route("GET /v1/storefronts/{slug}/products", h.storefrontProducts)
 	}

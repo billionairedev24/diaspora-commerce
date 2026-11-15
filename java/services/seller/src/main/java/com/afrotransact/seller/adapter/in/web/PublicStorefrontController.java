@@ -1,6 +1,7 @@
 package com.afrotransact.seller.adapter.in.web;
 
 import java.time.Instant;
+import java.util.List;
 
 import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.seller.application.BusinessPageService;
@@ -51,6 +52,18 @@ class PublicStorefrontController {
         return new PublicStorefrontResponse(page.orgId(), page.slug(), page.name(), page.description(), page.logoUrl(),
                 page.brandColor(), page.contactEmail(), json.readTree(published.published()), published.publishedAt(),
                 since);
+    }
+
+    @Schema(name = "PublishedStorefront")
+    record PublishedStorefrontResponse(String orgId, String slug, Instant publishedAt) {
+    }
+
+    @Operation(summary = "Published storefronts of approved sellers (no login)",
+            description = "Up to 5000, by address. Used to build the sitemap.")
+    @GetMapping("/v1/public/storefronts")
+    List<PublishedStorefrontResponse> published() {
+        return store.publishedStores(5000).stream()
+                .map(p -> new PublishedStorefrontResponse(p.orgId(), p.slug(), p.publishedAt())).toList();
     }
 
     private NotFoundException missing() {

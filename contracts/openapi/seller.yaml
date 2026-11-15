@@ -2540,6 +2540,14 @@ paths:
       parameters: [{name: orgId, in: path, required: true, schema: {type: string}}]
       responses:
         '200': {description: OK, content: {'*/*': {schema: {type: array, items: {$ref: '#/components/schemas/StorePageAuditEntry'}}}}}
+  /v1/public/storefronts:
+    get:
+      tags: [Storefronts]
+      summary: Published storefronts of approved sellers (no login)
+      description: Up to 5000, by address. Used to build the sitemap.
+      operationId: published
+      responses:
+        '200': {description: OK, content: {'*/*': {schema: {type: array, items: {$ref: '#/components/schemas/PublishedStorefront'}}}}}
   /v1/public/storefronts/{slug}:
     get:
       tags: [Storefronts]
@@ -3743,6 +3751,12 @@ components:
         action: {type: string}
         actor: {type: string}
         version: {type: integer, format: int64}
+    PublishedStorefront:
+      type: object
+      properties:
+        orgId: {type: string}
+        slug: {type: string}
+        publishedAt: {type: string, format: date-time}
     PublicStorefront:
       type: object
       properties:

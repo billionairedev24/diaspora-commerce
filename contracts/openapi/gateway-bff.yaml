@@ -3774,6 +3774,15 @@ paths:
               schema: {$ref: '#/components/schemas/ProviderPage'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/storefronts:
+    get:
+      tags: [Storefront]
+      operationId: listStorefronts
+      summary: Storefronts that belong in the sitemap
+      description: Published storefronts of approved sellers that have at least one sellable product (a store with nothing to buy is not listed). Public, cached for a minute.
+      responses:
+        '200': {description: Stores, content: {application/json: {schema: {$ref: '#/components/schemas/StorefrontList'}}}}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/storefronts/{slug}:
     get:
       tags: [Storefront]
@@ -7458,6 +7467,18 @@ components:
               value: {type: string}
               label: {type: string}
               count: {type: integer}
+    StorefrontList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [slug, publishedAt]
+            properties:
+              slug: {type: string}
+              publishedAt: {type: string, format: date-time}
     Storefront:
       type: object
       description: |

@@ -79,6 +79,18 @@ class JdbcStorePageRepository implements StorePageRepository {
                         rs.getString("actor"), rs.getLong("version"))).list();
     }
 
+    @Override
+    public List<PublishedStore> published(int limit) {
+        return jdbc.sql("""
+                select s.org_id, b.slug, s.published_at from store_page s
+                join business_page b on b.org_id = s.org_id
+                join organisation o on o.id = s.org_id
+                where s.published is not null and o.status = 'APPROVED'
+                order by b.slug limit :n
+                """).param("n", limit)
+                .query((rs, n) -> new PublishedStore(rs.getString("org_id"), rs.getString("slug"), Sql.instant(rs, "published_at"))).list();
+    }
+
     private static StorePage row(ResultSet rs, int n) throws SQLException {
         long publishedVersion = rs.getLong("published_version");
         Long pv = rs.wasNull() ? null : publishedVersion;

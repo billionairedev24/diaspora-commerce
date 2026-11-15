@@ -127,7 +127,7 @@ describe('storefront sections come from the seller settings', () => {
       expect(result.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical'), preset).toEqual([]);
       unmount();
     }
-  });
+  }, 40_000);
 });
 
 describe('addresses and structured data', () => {

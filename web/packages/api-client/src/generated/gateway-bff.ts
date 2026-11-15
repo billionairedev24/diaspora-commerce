@@ -3022,6 +3022,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefronts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Storefronts that belong in the sitemap
+         * @description Published storefronts of approved sellers that have at least one sellable product (a store with nothing to buy is not listed). Public, cached for a minute.
+         */
+        get: operations["listStorefronts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefronts/{slug}": {
         parameters: {
             query?: never;
@@ -6667,6 +6687,13 @@ export interface components {
                 value: string;
                 label: string;
                 count: number;
+            }[];
+        };
+        StorefrontList: {
+            items: {
+                slug: string;
+                /** Format: date-time */
+                publishedAt: string;
             }[];
         };
         /**
@@ -11446,6 +11473,27 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStorefronts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stores */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontList"];
+                };
+            };
             503: components["responses"]["Problem"];
         };
     };

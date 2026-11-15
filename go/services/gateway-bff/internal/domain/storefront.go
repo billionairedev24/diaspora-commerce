@@ -119,3 +119,14 @@ const CodeStoreAccentLowContrast = "STORE_ACCENT_LOW_CONTRAST"
 
 // CodeStoreNotApproved (422): only an approved organisation can publish its page.
 const CodeStoreNotApproved = "STORE_NOT_APPROVED"
+
+// StorefrontListItem is one store of the sitemap list.
+type StorefrontListItem struct {
+	Slug        string    `json:"slug"`
+	PublishedAt time.Time `json:"publishedAt"`
+}
+
+// StorefrontList is GET /v1/storefronts.
+type StorefrontList struct {
+	Items []StorefrontListItem `json:"items"`
+}

@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import com.afrotransact.seller.domain.StorePage;
 import com.afrotransact.seller.domain.StorePageAuditEntry;
+import com.afrotransact.seller.port.StorePageRepository;
 
 /**
  * The seller's branded storefront settings: edit a draft, publish it, take it down. Members read; the owner and admins
@@ -27,6 +28,9 @@ public interface StorePageService {
 
     /** The published settings of an approved organisation (public read); empty when unpublished or not approved. */
     Optional<StorePage> publishedFor(String orgId);
+
+    /** Published storefronts of approved sellers, for the sitemap (public read). */
+    List<StorePageRepository.PublishedStore> publishedStores(int limit);
 
     /** What the settings endpoints answer: the row (or an empty one) and whether the organisation may publish. */
     record StorePageView(StorePage page, boolean approved, boolean canEdit) {

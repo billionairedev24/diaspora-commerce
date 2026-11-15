@@ -14,6 +14,11 @@ func (h *handlersImpl) storefront(w http.ResponseWriter, r *http.Request) {
 	h.publicJSON(w, r, v, err)
 }
 
+func (h *handlersImpl) storefrontList(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.Storefronts.List(r.Context())
+	h.publicJSON(w, r, v, err)
+}
+
 func (h *handlersImpl) storefrontProducts(w http.ResponseWriter, r *http.Request) {
 	v := r.URL.Query()
 	page, _ := strconv.Atoi(v.Get("page"))

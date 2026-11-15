@@ -113,6 +113,12 @@ class StorePageServiceImpl implements StorePageService {
         return pages.find(orgId).filter(StorePage::isPublished);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<StorePageRepository.PublishedStore> publishedStores(int limit) {
+        return pages.published(Math.min(Math.max(limit, 1), 5000));
+    }
+
     private StorePageView view(String orgId, StorePage page) {
         boolean approved = org(orgId).status() == OrgStatus.APPROVED;
         return new StorePageView(page, approved, true);

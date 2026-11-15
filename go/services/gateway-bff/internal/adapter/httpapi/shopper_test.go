@@ -106,6 +106,9 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	}
 	mustStatus(t, b.do("GET", "/v1/storefronts/ades-kitchen/products?sort=price_asc&price=u10&page=1", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/storefronts/ades-kitchen/products?price=bogus", nil), 400)
+	if l := b.do("GET", "/v1/storefronts", nil); l.status != 200 || len(l.json(t)["items"].([]any)) != 1 {
+		t.Fatalf("storefront list = %d %s", l.status, l.body)
+	}
 	mustStatus(t, b.do("GET", "/v1/storefronts/nobody", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/storefronts/nobody/products", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/storefronts/Not%20A%20Slug", nil), 404)

@@ -41,6 +41,8 @@ type UpStorefront struct {
 // StorefrontsClient reads a seller's published storefront by its address (seller service, no token).
 type StorefrontsClient interface {
 	Storefront(ctx context.Context, slug string) (UpStorefront, error)
+	// PublishedStorefronts lists the published storefronts of approved sellers (the sitemap).
+	PublishedStorefronts(ctx context.Context) ([]UpPublishedStorefront, error)
 }
 
 // UpStorePage is seller's StorePageSettings: the draft and published JSON documents with their versions.
@@ -71,4 +73,11 @@ type StorePageClient interface {
 	PublishStorePage(ctx context.Context, bearer, orgID string, version int64) (UpStorePage, error)
 	UnpublishStorePage(ctx context.Context, bearer, orgID string) (UpStorePage, error)
 	StorePageAudit(ctx context.Context, bearer, orgID string) ([]UpStorePageAuditEntry, error)
+}
+
+// UpPublishedStorefront is one published storefront of an approved seller.
+type UpPublishedStorefront struct {
+	OrgID       string    `json:"orgId"`
+	Slug        string    `json:"slug"`
+	PublishedAt time.Time `json:"publishedAt"`
 }

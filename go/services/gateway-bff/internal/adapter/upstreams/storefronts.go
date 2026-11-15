@@ -23,6 +23,12 @@ func (s *storefrontsImpl) Storefront(ctx context.Context, slug string) (port.UpS
 	return out, err
 }
 
+func (s *storefrontsImpl) PublishedStorefronts(ctx context.Context) ([]port.UpPublishedStorefront, error) {
+	var out []port.UpPublishedStorefront
+	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/public/storefronts"}, &out)
+	return out, err
+}
+
 // ---------------------------------------------------------------- seller: store page settings (member token)
 
 func storePagePath(orgID, tail string) string {

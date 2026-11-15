@@ -545,6 +545,9 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 			"policy": policy, "instantBooking": false, "services": []any{service}, "team": []map[string]any{{"id": "0c0c0c0c-0000-4000-8000-0000000000aa", "displayName": "Ama"}}})
 	})
 	// A published storefront (seller kind) for the shopper routes; other addresses are unpublished.
+	mux.HandleFunc("GET /v1/public/storefronts", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, []map[string]any{{"orgId": SellerOrgID, "slug": "ades-kitchen", "publishedAt": "2026-11-10T10:00:00Z"}})
+	})
 	mux.HandleFunc("GET /v1/public/storefronts/{slug}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("slug") != "ades-kitchen" {
 			problem(w, 404, "seller.storefront-not-found", "No storefront", nil)

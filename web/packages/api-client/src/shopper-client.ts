@@ -73,7 +73,7 @@ import {
   type TotpSetup,
   TotpSetupSchema
 } from './schemas/shopper';
-import { type Storefront, type StorefrontProducts, StorefrontProductsSchema, type StorefrontQuery, StorefrontSchema } from './schemas/storefront';
+import { type Storefront, type StorefrontList, StorefrontListSchema, type StorefrontProducts, StorefrontProductsSchema, type StorefrontQuery, StorefrontSchema } from './schemas/storefront';
 
 const Void = z.undefined();
 const enc = encodeURIComponent;
@@ -201,6 +201,8 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     getProviderPage: (orgId: string, signal?: AbortSignal): Promise<ProviderPage> => request(`/v1/service-providers/${enc(orgId)}`, ProviderPageSchema, { signal }),
     /** A seller's branded storefront (/b/{slug}); 404 when unpublished, unknown or the seller is not approved. */
     getStorefront: (slug: string, signal?: AbortSignal): Promise<Storefront> => request(`/v1/storefronts/${enc(slug)}`, StorefrontSchema, { signal }),
+    /** Published storefronts with something to buy (the sitemap). */
+    listStorefronts: (signal?: AbortSignal): Promise<StorefrontList> => request('/v1/storefronts', StorefrontListSchema, { signal }),
     /** The storefront's All products grid: search in the store, filters, sort, pages (1-based). */
     getStorefrontProducts: (slug: string, q: StorefrontQuery = {}, signal?: AbortSignal): Promise<StorefrontProducts> =>
       request(`/v1/storefronts/${enc(slug)}/products`, StorefrontProductsSchema, {

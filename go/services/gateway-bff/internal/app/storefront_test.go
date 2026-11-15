@@ -14,8 +14,13 @@ import (
 )
 
 type fakeStorefronts struct {
-	up  port.UpStorefront
-	err error
+	up   port.UpStorefront
+	err  error
+	list []port.UpPublishedStorefront
+}
+
+func (f fakeStorefronts) PublishedStorefronts(context.Context) ([]port.UpPublishedStorefront, error) {
+	return f.list, f.err
 }
 
 func (f fakeStorefronts) Storefront(context.Context, string) (port.UpStorefront, error) {
@@ -202,5 +207,20 @@ func TestSellingSinceAndVerifiedAreReal(t *testing.T) {
 	g, _ := empty.Get(context.Background(), "laserfeet")
 	if g.Indexable {
 		t.Fatal("a page with no live products must not be indexable (no sitemap entry)")
+	}
+}
+
+func TestSitemapListOnlyHasStoresWithLiveProducts(t *testing.T) {
+	clock := Clock(func() time.Time { return time.Now() })
+	pages := fakeStorefronts{list: []port.UpPublishedStorefront{{OrgID: "org_1", Slug: "laserfeet"}}}
+	live := NewStorefrontService(pages, &fakeSearch{hits: []domain.ProductSummary{sfProduct("A", 0, 0, true, "https://m/a.jpg")}}, nil, domain.StorePolicy{}, clock)
+	got, err := live.List(context.Background())
+	if err != nil || len(got.Items) != 1 || got.Items[0].Slug != "laserfeet" {
+		t.Fatalf("live store missing: %+v %v", got, err)
+	}
+	empty := NewStorefrontService(pages, &fakeSearch{hits: []domain.ProductSummary{sfProduct("B", 0, 0, false, "https://m/b.jpg")}}, nil, domain.StorePolicy{}, clock)
+	got, _ = empty.List(context.Background())
+	if len(got.Items) != 0 {
+		t.Fatalf("a store with nothing sellable must not be listed: %+v", got)
 	}
 }

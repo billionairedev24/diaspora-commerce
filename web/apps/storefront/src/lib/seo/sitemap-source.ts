@@ -10,7 +10,7 @@ import { chunkUrls, lastmodOf, type SitemapKind, type SitemapSet, type SitemapUr
    sitemap stays empty), and an index query is capped by the search engine's maximum window (partitioned by department and
    community below). */
 
-export type SeoApi = Pick<ApiClient, 'searchOrganic' | 'getHelpArticles' | 'getLegalIndex' | 'searchServices' | 'getSitemapSources' | 'getNavigation'>;
+export type SeoApi = Pick<ApiClient, 'searchOrganic' | 'getHelpArticles' | 'getLegalIndex' | 'searchServices' | 'getSitemapSources' | 'getNavigation' | 'listStorefronts'>;
 
 const PAGE_SIZE = 60;
 /** Pages read per partition: 60 x 50 = 3,000 products; beyond the search window a partition is split by community. */
@@ -107,6 +107,15 @@ export async function collectServices(api: SeoApi, origin: string): Promise<Site
   return urls;
 }
 
+/**
+ * Seller storefronts (/b/<slug>): only published stores of approved sellers that have at least one sellable product (the
+ * gateway decides; a store with nothing to buy is not listed). lastmod is the publish time: the last real change of the page.
+ */
+export async function collectStores(api: SeoApi, origin: string): Promise<SitemapUrl[]> {
+  const res = await api.listStorefronts();
+  return res.items.map((s) => ({ loc: `${origin}/b/${encodeURIComponent(s.slug)}`, ...(lastmodOf(s.publishedAt) ? { lastmod: lastmodOf(s.publishedAt)! } : {}) }));
+}
+
 /** Static pages, published help articles (lastmod = the article's update time) and legal documents (lastmod = effective date). */
 export async function collectContent(api: SeoApi, origin: string): Promise<SitemapUrl[]> {
   const urls: SitemapUrl[] = STATIC_CONTENT_PATHS.map((p) => ({ loc: p === '/' ? origin : `${origin}${p}` }));
@@ -147,7 +156,7 @@ export async function buildSitemapSet(api: SeoApi, origin: string, now: Date = n
       return undefined;
     }
   };
-  const [products, categories, services, content] = await Promise.all([
+  const [products, categories, services, content, stores] = await Promise.all([
     run('products', async () => {
       const c = await collectProducts(api, origin);
       truncated ||= c.truncated;
@@ -155,7 +164,8 @@ export async function buildSitemapSet(api: SeoApi, origin: string, now: Date = n
     }),
     run('categories', () => collectCategories(api, origin)),
     run('services', () => collectServices(api, origin)),
-    run('content', () => collectContent(api, origin))
+    run('content', () => collectContent(api, origin)),
+    run('stores', () => collectStores(api, origin))
   ]);
   const set: SitemapSet = { generatedAt: now.toISOString(), kinds: {} };
   const put = (kind: SitemapKind, urls: SitemapUrl[] | undefined) => {
@@ -165,6 +175,6 @@ export async function buildSitemapSet(api: SeoApi, origin: string, now: Date = n
   put('categories', categories);
   put('services', services);
   put('content', content);
-  // stores: no listing endpoint yet (docs/engineering/seo.md, gap list), so the kind stays empty and is not in the index.
+  put('stores', stores);
   return { set, failed, truncated };
 }

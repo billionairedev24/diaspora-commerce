@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -22,6 +23,8 @@ type StorefrontService interface {
 	Build(ctx context.Context, src StorefrontSource) (domain.Storefront, error)
 	// FindProducts is the seller's featured-product picker: sellable products of the organisation matching the words.
 	FindProducts(ctx context.Context, orgID, text string) ([]domain.ProductSummary, error)
+	// List is the published storefronts that have at least one sellable product (the sitemap's stores).
+	List(ctx context.Context) (domain.StorefrontList, error)
 }
 
 // StorefrontSource is everything the page is made from besides the live products.
@@ -267,4 +270,31 @@ func (s *storefrontServiceImpl) FindProducts(ctx context.Context, orgID, text st
 		return nil, err
 	}
 	return eligibleOnly(res.Hits), nil
+}
+
+func (s *storefrontServiceImpl) List(ctx context.Context) (domain.StorefrontList, error) {
+	all, err := s.pages.PublishedStorefronts(ctx)
+	if err != nil {
+		return domain.StorefrontList{}, mapErr("seller", err)
+	}
+	live := make([]bool, len(all))
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i, st := range all {
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer func() { <-sem; wg.Done() }()
+			res, err := s.search.Search(ctx, &domain.Caller{}, domain.SearchQuery{SellerID: st.OrgID, EligibleOnly: true, Size: 1})
+			live[i] = err == nil && len(eligibleOnly(res.Hits)) > 0
+		}()
+	}
+	wg.Wait()
+	out := domain.StorefrontList{Items: []domain.StorefrontListItem{}}
+	for i, st := range all {
+		if live[i] {
+			out.Items = append(out.Items, domain.StorefrontListItem{Slug: st.Slug, PublishedAt: st.PublishedAt})
+		}
+	}
+	return out, nil
 }

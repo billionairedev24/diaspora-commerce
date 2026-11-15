@@ -231,6 +231,13 @@ export const storefrontHandlers = [
     return svg(mockPhotoSvg(name, shapeOf.get(name) ?? 'jar', product?.name ?? name));
   }),
   http.get(
+    '*/v1/storefronts',
+    route(() => {
+      const slugs = [...new Set(['laserfeet', ...Object.keys(readShared())])];
+      return HttpResponse.json({ items: slugs.map((slug) => ({ slug, publishedAt: publishedMockStore(slug)?.publishedAt ?? '2026-11-01T10:00:00.000Z' })) });
+    })
+  ),
+  http.get(
     '*/v1/storefronts/:slug/products',
     route((ctx, p) => {
       if (!publishedMockStore(p.slug ?? '')) throw new MockProblem(404, 'NOT_FOUND', 'Store not found', 'There is no store at this address.');

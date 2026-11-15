@@ -120,3 +120,7 @@ export function defaultStoreConfig(): StoreConfig {
     social: []
   };
 }
+
+/** GET /v1/storefronts: published stores with at least one sellable product (the sitemap). */
+export const StorefrontListSchema = z.object({ items: z.array(z.object({ slug: z.string(), publishedAt: z.string() })) });
+export type StorefrontList = z.infer<typeof StorefrontListSchema>;
