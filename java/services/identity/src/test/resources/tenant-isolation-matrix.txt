@@ -2,6 +2,7 @@
 # Spring Authorization Server endpoints (/oauth2/*, /connect/*, /userinfo, jwks, logout) are filter-chain
 # endpoints, not @Controller routes, and are not scanned here; see the report.
 @AccessAdminController | STAFF_ONLY | access:admin / access:read via PermissionChecker; permissions seeded on platform roles only | -
+@StaffInvitationController | STAFF_ONLY | StaffInvitationServiceImpl: access:admin to invite, resend and revoke, access:read to list; the token is never returned | -
 @IdentityAdminController | STAFF_ONLY | identity:admin via PermissionChecker; platform roles only | -
 @DataProtectionController | STAFF_ONLY | access:admin; envelope-key admin | -
 @InternalLookupController | SERVICE_ONLY | requireServiceLookup: SERVICE principal with users:read | -
@@ -56,6 +57,8 @@ PATCH /v1/me/passkeys/{credentialId} | CUSTOMER_SELF | subject taken from the to
 POST /v1/internal/orgs/reconcile | SERVICE_ONLY | orgs:manage service or staff | -
 POST /v1/invitations/accept | TOKEN_LINK | single-use invitation token; accept also requires the token's email to equal the signed-in account | -
 POST /v1/invitations/lookup | TOKEN_LINK | single-use invitation token; accept also requires the token's email to equal the signed-in account | -
+POST /v1/staff-invitations/preview | TOKEN_LINK | single-use staff invitation token (SHA-256 at rest, 72 h); answers name, email, role and status of that invitation only | -
+POST /v1/staff-invitations/accept | TOKEN_LINK | single-use staff invitation token, claimed atomically; creates only the invited email's account with the invited role | -
 POST /v1/me/addresses | CUSTOMER_SELF | address looked up by (token subject, id) in SQL | IdentityTenantIsolationTest
 POST /v1/me/addresses/{id}/default | CUSTOMER_SELF | address looked up by (token subject, id) in SQL | IdentityTenantIsolationTest
 POST /v1/me/devices | CUSTOMER_SELF | subject taken from the token (CurrentUser.id()); no user or org id in request, SQL scoped by user_id | IdentityTenantIsolationTest
