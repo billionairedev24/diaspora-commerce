@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -65,6 +66,8 @@ type serverImpl struct {
 	opts    Options
 	mux     *http.ServeMux
 	metrics http.Handler
+	once    sync.Once
+	built   http.Handler
 }
 
 var _ Server = (*serverImpl)(nil)
@@ -143,8 +146,38 @@ func (s *serverImpl) ready(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// handler assembles the middleware chain around the mux and registers the HTTP metrics.
+// HandlerOf returns the server's full handler (middleware chain around the mux) for a host that owns the listener, such
+// as afrotransact-go. It is the same handler Run serves, built once.
+func HandlerOf(s Server) http.Handler {
+	if impl, ok := s.(*serverImpl); ok {
+		return impl.handler()
+	}
+	return s.Mux()
+}
+
+// ChecksOf returns the readiness checks the server was built with.
+func ChecksOf(s Server) []ReadinessCheck {
+	if impl, ok := s.(*serverImpl); ok {
+		return impl.opts.Checks
+	}
+	return nil
+}
+
+// RegistryOf returns the Prometheus registry the server records into.
+func RegistryOf(s Server) *prometheus.Registry {
+	if impl, ok := s.(*serverImpl); ok {
+		return impl.opts.Registry
+	}
+	return nil
+}
+
+// handler assembles the middleware chain around the mux and registers the HTTP metrics (once).
 func (s *serverImpl) handler() http.Handler {
+	s.once.Do(func() { s.built = s.buildHandler() })
+	return s.built
+}
+
+func (s *serverImpl) buildHandler() http.Handler {
 	reqs := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_server_requests_total", Help: "HTTP requests by method, route and status.",
 	}, []string{"method", "route", "status"})
