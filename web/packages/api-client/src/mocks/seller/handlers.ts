@@ -144,6 +144,7 @@ import {
 import { applyToSell, resubmitSelling, sellingApplication, sellingApplications, sellingApprovals, sellingCapabilities, SellingMockError, sellingStatus } from './selling';
 import { sellerSettingsHandlers } from './settings';
 import { chartProblems, type MockSizeChart, readSizeChartCsv, sizeChartTemplateCsv, sizeProblems, suggestionsFor } from './size-charts';
+import { providerKeyForOrg } from '../storefront';
 import { emptyStorePage, validateMockStoreConfig } from './store-page';
 
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
@@ -795,16 +796,18 @@ function businessPage(ctx: Ctx): BusinessPageSettings {
 
 const storeSlug = (ctx: Ctx) => ctx.org.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-/** Sellers only (a provider has no storefront); Team view reads, Team edit changes. */
+/** Sellers and providers (each edits its own page); Team view reads, Team edit changes. */
 function storeAccess(ctx: Ctx, level: 'VIEW' | 'EDIT') {
-  require(ctx, 'team', level, 'SELLER');
+  require(ctx, 'team', level);
 }
+
+const storeKind = (ctx: Ctx): 'SELLER' | 'PROVIDER' => (ctx.org.kind === 'PROVIDER' ? 'PROVIDER' : 'SELLER');
 
 function storePageView(ctx: Ctx): StorePageSettings {
   const bp = businessPage(ctx);
   const page = ctx.db.storePage[ctx.org.id] ?? emptyStorePage();
   const canEdit = bp.canEdit;
-  return { slug: bp.slug, name: bp.name, logoUrl: bp.logoUrl, contactEmail: bp.contactEmail, draft: page.draft ?? defaultStoreConfig(), published: page.published, isPublished: page.published !== null,
+  return { kind: storeKind(ctx), slug: bp.slug, name: bp.name, logoUrl: bp.logoUrl, contactEmail: bp.contactEmail, draft: page.draft ?? defaultStoreConfig(storeKind(ctx)), published: page.published, isPublished: page.published !== null,
     version: page.version, publishedVersion: page.publishedVersion, hasUnpublishedChanges: page.published === null ? page.draft !== null : page.publishedVersion !== page.version,
     updatedAt: page.updatedAt, publishedAt: page.publishedAt, approved: ctx.org.status === 'APPROVED', canEdit, canPublish: canEdit && ctx.org.status === 'APPROVED' && !!bp.slug };
 }
@@ -2808,7 +2811,7 @@ export const sellerHandlers = [
     route(async (ctx) => {
       storeAccess(ctx, 'EDIT');
       const b = await body(ctx.request, z.object({ version: z.number().int(), config: StoreConfigSchema }));
-      const { errors, accentLow, clean } = validateMockStoreConfig(b.config);
+      const { errors, accentLow, clean } = validateMockStoreConfig(b.config, storeKind(ctx));
       if (Object.keys(errors).length) {
         throw accentLow ? new SellerProblem(422, 'STORE_ACCENT_LOW_CONTRAST', 'That colour is hard to read', errors['theme.accent']!, errors) : invalid(errors);
       }
@@ -2834,7 +2837,7 @@ export const sellerHandlers = [
       page.publishedAt = ctx.now.toISOString();
       page.audit.unshift({ at: page.publishedAt, action: 'PUBLISHED', actor: 'You', version: page.version });
       const v = storePageView(ctx);
-      publishMockStore({ slug: v.slug!, name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: page.published, publishedAt: page.publishedAt });
+      publishMockStore({ kind: storeKind(ctx), providerKey: providerKeyForOrg(ctx.org.id), slug: v.slug!, name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: page.published, publishedAt: page.publishedAt });
       return v;
     })
   ),
@@ -2859,7 +2862,7 @@ export const sellerHandlers = [
     route((ctx) => {
       storeAccess(ctx, 'VIEW');
       const v = storePageView(ctx);
-      return buildStorefront({ slug: v.slug!, name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: v.draft, preview: true }, ctx.now);
+      return buildStorefront({ kind: storeKind(ctx), providerKey: providerKeyForOrg(ctx.org.id), slug: v.slug!, name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: v.draft, preview: true }, ctx.now);
     })
   ),
   http.get(`${W}/store-page/featured-search`, route((ctx) => { storeAccess(ctx, 'VIEW'); return { items: searchStoreProducts(storeSlug(ctx), new URL(ctx.request.url).searchParams.get('q') ?? '', ctx.now) }; })),

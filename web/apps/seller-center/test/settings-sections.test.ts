@@ -38,10 +38,10 @@ describe('settings sections', () => {
     expect(settingsSectionOf('/orders')).toBeNull();
   });
 
-  it('shows a member only the sections their role can open, and shipping sections to sellers only', () => {
+  it('shows a member only the sections their role can open, and shipping sections to sellers only (the store page is for both)', () => {
     const owner = level({ orders: 'FULL', payouts: 'FULL', team: 'FULL', 'account-health': 'FULL' });
-    expect(visibleSections(false, owner).map((s) => s.key)).toEqual(['business', 'locations', 'shipping', 'pickup', 'payouts', 'team', 'notifications', 'tax', 'documents', 'language']);
-    expect(visibleSections(true, owner).map((s) => s.key)).toEqual(['business', 'payouts', 'team', 'notifications', 'tax', 'documents', 'language']);
+    expect(visibleSections(false, owner).map((s) => s.key)).toEqual(['business', 'store-page', 'locations', 'shipping', 'pickup', 'payouts', 'team', 'notifications', 'tax', 'documents', 'language']);
+    expect(visibleSections(true, owner).map((s) => s.key)).toEqual(['business', 'store-page', 'payouts', 'team', 'notifications', 'tax', 'documents', 'language']);
     // Fulfilment can run pickup and shipping but not money, team or compliance; personal sections stay.
     const fulfilment = level({ orders: 'FULL' });
     expect(visibleSections(false, fulfilment).map((s) => s.key)).toEqual(['locations', 'shipping', 'pickup', 'notifications', 'language']);

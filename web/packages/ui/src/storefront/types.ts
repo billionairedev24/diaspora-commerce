@@ -4,7 +4,7 @@ import { type LinkLikeProps } from '../commerce/ProductCard';
 
 /* Structural types for the seller storefront (they match @afrotransact/api-client's Storefront; ui has no dependency on the API client). */
 
-export type StoreSectionId = 'announcement' | 'featured' | 'categories' | 'about' | 'policies' | 'reviews';
+export type StoreSectionId = 'announcement' | 'featured' | 'categories' | 'about' | 'policies' | 'reviews' | 'services' | 'book' | 'schedule' | 'team';
 
 export interface StorefrontConfigModel {
   theme: { preset: string; accent: string | null };
@@ -51,7 +51,36 @@ export interface StorefrontPageModel {
   prices: { value: string; label: string; count: number }[];
 }
 
+/** A provider's bookable data (bookings' public view): services in person only, weekly hours ('HH:mm' local, empty list = none set), the service area, the bookable team. */
+export interface StorefrontProviderModel {
+  orgId: string;
+  timeZone: string;
+  location: string;
+  instantBooking: boolean;
+  policyLabel: string;
+  policyText: string;
+  services: StorefrontServiceModel[];
+  hours: { day: string; ranges: { start: string; end: string }[] }[];
+  area: { baseCity: string; baseState: string; radiusMiles: number; servedCities: string[]; extraAreas: string[] } | null;
+  team: { id: string; displayName: string }[];
+}
+
+export interface StorefrontServiceModel {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  durationMinutes: number;
+  priceMinor: number;
+  depositMinor: number;
+  currency: string;
+  modes: ('IN_PERSON' | 'AT_HOME')[];
+  imageUrl: string | null;
+}
+
 export interface StorefrontModel {
+  kind: 'SELLER' | 'PROVIDER';
+  provider: StorefrontProviderModel | null;
   slug: string;
   name: string;
   logoUrl: string | null;
@@ -74,9 +103,18 @@ export interface StorefrontQueryState {
   category: string;
   price: string;
   sort: StorefrontSort;
+  /** Only products with a real was-price above the price. */
+  onSale: boolean;
 }
 
-export const EMPTY_QUERY: StorefrontQueryState = { q: '', category: '', price: '', sort: 'relevance' };
+export const EMPTY_QUERY: StorefrontQueryState = { q: '', category: '', price: '', sort: 'relevance', onSale: false };
+
+/** What the app hands the provider's "Book" section: the services, which is chosen, and the booking panel to render for it. */
+export interface StorefrontBookerContext {
+  provider: StorefrontProviderModel;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}
 
 /** Everything that touches the marketplace: links, the cart and checkout. Preview passes inert versions. */
 export interface StorefrontCommerce {
@@ -128,7 +166,8 @@ export interface StorefrontLabels {
   inCart: (n: number) => string;
   onlyLeft: (n: number) => string;
   off: (percent: number) => string;
-  inStockNote: string;
+  onSale: string;
+  noSale: string;
   sort: string;
   sortOptions: Record<StorefrontSort, string>;
   price: string;
@@ -147,6 +186,28 @@ export interface StorefrontLabels {
   preview: string;
   networks: Record<string, string>;
   opensNewTab: string;
+  verifiedProvider: string;
+  bookAppointment: string;
+  servicesTitle: string;
+  bookTitle: string;
+  scheduleTitle: string;
+  teamTitle: string;
+  areaTitle: string;
+  minutes: (n: number) => string;
+  deposit: (amount: string) => string;
+  modeInPerson: string;
+  modeAtHome: string;
+  bookService: string;
+  closed: string;
+  timesIn: (zone: string) => string;
+  basedIn: (place: string) => string;
+  travelsUpTo: (miles: string) => string;
+  alsoServes: (list: string) => string;
+  cancellation: (label: string) => string;
+  chooseService: string;
+  previewBooker: string;
+  noServices: string;
+  providerNav: string;
 }
 
 export const defaultStorefrontLabels: StorefrontLabels = {
@@ -185,7 +246,8 @@ export const defaultStorefrontLabels: StorefrontLabels = {
   inCart: (n) => `${n} in cart`,
   onlyLeft: (n) => `Only ${n} left`,
   off: (p) => `${p}% off`,
-  inStockNote: 'Showing products in stock now',
+  onSale: 'On sale',
+  noSale: 'Nothing is on sale right now.',
   sort: 'Sort by',
   sortOptions: { relevance: 'Featured', price_asc: 'Price: low to high', price_desc: 'Price: high to low', rating: 'Top rated', newest: 'Newest' },
   price: 'Price',
@@ -203,5 +265,27 @@ export const defaultStorefrontLabels: StorefrontLabels = {
   reviewsCount: (c) => `(${c})`,
   preview: 'Preview: buttons are switched off',
   networks: { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', x: 'X', youtube: 'YouTube', whatsapp: 'WhatsApp', website: 'Website' },
-  opensNewTab: '(opens in a new tab)'
+  opensNewTab: '(opens in a new tab)',
+  verifiedProvider: 'Verified provider',
+  bookAppointment: 'Book an appointment',
+  servicesTitle: 'Services',
+  bookTitle: 'Book an appointment',
+  scheduleTitle: 'Opening hours',
+  teamTitle: 'Team',
+  areaTitle: 'Where we work',
+  minutes: (n) => `${n} min`,
+  deposit: (a) => `${a} deposit`,
+  modeInPerson: 'At the studio',
+  modeAtHome: 'Comes to you',
+  bookService: 'Book',
+  closed: 'Closed',
+  timesIn: (z) => `Times are ${z}.`,
+  basedIn: (p) => `Based in ${p}`,
+  travelsUpTo: (m) => `Travels up to ${m} miles`,
+  alsoServes: (l) => `Also serves ${l}`,
+  cancellation: (l) => `Cancellation policy: ${l}`,
+  chooseService: 'Choose a service',
+  previewBooker: 'Preview: customers choose a service, then a free time, and book here.',
+  noServices: 'Services will be listed here soon.',
+  providerNav: 'Sections'
 };

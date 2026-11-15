@@ -7,7 +7,10 @@ import { ProductSummarySchema } from './catalog';
    assignable to the generated contract types. */
 
 export const THEME_PRESET_IDS = ['clean', 'warm-market', 'bold', 'midnight', 'heritage', 'fresh'] as const;
-export const StoreSectionIdSchema = z.enum(['announcement', 'featured', 'categories', 'about', 'policies', 'reviews']);
+export const SELLER_SECTION_IDS = ['announcement', 'featured', 'categories', 'about', 'policies', 'reviews'] as const;
+/** A provider's page: no product sections; its services, the appointment booker, the weekly schedule with the service area, its team and reviews. */
+export const PROVIDER_SECTION_IDS = ['announcement', 'about', 'services', 'book', 'schedule', 'team', 'reviews'] as const;
+export const StoreSectionIdSchema = z.enum(['announcement', 'featured', 'categories', 'about', 'policies', 'reviews', 'services', 'book', 'schedule', 'team']);
 export type StoreSectionId = z.infer<typeof StoreSectionIdSchema>;
 export const StoreSocialNetworkSchema = z.enum(['instagram', 'facebook', 'tiktok', 'x', 'youtube', 'whatsapp', 'website']);
 export type StoreSocialNetwork = z.infer<typeof StoreSocialNetworkSchema>;
@@ -44,7 +47,40 @@ export const StorefrontProductsSchema = z.object({
 });
 export type StorefrontProducts = z.infer<typeof StorefrontProductsSchema>;
 
+export const StoreKindSchema = z.enum(['SELLER', 'PROVIDER']);
+export type StoreKind = z.infer<typeof StoreKindSchema>;
+
+/** What makes a provider's page bookable: real, public booking data (bookings). Services are in person (no virtual). Empty `hours` means none set (no schedule shown). */
+export const StorefrontProviderSchema = z.object({
+  orgId: z.string(),
+  timeZone: z.string(),
+  location: z.string(),
+  instantBooking: z.boolean(),
+  policyLabel: z.string(),
+  policyText: z.string(),
+  services: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string(),
+      category: z.string(),
+      durationMinutes: z.number().int(),
+      priceMinor: z.number().int(),
+      depositMinor: z.number().int(),
+      currency: z.string(),
+      modes: z.array(z.enum(['IN_PERSON', 'AT_HOME'])),
+      imageUrl: z.string().nullable()
+    })
+  ),
+  hours: z.array(z.object({ day: z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']), ranges: z.array(z.object({ start: z.string(), end: z.string() })) })),
+  area: z.object({ baseCity: z.string(), baseState: z.string(), radiusMiles: z.number().int(), servedCities: z.array(z.string()), extraAreas: z.array(z.string()) }).nullable(),
+  team: z.array(z.object({ id: z.string(), displayName: z.string() }))
+});
+export type StorefrontProvider = z.infer<typeof StorefrontProviderSchema>;
+
 export const StorefrontSchema = z.object({
+  kind: StoreKindSchema,
+  provider: StorefrontProviderSchema.nullable(),
   slug: z.string(),
   name: z.string(),
   logoUrl: z.string().nullable(),
@@ -58,7 +94,7 @@ export const StorefrontSchema = z.object({
   pickup: z.object({ zip: z.string() }).nullable(),
   categories: z.array(StorefrontCategorySchema),
   featured: z.array(ProductSummarySchema),
-  /** Null when the products have no reviews: never "0 reviews". */
+  /** Backend aggregate over REAL reviews (catalog for a seller, bookings for a provider). Null unless there is at least one: never "0 reviews". */
   reviews: z.object({ average: z.number(), count: z.number().int() }).nullable(),
   products: StorefrontProductsSchema
 });
@@ -69,6 +105,8 @@ export interface StorefrontQuery {
   category?: string;
   price?: string;
   sort?: 'relevance' | 'price_asc' | 'price_desc' | 'rating' | 'newest';
+  /** Only products with a real was-price above the price. */
+  onSale?: boolean;
   page?: number;
   size?: number;
 }
@@ -76,6 +114,7 @@ export interface StorefrontQuery {
 /* ── Seller Center: Settings > Store page ── */
 
 export const StorePageSettingsSchema = z.object({
+  kind: StoreKindSchema,
   slug: z.string().nullable(),
   name: z.string(),
   logoUrl: z.string().nullable(),
@@ -102,15 +141,15 @@ export type StorePageAudit = z.infer<typeof StorePageAuditSchema>;
 export const StorePageProductListSchema = z.object({ items: z.array(ProductSummarySchema) });
 export type StorePageProductList = z.infer<typeof StorePageProductListSchema>;
 
-/** The editor's starting point for a seller who never saved: the Clean look, every optional section on except the announcement. */
-export function defaultStoreConfig(): StoreConfig {
+/** The editor's starting point for an organisation that never saved: the Clean look, every optional section of its kind on except the announcement. */
+export function defaultStoreConfig(kind: StoreKind = 'SELLER'): StoreConfig {
   return {
     schemaVersion: 1,
     theme: { preset: 'clean', accent: null },
     hero: { style: 'image', tagline: '', bannerUrl: null, focalX: 50, focalY: 50 },
     announcement: { text: '', href: null },
     grid: { columns: 4 },
-    sections: (['announcement', 'featured', 'categories', 'about', 'policies', 'reviews'] as const).map((id) => ({ id, enabled: id !== 'announcement' })),
+    sections: (kind === 'PROVIDER' ? PROVIDER_SECTION_IDS : SELLER_SECTION_IDS).map((id) => ({ id, enabled: id !== 'announcement' })),
     featured: [],
     categories: { mode: 'auto', chosen: [] },
     about: { heading: '', body: '', photoUrl: null },
@@ -121,6 +160,6 @@ export function defaultStoreConfig(): StoreConfig {
   };
 }
 
-/** GET /v1/storefronts: published stores with at least one sellable product (the sitemap). */
-export const StorefrontListSchema = z.object({ items: z.array(z.object({ slug: z.string(), publishedAt: z.string() })) });
+/** GET /v1/storefronts: published stores with at least one sellable product, and published providers with at least one service (the sitemap). */
+export const StorefrontListSchema = z.object({ items: z.array(z.object({ kind: StoreKindSchema, slug: z.string(), publishedAt: z.string() })) });
 export type StorefrontList = z.infer<typeof StorefrontListSchema>;

@@ -1192,6 +1192,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/sellers/{orgId}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A seller's rating: average, count and star breakdown over every published review of its products
+         * @description Computed from the reviews themselves. count 0 means no reviews; callers show no rating then.
+         */
+        get: operations["sellerRating"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/products/{atin}/reports": {
         parameters: {
             query?: never;
@@ -6137,6 +6157,28 @@ export interface operations {
             header?: never;
             path: {
                 atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductRating"];
+                };
+            };
+        };
+    };
+    sellerRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
             };
             cookie?: never;
         };

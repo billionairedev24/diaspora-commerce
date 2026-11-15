@@ -4170,10 +4170,13 @@ export interface components {
                 /** @enum {integer} */
                 columns: 3 | 4;
             };
-            /** @description Order and visibility of the optional sections. The header, hero and All products are always present. */
+            /** @description Order and visibility of the optional sections of the organisation's kind. The header and hero are always present, and All products for a seller. */
             sections: {
-                /** @enum {string} */
-                id: "announcement" | "featured" | "categories" | "about" | "policies" | "reviews";
+                /**
+                 * @description A seller has announcement, featured, categories, about, policies, reviews; a provider has announcement, about, services, book, schedule, team, reviews. Any other id for the kind is 422.
+                 * @enum {string}
+                 */
+                id: "announcement" | "featured" | "categories" | "about" | "policies" | "reviews" | "services" | "book" | "schedule" | "team";
                 enabled: boolean;
             }[];
             /** @description ATINs the seller picked; only the sellable ones are shown */
@@ -4208,6 +4211,11 @@ export interface components {
             }[];
         };
         StorePageSettings: {
+            /**
+             * @description The organisation kind: decides the sections the editor offers
+             * @enum {string}
+             */
+            kind: "SELLER" | "PROVIDER";
             /** @description The address /b/{slug}; null until the page is first made */
             slug: string | null;
             name: string;
@@ -4277,11 +4285,69 @@ export interface components {
             }[];
         };
         /**
+         * @description What makes a provider's page bookable, from bookings' public view of the provider: nothing here is invented. Services are in person
+         *     (IN_PERSON or AT_HOME): there are no virtual services. `hours` is Monday first in the provider's time zone and EMPTY when no hours are
+         *     set (the page then shows no schedule, never "closed"). `area` has no address, base ZIP or coordinates.
+         */
+        StorefrontProvider: {
+            orgId: string;
+            timeZone: string;
+            location: string;
+            instantBooking: boolean;
+            policyLabel: string;
+            policyText: string;
+            services: {
+                /** @description Book it with the existing booking flow: GET /v1/services/{id}/days|slots|summary, POST /v1/services/bookings */
+                id: string;
+                name: string;
+                description: string;
+                category: string;
+                durationMinutes: number;
+                /** Format: int64 */
+                priceMinor: number;
+                /** Format: int64 */
+                depositMinor: number;
+                currency: string;
+                modes: ("IN_PERSON" | "AT_HOME")[];
+                /** @description Only AfroTransact media */
+                imageUrl: string | null;
+            }[];
+            hours: {
+                /** @enum {string} */
+                day: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+                ranges: {
+                    /** @description HH:mm local */
+                    start: string;
+                    /** @description HH:mm local, exclusive */
+                    end: string;
+                }[];
+            }[];
+            area: {
+                baseCity: string;
+                baseState: string;
+                radiusMiles: number;
+                servedCities: string[];
+                extraAreas: string[];
+            } | null;
+            /** @description Team members customers can book */
+            team: {
+                id: string;
+                displayName: string;
+            }[];
+        };
+        /**
          * @description A seller's public storefront: the published settings plus real data, in one response. Only sellable products
          *     appear (in stock, a real photograph, a resolved tax decision). `reviews` is null when the products have no
          *     reviews (never "0 reviews"). Carrier names and fulfilment details are never present.
          */
         Storefront: {
+            /**
+             * @description A provider's page has `provider` and no products, categories or featured
+             * @enum {string}
+             */
+            kind: "SELLER" | "PROVIDER";
+            /** @description Present on a provider's page when bookings could be read */
+            provider: components["schemas"]["StorefrontProvider"] | null;
             slug: string;
             name: string;
             logoUrl: string | null;
@@ -4306,6 +4372,7 @@ export interface components {
             featured: {
                 [key: string]: unknown;
             }[];
+            /** @description Backend aggregate over REAL reviews only (a seller: catalog, all published reviews of its products; a provider: bookings, approved reviews). Null unless count is at least 1: never "0 reviews". */
             reviews: {
                 average: number;
                 count: number;

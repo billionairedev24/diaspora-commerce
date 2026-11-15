@@ -11,7 +11,11 @@ export const SECTION_COPY: Record<StoreSectionId, { title: string; hint: string 
   categories: { title: 'Shop by category', hint: 'Tiles for the categories you sell in.' },
   about: { title: 'Our story', hint: 'Your text and a photo.' },
   policies: { title: 'Shipping and returns', hint: 'Your own words about both, and pickup if you have it.' },
-  reviews: { title: 'Customer reviews', hint: 'Appears only when your products have real reviews.' }
+  reviews: { title: 'Customer reviews', hint: 'Appears only when there are real reviews.' },
+  services: { title: 'Services', hint: 'Your services with durations and prices, from Provider Hub.' },
+  book: { title: 'Book an appointment', hint: 'Customers pick a service and a free time, and book. Real availability only.' },
+  schedule: { title: 'Opening hours and area', hint: 'Your weekly hours and where you work, from Provider Hub.' },
+  team: { title: 'Team', hint: 'The team members customers can book.' }
 };
 
 export function moveSection(sections: StoreConfig['sections'], id: StoreSectionId, delta: -1 | 1): StoreConfig['sections'] {
@@ -73,6 +77,8 @@ export interface PreviewQuery {
   category: string;
   price: string;
   sort: 'relevance' | 'price_asc' | 'price_desc' | 'rating' | 'newest';
+  /** Only products with a real was-price above the price. */
+  onSale?: boolean;
 }
 
 const BUCKETS: Record<string, (m: number) => boolean> = {
@@ -86,7 +92,7 @@ const BUCKETS: Record<string, (m: number) => boolean> = {
 export function filterPreviewProducts(all: readonly ProductSummary[], q: PreviewQuery): ProductSummary[] {
   const needle = q.q.trim().toLowerCase();
   const bucket = BUCKETS[q.price];
-  const list = all.filter((p) => (!needle || `${p.title} ${p.brand} ${p.department}`.toLowerCase().includes(needle)) && (!q.category || p.department === q.category) && (!bucket || bucket(p.priceMinor)));
+  const list = all.filter((p) => (!needle || `${p.title} ${p.brand} ${p.department}`.toLowerCase().includes(needle)) && (!q.category || p.department === q.category) && (!bucket || bucket(p.priceMinor)) && (!q.onSale || (p.listPriceMinor !== null && p.listPriceMinor > p.priceMinor)));
   const by: Record<PreviewQuery['sort'], (a: ProductSummary, b: ProductSummary) => number> = {
     relevance: (a, b) => b.reviewCount - a.reviewCount,
     price_asc: (a, b) => a.priceMinor - b.priceMinor,

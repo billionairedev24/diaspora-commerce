@@ -5,12 +5,13 @@
 import { http, HttpResponse } from 'msw';
 
 import { type ProductSummary } from '../schemas/catalog';
-import { defaultStoreConfig, type StoreConfig,type Storefront, type StorefrontProducts, type StorefrontQuery } from '../schemas/storefront';
+import { defaultStoreConfig, type StoreConfig, type StoreKind, type Storefront, type StorefrontProducts, type StorefrontProvider, type StorefrontQuery } from '../schemas/storefront';
 import { getDb } from './db';
 import { atinOf, PLATFORM_SELLER, PRODUCTS } from './fixtures/catalog';
 import { type DemoShape,LASERFEET_PRODUCTS, LASERFEET_PROFILE } from './fixtures/laserfeet';
 import { route } from './http-kit';
 import { MockProblem, summarize } from './service';
+import { PROVIDER_AREAS, PROVIDERS, SERVICES } from './shopper-state';
 import { mockPhotoSvg } from './storefront-photo';
 
 const PHOTO_PATH = '/api/bff/v1/mock-photos/';
@@ -25,6 +26,9 @@ interface NodeFs {
 const nodeFs = (): NodeFs | undefined => (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } }).process?.getBuiltinModule?.('node:fs') as NodeFs | undefined;
 
 export interface PublishedStore {
+  kind?: StoreKind;
+  /** Provider pages: the mock booking provider whose services, hours and area the page shows. */
+  providerKey?: string;
   slug: string;
   name: string;
   logoUrl: string | null;
@@ -90,9 +94,26 @@ function laserfeetConfig(): StoreConfig {
   return c;
 }
 
+/** A provider's demo page (the mock stack's provider with real-looking services, hours and area; MOCK DATA ONLY). */
+const DEMO_PROVIDER_SLUG = 'braids-by-ama';
+const DEMO_PROVIDER_KEY = 'org_braids_ama';
+export const providerKeyForOrg = (orgId: string): string => (orgId === 'org-ama-braiding' ? DEMO_PROVIDER_KEY : orgId);
+
+function providerDemoConfig(): StoreConfig {
+  const c = defaultStoreConfig('PROVIDER');
+  c.theme = { preset: 'heritage', accent: null };
+  c.hero = { style: 'colour', tagline: 'Protective styles that last.', bannerUrl: null, focalX: 50, focalY: 50 };
+  c.about = { heading: 'About the studio', body: 'Demo provider. Braids by Ama is a mock provider used to build and test this page.\n\nIts services, prices and times are made up for the mock stack and never appear in production.', photoUrl: null };
+  return c;
+}
+
 export function publishedMockStore(slug: string): PublishedStore | null {
   const shared = readShared()[slug];
   if (shared) return shared;
+  if (slug === DEMO_PROVIDER_SLUG) {
+    return { kind: 'PROVIDER', providerKey: DEMO_PROVIDER_KEY, slug, name: PROVIDERS[DEMO_PROVIDER_KEY]!.displayName, logoUrl: null, description: PROVIDERS[DEMO_PROVIDER_KEY]!.tagline, contactEmail: null,
+      sinceYear: 2024, config: providerDemoConfig(), publishedAt: '2026-11-01T10:00:00.000Z' };
+  }
   if (slug === LASERFEET_PROFILE.slug) {
     return { slug, name: LASERFEET_PROFILE.name, logoUrl: `${PHOTO_PATH}laserfeet-logo.jpg`, description: LASERFEET_PROFILE.description, contactEmail: LASERFEET_PROFILE.contactEmail,
       sinceYear: LASERFEET_PROFILE.sinceYear, config: laserfeetConfig(), publishedAt: '2026-11-01T10:00:00.000Z' };
@@ -153,7 +174,7 @@ export function storeProducts(slug: string, q: StorefrontQuery, now: Date): Stor
   const live = catalogOf(slug, now).filter(sellable);
   const categories = [...live.reduce((m, p) => m.set(p.department, (m.get(p.department) ?? 0) + 1), new Map<string, number>())].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
   const needle = (q.q ?? '').trim().toLowerCase();
-  let list = live.filter((p) => (!needle || `${p.title} ${p.brand} ${p.department}`.toLowerCase().includes(needle)) && (!q.category || p.department === q.category));
+  let list = live.filter((p) => !q.onSale || (p.listPriceMinor !== null && p.listPriceMinor > p.priceMinor)).filter((p) => (!needle || `${p.title} ${p.brand} ${p.department}`.toLowerCase().includes(needle)) && (!q.category || p.department === q.category));
   const prices = BUCKETS.map((b) => ({ value: b.value, label: b.label, count: list.filter((p) => b.test(p.priceMinor)).length })).filter((b) => b.count > 0);
   const bucket = BUCKETS.find((b) => b.value === q.price);
   if (bucket) list = list.filter((p) => bucket.test(p.priceMinor));
@@ -177,6 +198,8 @@ const reviewsOf = (all: ProductSummary[]) => {
 };
 
 export interface StorefrontSource {
+  kind?: StoreKind;
+  providerKey?: string;
   slug: string;
   name: string;
   logoUrl: string | null;
@@ -188,11 +211,38 @@ export interface StorefrontSource {
 }
 
 /** The whole storefront from a source: the same rules as the BFF (sellable only, reviews only when real, contact only when shown). */
+/** A provider's bookable data from the mock booking directory: services in person only, hours Monday to Saturday (what the mock slots follow), the service area. */
+function providerBlock(key: string): StorefrontProvider | null {
+  const meta = PROVIDERS[key];
+  const services = SERVICES.filter((s) => s.orgId === key);
+  if (!meta || services.length === 0) return null;
+  const area = PROVIDER_AREAS[key];
+  const days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+  return {
+    orgId: key, timeZone: 'America/Chicago', location: meta.location, instantBooking: services[0]!.instantBooking, policyLabel: services[0]!.policy.label, policyText: services[0]!.policy.text,
+    services: services.map((s) => ({ id: s.id, name: s.name, description: s.description, category: s.category, durationMinutes: s.durationMinutes, priceMinor: s.priceMinor, depositMinor: s.depositMinor,
+      currency: s.currency, modes: s.modes, imageUrl: null })),
+    hours: days.map((day) => ({ day, ranges: day === 'SUNDAY' ? [] : [{ start: '09:00', end: '18:00' }] })),
+    area: area ? { baseCity: area.city, baseState: area.state, radiusMiles: area.radiusMiles, servedCities: [], extraAreas: area.extra.map((e) => e.split(':').slice(1).join(', ')) } : null,
+    team: services[0]!.team
+  };
+}
+
 export function buildStorefront(src: StorefrontSource, now: Date): Storefront {
+  if (src.kind === 'PROVIDER') {
+    const key = src.providerKey ?? DEMO_PROVIDER_KEY;
+    const provider = providerBlock(key);
+    const meta = PROVIDERS[key];
+    const empty: StorefrontProducts = { hits: [], total: 0, page: 1, size: 24, pageCount: 1, categories: [], prices: [] };
+    return { kind: 'PROVIDER', provider, slug: src.slug, name: src.name, logoUrl: src.logoUrl, description: src.description, config: src.config, preview: src.preview,
+      indexable: !src.preview && !!provider && provider.services.length > 0, verified: true, sellingSinceYear: src.sinceYear, contactEmail: src.config.contact.showEmail ? src.contactEmail : null,
+      pickup: null, categories: [], featured: [], reviews: meta && meta.reviews > 0 && meta.rating > 0 ? { average: meta.rating, count: meta.reviews } : null, products: empty };
+  }
   const first = storeProducts(src.slug, { page: 1, size: 24 }, now);
   const all = catalogOf(src.slug, now).filter(sellable);
   const featured = src.config.featured.map((a) => all.find((p) => p.atin === a)).filter((p): p is ProductSummary => !!p);
   return {
+    kind: 'SELLER', provider: null,
     slug: src.slug, name: src.name, logoUrl: src.logoUrl, description: src.description, config: src.config, preview: src.preview, indexable: !src.preview && first.hits.length > 0,
     verified: true, sellingSinceYear: src.sinceYear, contactEmail: src.config.contact.showEmail ? src.contactEmail : null,
     pickup: src.config.pickup.show && src.slug.startsWith(LASERFEET_PROFILE.slug) ? { zip: '77002' } : null, categories: first.categories, featured, reviews: reviewsOf(all), products: first
@@ -233,8 +283,8 @@ export const storefrontHandlers = [
   http.get(
     '*/v1/storefronts',
     route(() => {
-      const slugs = [...new Set(['laserfeet', ...Object.keys(readShared())])];
-      return HttpResponse.json({ items: slugs.map((slug) => ({ slug, publishedAt: publishedMockStore(slug)?.publishedAt ?? '2026-11-01T10:00:00.000Z' })) });
+      const slugs = [...new Set(['laserfeet', DEMO_PROVIDER_SLUG, ...Object.keys(readShared())])];
+      return HttpResponse.json({ items: slugs.map((slug) => ({ kind: publishedMockStore(slug)?.kind ?? 'SELLER', slug, publishedAt: publishedMockStore(slug)?.publishedAt ?? '2026-11-01T10:00:00.000Z' })) });
     })
   ),
   http.get(
@@ -245,7 +295,8 @@ export const storefrontHandlers = [
       const bucket = u.get('price');
       if (bucket && !BUCKETS.some((b) => b.value === bucket)) throw new MockProblem(400, 'INVALID_QUERY', 'Invalid query', 'Unknown price range.');
       const sort = u.get('sort') as StorefrontQuery['sort'];
-      return HttpResponse.json(storeProducts(p.slug ?? '', { q: u.get('q') ?? '', category: u.get('category') ?? '', price: bucket ?? '', sort: sort ?? 'relevance', page: Number(u.get('page') ?? 1), size: Number(u.get('size') ?? 24) }, ctx.now));
+      if (publishedMockStore(p.slug ?? '')?.kind === 'PROVIDER') return HttpResponse.json({ hits: [], total: 0, page: 1, size: 24, pageCount: 1, categories: [], prices: [] });
+      return HttpResponse.json(storeProducts(p.slug ?? '', { q: u.get('q') ?? '', category: u.get('category') ?? '', price: bucket ?? '', sort: sort ?? 'relevance', onSale: u.get('onSale') === 'true', page: Number(u.get('page') ?? 1), size: Number(u.get('size') ?? 24) }, ctx.now));
     })
   ),
   http.get(
@@ -253,7 +304,7 @@ export const storefrontHandlers = [
     route((ctx, p) => {
       const s = publishedMockStore((p.slug ?? '').toLowerCase());
       if (!s) throw new MockProblem(404, 'NOT_FOUND', 'Store not found', 'There is no store at this address.');
-      return HttpResponse.json(buildStorefront({ slug: s.slug, name: s.name, logoUrl: s.logoUrl, description: s.description, contactEmail: s.contactEmail, sinceYear: s.sinceYear, config: s.config, preview: false }, ctx.now));
+      return HttpResponse.json(buildStorefront({ ...(s.kind ? { kind: s.kind } : {}), ...(s.providerKey ? { providerKey: s.providerKey } : {}), slug: s.slug, name: s.name, logoUrl: s.logoUrl, description: s.description, contactEmail: s.contactEmail, sinceYear: s.sinceYear, config: s.config, preview: false }, ctx.now));
     })
   )
 ];

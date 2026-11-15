@@ -3050,7 +3050,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A seller's public storefront (/b/{slug})
+         * A seller's or provider's public storefront (/b/{slug})
          * @description Public, cached for a minute. 404 when there is no such page, the seller has not published it, or the organisation
          *     is not approved (or suspended): the storefront shows a 404 page. Everything is sanitised: plain text, https links on
          *     an allowed host, images only from AfroTransact media.
@@ -6634,10 +6634,13 @@ export interface components {
                 /** @enum {integer} */
                 columns: 3 | 4;
             };
-            /** @description Order and visibility of the optional sections. The header, hero and All products are always present. */
+            /** @description Order and visibility of the optional sections of the organisation's kind. The header and hero are always present, and All products for a seller. */
             sections: {
-                /** @enum {string} */
-                id: "announcement" | "featured" | "categories" | "about" | "policies" | "reviews";
+                /**
+                 * @description A seller has announcement, featured, categories, about, policies, reviews; a provider has announcement, about, services, book, schedule, team, reviews. Any other id for the kind is 422.
+                 * @enum {string}
+                 */
+                id: "announcement" | "featured" | "categories" | "about" | "policies" | "reviews" | "services" | "book" | "schedule" | "team";
                 enabled: boolean;
             }[];
             /** @description ATINs the seller picked; only the sellable ones are shown */
@@ -6691,9 +6694,62 @@ export interface components {
         };
         StorefrontList: {
             items: {
+                /** @enum {string} */
+                kind: "SELLER" | "PROVIDER";
                 slug: string;
                 /** Format: date-time */
                 publishedAt: string;
+            }[];
+        };
+        /**
+         * @description What makes a provider's page bookable, from bookings' public view of the provider: nothing here is invented. Services are in person
+         *     (IN_PERSON or AT_HOME): there are no virtual services. `hours` is Monday first in the provider's time zone and EMPTY when no hours are
+         *     set (the page then shows no schedule, never "closed"). `area` has no address, base ZIP or coordinates.
+         */
+        StorefrontProvider: {
+            orgId: string;
+            timeZone: string;
+            location: string;
+            instantBooking: boolean;
+            policyLabel: string;
+            policyText: string;
+            services: {
+                /** @description Book it with the existing booking flow: GET /v1/services/{id}/days|slots|summary, POST /v1/services/bookings */
+                id: string;
+                name: string;
+                description: string;
+                category: string;
+                durationMinutes: number;
+                /** Format: int64 */
+                priceMinor: number;
+                /** Format: int64 */
+                depositMinor: number;
+                currency: string;
+                modes: ("IN_PERSON" | "AT_HOME")[];
+                /** @description Only AfroTransact media */
+                imageUrl: string | null;
+            }[];
+            hours: {
+                /** @enum {string} */
+                day: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+                ranges: {
+                    /** @description HH:mm local */
+                    start: string;
+                    /** @description HH:mm local, exclusive */
+                    end: string;
+                }[];
+            }[];
+            area: {
+                baseCity: string;
+                baseState: string;
+                radiusMiles: number;
+                servedCities: string[];
+                extraAreas: string[];
+            } | null;
+            /** @description Team members customers can book */
+            team: {
+                id: string;
+                displayName: string;
             }[];
         };
         /**
@@ -6702,6 +6758,13 @@ export interface components {
          *     reviews (never "0 reviews"). Carrier names and fulfilment details are never present.
          */
         Storefront: {
+            /**
+             * @description A provider's page has `provider` and no products, categories or featured
+             * @enum {string}
+             */
+            kind: "SELLER" | "PROVIDER";
+            /** @description Present on a provider's page when bookings could be read */
+            provider: components["schemas"]["StorefrontProvider"] | null;
             slug: string;
             name: string;
             logoUrl: string | null;
@@ -6724,6 +6787,7 @@ export interface components {
             } | null;
             categories: components["schemas"]["StorefrontCategory"][];
             featured: components["schemas"]["ProductSummary"][];
+            /** @description Backend aggregate over REAL reviews only (a seller: catalog, all published reviews of its products; a provider: bookings, approved reviews). Null unless count is at least 1: never "0 reviews". */
             reviews: {
                 average: number;
                 count: number;
@@ -11528,6 +11592,8 @@ export interface operations {
                 category?: string;
                 price?: "u10" | "10-25" | "25-50" | "o50";
                 sort?: "relevance" | "price_asc" | "price_desc" | "rating" | "newest";
+                /** @description Only products with a real was-price above the price (still in stock only). A provider's page has no products: always empty. */
+                onSale?: boolean;
                 page?: number;
                 size?: number;
             };

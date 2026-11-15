@@ -12,6 +12,7 @@ import { browserApi } from '@/lib/api/browser';
 import { lineForOffer, useCart, useCartMutation } from '@/lib/cart/useCart';
 import { productHref } from '@/lib/links';
 
+import { ProviderBooker } from './ProviderBooker';
 import { useStorefrontLabels } from './useStorefrontLabels';
 
 const PAGE_SIZE = 24;
@@ -51,7 +52,7 @@ export function StorefrontClient({ store, initialQuery = EMPTY_STOREFRONT_QUERY 
 
   const loadProducts = useCallback(
     (q: StorefrontQueryState, page: number) =>
-      browserApi().getStorefrontProducts(store.slug, { q: q.q, category: q.category, price: q.price, sort: q.sort, page, size: PAGE_SIZE }),
+      browserApi().getStorefrontProducts(store.slug, { q: q.q, category: q.category, price: q.price, sort: q.sort, onSale: q.onSale, page, size: PAGE_SIZE }),
     [store.slug]
   );
 
@@ -63,6 +64,7 @@ export function StorefrontClient({ store, initialQuery = EMPTY_STOREFRONT_QUERY 
       if (q.category) sp.set('category', q.category);
       if (q.price) sp.set('price', q.price);
       if (q.sort !== 'relevance') sp.set('sort', q.sort);
+      if (q.onSale) sp.set('onSale', 'true');
       const qs = sp.toString();
       window.history.replaceState(null, '', qs ? `${pathname}?${qs}` : pathname);
     },
@@ -79,6 +81,7 @@ export function StorefrontClient({ store, initialQuery = EMPTY_STOREFRONT_QUERY 
       loadProducts={loadProducts}
       initialQuery={initialQuery}
       onQueryChange={onQueryChange}
+      renderBooker={store.kind === 'PROVIDER' ? (ctx) => <ProviderBooker provider={ctx.provider} selectedId={ctx.selectedId} onSelect={ctx.onSelect} /> : undefined}
     />
   );
 }

@@ -71,7 +71,7 @@ export default async function StorefrontPage({ params, searchParams }: Props) {
   if (!isDefaultQuery(query)) {
     // A shared filtered link: the first HTML already has that grid.
     try {
-      const products = await (await serverApi()).getStorefrontProducts(store.slug, { q: query.q, category: query.category, price: query.price, sort: query.sort });
+      const products = await (await serverApi()).getStorefrontProducts(store.slug, { q: query.q, category: query.category, price: query.price, sort: query.sort, onSale: query.onSale });
       store = { ...store, products };
     } catch {
       /* keep the unfiltered grid; the client refetches */
@@ -81,7 +81,7 @@ export default async function StorefrontPage({ params, searchParams }: Props) {
   const origin = publicWebUrl()?.origin;
   return (
     <>
-      {origin && policy.indexable && store.indexable ? <JsonLd data={[storefrontJsonLd({ origin, store })]} /> : null}
+      {origin && policy.indexable && store.indexable ? <JsonLd data={[storefrontJsonLd({ origin, store: { ...store, kind: store.kind } })]} /> : null}
       <StorefrontClient store={store} initialQuery={query} />
     </>
   );

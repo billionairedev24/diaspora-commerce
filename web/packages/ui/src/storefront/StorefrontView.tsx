@@ -6,10 +6,12 @@ import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useM
 import { cx } from '../cx';
 import { MagnifyingGlass, MapPin, SealCheck, ShoppingCart, User, X } from '../icons';
 import styles from './Storefront.module.css';
+import { BookSection, ScheduleSection, ServicesSection, TeamSection } from './ProviderSections';
 import { ProductMeta, StoreProductTile } from './StoreProductTile';
 import {
   defaultStorefrontLabels,
   EMPTY_QUERY,
+  type StorefrontBookerContext,
   type StorefrontCategoryModel,
   type StorefrontCommerce,
   type StorefrontLabels,
@@ -33,13 +35,15 @@ export interface StorefrontViewProps {
   initialQuery?: StorefrontQueryState;
   /** Called when the shopper changes the search, category, price or sort (the app mirrors it into the URL). */
   onQueryChange?: (q: StorefrontQueryState) => void;
+  /** A provider's appointment booker for the chosen service (real availability and checkout). Without it (or in a preview) the Book section is an inert description. */
+  renderBooker?: (ctx: StorefrontBookerContext) => ReactNode;
   /** Preview inside Seller Center: buttons are inert, the header is not sticky. */
   preview?: boolean;
   /** Extra content at the very end (nothing in live). */
   children?: ReactNode;
 }
 
-const same = (a: StorefrontQueryState, b: StorefrontQueryState) => a.q === b.q && a.category === b.category && a.price === b.price && a.sort === b.sort;
+const same = (a: StorefrontQueryState, b: StorefrontQueryState) => a.q === b.q && a.category === b.category && a.price === b.price && a.sort === b.sort && a.onSale === b.onSale;
 const paragraphs = (text: string) => text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
 
 /** Plain text with line breaks: paragraphs on blank lines, single breaks kept. Never HTML. */
@@ -174,6 +178,8 @@ function QuickView({ product, labels, commerce, locale, onClose, inert }: { prod
 }
 
 function Hero({ model, labels, locale }: { model: StorefrontModel; labels: StorefrontLabels; locale: string }) {
+  const isProvider = model.kind === 'PROVIDER';
+  const bookable = isProvider && !!model.provider && model.provider.services.length > 0 && model.config.sections.some((s) => s.id === 'book' && s.enabled);
   const { hero } = model.config;
   const banner = hero.bannerUrl;
   // A hero that asks for an image with none uploaded gets the colour treatment: never an empty frame.
@@ -184,7 +190,7 @@ function Hero({ model, labels, locale }: { model: StorefrontModel; labels: Store
     <ul className={styles.facts}>
       {model.verified ? (
         <li className={styles.fact}>
-          <SealCheck size={16} weight="fill" aria-hidden /> {labels.verified}
+          <SealCheck size={16} weight="fill" aria-hidden /> {isProvider ? labels.verifiedProvider : labels.verified}
         </li>
       ) : null}
       {since ? <li className={styles.fact}>{labels.sellingSince(since)}</li> : null}
@@ -201,9 +207,17 @@ function Hero({ model, labels, locale }: { model: StorefrontModel; labels: Store
       <h1 className={styles.heroName}>{model.name}</h1>
       {tagline ? <p className={styles.heroTagline}>{tagline}</p> : null}
       {facts}
-      <a href="#sf-products" className={styles.heroCta}>
-        {labels.shopAll}
-      </a>
+      {isProvider ? (
+        bookable ? (
+          <a href="#sf-book" className={styles.heroCta}>
+            {labels.bookAppointment}
+          </a>
+        ) : null
+      ) : (
+        <a href="#sf-products" className={styles.heroCta}>
+          {labels.shopAll}
+        </a>
+      )}
     </div>
   );
   if (style === 'split' && banner) {
@@ -252,8 +266,14 @@ function CategoryTiles({ categories, labels, onPick }: { categories: StorefrontC
   );
 }
 
-export function StorefrontView({ model, theme, commerce, labels = defaultStorefrontLabels, locale = 'en-US', loadProducts, initialQuery = EMPTY_QUERY, onQueryChange, preview = false, children }: StorefrontViewProps) {
+export function StorefrontView({ model, theme, commerce, labels = defaultStorefrontLabels, locale = 'en-US', loadProducts, initialQuery = EMPTY_QUERY, onQueryChange, renderBooker, preview = false, children }: StorefrontViewProps) {
   const cfg = model.config;
+  const isProvider = model.kind === 'PROVIDER';
+  const [serviceId, setServiceId] = useState<string | null>(null);
+  const bookService = (id: string) => {
+    setServiceId(id);
+    document.getElementById('sf-book')?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  };
   const grid = useGrid(model, initialQuery, loadProducts);
   const [quick, setQuick] = useState<StorefrontProductModel | null>(null);
   const vars = useMemo(() => themeCssVars(theme) as CSSProperties, [theme]);
@@ -271,7 +291,7 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
     productsRef.current?.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   };
 
-  const filtered = grid.query.q !== '' || grid.query.category !== '' || grid.query.price !== '';
+  const filtered = grid.query.q !== '' || grid.query.category !== '' || grid.query.price !== '' || grid.query.onSale;
   const announcement = cfg.sections.find((s) => s.id === 'announcement');
   const showAnnouncement = !!announcement?.enabled && cfg.announcement.text.trim() !== '';
   const tabs = (cfg.categories.mode === 'chosen' && cfg.categories.chosen.length
@@ -283,7 +303,12 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
     <StoreProductTile key={p.atin} product={p} labels={labels} locale={locale} commerce={commerce} inert={preview} eager={eager && i < 4} onQuickView={() => setQuick(p)} />
   );
 
+  const provider = model.provider;
   const sectionNodes: Record<Exclude<StoreSectionId, 'announcement'>, ReactNode> = {
+    services: provider ? <ServicesSection key="services" provider={provider} labels={labels} locale={locale} onBook={bookService} /> : null,
+    book: provider ? <BookSection key="book" provider={provider} labels={labels} selectedId={serviceId} onSelect={setServiceId} booker={renderBooker} preview={preview} /> : null,
+    schedule: provider ? <ScheduleSection key="schedule" provider={provider} labels={labels} locale={locale} /> : null,
+    team: provider ? <TeamSection key="team" provider={provider} labels={labels} /> : null,
     featured:
       model.featured.length > 0 ? (
         <section key="featured" className={styles.section} aria-labelledby="sf-featured">
@@ -352,7 +377,6 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
         <h2 id="sf-all" className={styles.h2}>
           {grid.query.category || labels.allProducts}
         </h2>
-        <p className={styles.note}>{labels.inStockNote}</p>
       </div>
       <div className={styles.toolbar} role="group" aria-label={labels.allProducts}>
         <label className={styles.field}>
@@ -387,8 +411,12 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
             ))}
           </select>
         </label>
+        <label className={styles.check}>
+          <input type="checkbox" checked={grid.query.onSale} onChange={(e) => update({ onSale: e.target.checked })} />
+          <span>{labels.onSale}</span>
+        </label>
         {filtered ? (
-          <button type="button" className={styles.clear} onClick={() => update({ q: '', category: '', price: '' })}>
+          <button type="button" className={styles.clear} onClick={() => update({ q: '', category: '', price: '', onSale: false })}>
             {labels.clear}
           </button>
         ) : null}
@@ -414,7 +442,7 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
           </button>
         </p>
       ) : grid.items.length === 0 ? (
-        <p className={styles.empty}>{filtered ? labels.noResults : labels.noProducts}</p>
+        <p className={styles.empty}>{grid.query.onSale && grid.query.q === '' && grid.query.category === '' && grid.query.price === '' ? labels.noSale : filtered ? labels.noResults : labels.noProducts}</p>
       ) : (
         <ul className={styles.grid} data-columns={cfg.grid.columns}>
           {grid.items.map((p, i) => (
@@ -435,15 +463,20 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
   // The seller orders the optional sections; All products sits after the leading featured and categories rows.
   const ordered = cfg.sections.filter((s): s is { id: Exclude<StoreSectionId, 'announcement'>; enabled: boolean } => s.id !== 'announcement' && s.enabled);
   const body: ReactNode[] = [];
-  let placed = false;
-  for (const s of ordered) {
-    if (!placed && s.id !== 'featured' && s.id !== 'categories') {
-      body.push(productsBlock);
-      placed = true;
+  if (isProvider) {
+    // A provider's page has no products: only the sections it switched on, in its order.
+    for (const s of ordered) body.push(sectionNodes[s.id]);
+  } else {
+    let placed = false;
+    for (const s of ordered) {
+      if (!placed && s.id !== 'featured' && s.id !== 'categories') {
+        body.push(productsBlock);
+        placed = true;
+      }
+      body.push(sectionNodes[s.id]);
     }
-    body.push(sectionNodes[s.id]);
+    if (!placed) body.push(productsBlock);
   }
-  if (!placed) body.push(productsBlock);
 
   const social = cfg.social.filter((s) => s.url);
   const hasContact = (cfg.contact.showEmail && model.contactEmail) || cfg.contact.phone || cfg.contact.hours;
@@ -469,6 +502,7 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
             {model.logoUrl ? <img src={model.logoUrl} alt="" className={styles.brandLogo} width={40} height={40} /> : null}
             <span className={styles.brandName}>{model.name}</span>
           </a>
+          {isProvider ? null : (
           <form
             role="search"
             className={styles.search}
@@ -485,20 +519,23 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
               <MagnifyingGlass size={20} aria-hidden />
             </button>
           </form>
+          )}
           <nav className={styles.actions} aria-label={model.name}>
             <Anchor as={Link} href={commerce.accountHref} className={styles.iconLink} label={labels.account}>
               <User size={22} aria-hidden />
               <span className={styles.iconText}>{labels.account}</span>
             </Anchor>
-            <Anchor as={Link} href={commerce.cartHref} className={styles.iconLink} label={labels.cart(commerce.cartCount)}>
-              <span className={styles.cartIcon}>
-                <ShoppingCart size={22} aria-hidden />
-                {commerce.cartCount > 0 ? <span className={styles.cartCount} aria-hidden>{commerce.cartCount}</span> : null}
-              </span>
-            </Anchor>
+            {isProvider ? null : (
+              <Anchor as={Link} href={commerce.cartHref} className={styles.iconLink} label={labels.cart(commerce.cartCount)}>
+                <span className={styles.cartIcon}>
+                  <ShoppingCart size={22} aria-hidden />
+                  {commerce.cartCount > 0 ? <span className={styles.cartCount} aria-hidden>{commerce.cartCount}</span> : null}
+                </span>
+              </Anchor>
+            )}
           </nav>
         </div>
-        {tabs.length > 1 ? (
+        {!isProvider && tabs.length > 1 ? (
           <nav className={styles.tabs} aria-label={labels.storeNav}>
             <button type="button" className={styles.tab} aria-current={grid.query.category === '' ? 'true' : undefined} onClick={() => update({ category: '' })}>
               {labels.allProducts}
@@ -519,7 +556,7 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
         <div className={styles.footerInner}>
           <div className={styles.footerCol}>
             <strong className={styles.footerName}>{model.name}</strong>
-            {cfg.policies.shipping.trim() || cfg.policies.returns.trim() ? (
+            {!isProvider && (cfg.policies.shipping.trim() || cfg.policies.returns.trim()) ? (
               <p className={styles.footerLine}>
                 <a href="#sf-policies" className={styles.footerLink}>
                   {labels.policies}

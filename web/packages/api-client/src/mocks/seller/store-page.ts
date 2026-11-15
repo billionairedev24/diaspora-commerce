@@ -1,6 +1,6 @@
 /* Mock of Settings > Store page: the same validation the BFF makes (plain text, https links on allowed hosts, own-media images,
    WCAG AA accent on the chosen look), a draft and a published copy, a version for optimistic locking, and an audit trail. */
-import { defaultStoreConfig, type StoreConfig } from '../../schemas/storefront';
+import { defaultStoreConfig, PROVIDER_SECTION_IDS, SELLER_SECTION_IDS, type StoreConfig, type StoreKind } from '../../schemas/storefront';
 import { MOCK_PHOTO_PREFIXES } from '../storefront';
 
 export interface MockStorePage {
@@ -49,7 +49,7 @@ const NETWORK_HOSTS: Record<string, string[] | undefined> = {
 };
 
 /** Field errors by config path (empty when valid), and the config with text trimmed. */
-export function validateMockStoreConfig(c: StoreConfig): { errors: Record<string, string>; accentLow: boolean; clean: StoreConfig } {
+export function validateMockStoreConfig(c: StoreConfig, kind: StoreKind = 'SELLER'): { errors: Record<string, string>; accentLow: boolean; clean: StoreConfig } {
   const errors: Record<string, string> = {};
   let accentLow = false;
   const text = (path: string, v: string, max: number, line: boolean) => {
@@ -66,7 +66,8 @@ export function validateMockStoreConfig(c: StoreConfig): { errors: Record<string
     }
     return v;
   };
-  const clean: StoreConfig = { ...defaultStoreConfig(), ...c };
+  const clean: StoreConfig = { ...defaultStoreConfig(kind), ...c };
+  const allowed: readonly string[] = kind === 'PROVIDER' ? PROVIDER_SECTION_IDS : SELLER_SECTION_IDS;
   clean.hero = { ...c.hero, tagline: text('hero.tagline', c.hero.tagline, 140, true), bannerUrl: image('hero.bannerUrl', c.hero.bannerUrl) };
   clean.announcement = { text: text('announcement.text', c.announcement.text, 140, true), href: c.announcement.href };
   if (c.announcement.href && !(c.announcement.href.startsWith('/') && !c.announcement.href.startsWith('//')) && !link(c.announcement.href)) errors['announcement.href'] = 'Use a page on your store or a full https link';
@@ -75,7 +76,7 @@ export function validateMockStoreConfig(c: StoreConfig): { errors: Record<string
   clean.contact = { ...c.contact, hours: text('contact.hours', c.contact.hours, 200, true) };
   if (c.contact.phone && !/^[+0-9 ()\-.]{6,24}$/.test(c.contact.phone)) errors['contact.phone'] = 'Use digits, spaces, + ( ) and -';
   if (c.featured.length > 8) errors.featured = 'Feature at most 8 products';
-  if (new Set(c.sections.map((s) => s.id)).size !== c.sections.length) errors.sections = 'Each section can appear once';
+  if (new Set(c.sections.map((s) => s.id)).size !== c.sections.length || c.sections.some((s) => !allowed.includes(s.id))) errors.sections = 'Each section can appear once';
   c.social.forEach((s, i) => {
     if (!link(s.url, NETWORK_HOSTS[s.network])) errors[`social.${i}.url`] = 'Use the full https link of your profile';
   });

@@ -206,7 +206,7 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     /** The storefront's All products grid: search in the store, filters, sort, pages (1-based). */
     getStorefrontProducts: (slug: string, q: StorefrontQuery = {}, signal?: AbortSignal): Promise<StorefrontProducts> =>
       request(`/v1/storefronts/${enc(slug)}/products`, StorefrontProductsSchema, {
-        query: { q: q.q || undefined, category: q.category || undefined, price: q.price || undefined, sort: q.sort && q.sort !== 'relevance' ? q.sort : undefined,
+        query: { q: q.q || undefined, category: q.category || undefined, price: q.price || undefined, sort: q.sort && q.sort !== 'relevance' ? q.sort : undefined, onSale: q.onSale ? 'true' : undefined,
           page: q.page && q.page > 1 ? String(q.page) : undefined, size: q.size ? String(q.size) : undefined },
         signal
       }),
