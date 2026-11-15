@@ -3,7 +3,6 @@ package config
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -87,6 +86,7 @@ type Config struct {
 		SellerCenterURL string `yaml:"sellerCenterUrl" env:"SELLER_CENTER_URL"` // Seller Center & Provider Hub
 		StaffConsoleURL string `yaml:"staffConsoleUrl" env:"STAFF_CONSOLE_URL"` // staff console
 		AuthIssuerURL   string `yaml:"authIssuerUrl" env:"AUTH_ISSUER_URL"`     // identity OIDC issuer
+		MediaPublicURL  string `yaml:"mediaPublicUrl" env:"MEDIA_PUBLIC_URL"`   // public media base (the same value the media service serves from)
 	} `yaml:"platform"`
 
 	Web struct {
@@ -102,9 +102,9 @@ type Config struct {
 		// address (LocalMediaURL) are rewritten to it in JSON responses, so a phone on the Wi-Fi can load them.
 		// Ignored outside APP_ENV=local.
 		LANMediaURL string `yaml:"lanMediaUrl" env:"LAN_MEDIA_URL"`
-		// StoreMediaPrefixes are the URL prefixes a seller's storefront images may come from (AfroTransact media only), e.g.
-		// "https://media.afrotransact.example/". Default (StoreMediaPrefixes): the local media URL in local, and
-		// https://media.<the storefront's host> elsewhere; STORE_MEDIA_PREFIXES (comma-separated) replaces the list.
+		// StoreMediaPrefixes are EXTRA URL prefixes a storefront image may come from, on top of the media public URL
+		// (Platform.MediaPublicURL, MEDIA_PUBLIC_URL, the value the media service builds its URLs from). Optional;
+		// STORE_MEDIA_PREFIXES is comma-separated. It never replaces the media public URL.
 		StoreMediaPrefixes []string `yaml:"storeMediaPrefixes" env:"STORE_MEDIA_PREFIXES"`
 	} `yaml:"web"`
 
@@ -406,23 +406,31 @@ func (c *Config) validateStripe(env string) error {
 	return nil
 }
 
-// StoreMediaPrefixes is where a storefront image may come from: the configured list, else the local media URL (local)
-// or https://media.<storefront host>/ (every other environment). The LAN rewrite address is allowed too, since stored
-// URLs may carry either.
+// StoreMediaPrefixes is where a storefront image may come from: the media public URL (MEDIA_PUBLIC_URL, injected by the Helm
+// library from global.mediaHost, the very value the media service builds asset URLs from; local: the local MinIO URL
+// media returns) plus the optional extra STORE_MEDIA_PREFIXES, and in local LAN mode the LAN rewrite address (stored URLs
+// may carry either). Every prefix ends in "/", duplicates are dropped.
 func (c *Config) StoreMediaPrefixes(env string) []string {
-	if len(c.Web.StoreMediaPrefixes) > 0 {
-		return c.Web.StoreMediaPrefixes
+	var out []string
+	add := func(raw string) {
+		p := strings.TrimSpace(raw)
+		if p == "" {
+			return
+		}
+		if !strings.HasSuffix(p, "/") {
+			p += "/"
+		}
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
 	}
 	if env == "local" {
-		out := []string{LocalMediaURL}
-		if to := strings.TrimRight(strings.TrimSpace(c.Web.LANMediaURL), "/"); to != "" {
-			out = append(out, to+"/")
-		}
-		return out
+		add(LocalMediaURL)
+		add(c.Web.LANMediaURL)
 	}
-	u, err := url.Parse(strings.TrimSpace(c.Platform.PublicWebURL))
-	if err != nil || u.Hostname() == "" {
-		return nil
+	add(c.Platform.MediaPublicURL)
+	for _, p := range c.Web.StoreMediaPrefixes {
+		add(p)
 	}
-	return []string{"https://media." + u.Hostname() + "/"}
+	return out
 }

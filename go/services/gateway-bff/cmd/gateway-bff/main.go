@@ -248,6 +248,11 @@ func run() error {
 		taxMetrics: taxmetrics.New(reg), zipLookup: zipLookup, places: places, arrival: arrival}, services, log)
 	// A seller's branded storefront /b/{slug}: public read, and the Settings > Store page editor with its draft preview.
 	storePolicy := domain.StorePolicy{MediaPrefixes: cfg.StoreMediaPrefixes(loader.Env())}
+	if len(storePolicy.MediaPrefixes) == 0 {
+		log.Warn("storefront media: no allowed prefixes, set MEDIA_PUBLIC_URL; every storefront image will be refused")
+	} else {
+		log.Info("storefront media: allowed image prefixes", "prefixes", storePolicy.MediaPrefixes, "source", "MEDIA_PUBLIC_URL + STORE_MEDIA_PREFIXES")
+	}
 	var storePickup port.DeliveryFactsClient
 	if !up.Carrier.Disabled {
 		storePickup = upstreams.NewDeliveryFacts(nil, client("carrier-gateway", up.Carrier), client("geo", up.Geo), serviceTokens)

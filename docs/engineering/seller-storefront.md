@@ -43,7 +43,16 @@ fails (422 `STORE_ACCENT_LOW_CONTRAST`) using the same palette numbers (`presetC
 
 - **Text**: plain text only (line breaks; blank line = paragraph), length-capped; text that looks like markup is refused on write (422) and dropped on read; React escapes it anyway. No rich text.
 - **Links**: https only, no credentials, no IP/localhost, social links on the network's own hosts; the announcement may link to a page of the store or an https URL.
-- **Images**: only AfroTransact media. The allowed prefixes are config (`STORE_MEDIA_PREFIXES`; default local media URL in local, `https://media.<storefront host>/` elsewhere). Anything else is refused on write and removed on read.
+- **Images**: only AfroTransact media. The allowed prefixes DEFAULT to the media public URL, the same `MEDIA_PUBLIC_URL` the media service builds asset URLs from (Helm derives it from `global.mediaHost`; local `http://localhost:9000/media/`). `STORE_MEDIA_PREFIXES` (comma-separated) only adds extra prefixes. gateway-bff logs the list at startup. Anything else is refused on write and removed on read.
+
+| Environment | Media host (`MEDIA_PUBLIC_URL`) | Set in |
+|---|---|---|
+| local | `http://localhost:9000/media/` | `go/services/media/config/local.yaml` (what uploads return) and gateway-bff `config/local.yaml` |
+| trial | `https://media-test.afrotransact.com` | `global.mediaHost`, `infra/argocd/envs/trial/platform-values.yaml` |
+| dev / uat | `https://media-dev.afrotransact.com`, `https://media-uat.afrotransact.com` | `global.mediaHost` of the environment |
+| prod | `https://media.afrotransact.com` | `global.mediaHost`, `infra/argocd/envs/prod/platform-values.yaml` |
+
+See [r2-buckets.md](../runbooks/r2-buckets.md).
 - **Both directions**: the BFF validates on save and re-sanitises the stored config before every public response (a bad stored value is replaced by its default, never an error).
 - Public responses are cached 60 s; preview and seller endpoints are never cached. No per-person data (the BFF searches as an anonymous caller).
 

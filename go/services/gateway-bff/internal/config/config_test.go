@@ -2,6 +2,8 @@ package config_test
 
 import (
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -228,5 +230,59 @@ func TestLANMediaRewriteIsLocalOnly(t *testing.T) {
 	_ = c.Validate("dev")
 	if from, to := c.MediaRewrite(); from != "" || to != "" {
 		t.Fatalf("dev keeps the rewrite: %q → %q", from, to)
+	}
+}
+
+// The storefront's image allow-list defaults to the media public URL (the value the media service builds its URLs from);
+// STORE_MEDIA_PREFIXES only adds to it.
+func TestStoreMediaPrefixesFollowTheMediaPublicURL(t *testing.T) {
+	cases := []struct {
+		env   string
+		extra map[string]string
+		want  []string
+	}{
+		{"local", nil, []string{"http://localhost:9000/media/"}},
+		{"dev", nil, []string{"https://media-dev.afrotransact.com/"}},
+		{"uat", nil, []string{"https://media-uat.afrotransact.com/"}},
+		{"prod", nil, []string{"https://media.afrotransact.com/"}},
+		// Helm injects MEDIA_PUBLIC_URL from global.mediaHost (trial: media-test): it wins over the file.
+		{"prod", map[string]string{"MEDIA_PUBLIC_URL": "https://media-test.afrotransact.com"}, []string{"https://media-test.afrotransact.com/"}},
+		// The optional override adds; it never replaces the media host, and duplicates collapse.
+		{"prod", map[string]string{"STORE_MEDIA_PREFIXES": "https://img.example.test/a/, https://media.afrotransact.com"},
+			[]string{"https://media.afrotransact.com/", "https://img.example.test/a/"}},
+		{"local", map[string]string{"LAN_MEDIA_URL": "http://192.168.1.5:9000/media"}, []string{"http://localhost:9000/media/", "http://192.168.1.5:9000/media/"}},
+	}
+	for _, c := range cases {
+		cfg := load(t, c.env, c.extra)
+		if got := cfg.StoreMediaPrefixes(c.env); !slices.Equal(got, c.want) {
+			t.Errorf("%s %v: prefixes %v, want %v", c.env, c.extra, got, c.want)
+		}
+	}
+}
+
+// The charts that read the media host get MEDIA_PUBLIC_URL from the library chart (derived from global.mediaHost, like the media
+// chart), and neither sets its own value that would drift from it. (No helm binary in CI for this test: it reads the sources.)
+func TestChartsReceiveMediaPublicURLFromTheLibrary(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	lib, err := os.ReadFile(filepath.Join(root, "infra", "helm", "library", "at-service", "templates", "_helpers.tpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(lib), `"MEDIA_PUBLIC_URL" (printf "https://%s" (default (printf "media.%s" $domain) $mediaHost))`) {
+		t.Fatal("the library chart must derive MEDIA_PUBLIC_URL from global.mediaHost")
+	}
+	for _, chart := range []string{"go/services/gateway-bff", "go/services/media", "java/services/seller"} {
+		dir := filepath.Join(root, chart, "deploy", "helm")
+		c, err := os.ReadFile(filepath.Join(dir, "Chart.yaml"))
+		if err != nil || !strings.Contains(string(c), "name: at-service") {
+			t.Errorf("%s: chart must depend on the at-service library (%v)", chart, err)
+		}
+		v, err := os.ReadFile(filepath.Join(dir, "values.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(v), "MEDIA_PUBLIC_URL") {
+			t.Errorf("%s: values.yaml must not set MEDIA_PUBLIC_URL itself; it comes from global.mediaHost", chart)
+		}
 	}
 }
