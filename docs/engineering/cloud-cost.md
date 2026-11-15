@@ -145,6 +145,49 @@ Ask Layerbase for `max_connections` (a plan below ~100 needs action): lower Hika
 statements). ai-gateway's `application-prod.yml` says `DB_POOL_SIZE` default 30; the chart's `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=4`
 environment variable overrides it by Spring's property precedence: confirm with `pg_stat_activity` on the first boot.
 
+## Release 1 (ADR 0011): two deployables instead of 21 services (release-1 branch)
+
+Everything above describes the per-service build (`main`). On `release-1` the same node runs two deployables and **4 databases** instead of 19
+(`docs/runbooks/release-1-deploy.md`). Numbers are requests and limits from `java/apps/core/deploy/helm/values.yaml` and
+`go/apps/afrotransact-go/deploy/helm/values.yaml`, not measurements, except the two-module JVM measurement quoted from
+`release-1-architecture.md` 11.2 (catalog + tax-returns in one JVM: 335 MB RSS warm, each further module about 40-50 MB, the 14 launch modules
+extrapolated to 0.9-1.2 GB, **an extrapolation from two modules**). Re-measure after every batch (`kubectl top pod`).
+
+**Memory.** Replace the 14 Java rows and the 7 Go rows of the table above:
+
+| Workload | Per-service build | Release 1 | Note |
+|---|---|---|---|
+| Java | 14 x 384 Mi request = 5,376 Mi, limit 14 x 640 Mi = 8,960 Mi | **1 x 1,536 Mi request, 2,048 Mi limit** | the limit is the ADR 0011 S1 hard cap, 2.0 GiB RSS; heap 50 % of it |
+| Go | 7 x 48 Mi = 336 Mi, limit 1,120 Mi | **1 x 128 Mi request, 384 Mi limit** | **UNMEASURED estimate**: the Go batch has not been measured |
+| **Subtotal, our workloads** | 7,976 Mi = 7.79 GiB, limits 14.25 GiB | **3,928 Mi = 3.84 GiB**, limits 6,944 Mi = 6.78 GiB | ClamAV (1,280 Mi, UNMEASURED) is still not in it |
+| Total with Kubernetes system (~1.2) and Argo CD (~1.0) | ~10.0 GiB | **~6.0 GiB** | |
+| Spare against ~13 GiB allocatable (**UNVERIFIED** on `b3-16`) | ~3.0 GiB | **~7.0 GiB** (about 5.7 with ClamAV) | a core rolling update adds one more pod (+1.5 GiB): still about 5.5 spare |
+| Worst case in the middle of the migration (old JVMs still up, core with its 1,536 Mi request and its surge pod) | | **about 13.1 GiB** with nothing moved yet, 12.4 GiB after batch 1 | **does NOT fit** the ~13 GiB: scale core's request up with the batches (below), never sync two batches at once |
+| Core memory request schedule (values-prod.yaml `resources.requests.memory`) | | batch 1: 768 Mi, batch 2: 1,024 Mi, batch 3: 1,280 Mi, from batch 4 (or when RSS passes 700 MB): 1,536 Mi | 2 x request + the old pods still up stays under ~11 GiB with the 2.2 GiB of system and Argo; the limit stays 2,048 Mi throughout |
+
+CPU requests: core 500 m + Go 100 m instead of about 1,575 m of services (**UNMEASURED**; concurrent JVM starts were the CPU spike on the per-service build, one JVM starts once).
+The node stays `b3-16`: the gain is headroom (a second replica of core, ClamAV, a rolling update that does not squeeze the node), **not a smaller bill** until someone decides to resize after a trial
+measurement; an 8 GB node is still not supported by these numbers.
+
+**Postgres connections.** Pool maximums per pod, with a rolling-update surge of two pods (`values.yaml` `dbBudget`, enforced at `helm template` and by a `CONNECTION LIMIT` of 2 x pool + 2 on every role):
+
+| Consumer | Steady | With the surge | Budget |
+|---|---|---|---|
+| core: 13 module pools (catalog 8, orders 6, payments 5, identity 4, tax_returns 4, offers 3, inventory 3, seller 3, fulfilment 3, bookings 3, trust_ops 2, content 2, ai_gateway 2) | 48 | 96 | under 100 |
+| go: cart, geo, media, notifications at 3 (capped in code) | 12 | 24 | under 50 |
+| Temporal (2 databases x 5) | 10 | 10 | |
+| Backup job, operators | 10 | 10 | |
+| **Total** | **80** | **140** | Layerbase **up to 500** (owner figure, **UNVERIFIED** in writing) |
+
+The per-service plan above was 74 steady and about 90 at peak; the Release 1 totals are higher at peak because every pool in a pod is sized for its module's own peak and two pods overlap during a roll,
+but they sit far under 500 and the per-role limits make them a hard cap. If Layerbase's real `max_connections` is below 150, lower the large pools (`catalog`, `orders`, `payments`) first.
+
+**Layerbase plan.** 4 databases instead of 19: the **Dedicated 4 GB** plan stays the plan for this design (storage, memory and connections decide, not the database count). Whether a cheaper tier with
+a database limit of 10 (the table above lists Pro at "2 or 10 databases", **UNVERIFIED**) is enough depends on its connection limit and storage, not on the database count any more.
+
+**Money.** No price in this repository changes (every OVH figure is still **UNVERIFIED** and absent). GHCR stays free for what this builds (**UNVERIFIED**: two images instead of 21 are a smaller package storage
+and fewer pushes). Backups: 4 dumps a night instead of 19 (the bucket size is the same data in fewer objects; `BackupSizeHigh` thresholds are per night, unchanged).
+
 ## Cost guards that are real
 
 - **ai-gateway spend ceiling** (owner decision, enforced in code by `SpendGuard`, `docs/runbooks/ai-spend-and-mcp-access.md`): USD 2.00 per UTC day for the whole

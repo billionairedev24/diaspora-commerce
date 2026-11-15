@@ -5,6 +5,10 @@ vendor fact to confirm on first use. Do the whole procedure once in a **disposab
 hourly node, a Layerbase trial) and only then repeat it for the real project. Decision: [ADR 0004](../adr/0004-lean-single-node-production.md).
 Sizing: [cloud-cost.md](../engineering/cloud-cost.md). Restore: [restore-drill.md](restore-drill.md).
 
+**Release 1 (this branch, ADR 0011):** the 21 services run as two deployables, `afrotransact-core` and `afrotransact-go`, and Postgres has **4 databases** (`core`, `go`, `temporal`, `temporal_visibility`) with one
+schema and one role per module. Where this page says "19 databases" or "21 services" the per-service build (main) is meant; the Release 1 steps are marked **Release 1** and everything else applies unchanged.
+Build, deploy, cutover per batch and rollback: [release-1-deploy.md](release-1-deploy.md).
+
 What this deploys: 21 services (14 Java, 7 Go), Kafka, Temporal, Valkey, Meilisearch, an OTLP collector, cloudflared + Envoy on **one**
 `b3-16` node; Postgres on Layerbase; web apps on Cloudflare Workers. It deploys the **prod** profile (`APP_ENV=prod`,
 `SPRING_PROFILES_ACTIVE=prod`) from each chart's `values-prod.yaml`. `infra/ovh-vps` is a different thing: a one-server **test** box on
@@ -18,7 +22,8 @@ the dev profile; do not use it for production.
 Gate before anything else (works offline):
 
 ```bash
-python3 infra/argocd/scripts/check_launch_set.py             # lists the Applications each env produces; prod must say 21 + 5, "OK"
+python3 infra/argocd/scripts/check_launch_set.py             # lists the Applications each env produces; prod must say 21 + 5, "OK" (Release 1: also the two deployables and the modules each runs)
+make release-1-check                                          # Release 1: workflows, launch set vs cutover, pools vs SQL vs charts, rule labels (offline)
 python3 infra/argocd/scripts/render_apps.py --env prod --no-crd-schemas   # renders every launch-set chart with the prod values
 ```
 
@@ -89,7 +94,14 @@ The web apps (Workers) are deployed by `.github/workflows/trial.yml` (trial) or 
    section 14 first and wait for the answers about connections, mTLS, backups and PostGIS.
 2. **Measure latency** from a pod on the node (`kubectl run -it --rm psql --image=postgres:17-alpine -- psql "host=... sslmode=require"`,
    `\timing`, `select 1` x 50): a few ms expected (UNVERIFIED). If it is above ~10 ms, stop and ask Layerbase which data centre it is.
-3. Create the 19 databases, roles and extensions **before any service starts**. Either:
+3. **Release 1 (schema per module): create the 4 databases, 17 module roles and schemas, the Temporal role and the extensions** before any service starts, with ONE command (idempotent, prints no password):
+   ```bash
+   PGHOST=<layerbase host> PGUSER=<admin> PGPASSWORD=... PGSSLMODE=require STATE_DIR=$HOME/.afrotransact-prod infra/ops/postgres/release-1-bootstrap.sh
+   ```
+   It runs `release-1-bootstrap.sql` (roles without a password, `core`, `go`, `temporal`, `temporal_visibility`, `postgis` and `btree_gist` created by the admin in `public`, a schema owned by each module's role, `REVOKE` from PUBLIC,
+   a role-level `search_path = <schema>, public`, `CONNECTION LIMIT` = 2 x the module's pool + 2), sets each password from `STATE_DIR/generated.env` (`DBPW_<schema>`; the same file `secrets.sh` reads) and runs `release-1-verify.sql`,
+   which fails when a module role can reach another module's schema. `DB_LAYOUT=schema infra/tofu/scripts/postgres-bootstrap.sh` and `DB_LAYOUT=schema ... infra/ovh-vps/secrets.sh databases` run the same thing. Back up `STATE_DIR` offline.
+   Per-service build (main): create the 19 databases, roles and extensions. Either:
    - `PROFILE=prod ... infra/ovh-vps/secrets.sh databases` (also the passwords source for the rendered Secrets, step 6), or
    - `infra/tofu/scripts/postgres-bootstrap.sh` (prints each URL/password once; you then have to put them into the Secrets yourself).
    Both create `<db>_app` roles (`temporal_visibility` uses `temporal_app`) and, **as the admin**, `postgis` in **`geo` and `fulfilment`** and
@@ -244,7 +256,7 @@ environment `trial` (`infra/argocd/envs/trial`, root `bootstrap/root-trial.yaml`
 | AI | the same code-enforced USD 2 per UTC day and USD 0.50 per caller | same |
 | Cloudflare | `tofu apply -var-file=envs/trial.tfvars`, `manage_zone = false` (the prod run owns the zone-wide WAF), `developers_enabled = false` | `envs/prod.tfvars` |
 | Resend | the same verified domain `afrotransact.com`, sender `no-reply@afrotransact.com`, webhook at the trial API host | same domain |
-| Layerbase | the plan must allow **19 databases** (17 services + `temporal` + `temporal_visibility`) | same |
+| Layerbase | the plan must allow **19 databases** (17 services + `temporal` + `temporal_visibility`); **Release 1: 4** (`core`, `go`, `temporal`, `temporal_visibility`) | same |
 | Not in either | OpenFGA, GCP/Azure/AWS, cert-manager, a load balancer, an `mcp.` or `grafana.` host | same |
 
 **Hosts, cookies and origins (checked in code, nothing to configure by hand)**
@@ -261,7 +273,7 @@ environment `trial` (`infra/argocd/envs/trial`, root `bootstrap/root-trial.yaml`
 
 **Order of work (each step is in the section above)**
 
-1. Accounts and tokens (sections 1, 5, 6; the Resend, R2, Backblaze, Grafana, Stripe-test runbooks). Layerbase plan with 19 databases and the written questions of section 14.
+1. Accounts and tokens (sections 1, 5, 6; the Resend, R2, Backblaze, Grafana, Stripe-test runbooks). Layerbase plan with 19 databases (Release 1: 4) and the written questions of section 14.
 2. `tofu` for OVH (section 2, a **separate project**, `disposable = true`), kubeconfig (3).
 3. Deploy the three Workers: Actions > **trial** (input `zone` empty = `afrotransact.com`), then `tofu apply -var-file=envs/trial.tfvars` in `infra/cloudflare` (buckets, DNS, routes, Tunnel); CORS and R2 tokens: `r2-buckets.md`.
 4. Secrets (6): `infra/ovh-vps/config.trial.env.example` and `secrets.trial.env.example`, `PROFILE=prod`, a new `STATE_DIR`, SOPS, `apply.sh`; `escrow.sh create`.
@@ -279,7 +291,7 @@ widget is wired before the trial ends, use Cloudflare's documented **dummy keys*
 
 `kubectl top pods` RSS per JVM at idle and under a k6 run (`tools/perf`, 50 concurrent shoppers) against the requests in cloud-cost.md; node
 requests vs allocatable; CPU during a 3-service sync; downtime of a rolling update and of a node reboot (time to all-Ready, PVCs reattach, Kafka/
-Temporal/Valkey resume); `pg_stat_activity` peak vs the 74 steady / 90 peak plan; migration times; Layerbase RTT; backup run time and size; **restore time**;
+Temporal/Valkey resume); `pg_stat_activity` peak vs the 74 steady / 90 peak plan (Release 1: 80 steady / 140 with a rolling-update surge, per role below its `CONNECTION LIMIT`, `cloud-cost.md`); migration times; Layerbase RTT; backup run time and size; **restore time**;
 Kafka disk growth per day; Grafana Cloud series and log volume against the free limits (`docs/runbooks/observability-grafana-cloud.md` section 10; also `kubectl top pods -n observability` for Alloy); cost per day x 30 for node, disks and buckets.
 
 ## 13. Day 2
@@ -297,7 +309,7 @@ Kafka disk growth per day; Grafana Cloud series and log volume against the free 
 
 ## 14. Questions for Layerbase, in writing (all answers currently unknown)
 
-1. Exact plan and price for 19 databases; is Dedicated 4 GB right? Per-database or per-role limits? Extension list: PostGIS version, `btree_gist`,
+1. Exact plan and price for 19 databases (Release 1: 4 databases, but 17 login roles, each with a `CONNECTION LIMIT`, and the admin must `GRANT` roles to itself `WITH SET TRUE`); is Dedicated 4 GB right? Per-database or per-role limits? Extension list: PostGIS version, `btree_gist`,
    and whether the admin may `CREATE EXTENSION postgis` in a database (we pre-create it in `geo` and `fulfilment`, `btree_gist` in `bookings`).
 2. Which cloud, region and data centre hosts the Virginia server; private connectivity or peering options toward OVH US East; expected round-trip time.
 3. `max_connections` per plan, any pooler (PgBouncer mode), idle-connection reaping. (Our plan: 74 steady, ~90 peak.)

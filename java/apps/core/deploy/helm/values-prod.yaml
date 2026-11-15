@@ -7,8 +7,10 @@ autoscaling:
   enabled: false
 rollout:
   enabled: false
+# The REQUEST grows with the batches (docs/runbooks/release-1-deploy.md section 6, cloud-cost.md): 768Mi for batch 1, 1024Mi batch 2, 1280Mi batch 3,
+# 1536Mi from batch 4. With the old JVMs still up, 2 x 1536Mi (a rolling-update surge) does not fit the node. The limit (the 2.0 GiB RSS cap) is constant.
 resources:
-  requests: {cpu: 500m, memory: 1536Mi}
+  requests: {cpu: 500m, memory: 768Mi}
   limits: {memory: 2048Mi}
 monitoring:
   serviceMonitor: false     # no in-cluster Prometheus on the lean footprint: Alloy scrapes the pod annotations (honor_labels, see observability)

@@ -100,7 +100,7 @@ Pick **one** mode (the default is the first):
 
 Safety built into the job: a sweep never runs after a night with a failed database (a broken run must not also eat the history); `RETENTION_DAYS`
 below 3 or above 365 aborts the run; one sweep deletes at most `RETENTION_MAX_DELETE` (default 400) objects; only the `postgres/` prefix is touched.
-Lowering 14 to 7 hides about 7 days of objects (19 databases plus globals, about 140 objects) in the next run, within the cap.
+Lowering 14 to 7 hides about 7 days of objects (19 databases plus globals, about 140 objects; Release 1: 4 databases plus globals, about 40) in the next run, within the cap.
 The job also runs `rclone cleanup` once (best effort) to drop abandoned multipart uploads (UNVERIFIED whether B2 supports it through S3).
 The test server's `backup.sh` follows the same rules for its prefixes `postgres/` and `secrets/`; for it set the rule's prefix to empty.
 

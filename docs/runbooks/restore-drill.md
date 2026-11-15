@@ -8,7 +8,7 @@ restored is not a backup: **the first drill is a launch blocker** (`production-r
 
 | Data | How | Where | Retention |
 |---|---|---|---|
-| PostgreSQL, all 19 databases (`identity catalog offers inventory orders payments seller fulfilment bookings trustops taxreturns content ai cart geo media notifications temporal temporal_visibility`) | CronJob `pg-backup` in namespace `ops` at **03:15 UTC** nightly: `pg_dump -Fc` per database, checked with `pg_restore --list`, encrypted with **age** (the cluster holds only the public key), uploaded with rclone | **Backblaze B2** (S3 API, rclone), one private bucket per environment (`afrotransact-prod-backups`, `afrotransact-test-backups`), one bucket-scoped key; a vendor other than Layerbase, OVH and Cloudflare (**never R2**). Setup, key, lifecycle rule: `backups-backblaze.md` | **`RETENTION_DAYS`, default 14** (owner may set 7); the job's sweep plus the bucket lifecycle rule "delete hidden versions after 1 day" (B2 versions every file) |
+| **Release 1:** PostgreSQL, 4 databases (`core go temporal temporal_visibility`; `core` and `go` hold one schema per module). Per-service build: all 19 databases (`identity catalog offers inventory orders payments seller fulfilment bookings trustops taxreturns content ai cart geo media notifications temporal temporal_visibility`) | CronJob `pg-backup` in namespace `ops` at **03:15 UTC** nightly: `pg_dump -Fc` per database, checked with `pg_restore --list`, encrypted with **age** (the cluster holds only the public key), uploaded with rclone | **Backblaze B2** (S3 API, rclone), one private bucket per environment (`afrotransact-prod-backups`, `afrotransact-test-backups`), one bucket-scoped key; a vendor other than Layerbase, OVH and Cloudflare (**never R2**). Setup, key, lifecycle rule: `backups-backblaze.md` | **`RETENTION_DAYS`, default 14** (owner may set 7); the job's sweep plus the bucket lifecycle rule "delete hidden versions after 1 day" (B2 versions every file) |
 | Roles and grants | `pg_dumpall --globals-only --no-role-passwords` in the same job (a warning if Layerbase does not allow it) | same bucket, `postgres/_globals/` | `RETENTION_DAYS` |
 | **Secrets that cannot be re-created**: `IDENTITY_DATA_KEY`, JWT signing key `SIGNING_KEY_PEM`, `HANDOVER_CODE_KEY`, `PAY_LINK_KEY`, `FIELD_ENCRYPTION_KEY`, `LINK_SIGNING_KEY`, `*_CLIENT_SECRET`, database role passwords | `infra/ops/secrets/escrow.sh create`: age bundle of `STATE_DIR` for two recipients, **plus** the SOPS-encrypted Secret files | **offline**, in two places (password manager attachment + a physical copy), **separately from the database backups** | until rotated |
 | Temporal | state is in the two Postgres databases above | covered | |
@@ -31,8 +31,8 @@ repository). Lose `IDENTITY_DATA_KEY` and a perfect database restore leaves iden
 3. A dead-man's-switch URL (`BACKUP_HEALTHCHECK_URL`, healthchecks.io style) with a 26-hour grace: no success ping means someone is told. Free-tier limits UNVERIFIED.
 4. Apply the Secret `pg-backup` (infra/ops/secrets), sync `lean-prod`, then run one now:
    `kubectl -n ops create job --from=cronjob/pg-backup manual-1 && kubectl -n ops logs -f job/manual-1`
-   Expected: `backed up <db>` x 19, one `backup_metrics ... run_bytes=... bucket_bytes=...` line (the size alerts in `infra/observability/rules/backup.yaml` read it) and
-   `backup complete: 19 databases`. Any `FAILED` line makes the job exit 1.
+   Expected: `backed up <db>` x 19 (Release 1: x 4: `core go temporal temporal_visibility`), one `backup_metrics ... run_bytes=... bucket_bytes=...` line (the size alerts in `infra/observability/rules/backup.yaml` read it) and
+   `backup complete: 19 databases` (Release 1: `4 databases`). Any `FAILED` line makes the job exit 1.
 5. `escrow.sh create` and store the bundle; test with `escrow.sh restore` into a temp directory.
 
 ## The drill (do it in the trial, before launch, then monthly)
@@ -56,6 +56,21 @@ date -u +%T                                                   # END TIME of the 
 `pg-restore.sh` decrypts with the age key, verifies the dump with `pg_restore --list`, creates the role and database when missing,
 creates `postgis` (geo, fulfilment) or `btree_gist` (bookings) as admin, skips the extension objects inside the dump, restores with
 `--no-owner --role=<db>_app --exit-on-error` and prints the table count. It refuses a non-empty database.
+
+**Release 1 (schema per module).** `core` and `go` are restored **schema by schema from the one whole-database dump** (one consistent snapshot of every module in it); `temporal` and `temporal_visibility` with `restore` as above.
+
+```bash
+# 1. the empty target: database, roles, EMPTY schemas, extensions (idempotent; the roles get new passwords from your STATE_DIR)
+STATE_DIR=<restored escrow dir> infra/ops/postgres/release-1-bootstrap.sh
+# 2. one module, or all of them
+infra/ops/backup/pg-restore.sh restore-schema core catalog latest      # also: restore-schema core all latest
+infra/ops/backup/pg-restore.sh restore-schema go all latest
+infra/ops/backup/pg-restore.sh restore temporal latest; infra/ops/backup/pg-restore.sh restore temporal_visibility latest
+```
+
+`restore-schema` decrypts and verifies the dump, refuses a schema that is not empty, restores only that schema's objects with `--no-owner --role=<schema>_app --exit-on-error`, then re-runs the bootstrap SQL and
+`release-1-verify.sql` so ownership, grants and `search_path` are exactly the production ones. Never restore over a live module: stop its writers (scale core's module off, section 7 of `release-1-deploy.md`) or restore into a
+scratch server. A module can be restored on its own: the other schemas in `core` are not touched. **Not yet run against a real server with a real dump** (the logic was run with `pg_dump`/`pg_restore` on a scratch PostgreSQL 16).
 
 Then prove the data is usable, not just present:
 

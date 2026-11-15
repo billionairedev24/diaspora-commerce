@@ -64,3 +64,24 @@ Nothing in this ADR has been applied to a live account. Every vendor fact is tag
 - **Self-managed k3s on one OVH instance** (`infra/ovh-vps`): the same instance price, but the operator owns OS patches, k3s
   upgrades and the control plane. Kept as the **test** path only; it deploys the dev profile and is not production.
 - **A second node** or a managed OVH PostgreSQL: both add cost without a measured need; revisit with data from the trial.
+
+## Addendum 2026-11-15: Release 1 runs the services as two deployables (ADR 0011)
+
+Applies to the `release-1` branch; `main` and `develop` keep what is written above. Nothing in the decision changes (one `b3-16` node, one
+replica, Layerbase, GHCR, Argo CD with manual sync in prod); the **shape of what runs on that node** does:
+
+- **Workloads.** The 14 Java services and 7 Go services of the launch set become two deployables, `afrotransact-core` (every Java module in one
+  JVM, request 0.75 GiB growing to 1.5 GiB over the batches, limit and hard cap 2.0 GiB) and `afrotransact-go` (every Go module in one binary), moved over batch by batch with the old
+  per-service Applications scaled to 0, not deleted (`docs/runbooks/release-1-deploy.md`). The launch set stays the list of modules the
+  environment may run (`infra/argocd/launch-set/release-1.yaml`, next to the old per-service list); retail, delivery-runs, promise, carrier-gateway
+  and authz-sync are modules that stay switched off.
+- **Postgres: 4 databases instead of 19** (owner decision): `core` and `go`, one schema and one role per module, plus `temporal` and
+  `temporal_visibility`. A module role cannot see another module's schema (`release-1-verify.sql` proves it), so the isolation that separate
+  databases gave is kept; the Layerbase plan now needs 4 databases. The nightly dump covers 4 databases, a module is restored from the whole-database dump by schema
+  (`pg-restore.sh restore-schema`).
+- **Connections:** Java pools add up to 48 per pod (96 with a rolling-update surge, budget under 100), Go 12 (24, budget under 50), against the 500
+  the owner states for Layerbase (UNVERIFIED in writing); each role carries a `CONNECTION LIMIT`.
+- **Memory:** the 14 x 384 Mi and 7 x 48 Mi requests (5,712 Mi) become 1,536 Mi + 128 Mi (Go figure UNMEASURED); `cloud-cost.md` has the table. The node
+  size is not changed by this addendum: the gain is headroom for the surge and a second replica of core later, not a smaller bill.
+- **Consequence for the failure model:** a core crash or OOM restarts every Java module together (ADR 0004 already accepted minutes of downtime for a node restart;
+  this adds the same class of event for the Java side alone). Mitigations and the rollback are in ADR 0011 and the runbook.

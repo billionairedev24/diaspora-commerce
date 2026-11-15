@@ -61,7 +61,7 @@ in files.
 ### Database
 
 Default: each Go service keeps its own database (`cart`, `geo`, `media`, `notifications`, `carriers`) through its `<MODULE>_DB_URL`. Optional single database
-(`afrotransact_go`): schema and role per module (`infra/ops/postgres/release-1-bootstrap.sh`, `make db-release-1` locally), `search_path` pinned on the role and in
+(`go`): schema and role per module (`infra/ops/postgres/release-1-bootstrap.sh`, `make db-release-1` locally), `search_path` pinned on the role and in
 the URL, PostGIS created by the admin in `public` before deploy. The embedded migrations are idempotent SQL on unqualified names and notifications' `schema_migrations`
 is unqualified too, so each schema keeps its own history with no code change. Verified with a real PostgreSQL: **not yet** (see the status table below).
 
