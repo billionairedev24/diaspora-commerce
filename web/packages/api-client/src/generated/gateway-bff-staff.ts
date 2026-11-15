@@ -2160,6 +2160,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/access/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open staff invitations (pending, and expired ones never used), newest first
+         * @description identity `GET /v1/admin/staff-invitations` (access:read). Names and emails; the token is never part of an answer. Server-driven paging with an exact `total`.
+         */
+        get: operations["listStaffInvitations"];
+        put?: never;
+        /**
+         * Invite a person to be staff
+         * @description Needs Edit on Users & roles and access:admin. Identity stores a pending invitation (single-use token, hashed, 72 hours by default) and the notifications service emails the link. Inviting an email that has an open invitation replaces it (the old link stops working). 409 when an account with the email already exists; 422 for a role that is not a staff role or an email outside the staff domains. Only a Super Admin can invite a Super Admin.
+         */
+        post: operations["inviteStaff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/invitations/{id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send an invitation again with a new link and expiry
+         * @description Needs Edit on Users & roles and access:admin. The previous link stops working. 409 when the invitation was accepted or revoked.
+         */
+        post: operations["resendStaffInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/access/invitations/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an open invitation (its link stops working at once)
+         * @description Needs Edit on Users & roles and access:admin and a reason of 3 to 300 characters, kept in the access change log.
+         */
+        post: operations["revokeStaffInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/invitations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Who an invite link is for (no session)
+         * @description The token is in the body, never the URL. Answers name, email, role and status (`PENDING`, `ACCEPTED`, `REVOKED`, `EXPIRED`) so the page can say what to do; 404 for a token that is not an invitation. Rate limited like sign-in; not cached.
+         */
+        post: operations["previewStaffInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose a password and activate the account (no session)
+         * @description Identity checks the token (single use, not expired, not revoked), applies the password policy and creates the account with the invited role. 422 with field errors for the password (`password`, `confirmPassword`, `phone`); 422 when the link expired, was withdrawn or was used (the page then offers to ask for a new one or to sign in); 404 for a token that is not an invitation. The token and the password are never logged or kept. Rate limited like sign-in; not cached.
+         */
+        post: operations["acceptStaffInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/preorders": {
         parameters: {
             query?: never;
@@ -7206,6 +7310,80 @@ export interface components {
              * @description Entries that match the filter
              */
             total: number;
+        };
+        StaffInviteRequest: {
+            firstName: string;
+            lastName: string;
+            /**
+             * Format: email
+             * @description Work email; identity may limit it to the staff domains
+             */
+            email: string;
+            /** @description A platform (staff) role */
+            roleKey: string;
+            /** @description Kept in the access change log */
+            reason: string;
+        };
+        StaffInvitation: {
+            /**
+             * Format: uuid
+             * @description Opaque key for resend and revoke; never shown
+             */
+            id: string;
+            name: string;
+            firstName: string;
+            lastName: string;
+            email: string;
+            roleKey: string;
+            roleName: string;
+            /** @enum {string} */
+            status: "PENDING" | "EXPIRED";
+            reason: string;
+            /** @description Who invited (a name) */
+            invitedByName: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            lastSentAt: string;
+            sendCount: number;
+        };
+        StaffInvitationPage: {
+            items: components["schemas"]["StaffInvitation"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+            /** @description The caller may invite, resend and revoke */
+            canAdmin: boolean;
+        };
+        StaffInvitationToken: {
+            /** @description The single-use token from the link (after `#token=`) */
+            token: string;
+        };
+        StaffInvitationPreview: {
+            firstName: string;
+            lastName: string;
+            name: string;
+            email: string;
+            roleName: string;
+            /** @enum {string} */
+            status: "PENDING" | "ACCEPTED" | "REVOKED" | "EXPIRED";
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        StaffInvitationAccept: {
+            token: string;
+            password: string;
+            confirmPassword: string;
+            /** @description Optional; can be added later */
+            phone?: string;
+            phoneRegion?: string;
+        };
+        StaffInvitationAccepted: {
+            email: string;
+            roleName: string;
         };
         IdentityDocuments: {
             discovery: {
@@ -15055,6 +15233,180 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffInvitations: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of open invitations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvitationPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    inviteStaff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffInviteRequest"];
+            };
+        };
+        responses: {
+            /** @description Invited */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvitation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resendStaffInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sent again */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvitation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    revokeStaffInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffInvitationToken"];
+            };
+        };
+        responses: {
+            /** @description The invitation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvitationPreview"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    acceptStaffInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffInvitationAccept"];
+            };
+        };
+        responses: {
+            /** @description Account created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvitationAccepted"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
