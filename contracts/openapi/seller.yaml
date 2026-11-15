@@ -2543,7 +2543,7 @@ paths:
   /v1/public/storefronts:
     get:
       tags: [Storefronts]
-      summary: Published storefronts of approved sellers (no login)
+      summary: Published storefronts of approved sellers and providers (no login)
       description: Up to 5000, by address. Used to build the sitemap.
       operationId: published
       responses:
@@ -2551,7 +2551,7 @@ paths:
   /v1/public/storefronts/{slug}:
     get:
       tags: [Storefronts]
-      summary: A seller's published storefront settings (no login)
+      summary: A seller's or provider's published storefront settings (no login)
       description: 404 when there is no page, it is not published, or the organisation is not approved.
       operationId: storefront
       parameters: [{name: slug, in: path, required: true, schema: {type: string}}]
@@ -3754,12 +3754,14 @@ components:
     PublishedStorefront:
       type: object
       properties:
+        kind: {type: string, enum: [SELLER, PROVIDER]}
         orgId: {type: string}
         slug: {type: string}
         publishedAt: {type: string, format: date-time}
     PublicStorefront:
       type: object
       properties:
+        kind: {type: string, enum: [SELLER, PROVIDER]}
         orgId: {type: string}
         slug: {type: string}
         name: {type: string}

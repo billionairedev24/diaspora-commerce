@@ -57,8 +57,8 @@ GET /v1/orgs/{orgId}/store-page | ORG_OWNED | AccessGuard.orgRole(orgId path vs 
 GET /v1/orgs/{orgId}/store-page/audit | ORG_OWNED | AccessGuard.orgRole(orgId path vs actor org claim + role suffix, or members table of that org); ids re-checked against orgId | SellerTenantIsolationTest
 GET /v1/plans | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
 GET /v1/public/business-pages/{slug} | PUBLIC | reference or public-profile data only (name, kind, status; live markets; public plans); no tenant-private fields | -
-GET /v1/public/storefronts | PUBLIC | slugs of published storefronts of approved sellers only (public addresses); no tenant-private fields | -
-GET /v1/public/storefronts/{slug} | PUBLIC | published storefront settings of an approved seller only (the same fields the page shows); no tenant-private fields | -
+GET /v1/public/storefronts | PUBLIC | slugs and kinds of published storefronts of approved sellers and providers only (public addresses); no tenant-private fields | -
+GET /v1/public/storefronts/{slug} | PUBLIC | published storefront settings of an approved seller or provider only (the same fields the page shows); no tenant-private fields | -
 GET /v1/review-reason-codes | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
 GET /v1/selling-applications | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
 GET /v1/selling-applications/{id} | STAFF_ONLY | AccessGuard.staff/staffAny (STAFF or SERVICE principal + permission); platform admin, KYC documents and reviews included | -
