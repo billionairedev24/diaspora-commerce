@@ -13,6 +13,7 @@ import com.afrotransact.orders.port.UpstreamFailure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,6 +24,7 @@ import tools.jackson.databind.JsonNode;
  * answer: the customer simply pays the fee (logged).
  */
 @Component
+@ConditionalOnExpression("'${at.orders.payments.mode:${at.orders.mode:http}}' == 'http'")
 class HttpMemberBenefits implements MemberBenefits {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpMemberBenefits.class);
