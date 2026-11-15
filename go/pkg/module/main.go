@@ -29,8 +29,12 @@ func run(name string, ctor Constructor) error {
 	}
 	slog.SetDefault(m.Logger)
 	shutdown, err := telemetry.Setup(ctx, name, m.Env, m.Telemetry.OTLPEndpoint, m.Telemetry.SampleRatio)
-	if err != nil {
+	if err != nil && !m.Telemetry.BestEffort {
 		return fmt.Errorf("tracing: %w", err)
+	}
+	if err != nil {
+		m.Logger.Warn("tracing disabled", "error", err)
+		shutdown = func(context.Context) error { return nil }
 	}
 	defer func() { _ = shutdown(context.WithoutCancel(ctx)) }()
 	return Serve(ctx, m)

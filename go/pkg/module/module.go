@@ -41,6 +41,8 @@ type Deps struct {
 type Telemetry struct {
 	OTLPEndpoint string
 	SampleRatio  float64
+	// BestEffort logs a tracing setup failure instead of stopping the process.
+	BestEffort bool
 }
 
 // Module is a constructed service.
