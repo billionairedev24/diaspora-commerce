@@ -338,6 +338,8 @@ at:
     identity:
       enabled: ${MODULE_IDENTITY_ENABLED:true}
       client-id: identity-service
+      caller-scopes:
+        - sellers:directory
       datasource:
         url: ${IDENTITY_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
         username: ${IDENTITY_DB_USER:identity}
@@ -427,3 +429,6 @@ at:
   # trust-ops -> payments (claim refunds), seller (suspend / reinstate) in-process; its other edges are still HTTP.
   trust-ops:
     mode: ${AT_TRUST_OPS_MODE:in-process}
+  # identity -> seller (organisation mirror for the reconcile job) in-process; token validation stays on the real JWT/JWKS path.
+  identity:
+    mode: ${AT_IDENTITY_MODE:in-process}
