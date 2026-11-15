@@ -47,6 +47,11 @@ public final class ModuleEntry {
         }
     }
 
+    /** Same for a call with no result, platform errors only. */
+    public void runVoid(Runnable body) {
+        runVoid(body, ex -> Optional.empty());
+    }
+
     /** Same for a call with no result. */
     public void runVoid(Runnable body, Function<RuntimeException, Optional<ModuleApiException>> own) {
         run(() -> {

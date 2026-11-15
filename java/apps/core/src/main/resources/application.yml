@@ -424,3 +424,6 @@ at:
   # fulfilment -> orders, inventory in-process; fulfilment -> delivery-runs (disabled in core) and geo (Go) stay HTTP.
   fulfilment:
     mode: ${AT_FULFILMENT_MODE:in-process}
+  # trust-ops -> payments (claim refunds), seller (suspend / reinstate) in-process; its other edges are still HTTP.
+  trust-ops:
+    mode: ${AT_TRUST_OPS_MODE:in-process}
