@@ -276,6 +276,22 @@ Findings that decide the Go design:
 - Order: cart, promise, geo (small, Redis/Postgres), then search + indexer, notifications, media, carrier-gateway, authz-sync,
   and gateway-bff last (it is the biggest consumer of the others).
 
+### 7.1 Implemented (afrotransact-go) and where it differs from the plan
+
+- `go/pkg/module`: `Deps`, `Module`, `Main` (the whole body of a `cmd/<svc>/main.go`), `Background` (long-lived work; a failure is fatal for the host), `Closers`.
+  `New(Deps)` of every service builds without touching `slog`, the tracer provider, a listener or a goroutine; `Start` launches background work, `Close` releases.
+  Module carries `Router`, `Specs` (OpenAPI) and `Gatherer` as well, because the host routes and checks with them.
+- Services: `New` is in the root package (`cart`, `promise`, `geo`, `search`, `indexer`, `notifications`, `media`, `carrier-gateway`, `authz-sync`). **gateway-bff's is
+  `bffmodule.New`**: `internal/app`'s in-package test imports the root package for `Files`, so a root-package `New` would be an import cycle. The `shopper.go`/`staff.go`
+  wiring moved with it. Indexer's `reindex` command keeps its flags and tests in `cmd/indexer` and shares `internal/wiring`; notifications' `providers.go` (and its test, package clause
+  only) moved to the root package.
+- **The plan said paths are already distinct per service. They are not**: cart and search document the same paths as gateway-bff's facade (`/v1/cart`, `/v1/search`, `/v1/search/clicks`,
+  `PUT /v1/cart/preorder-fulfilment`), carrier-gateway shares `POST /v1/addresses/validate` with geo and `/v1/webhooks/*` with notifications. Resolution: those three modules are mounted
+  `prefixed` (only under `/modules/<name>/`, reached by gateway-bff in-process); the startup check refuses any other overlap and names both modules. It replays every operation of every
+  module's OpenAPI documents against the other modules' muxes (a `ServeMux` cannot list its patterns), so it covers documented routes; `registry_test.go` runs the same comparison on the real documents.
+- Tracing: the tracer provider is set once (`telemetry.SetupWith`); a span processor tags spans with the module that the host put on the request or in-process call context.
+- Database: schema per module needs no code change (idempotent SQL on unqualified names): `<MODULE>_DB_URL` with `search_path=<schema>`, or `AT_GO_DB_URL` for all. Not run against a real PostgreSQL.
+
 ## 8. Keeping `main` in release-1
 
 1. `tools/release/sync-main.sh --check` weekly; `tools/release/sync-main.sh` to merge. It refuses to run on a branch that does not track

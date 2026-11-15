@@ -52,6 +52,8 @@ in files.
   `CARRIER_URL` resolve to `http://<module>.inproc`, a `RoundTripper` that serves the request through the module's own handler. The bearer token is still
   sent, so the callee's authentication middleware runs. `GATEWAY_BFF_SEARCH_URL=http://...` forces HTTP for that one edge.
 
+When promise is off, gateway-bff must not call it: set `PROMISE_DISABLED=true` (and `CARRIER_DISABLED=true` for carrier-gateway), as the separate deployment does today.
+
 ### Detach one module
 
 1. Run it alone: `AT_MODULES_MEDIA_ENABLED=false` in afrotransact-go, and start `go/services/media/cmd/media` (or its own Deployment).
