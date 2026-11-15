@@ -64,14 +64,14 @@ export function InvitationsPanel() {
   const columns = useMemo<ColumnDef<StaffInvitation>[]>(
     () => [
       { id: 'name', accessorFn: (i) => i.name, header: t('st.inv.col.name'), size: 190, meta: { kind: 'strong', label: t('st.inv.col.name') }, cell: ({ row }) => <strong className="font-semibold">{row.original.name}</strong> },
-      { id: 'email', accessorFn: (i) => i.email, header: t('st.inv.col.email'), size: 250, cell: ({ row }) => <CellText>{row.original.email}</CellText> },
-      { id: 'role', accessorFn: (i) => i.roleName, header: t('st.inv.col.role'), size: 160 },
-      { id: 'by', accessorFn: (i) => i.invitedByName, header: t('st.inv.col.by'), size: 160 },
+      { id: 'email', accessorFn: (i) => i.email, header: t('st.inv.col.email'), size: 230, cell: ({ row }) => <CellText>{row.original.email}</CellText> },
+      { id: 'role', accessorFn: (i) => i.roleName, header: t('st.inv.col.role'), size: 150 },
+      { id: 'by', accessorFn: (i) => i.invitedByName, header: t('st.inv.col.by'), size: 150 },
       {
         id: 'status',
         accessorFn: (i) => i.status,
         header: t('st.inv.col.status'),
-        size: 230,
+        size: 240,
         cell: ({ row }) => {
           const i = row.original;
           const state = i.status === 'EXPIRED' ? t('st.inv.status.expired', { when: dateTime(i.expiresAt) }) : t('st.inv.status.waiting', { when: dateTime(i.expiresAt) });
@@ -81,11 +81,11 @@ export function InvitationsPanel() {
       {
         id: 'actions',
         header: t('st.inv.col.actions'),
-        size: 230,
+        size: 260,
         enableSorting: false,
         cell: ({ row }) =>
           canAdmin ? (
-            <span className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-2">
               <Button size="sm" variant="secondary" loading={resend.isPending && resend.variables?.id === row.original.id} onClick={() => resend.mutate(row.original)}>
                 {t('st.inv.action.resend')}
               </Button>

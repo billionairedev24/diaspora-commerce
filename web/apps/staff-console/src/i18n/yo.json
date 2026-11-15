@@ -3289,7 +3289,7 @@
   "st.inv.col.by": "Ẹni tó pè",
   "st.inv.col.status": "Ọ̀nà ìsopọ̀",
   "st.inv.col.actions": "Àwọn ìgbésẹ̀",
-  "st.inv.status.waiting": "Ó ń dúró, ọ̀nà ìsopọ̀ máa parí {when}",
+  "st.inv.status.waiting": "Yóò parí {when}",
   "st.inv.status.expired": "Ó parí {when}",
   "st.inv.status.sent": "{count, plural, one {a ránṣẹ́ lẹ́ẹ̀kan} other {a ránṣẹ́ ìgbà #}}",
   "st.inv.action.resend": "Tún ránṣẹ́",

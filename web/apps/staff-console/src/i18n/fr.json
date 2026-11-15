@@ -3289,7 +3289,7 @@
   "st.inv.col.by": "Invité par",
   "st.inv.col.status": "Lien",
   "st.inv.col.actions": "Actions",
-  "st.inv.status.waiting": "En attente, le lien expire {when}",
+  "st.inv.status.waiting": "Expire {when}",
   "st.inv.status.expired": "Expirée {when}",
   "st.inv.status.sent": "{count, plural, one {envoyée # fois} other {envoyée # fois}}",
   "st.inv.action.resend": "Renvoyer",

@@ -17,15 +17,22 @@ const MIN_PASSWORD = 12;
 function useInviteToken(): string | null {
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
-    const m = /(?:^|[#&])token=([^&]+)/.exec(window.location.hash);
-    let value = '';
-    try {
-      value = m?.[1] ? decodeURIComponent(m[1]) : '';
-    } catch {
-      value = '';
-    }
-    setToken(value);
-    if (value) window.history.replaceState(null, '', window.location.pathname);
+    const read = () => {
+      const m = /(?:^|[#&])token=([^&]+)/.exec(window.location.hash);
+      let value = '';
+      try {
+        value = m?.[1] ? decodeURIComponent(m[1]) : '';
+      } catch {
+        value = '';
+      }
+      // React's development StrictMode runs this effect twice: the second run finds the address already cleaned, so it must keep the token.
+      // A new link pasted into this same tab (a hash change) replaces it.
+      setToken((prev) => value || prev || '');
+      if (value) window.history.replaceState(null, '', window.location.pathname);
+    };
+    read();
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
   }, []);
   return token;
 }
@@ -40,7 +47,7 @@ export function InviteAccept() {
   const api = staffApi();
   const token = useInviteToken();
   const preview = useQuery({
-    queryKey: [...staffAccessKeys.all, 'invite-preview', token ? 'present' : 'absent'],
+    queryKey: [...staffAccessKeys.all, 'invite-preview', token ?? ''],
     queryFn: ({ signal }) => api.access.previewInvitation(token ?? '', signal),
     enabled: Boolean(token),
     retry: false,

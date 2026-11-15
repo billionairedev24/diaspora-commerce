@@ -3289,7 +3289,7 @@
   "st.inv.col.by": "Invitado por",
   "st.inv.col.status": "Enlace",
   "st.inv.col.actions": "Acciones",
-  "st.inv.status.waiting": "Pendiente, el enlace caduca {when}",
+  "st.inv.status.waiting": "Caduca {when}",
   "st.inv.status.expired": "Caducó {when}",
   "st.inv.status.sent": "{count, plural, one {enviada # vez} other {enviada # veces}}",
   "st.inv.action.resend": "Enviar de nuevo",

@@ -3282,7 +3282,7 @@
   "st.inv.col.by": "Invited by",
   "st.inv.col.status": "Link",
   "st.inv.col.actions": "Actions",
-  "st.inv.status.waiting": "Waiting, link expires {when}",
+  "st.inv.status.waiting": "Expires {when}",
   "st.inv.status.expired": "Expired {when}",
   "st.inv.status.sent": "{count, plural, one {sent # time} other {sent # times}}",
   "st.inv.action.resend": "Send again",

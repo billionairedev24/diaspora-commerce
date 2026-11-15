@@ -23,7 +23,7 @@ Reported: "I do not see permission in staff console settings." The owner is a Su
 
 | Section (route) | Holds | Gate (module level, plus permission) | Status |
 |---|---|---|---|
-| Staff accounts `/settings/staff` | the people table: roles, disable, new staff account (the old *People* tab) | Users & roles, `access:read` | View only |
+| Staff accounts `/settings/staff` | invitations waiting (invite, send again, revoke), then the people table: roles, disable (the old *People* tab) | Users & roles, `access:read`; invitations `access:admin` + Edit | View only |
 | Roles and permissions `/settings/access` | roles by portal, permissions by module, who has a role, people, change log | Users & roles, `access:read`; changes `access:admin` + Edit | "15 platform roles" |
 | Security and sign-in `/settings/security` | the identity admin screen (clients, sessions, keys, token inspector, sign-in settings, sign-out policy); was *Identity & access* | Identity & access (`identity:admin`) | |
 | Social sign-in `/settings/sign-in` | which social buttons appear | Developers | |
@@ -38,7 +38,7 @@ Reported: "I do not see permission in staff console settings." The owner is a Su
 
 The AI cap page is **informational**: the cap is set where ai-gateway is deployed (`AI_GLOBAL_DAILY_COST_USD`), there is no endpoint
 to read today's spend or change it, so it has no switch and shows the deployment defaults ([ai-spend-and-mcp-access.md](../runbooks/ai-spend-and-mcp-access.md)).
-There is no staff **invitation** flow: staff accounts are created with a temporary password (Staff accounts, "New").
+Staff accounts are made by **invitation** (Staff accounts, "Invite a person"): see [staff-invitations.md](staff-invitations.md). There is no temporary password.
 Statuses come from saved state only; sections with nothing live to say show "View only" for read-only staff, or nothing.
 
 ### Where things moved

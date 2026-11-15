@@ -3289,7 +3289,7 @@
   "st.inv.col.by": "دعاه",
   "st.inv.col.status": "الرابط",
   "st.inv.col.actions": "الإجراءات",
-  "st.inv.status.waiting": "بانتظار القبول، ينتهي الرابط {when}",
+  "st.inv.status.waiting": "ينتهي {when}",
   "st.inv.status.expired": "انتهت {when}",
   "st.inv.status.sent": "{count, plural, one {أُرسلت مرة واحدة} other {أُرسلت # مرات}}",
   "st.inv.action.resend": "إرسال مرة أخرى",
