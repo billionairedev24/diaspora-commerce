@@ -1,0 +1,12 @@
+# uat: the same shape as prod (one replica, no canary on the lean footprint). image.tag / image.digest: the promote workflow.
+env: uat
+replicas: 1
+autoscaling:
+  enabled: false
+rollout:
+  enabled: false
+monitoring:
+  serviceMonitor: false
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.25"

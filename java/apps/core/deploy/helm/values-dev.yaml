@@ -1,0 +1,11 @@
+# dev runs everything on the shared cluster; modules move into core batch by batch through cutover.services in
+# infra/argocd/envs/dev/platform-values.yaml (nothing is switched on here). image.tag / image.digest: written by the deploy workflow.
+env: dev
+replicas: 1
+autoscaling:
+  enabled: false
+rollout:
+  enabled: false
+resources:
+  requests: {cpu: 250m, memory: 1024Mi}
+  limits: {memory: 2048Mi}

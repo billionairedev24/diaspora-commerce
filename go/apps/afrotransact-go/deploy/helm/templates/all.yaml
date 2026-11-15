@@ -1,0 +1,26 @@
+{{- /*
+Release 1: module switches become environment variables of the one container; names only, credentials are in the Secret
+afrotransact-go-secrets (envFrom). Per module (the NAME is the module name upper-cased, '-' as '_'; the Go entry package tries
+<MODULE>_<VAR> before <VAR>, release-1-architecture.md section 7):
+  MODULE_<NAME>_ENABLED   the module is mounted in the binary
+  <NAME>_DB_MAX_CONNS     its pgx pool maximum (modules with a database)
+A module is on when modules.<name>.enabled OR platform-values cutover.services maps it to afrotransact-go. User extraEnv wins.
+*/ -}}
+{{- $env := dict -}}
+{{- $sum := 0 -}}
+{{- $services := (.Values.cutover | default dict).services | default dict -}}
+{{- range $name, $m := .Values.modules -}}
+{{- $p := $m.envPrefix | default (upper (replace "-" "_" $name)) -}}
+{{- $on := or $m.enabled (eq (get $services $name | default "") "afrotransact-go") -}}
+{{- $_ := set $env (printf "MODULE_%s_ENABLED" $p) (toString (and $on true)) -}}
+{{- if $m.pool -}}
+{{- $_ := set $env (printf "%s_DB_MAX_CONNS" $p) (toString $m.pool) -}}
+{{- $sum = add $sum $m.pool -}}
+{{- end -}}
+{{- end -}}
+{{- if gt (int $sum) (int .Values.dbBudget.maxPerPod) -}}
+{{- fail (printf "afrotransact-go: module pools add up to %d connections, over dbBudget.maxPerPod=%d (the Go budget is 50 with a rolling-update surge of 2 pods)" (int $sum) (int .Values.dbBudget.maxPerPod)) -}}
+{{- end -}}
+{{- $_ := set $env "AT_DB_POOL_TOTAL_MAX" (toString $sum) -}}
+{{- $_ := set .Values "extraEnv" (merge (dict) (.Values.extraEnv | default dict) $env) -}}
+{{ include "at-service.all" . }}

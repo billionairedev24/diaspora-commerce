@@ -14,6 +14,19 @@ app.kubernetes.io/name: {{ include "at-service.name" . }}
 {{- end -}}
 
 {{/*
+Release 1 cutover (docs/runbooks/release-1-deploy.md). cutover.movedTo names the deployable (afrotransact-core | afrotransact-go) that now
+serves this service's module; the services ApplicationSet sets it from infra/argocd/envs/<env>/platform-values.yaml
+(cutover.services: service -> deployable). When set: the Deployment is scaled to 0 (not deleted: rollback is clearing the value) and the
+Service keeps its name, so every caller's URL (http://catalog) is unchanged, but selects the deployable's pods. Empty = unchanged.
+*/}}
+{{- define "at-service.movedTo" -}}{{ (.Values.cutover | default dict).movedTo | default "" }}{{- end -}}
+
+{{/* Pods a Service routes to: this chart's own pods, or the deployable that took the module over (cutover.movedTo). */}}
+{{- define "at-service.serviceSelector" -}}
+app.kubernetes.io/name: {{ include "at-service.movedTo" . | default (include "at-service.name" .) }}
+{{- end -}}
+
+{{/*
 Image reference. Every workload must pin its image: image.tag (CI writes the full git sha into values-<env>.yaml)
 and/or image.digest (sha256:…; rendered as repo[:tag]@digest). A missing tag and digest, or the mutable tag
 "latest", fails the render. Local and not-yet-deployed charts use the sentinel tag "dev".

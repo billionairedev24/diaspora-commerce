@@ -1,0 +1,17 @@
+# Production: OVH MKS, one b3-16 node, ONE core pod (prod profile). image.tag / image.digest: the promote workflow after a green
+# release-1 build; a human syncs core-prod (manual sync). The modules it runs are the cutover.services entries of
+# infra/argocd/envs/prod/platform-values.yaml (listed in infra/argocd/launch-set/release-1.yaml).
+env: prod
+replicas: 1
+autoscaling:
+  enabled: false
+rollout:
+  enabled: false
+resources:
+  requests: {cpu: 500m, memory: 1536Mi}
+  limits: {memory: 2048Mi}
+monitoring:
+  serviceMonitor: false     # no in-cluster Prometheus on the lean footprint: Alloy scrapes the pod annotations (honor_labels, see observability)
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.1"

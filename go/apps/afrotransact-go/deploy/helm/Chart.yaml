@@ -1,0 +1,10 @@
+apiVersion: v2
+name: afrotransact-go
+description: AfroTransact Go deployable (Release 1, ADR 0011): every Go module (gateway-bff, search, indexer, cart, geo, media, notifications) in one binary.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: at-service
+    version: 0.1.0
+    repository: "file://../../../../../infra/helm/library/at-service"

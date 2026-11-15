@@ -1,0 +1,74 @@
+# afrotransact-go (Release 1, ADR 0011): ONE Go binary with every Go module; gateway-bff stays the edge inside it. Base values;
+# values-<env>.yaml and infra/argocd/envs/<env>/platform-values.yaml (cloud, global hosts incl. global.mediaHost -> MEDIA_PUBLIC_URL,
+# cutover) override.
+service:
+  name: afrotransact-go
+  runtime: go
+  port: 8080
+env: dev
+cloud: none
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: afrotransact-go
+  tag: dev   # sentinel for local renders; the deploy pipeline writes the git sha and digest into values-<env>.yaml
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 2
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+# The seven separate Go processes request 7 x 48 Mi = 336 Mi (limit 160 Mi each, cloud-cost.md). One process pays the Go runtime
+# once; 128 Mi request / 384 Mi limit is an ESTIMATE (UNMEASURED: the Go batch has not been measured; re-measure with
+# `kubectl top pod` in the trial). media's image processing is the part that can spike; ClamAV is a separate pod. GOMEMLIMIT is
+# derived by the library as 90 % of the limit.
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {memory: 384Mi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret afrotransact-go-secrets (infra/ovh-vps/secrets.sh with DB_LAYOUT=schema; names only here):
+#   CART_DB_URL, GEO_DB_URL, MEDIA_DB_URL, NOTIFICATIONS_DB_URL (one database afrotransact_go, schema and role per module),
+#   REDIS_URL, KAFKA_BOOTSTRAP, MEILISEARCH_URL, MEILISEARCH_API_KEY, SEARCH_PROVIDER, OIDC_CLIENT_SECRET, SESSION_SIGNING_KEY,
+#   STRIPE_PUBLISHABLE_KEY, <X>_CLIENT_SECRET (cart, media, notifications, search, indexer), LINK_SIGNING_KEY, R2_* (media),
+#   RESEND_API_KEY, RESEND_WEBHOOK_SECRET, UNSUBSCRIBE_SIGNING_KEY, ADS_TOKEN_KEY, GOOGLE_*, SMARTY_* ...
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+cutover:
+  services: {}
+# CONNECTION BUDGET. Layerbase allows up to 500 connections for the platform (owner figure, UNVERIFIED in writing). Go budget:
+# under 50. Four modules own a schema (cart, geo, media, notifications) with a pool of 5 = 20 for one pod; a rolling update runs two
+# pods for a moment: 40 < 50. `helm template` fails when the pools add up to more than dbBudget.maxPerPod. The database roles carry
+# CONNECTION LIMIT 2 x pool + 2 (infra/ops/postgres/release-1-bootstrap.sql).
+dbBudget:
+  maxPerPod: 20
+  total: 50
+# enabled: this environment mounts the module (default false; env files and the cutover map turn it on). Not in the launch set:
+# promise, carrier-gateway, authz-sync (built, switched off). pool: pgx maximum for the module's own schema.
+modules:
+  gateway-bff:     {enabled: false}
+  search:          {enabled: false}
+  indexer:         {enabled: false}
+  cart:            {enabled: false, schema: cart,          pool: 5}
+  geo:             {enabled: false, schema: geo,           pool: 5}
+  media:           {enabled: false, schema: media,         pool: 5}
+  notifications:   {enabled: false, schema: notifications, pool: 5}
+  promise:         {enabled: false}
+  carrier-gateway: {enabled: false, schema: carriers}
+  authz-sync:      {enabled: false}
+extraEnv: {}
+nodeSelector: {}
+tolerations: []

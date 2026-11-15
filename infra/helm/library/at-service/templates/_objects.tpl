@@ -16,7 +16,7 @@ metadata:
   name: {{ include "at-service.name" . }}
   labels: {{- include "at-service.labels" . | nindent 4 }}
 spec:
-  selector: {{- include "at-service.selector" . | nindent 4 }}
+  selector: {{- include "at-service.serviceSelector" . | nindent 4 }}
   ports:
     - {name: http, port: 80, targetPort: http}
     # Scrape target only. Gateway routes use port 80 and the NetworkPolicy admits only observability on this port.
@@ -29,14 +29,14 @@ metadata:
   name: {{ include "at-service.name" . }}-canary
   labels: {{- include "at-service.labels" . | nindent 4 }}
 spec:
-  selector: {{- include "at-service.selector" . | nindent 4 }}
+  selector: {{- include "at-service.serviceSelector" . | nindent 4 }}
   ports:
     - {name: http, port: 80, targetPort: http}
 {{- end }}
 {{- end -}}
 
 {{- define "at-service.hpa" -}}
-{{- if .Values.autoscaling.enabled }}
+{{- if and .Values.autoscaling.enabled (not (include "at-service.movedTo" .)) }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

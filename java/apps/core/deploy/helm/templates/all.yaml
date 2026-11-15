@@ -1,0 +1,35 @@
+{{- /*
+Release 1: module switches become environment variables of the one container. Names only; every credential (DB URL, user and
+password per module, client secrets, third-party keys) comes from the Secret afrotransact-core-secrets (envFrom, secrets.sh).
+  MODULE_<NAME>_ENABLED   at.modules.<module>.enabled
+  <NAME>_DB_POOL_SIZE     at.modules.<module>.datasource.maximum-pool-size   (the per-module pool; budget below)
+  <NAME>_SCHEDULER_POOL_SIZE  at.modules.<module>.scheduler.pool-size
+  AT_<PROP>_MODE          at.<module>.mode: in-process | http (how this module calls the others)
+A module is on when modules.<name>.enabled is true OR the environment's cutover map names it (platform-values.yaml
+cutover.services, which also scales the old per-service Application to 0). User extraEnv wins over everything here.
+*/ -}}
+{{- $env := dict -}}
+{{- $sum := 0 -}}
+{{- $services := (.Values.cutover | default dict).services | default dict -}}
+{{- range $name, $m := .Values.modules -}}
+{{- $p := $m.envPrefix | default (upper (replace "-" "_" $name)) -}}
+{{- $on := or $m.enabled (eq (get $services $name | default "") "afrotransact-core") -}}
+{{- $_ := set $env (printf "MODULE_%s_ENABLED" $p) (toString (and $on true)) -}}
+{{- if and $m.modeEnv $m.mode -}}
+{{- if not (has $m.mode (list "in-process" "http")) -}}{{- fail (printf "modules.%s.mode must be in-process or http (got %q)" $name $m.mode) -}}{{- end -}}
+{{- $_ := set $env $m.modeEnv $m.mode -}}
+{{- end -}}
+{{- if $m.pool -}}
+{{- $_ := set $env (printf "%s_DB_POOL_SIZE" $p) (toString $m.pool) -}}
+{{- $sum = add $sum $m.pool -}}
+{{- end -}}
+{{- if $m.schedulerPool -}}{{- $_ := set $env (printf "%s_SCHEDULER_POOL_SIZE" $p) (toString $m.schedulerPool) -}}{{- end -}}
+{{- end -}}
+{{- /* Connection budget guard: the sum of every module's pool maximum (enabled or not) must stay within dbBudget.maxPerPod. A rolling
+       update runs two pods for a short time, so the worst case is 2 x this sum (docs/runbooks/release-1-deploy.md, "Connections"). */ -}}
+{{- if gt (int $sum) (int .Values.dbBudget.maxPerPod) -}}
+{{- fail (printf "afrotransact-core: module pools add up to %d connections, over dbBudget.maxPerPod=%d (the Java budget is 100 with a rolling-update surge of 2 pods)" (int $sum) (int .Values.dbBudget.maxPerPod)) -}}
+{{- end -}}
+{{- $_ := set $env "AT_DB_POOL_TOTAL_MAX" (toString $sum) -}}
+{{- $_ := set .Values "extraEnv" (merge (dict) (.Values.extraEnv | default dict) $env) -}}
+{{ include "at-service.all" . }}

@@ -49,6 +49,8 @@ media: [pg, clamav]
 notifications: [pg]
 carrier-gateway: [pg, valkey]
 authz-sync: [fga]
+afrotransact-core: [pg, temporal, fga, valkey]
+afrotransact-go: [pg, valkey, meili, clamav]
 {{- end -}}
 
 {{/* Public-internet ipBlock: everything except private, link-local (cloud metadata), CGNAT and loopback ranges. */}}

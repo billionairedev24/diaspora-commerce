@@ -1,0 +1,91 @@
+# afrotransact-core (Release 1, ADR 0011): ONE Spring Boot application with every Java module. Base values; values-<env>.yaml and
+# Argo CD's infra/argocd/envs/<env>/platform-values.yaml (cloud, global hosts incl. global.mediaHost -> MEDIA_PUBLIC_URL, cutover) override.
+service:
+  name: afrotransact-core
+  runtime: java
+  port: 8080
+env: dev
+cloud: none
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: afrotransact-core
+  tag: dev   # sentinel for local renders; the deploy pipeline writes the git sha and digest into values-<env>.yaml
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 2
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+# ONE b3-16 node (4 vCPU / 16 GB, ~13 GiB allocatable, docs/engineering/cloud-cost.md). Measured on two modules
+# (release-1-architecture.md section 11.2): 335 MB RSS warm for catalog + tax-returns, each further module about 40-50 MB, so the 14
+# launch modules extrapolate to 0.9-1.2 GB. The hard cap is the ADR 0011 criterion S1: 2.0 GiB RSS, which is the memory limit
+# (the kernel enforces it); the request is what the scheduler reserves (1.5 GiB, so a rolling-update surge of a second pod, 3 GiB,
+# still fits the spare ~3 GiB while the old per-service JVMs are scaled to 0).
+resources:
+  requests: {cpu: 500m, memory: 1536Mi}
+  limits: {memory: 2048Mi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret afrotransact-core-secrets (infra/ovh-vps/secrets.sh with DB_LAYOUT=schema; names only here):
+#   per enabled module <NAME>_DB_URL, <NAME>_DB_USER, <NAME>_DB_PASSWORD  (one database afrotransact_core, schema and role per module)
+#   KAFKA_BOOTSTRAP, FGA_API_TOKEN (not in prod), every module's <X>_CLIENT_SECRET, IDENTITY_DATA_KEY, SIGNING_KEY_PEM,
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_WEBHOOK_SECRET, FIELD_ENCRYPTION_KEY, OPENROUTER_API_KEY, TEMPORAL_TARGET,
+#   REDIS_URL, NEWSLETTER_TOKEN_KEY, HANDOVER_CODE_KEY, PAY_LINK_KEY ... the union of the per-service Secrets' keys.
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+# Per-environment cutover map (platform-values.yaml wins over this): service -> deployable. A module mapped to afrotransact-core is
+# on in core (and its old per-service Application is scaled to 0 and its Service routed here by the services ApplicationSet).
+cutover:
+  services: {}
+# CONNECTION BUDGET. Layerbase allows up to 500 connections for the whole platform (owner figure, UNVERIFIED in writing).
+# Java core budget: under 100. The sum of the pools below is the steady maximum of ONE pod; a rolling update runs two pods for a
+# moment, so the worst case is twice that. 48 x 2 = 96 < 100. `helm template` fails when the pools add up to more than
+# dbBudget.maxPerPod. The database roles carry CONNECTION LIMIT 2 x pool + 2 (infra/ops/postgres/release-1-bootstrap.sql), the
+# same numbers, so a bug cannot exceed them. Go: 20 x 2 = 40 < 50 (go chart). Temporal 10, backup and operators 10: ~156 of 500.
+dbBudget:
+  maxPerPod: 48
+  total: 100
+# Modules. enabled: this environment runs the module in core (default false; the env files and the cutover list turn them on).
+# mode: how the module calls the OTHER modules (in-process | http; http needs its upstream URL and client credentials as the standalone
+# service). pool / schedulerPool: per-module Hikari maximum and @Scheduled threads. schema: database schema and role stem
+# (role <schema>_app) in the ONE database afrotransact_core. envPrefix overrides the NAME of the environment variables.
+modules:
+  identity:      {enabled: false, schema: identity,    pool: 4, schedulerPool: 2, modeEnv: AT_IDENTITY_MODE,    mode: in-process}
+  catalog:       {enabled: false, schema: catalog,     pool: 8, schedulerPool: 3, modeEnv: AT_CATALOG_MODE,     mode: in-process}
+  offers:        {enabled: false, schema: offers,      pool: 3, schedulerPool: 2, modeEnv: AT_OFFERS_MODE,      mode: in-process}
+  inventory:     {enabled: false, schema: inventory,   pool: 3, schedulerPool: 2, modeEnv: AT_INVENTORY_MODE,   mode: in-process}
+  orders:        {enabled: false, schema: orders,      pool: 6, schedulerPool: 3, modeEnv: AT_ORDERS_MODE,      mode: in-process}
+  payments:      {enabled: false, schema: payments,    pool: 5, schedulerPool: 2, modeEnv: AT_PAYMENTS_MODE,    mode: in-process}
+  seller:        {enabled: false, schema: seller,      pool: 3, schedulerPool: 2, modeEnv: AT_SELLER_MODE,      mode: in-process}
+  fulfilment:    {enabled: false, schema: fulfilment,  pool: 3, schedulerPool: 2, modeEnv: AT_FULFILMENT_MODE,  mode: in-process}
+  bookings:      {enabled: false, schema: bookings,    pool: 3, schedulerPool: 2, modeEnv: AT_BOOKINGS_MODE,    mode: in-process}
+  trust-ops:     {enabled: false, schema: trustops,    pool: 2, schedulerPool: 2, modeEnv: AT_TRUSTOPS_MODE,    mode: in-process}
+  tax-returns:   {enabled: false, schema: taxreturns,  pool: 4, schedulerPool: 2, modeEnv: AT_TAXRETURNS_MODE,  mode: in-process}
+  content:       {enabled: false, schema: content,     pool: 2, schedulerPool: 2, modeEnv: AT_CONTENT_MODE,     mode: in-process}
+  ai-gateway:    {enabled: false, schema: ai,          pool: 2, schedulerPool: 1, modeEnv: AT_AI_MODE,          mode: in-process}
+  mcp-server:    {enabled: false,                                schedulerPool: 2, modeEnv: AT_MCP_MODE,         mode: in-process}   # no database
+  # Not in the launch set (the module is built, switched off): enable when the business needs it, and add its schema to
+  # infra/ops/postgres/release-1-bootstrap.sql first. no pool is set, so it adds nothing to the budget until then.
+  retail:        {enabled: false, schema: retail,                schedulerPool: 1, modeEnv: AT_RETAIL_MODE,      mode: in-process}
+  delivery-runs: {enabled: false, schema: deliveryruns,          schedulerPool: 2, modeEnv: AT_DELIVERY_RUNS_MODE, mode: in-process}
+extraEnv:
+  # One JVM for every module, so a bigger heap share than a single-service pod: 50 % of the 2 GiB limit = 1 GiB heap, the rest is
+  # metaspace, a 128 MB code cache, thread stacks (virtual threads for requests), direct buffers and Kafka/TLS native memory,
+  # to stay under the 2.0 GiB RSS cap. Serial GC and C1 only as in java/Dockerfile (low CPU, small footprint).
+  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=50 -Xss512k -XX:-UsePerfData -XX:ReservedCodeCacheSize=128m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
+nodeSelector: {}
+tolerations: []

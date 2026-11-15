@@ -11,7 +11,9 @@ metadata:
   name: {{ include "at-service.name" . }}
   labels: {{- include "at-service.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
+  {{- if include "at-service.movedTo" . }}
+  replicas: 0
+  {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicas }}
   {{- end }}
   revisionHistoryLimit: 5
