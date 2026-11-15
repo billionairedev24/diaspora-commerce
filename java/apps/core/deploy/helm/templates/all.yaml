@@ -10,11 +10,13 @@ cutover.services, which also scales the old per-service Application to 0). User 
 */ -}}
 {{- $env := dict -}}
 {{- $sum := 0 -}}
+{{- $on := 0 -}}
 {{- $services := (.Values.cutover | default dict).services | default dict -}}
 {{- range $name, $m := .Values.modules -}}
 {{- $p := $m.envPrefix | default (upper (replace "-" "_" $name)) -}}
-{{- $on := or $m.enabled (eq (get $services $name | default "") "afrotransact-core") -}}
-{{- $_ := set $env (printf "MODULE_%s_ENABLED" $p) (toString (and $on true)) -}}
+{{- $enabled := or $m.enabled (eq (get $services $name | default "") "afrotransact-core") -}}
+{{- if $enabled -}}{{- $on = add $on 1 -}}{{- end -}}
+{{- $_ := set $env (printf "MODULE_%s_ENABLED" $p) (toString (and $enabled true)) -}}
 {{- if and $m.modeEnv $m.mode -}}
 {{- if not (has $m.mode (list "in-process" "http")) -}}{{- fail (printf "modules.%s.mode must be in-process or http (got %q)" $name $m.mode) -}}{{- end -}}
 {{- $_ := set $env $m.modeEnv $m.mode -}}
@@ -31,5 +33,7 @@ cutover.services, which also scales the old per-service Application to 0). User 
 {{- fail (printf "afrotransact-core: module pools add up to %d connections, over dbBudget.maxPerPod=%d (the Java budget is 100 with a rolling-update surge of 2 pods)" (int $sum) (int .Values.dbBudget.maxPerPod)) -}}
 {{- end -}}
 {{- $_ := set $env "AT_DB_POOL_TOTAL_MAX" (toString $sum) -}}
+{{- /* No module on (every cutover.services entry empty): the pod would be an idle JVM, so it is scaled to 0. */ -}}
+{{- if eq (int $on) 0 -}}{{- $_ := set .Values "replicas" 0 -}}{{- end -}}
 {{- $_ := set .Values "extraEnv" (merge (dict) (.Values.extraEnv | default dict) $env) -}}
 {{ include "at-service.all" . }}

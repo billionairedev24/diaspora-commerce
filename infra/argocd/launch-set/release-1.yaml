@@ -48,8 +48,8 @@ deployables:
       - carrier-gateway
       - authz-sync
 # Which modules each environment runs INSIDE a deployable (the rest of the launch set still runs as its own per-service Application).
-# Every environment runs both deployables (their Applications exist from the first sync); a deployable with no modules enabled is an
-# idle pod: set its chart's replicas to 0 in values-<env>.yaml until its first batch if the memory is needed.
+# Every environment has both deployable Applications from the first sync; a deployable with no module enabled renders replicas 0 (the
+# charts do this by themselves), so it costs no memory until its first batch.
 enabled:
   dev:
     afrotransact-core: []     # first batch: catalog, tax-returns (the spike modules) once core's first image is pinned in values-dev.yaml

@@ -51,22 +51,24 @@ workloadIdentity:
 cutover:
   services: {}
 # CONNECTION BUDGET. Layerbase allows up to 500 connections for the platform (owner figure, UNVERIFIED in writing). Go budget:
-# under 50. Four modules own a schema (cart, geo, media, notifications) with a pool of 5 = 20 for one pod; a rolling update runs two
-# pods for a moment: 40 < 50. `helm template` fails when the pools add up to more than dbBudget.maxPerPod. The database roles carry
-# CONNECTION LIMIT 2 x pool + 2 (infra/ops/postgres/release-1-bootstrap.sql).
+# under 50. Four modules own a schema (cart, geo, media, notifications); each module's pgx pool is capped at 3 IN CODE (maxPoolConns in
+# go/services/<m>/module.go), 12 for one pod; a rolling update runs two pods for a moment: 24 < 50. `helm template` fails when the
+# figures below add up to more than dbBudget.maxPerPod. The database roles carry CONNECTION LIMIT 2 x pool + 2
+# (infra/ops/postgres/release-1-bootstrap.sql). To lower a pool, put pool_max_conns=<n> in the module's <NAME>_DB_URL.
 dbBudget:
-  maxPerPod: 20
+  maxPerPod: 12
   total: 50
 # enabled: this environment mounts the module (default false; env files and the cutover map turn it on). Not in the launch set:
-# promise, carrier-gateway, authz-sync (built, switched off). pool: pgx maximum for the module's own schema.
+# promise, carrier-gateway, authz-sync (built, switched off). pool: the pgx maximum of the module's own schema (a figure for the budget).
+# mode: in-process (default of the host) | http, rendered as AT_MODULES_<NAME>_MODE only when set.
 modules:
   gateway-bff:     {enabled: false}
   search:          {enabled: false}
   indexer:         {enabled: false}
-  cart:            {enabled: false, schema: cart,          pool: 5}
-  geo:             {enabled: false, schema: geo,           pool: 5}
-  media:           {enabled: false, schema: media,         pool: 5}
-  notifications:   {enabled: false, schema: notifications, pool: 5}
+  cart:            {enabled: false, schema: cart,          pool: 3}
+  geo:             {enabled: false, schema: geo,           pool: 3}
+  media:           {enabled: false, schema: media,         pool: 3}
+  notifications:   {enabled: false, schema: notifications, pool: 3}
   promise:         {enabled: false}
   carrier-gateway: {enabled: false, schema: carriers}
   authz-sync:      {enabled: false}

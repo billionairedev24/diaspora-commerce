@@ -78,7 +78,7 @@ def check_release1(env, apps, pv, plan):
             lines.append(f"  FAIL [{env}] cutover.services: {m} is not a launch-set service, so there is no Application to scale down")
     for dep in sorted(DEPLOYABLE_RUNTIME):
         on = sorted(m for m, d in cut.items() if d == dep)
-        lines.append(f"[{env}] {dep}-{env}: runs {len(on)} module(s) {', '.join(on) if on else '(none yet: idle pod)'}")
+        lines.append(f"[{env}] {dep}-{env}: runs {len(on)} module(s) {', '.join(on) if on else '(none yet: idle, scaled to 0)'}")
     return bad, lines, cut
 
 
