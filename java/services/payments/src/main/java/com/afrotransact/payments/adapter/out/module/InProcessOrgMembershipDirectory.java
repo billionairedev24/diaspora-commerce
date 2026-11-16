@@ -41,7 +41,7 @@ public class InProcessOrgMembershipDirectory implements OrgMembershipDirectory {
     public Optional<String> roleOf(String orgId, String userId) {
         CallerPrincipal caller = callers.getObject().principalFor(MODULE);
         try {
-            return InProcessCalls.as(caller, () -> api.getObject().roleOf(orgId, userId));
+            return InProcessCalls.as(caller, "seller", () -> api.getObject().roleOf(orgId, userId));
         } catch (RuntimeException ex) {
             throw new OrgMembershipUnavailableException("seller refused or failed the in-process membership call: "
                     + ex.getMessage(), ex);

@@ -43,7 +43,7 @@ public class InProcessSellerOrgSource implements SellerOrgSource {
 
     private <T> T call(Supplier<T> call, String what) {
         try {
-            return InProcessCalls.as(callers.getObject().principalFor(MODULE), call);
+            return InProcessCalls.as(callers.getObject().principalFor(MODULE), "seller", call);
         } catch (ModuleApiException e) {
             throw new IllegalStateException("seller module answered " + e.status() + " (" + e.code() + ") for " + what, e);
         }

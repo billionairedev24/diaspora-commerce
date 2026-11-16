@@ -3,6 +3,7 @@ package com.afrotransact.orders.adapter.out.http;
 import java.time.Duration;
 
 import com.afrotransact.orders.application.OrdersSettings;
+import com.afrotransact.orders.port.AddressBook;
 import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.MarketEligibility;
@@ -13,6 +14,7 @@ import com.afrotransact.orders.port.PickupLocations;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.ShipFromAddresses;
+import com.afrotransact.orders.port.StaffDirectory;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import org.springframework.web.client.RestClient;
 
@@ -58,6 +60,14 @@ public final class HttpWiring {
 
     public static PickupLocations pickupLocations(String url, Duration timeout) {
         return new HttpPickupLocations(RestClient.builder(), url, url, timeout, TOKEN);
+    }
+
+    public static AddressBook addressBook(String url, Duration timeout) {
+        return new HttpAddressBook(RestClient.builder(), url, timeout);
+    }
+
+    public static StaffDirectory staff(String url, Duration timeout) {
+        return new HttpStaffDirectory(RestClient.builder(), url, timeout, TOKEN);
     }
 
     public static ShipFromAddresses shipFrom(String url, Duration timeout) {

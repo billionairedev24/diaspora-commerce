@@ -44,7 +44,7 @@ class InProcessProductFacts implements ProductFacts {
         Map<String, Facts> out = new LinkedHashMap<>();
         for (String atin : atins) {
             try {
-                Optional<VariantFactsApi.VariantFacts> found = InProcessCalls.as(caller,
+                Optional<VariantFactsApi.VariantFacts> found = InProcessCalls.as(caller, "catalog",
                         () -> api.getObject().liveVariantFacts(atin));
                 found.ifPresent(v -> out.put(atin, new Facts(atin, v.productType(),
                         "true".equalsIgnoreCase(v.attributes().getOrDefault("perishable", "")), v.attributes(),

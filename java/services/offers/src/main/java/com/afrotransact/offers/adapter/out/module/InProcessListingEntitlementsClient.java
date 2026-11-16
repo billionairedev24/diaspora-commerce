@@ -30,7 +30,7 @@ class InProcessListingEntitlementsClient implements ListingEntitlementsClient {
                                        ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(SellerLookupApi.class, true, false).length > 0, "offers", "seller",
                 "at.offers.seller.mode");
-        this.seller = new InProcessLink<>("offers", api::getObject, callers::getObject);
+        this.seller = new InProcessLink<>("offers", "seller", api::getObject, callers::getObject);
     }
 
     @Override

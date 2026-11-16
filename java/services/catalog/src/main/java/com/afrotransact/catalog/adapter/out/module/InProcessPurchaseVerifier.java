@@ -30,7 +30,7 @@ class InProcessPurchaseVerifier implements PurchaseVerifier {
                               ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(OrderLookupApi.class, true, false).length > 0, "catalog",
                 "orders", "at.catalog.orders.mode");
-        this.orders = new InProcessLink<>("catalog", api::getObject, callers::getObject);
+        this.orders = new InProcessLink<>("catalog", "orders", api::getObject, callers::getObject);
     }
 
     @Override

@@ -4,11 +4,14 @@ import java.util.Set;
 
 import com.afrotransact.catalog.api.ProductListingApi;
 import com.afrotransact.content.api.MarketEligibilityApi;
+import com.afrotransact.identity.api.AddressBookApi;
+import com.afrotransact.identity.api.StaffDirectoryApi;
 import com.afrotransact.inventory.api.ReservationApi;
 import com.afrotransact.module.CallerPrincipal;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.application.OrdersSettings;
+import com.afrotransact.orders.port.AddressBook;
 import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.MarketEligibility;
@@ -16,9 +19,11 @@ import com.afrotransact.orders.port.MemberBenefits;
 import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.ProductFactsClient;
+import com.afrotransact.orders.port.StaffDirectory;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import com.afrotransact.payments.api.MembershipBenefitsApi;
 import com.afrotransact.payments.api.OrderPaymentsApi;
+import com.afrotransact.platform.security.EndUsers;
 import com.afrotransact.taxreturns.api.TaxQuoteApi;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
@@ -32,7 +37,7 @@ public final class InProcessWiring {
     /** The principal orders runs in-process calls as (the client id identity grants the orders service). */
     public static final CallerPrincipal ORDERS = new CallerPrincipal("orders", "orders-service",
             Set.of("inventory:reserve", "inventory:read", "payments:service", "tax:quote", "offers:read",
-                    "sellers:ship-from.read"));
+                    "sellers:ship-from.read", "users:read", "identity:addresses.read"));
 
     private InProcessWiring() {
     }
@@ -80,6 +85,16 @@ public final class InProcessWiring {
         DefaultListableBeanFactory b = beans(MarketEligibilityApi.class, api);
         return new InProcessMarketEligibility(b.getBeanProvider(MarketEligibilityApi.class),
                 b.getBean(ModuleUpstream.class), b);
+    }
+
+    public static AddressBook addressBook(AddressBookApi api, EndUsers endUsers) {
+        DefaultListableBeanFactory b = beans(AddressBookApi.class, api);
+        return new InProcessAddressBook(b.getBeanProvider(AddressBookApi.class), b.getBean(ModuleUpstream.class), endUsers, b);
+    }
+
+    public static StaffDirectory staff(StaffDirectoryApi api) {
+        DefaultListableBeanFactory b = beans(StaffDirectoryApi.class, api);
+        return new InProcessStaffDirectory(b.getBeanProvider(StaffDirectoryApi.class), b.getBean(ModuleUpstream.class), b);
     }
 
     public static MemberBenefits benefits(MembershipBenefitsApi api) {

@@ -30,7 +30,7 @@ class InProcessCatalogClient implements CatalogClient {
                            ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(CatalogLookupApi.class, true, false).length > 0, "offers", "catalog",
                 "at.offers.catalog.mode");
-        this.catalog = new InProcessLink<>("offers", api::getObject, callers::getObject);
+        this.catalog = new InProcessLink<>("offers", "catalog", api::getObject, callers::getObject);
     }
 
     @Override

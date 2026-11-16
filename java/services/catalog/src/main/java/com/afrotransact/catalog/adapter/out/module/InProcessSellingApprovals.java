@@ -29,7 +29,7 @@ class InProcessSellingApprovals implements SellingApprovals {
                               ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(SellerLookupApi.class, true, false).length > 0, "catalog", "seller",
                 "at.catalog.seller.mode");
-        this.seller = new InProcessLink<>("catalog", api::getObject, callers::getObject);
+        this.seller = new InProcessLink<>("catalog", "seller", api::getObject, callers::getObject);
     }
 
     @Override

@@ -110,7 +110,7 @@ class InProcessPaymentsClient implements PaymentsClient {
     private <T> T call(Supplier<T> call) {
         CallerPrincipal caller = callers.getObject().principalFor(MODULE);
         try {
-            return InProcessCalls.as(caller, call);
+            return InProcessCalls.as(caller, "payments", call);
         } catch (ModuleApiException e) {
             throw new PaymentsClientException(e.status(), e.code(), "Payments: " + e.getMessage(), e);
         } catch (RuntimeException e) {

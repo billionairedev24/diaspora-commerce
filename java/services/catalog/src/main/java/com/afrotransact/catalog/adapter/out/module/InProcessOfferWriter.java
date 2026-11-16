@@ -31,12 +31,12 @@ class InProcessOfferWriter implements OfferWriter {
                          ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(OffersApi.class, true, false).length > 0, "catalog", "offers",
                 "at.catalog.offers.mode");
-        this.offers = new InProcessLink<>("catalog", api::getObject, callers::getObject);
+        this.offers = new InProcessLink<>("catalog", "offers", api::getObject, callers::getObject);
     }
 
     @Override
     public List<Result> upsert(String sellerOrgId, UUID importId, String uploadedBy, List<OfferTerms> rows) {
-        return send(() -> offers.call(api -> api.upsert(sellerOrgId, importId, uploadedBy, rows.stream().map(t ->
+        return send(() -> offers.call("batch", api -> api.upsert(sellerOrgId, importId, uploadedBy, rows.stream().map(t ->
                 new OffersApi.OfferTerms(t.rowKey(), t.atin(), t.sellerSku(), t.condition(), t.priceMinor(),
                         t.listPriceMinor(), t.shippingMinor(), t.fulfilment(), t.quantity(), t.handlingDays(),
                         t.shipFrom() == null ? null : new OffersApi.ShipFromPlace(t.shipFrom().city(), t.shipFrom().region(),
@@ -48,7 +48,7 @@ class InProcessOfferWriter implements OfferWriter {
 
     @Override
     public List<Result> setPricesAndStock(String sellerOrgId, UUID importId, String uploadedBy, List<PriceStock> rows) {
-        return send(() -> offers.call(api -> api.setPricesAndStock(sellerOrgId, importId, uploadedBy, rows.stream()
+        return send(() -> offers.call("batch", api -> api.setPricesAndStock(sellerOrgId, importId, uploadedBy, rows.stream()
                 .map(r -> new OffersApi.PriceStock(r.rowKey(), r.sellerSku(), r.atin(), r.priceMinor(),
                         r.listPriceMinor(), r.quantity(), r.gtin())).toList())), rows.size());
     }

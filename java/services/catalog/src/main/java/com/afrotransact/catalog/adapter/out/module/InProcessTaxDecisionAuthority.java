@@ -48,7 +48,7 @@ public class InProcessTaxDecisionAuthority implements TaxDecisionAuthority {
             for (int from = 0; from < all.size(); from += BATCH) {
                 List<TaxClassificationApi.ListingQuery> chunk = all.subList(from, Math.min(all.size(), from + BATCH))
                         .stream().map(a -> new TaxClassificationApi.ListingQuery(a.atin(), a.sellerOrgId())).toList();
-                Map<String, TaxClassificationApi.ListingStatus> found = InProcessCalls.as(caller,
+                Map<String, TaxClassificationApi.ListingStatus> found = InProcessCalls.as(caller, "tax-returns",
                         () -> api.getObject().listingStatus(chunk));
                 found.values().forEach(s -> out.put(s.atin(), new Answer(s.atin(), s.decisionStatus(), s.recordStatus(),
                         s.reason())));

@@ -40,7 +40,7 @@ class InProcessSellerPlanDirectory implements SellerPlanDirectory {
     @Override
     public Optional<Plan> currentPlan(String orgId) {
         try {
-            Optional<BillingPlanApi.Plan> plan = InProcessCalls.as(callers.getObject().principalFor("payments"),
+            Optional<BillingPlanApi.Plan> plan = InProcessCalls.as(callers.getObject().principalFor("payments"), "seller",
                     () -> api.getObject().currentPlan(orgId));
             return Optional.of(plan.map(p -> new Plan(p.planCode(), p.status())).orElse(new Plan(null, null)));
         } catch (ModuleApiException e) {

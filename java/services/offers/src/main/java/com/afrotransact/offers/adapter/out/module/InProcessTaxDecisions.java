@@ -29,7 +29,7 @@ class InProcessTaxDecisions implements TaxDecisions {
                           ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(ListingDecisionApi.class, true, false).length > 0, "offers", "tax-returns",
                 "at.offers.taxreturns.mode");
-        this.tax = new InProcessLink<>("offers", api::getObject, callers::getObject);
+        this.tax = new InProcessLink<>("offers", "tax-returns", api::getObject, callers::getObject);
     }
 
     @Override

@@ -18,11 +18,6 @@ public final class InProcessLink<A> {
     private final Supplier<? extends A> api;
     private final Supplier<? extends CallerPrincipals> callers;
 
-    /** Temporary: a link that does not name its callee is bounded under {@link InProcessCalls#UNSPECIFIED}. */
-    public InProcessLink(String caller, Supplier<? extends A> api, Supplier<? extends CallerPrincipals> callers) {
-        this(caller, InProcessCalls.UNSPECIFIED, api, callers);
-    }
-
     /** @param callee the called module as named in the module registry; it selects the timeout, bulkhead and metrics of the edge */
     public InProcessLink(String caller, String callee, Supplier<? extends A> api, Supplier<? extends CallerPrincipals> callers) {
         this.caller = caller;

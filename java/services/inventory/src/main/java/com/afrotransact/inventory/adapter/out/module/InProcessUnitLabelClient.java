@@ -40,7 +40,7 @@ class InProcessUnitLabelClient implements UnitLabelClient {
                              ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(LabelApi.class, true, false).length > 0, "inventory",
                 "catalog", "at.inventory.catalog.mode");
-        this.catalog = new InProcessLink<>("inventory", api::getObject, callers::getObject);
+        this.catalog = new InProcessLink<>("inventory", "catalog", api::getObject, callers::getObject);
     }
 
     @Override

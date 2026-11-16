@@ -28,7 +28,7 @@ final class ModuleUpstreams<A> {
                     ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(api, true, false).length > 0, "tax-returns", callee,
                 "at.taxreturns." + callee.replace("-", "") + ".mode");
-        this.link = new InProcessLink<>("tax-returns", provider::getObject, callers::getObject);
+        this.link = new InProcessLink<>("tax-returns", callee, provider::getObject, callers::getObject);
         this.name = callee;
     }
 

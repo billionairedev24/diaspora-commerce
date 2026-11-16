@@ -21,14 +21,18 @@ import java.util.stream.Stream;
 
 import com.afrotransact.catalog.api.ProductListingApi;
 import com.afrotransact.content.api.MarketEligibilityApi;
+import com.afrotransact.identity.api.AddressBookApi;
+import com.afrotransact.identity.api.StaffDirectoryApi;
 import com.afrotransact.inventory.api.NodeAddressApi;
 import com.afrotransact.inventory.api.ReservationApi;
 import com.afrotransact.module.CallerPrincipals;
 import com.afrotransact.module.ModuleApiException;
+import com.afrotransact.module.ModuleCallTimeoutException;
 import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.adapter.out.http.HttpWiring;
 import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.port.AddressBook;
 import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.MarketEligibility;
@@ -38,10 +42,12 @@ import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.PickupLocations;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.ShipFromAddresses;
+import com.afrotransact.orders.port.StaffDirectory;
 import com.afrotransact.orders.port.TaxQuoteClient;
 import com.afrotransact.orders.port.UpstreamFailure;
 import com.afrotransact.payments.api.MembershipBenefitsApi;
 import com.afrotransact.payments.api.OrderPaymentsApi;
+import com.afrotransact.platform.security.EndUsers;
 import com.afrotransact.seller.api.ShipFromAddressApi;
 import com.afrotransact.taxreturns.api.TaxQuoteApi;
 import com.sun.net.httpserver.HttpServer;
@@ -52,6 +58,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 /**
  * Release 1 turned the HTTP adapters of orders into in-process ones behind the same ports; the saga must not notice. For every
@@ -87,6 +97,9 @@ class InProcessVersusHttpFailureParityTest {
         }
 
         RuntimeException thrown() {
+            if (name.startsWith("bounded wait")) {
+                return new ModuleCallTimeoutException("orders", "callee", TIMEOUT);
+            }
             return crash ? new IllegalStateException("could not execute statement; password=hunter2")
                     : new ModuleApiException(status, code, detail, shortfalls, null);
         }
@@ -174,7 +187,12 @@ class InProcessVersusHttpFailureParityTest {
                 new Callee("502 stripe unavailable", 502, "payments.stripe-unavailable", "Stripe could not be reached",
                         List.of(), false),
                 new Callee("503 unavailable", 503, "x.unavailable", "Try later", List.of(), false),
-                new Callee("crash or timeout", 500, "x.crash", "n/a", List.of(), true));
+                // the callee module's bulkhead is full: the gate answers 503 <callee>.unavailable at once, as a 503 over HTTP
+                new Callee("bulkhead full", 503, "callee.unavailable", "callee is busy: too many calls in flight", List.of(),
+                        false),
+                new Callee("crash or timeout", 500, "x.crash", "n/a", List.of(), true),
+                // the bounded wait of the in-process gate fires: over HTTP that is the read timeout (the server never answers)
+                new Callee("bounded wait timeout", 500, "x.timeout", "n/a", List.of(), true));
     }
 
     private static final String OFFER = "11111111-1111-1111-1111-111111111111";
@@ -217,6 +235,10 @@ class InProcessVersusHttpFailureParityTest {
                 new Op("memberBenefits", "waivers", w -> benefits(w).waivers("c1", 1000, "USD",
                         List.of(new MemberBenefits.Fee("1", MemberBenefits.FeeKind.PICKUP, 599)))),
                 new Op("pickupLocations", "forOffer", w -> pickups(w).forOffer(OFFER)),
+                new Op("addressBook", "find", w -> signedIn(() -> addressBook(w).find("customer-token", "addr-1"))),
+                new Op("staffDirectory", "withPermission", w -> staff(w).withPermission("orders:review")),
+                new Op("staffDirectory", "withRole", w -> staff(w).withRole("staff.support")),
+                new Op("staffDirectory", "people", w -> staff(w).people(List.of("u1"))),
                 new Op("shipFromAddresses", "centre", w -> shipFrom(w).forShipment(FulfilmentType.FBA_AFROTRANSACT, "org",
                         "node-1", null)),
                 new Op("shipFromAddresses", "pickupLocation", w -> shipFrom(w).forShipment(FulfilmentType.SELLER_FULFILLED,
@@ -241,8 +263,8 @@ class InProcessVersusHttpFailureParityTest {
     void theMatrixCoversEveryAdapterOfTheCheckoutPathAndEveryFailureClass() {
         assertThat(operations().map(Op::adapter).distinct()).containsExactlyInAnyOrder("inventory", "payments", "coupons",
                 "tax", "offerInventory", "productFacts", "markets", "memberBenefits", "pickupLocations",
-                "shipFromAddresses");
-        assertThat(failures().count()).isEqualTo(14);
+                "shipFromAddresses", "addressBook", "staffDirectory");
+        assertThat(failures().count()).isEqualTo(16);
     }
 
     /** A failure as the saga sees it, or the (equal-comparable) result. */
@@ -264,6 +286,27 @@ class InProcessVersusHttpFailureParityTest {
     private static Object run(Runnable r) {
         r.run();
         return "void";
+    }
+
+    /** Runs {@code call} with a signed-in customer in the security context (what the request thread has at checkout). */
+    private static Object signedIn(Supplier<Object> call) {
+        Jwt jwt = new Jwt("t", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "RS256"),
+                Map.of("sub", "customer-1", "pt", "CUSTOMER"));
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, AuthorityUtils.NO_AUTHORITIES));
+        try {
+            return call.get();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    private static AddressBook addressBook(Wiring w) {
+        return w.http() ? HttpWiring.addressBook(w.url(), TIMEOUT)
+                : InProcessWiring.addressBook(w.api(AddressBookApi.class), new EndUsers(true));
+    }
+
+    private static StaffDirectory staff(Wiring w) {
+        return w.http() ? HttpWiring.staff(w.url(), TIMEOUT) : InProcessWiring.staff(w.api(StaffDirectoryApi.class));
     }
 
     private static InventoryClient inventory(Wiring w) {

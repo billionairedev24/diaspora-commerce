@@ -26,7 +26,7 @@ class InProcessSellerOffers implements SellerOffers {
                           ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(OffersApi.class, true, false).length > 0, "catalog", "offers",
                 "at.catalog.offers.mode");
-        this.offers = new InProcessLink<>("catalog", api::getObject, callers::getObject);
+        this.offers = new InProcessLink<>("catalog", "offers", api::getObject, callers::getObject);
     }
 
     @Override

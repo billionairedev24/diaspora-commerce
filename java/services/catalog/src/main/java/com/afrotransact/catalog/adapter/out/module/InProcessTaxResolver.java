@@ -34,7 +34,7 @@ public class InProcessTaxResolver implements TaxResolver {
     public Resolution resolve(Request request) {
         CallerPrincipal caller = callers.getObject().principalFor(MODULE);
         try {
-            TaxClassificationApi.Resolution r = InProcessCalls.as(caller, () -> api.getObject().resolve(
+            TaxClassificationApi.Resolution r = InProcessCalls.as(caller, "tax-returns", () -> api.getObject().resolve(
                     new TaxClassificationApi.ResolveRequest(request.categoryCode(), request.productTypeCode(),
                             request.facts(), request.sellerBehaviour())));
             List<MissingTaxFact> missing = r.missingFacts().stream()

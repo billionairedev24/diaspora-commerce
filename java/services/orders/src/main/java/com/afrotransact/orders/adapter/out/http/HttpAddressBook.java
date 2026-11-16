@@ -3,9 +3,11 @@ package com.afrotransact.orders.adapter.out.http;
 import java.time.Duration;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.port.AddressBook;
 import com.afrotransact.platform.security.ActingAsActorResolver;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -13,6 +15,7 @@ import tools.jackson.databind.JsonNode;
 
 /** identity-service (port 8100) {@code GET /v1/me/addresses} with the customer's token. */
 @Component
+@ConditionalOnModuleMode(caller = "orders", callee = "identity", value = ModuleMode.HTTP)
 class HttpAddressBook implements AddressBook {
 
     private final Upstream identity;

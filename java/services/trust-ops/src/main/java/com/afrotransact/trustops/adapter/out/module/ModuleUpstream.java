@@ -33,7 +33,7 @@ public class ModuleUpstream {
     public <T> T call(String service, Supplier<T> call) {
         CallerPrincipal caller = callers.getObject().principalFor(MODULE);
         try {
-            return InProcessCalls.as(caller, call);
+            return InProcessCalls.as(caller, service, call);
         } catch (ModuleApiException e) {
             throw new UpstreamException(service, e.status(), e.code(), service + ": " + e.getMessage(), e);
         } catch (RuntimeException e) {

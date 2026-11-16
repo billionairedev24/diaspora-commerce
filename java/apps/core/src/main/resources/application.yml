@@ -249,6 +249,8 @@ at:
         - sellers:ship-from.read
         - offers:read
         - delivery-runs:reserve
+        # Delegation, not a token scope: lets orders read the signed-in customer's own address book in-process (identity AddressBookApi).
+        - identity:addresses.read
       datasource:
         url: ${ORDERS_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
         username: ${ORDERS_DB_USER:orders}

@@ -15,7 +15,6 @@ HttpMediaClient=@bean seller -> media (Go service, stays HTTP: not a Java module
 HttpAiUsageSource=@off:ai-gateway seller -> ai-gateway: in-process when ai-gateway runs (core default), HTTP only when it is switched off
 # --- other callers (owned by the other in-process batch; remove the line when the edge is converted)
 HttpAccountReader=ai-gateway -> Java modules (catalog, offers, orders, bookings, tax-returns): ai-gateway batch, not converted yet
-HttpAddressBook=orders -> identity (address book): orders batch, not converted yet
 HttpApplicationsApi=mcp-server relays the caller token to the module APIs: mcp-server batch, not converted yet
 HttpBookingsApi=mcp-server batch, not converted yet
 HttpCartApi=mcp-server -> cart (Go service, stays HTTP)
@@ -46,6 +45,5 @@ HttpSearchApi=mcp-server -> search (Go service, stays HTTP)
 HttpSellerApi=mcp-server batch, not converted yet
 HttpSellerOrgSource=@off:seller identity -> seller (organisation sync): in-process when seller runs (core default), HTTP only when it is switched off
 HttpServiceDirectory=ai-gateway -> bookings / service directory: ai-gateway batch, not converted yet
-HttpStaffDirectory=orders -> identity (staff directory): orders batch, not converted yet
 HttpTaxApi=mcp-server batch, not converted yet
 HttpTriageClient=trust-ops -> ai-gateway: trust-ops batch, not converted yet

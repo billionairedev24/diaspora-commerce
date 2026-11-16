@@ -25,7 +25,7 @@ final class SellerModuleCalls<A> {
                       ListableBeanFactory beans) {
         InProcessCalls.requireRunning(beans.getBeanNamesForType(api, true, false).length > 0, MODULE, callee,
                 "at.seller." + callee.replace("-", "") + ".mode");
-        this.link = new InProcessLink<>(MODULE, provider::getObject, callers::getObject);
+        this.link = new InProcessLink<>(MODULE, callee, provider::getObject, callers::getObject);
         this.callee = callee;
     }
 
