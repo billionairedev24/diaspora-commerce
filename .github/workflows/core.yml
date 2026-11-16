@@ -13,38 +13,8 @@ name: core
 on:
   push:
     branches: [release-1]
-    paths:
-      - java/**
-      - contracts/openapi/**
-      - infra/helm/library/**
-      - infra/ops/postgres/**
-      - tools/ci/core_ci_db.sh
-      - tools/release/route_diff.py
-      - tools/release/parity.py
-      - tools/release/parity.yaml
-      - tools/release/requirements-ci.txt
-      - tools/release/test_cutover_render.sh
-      - .github/workflows/core.yml
-      - .github/workflows/_deploy.yml
-      - .github/actions/publish-image/**
-      - .github/actions/helm-check/**
   pull_request:
     branches: [release-1]
-    paths:
-      - java/**
-      - contracts/openapi/**
-      - infra/helm/library/**
-      - infra/ops/postgres/**
-      - tools/ci/core_ci_db.sh
-      - tools/release/route_diff.py
-      - tools/release/parity.py
-      - tools/release/parity.yaml
-      - tools/release/requirements-ci.txt
-      - tools/release/test_cutover_render.sh
-      - .github/workflows/core.yml
-      - .github/workflows/_deploy.yml
-      - .github/actions/publish-image/**
-      - .github/actions/helm-check/**
   workflow_dispatch:
 
 permissions:
@@ -67,8 +37,28 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       exists: ${{ steps.check.outputs.exists }}
+      relevant: ${{ steps.paths.outputs.relevant }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # No `paths:` filter on the triggers: a required status check of a workflow that did not start stays pending forever and blocks the
+      # merge. The workflow always starts; this step decides whether the heavy jobs have anything to do (a skipped job counts as passing).
+      - id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          RELEVANT: '^(java/|contracts/openapi/|infra/helm/library/|infra/ops/postgres/|tools/ci/core_ci_db\.sh|tools/release/(route_diff\.py|parity\.py|parity\.yaml|requirements-ci\.txt|test_cutover_render\.sh)|\.github/workflows/(core|_deploy)\.yml|\.github/actions/(publish-image|helm-check)/)'
+        run: |
+          case "$EVENT" in
+            pull_request) git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"; files="$(git diff --name-only "origin/${BASE_REF}...HEAD")" ;;
+            push) if [[ "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then files=relevant; else files="$(git diff --name-only "$BEFORE" "$SHA")"; fi ;;
+            *) files=relevant ;;
+          esac
+          if [[ "$files" == relevant ]] || grep -Eq "$RELEVANT" <<<"$files"; then echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else echo "relevant=false" >> "$GITHUB_OUTPUT"; echo "::notice::no file of this change is an input of this pipeline: heavy jobs skipped"; fi
       - name: No duplicate Flyway versions
         run: tools/dev/check_migrations.sh
       - id: check
@@ -79,7 +69,7 @@ jobs:
   verify:
     name: verify (checkstyle, unit, ArchUnit, integration, route diff)
     needs: meta
-    if: needs.meta.outputs.exists == 'true'
+    if: needs.meta.outputs.exists == 'true' && needs.meta.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 75
     services:
@@ -161,7 +151,7 @@ jobs:
   security:
     name: security (gitleaks, trivy fs)
     needs: meta
-    if: needs.meta.outputs.exists == 'true'
+    if: needs.meta.outputs.exists == 'true' && needs.meta.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -188,7 +178,7 @@ jobs:
   helm:
     name: helm (lint, template, kubeconform, cutover and budget tests)
     needs: meta
-    if: needs.meta.outputs.exists == 'true'
+    if: needs.meta.outputs.exists == 'true' && needs.meta.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -201,7 +191,7 @@ jobs:
   image:
     name: image (build${{ github.event_name == 'push' && github.ref == 'refs/heads/release-1' && ', push, SBOM, sign' || '' }})
     needs: [meta, verify, security, helm]
-    if: needs.meta.outputs.exists == 'true'
+    if: needs.meta.outputs.exists == 'true' && needs.meta.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

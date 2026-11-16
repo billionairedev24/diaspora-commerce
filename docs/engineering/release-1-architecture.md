@@ -296,14 +296,17 @@ Findings that decide the Go design:
 
 ## 8. Keeping `main` in release-1
 
-1. `tools/release/sync-main.sh --check` weekly; `tools/release/sync-main.sh` to merge. It refuses to run on a branch that does not track
-   release-1, never pushes, and prints `git push origin HEAD:release-1`.
+Since 2026-11-16 this is a pipeline, not a habit ([release-1-parity.md](release-1-parity.md), runbook sections 10 to 10b): `release-1-sync.yml` opens a pull request that merges main (and develop on request)
+into release-1 every day; `tools/release/sync-main.sh` resolves the mechanical conflicts (backlog by row, generated workflows) and reports the rest; `release-1-parity.yml` fails the pull request when main
+brought something the monolith does not have. The rules the script follows:
+
+1. `tools/release/sync-main.sh --check` reports how far release-1 is behind and which files would conflict; it never pushes (`--ci` is for the workflow).
 2. A new migration on `main` merges cleanly (new file). Never edit or renumber an applied migration to resolve a conflict; if two sides
-   added the same `V<n>`, the not-yet-deployed one is renumbered.
+   added the same `V<n>`, the not-yet-deployed one is renumbered. `parity.py migrations` checks that the module role can run it.
 3. A new `@Bean`, adapter or port in a service on `main`: if it calls another module over HTTP, add the in-process adapter in the same
-   merge or leave `mode=http` for that port (the mode switch is per module, and the checklist below catches it).
-4. A new service on `main` is added to release-1 as a module in its batch, not by default.
-5. Conflict hot spots: service poms (`resources`, `plain` jar), `application*.yml` of the two spike modules, `*Configuration.java` where an
+   merge or leave `mode=http` for that port; `parity.py http-edges` fails on an unlisted always-on `Http*` adapter, `ModuleEdgeGuardTest` on the running context.
+4. A new service on `main` is added to release-1 as a module in its batch (section 9); until then it is listed under `unmounted` in `tools/release/parity.yaml` with the reason, or parity fails.
+5. Conflict hot spots: service poms (`resources`, `plain` jar), `application*.yml` of the spike modules, `*Configuration.java` where an
    adapter is chosen. Keep both sides; the release-1 side is always the small switch.
 
 ## 9. Per-module batch checklist
@@ -315,6 +318,9 @@ Findings that decide the Go design:
 5. Core config: module env vars (`<M>_DB_URL`...), pool size, scheduler pool size.
 6. Tests: the module's own suite, ArchUnit, the in-process 403 test, route diff.
 7. Dashboards: only what the label rules in 6.1 change.
+8. Settings: in the service chart, then `python3 tools/release/chart_env_sync.py --write` (secrets: the `# - NAME` list and `service_keys()` in `secrets.sh`); the module in `release-1.yaml`, the deployable
+   chart's `modules:` and `release-1-bootstrap.sql`; a line in `services.conf`.
+9. `python3 tools/release/parity.py` and `make release-1-check` green (the full list and fix hints: [release-1-parity.md](release-1-parity.md)).
 
 ## 10. Re-check after merging main (2026-11-15, main at 72ae69796)
 

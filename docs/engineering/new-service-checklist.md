@@ -1,5 +1,8 @@
 # New service checklist
 
+> **release-1 (ADR 0011).** A new service on main or develop is also a **module** of `afrotransact-core` / `afrotransact-go` on the production line, or it is not done:
+> [release-1-parity.md](release-1-parity.md) lists the module checklist and what the `release-1-parity` check fails on. The sync pull request shows the gaps.
+
 Every service is built, tested, packaged and deployed **on its own**. Copy the reference implementations:
 
 - Java: `java/services/catalog` (Spring Boot 4.1, Java 25, hexagonal, JdbcClient + Flyway, outbox events)

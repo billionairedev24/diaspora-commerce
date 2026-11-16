@@ -1,10 +1,10 @@
 # Release 1 deploy: build, deploy, cut over per batch, roll back, watch
 
-Status: **written, never run against a live cluster.** Everything here was checked offline (workflow YAML, shellcheck, the SQL on a scratch
-PostgreSQL 16, the Argo CD emulation in `infra/argocd/scripts`); `helm`, `kubeconform`, `kustomize`, `actionlint` and `tofu` were not
-available where this was written, so every `helm template` claim is read from the templates, not rendered. The first run of `core.yml`
-and of the first cutover will find things: treat the trial (`ovh-production.md`, "Trial") as the rehearsal. Vendor facts are tagged
-**UNVERIFIED** as elsewhere in this repository.
+Status: **written, never run against a live cluster.** Checked offline: workflow YAML (`actionlint` 1.7.7 with shellcheck), shellcheck, the SQL on a scratch
+PostgreSQL 16, the Argo CD emulation in `infra/argocd/scripts` with `kustomize` 5.6 (all four environments: `make launch-set-check`, `render_apps.py`), and
+**`helm` 3 with `kubeconform` 0.7** (lint, template for dev, uat and prod, and `tools/release/test_cutover_render.sh`, which had never run with a real helm: both
+`Chart.yaml` files were invalid YAML, so the helm jobs could not have passed until 2026-11-16). `tofu` was **not** run. The first run of `core.yml` and of the first
+cutover will find things: treat the trial (`ovh-production.md`, "Trial") as the rehearsal. Vendor facts are tagged **UNVERIFIED** as elsewhere in this repository.
 
 Decision and success criteria: [ADR 0011](../adr/0011-modular-monolith-release-1.md). Shape and inventory:
 [release-1-architecture.md](../engineering/release-1-architecture.md). Local run: [release-1-local.md](release-1-local.md).
@@ -38,7 +38,10 @@ Where things are:
 | Scale an old Application to 0 and route its Service | `cutover.movedTo` parameter in `services.yaml`, implemented in `infra/helm/library/at-service` |
 | Generators and root apps read the release-1 branch | `infra/argocd/release-branch/`, `infra/argocd/bootstrap/root-<env>.yaml` (`targetRevision: release-1`) |
 | Database bootstrap, verify, restore | `infra/ops/postgres/release-1-bootstrap.{sql,sh}`, `release-1-verify.sql`, `infra/ops/backup/pg-restore.sh restore-schema` |
-| Secrets rendering | `infra/ovh-vps/secrets.sh` with `DB_LAYOUT=schema` |
+| Secrets rendering | `infra/ovh-vps/secrets.sh` with `DB_LAYOUT=schema` (multi-line values such as `SIGNING_KEY_PEM` are one key; test: `tools/ovh/test/secrets-multiline.test.sh`) |
+| Parity with main, the sync, the hotfix port-back | `tools/release/parity.py` + `parity.yaml`, `release-1-sync.yml`, `tools/release/sync-main.sh`, `sync-open-pr.sh`, `merge_backlog.py`, `port-back.sh`; [release-1-parity.md](../engineering/release-1-parity.md) |
+| Deployable settings from the service charts | `tools/release/chart_env_sync.py` (generated block in the deployable `values*.yaml`) |
+| Does the plan fit the one node | `tools/release/check_capacity.py` |
 | Alerts, dashboard, scrape | `infra/observability/rules/release-1.yaml`, `grafana/dashboards/release-1-modules.json`, `infra/k8s/platform/lean/alloy/config.alloy` |
 
 Offline gate for all of it: `make release-1-check` (workflows generated, action pins, launch set vs cutover, pools vs SQL vs chart, rule labels,
@@ -53,8 +56,8 @@ route-diff tests, shellcheck), then `make launch-set-check` (needs `kustomize` o
 2. **GitHub environments** `dev`, `uat`, `trial`, `prod` (they already exist for the per-service deploys): `_deploy.yml` reads their variables `CLOUD` (= `ovh`) and
    `REGISTRY_URL` (= `ghcr.io/<owner>/<repo>`, so nothing is mirrored). `prod` keeps its required reviewers. Secrets `GITOPS_APP_ID` and `GITOPS_APP_PRIVATE_KEY` (the GitOps
    app) must be allowed to push to **release-1**: the deployables' image pins are committed there (`values-<env>.yaml`), not on main.
-3. **Branch protection on `release-1`:** require the check of `release-1-guard` and the `verify`, `helm` and `image` jobs of the workflows `core` and `afrotransact-go` (GitHub names a check `<workflow> / <job name>`; copy the exact names from the first run).
-   The GitOps app must be a bypass actor (it pushes pin commits), as it is on main today.
+3. **Branch protection on `release-1`:** see section 10b for the exact list (the checks of `release-1-parity`, `core` and `afrotransact-go`; **not** `release-1-guard`). The GitOps app must be a bypass actor
+   (it pushes pin commits), as it is on main today.
 4. **Argo CD** (once per cluster): point the root Applications at the branch: `kubectl apply -n argocd -f infra/argocd/bootstrap/root-<env>.yaml` (they now say
    `targetRevision: release-1`). A running cluster that was bootstrapped from main: apply the new file over the old Application.
 5. **Layerbase:** the plan now needs **4 databases** (`core`, `go`, `temporal`, `temporal_visibility`) instead of 19, and the admin needs `CREATEROLE` and `CREATEDB`, the ability
@@ -88,6 +91,26 @@ Both workflows: concurrency group per ref (cancel in progress only for pull requ
 third-party actions pinned by commit SHA (`tools/ci/check_action_pins.py`), caches (Maven, Go modules, pip, the buildx GitHub cache).
 
 **`release-1-guard.yml`** fails when release-1 is behind main (`tools/release/sync-main.sh --require-current`), on every push, every pull request, daily at 05:17 UTC and by hand.
+It is an **alarm, not a required check**: it looks at the release-1 tip, so on the sync pull request itself it is red until that pull request merges.
+
+**`release-1-parity.yml`** (jobs `parity` and `delivery`; no path filter, so it can be required) fails when main brought something the monolith does not have
+(table of gaps with a fix hint in the job summary, [release-1-parity.md](../engineering/release-1-parity.md)) and runs `make release-1-check` plus the Argo CD render of
+every environment. **`release-1-sync.yml`** opens the pull request that carries main (and develop on request) into release-1 every day (section 10).
+
+`core.yml` and `afrotransact-go.yml` have **no `paths:` filter** on their triggers (a required check of a workflow that did not start stays pending and blocks the merge): their
+`meta` job decides whether the change touches an input of the pipeline and the heavy jobs are skipped otherwise (a skipped job counts as passing).
+
+**Every other workflow on release-1** (classified one by one in `tools/release/parity.yaml`, checked by `parity.py`):
+
+| Workflow | On release-1 |
+|---|---|
+| `java-<service>.yml`, `go-<service>.yml`, `_java-service.yml`, `_go-service.yml` | per-service, trigger on **main and develop only**: release-1 builds the two images |
+| `backlog`, `contracts`, `deploy-guide`, `docs`, `env-urls`, `kafka-topics`, `legal-documents`, `observability-config`, `security`, `seed-guard`, `storybook`, `tofu`, `tool-kafka-replay`, `workflows` | validate release-1 pushes too (`branches: [main, release-1]`) and pull requests into it |
+| `web-*` (generated) | preview on pull requests, dev on pushes to main **and** release-1 (one concurrency group), prod only by dispatch and only of a commit release-1 contains |
+| `mobile` | OTA preview from release-1; a production store build only of a commit release-1 contains |
+| `promote` (generated) | runs only from release-1; the tag's commit must be on release-1 (deployables) or main/release-1 (a per-service image) |
+| `_deploy` | pins of the deployables **and of every uat, trial and prod promotion** are committed to release-1 (Argo CD tracks it); a per-service dev pin stays on the GitOps branch (main) and arrives with the sync |
+| `ovh-images`, `ovh-vps`, `ovh-web`, `trial`, `carrier-sandboxes` | manual only; `ovh-images` and `ovh-vps` are the per-service single-VPS path and need images built on main |
 
 Verify a published image by hand:
 
@@ -265,20 +288,62 @@ re-run the bootstrap.
 
 ## 10. Keeping main in release-1
 
-`tools/release/sync-main.sh` (never pushes), then `git push origin HEAD:release-1`. Delivery files that main also edits and where a merge will conflict: the **generated workflows** (resolve by re-running
-`python3 tools/ci/gen_workflows.py`, never by hand), `java/Dockerfile` (keep both: the `PROJECT` and `JAR_GLOB` arguments), `infra/argocd/applicationsets/*.yaml`, the env kustomizations and platform-values
-(keep both sides), `infra/k8s/platform/lean/backup/pg-backup.sh` (release-1 default list is the 4 databases), `Makefile`. The guard workflow turns red when release-1 falls behind.
+**Automatic.** `release-1-sync.yml` (daily 04:41 UTC and by hand; `include_develop` for develop) runs `tools/release/sync-open-pr.sh`: it cuts `sync/main-<sha>` from release-1, merges main with
+`tools/release/sync-main.sh --ci`, runs the release-1 CI on it and opens a pull request titled with the commits it carries (a **draft** while parity has gaps). Mechanical conflicts are resolved by the script:
+`docs/backlog/backlog.csv` by row (release-1 stories S600-S699, renumbered on an id collision), generated workflows by regenerating them. Anything else opens **one issue** (label `release-1-sync`) listing
+the files, and nothing is pushed. It never pushes release-1, main or develop and never forces. Review and merge the pull request like any other; parity must be green.
+
+**By hand** (a release-1 worktree whose branch tracks release-1): `tools/release/sync-main.sh --check`, then `tools/release/sync-main.sh` (`--ref origin/develop` for develop), then
+`git push origin HEAD:release-1` (or push a branch and open the PR). `tools/release/setup-merge-driver.sh` (once per clone) makes plain `git merge`, `rebase` and `cherry-pick` merge the backlog by row too.
+Delivery files that main also edits and where a merge can conflict: the **generated workflows** (regenerate with `python3 tools/ci/gen_workflows.py`, never by hand), `java/Dockerfile` (keep both: the `PROJECT` and
+`JAR_GLOB` arguments), `infra/argocd/applicationsets/*.yaml`, the env kustomizations and platform-values (keep both sides), `infra/k8s/platform/lean/backup/pg-backup.sh` (release-1 default list is the 4 databases),
+`Makefile`. The guard workflow turns red when release-1 falls behind.
+
+## 10a. Branch model
+
+* **release-1 is the production line** (the modular monolith, ADR 0011). Argo CD, the promote workflow, the pins, prod web and mobile releases all follow it. Make it the GitHub default branch (section 10b).
+* **main and develop mirror it for the microservice option.** They keep the per-service build and are merged INTO release-1 (never the other way) by the sync pull request. Nothing on main or develop is
+  done until release-1 parity is green ([release-1-parity.md](../engineering/release-1-parity.md)): that is what `release-1-parity.yml` and `tools/release/parity.py` verify.
+* **Features** start on main or develop as before (per-service pipelines, per-service charts), reach release-1 by the sync, and are done when parity is green. A feature that only makes sense in the monolith
+  (module wiring, core, `go/apps`) is made on release-1 directly.
+* **A hotfix** is made **on release-1** (a branch from release-1, a PR into it, deployed by promote). Then it is ported back so the lines never drift:
+  ```bash
+  tools/release/port-back.sh                       # lists release-1 commits that are not on origin/main (skips merges, bot pins, release-1-only paths)
+  tools/release/port-back.sh <sha>... [--onto origin/develop]   # a branch port/main-<sha> from origin/main with the commits cherry-picked (-x), never pushed
+  git push -u origin port/main-<sha> && gh pr create --base main ...   # the script prints the exact commands
+  ```
+  A commit that touches only release-1-only paths (`java/apps/core`, `java/libs/module-*`, `go/apps`, the deployable charts, `tools/release`) is not ported; one that mixes both is listed with a warning.
+  When the ported PR merges, the next sync finds the change on both sides (identical patch) and carries nothing for it.
+* **Going back to microservices** (if the owner decides): remove `infra/argocd/release-branch` from the env kustomizations, set `argocd.targetRevision` and the root Applications back to `HEAD`/main, make main the default
+  branch. Nothing is deleted on either line until the cutover phase of ADR 0011.
+
+## 10b. Settings the owner changes in GitHub (nothing here was changed by the pipelines work)
+
+| Where | Setting | Why |
+|---|---|---|
+| Settings > General > Default branch | **`release-1`** | scheduled workflows (`release-1-sync`, `release-1-guard`, `security`, `seo-probe`, `reproducible-build`) and the `workflow_dispatch` buttons use the default branch's copy of the file; new PRs, Dependabot and `CODEOWNERS` follow it. If you keep `main` as default instead, copy `release-1-sync.yml` and `release-1-guard.yml` to main |
+| Settings > Actions > General > Workflow permissions | enable **Allow GitHub Actions to create and approve pull requests** (default token rights can stay read-only: the job asks for its own) | the sync workflow opens its pull request with `GITHUB_TOKEN` |
+| Repository secrets | `GITOPS_APP_ID`, `GITOPS_APP_PRIVATE_KEY` of the GitOps app, with **Contents, Pull requests, Issues, Actions and Workflows: write** on the app | `release-1-sync` then uses a narrowed app token: needed whenever main changes `.github/workflows/**` (GITHUB_TOKEN cannot push workflow files; without the app the job opens an issue instead) and it makes the PR's checks start by themselves |
+| Branch protection / ruleset on `release-1` | require a pull request; **required checks** (always report): `release-1-parity / parity (what main and develop have, the monolith has)` and `release-1-parity / delivery (workflows, charts, Argo CD, secrets renderer)`; and, now that the workflows always start, `core / verify (checkstyle, unit, ArchUnit, integration, route diff)`, `core / helm (lint, template, kubeconform, cutover and budget tests)`, `core / image (build)`, `core / security (gitleaks, trivy fs)`, `afrotransact-go / verify (lint, vet, unit, integration)`, `afrotransact-go / helm (lint, template, kubeconform, cutover and budget tests)`, `afrotransact-go / image (build)`, `afrotransact-go / security (gitleaks, trivy fs, govulncheck)` (copy the exact names from the first run; the `image` name changes on a push); **not** `release-1-guard` (red by design on the sync PR); the GitOps app is a bypass actor only for the pin commits | merge only green; the part after the slash is the job's `name:` |
+| Branch protection on `main` and `develop` | keep as is; the sync never pushes there | |
+| Environments `dev`, `uat`, `trial`, `prod` | `prod` keeps required reviewers; variables `CLOUD=ovh`, `REGISTRY_URL=ghcr.io/<owner>/<repo>`; `GITOPS_APP_*` secrets allowed on all four; deployment branch rule of `prod` and `trial`: **`release-1`** | promote and `_web-app` prod deploys come from release-1 only |
+| Packages | link `afrotransact-core` and `afrotransact-go` to the repository (Write) after the first push | `GITHUB_TOKEN` pushes the images |
 
 ## 11. Known gaps (honest list)
 
 - Upstream wiring (section 5a): the library template and both deployable charts were executed with Go's `text/template` + sprig (Helm's engine) and cross-checked against `tools/release/upstreams.py`'s emulation, never with a real `helm template`, `kubeconform` or a cluster. `AUTH_TOKEN_URL` now points at identity's Service/loopback instead of the public issuer hairpin (first deploy: confirm client-credentials tokens are issued).
-- Nothing ran on a cluster. `helm template`, `kubeconform`, `kustomize`, `actionlint` and `tofu validate` were **not run** (not installed in the authoring environment); the SQL, the shell scripts (shellcheck), the route-diff tests,
-  the Argo CD emulation and the secrets rendering (with a stub `kubectl`) were.
+- Nothing ran on a cluster. `helm` (lint, template, kubeconform), `kustomize` and `actionlint` were run offline on 2026-11-16 (see the status line); `tofu validate` was **not**. The SQL, the shell scripts (shellcheck),
+  the route-diff tests, the Argo CD emulation and the secrets rendering (stub `kubectl`) were.
 - `core.yml` needs the Java side's final environment names; it uses `CORE_DB_URL`, `CATALOG_DB_USER`, `TAX_RETURNS_DB_USER` as `application.yml` has them today and the per-module test databases `catalog` and `taxreturns` that `CoreRun` still uses.
 - `at_module_up` is now exported by both deployables (module-core `ModuleUpMeter`, afrotransact-go `host/metrics.go`) and unit-tested, but it was never scraped from a running stack: confirm it with `count by (job) (at_module_up)` after the first deploy (section Monitoring below).
 - The Go pool cap is in code; the chart's `pool` is a budget figure. A lower value goes in `pool_max_conns` of the module's URL.
-- Pre-existing, found on the way: `infra/ovh-vps/secrets.sh` splits a multi-line value on newlines (`SIGNING_KEY_PEM` is a PEM): `service_keys` builds `KEY=VALUE` lines and `mapfile` re-reads them per line, which
-  yields junk keys for identity's Secret. Check the identity Secret's keys before the first apply (this also affects `afrotransact-core-secrets`, which is the union).
+- Fixed 2026-11-16: `infra/ovh-vps/secrets.sh` split a multi-line value (`SIGNING_KEY_PEM`) into one junk key per line (identity's Secret and `afrotransact-core-secrets`), and put every value in
+  kubectl's argv. Records are now NUL-terminated and values go through 0600 files (`--from-file`); `tools/ovh/test/secrets-multiline.test.sh` proves it with a throwaway PEM and a stub kubectl.
+  **A Secret already applied from the old script has junk keys: re-render and re-apply it before the first prod sync.**
+- Open item for the orders batch: `uat` runs orders with the profile `uat,temporal-cloud`; a deployable cannot switch a profile for one module. Its `TEMPORAL_*` values are copied into the core chart; check that
+  the settings of `application-temporal-cloud.yml` reach core in uat before orders moves there (`parity.yaml` `config.env_skip.SPRING_PROFILES_ACTIVE`).
+- The non-secret settings of every module (peer URLs, zones, TTLs) were missing from both deployable charts until 2026-11-16 (core would have used the localhost defaults of each `application.yml`): they are generated
+  into the charts now (`tools/release/chart_env_sync.py`) and `parity.py config` keeps them current.
 - `generate_rules.py --check` used to report `r2-backup.yaml` as a missing generated file on this branch: the PrometheusRule CR is committed now (`make observability-check` is green).
 
 ## 12. Monitoring in production (Release 1)
