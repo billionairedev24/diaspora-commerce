@@ -185,7 +185,7 @@ func CanBuyLabel(fulfilment, deliveryMethod, status, tracking string) bool {
 	if fulfilment != ShipsFromSeller || tracking != "" {
 		return false
 	}
-	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" || dm == "SELLER_SHIPS" {
+	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" || dm == "SELLER_SHIPS" { // SELLER_SHIPS: retired
 		return false
 	}
 	return slices.Contains(labelStatuses, status)
@@ -258,12 +258,10 @@ type SellerShipment struct {
 	Status         string               `json:"status"`
 	StatusLabel    string               `json:"statusLabel"`
 	Fulfilment     string               `json:"fulfilment"`
-	// FulfilmentMode is seller_ships, afrotransact_delivery (the seller opted in), fulfilled_by_afrotransact, pickup or preorder_run.
-	FulfilmentMode string `json:"fulfilmentMode"`
-	// NeedsShipDetails: the next step is "Mark shipped" and the seller ships it themselves, so it needs a tracking number or
-	// handover details (there is no label to buy).
-	NeedsShipDetails bool                 `json:"needsShipDetails"`
-	Perishable       bool                 `json:"perishable"`
+	// FulfilmentMode is legacy_seller_shipped (history), afrotransact_delivery (from the seller's location),
+	// fulfilled_by_afrotransact, pickup or preorder_run.
+	FulfilmentMode string               `json:"fulfilmentMode"`
+	Perishable     bool                 `json:"perishable"`
 	Lines            []SellerShipmentLine `json:"lines"`
 	ItemsMinor     int64                `json:"itemsMinor"`
 	ShippingMinor  int64                `json:"shippingMinor"`
@@ -1485,6 +1483,9 @@ type ShipFromInput struct {
 	Country     string `json:"country"`
 	MakeDefault bool   `json:"makeDefault"`
 	Version     *int64 `json:"version"`
+	// PickupHours (creates only) are the hours AfroTransact can collect here. With them the new location is Fulfilled by
+	// AfroTransact by default when that is possible; without them nothing is enabled (hours are never invented).
+	PickupHours []PickupWindow `json:"pickupHours,omitempty"`
 }
 
 // Validate applies the seller service's format rules so the form gets field errors before a round trip.
@@ -1509,6 +1510,11 @@ func (in ShipFromInput) Validate() map[string]string {
 	} else {
 		req("state", in.State, 40)
 		req("postalCode", in.PostalCode, 12)
+	}
+	if len(in.PickupHours) > 0 {
+		for k, v := range (AfrotransactPickupRequest{Enabled: true, Hours: in.PickupHours}).Validate() {
+			errs["pickupHours"+strings.TrimPrefix(k, "hours")] = v
+		}
 	}
 	return errs
 }

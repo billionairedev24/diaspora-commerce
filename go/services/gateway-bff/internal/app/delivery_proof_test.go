@@ -99,10 +99,10 @@ func TestFulfilmentModeDecidesWhoMayShowProof(t *testing.T) {
 		want   string
 		proof  bool
 	}{
-		{"SELLER_FULFILLED", "SELLER_SHIPS", false, domain.ModeSellerShips, false},
-		{"SELLER_FULFILLED", "CARRIER", false, domain.ModeSellerShips, false},
+		{"SELLER_FULFILLED", "SELLER_SHIPS", false, domain.ModeLegacySellerShipped, false},
+		{"SELLER_FULFILLED", "CARRIER", false, domain.ModeLegacySellerShipped, false},
 		// A package the old checkout mislabelled: AfroTransact Delivery with no seller-store snapshot is shipped by its seller.
-		{"SELLER_FULFILLED", "AFROTRANSACT_DELIVERY", false, domain.ModeSellerShips, false},
+		{"SELLER_FULFILLED", "AFROTRANSACT_DELIVERY", false, domain.ModeLegacySellerShipped, false},
 		{"SELLER_FULFILLED", "AFROTRANSACT_DELIVERY", true, domain.ModeSellerStore, true},
 		{"FBA_AFROTRANSACT", "AFROTRANSACT_DELIVERY", false, domain.ModeFulfilled, true},
 		{"RETAIL_1P", "AFROTRANSACT_DELIVERY", false, domain.ModeFulfilled, true},

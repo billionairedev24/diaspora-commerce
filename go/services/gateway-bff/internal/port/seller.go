@@ -608,6 +608,8 @@ type ShipFromInput struct {
 	Country     string `json:"country,omitempty"`
 	MakeDefault bool   `json:"makeDefault"`
 	Version     *int64 `json:"version,omitempty"`
+	// PickupHours: creates only, see domain.ShipFromInput.
+	PickupHours []domain.PickupWindow `json:"pickupHours,omitempty"`
 }
 
 // ShipFromClient manages an organisation's ship-from addresses (seller /v1/orgs/{orgId}/ship-from-addresses).

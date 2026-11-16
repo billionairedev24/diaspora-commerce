@@ -2,20 +2,23 @@ package domain
 
 import "strings"
 
-// Fulfilment modes of a shipment as the apps word them. They decide what a customer or seller is told: only an
-// AfroTransact-delivered shipment (the seller opted into delivery by AfroTransact, or Fulfilled by AfroTransact) may say that
-// AfroTransact collects or delivers it or show a proof of delivery. Derived from what orders returns, never guessed.
+// Fulfilment modes of a shipment as the apps word them. The product has two: Seller pickup and Fulfilled by AfroTransact
+// (from the seller's location, or from stock AfroTransact holds). They decide what a customer or seller is told: only an
+// AfroTransact-delivered shipment may say that AfroTransact collects or delivers it or show a proof of delivery. Derived from
+// what orders returns, never guessed. Seller self-shipping is not supported: what sellers shipped themselves before is
+// ModeLegacySellerShipped, read-only history.
 const (
-	ModeSellerShips   = "seller_ships"
-	ModeSellerStore   = "afrotransact_delivery"
-	ModeFulfilled     = "fulfilled_by_afrotransact"
-	ModePickup        = "pickup"
-	ModePreorderRun   = "preorder_run"
-	deliveryMethodATD = "AFROTRANSACT_DELIVERY"
+	ModeLegacySellerShipped = "legacy_seller_shipped"
+	ModeSellerStore         = "afrotransact_delivery"
+	ModeFulfilled           = "fulfilled_by_afrotransact"
+	ModePickup              = "pickup"
+	ModePreorderRun         = "preorder_run"
+	deliveryMethodATD       = "AFROTRANSACT_DELIVERY"
 )
 
 // FulfilmentModeOf mirrors orders' Shipment.fulfilmentMode(): a seller-packed shipment sent to AfroTransact Delivery without
-// the seller-store snapshot (localDelivery) is one the old checkout mislabelled; the seller ships it.
+// the seller-store snapshot (localDelivery) is one the old checkout mislabelled, and SELLER_SHIPS and CARRIER are the retired
+// self-shipping methods: all of them are legacy history.
 func FulfilmentModeOf(fulfilmentType, deliveryMethod string, hasLocalDelivery bool) string {
 	ft, dm := strings.ToUpper(fulfilmentType), strings.ToUpper(deliveryMethod)
 	switch {
@@ -24,14 +27,17 @@ func FulfilmentModeOf(fulfilmentType, deliveryMethod string, hasLocalDelivery bo
 	case dm == "PICKUP":
 		return ModePickup
 	case dm == "SELLER_SHIPS" || dm == "CARRIER":
-		return ModeSellerShips
+		return ModeLegacySellerShipped
 	case ft == "FBA_AFROTRANSACT" || ft == "RETAIL_1P":
 		return ModeFulfilled
 	case dm == deliveryMethodATD && hasLocalDelivery:
 		return ModeSellerStore
 	}
-	return ModeSellerShips
+	return ModeLegacySellerShipped
 }
+
+// IsLegacySellerShipped reports a shipment from before self-shipping was retired.
+func IsLegacySellerShipped(mode string) bool { return mode == ModeLegacySellerShipped }
 
 // DeliveredByAfroTransact reports whether AfroTransact itself delivers (or hands over) this mode: the only modes that may
 // show delivery proof or say AfroTransact delivers.

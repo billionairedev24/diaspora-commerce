@@ -120,11 +120,8 @@ func (e *estimatorImpl) ShippingSettings() (ShippingSettings, bool) {
 	return ShippingSettings{}, false
 }
 
-// carrierOn is the staff switch for seller-shipped carrier options (off at launch, and while unknown).
-func (e *estimatorImpl) carrierOn() bool {
-	s := e.settings.Load()
-	return s != nil && s.SellerCarrierShippingEnabled
-}
+// carrierOn is retired with seller self-shipping: the old staff switch no longer offers any carrier option.
+func (e *estimatorImpl) carrierOn() bool { return false }
 
 // shipping is the carrier estimate for a package a seller ships (switch on): the staff rule's fee, else the configured fee.
 func (e *estimatorImpl) shipping() int64 {
@@ -150,7 +147,8 @@ func NewEstimator(p DeliveryPolicy) Estimator {
 	return &estimatorImpl{p: p}
 }
 
-// sellerCarrier is true for a seller-shipped package offered the carrier option (staff switch on).
+// sellerCarrier is always false now (carrier options for seller-shipped packages are retired); kept so the branches below
+// read the same as orders'.
 func (e *estimatorImpl) sellerCarrier(fulfilment string) bool {
 	return fulfilment != FulfilledByAfroTransact && fulfilment != AfroTransactDelivery && e.carrierOn()
 }
@@ -191,6 +189,11 @@ func (e *estimatorImpl) Options(fulfilment string, subtotalMinor int64) []Delive
 		}
 		// A seller package can still be delivered by AfroTransact, at the flat fee.
 		return []DeliveryOption{carrier, e.deliveryOption(fulfilment, subtotalMinor)}
+	}
+	if fulfilment == ShipsFromSeller {
+		// Sellers do not ship themselves: a seller's own package has no delivery option. Pickup is added at checkout when the
+		// seller offers it; with neither the package cannot be bought.
+		return []DeliveryOption{}
 	}
 	return []DeliveryOption{e.deliveryOption(fulfilment, subtotalMinor)}
 }

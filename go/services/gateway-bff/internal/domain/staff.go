@@ -545,7 +545,7 @@ type RecordShipment struct {
 	// "AfroTransact Delivery", "Pickup").
 	FulfilmentLabel string `json:"fulfilmentLabel"`
 	DeliveryLabel   string `json:"deliveryLabel"`
-	// Mode is who moves it: seller_ships, afrotransact_delivery and fulfilled_by_afrotransact ("Fulfilled by AfroTransact"),
+	// Mode is who moves it: legacy_seller_shipped (history), afrotransact_delivery and fulfilled_by_afrotransact ("Fulfilled by AfroTransact"),
 	// pickup or preorder_run. CanOverride and OverrideSteps are for holders of orders:override-shipment on seller-shipped
 	// shipments.
 	Mode           string           `json:"mode"`

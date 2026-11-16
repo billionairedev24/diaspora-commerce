@@ -65,6 +65,9 @@ const (
 	CodeDeliveryUnavailable       = "DELIVERY_UNAVAILABLE"
 	CodeDeliveryPickupUnavailable = "DELIVERY_PICKUP_UNAVAILABLE"
 	CodeDeliveryAddressNotLocated = "DELIVERY_ADDRESS_NOT_LOCATED"
+	// CodeFulfilmentUnavailable: the seller offers neither Seller pickup nor Fulfilled by AfroTransact for an item (sellers do
+	// not ship themselves), so it cannot be bought. Never guessed into a mode.
+	CodeFulfilmentUnavailable = "FULFILMENT_UNAVAILABLE"
 	// CodeCheckoutItemBlocked: a cart line can't be sold yet (its tax decision is not definite); remove it or wait.
 	CodeCheckoutItemBlocked = "CHECKOUT_ITEM_BLOCKED"
 	// CodeCheckoutTotalChanged: the total would be higher than the one the shopper saw (tax, delivery, coupon or price

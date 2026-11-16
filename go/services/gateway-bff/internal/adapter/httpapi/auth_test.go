@@ -428,10 +428,10 @@ func TestAccountAddresses(t *testing.T) {
 	if num(sum, "subtotalMinor") != 2500 || num(sum, "shippingMinor") != 599 || num(sum, "totalMinor") != 3099 || len(sum["addresses"].([]any)) != 2 {
 		t.Fatalf("summary = %v", sum)
 	}
-	r = b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "a", "paymentMethodId": "pm_1", "deliverySelections": []any{map[string]any{"packageId": "org_kente:SELLER", "option": "carrier"}}})
+	r = b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "a", "paymentMethodId": "pm_1", "deliverySelections": []any{map[string]any{"packageId": "org_kente:AFROTRANSACT", "option": "carrier"}}})
 	mustStatus(t, r, 422) // missing Idempotency-Key
 	b.headers["Idempotency-Key"] = "0123456789abcdef0123"
-	r = b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "a", "paymentMethodId": "pm_1", "deliverySelections": []any{map[string]any{"packageId": "org_kente:SELLER", "option": "carrier"}}})
+	r = b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "a", "paymentMethodId": "pm_1", "deliverySelections": []any{map[string]any{"packageId": "org_kente:AFROTRANSACT", "option": "carrier"}}})
 	mustStatus(t, r, 201) // orders' checkout saga (testkit shopper fakes) — the client secret always comes back
 	if r.json(t)["paymentClientSecret"] == nil {
 		t.Fatalf("placement = %s", r.body)

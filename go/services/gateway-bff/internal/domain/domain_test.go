@@ -50,8 +50,12 @@ func TestEstimator(t *testing.T) {
 			}
 		}
 	}
-	// Carrier off (launch): a seller's package is delivered by AfroTransact at the same flat fee; no express, no carrier.
-	opts := e.Options(domain.ShipsFromSeller, 5000)
+	// A seller's own package has no delivery (sellers do not ship themselves); Fulfilled by AfroTransact from the seller's
+	// store is the same flat fee as every other delivery; no express, no carrier.
+	if opts := e.Options(domain.ShipsFromSeller, 5000); len(opts) != 0 {
+		t.Fatalf("%+v", opts)
+	}
+	opts := e.Options(domain.AfroTransactDelivery, 5000)
 	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].FeeMinor != 599 || opts[0].Free || opts[0].Label != "Delivery" {
 		t.Fatalf("%+v", opts)
 	}

@@ -387,18 +387,13 @@ func (h *handlersImpl) shipmentStatus(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Status       string `json:"status"`
 		HandoverCode string `json:"handoverCode"`
-		// How a seller who ships it themselves sent it (Mark shipped): a tracking number, an optional courier name, or details.
-		ShipNote        string `json:"shipNote"`
-		TrackingNumber  string `json:"trackingNumber"`
-		TrackingCarrier string `json:"trackingCarrier"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
 	v, err := h.s.SellerOrders.UpdateStatus(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"),
-		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status, b.HandoverCode,
-		domain.ShipDetails{Note: b.ShipNote, TrackingNumber: b.TrackingNumber, TrackingCarrier: b.TrackingCarrier})
+		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status, b.HandoverCode)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
