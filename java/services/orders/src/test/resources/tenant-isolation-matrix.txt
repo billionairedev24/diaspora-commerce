@@ -8,6 +8,7 @@ GET /v1/orders/{number}/payment-split | ORG_OWNED | viewerOf (404 for foreign), 
 POST /v1/shipments/{id}/transitions | ORG_OWNED | OrdersAccess.transitionActor: seller org claim == shipment.sellerOrgId else 404, plus RBAC require() owner tuple | OrdersTenantIsolationTest
 POST /v1/shipments/{id}/courier-events | SERVICE_ONLY | OrdersAccess.courier: SERVICE principal with delivery:relay only (the fulfilment relay, which has checked the driver against the route and names them in driverId); driver tokens are refused (orders.relay-only) | OrdersTenantIsolationTest
 GET /v1/shipments/{id}/delivery-brief | SERVICE_ONLY | OrdersAccess.briefReader: delivery:dispatch (dispatch, fulfilment service) or SERVICE with delivery:relay; driver tokens are refused | OrdersTenantIsolationTest
+POST /v1/shipments/{id}/override | STAFF_ONLY | OrdersAccess.overrideActor: STAFF principal (or super admin) holding orders:override-shipment; sellers, customers, services and drivers are refused; only SELLER_SHIPS shipments, forward only, reason required [principal-guard] | -
 POST /v1/shipments/{id}/tracking | ORG_OWNED | ShipmentServiceImpl.attachTracking: transitionActor (seller org claim == shipment owner) | OrdersTenantIsolationTest
 GET /v1/seller/shipments | ORG_SCOPED_LIST | OrdersAccess.sellerOrg: org from the token for non-staff (param ignored), staff must name it; SQL where seller_org_id | OrdersTenantIsolationTest
 GET /v1/admin/orders | STAFF_ONLY | OrdersAccess.staffReader: orders:read and STAFF/SERVICE principal | -
@@ -33,7 +34,9 @@ GET /v1/deliveries/{shipmentId} | STAFF_ONLY | OrdersAccess.deliveryReader; a se
 POST /v1/deliveries/{shipmentId}/take | STAFF_ONLY | OrdersAccess.deliveryManager: STAFF holding delivery:manage [principal-guard] | -
 POST /v1/deliveries/{shipmentId}/assign | STAFF_ONLY | OrdersAccess.deliveryManager; the assignee must hold delivery:manage (name read from identity) [principal-guard] | -
 POST /v1/deliveries/{shipmentId}/picked-up | STAFF_ONLY | OrdersAccess.deliveryManager [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/in-transit | STAFF_ONLY | OrdersAccess.deliveryManager; optional step between picked up and out for delivery [principal-guard] | -
 POST /v1/deliveries/{shipmentId}/out-for-delivery | STAFF_ONLY | OrdersAccess.deliveryManager [principal-guard] | -
 POST /v1/deliveries/{shipmentId}/delivered | STAFF_ONLY | OrdersAccess.deliveryManager; proof (at least one photo) validated by DeliveryProofDraft [principal-guard] | -
+POST /v1/deliveries/{shipmentId}/returned | STAFF_ONLY | OrdersAccess.deliveryManager; only after a failed delivery, a reason is required [principal-guard] | -
 POST /v1/deliveries/{shipmentId}/failed | STAFF_ONLY | OrdersAccess.deliveryManager; a reason is required [principal-guard] | -
 PUT /v1/deliveries/{shipmentId}/proof | STAFF_ONLY | OrdersAccess.deliveryManager; audited correction with a reason [principal-guard] | -

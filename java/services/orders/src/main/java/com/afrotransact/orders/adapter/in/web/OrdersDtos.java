@@ -129,6 +129,14 @@ final class OrdersDtos {
     record Line(@NotBlank String variantAtin, Integer quantity, String packageId) {
     }
 
+    @Schema(name = "OverrideRequest", description = "Override the status of a shipment the seller ships (orders:override-shipment)")
+    record OverrideRequest(
+            @Schema(description = "A later status: confirmed ... delivered, delivery_failed, returned, cancelled "
+                    + "(only before it is picked up)") @NotBlank String to,
+            @Schema(description = "Why the status is overridden; kept with who and when") @NotBlank @Size(max = 500)
+            String reason) {
+    }
+
     @Schema(name = "TransitionRequest", description = "Move a shipment to the next status")
     record TransitionRequest(
             @Schema(description = "confirmed | packed | ready | picked_up | in_transit | out_for_delivery | "

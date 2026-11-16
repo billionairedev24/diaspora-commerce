@@ -168,6 +168,27 @@ class DeliveryDeskServiceImpl implements DeliveryDeskService {
 
     @Override
     @Transactional
+    public Detail inTransit(String shipmentId, Command cmd) {
+        return step(shipmentId, cmd, ShipmentStatus.IN_TRANSIT, "IN_TRANSIT", cmd == null ? null : cmd.note(), null,
+                null);
+    }
+
+    @Override
+    @Transactional
+    public Detail returned(String shipmentId, String reason, Command cmd) {
+        String why = reason == null ? "" : reason.strip();
+        if (why.length() < 3) {
+            throw new OrdersRuleViolation("orders.return-reason-required",
+                    "Say why the parcel goes back to the seller (at least a few words)");
+        }
+        if (why.length() > 500) {
+            throw new OrdersRuleViolation("orders.failure-reason-too-long", "The reason can be up to 500 characters");
+        }
+        return step(shipmentId, cmd, ShipmentStatus.RETURNED, "RETURNED", why, null, null);
+    }
+
+    @Override
+    @Transactional
     public Detail outForDelivery(String shipmentId, Command cmd) {
         return step(shipmentId, cmd, ShipmentStatus.OUT_FOR_DELIVERY, "OUT_FOR_DELIVERY",
                 cmd == null ? null : cmd.note(), null, null);
@@ -206,16 +227,28 @@ class DeliveryDeskServiceImpl implements DeliveryDeskService {
         if (replayed(shipmentId, cmd)) {
             return detail(order, s, true);
         }
+        checkStatus(s, cmd);
         checkVersion(job, cmd);
         if (s.status() == to) {
             // Already there: the same step twice changes nothing (and never replaces a saved proof).
             return detail(order, s, true);
         }
-        if (!job.assigned()) {
-            throw new OrdersStateConflict("orders.delivery-unassigned",
-                    "Take this delivery, or assign it to someone, first");
-        }
         ShipmentStatus from = s.status();
+        if (!job.assigned()) {
+            // Nobody has it yet: whoever takes the step takes the job (audited as a take), so no extra click is needed.
+            // The transition below is still refused when the step is not legal, and then nothing here is saved.
+            policy.decide(s, to, ActorKind.DELIVERY_STAFF);
+            Instant at = Instant.now(clock);
+            String me = nameOf(actor.subject());
+            DeliveryJob taken = job.assignedTo(actor.subject(), me, actor.subject(), at);
+            save(job, taken);
+            audit(order, s, "TAKE", s.status(), s.status(), actor, me, new Command(null, null, null),
+                    Map.of("assignee", me, "automatic", true));
+            events.publish(OrdersEvents.DELIVERY_ASSIGNED, OrdersEvents.AGGREGATE, order.id(),
+                    new OrdersEventPayloads.DeliveryAssigned(order.id(), order.number(), s.id(), actor.subject(), me,
+                            actor.subject(), at));
+            job = taken;
+        }
         String key = cmd == null || cmd.idempotencyKey() == null || cmd.idempotencyKey().isBlank()
                 ? UUID.randomUUID().toString() : cmd.idempotencyKey().trim();
         CourierProof history = proof == null ? failure == null ? null : failureProof(failure) : historyProof(proof);
@@ -306,6 +339,15 @@ class DeliveryDeskServiceImpl implements DeliveryDeskService {
     private boolean replayed(String shipmentId, Command cmd) {
         return cmd != null && cmd.idempotencyKey() != null && !cmd.idempotencyKey().isBlank()
                 && desk.auditKeySeen(shipmentId, cmd.idempotencyKey().trim());
+    }
+
+    /** The caller names the status it saw; if another person has moved the shipment since, it is told, not overruled. */
+    private static void checkStatus(Shipment s, Command cmd) {
+        if (cmd != null && cmd.expectedStatus() != null && !cmd.expectedStatus().isBlank()
+                && !cmd.expectedStatus().trim().equalsIgnoreCase(s.status().wire())) {
+            throw new OrdersStateConflict("orders.delivery-status-changed", "Someone already moved this shipment to "
+                    + s.status().wire().replace('_', ' ') + ". Reload to see it.");
+        }
     }
 
     private static void checkVersion(DeliveryJob job, Command cmd) {

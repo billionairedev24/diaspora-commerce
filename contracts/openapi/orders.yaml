@@ -731,6 +731,40 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/DeliveryBrief'
+  /v1/shipments/{id}/override:
+    post:
+      tags:
+      - Shipments
+      summary: Override the status of a seller-shipped shipment (orders:override-shipment)
+      description: The seller ships and updates these shipments themselves. Staff holding orders:override-shipment can correct
+        one, forward only, with a required reason that is kept with who and when. Refused (403) for AfroTransact-delivered
+        and pickup shipments, which are moved with the delivery steps and the pickup steps. The optional Idempotency-Key makes
+        retries safe.
+      operationId: override
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OverrideRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipmentActionResult'
   /v1/shipments/{id}/tracking:
     post:
       tags:
@@ -1094,6 +1128,22 @@ components:
               title: {type: string}
               quantity: {type: integer, format: int32}
               totalMinor: {type: integer, format: int64}
+    OverrideRequest:
+      type: object
+      description: Override the status of a shipment the seller ships (orders:override-shipment)
+      properties:
+        to:
+          type: string
+          description: 'A later status: confirmed ... delivered, delivery_failed, returned, cancelled (only before it is picked up)'
+          minLength: 1
+        reason:
+          type: string
+          description: Why the status is overridden; kept with who and when
+          maxLength: 500
+          minLength: 1
+      required:
+      - reason
+      - to
     TransitionRequest:
       type: object
       description: Move a shipment to the next status

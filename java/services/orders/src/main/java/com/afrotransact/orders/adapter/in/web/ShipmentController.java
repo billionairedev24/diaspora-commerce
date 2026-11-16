@@ -3,6 +3,7 @@ package com.afrotransact.orders.adapter.in.web;
 import java.time.Instant;
 
 import com.afrotransact.orders.adapter.in.web.OrdersDtos.CourierEventRequest;
+import com.afrotransact.orders.adapter.in.web.OrdersDtos.OverrideRequest;
 import com.afrotransact.orders.adapter.in.web.OrdersDtos.TrackingRequest;
 import com.afrotransact.orders.adapter.in.web.OrdersDtos.TransitionRequest;
 import com.afrotransact.orders.application.DeliveryBrief;
@@ -13,6 +14,7 @@ import com.afrotransact.orders.application.OrderView;
 import com.afrotransact.orders.application.SellerShipmentView;
 import com.afrotransact.orders.application.ShipmentActionResult;
 import com.afrotransact.orders.application.ShipmentService;
+import com.afrotransact.platform.security.StaffOrServiceOnly;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -52,6 +54,20 @@ class ShipmentController {
                                     String key,
                                     @Valid @RequestBody TransitionRequest body) {
         return shipments.transition(id, body.to(), body.reason(), body.handoverCode(), key);
+    }
+
+    @Operation(summary = "Override the status of a seller-shipped shipment (orders:override-shipment)",
+            description = "The seller ships and updates these shipments themselves. Staff holding "
+                    + "orders:override-shipment can correct one, forward only, with a required reason that is kept "
+                    + "with who and when. Refused (403) for AfroTransact-delivered and pickup shipments, which are moved "
+                    + "with the delivery steps and the pickup steps. The optional Idempotency-Key makes retries safe.")
+    @StaffOrServiceOnly
+    @PostMapping("/v1/shipments/{id}/override")
+    ShipmentActionResult override(@PathVariable String id,
+                                  @RequestHeader(value = CheckoutController.IDEMPOTENCY_KEY, required = false)
+                                  String key,
+                                  @Valid @RequestBody OverrideRequest body) {
+        return shipments.override(id, body.to(), body.reason(), key);
     }
 
     @Operation(summary = "Driver-app event (AfroTransact Delivery)",

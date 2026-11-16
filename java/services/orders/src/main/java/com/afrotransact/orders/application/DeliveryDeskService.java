@@ -10,7 +10,9 @@ import java.util.Map;
  * The staff console Delivery module (docs/engineering/delivery-fulfilment.md): AfroTransact runs AfroTransact-delivered
  * shipments end to end without the driver app. Reads need {@code delivery:read} (or manage), every action needs
  * {@code delivery:manage}, checked here on the server. Every action is audited, idempotent per Idempotency-Key and
- * optimistic-locked on the job version.
+ * optimistic-locked on the job version (and, when the caller names the status it saw, on that status).
+ * Whoever takes a step and has no job yet takes the job automatically (audited), so the order sheet and the queue offer
+ * the same steps with no extra click.
  */
 public interface DeliveryDeskService {
 
@@ -20,7 +22,12 @@ public interface DeliveryDeskService {
     }
 
     /** What a caller sends with an action: the job version it saw, its idempotency key and a note. */
-    record Command(Long expectedVersion, String idempotencyKey, String note) {
+    record Command(Long expectedVersion, String idempotencyKey, String note, String expectedStatus) {
+
+        /** A command that does not say which status the caller saw. */
+        public Command(Long expectedVersion, String idempotencyKey, String note) {
+            this(expectedVersion, idempotencyKey, note, null);
+        }
     }
 
     /** The proof staff attach when marking delivered, or correct later. */
@@ -87,7 +94,11 @@ public interface DeliveryDeskService {
     /** The job goes to a named staff member or courier holding delivery:manage. */
     Detail assign(String shipmentId, String assigneeId, Command command);
 
+    /** Picked up from the seller by AfroTransact; the note says where and from whom, the time is recorded. */
     Detail pickedUp(String shipmentId, Command command);
+
+    /** In transit (optional step between picked up and out for delivery). */
+    Detail inTransit(String shipmentId, Command command);
 
     Detail outForDelivery(String shipmentId, Command command);
 
@@ -96,6 +107,9 @@ public interface DeliveryDeskService {
 
     /** A failed attempt with a reason; it can be attempted again with {@link #outForDelivery}. */
     Detail failed(String shipmentId, String reason, Command command);
+
+    /** After a failed attempt that cannot be tried again: back to the seller. Needs a reason. */
+    Detail returned(String shipmentId, String reason, Command command);
 
     /** An admin correction of a saved proof; needs a reason; the old values go to the audit trail. */
     Detail correctProof(String shipmentId, ProofInput proof, String reason, Command command);
