@@ -44,6 +44,9 @@ type SiteService interface {
 	// RecentlyViewed resolves browser-remembered ATINs (most recent first) into eligible product cards; the storefront
 	// hides the rail when the result is empty.
 	RecentlyViewed(ctx context.Context, atins []string) ([]domain.ProductSummary, error)
+	// RecentlyViewedRail is RecentlyViewed plus the tile that fills the row when the rail is short (never more products:
+	// a "Recently viewed" rail only holds what the shopper opened).
+	RecentlyViewedRail(ctx context.Context, c *domain.Caller, atins []string) ([]domain.ProductSummary, *domain.RailFill, error)
 	CheckoutCrossSell(ctx context.Context, c *domain.Caller) (*domain.Rail, error)
 	// RecordAdEvent counts an impression or click ("impression" | "click") on a paid home module's placement.
 	RecordAdEvent(ctx context.Context, placementID, kind string) error
@@ -239,6 +242,7 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 		}
 	}
 	blocks := s.composeBody(ctx, c, loc, pl, sc, now, used)
+	s.fillRails(ctx, blocks, pl, sc, used, false, now)
 	home := domain.Home{Announcements: orEmpty(pl.Announcements), Hero: activeHero(pl.Hero, now), Tiles: orEmpty(tiles),
 		Blocks: orEmpty(blocks), Banners: []domain.Banner{}, Rails: []domain.Rail{}, DeliverTo: loc}
 	for _, b := range blocks {

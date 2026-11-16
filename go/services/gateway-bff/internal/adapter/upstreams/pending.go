@@ -92,6 +92,9 @@ func placementsFrom(in []servedPlacement) domain.Placements {
 		if bodySlots[sp.Slot] {
 			p.Body = append(p.Body, domain.BodyPlacement{ID: sp.ID, Slot: sp.Slot, Priority: sp.Priority, Advertiser: sp.Advertiser, Payload: sp.Payload})
 		}
+		if sp.Slot == "rail_fill" {
+			p.RailFill = append(p.RailFill, domain.BodyPlacement{ID: sp.ID, Slot: sp.Slot, Priority: sp.Priority, Advertiser: sp.Advertiser, Payload: sp.Payload})
+		}
 		switch sp.Slot {
 		case "announcement_bar":
 			var a domain.Announcement
