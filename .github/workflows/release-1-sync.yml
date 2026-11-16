@@ -1,0 +1,81 @@
+# release-1-sync (ADR 0011): carries main (and develop on request) into release-1 as a PULL REQUEST, so "done on main" reaches production.
+#   schedule          every day: fetch main, merge it into a throwaway branch sync/main-<sha> cut from release-1 (tools/release/sync-main.sh --ci),
+#                     resolve what is mechanical (backlog.csv by row with S600-S699 renumbering, generated workflows), run the release-1 CI on the
+#                     branch, and open a PR titled with the commits it carries. Conflicts that need a person become ONE issue listing the files.
+#   workflow_dispatch the same by hand; `include_develop` also proposes develop (a second branch and PR).
+# Never pushes to release-1, main or develop and never forces: it pushes only sync/* (tools/release/sync-open-pr.sh refuses anything else).
+# Token: the job asks for contents, pull-requests, issues and actions write and nothing else. If the repository variable or secrets of the GitOps
+# app exist (GITOPS_APP_ID, GITOPS_APP_PRIVATE_KEY) the job uses an app token narrowed to those rights plus `workflows` (the default GITHUB_TOKEN can
+# not push a branch that changes .github/workflows/**, which main does often) and the pull_request workflows then start by themselves;
+# otherwise GITHUB_TOKEN is used and the CI is started with workflow_dispatch on the branch. Scheduled workflows run from the default branch:
+# release-1 should be the default branch (docs/runbooks/release-1-deploy.md, "Settings the owner changes").
+name: release-1-sync
+
+on:
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+    inputs:
+      include_develop:
+        description: Also propose develop (a second sync branch and pull request)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-1-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: sync main${{ inputs.include_develop && ' and develop' || '' }} into release-1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    env:
+      HAS_APP: ${{ secrets.GITOPS_APP_ID != '' }}
+    steps:
+      - name: App token (narrowed), when the GitOps app is configured
+        id: app
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-actions: write
+          permission-workflows: write
+      - uses: actions/checkout@v7
+        with:
+          ref: release-1          # the tip of release-1, whatever the default branch is
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token || github.token }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: tools/release/requirements-ci.txt
+      - run: pip install -q -r tools/release/requirements-ci.txt
+      - name: Sync main
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          SYNC_DISPATCH_CI: ${{ steps.app.outputs.token == '' && '1' || '0' }}
+          SYNC_OUT: ${{ runner.temp }}/sync-main
+        run: tools/release/sync-open-pr.sh origin/main
+      - name: Sync develop (on request)
+        if: inputs.include_develop
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          SYNC_DISPATCH_CI: ${{ steps.app.outputs.token == '' && '1' || '0' }}
+          SYNC_OUT: ${{ runner.temp }}/sync-develop
+        run: |
+          git checkout -q --detach origin/release-1
+          tools/release/sync-open-pr.sh origin/develop

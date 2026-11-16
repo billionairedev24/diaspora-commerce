@@ -27,6 +27,14 @@ cd "$(git rev-parse --show-toplevel)"
 SYNC_OUT="${SYNC_OUT:-$(mktemp -d)}"
 export SYNC_OUT
 
+open_issue() { # open_issue TITLE BODYFILE: one open issue per title (label release-1-sync), edited when it exists
+  local t="$1" f="$2" existing
+  "$GH" label create release-1-sync --color 5319e7 --description "release-1 sync of main/develop" >/dev/null 2>&1 || true
+  existing="$("$GH" issue list --state open --label release-1-sync --search "in:title \"$t\"" --json number --jq '.[0].number // empty' 2>/dev/null || true)"
+  if [[ -n "$existing" ]]; then "$GH" issue edit "$existing" --body-file "$f" >/dev/null; echo "updated issue #$existing"
+  else "$GH" issue create --title "$t" --body-file "$f" --label release-1-sync; fi
+}
+
 git fetch origin "${NAME}:refs/remotes/origin/${NAME}" "release-1:refs/remotes/origin/release-1" >/dev/null
 short="$(git rev-parse --short=10 "$REF")"
 BRANCH="sync/${NAME}-${short}"
@@ -64,10 +72,7 @@ case "$rc" in
       cat "$summary"
     } > "$SYNC_OUT/issue.md"
     if [[ "$DRY" -eq 1 ]]; then echo "[dry run] would open or update the issue: $title"; cat "$SYNC_OUT/issue.md"; exit 0; fi
-    "$GH" label create release-1-sync --color 5319e7 --description "release-1 sync of main/develop" >/dev/null 2>&1 || true
-    existing="$("$GH" issue list --state open --label release-1-sync --search "in:title \"$title\"" --json number --jq '.[0].number // empty' 2>/dev/null || true)"
-    if [[ -n "$existing" ]]; then "$GH" issue edit "$existing" --body-file "$SYNC_OUT/issue.md" >/dev/null; echo "updated issue #$existing"
-    else "$GH" issue create --title "$title" --body-file "$SYNC_OUT/issue.md" --label release-1-sync; fi
+    open_issue "$title" "$SYNC_OUT/issue.md"
     echo "::warning::release-1 sync blocked by conflicts: see the issue"
     exit 0 ;;
   0) ;;
@@ -93,7 +98,26 @@ if [[ "$DRY" -eq 1 ]]; then
   cat "$SYNC_OUT/pr-body.md"
   exit 0
 fi
-git push origin "refs/heads/${BRANCH}:refs/heads/${BRANCH}"
+if ! git push origin "refs/heads/${BRANCH}:refs/heads/${BRANCH}" 2> "$SYNC_OUT/push.err"; then
+  # The usual cause: main changed .github/workflows/** and GITHUB_TOKEN may not push workflow files (it cannot be granted `workflows`).
+  title="release-1 sync could not push its branch: ${NAME}"
+  {
+    echo "The sync of \`${REF}\` merged cleanly but pushing \`${BRANCH}\` was rejected:"
+    echo
+    echo '```'
+    cat "$SYNC_OUT/push.err"
+    echo '```'
+    echo
+    echo "If the message mentions \`workflows\`: main changed files under \`.github/workflows/\` and the default GITHUB_TOKEN cannot push those."
+    echo "Give the workflow a GitHub App token that has Workflows, Contents, Pull requests, Issues and Actions write (secrets \`GITOPS_APP_ID\` and"
+    echo "\`GITOPS_APP_PRIVATE_KEY\`, docs/runbooks/release-1-deploy.md, Branch model), or run \`tools/release/sync-main.sh\` by hand."
+    echo
+    cat "$summary"
+  } > "$SYNC_OUT/issue.md"
+  open_issue "$title" "$SYNC_OUT/issue.md"
+  echo "::warning::${title}"
+  exit 0
+fi
 "$GH" label create release-1-sync --color 5319e7 --description "release-1 sync of main/develop" >/dev/null 2>&1 || true
 "$GH" pr create --base release-1 --head "$BRANCH" --title "$title" --body-file "$SYNC_OUT/pr-body.md" --label release-1-sync "${draft[@]}"
 if [[ "${SYNC_DISPATCH_CI:-0}" == 1 ]]; then

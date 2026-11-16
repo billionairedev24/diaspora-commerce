@@ -20,6 +20,8 @@ on:
       - infra/ops/postgres/**
       - tools/ci/core_ci_db.sh
       - tools/release/route_diff.py
+      - tools/release/parity.py
+      - tools/release/parity.yaml
       - tools/release/requirements-ci.txt
       - tools/release/test_cutover_render.sh
       - .github/workflows/core.yml
@@ -35,6 +37,8 @@ on:
       - infra/ops/postgres/**
       - tools/ci/core_ci_db.sh
       - tools/release/route_diff.py
+      - tools/release/parity.py
+      - tools/release/parity.yaml
       - tools/release/requirements-ci.txt
       - tools/release/test_cutover_render.sh
       - .github/workflows/core.yml
@@ -90,6 +94,8 @@ jobs:
           --shm-size 256m
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0      # the route parity step below diffs main's contracts against the last sync
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -133,7 +139,12 @@ jobs:
             sleep 2
           done
           curl -fsS localhost:18081/actuator/health/readiness >/dev/null || { echo "::error::core not ready after 180 s"; tail -50 core.log; exit 1; }
-          python3 tools/release/route_diff.py --live http://localhost:18080 --modules-from java/apps/core/src/main/resources/application.yml
+          python3 tools/release/route_diff.py --live http://localhost:18080 --modules-from java/apps/core/src/main/resources/application.yml \
+            --json-out core-routes.json
+      - name: Route parity of what main changed since the last sync (a changed contract route core does not answer fails)
+        run: |
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/release-1:refs/remotes/origin/release-1'
+          python3 tools/release/parity.py --only routes --main origin/main --route-report core-routes.json --require-route-report
       - name: Test reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -143,6 +154,7 @@ jobs:
             java/**/target/surefire-reports/
             java/**/target/failsafe-reports/
             core.log
+            core-routes.json
           if-no-files-found: ignore
           retention-days: 14
 

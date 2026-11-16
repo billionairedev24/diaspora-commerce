@@ -255,5 +255,14 @@ out=$(cd "$W/w11" && tools/release/sync-open-pr.sh origin/main --dry-run 2>&1); 
 [ "$rc" = 0 ] && printf '%s' "$out" | grep -q "dry run" && ! grep -q 'pr create\|issue create' "$GH_LOG" && [ -z "$(remote_heads w11 | grep sync/)" ] && ok "dry run pushes and creates nothing" || ko "rc $rc" "$out"
 out=$(cd "$W/w11" && tools/release/sync-open-pr.sh origin/release-1 2>&1); rc=$?
 [ "$rc" = 64 ] && ok "only main and develop can be synced" || ko "rc $rc" "$out"
+echo "-- a rejected push (workflow files) becomes an issue"
+new_world w12
+work w12 main "main adds" <<'SH'
+echo hi > src/new.txt
+SH
+printf '#!/bin/sh\necho "refusing to allow a GitHub App to create or update workflow without workflows permission" >&2\nexit 1\n' > "$W/w12.git/hooks/pre-receive"; chmod +x "$W/w12.git/hooks/pre-receive"
+: > "$GH_LOG"
+out=$(cd "$W/w12" && tools/release/sync-open-pr.sh origin/main 2>&1); rc=$?
+[ "$rc" = 0 ] && grep -q '^issue create --title release-1 sync could not push its branch: main' "$GH_LOG" && ! grep -q 'pr create' "$GH_LOG" && ok "issue, no PR, rc 0" || ko "rc $rc" "$out$(cat "$GH_LOG")"
 printf '\npassed: %d, failed: %d\n' "$PASS" "$FAILN"
 [ "$FAILN" = 0 ]

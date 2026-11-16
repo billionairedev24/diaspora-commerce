@@ -1,0 +1,93 @@
+# release-1 parity (ADR 0011, docs/engineering/release-1-parity.md): "done on main is not done until release-1 parity is green".
+#   parity    : tools/release/parity.py. Every service, route, migration, Kafka consumer, setting, scrape/alert and delivery file that exists
+#               in the per-service world must exist in the two deployables. Prints a table of gaps with a one-line fix hint each, marks the ones
+#               that come from what main changed since the last sync, and FAILS the pull request (including the sync pull request) on any gap.
+#               Also runs the tests of the parity machinery itself (parity, merge_backlog, sync-main, port-back, capacity).
+#   delivery  : `make release-1-check` offline gate (generated workflows, action pins, launch set vs cutover.services, pools vs SQL, chart env
+#               sync, capacity of the one node, shellcheck, secrets renderer test) and the Argo CD render of every environment through kubeconform.
+# No path filter on purpose: a required check must always report. Read-only token.
+name: release-1-parity
+
+on:
+  push:
+    branches: [release-1]
+  pull_request:
+    branches: [release-1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-1-parity-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  parity:
+    name: parity (what main and develop have, the monolith has)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: tools/release/requirements-ci.txt
+      - run: pip install -q -r tools/release/requirements-ci.txt
+      - name: Fetch main, develop and release-1 (explicit refspecs)
+        run: |
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/release-1:refs/remotes/origin/release-1'
+          git fetch --no-tags origin '+refs/heads/develop:refs/remotes/origin/develop' || echo "::notice::no develop branch"
+      - name: Tests of the parity machinery
+        run: |
+          python3 tools/release/test_parity.py
+          python3 tools/release/test_merge_backlog.py
+          python3 tools/release/test_capacity.py
+          python3 tools/release/test_route_diff.py
+          bash tools/release/test_sync.sh
+      - name: Parity with main (state of the tree, gaps from main marked)
+        run: |
+          set +e
+          python3 tools/release/parity.py --main origin/main --format markdown > parity-main.md
+          rc=$?
+          { echo "### release-1 parity with main"; echo; cat parity-main.md; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+      - name: Parity with develop (when the branch exists)
+        if: always()
+        run: |
+          git rev-parse --verify -q refs/remotes/origin/develop >/dev/null || { echo "no develop branch: skipped"; exit 0; }
+          set +e
+          python3 tools/release/parity.py --main origin/develop --format markdown > parity-develop.md
+          rc=$?
+          { echo "### release-1 parity with develop"; echo; cat parity-develop.md; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+  delivery:
+    name: delivery (workflows, charts, Argo CD, secrets renderer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: tools/release/requirements-ci.txt
+      - run: pip install -q -r tools/release/requirements-ci.txt
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5
+      - name: Install kubeconform
+        env:
+          VERSION: v0.7.0
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz" | tar -xz -C "$RUNNER_TEMP/bin" kubeconform
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: kustomize or kubectl is available (the runner image ships both)
+        run: command -v kustomize || kubectl version --client
+      - name: make release-1-check
+        run: make release-1-check
+      - name: "Argo CD emulation, every environment rendered and validated"
+        run: python3 infra/argocd/scripts/render_apps.py --out "$RUNNER_TEMP/render"
