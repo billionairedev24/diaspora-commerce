@@ -270,7 +270,7 @@ func methodKey(deliveryMethod, serviceLevel string) string {
 	case "PICKUP":
 		return "pickup"
 	case "SELLER_SHIPS":
-		return domain.ModeSellerShips
+		return domain.ModeLegacySellerShipped
 	}
 	if lv := strings.ToLower(serviceLevel); lv == "express" || lv == "overnight" || lv == "two_day" {
 		return "express"
@@ -357,9 +357,10 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 	for _, sh := range o.Shipments {
 		mode := domain.FulfilmentModeOf(sh.FulfilmentType, sh.DeliveryMethod, sh.LocalDelivery != nil)
 		method := methodKey(sh.DeliveryMethod, sh.ServiceLevel)
-		if mode == domain.ModeSellerShips {
-			// A seller-packed shipment the old checkout labelled "AfroTransact Delivery" is still shipped by its seller.
-			method = domain.ModeSellerShips
+		if mode == domain.ModeLegacySellerShipped {
+			// An old seller-shipped shipment (or one the old checkout labelled "AfroTransact Delivery"): history, never worded
+			// as AfroTransact delivering.
+			method = domain.ModeLegacySellerShipped
 		}
 		d := domain.ShipmentDetail{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: strings.ToLower(sh.Status),
 			StatusLabel: statusLabel(sh.Status), Items: sh.Items, SellerName: sh.SellerName, DeliveryMethod: method, FulfilmentMode: mode,
@@ -454,8 +455,8 @@ func (s *customerOrdersServiceImpl) Tracking(ctx context.Context, c *domain.Call
 		st := strings.ToLower(sh.Status)
 		mode := domain.FulfilmentModeOf(sh.FulfilmentType, sh.DeliveryMethod, sh.LocalDelivery != nil)
 		method := methodKey(sh.DeliveryMethod, sh.ServiceLevel)
-		if mode == domain.ModeSellerShips && strings.EqualFold(sh.DeliveryMethod, "AFROTRANSACT_DELIVERY") {
-			method = domain.ModeSellerShips // a seller-packed package the old checkout labelled AfroTransact Delivery
+		if mode == domain.ModeLegacySellerShipped && strings.EqualFold(sh.DeliveryMethod, "AFROTRANSACT_DELIVERY") {
+			method = domain.ModeLegacySellerShipped // a seller-packed package the old checkout labelled AfroTransact Delivery
 		}
 		t := domain.TrackedShipment{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: st, FulfilmentMode: mode,
 			ETA: optStr(firstNonEmpty(sh.PromisedBy, sh.PromisedFrom)), Method: method,

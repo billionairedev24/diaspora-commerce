@@ -186,16 +186,16 @@ func TestWithoutTheDeliveryPermissionTheMenuSaysSo(t *testing.T) {
 	}
 }
 
-func TestSellerShipsMenuSaysTheSellerUpdatesIt(t *testing.T) {
+func TestLegacySellerShippedMenuSaysOnlyTheOverrideMovesIt(t *testing.T) {
 	s := jobj{"status": "picked_up", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "SELLER_SHIPS", "nextActions": []any{}}
 	got := shipmentTransitionsFor(s, "PICKED_UP", shipmentCaps{orders: true, delivery: true})
 	for _, step := range []string{"IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "DELIVERY_FAILED", "RETURNED"} {
 		d := stepFor(got, step)
-		if d.Allowed || d.Blocked == nil || *d.Blocked != blockedSellerUpdates || blockReason(d) != "Updated by the seller" {
+		if d.Allowed || d.Blocked == nil || *d.Blocked != blockedSellerUpdates || blockReason(d) != "Old seller-shipped order: use Override status" {
 			t.Fatalf("%s: %+v", step, d)
 		}
 	}
-	// Even a person with every permission is told it is the seller's: only the override changes it.
+	// Even a person with every permission is told it is history: only the override changes it.
 	got = shipmentTransitionsFor(s, "PICKED_UP", shipmentCaps{})
 	if d := stepFor(got, "DELIVERED"); *d.Blocked != blockedSellerUpdates {
 		t.Fatalf("%+v", d)
@@ -227,7 +227,7 @@ func TestOnlyHoldersOfTheOverridePermissionSeeOverrideSteps(t *testing.T) {
 	ship := jobj{"shipmentId": "s1", "label": "Shipment 1 of 1", "status": "picked_up", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "SELLER_SHIPS",
 		"nextActions": []any{}, "overrideActions": []any{"in_transit", "delivered"}}
 	holder := orderShipments(staffCtx{access: domain.StaffAccess{Permissions: []string{"orders:override-shipment"}}}, jobj{"shipments": []any{ship}})
-	if !holder[0].CanOverride || len(holder[0].OverrideSteps) != 2 || holder[0].Mode != domain.ModeSellerShips {
+	if !holder[0].CanOverride || len(holder[0].OverrideSteps) != 2 || holder[0].Mode != domain.ModeLegacySellerShipped {
 		t.Fatalf("%+v", holder[0])
 	}
 	other := orderShipments(staffCtx{access: domain.StaffAccess{Permissions: []string{"orders:manage"}}}, jobj{"shipments": []any{ship}})
@@ -236,6 +236,21 @@ func TestOnlyHoldersOfTheOverridePermissionSeeOverrideSteps(t *testing.T) {
 	}
 	if opts := shipmentOverrideSteps(jobj{"shipments": []any{ship}}); len(opts) != 2 || opts[0].Value != "s1|IN_TRANSIT" || opts[1].Label != "Mark delivered" {
 		t.Fatalf("%+v", opts)
+	}
+}
+
+// The override also corrects Fulfilled by AfroTransact (orders-service answers forward steps only), never a pickup order.
+func TestOverrideStepsAreOfferedForFulfilledByAfroTransactToo(t *testing.T) {
+	ship := jobj{"shipmentId": "s2", "label": "Shipment 1 of 1", "status": "picked_up", "fulfilmentType": "FBA_AFROTRANSACT", "deliveryMethod": "AFROTRANSACT_DELIVERY",
+		"nextActions": []any{}, "overrideActions": []any{"out_for_delivery", "delivered"}}
+	holder := orderShipments(staffCtx{access: domain.StaffAccess{Permissions: []string{"orders:override-shipment"}}}, jobj{"shipments": []any{ship}})
+	if !holder[0].CanOverride || holder[0].Mode != domain.ModeFulfilled || len(holder[0].OverrideSteps) != 2 {
+		t.Fatalf("%+v", holder[0])
+	}
+	pickup := jobj{"shipmentId": "s3", "status": "ready", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "PICKUP", "nextActions": []any{}, "overrideActions": []any{}}
+	p := orderShipments(staffCtx{access: domain.StaffAccess{Permissions: []string{"orders:override-shipment"}}}, jobj{"shipments": []any{pickup}})
+	if p[0].CanOverride {
+		t.Fatalf("pickup has no override: %+v", p[0])
 	}
 }
 

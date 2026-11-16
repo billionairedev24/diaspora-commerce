@@ -565,7 +565,7 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 			pkg.Seller.City = city
 			pkg.Heading, pkg.ShipsFrom = domain.LocalDeliveryHeading(city), firstNonEmpty(city, seller.Name)
 		default:
-			pkg.Heading, pkg.ShipsFrom = "Shipped by "+seller.Name, seller.Name
+			pkg.Heading, pkg.ShipsFrom = "Sold by "+seller.Name, seller.Name
 		}
 		if pre := preorderBlock(p.Preorder); pre != nil {
 			// A pre-order package is delivered on the window's date (door or pickup, priced by delivery-runs); the

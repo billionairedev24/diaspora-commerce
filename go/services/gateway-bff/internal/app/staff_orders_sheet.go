@@ -16,7 +16,7 @@ const (
 	blockedPermission         = "PERMISSION"
 	blockedDeliveryPermission = "DELIVERY_PERMISSION" // AfroTransact delivers it and the role lacks delivery:manage
 	blockedSeller             = "SELLER"
-	blockedSellerUpdates      = "SELLER_UPDATES" // the seller ships it and updates it themselves
+	blockedSellerUpdates      = "SELLER_UPDATES" // an old seller-shipped order (retired): only the override moves it
 	blockedPickupOrder        = "PICKUP_ORDER"
 	blockedSequence           = "SEQUENCE"
 	blockedState              = "STATE"
@@ -40,7 +40,7 @@ var blockedReasons = map[string]string{
 	blockedPermission:         "No permission",
 	blockedDeliveryPermission: "You need the delivery permission",
 	blockedSeller:             "Only the seller does this step",
-	blockedSellerUpdates:      "Updated by the seller",
+	blockedSellerUpdates:      "Old seller-shipped order: use Override status",
 	blockedPickupOrder:        "Not available for pickup orders",
 	blockedSequence:           "Earlier steps come first",
 	blockedState:              "Not available from here",
@@ -67,7 +67,7 @@ func deliveryLabel(method string) string {
 	case "AFROTRANSACT_DELIVERY":
 		return "AfroTransact Delivery"
 	case "SELLER_SHIPS":
-		return "Seller ships"
+		return "Seller shipped (retired)"
 	case "PICKUP":
 		return "Pickup"
 	case "CARRIER":
@@ -86,7 +86,8 @@ func mayDeliver(sc staffCtx) bool {
 	return sc.access.Can(domain.PermDeliveryManage) && sc.access.Allows(domain.DeliveryModule, domain.LevelEdit)
 }
 
-// permOverrideShipment lets a person override the status of a shipment the seller ships (identity V52, Super Admin only).
+// permOverrideShipment lets a person override the status of a shipment Fulfilled by AfroTransact or an old seller-shipped one
+// (forward only, a reason is required; identity V52/V53, Super Admin only).
 const permOverrideShipment = "orders:override-shipment"
 
 // orderShipments lays out every package of the order for the sheet.
@@ -130,7 +131,7 @@ func shipmentMode(s jobj) string {
 }
 
 // overrideSteps are the statuses orders-service says an override may set (it answers only holders of
-// orders:override-shipment, and only for seller-shipped shipments).
+// orders:override-shipment, for Fulfilled by AfroTransact and old seller-shipped shipments, never for pickup).
 func overrideSteps(s jobj) []string {
 	out := []string{}
 	for _, a := range strs(s, "overrideActions") {
@@ -147,8 +148,8 @@ func shipmentTransitions(s jobj, status string, may bool) []domain.ShipmentStep 
 // shipmentTransitionsFor lists what staff can set on the shipment now (its nextActions: orders-service applies the state
 // machine for the caller) and, so nothing silently goes missing, the later steps and exceptions they cannot, each with
 // the accurate reason. Who owns a step depends on the fulfilment mode: Fulfilled by AfroTransact steps are taken with the
-// delivery permission, a pickup order's steps are Ready, Collected and Not collected, and a seller-shipped order is
-// updated by the seller.
+// delivery permission, a pickup order's steps are Ready, Collected and Not collected, and an old seller-shipped order (history) is
+// moved only by the override.
 func shipmentTransitionsFor(s jobj, status string, caps shipmentCaps) []domain.ShipmentStep {
 	next := map[string]bool{}
 	for _, a := range strs(s, "nextActions") {
@@ -194,7 +195,7 @@ func shipmentTransitionsFor(s jobj, status string, caps shipmentCaps) []domain.S
 		}
 		blocked := ""
 		switch {
-		case mode == domain.ModeSellerShips && sellerFulfilled && step != "CANCELLED":
+		case mode == domain.ModeLegacySellerShipped && sellerFulfilled && step != "CANCELLED":
 			blocked = blockedSellerUpdates
 		case mode == domain.ModePickup && (step == "PICKED_UP" || step == "IN_TRANSIT" || step == "OUT_FOR_DELIVERY" || step == "DELIVERY_FAILED"):
 			blocked = blockedPickupOrder

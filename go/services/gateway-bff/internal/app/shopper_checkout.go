@@ -237,7 +237,10 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 			log.InfoContext(ctx, "no store pickup offered for the package", "seller", p.Seller.ID, "sellerPickupPlaces", len(own), "zip", zip,
 				"reason", p.PickupUnavailableReason)
 		}
-		if outside {
+		p.NoFulfilment = p.Fulfilment == domain.ShipsFromSeller && len(p.DeliveryOptions) == 0 &&
+			p.PickupUnavailableReason != "" && p.PickupUnavailableReason != domain.PickupWhyLookupFailed &&
+			p.PickupUnavailableReason != domain.PickupWhyNeedsAddress
+		if outside && p.Fulfilment != domain.ShipsFromSeller {
 			p.DeliveryOptions = quoteRequiredOptions(*p)
 			p.LocalDelivery = nil
 			continue
@@ -295,6 +298,7 @@ func quoteRequiredOptions(p domain.CheckoutPackage) []domain.DeliveryOption {
 const (
 	quoteRequiredMessage = "Part of your order is too far for standard delivery. Ask us for a quote, choose pickup, or choose another address."
 	feeUnknownMessage    = "We can't confirm the delivery fee right now. Please try again in a moment."
+	noFulfilmentMessage  = "Some items can't be bought right now: the seller offers neither pickup near you nor delivery. Remove them or choose another address."
 )
 
 // blockUndeliverable stops the order while a package's chosen option is quote_required or its fee is unknown, and says why
@@ -303,6 +307,10 @@ func (s *checkoutPaymentServiceImpl) blockUndeliverable(sum *domain.CheckoutSumm
 	for _, p := range sum.Packages {
 		if len(p.Preorder) > 0 {
 			continue
+		}
+		if p.NoFulfilment {
+			sum.CanPlaceOrder, sum.DeliveryBlockedReason = false, noFulfilmentMessage
+			return
 		}
 		o, ok := chosenOption(p, packageDelivery)
 		switch {

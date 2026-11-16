@@ -91,7 +91,7 @@ func shippingSettingsResource() *staffResource {
 					fieldOf("Address too far for standard delivery", "The shopper asks for a quote; customer care agrees the amount", "text"),
 				}},
 				{Title: "Seller carrier shipping", Fields: []domain.DetailField{
-					fieldOf("Offer seller-shipped carrier options at checkout", jstr(o, "carrierText"), "text"),
+					fieldOf("Seller-shipped carrier options (retired, no effect)", jstr(o, "carrierText"), "text"),
 					fieldOf("Why it is off", "At launch AfroTransact sets all shipping. Turn it on only when sellers ship themselves.", "text"),
 				}},
 				{Title: "How it applies", Fields: []domain.DetailField{
@@ -125,7 +125,7 @@ func shippingSettingsResource() *staffResource {
 				above := withValue(withRange(ff("freeAbove", "Free delivery on packages of (dollars, blank = never free)", "number", false), 100_000), free)
 				above.Help = "A package whose items cost this much or more is delivered free."
 				carrier := withValue(ff("sellerCarrierShipping", "Offer seller-shipped carrier options at checkout", "toggle", false), boolean(o, "sellerCarrierShippingEnabled"))
-				carrier.Help = "Off at launch: AfroTransact sets all shipping. Turn on only when sellers ship themselves."
+				carrier.Help = "Retired: sellers do not ship themselves, so this switch changes nothing. AfroTransact delivers (the customer pays the fee) or the customer collects."
 				return domain.Form{Title: "Change the delivery fee", SubmitLabel: "Save",
 					ChangeKeys: []string{"flatFee", "freeAbove", "sellerCarrierShipping"},
 					Intro:      "Shoppers see the new fee within 15 seconds and are charged it on new orders; placed orders keep what they paid. Every change is kept with who made it and why.",

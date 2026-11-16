@@ -68,7 +68,7 @@ func shipFromInput(in domain.ShipFromInput) port.ShipFromInput {
 	t := strings.TrimSpace
 	return port.ShipFromInput{Label: t(in.Label), Name: t(in.Name), Company: t(in.Company), Phone: t(in.Phone), Line1: t(in.Line1),
 		Line2: t(in.Line2), City: t(in.City), State: strings.ToUpper(t(in.State)), PostalCode: t(in.PostalCode),
-		Country: strings.ToUpper(firstNonEmpty(t(in.Country), "US")), MakeDefault: in.MakeDefault, Version: in.Version}
+		Country: strings.ToUpper(firstNonEmpty(t(in.Country), "US")), MakeDefault: in.MakeDefault, Version: in.Version, PickupHours: in.PickupHours}
 }
 
 func (s *sellerShipFromImpl) List(ctx context.Context, c *domain.Caller) ([]domain.ShipFromAddress, error) {

@@ -5099,6 +5099,7 @@ components:
         country: {type: string, default: US, pattern: '^[A-Z]{2}$'}
         makeDefault: {type: boolean}
         version: {type: [integer, 'null'], format: int64, description: Version being edited (updates)}
+        pickupHours: {type: array, maxItems: 14, items: {$ref: '#/components/schemas/PickupWindow'}, description: 'Creates only: the hours AfroTransact can collect here. With them the new location is Fulfilled by AfroTransact by default whenever that is possible (approved, located at street level, inside the delivery area); without them nothing is enabled. Hours are never invented.'}
     PostalAddress:
       type: object
       required: [name, line1, city, state, postalCode, country]
@@ -5115,7 +5116,7 @@ components:
       type: [object, 'null']
       description: |
         How AfroTransact handed the parcel over, shown on a delivered shipment (a driver, or AfroTransact staff with a photo).
-        Null for seller-shipped orders (the seller ships and confirms those), carrier deliveries, pickups and deliveries staff
+        Null for old seller-shipped orders (history), carrier deliveries, pickups and deliveries staff
         confirmed by hand. It is never shown for an order AfroTransact did not deliver. The photo and signature links are
         short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
       required: [method, recipientName, relationship, safePlace, photoUrl, photoUrls, signatureUrl, at]
@@ -5130,15 +5131,14 @@ components:
         at: {type: string, format: date-time, description: When it was delivered}
     SellerShipment:
       type: object
-      required: [shipmentId, label, status, statusLabel, fulfilment, fulfilmentMode, needsShipDetails, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, hasLabel, suggestedParcel, timeline, localDelivery]
+      required: [shipmentId, label, status, statusLabel, fulfilment, fulfilmentMode, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, hasLabel, suggestedParcel, timeline, localDelivery]
       properties:
         shipmentId: {type: string}
         label: {type: string}
         status: {$ref: '#/components/schemas/ShipmentStatus'}
         statusLabel: {type: string}
         fulfilment: {$ref: '#/components/schemas/Fulfilment'}
-        fulfilmentMode: {type: string, enum: [seller_ships, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'seller_ships: you ship it and mark it shipped and delivered, it is never in an AfroTransact delivery queue. afrotransact_delivery: you opted into delivery by AfroTransact. fulfilled_by_afrotransact: AfroTransact fulfils and delivers it.'}
-        needsShipDetails: {type: boolean, description: 'The next step is Mark shipped and you ship it yourself: send a tracking number or say how it was sent (shipNote)'}
+        fulfilmentMode: {type: string, enum: [legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Two modes exist. afrotransact_delivery: Fulfilled by AfroTransact from your location (AfroTransact collects and delivers; the customer pays the delivery fee, you pay nothing for it). fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired; history, you have no steps on it.'}
         perishable: {type: boolean}
         lines:
           type: array
@@ -5200,9 +5200,6 @@ components:
       properties:
         status: {$ref: '#/components/schemas/SellerStatusAction'}
         handoverCode: {type: string, pattern: '^\d{4}$', description: 'The buyer''s 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise'}
-        shipNote: {type: string, maxLength: 500, description: 'Marking shipped a shipment you ship yourself: how it was sent (who took it, a local delivery). Needed unless a trackingNumber is given (422 orders.ship-details-required)'}
-        trackingNumber: {type: string, maxLength: 80, description: 'Marking shipped a shipment you ship yourself: the tracking number (no spaces)'}
-        trackingCarrier: {type: string, maxLength: 40, description: 'Optional courier name for your own records; customers are never shown it'}
     Parcel:
       type: object
       required: [weightLb]
