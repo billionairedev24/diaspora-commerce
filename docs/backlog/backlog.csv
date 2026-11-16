@@ -2216,3 +2216,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Contracts (openapi, asyncapi), docs, ADR 0011, i18n in 5 languages, orders, payments, seller, gateway-bff, api-client, storefront, Seller Center, console and mobile tests, same change on main, develop and release-1
 - Orders and payments integration tests (Testcontainers) and Playwright run in CI
 - Seed data: products seeded as seller-shipped get a mode (pickup place or Fulfilled by AfroTransact location) so they stay purchasable","E12","","Highest","8","delivery orders payments seller","delivery","In Review"
+"S526","Story","Store page preview works before the page has an address or is published","The Settings > Store page preview 404'd (Store not found) until the page address existed (it is made when the payout account is set up) because gateway-bff refused a preview with no slug. The preview is now built from the caller's own organisation and draft, never by address; sellers and providers; empty states are not errors; a failed preview has a plain message and Try again.","- Preview renders the real draft with unsaved changes at desktop and phone widths before any address or publish (seller and provider)
+- Labelled Preview, not published; buttons off
+- No featured products or no hero image is not an error
+- Publishing still needs the address and an approved organisation
+- Only the caller's own draft is reachable; nothing public is exposed
+- A failed preview shows a plain message with Try again
+- Gateway-bff, seller and seller-center tests cover it
+- Playwright and the seed run on Mama Put Pantry not verified here","E16","","High","3","seller storefront","storefront","In Review"
