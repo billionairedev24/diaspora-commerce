@@ -1,0 +1,40 @@
+# GENERATED from infra/observability/rules/r2-backup.yaml by generate_rules.py — do not edit by hand.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: afrotransact-r2-backup
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/part-of: afrotransact
+spec:
+  groups:
+  - name: afrotransact-r2-backup
+    rules:
+    - alert: R2BackupStale
+      expr: |
+        (time() - kube_cronjob_status_last_successful_time{namespace="ops",cronjob="r2-backup"} > 93600)
+        or
+        (time() - kube_cronjob_created{namespace="ops",cronjob="r2-backup"} > 93600
+          unless on (namespace, cronjob) kube_cronjob_status_last_successful_time{namespace="ops",cronjob="r2-backup"})
+        or
+        (time() - afrotransact_r2_backup_last_success_timestamp_seconds > 93600)
+      for: 10m
+      labels:
+        severity: page
+      annotations:
+        summary: No successful R2 to B2 copy for more than 26 hours
+        description: The r2-backup CronJob has not completed successfully since the last 02:30 UTC run plus a margin. A deleted or overwritten media or KYC object would not be recoverable from B2.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backup-restore-r2.md#alerts
+    - alert: R2BackupFailed
+      expr: |
+        (kube_job_status_failed{namespace="ops",job_name=~"r2-backup-.*"} > 0)
+        or
+        (max by (env) (afrotransact_r2_backup_last_run_failed) == 1)
+      for: 5m
+      labels:
+        severity: page
+      annotations:
+        summary: The last R2 to B2 copy finished with failures
+        description: 'Read the job log (kubectl -n ops logs job/<r2-backup job>): lines starting FAILED or MISSING name the cause. Objects that failed are retried the next night.'
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/backup-restore-r2.md#alerts

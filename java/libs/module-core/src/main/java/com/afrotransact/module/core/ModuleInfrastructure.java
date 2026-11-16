@@ -14,6 +14,7 @@ import com.afrotransact.platform.events.OutboxStore;
 import com.afrotransact.platform.events.retention.EventRetentionProperties;
 import com.afrotransact.platform.events.retention.EventRetentionServices;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -96,6 +97,9 @@ final class ModuleInfrastructure {
         String key = ModuleCoreConfiguration.healthKey(module);
         registerHealth(key + "ModuleHealthIndicator", () -> new ModuleHealthIndicator(
                 beans.getBean(module.bean("status"), ModuleStatus.class)));
+        registry.registerBeanDefinition(module.bean("upMeter"), owned(BeanDefinitionBuilder.genericBeanDefinition(
+                MeterBinder.class, () -> new ModuleUpMeter(module.name(), () -> beans.getBean(
+                        key + "ModuleHealthIndicator", HealthIndicator.class))).getBeanDefinition()));
         registerHealth(key + "DatabaseHealthIndicator", () -> new ModuleDatabaseHealthIndicator(ds()));
     }
 
