@@ -13,7 +13,7 @@ HttpMediaClient=@bean seller -> media (Go service, stays HTTP: not a Java module
 # @bean = declared by a @Bean method (not a component, so the static check cannot see it; ModuleEdgesInCoreTest checks the running context)
 # @off:<module> = a bean-declared HTTP adapter that may be selected only while <module> is switched off in the application
 HttpAiUsageSource=@off:ai-gateway seller -> ai-gateway: in-process when ai-gateway runs (core default), HTTP only when it is switched off
-# --- other callers (owned by the other in-process batch; remove the line when the edge is converted)
+# --- other callers: Go callees (cart, promise, geo, search, carrier-gateway); no Java module is left here
 HttpCartReader=ai-gateway -> cart (Go service, stays HTTP: Lola's account reads of orders, bookings and returns are in-process, the cart is not a module)
 HttpCartApi=mcp-server -> cart (Go service, stays HTTP)
 HttpCartClient=orders -> cart (Go service, stays HTTP)
@@ -21,7 +21,7 @@ HttpDeliveryPromises=ai-gateway -> promise (Go service, stays HTTP)
 HttpDistanceClient=orders -> geo (Go service, stays HTTP)
 HttpGeoApi=mcp-server -> geo (Go service, stays HTTP)
 HttpGeoClient=bookings, fulfilment -> geo (Go service, stays HTTP)
-HttpPickupPoints=orders batch, not converted yet
+HttpPickupPoints=orders -> carrier-gateway (Go service, stays HTTP)
 HttpProductSearch=ai-gateway -> search (Go service, stays HTTP)
 HttpPromiseApi=mcp-server -> promise (Go service, stays HTTP)
 HttpPromiseClient=orders -> promise (Go service, stays HTTP)

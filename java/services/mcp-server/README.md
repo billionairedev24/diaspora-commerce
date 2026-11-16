@@ -72,15 +72,21 @@ layer.
 | | `payout_balance` | — (payments decides per member role) | payments `GET /v1/payouts/balance?orgId=` — available now, held orders with the date each is released (7 days after delivery), in transit, paid, minimum, pauses; the answer to "when will I get my payout" |
 | | `list_payouts` | — | payments `GET /v1/payouts/requests?orgId=` |
 | | `account_health` | — | seller `GET /v1/orgs/{orgId}/account-health` — what Stripe still needs, whether payouts or charges are off |
-| staff (`mcp:staff` + staff) | `applications_queue`, `application_detail` | `applications:review` | seller `GET /v1/applications…` — PII masked |
+| staff (`mcp:staff` + staff) | `applications_queue`, `application_detail` | `applications:review` | seller `GET /v1/applications…` — PII masked; the queue defaults to PENDING_REVIEW |
 | | `moderation_queue` | `catalog:moderate` | catalog `GET /v1/products?status=IN_REVIEW` |
 | | `category_requests_queue` | `catalog:taxonomy` | catalog `GET /v1/category-requests?status=` — sellers' requests for a missing category with the products waiting; read-only (staff decide in the console under Catalog) |
-| | `order_payment_split` | `ledger:read` | payments `GET /v1/orders/{id}/payment-split` |
+| | `order_payment_split` | `ledger:read` | orders `GET /v1/orders/{number}/payment-split` (orders owns it; it asks payments for the split) |
 | | `order_lookup` | `orders:read` | orders `GET /v1/orders/{id}` — PII masked |
 | | `seller_payout_status` | `ledger:read` | payments `GET /v1/payouts/balance?orgId=` — why a seller has not been paid |
 | | `seller_account_health` | `applications:review` | seller `GET /v1/orgs/{orgId}/account-health` — PII masked |
 | | `tax_review_queue` | `tax:read` | tax-returns `GET /v1/tax/variant-classifications?status=` — variants waiting for tax review (default PENDING_REVIEW) or the decisions made (APPROVED, REJECTED, STALE) with who decided and when; read-only (staff decide in the console under Fees & commissions > Sales tax > Tax review) |
 | | `tax_shadow_report` | `tax:read` | tax-returns `GET /v1/tax/shadow/report` — a provider's tax quote against ours on real orders over the last 7, 30 or 90 days, grouped by internal tax code; never charged |
+
+> **In afrotransact-core the platform calls above are in-process, as the signed-in person.** `McpCallerExtractor` captures the caller's
+> `EndUserActor` from the request's security context when the MCP request enters, and `InProcess*Api` (adapter/out/module) calls the callee
+> module's published `*UserApi`/`PayoutReadApi`/`TaxReviewReadApi`/`UserServiceSearchApi` through the bounded call gate; the callee applies the person's own
+> permissions, never a service identity's. Search, geo, promise and cart (Go) stay HTTP. As a standalone service (microservices profile) the
+> `Http*Api` adapters relay the bearer token as before (`at.mcpserver.mode` unset = `http`). Details: `docs/engineering/release-1-architecture.md` 12.11.
 
 > **Changed:** `update_shipment_status` and `list_my_orders` now call orders-service's real routes (they called ones
 > that do not exist). `list_my_orders` takes `cursor` instead of `page`; `update_shipment_status` takes `handoverCode`

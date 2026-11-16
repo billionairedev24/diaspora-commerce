@@ -480,8 +480,8 @@ converted in two passes, listed edge by edge in 12.7 (orders, payments, fulfilme
 inventory, seller, content, tax-returns)**: 43 port adapters were converted in those two passes (19 in 12.7, 24 in 12.8 with the 3 of the spike); **12.10 converts 10 more** (orders -> identity: address book for the
 signed-in customer and staff directory; trust-ops -> catalog twice, orders, ai-gateway; orders -> delivery-runs three times and fulfilment -> delivery-runs, the last four in-process
 only while delivery-runs is enabled, which it is not by default) and adds the bounded wait, the bulkhead and the end-user actor every edge now uses. **ai-gateway's 5 readers are converted too** (`HttpCatalogReader`, `HttpOfferReader`, `HttpOrderTracker`, `HttpAccountReader` -> orders, bookings and
-tax-returns histories, `HttpServiceDirectory`: the shopper is captured at request entry, 12.10). **8 Java-to-Java HTTP adapters are still not converted**: mcp-server's
-8 tool clients (they act for the signed-in user: the extension point is in 12.10, another agent converts them). What stays HTTP is listed with the reason in 12.7, 12.8 and 12.10 and in
+tax-returns histories, `HttpServiceDirectory`: the shopper is captured at request entry, 12.10). **mcp-server's 8 tool clients are converted too** (12.11: they act as the signed-in user, not as a service). **No Java module calls another over HTTP in core any more**
+(the Java edges that still select an HTTP adapter do so only while the callee is switched off, and the old Java ports are local-only compatibility). What stays HTTP is listed with the reason in 12.7, 12.8 and 12.10 and in
 `apps/core/src/test/resources/http-edges.txt`, and `ModuleEdgeGuardTest` keeps that list honest.
 The principal registry (`at.modules.<m>.caller-scopes`, copied from identity's client list) holds every module's scopes.
 
@@ -541,7 +541,7 @@ Still HTTP in core, and why:
 | fulfilment -> geo, bookings -> geo | Go callee |
 | trust-ops -> catalog (product moderation, review moderation), orders (lookup), ai-gateway (triage) | **converted in 12.10** |
 | ai-gateway -> catalog, offers, orders, bookings, tax-returns readers and search/promise/cart | catalog, offers, orders (tracker and history), bookings (history and service search) and tax-returns (returns): **converted in 12.10** (the shopper captured at request entry); search, promise and cart are Go and stay HTTP (`HttpCartReader`, `HttpProductSearch`, `HttpDeliveryPromises`) |
-| mcp-server -> catalog, inventory, orders, seller, payments, bookings (and applications, tax) | **not converted yet**: the tools relay the end user's token, so an in-process version runs the callee as that user (`EndUserActor`, 12.10), not as a service principal, and keeps the AI/MCP spend cap path unchanged |
+| mcp-server -> catalog, inventory, orders, seller, payments, bookings (and applications, tax) | **converted in 12.11**: the callee runs as the signed-in user (`EndUserActor` captured at request entry, 12.10), never as a service principal; the AI/MCP spend cap path is unchanged; search, geo, promise and cart (Go) stay HTTP |
 | retail -> catalog, inventory; delivery-runs -> orders, catalog | retail and delivery-runs are disabled in core by default; the callers are converted when they are enabled |
 
 Tests per converted edge: a consumer test (principal passed, failure mapping, defaults of the HTTP adapter kept); a provider test per API method in the
@@ -662,7 +662,7 @@ permissions, nothing of the caller's), so the application service applies its ow
 tests: another customer's book unreachable (there is no parameter to name one; the staff-only `listOf` is refused for a customer person), missing delegation scope 403, org member acts as a customer without
 their organisation (`requireOrganisation` mismatch 403), a service token never becomes a person, no authentication is 401, failure parity with the HTTP adapter.
 
-*Extension point for mcp-server's tools* (next agent): each tool edge needs (1) a callee API method that takes `EndUserActor` and enters through `ModuleEntry.runAsUser` with a delegation scope added to
+*Extension point for mcp-server's tools* (used in 12.11): each tool edge needs (1) a callee API method that takes `EndUserActor` and enters through `ModuleEntry.runAsUser` with a delegation scope added to
 mcp-server's `caller-scopes`; (2) the person captured with `EndUsers.current()` **on the thread that has the SecurityContext, before any executor hop** (Lola's tool loop runs on `lolaExecutor`, so ai-gateway
 must capture it at request entry into `Caller`, not at the adapter); (3) the tool's own **token scope check left where it is** (`mcp:*` permissions are checked before the call, and
 `EndUserActor.hasScope` reads the same permissions); (4) the AI/MCP spend cap (USD 2 per day) is a separate path in ai-gateway/mcp-server and is not touched by any of this.
@@ -705,8 +705,7 @@ must capture it at request entry into `Caller`, not at the adapter); (3) the too
 * **Found while converting (fixed in the HTTP reader as well)**: `HttpOfferReader` called `GET /v1/public/products/{atin}/offers`, a path offers never served, so `compare_offers` always said "not available yet"
   over HTTP. It now reads the real `GET /v1/public/products/{productAtin}/buy-boxes` (the winner and the other offers of every variant), which the in-process reader serves the same way.
 
-**Left HTTP, with the reason**: mcp-server's 8 tool clients (`HttpCatalogApi`, `HttpInventoryApi`, `HttpOrdersApi`, `HttpSellerApi`, `HttpPaymentsApi`, `HttpBookingsApi`, `HttpApplicationsApi`, `HttpTaxApi`): owner
-sequence, the next agent converts them on the extension point above. Go callees stay HTTP (cart, promise, geo, search, media, carrier-gateway, authz-sync); ai-gateway's readers of catalog, offers, orders, bookings and tax-returns are converted (above).
+**Left HTTP, with the reason**: mcp-server's 8 tool clients were converted in 12.11 (the extension point above). Go callees stay HTTP (cart, promise, geo, search, media, carrier-gateway, authz-sync); ai-gateway's readers of catalog, offers, orders, bookings and tax-returns are converted (above).
 
 **Tests of the ai-gateway edges**: `InProcessReadersTest` (person from `Caller`, worker thread without a security context, caller principal, no person = nothing called, refusal mapping, public reads),
 `InProcessVersusHttpReaderParityTest` (7 readers x 13 behaviours), `CallerResolverTest` (seller member shops as a customer, service token gives no person), provider tests `ShopperOrdersApiAdapterTest`,
@@ -720,6 +719,60 @@ leak, person binding, nested hop, measured hop cost), `ModuleCallSettingsTest`, 
 **Not verified**: Docker ITs, Kafka, a Temporal server, a signed JWT end to end (the actor tests build the authentication a validated token would give, not a token), the new provider APIs on a running core with
 Postgres (the 403-per-method cases in `ModuleEdgesInCoreTest` / `InProcessScopesInCoreTest` were not extended and not run for them), orders/fulfilment/ai-gateway booted with these edges, trace export to a collector
 (propagation is proven on the Micrometer observation, not on OTLP), behaviour under load.
+
+### 12.11 mcp-server's eight tool clients in-process, as the signed-in user (2026-11-16)
+
+Owner decision (unchanged): a monolith makes no HTTP call to itself, and a call made for a person is never made as a service. mcp-server's tools used to relay the caller's bearer token to catalog,
+inventory, orders, seller (account health and the application queue), payments, bookings and tax-returns. In core they now call those modules in-process **as the same person**, with the same checks.
+
+* **The person is captured at request entry.** `McpCallerExtractor` runs on the request thread (the SecurityContext is there; the tool may run later on another thread) and takes `EndUsers.current()`
+  into `McpCaller`. The ports (`CatalogApi`, `InventoryApi`, `OrdersApi`, `PaymentsApi`, `SellerApi`, `ApplicationsApi`, `BookingsApi`, `TaxApi`) take `CallerCredentials` (bearer token for the HTTP adapters,
+  the person for the in-process ones) instead of the bare bearer string; `search`, `geo`, `promise` and `cart` (Go) keep the string. A service token or no authentication is captured as the refusal
+  (403 `auth.service-token` / 401) and only raised when an in-process call asks for it, so it surfaces as the same FORBIDDEN the HTTP adapter gives and **never reaches the callee**. There is no code path that
+  runs a tool call as a service identity.
+* **Providers** (published API in `module-api`, entered through `ModuleEntry.runAsUser` with a delegation scope, never a token scope): `catalog-api` `CatalogUserApi` (`catalog:user.read`, `catalog:user.write`
+  for the category request), `inventory-api` `InventoryUserApi` (`inventory:user.read`), `orders-api` `OrdersUserApi` (`orders:user.read`, `orders:user.write` for a shipment step and a tracking label),
+  `payments-api` `PayoutReadApi` (`payments:user.read`), `seller-api` `SellerUserApi` (`seller:user.read`), `bookings-api` `UserServiceSearchApi` (`bookings:user.read`; ai-gateway's anonymous
+  `ServiceSearchApi` is a different API), `tax-returns-api` `TaxReviewReadApi` (`tax-returns:user.read`). All are granted to mcp-server in `at.modules.mcp-server.caller-scopes` and to nobody else.
+  Each method returns the **JSON tree of the HTTP response** (so the tools, the PII masking and the audit see the same body): every service has a public `<Svc>EndpointViews` next to its controllers that
+  calls the controller handler (same use case, same response record) and converts the result; the adapter in `adapter/in/module` enters it as the person. The only controller-level guard among these
+  endpoints, `@StaffOrServiceOnly` on catalog's category request queue, is `ModuleEntry.requireStaff` inside the entry; `@Valid` bodies are validated by hand (`ModuleFailures.validate`, 400 `validation`).
+  Failures use each module's own mapping (`CatalogFailures`, `ShipmentFailures`, `InventoryFailures`, `PaymentsFailures`, `TaxReturnsFailures`, new `SellerFailures`, bookings' search mapping), so the
+  status and code are the HTTP problem's.
+* **Consumers**: `adapter/out/module/InProcess*Api` behind the existing ports, selected by `@ConditionalOnModuleMode(caller = "mcp-server", ...)` (`at.mcpserver.mode`, per edge
+  `at.mcpserver.<callee>.mode`; core default in-process, which gives way to HTTP for a callee that is switched off, e.g. orders in a core without Valkey); the HTTP adapters are kept for the microservices profile.
+  Every call is `InProcessCalls.as(principal, <callee>, ...)` through `ModuleUpstream`, so the bounded wait (5 s per edge, as `at.mcp.downstream.timeout`) and the callee's bulkhead apply and are counted
+  in `at_module_call_*`; outcomes map exactly as `JsonHttp` does (404 NOT_FOUND, 401/403 FORBIDDEN, other 4xx REJECTED, 5xx, timeout, full bulkhead or crash UNAVAILABLE).
+* **Kept as they were**: the per-tool scope checks (`ToolGuardService`, `mcp:*` permissions, before the call), rate limits, the audit trail, and the AI/MCP spend cap path (ai-gateway's USD/day ceiling
+  and its runtime setting): none of it is on these edges.
+* **Privileges are not widened.** The callee's actor is the person's subject, type, organisation, roles and permissions (`CallerAwareActorResolver`); mcp-server's own scopes are delegation scopes that only
+  decide whether the module may act for users on that API at all. A seller member still sees only its own organisation, a customer only their own orders, a shipment step is still allowed only to
+  the actor the state machine names, application dossiers are still masked unless the reviewer holds `applications:pii` (the view is then logged, as over HTTP).
+* **Not reproduced in-process** (they belong to the HTTP request, not to the use case): the servlet filters of the callee's chain (rate limit per client IP, sign-in freshness, CORS) and the
+  `Idempotency-Key` header (the two shipment writes send none today, as before). The audit of the tool call itself is mcp-server's.
+* **Found while converting** (all pre-existing, all on `main` and `develop` too): (1) `HttpPaymentsApi.orderSplit` asked payments-service for `GET /v1/orders/{id}/payment-split`, a path only orders
+  serves, so `order_payment_split` was NOT_FOUND in the microservices profile; the split is now `OrdersApi.paymentSplit` (orders owns it; the seller sees its own row). (2) The staff `applications_queue`
+  tool defaulted to the status `IN_REVIEW`, which seller's application statuses do not contain (`PENDING_REVIEW`, `FLAGGED`, ...): every call without a status was a 422 `seller.invalid-input`; the default is
+  `PENDING_REVIEW`. **Not fixed (owner decision)**: the seller tool `request_category` sends `{name, parentId, reason}` but catalog's `POST /v1/category-requests` requires `{parentPath, name,
+  exampleProduct, detailsNeeded}`, so over HTTP it has always been a 400 (REJECTED); the in-process path reproduces that exactly (the same validation), because changing what a tool takes is a new
+  tool contract, not plumbing.
+* **Overlap with ai-gateway's shopper APIs (12.10)**: `ShopperOrdersApi`, `PublicProductApi` and `UserServiceSearchApi`/`ShopperBookingsApi` cover similar reads with typed results for Lola; the MCP
+  ones return the HTTP JSON tree so the tool output does not change. They could be folded together later; not done here (separate callers, separate delegation scopes).
+
+**Edges after this section**: in core every Java module-to-module call is in-process. HTTP adapters that are still selected there: the Go callees (search, cart, promise, geo, media, carrier-gateway,
+authz-sync), and an edge whose callee is switched off (the caller-level default gives way to HTTP). `at.core.legacy-ports.enabled` is `false` by default and set to `true` by the `local` profile only (see
+the runbook, 7.1, for why it stays there for now); `SingleEntryPortTest` holds that dev, uat and prod expose the one port.
+
+**Tests**: `InProcessVersusHttpFailureParityTest` in mcp-server (23 operations x 15 callee outcomes, plus the success body, in-process vs a real HTTP server: 346 cases), `InProcessAsThePersonTest` (the callee gets exactly
+the captured person under mcp-server's own principal; no valid person = nothing called), `McpCallerExtractorTest` (person captured on the request thread, survives the end of the SecurityContext, service token and
+no authentication captured as the refusal), `StaffToolsServiceTest`, provider tests per module (`CatalogUserApiAdapterTest`, `InventoryUserApiAdapterTest`, `OrdersUserApiAdapterTest`, `PayoutReadApiAdapterTest`,
+`SellerUserApiAdapterTest`, `UserServiceSearchApiAdapterTest`, `TaxReviewReadApiAdapterTest`: delegation scope 403 and nothing runs, the actor in force is the person, read scope cannot write, failure
+status, fails closed), `ModuleEntryRequireStaffTest`, `ModuleFailuresValidateTest`, `ModuleEdgeGuardTest` (the eight lines are gone from `http-edges.txt`), `InProcessCallSitesTest`, and, on PostgreSQL,
+`McpUserApisInCoreTest` (real core with mcp-server and the six running callees: the eight adapters are the beans; per API a module without the delegation scope is refused 403, a person without the
+HTTP endpoint's permission is refused by the real use case **even when mcp-server's own principal holds that permission as a scope**, a person with it gets past; the real `CatalogApi` port maps a customer's call for the
+staff-only queue to FORBIDDEN) and `SingleEntryPortTest`. **Not verified**: orders through `OrdersUserApi` in a running core (orders needs Valkey and Temporal; its provider is covered by the unit test with a
+mocked views class only), a signed JWT end to end through the MCP transport (the extractor test builds the authentication a validated token would give), the MCP tool call over the real Streamable HTTP
+transport with a model client, the Docker ITs of mcp-server (`McpServerIT`, `McpSecurityIT`: not run, they need Docker), Valkey-backed rate limit and audit spool, behaviour under load.
 
 ### 12.6 Measurement (this sandbox, 2026-11-15; one run, not comparable to the Phase 2 table)
 

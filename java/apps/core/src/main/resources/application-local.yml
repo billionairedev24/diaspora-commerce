@@ -4,8 +4,10 @@ server:
   port: ${PORT:8120}   # afrotransact-core, every module's paths on this one port (docs/runbooks/release-1-local.md)
 at:
   core:
-    # Old standalone ports are compatibility only (no module calls another over them). Local keeps them until mcp-server's tool edges are
-    # in-process; every other profile has at.core.legacy-ports.enabled=false (the default), so the one port is the only listener.
+    # Old standalone ports are compatibility only (no module calls another over them: mcp-server's tool edges were the last to go
+    # in-process). Local keeps them for the clients outside the JVM that use them (mobile apps, MCP links :8114/mcp, the Stripe webhook
+    # forward, the seeder) and for an edge whose callee is switched off; every other profile has at.core.legacy-ports.enabled=false (the
+    # default), so the one port is the only listener (SingleEntryPortTest).
     legacy-ports:
       enabled: true
     # Old standalone ports served by this one JVM (local only): a module left in http mode, a script or gateway-bff configured as

@@ -15,7 +15,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-import com.afrotransact.bookings.api.ServiceSearchApi;
+import com.afrotransact.bookings.api.UserServiceSearchApi;
 import com.afrotransact.catalog.api.CatalogUserApi;
 import com.afrotransact.inventory.api.InventoryUserApi;
 import com.afrotransact.mcp.adapter.out.http.HttpWiring;
@@ -245,7 +245,7 @@ class InProcessVersusHttpFailureParityTest {
     }
 
     private static BookingsApi bookings(Wiring w) {
-        return w.http() ? HttpWiring.bookings(w.url(), TIMEOUT) : InProcessWiring.bookings(w.api(ServiceSearchApi.class));
+        return w.http() ? HttpWiring.bookings(w.url(), TIMEOUT) : InProcessWiring.bookings(w.api(UserServiceSearchApi.class));
     }
 
     private static TaxApi tax(Wiring w) {

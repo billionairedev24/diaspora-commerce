@@ -10,7 +10,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import com.afrotransact.bookings.api.ServiceSearchApi;
+import com.afrotransact.bookings.api.UserServiceSearchApi;
 import com.afrotransact.catalog.api.CatalogUserApi;
 import com.afrotransact.inventory.api.InventoryUserApi;
 import com.afrotransact.mcp.port.CallerCredentials;
@@ -176,16 +176,16 @@ class McpUserApisInCoreTest {
 
     @Test
     void thePublicServiceSearchRunsForAnyPersonWithTheDelegationScope() {
-        CallerPrincipal delegated = new CallerPrincipal("mcp-server", "mcp-server-service", Set.of(ServiceSearchApi.READ_SCOPE));
+        CallerPrincipal delegated = new CallerPrincipal("mcp-server", "mcp-server-service", Set.of(UserServiceSearchApi.READ_SCOPE));
         try {
             Object result = InProcessCalls.as(delegated, "bookings",
-                    () -> ctx.getBean(ServiceSearchApi.class).findServices(person("CUSTOMER"), "braids", null));
+                    () -> ctx.getBean(UserServiceSearchApi.class).findServices(person("CUSTOMER"), "braids", null));
             assertThat(result).isNotNull();
         } catch (ModuleApiException e) {
             assertThat(e.status()).as(e.getMessage()).isNotEqualTo(403);
         }
         assertThatThrownBy(() -> InProcessCalls.as(new CallerPrincipal("mcp-server", "mcp-server-service", Set.of("x:y")), "bookings",
-                () -> ctx.getBean(ServiceSearchApi.class).findServices(person("CUSTOMER"), "braids", null)))
+                () -> ctx.getBean(UserServiceSearchApi.class).findServices(person("CUSTOMER"), "braids", null)))
                 .isInstanceOfSatisfying(ModuleApiException.class, e -> assertThat(e.status()).isEqualTo(403));
     }
 

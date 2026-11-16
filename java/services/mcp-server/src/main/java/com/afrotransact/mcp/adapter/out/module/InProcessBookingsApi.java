@@ -1,6 +1,6 @@
 package com.afrotransact.mcp.adapter.out.module;
 
-import com.afrotransact.bookings.api.ServiceSearchApi;
+import com.afrotransact.bookings.api.UserServiceSearchApi;
 import com.afrotransact.mcp.port.BookingsApi;
 import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.Downstream;
@@ -12,7 +12,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link BookingsApi} through bookings' published {@link ServiceSearchApi} inside this JVM (mode {@code in-process}), run as the
+ * {@link BookingsApi} through bookings' published {@link UserServiceSearchApi} inside this JVM (mode {@code in-process}), run as the
  * signed-in person captured at request entry. The bearer token the port still carries is not read.
  */
 @Component
@@ -21,11 +21,11 @@ class InProcessBookingsApi implements BookingsApi {
 
     private static final String SERVICE = "bookings";
 
-    private final ObjectProvider<ServiceSearchApi> api;
+    private final ObjectProvider<UserServiceSearchApi> api;
     private final ModuleUpstream upstream;
 
-    InProcessBookingsApi(ObjectProvider<ServiceSearchApi> api, ModuleUpstream upstream, ListableBeanFactory beans) {
-        InProcessCalls.requireRunning(beans.getBeanNamesForType(ServiceSearchApi.class, true, false).length > 0, "mcp-server",
+    InProcessBookingsApi(ObjectProvider<UserServiceSearchApi> api, ModuleUpstream upstream, ListableBeanFactory beans) {
+        InProcessCalls.requireRunning(beans.getBeanNamesForType(UserServiceSearchApi.class, true, false).length > 0, "mcp-server",
                 "bookings", "at.mcpserver.bookings.mode");
         this.api = api;
         this.upstream = upstream;

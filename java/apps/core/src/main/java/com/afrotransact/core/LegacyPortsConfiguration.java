@@ -18,9 +18,10 @@ import org.springframework.core.env.Environment;
  * or gateway-bff configured as before keeps working while the modules run in one JVM. Off by default; the local profile turns
  * it on. In production the one port and in-process calls are used.
  *
- * <p>Switch: {@code at.core.legacy-ports.enabled}, default {@code false}; only the {@code local} profile sets it to {@code true}, and only until
- * mcp-server's tool edges are converted to in-process calls (they are the last Java-to-Java HTTP calls). With it {@code false} no extra
- * listener is opened even when {@code module-ports} is set. The ports are compatibility only: no module calls another over them.
+ * <p>Switch: {@code at.core.legacy-ports.enabled}, default {@code false}; only the {@code local} profile sets it to {@code true} (for clients outside the JVM:
+ * mobile apps, MCP links, the Stripe webhook forward, the seeder). With it {@code false} no extra listener is opened even when
+ * {@code module-ports} is set. The ports are compatibility only: no module calls another over them (mcp-server's tool edges were the
+ * last Java-to-Java HTTP calls and are in-process), and {@code SingleEntryPortTest} holds that dev, uat and prod have the one port.
  */
 @Configuration(proxyBeanMethods = false)
 class LegacyPortsConfiguration {

@@ -2,7 +2,7 @@ package com.afrotransact.mcp.adapter.out.module;
 
 import java.util.Set;
 
-import com.afrotransact.bookings.api.ServiceSearchApi;
+import com.afrotransact.bookings.api.UserServiceSearchApi;
 import com.afrotransact.catalog.api.CatalogUserApi;
 import com.afrotransact.inventory.api.InventoryUserApi;
 import com.afrotransact.mcp.port.ApplicationsApi;
@@ -32,7 +32,7 @@ public final class InProcessWiring {
     /** The principal mcp-server runs in-process calls as: the delegation scopes core grants it, nothing else. */
     public static final CallerPrincipal MCP_SERVER = new CallerPrincipal("mcp-server", "mcp-server-service",
             Set.of(CatalogUserApi.READ_SCOPE, CatalogUserApi.WRITE_SCOPE, InventoryUserApi.READ_SCOPE, OrdersUserApi.READ_SCOPE,
-                    OrdersUserApi.WRITE_SCOPE, PayoutReadApi.READ_SCOPE, SellerUserApi.READ_SCOPE, ServiceSearchApi.READ_SCOPE,
+                    OrdersUserApi.WRITE_SCOPE, PayoutReadApi.READ_SCOPE, SellerUserApi.READ_SCOPE, UserServiceSearchApi.READ_SCOPE,
                     TaxReviewReadApi.READ_SCOPE));
 
     private InProcessWiring() {
@@ -74,8 +74,8 @@ public final class InProcessWiring {
         return wire(SellerUserApi.class, api, InProcessApplicationsApi::new);
     }
 
-    public static BookingsApi bookings(ServiceSearchApi api) {
-        return wire(ServiceSearchApi.class, api, InProcessBookingsApi::new);
+    public static BookingsApi bookings(UserServiceSearchApi api) {
+        return wire(UserServiceSearchApi.class, api, InProcessBookingsApi::new);
     }
 
     public static TaxApi tax(TaxReviewReadApi api) {
