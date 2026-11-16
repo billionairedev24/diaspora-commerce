@@ -12,7 +12,12 @@ python3 tools/seed/seed.py --only ops           # just the operations data (make
 python3 tools/seed/seed.py --only users         # just check the test users
 python3 tools/seed/seed.py --skip products      # everything else
 make seed-test                                  # the seeder's unit tests
+make seed-check                                 # offline: every demo product against the catalog's recorded schemas (publish gate)
 ```
+
+The publish-gate answers (description, typed facts, dangerous goods, package per variant, GTIN where required, label photo) are
+derived from the catalog's own schemas by `seedlib/listing.py`; `testdata/` holds the recorded category tree, product types and
+listing rules (`gen_testdata.py`). See docs/runbooks/release-1-local.md, "Demo data".
 
 Steps: `sellers`, `size-charts`, `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
 carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets are
