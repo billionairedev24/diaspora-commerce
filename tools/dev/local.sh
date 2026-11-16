@@ -1258,6 +1258,8 @@ links() {
   echo "  Kafka                localhost:9092                 Temporal gRPC localhost:7233 · UI http://localhost:8088"
   echo "  Postgres             localhost:5432                 Valkey   localhost:6379"
   echo "Manage"
+  echo "  make smoke           proves it works: one PASS/FAIL line per check (catalogue, photos, search, cart, tax, checkout, apps, orders, metrics); run it after make up"
+  echo "  make seed            re-runs the demo data (SEED=0 make up skips it); make seed-check validates it offline"
   echo "  make status | make logs SERVICE=core (afrotransact-go, web-storefront, ...) | make restart SERVICE=core | make dev-links | make down"
   echo "Secrets (.local/secrets.env; make secrets-check; docs/engineering/secrets-and-configuration.md)"
   secrets_summary
@@ -1812,7 +1814,11 @@ case "${1:-}" in
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }
     target="$2"; [[ -f "$LOGS/$target.log" ]] || target=$(mono_target "$target")
     tail -n 200 -f "$LOGS/$target.log" ;;
-  seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
+  seed) shift
+    # Release 1 (STACK=monolith): media, geo, cart, search and carrier-gateway are afrotransact-go's (:8200), not their old ports.
+    # `make up` exports those addresses for its own seeding; a later `make seed` must too (values you set win).
+    if [[ "$STACK" == monolith ]]; then mono_peer_env; fi
+    python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   repair-orgs) cmd_repair_orgs ;;
   reindex) shift; cmd_reindex "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
