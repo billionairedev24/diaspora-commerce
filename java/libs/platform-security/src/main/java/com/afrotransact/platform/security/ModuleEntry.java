@@ -86,6 +86,17 @@ public final class ModuleEntry {
         }
     }
 
+    /**
+     * The {@link StaffOrServiceOnly} guard for an API method entered through {@link #runAsUser}: call it inside the body, where the actor
+     * in force is the person. Staff (and the local super admin) pass; anyone else is refused with 403 {@code auth.staff-only}, as the
+     * HTTP interceptor refuses them.
+     */
+    public void requireStaff() {
+        if (!StaffOrServiceOnlyInterceptor.allowed(actors.current())) {
+            throw new ModuleApiException(403, "auth.staff-only", "Only AfroTransact staff or services can do this");
+        }
+    }
+
     /** Same for a call with no result, platform errors only. */
     public void runVoid(Runnable body) {
         runVoid(body, ex -> Optional.empty());
