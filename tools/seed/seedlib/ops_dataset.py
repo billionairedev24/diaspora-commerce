@@ -15,12 +15,12 @@ SEED_SOURCE = "demo-seed"  # orders' attribution source: how the ops step recogn
 HOUSTON = "customer.houston@afrotransact.test"
 LUBBOCK = "customer.lubbock@afrotransact.test"
 SELLER_OWNER = "seller.owner@afrotransact.test"  # Mama Put Pantry
-SELLER_BAMAKO = "seller.bamako@afrotransact.test"  # Bamako Home (seller-fulfilled)
+SELLER_BAMAKO = "seller.bamako@afrotransact.test"  # Bamako Home
 DRIVER = "driver@afrotransact.test"
 FINANCE_ORG = "org_mama_put_pantry"  # the seller whose matured sale is paid out
 BAMAKO_ORG = "org_bamako_home"
 
-# Seller-fulfilled shipments in demo ops are packed with these seller test users (see ops._drive_shipment).
+# Shipments packed by the seller (from a seller location, or a pickup) are driven with these seller test users (see ops._drive_shipment).
 SELLER_FULFILMENT_ACTORS: dict[str, str] = {
     FINANCE_ORG: SELLER_OWNER,
     BAMAKO_ORG: SELLER_BAMAKO,
@@ -212,15 +212,18 @@ class Line:
 
 @dataclass(frozen=True)
 class Package:
-    """One package of an order: its lines (one seller and fulfilment) and the delivery option."""
+    """One package of an order: its lines (one seller and fulfilment) and how the customer gets it. `option` is
+    afrotransact_delivery (Fulfilled by AfroTransact: AfroTransact delivers) | pickup (Seller pickup: the customer collects)
+    | door (pre-order). Never a carrier: seller self-shipping is retired (ADR 0011).
+    `target`: placed · picking · packed · ready (an FBA package waits for the Delivery desk; a pickup one for the customer) ·
+    picked_up · out_for_delivery · delivered (staff, with photo proof) · failed (delivery failed, with a reason) · returned
+    (back to the seller after a failed delivery) · collected (pickup handed over with the customer's code) · cancelled.
+    Seller-packed packages (a seller location, or a pickup) are confirmed, packed and marked ready by the seller (only Mama Put
+    has a test user); the delivery steps are staff's, from the Delivery desk (`delivery:manage`)."""
     lines: tuple[Line, ...]
-    option: str = "carrier"  # carrier | express | afrotransact_delivery | door (pre-order)
-    # placed · picking · packed · ready · shipped · out_for_delivery · delivered · cancelled. Seller-fulfilled
-    # packages are confirmed, packed and marked ready by the seller (only Mama Put has a test user).
+    option: str = "afrotransact_delivery"
     target: str = "placed"
-    carrier: str = "ups"
-    tracking: str = ""
-    route: str = ""  # dispatch route key (AfroTransact Delivery)
+    route: str = ""  # dispatch route key (only with the dormant driver app: DRIVER_APP_ENABLED=true)
 
 
 @dataclass(frozen=True)
@@ -231,9 +234,9 @@ class Order:
     note: str = ""
     preorder: bool = False
     # (target status, reason, method) of a return of the first line: APPROVED (these reasons approve themselves) or
-    # REFUNDED. Drop-off returns
-    # need a carrier label (carrier-gateway, not in the local stack), so locally they wait at approved; a DRIVER_PICKUP
-    # return is collected on a returns route and refunded after inspection.
+    # REFUNDED. Drop-off returns need a carrier label (carrier-gateway, not in the local stack) and a driver pickup needs the
+    # dormant driver app, so locally they wait at approved; with the driver app on, a DRIVER_PICKUP return is collected on a
+    # returns route and refunded after inspection. The method asked for falls back to the first one the return rules offer.
     returns: tuple[tuple[str, str, str], ...] = ()
     claim: tuple[str, str] = ("", "")  # (type, description)
     settle_early: bool = False  # start the settlement hold as already matured (payout demo)
@@ -241,53 +244,59 @@ class Order:
 
 ORDERS: list[Order] = [
     Order("placed", HOUSTON, (Package((Line("chin-chin", qty=2), Line("ijebu-garri")), target="placed"),),
-          note="Paid, waiting for the Houston FC to start picking"),
+          note="Fulfilled by AfroTransact: paid, waiting for the Houston FC to start picking"),
     Order("picking", HOUSTON, (Package((Line("smoked-catfish"),), target="picking"),),
           note="Perishable: picking started at HOU-FC"),
-    Order("packed", HOUSTON, (Package((Line("at-basmati"), Line("at-pepper-sauce", qty=2)), target="packed",
-                                      tracking="1Z84A7W90312000101"),),
-          note="Packed with a UPS label, waiting at the dock"),
+    Order("packed", HOUSTON, (Package((Line("at-basmati"), Line("at-pepper-sauce", qty=2)), target="packed"),),
+          note="Packed at the Houston FC, waiting at the dock"),
     Order("shipped-multi", HOUSTON, (
-        Package((Line("at-jollof-seasoning", qty=2),), target="shipped", tracking="1Z84A7W90312000202"),
+        Package((Line("at-jollof-seasoning", qty=2),), target="out_for_delivery"),
         Package((Line("kente-stole"),), target="placed")),
-          note="Two packages: AfroTransact's is on its way with UPS; Bonwire Weavers ships the stole itself and has "
-               "not confirmed yet"),
+          note="Two packages, both Fulfilled by AfroTransact: one is out for delivery with staff, the stole is waiting "
+               "to be picked"),
     Order("out-for-delivery", HOUSTON, (Package((Line("egusi", seller="mama-put"), Line("ground-crayfish")),
-                                                option="afrotransact_delivery", target="out_for_delivery",
-                                                route="today"),),
-          note="AfroTransact Delivery: on the driver's van"),
+                                                target="out_for_delivery"),),
+          note="Fulfilled by AfroTransact: picked up by the Delivery desk, out for delivery"),
     # AfroTransact Delivery packages leave from the Houston FC: products whose Mama Put stock is at HOU-FC.
-    Order("delivered-courier", HOUSTON, (Package((Line("pepper-soup-spice", qty=3),),
-                                                 option="afrotransact_delivery", target="delivered", route="today"),),
-          note="AfroTransact Delivery: delivered with a photo; one jar picked up by the driver and refunded",
+    Order("delivered-courier", HOUSTON, (Package((Line("pepper-soup-spice", qty=3),), target="delivered"),),
+          note="Fulfilled by AfroTransact: delivered, photo proof saved by staff; one jar picked up and refunded",
           returns=(("REFUNDED", "NOT_AS_DESCRIBED", "DRIVER_PICKUP"),)),
     Order("delivered-return-requested", HOUSTON, (Package((Line("ofada-rice", variant=1, qty=2), Line("goat-meat")),
-                                                          target="delivered", tracking="1Z84A7W90312000303"),),
-          note="Delivered; the customer asked to return the rice", settle_early=True,
+                                                          target="delivered"),),
+          note="Delivered with proof; the customer asked to return the rice", settle_early=True,
           returns=(("APPROVED", "ORDERED_BY_MISTAKE", "DROP_OFF"),)),
-    Order("delivered-refunded", HOUSTON, (Package((Line("at-black-soap", qty=3),), target="delivered",
-                                                  tracking="1Z84A7W90312000404"),),
-          note="Delivered; a soap return approved, its drop-off label waiting for carrier-gateway",
+    Order("delivered-refunded", HOUSTON, (Package((Line("at-black-soap", qty=3),), target="delivered"),),
+          note="Delivered with proof; a soap return approved, waiting for its return method to be carried out",
           returns=(("APPROVED", "NOT_AS_DESCRIBED", "DROP_OFF"),)),
     Order("cancelled", HOUSTON, (Package((Line("jerk-paste"),), target="cancelled"),),
           note="Cancelled by the customer before packing"),
-    Order("next-route", HOUSTON, (Package((Line("oloyin-beans"),), option="afrotransact_delivery", target="ready",
-                                          route="tomorrow"),),
-          note="Staged for tomorrow's route (its van has an open defect)"),
+    Order("next-route", HOUSTON, (Package((Line("oloyin-beans"),), target="ready"),),
+          note="Packed and ready: waiting for the Delivery desk to pick it up"),
+    Order("delivery-failed", HOUSTON, (Package((Line("suya-spice", seller="mama-put"),), target="failed"),),
+          note="Fulfilled by AfroTransact from Mama Put's kitchen: nobody home, delivery failed with a reason, "
+               "waiting to be reattempted"),
+    Order("returned-to-seller", HOUSTON, (Package((Line("suya-spice", seller="mama-put"),), target="returned"),),
+          note="Delivery failed twice, the parcel was returned to the seller (reason recorded)"),
+    Order("pickup-ready", HOUSTON, (Package((Line("suya-spice", seller="mama-put"),), option="pickup", target="ready"),),
+          note="Seller pickup at Mama Put's kitchen: ready, waiting for the customer to collect with the code"),
+    Order("pickup-collected", HOUSTON, (Package((Line("suya-spice", seller="mama-put"),), option="pickup",
+                                                target="collected"),),
+          note="Seller pickup: collected with the customer's code (no delivery fee)"),
     # Lubbock has an open pre-order window: its pantry lines (the window's categories) can only be a pre-order there.
     Order("preorder", LUBBOCK, (Package((Line("at-basmati"), Line("at-jollof-seasoning")), option="door",
                                         target="placed"),), preorder=True,
           note="Lubbock pre-order: delivered on the window's delivery day"),
-    Order("lubbock-claim", LUBBOCK, (Package((Line("shea-butter", qty=2),), target="delivered",
-                                             tracking="1Z84A7W90312000505"),),
+    # Houston: Lubbock is outside the delivery zone, where a delivery needs a quote instead of a delivery option.
+    Order("lubbock-claim", HOUSTON, (Package((Line("shea-butter", qty=2),), target="delivered"),),
           claim=("DAMAGED_ITEM", "One of the two jars arrived cracked and the butter had leaked into the box."),
-          note="Delivered; A-to-z claim waiting for the seller"),
-    Order("lubbock-seller", LUBBOCK, (Package((Line("things-fall-apart"),), target="placed"),),
-          note="Seller-fulfilled by Diaspora Books: waiting for the seller to confirm"),
+          note="Delivered with proof; A-to-z claim waiting for the seller"),
+    Order("lubbock-seller", HOUSTON, (Package((Line("things-fall-apart"),), target="placed"),),
+          note="Fulfilled by AfroTransact (Diaspora Books stock at ATL-FC): waiting to be picked"),
 ]
 
-# S255 AfroTransact Delivery from the seller's store: Mama Put's Houston kitchen, an offer it ships itself. A driver
-# needs a street-level position: locally geo knows the street addresses of its fixture list, this one among them.
+# S255 Fulfilled by AfroTransact from the seller's location: Mama Put's Houston kitchen (pickup hours, located address) and an
+# offer from it; AfroTransact collects and delivers, and customers can also collect it (Seller pickup). Locally geo knows the
+# street addresses of its fixture list, this one among them.
 SELLER_PICKUP = {
     "seller": "mama-put",
     "address": {"label": "Kitchen", "name": "Mama Put Pantry", "company": "Mama Put Pantry LLC", "phone": "+17135550142",
@@ -297,8 +306,8 @@ SELLER_PICKUP = {
               ("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY")],
     "product": "suya-spice", "price": 899, "stock": 20,
     "order": Order("seller-pickup", HOUSTON, (Package((Line("suya-spice", seller="mama-put", qty=2),),
-                                                      option="afrotransact_delivery", target="ready"),),
-                   note="Seller-fulfilled, AfroTransact Delivery: packed at Mama Put's kitchen, pickup waiting"),
+                                                      target="ready"),),
+                   note="Fulfilled by AfroTransact from Mama Put's kitchen: packed there, waiting for the Delivery desk to collect it"),
 }
 
 # The Houston FC as fulfilment-service's dispatch depot (routes start and end there).

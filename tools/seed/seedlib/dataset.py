@@ -25,7 +25,7 @@ class Seller:
     region: str
     zip: str
     node: str  # AfroTransact fulfilment centre that holds its FBA stock
-    fulfilment: str = "AFROTRANSACT"  # default for its offers: AFROTRANSACT (FBA) or SELLER
+    fulfilment: str = "AFROTRANSACT"  # default for its offers: AFROTRANSACT (FBA from AfroTransact stock; never self-shipping)
     kind: str = "SELLER"
 
 
@@ -34,15 +34,15 @@ SELLERS: list[Seller] = [
     Seller("mama-put", "org_mama_put_pantry", "Mama Put Pantry", "Mama Put Pantry LLC", "Houston", "TX", "77036", "HOU-FC"),
     Seller("lagos-larder", "org_lagos_larder", "Lagos Larder", "Lagos Larder Foods LLC", "Houston", "TX", "77072", "HOU-FC"),
     Seller("accra-market", "org_accra_market_co", "Accra Market Co.", "Accra Market Company LLC", "Bronx", "NY", "10453", "EWR-FC"),
-    Seller("bonwire", "org_bonwire_weavers", "Bonwire Weavers Collective", "Bonwire Weavers Collective Inc.", "Atlanta", "GA", "30310", "ATL-FC", "SELLER"),
+    Seller("bonwire", "org_bonwire_weavers", "Bonwire Weavers Collective", "Bonwire Weavers Collective Inc.", "Atlanta", "GA", "30310", "ATL-FC"),
     Seller("kente-co", "org_kente_and_co", "Kente & Co.", "Kente and Company LLC", "Atlanta", "GA", "30318", "ATL-FC"),
     Seller("tamale", "org_tamale_naturals", "Tamale Naturals", "Tamale Naturals LLC", "Columbus", "OH", "43219", "EWR-FC"),
     Seller("addis", "org_addis_spice_house", "Addis Spice House", "Addis Spice House LLC", "Silver Spring", "MD", "20910", "EWR-FC"),
     Seller("kingston", "org_kingston_kitchen", "Kingston Kitchen", "Kingston Kitchen Foods LLC", "Miami", "FL", "33138", "ATL-FC"),
     Seller("patel", "org_patel_grocers", "Patel Grocers", "Patel Grocers Inc.", "Edison", "NJ", "08817", "EWR-FC"),
     Seller("dakar", "org_dakar_market", "Dakar Market", "Dakar Market LLC", "Bronx", "NY", "10456", "EWR-FC"),
-    Seller("books", "org_diaspora_books", "Diaspora Books", "Diaspora Books LLC", "Atlanta", "GA", "30303", "ATL-FC", "SELLER"),
-    Seller("bamako", "org_bamako_home", "Bamako Home", "Bamako Home Goods LLC", "Brooklyn", "NY", "11216", "EWR-FC", "SELLER"),
+    Seller("books", "org_diaspora_books", "Diaspora Books", "Diaspora Books LLC", "Atlanta", "GA", "30303", "ATL-FC"),
+    Seller("bamako", "org_bamako_home", "Bamako Home", "Bamako Home Goods LLC", "Brooklyn", "NY", "11216", "EWR-FC"),
     Seller("owambe", "org_owambe_party_co", "Owambe Party Co.", "Owambe Party Company LLC", "Houston", "TX", "77082", "HOU-FC"),
 ]
 SELLER_BY_KEY = {s.key: s for s in SELLERS}
@@ -374,7 +374,7 @@ PRODUCTS: list[Product] = [
       ["Whole calyces for bissap, zobo and sorrel", "Resealable bag"], [("1 lb", 1099)],
       ["hibiscus", "bissap", "sorrel drink"], unit="1 lb", stock=120, attrs={"ingredients": "Dried hibiscus calyces"}),
     P("kenyan-coffee", "Kenyan AA Coffee, Whole Bean", COFFEE, "retail", "Nairobi Roast", "Kenyan", "Kenya",
-      ["Blackcurrant and grapefruit notes", "Roasted to order, shipped same day"], [("1 lb", 1900)],
+      ["Blackcurrant and grapefruit notes", "Roasted to order, packed same day"], [("1 lb", 1900)],
       ["kenyan coffee", "coffee beans", "coffee plantation"], unit="12 oz", attrs={"ingredients": "Arabica coffee"}),
     P("yirgacheffe", "Yirgacheffe Coffee, Whole Bean", COFFEE, "addis", "Addis Spice House", "Ethiopian", "Ethiopia",
       ["Floral, citrus and bergamot", "For the jebena coffee ceremony"], [("1 lb", 1799)],
@@ -387,11 +387,11 @@ PRODUCTS: list[Product] = [
       ["masala chai", "chai tea", "spiced tea"], unit="8 oz", attrs={"ingredients": "Black tea, cardamom, ginger, clove, cinnamon"}),
     # ---------------------------------------------------------------------------------------- fresh & frozen
     P("smoked-catfish", "Smoked Catfish, Whole", MEAT, "lagos-larder", "Lagos Larder", "Nigerian", "Nigeria",
-      ["Wood-smoked, ready for pepper soup and ogbono", "Shipped frozen"], [("1 lb", 1599), ("2 lb", 2899)],
+      ["Wood-smoked, ready for pepper soup and ogbono", "Delivered frozen"], [("1 lb", 1599), ("2 lb", 2899)],
       ["smoked fish", "catfish", "dried fish"], unit="1 lb", fulfilment="AFROTRANSACT",
       attrs={"ingredients": "Catfish", "allergens": "Contains fish", "temp": "Frozen (≤ 0°F)"}),
     P("goat-meat", "Halal Goat Meat, Cubed", MEAT, "mama-put", "Mama Put", "West African", "United States",
-      ["Bone-in cubes for stew and pepper soup", "Halal, shipped frozen"], [("2 lb", 2499), ("5 lb", 5499)],
+      ["Bone-in cubes for stew and pepper soup", "Halal, delivered frozen"], [("2 lb", 2499), ("5 lb", 5499)],
       ["goat meat", "goat stew", "pepper soup"], unit="2 lb", attrs={"ingredients": "Goat meat", "temp": "Frozen (≤ 0°F)"}),
     P("frozen-okra", "AfroTransact Brand Chopped Okra, Frozen", MEAT, "retail", "AfroTransact Brand", "West African",
       "United States", ["Chopped and flash-frozen", "For okra soup and gumbo"], [("1 lb", 499)], ["okra", "okra soup", "okra pods"],
@@ -589,14 +589,46 @@ PRODUCTS = [_placed(p) for p in PRODUCTS]
 PRODUCTS += _coverage()
 
 
-# Products their seller ships itself (offer fulfilment SELLER, shipFrom the seller's city) rather than from an AfroTransact
-# fulfilment centre. Their ship-from place is what the home page's "ships from near you" rule reads; the rest stay FBA.
-SELF_SHIPPED = {
-    "ijebu-garri", "poundo-yam", "egusi", "suya-spice", "ground-crayfish", "kuli-kuli",  # Houston
-    "turmeric", "mango-pickle", "namkeen",  # Edison
-    "plantain-fufu", "shito", "red-palm-oil", "groundnut-paste",  # Bronx
-}
-PRODUCTS = [replace(p, fulfilment="SELLER") if p.key in SELF_SHIPPED else p for p in PRODUCTS]
+# Seller locations and the two fulfilment modes (ADR 0011). A seller never ships itself: a location is Fulfilled by AfroTransact
+# (FBA: the seller gives pickup hours and a located street-level address inside the delivery area, so AfroTransact collects and
+# delivers) and/or Seller pickup (the customer collects). Street addresses are ones geo's local fixture list can place (a driver
+# needs street level). `modes`: "fba" = created with pickupHours (the seller service enables Fulfilled by AfroTransact by default
+# when it can), "pickup" = also an active SELLER customer pickup place in carrier-gateway.
+HOURS = tuple({"day": d, "opens": "10:00", "closes": "18:00"} for d in
+              ("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"))
+
+
+@dataclass(frozen=True)
+class Location:
+    seller: str
+    label: str
+    line1: str
+    city: str
+    state: str
+    zip: str
+    phone: str
+    modes: tuple[str, ...]
+    line2: str = ""
+
+
+LOCATIONS: list[Location] = [
+    Location("mama-put", "Kitchen", "9800 Bissonnet St", "Houston", "TX", "77036", "+17135550142", ("fba", "pickup"), "Suite 118"),
+    Location("lagos-larder", "Warehouse", "11200 Westheimer Rd", "Houston", "TX", "77042", "+17135550143", ("fba",)),
+    Location("patel", "Store", "1600 Oak Tree Rd", "Edison", "NJ", "08820", "+17325550144", ("fba", "pickup")),
+    Location("bamako", "Studio", "740 Flatbush Ave", "Brooklyn", "NY", "11226", "+17185550145", ("fba",)),
+    Location("addis", "Shop", "8484 Georgia Ave", "Silver Spring", "MD", "20910", "+13015550146", ("pickup",)),
+]
+LOCATION_BY_SELLER = {loc.seller: loc for loc in LOCATIONS}
+# AfroTransact delivery zones the FBA locations above sit in (geo DELIVERY zones; Houston is created by the ops step too).
+DELIVERY_ZONES = [
+    {"name": "Houston", "ownerId": "afrotransact-delivery", "type": "DELIVERY", "centerLat": 29.7604, "centerLon": -95.3698,
+     "radiusMiles": 30, "active": True},
+    {"name": "New York and New Jersey", "ownerId": "afrotransact-delivery", "type": "DELIVERY", "centerLat": 40.7128,
+     "centerLon": -74.006, "radiusMiles": 40, "active": True},
+]
+# Products offered from their seller's own FBA location (offer fulfilment AFROTRANSACT_DELIVERY, shipFrom that location,
+# stock counted on the offer) instead of from stock held at an AfroTransact fulfilment centre. All others are FBA from stock.
+LOCATION_FBA = {"poundo-yam", "kuli-kuli", "turmeric", "mango-pickle", "namkeen"}
 
 # ---------------------------------------------------------------------------------------- home content
 # Images: (key, queries). Campaigns replace the image-less placements of content's V2 migration (same copy).
