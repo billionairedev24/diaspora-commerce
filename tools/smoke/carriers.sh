@@ -12,7 +12,7 @@
 # Runbook: docs/runbooks/carrier-sandboxes.md. CI: .github/workflows/carrier-sandboxes.yml (manual).
 #
 # Usage
-#   tools/smoke/carriers.sh                                  # every carrier against http://localhost:8209 (auth off)
+#   tools/smoke/carriers.sh                                  # every carrier against http://localhost:8200/modules/carrier-gateway (afrotransact-go, auth off)
 #   tools/smoke/carriers.sh --carriers "ups fedex" --rates-only
 #   CARRIER_GATEWAY_URL=https://api.dev.<domain>/carrier-gateway \
 #   AUTH_TOKEN_URL=https://auth.dev.<domain>/oauth2/token SMOKE_CLIENT_ID=... SMOKE_CLIENT_SECRET=... \
@@ -20,7 +20,8 @@
 #   tools/smoke/carriers.sh --dry-run                        # print the requests, call nothing
 #
 # Environment
-#   CARRIER_GATEWAY_URL   base URL of the service (default http://localhost:8209)
+#   CARRIER_GATEWAY_URL   base URL of the service (default http://localhost:8200/modules/carrier-gateway;
+#                         a standalone carrier-gateway, STACK=services, is http://localhost:8209)
 #   SMOKE_TOKEN           bearer token with shipping:rate shipping:label shipping:void; or obtain one with
 #   AUTH_TOKEN_URL, SMOKE_CLIENT_ID, SMOKE_CLIENT_SECRET   (client credentials, scope from SMOKE_SCOPE)
 #   SMOKE_ORIGIN_NODE     originNode used for carrier accounts (default FC-HOU-1)
@@ -30,7 +31,7 @@
 # Exit status: 0 all checks passed (skips allowed), 1 a check failed, 2 usage / missing tools.
 set -euo pipefail
 
-BASE="${CARRIER_GATEWAY_URL:-http://localhost:8209}"
+BASE="${CARRIER_GATEWAY_URL:-http://localhost:8200/modules/carrier-gateway}"
 BASE="${BASE%/}"
 CARRIERS="usps ups fedex dhl"
 RATES_ONLY=0

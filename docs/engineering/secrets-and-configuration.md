@@ -161,7 +161,7 @@ Prices and free tiers change: check the provider's pricing page.
   account**: sign up in the storefront with that address for the real test.
 - **Webhooks (optional, deployed):** **Webhooks → Add Endpoint** `https://<api host>/notifications/v1/webhooks/resend`
   (email.delivered, bounced, complained) → its signing secret (`whsec_…`) → `RESEND_WEBHOOK_SECRET`. Locally a tunnel
-  to `localhost:8208/v1/webhooks/resend` works; signatures are not verified locally.
+  to `localhost:8200/v1/webhooks/resend` works; signatures are not verified locally.
 - **Cost:** free tier (about 3,000 emails a month, 100 a day at the time of writing).
 
 ### OpenRouter (optional): ai-gateway
@@ -281,8 +281,8 @@ A provider that must call your machine (Twilio status callbacks and inbound text
 return URLs) needs a public HTTPS URL. Stripe does not: `stripe listen` forwards for you.
 
 ```bash
-cloudflared tunnel --url http://localhost:8208     # prints https://<random>.trycloudflare.com (no account needed)
-# or: ngrok http 8208
+cloudflared tunnel --url http://localhost:8200     # prints https://<random>.trycloudflare.com (no account needed)
+# or: ngrok http 8200
 ```
 
 Put that URL in `PUBLIC_BASE_URL` (notifications) and restart notifications; point the provider's webhook at

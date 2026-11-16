@@ -340,12 +340,16 @@ spec:
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
         dashboard: /d/at-launch-platform
     - alert: ScrapeTargetCardinalityHigh
-      expr: max by (env, job) (scrape_samples_post_metric_relabeling) > 3000
+      expr: |
+        max by (env, job) (scrape_samples_post_metric_relabeling{job!~"afrotransact-core|afrotransact-go"}) > 3000
+        or
+        max by (env, job) (scrape_samples_post_metric_relabeling{job=~"afrotransact-core|afrotransact-go"}) > 30000
       for: 15m
       labels:
         severity: ticket
       annotations:
         summary: '{{ $labels.job }} exposes {{ $value }} samples per scrape after filtering'
-        description: Above 75% of the 4000-sample guard in config.alloy (above it the scrape FAILS and up becomes 0). Tighten the allowlist or fix the label that explodes.
+        description: Above 75% of the sample guard in config.alloy (4000 per target, 40000 for afrotransact-core and afrotransact-go; above it the scrape FAILS and up becomes 0). Tighten the allowlist or
+          fix the label that explodes.
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
         dashboard: /d/at-launch-platform

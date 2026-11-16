@@ -1,5 +1,37 @@
 # Service catalogue and local ports
 
+## Release 1 (the monolith): the ports that matter
+
+Release 1 (ADR 0011, branch `release-1`) is what goes to production: **two deployables**, every service is a module inside one of them.
+`make up` runs exactly these two application processes:
+
+| Deployable | Local port | What it serves | Metrics for Prometheus | Log file |
+|---|---|---|---|---|
+| **afrotransact-core** (Java, every Java module, one JVM) | **8120** | all Java modules flat on one port; per-module health groups `/actuator/health/<module>`; Swagger UI / Scalar / Redoc | `http://localhost:8120/actuator/prometheus` (every meter tagged `module` and `service`) | `.local/logs/core.log` |
+| **afrotransact-go** (Go, every Go module, one binary) | **8200** (gateway-bff's old port, so every `BFF_ORIGIN` is unchanged; `AFROTRANSACT_GO_PORT` overrides) | gateway-bff (the edge), geo, media, notifications, promise flat; cart, search, carrier-gateway under `/modules/<name>/`; probes `/healthz` `/readyz` | `http://localhost:8200/metrics` (every series labelled `module` and `service`; `at_module_up{module}` per module) | `.local/logs/afrotransact-go.log` |
+
+A module is a **label**, not a port: dashboards and alerts select `service="orders"` or `module="orders"`, never a port. Prometheus scrapes only
+these two targets (`infra/observability/prometheus.yml`). `make go-monolith-run` runs the Go binary on **8250** instead (standalone run, not
+under `make up`).
+
+### Legacy ports (compatibility only)
+
+The tables below list the per-service ports of the pre-monolith layout. They are kept so that nothing configured the old way breaks:
+
+- **Java 8100-8115**: core also listens on these (local profile only, `at.core.module-ports`); each one serves the **same** application as 8120
+  (so `http://localhost:8101/v1/...` is catalog's API and also answers on 8120); the port only decides which module wins when two modules map
+  the same route (`/modules/<name>/...` on 8120 does the same). Used by scripts, the MCP links (`:8114/mcp`), the Stripe webhook
+  forward (`:8105`), the mobile apps (fulfilment `:8108`, bookings `:8109`, identity `:8100`) and the seeder. They are **not** scraped by
+  Prometheus (that would count every request several times). In production there is one port and in-process calls.
+- **Go 8201-8210**: **not served by `make up`.** They exist only for a standalone service (`STACK=services`, or running
+  `go/services/<name>` yourself). Under the monolith use `http://localhost:8200` (flat modules) or `http://localhost:8200/modules/<name>`
+  (cart, search, carrier-gateway).
+- In Kubernetes the old Service names (`http://catalog`, `http://geo` ...) are kept and, after a module's cutover, select the deployable's
+  pods (`cutover.services`, `docs/runbooks/release-1-deploy.md`). A Go module mounted `prefixed` (cart, search, carrier-gateway) needs the
+  `/modules/<name>` path through that Service, which core's chart sets (`CART_URL`, `SEARCH_URL`, `CARRIER_GATEWAY_URL`).
+
+## Per-service catalogue (standalone layout; on release-1 each row is a module of core or afrotransact-go)
+
 | Service | Runtime | Local port | Owns | Store |
 |---|---|---|---|---|
 | identity | Spring Boot (Authorization Server) | 8100 | users, roles, permissions, seller/provider orgs, OAuth clients, MFA, passkeys | Postgres `identity` |

@@ -236,7 +236,7 @@ security: supply-chain-check ## Local security scans that work offline-first: pi
 coverage: ## Coverage summary + gate (SERVICE=<name> for one; Go modules are tested first with -short)
 	tools/quality/coverage_report.sh --run-go $(if $(SERVICE),--service $(SERVICE),)
 
-smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARRIER_GATEWAY_URL, default localhost:8209)
+smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARRIER_GATEWAY_URL, default localhost:8200/modules/carrier-gateway: afrotransact-go)
 	tools/smoke/carriers.sh
 
 SCENARIO ?= smoke

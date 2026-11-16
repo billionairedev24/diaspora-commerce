@@ -55,8 +55,24 @@ make local-test                      # bash tests of the start script (no Docker
 mobile apps (fulfilment :8108, bookings :8109, identity :8100) and the demo-data seeder keep working. The Go services' own ports
 8201-8209 are **not** served any more: gateway-bff, geo, media, notifications and promise are on **:8200**, cart, search and
 carrier-gateway under `http://localhost:8200/modules/<name>`. `make up` points core, the seeder and the driver app's media URL
-(`EXPO_PUBLIC_MEDIA_URL`) there for you (names you set yourself win). Not changed: the Prometheus scrape targets
-(`infra/observability/prometheus.yml`) still list the old Go ports; afrotransact-go's `/metrics` on :8200 carries every module.
+(`EXPO_PUBLIC_MEDIA_URL`) there for you (names you set yourself win). Monitoring follows the same shape: Prometheus scrapes exactly two
+application targets, core `:8120/actuator/prometheus` and afrotransact-go `:8200/metrics`; the old ports are never scraped, a module is
+a `module=` / `service=` label (see "Monitoring locally" below).
+
+### Monitoring locally (OBS=1, the default)
+
+`make up` starts Prometheus, Alertmanager, Grafana, Loki, Tempo, the OTel collector and the host log shipper beside the stack. Everything is
+shaped for the two deployables:
+
+| Signal | Where it comes from | How to read one module |
+|---|---|---|
+| Metrics | Prometheus scrapes core `host.docker.internal:8120/actuator/prometheus` (job `afrotransact-core`) and afrotransact-go `:8200/metrics` (job `afrotransact-go`), both with `honor_labels: true` | `{module="orders"}` or `{service="orders"}`; process series (`jvm_*`, `process_*`, `go_*`, `up`) carry the deployable |
+| Readiness | `at_module_up{module}` from both deployables (1 = UP) | dashboard `AfroTransact / Release 1 modules` |
+| Logs | the host log shipper tails `.local/logs/core.log` and `afrotransact-go.log`; Loki `service_name` is `afrotransact-core` and `afrotransact-go` | `{service_name="afrotransact-core"} \|= "com.afrotransact.orders"`, or `\| module="cart"` where the line states it (Go slog; core's JSON profiles) |
+| Traces | both deployables send OTLP to the collector; Tempo `service.name` is `afrotransact-core` / `afrotransact-go`, the module is a span attribute | Grafana trace -> logs link uses `service_name`, which now matches |
+
+Not scraped locally: the legacy ports (8100-8115, 8201-8210), Meilisearch (its `/metrics` needs the master key; production Alloy scrapes it).
+`STACK=services` (the old per-service processes) is not covered by `prometheus.yml`.
 
 What you may need to set: nothing for the defaults. `.local/secrets.env` (provider keys, `SEARCH_PROVIDER`), `PG_SUPERUSER` and
 `PGPASSWORD` only when your own Postgres on :5432 needs them, JDK 25 (`brew install openjdk@25`), PostGIS on your own Postgres.

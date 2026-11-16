@@ -27,7 +27,7 @@ Pick one with `-e SCENARIO=…` (default `smoke`):
 |---|---|---|
 | `BASE_URL` | `http://localhost:8200` | gateway BFF origin |
 | `TARGET` | `bff` | search.js only: `search` hits the search service at `SEARCH_URL` |
-| `SEARCH_URL` | `http://localhost:8201` | search service origin |
+| `SEARCH_URL` | `http://localhost:8200/modules/search` | search module origin (inside afrotransact-go; a standalone search service, `STACK=services`, is `http://localhost:8201`) |
 | `TOKEN` | — | customer bearer token (checkout needs one; search works anonymously) |
 | `TOKENS` | — | comma-separated tokens, one per VU — use for checkout at concurrency and for `flash` (one cart per customer) |
 | `SESSION` | — | alternatively a BFF session id, sent as the `at_session` cookie |

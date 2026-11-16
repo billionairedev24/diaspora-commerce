@@ -190,8 +190,9 @@ then make git say the same thing (the normal way above). A bad **image** (not a 
 
 | Where | What | Healthy |
 |---|---|---|
-| Dashboard `at-release-1-modules` | modules ready, RSS against the 2 GiB line, heap, one Hikari pool per module, pending threads, requests / 5xx / p95 by module | all modules UP; RSS under 1.8 GiB; no pool above 90 %; Sum of pool maximums 48 |
-| `ModuleNotReady` (page) | `at_module_up{module}` is 0 for 3 minutes | silent (series UNCONFIRMED until the Java side exports it) |
+| Dashboard `at-release-1-modules` | modules ready, RSS against the 2 GiB line, heap, one Hikari pool per module and its schema usage, connection budget against 500, Kafka lag per module, scheduled jobs per module, Temporal workflow outcomes, requests / 5xx / p95 by module | all modules UP; RSS under 1.8 GiB; no pool above 90 %; Sum of pool maximums 48; worst case far under 500 |
+| `ModuleNotReady` (page) | `at_module_up{module}` is 0 for 3 minutes (Java and Go modules) | silent. `ModuleReadinessMetricMissing` (ticket) fires if a deployable is up but the series does not arrive |
+| `ConnectionBudgetNearLimit` (ticket) | worst-case connections (Java pool maximums + 12 per Go pod + 20) above 400 of 500 | silent; the dashboard row "Connection budget vs the Layerbase limit" shows it |
 | `ServiceDown` (page) | now also `afrotransact-core`, `afrotransact-go` | silent |
 | `HighErrorRate`, `HighLatency`, `DatabasePoolSaturation`, `OutboxBacklogGrowing` | unchanged: they select on `service`, which stays the module's short name | silent |
 | `CoreMemoryNearCap`, `CorePoolBudgetExceeded`, `DeployableRolloutOverlap` (ticket) | RSS above 1.8 GiB for 10 min; pools above 48; two pods for 20 min | silent |
@@ -229,8 +230,33 @@ re-run the bootstrap.
 - Nothing ran on a cluster. `helm template`, `kubeconform`, `kustomize`, `actionlint` and `tofu validate` were **not run** (not installed in the authoring environment); the SQL, the shell scripts (shellcheck), the route-diff tests,
   the Argo CD emulation and the secrets rendering (with a stub `kubectl`) were.
 - `core.yml` needs the Java side's final environment names; it uses `CORE_DB_URL`, `CATALOG_DB_USER`, `TAX_RETURNS_DB_USER` as `application.yml` has them today and the per-module test databases `catalog` and `taxreturns` that `CoreRun` still uses.
-- `at_module_up` and the per-module Spring health groups are the Java side's to export; the rules and panels read them and stay silent until they exist.
+- `at_module_up` is now exported by both deployables (module-core `ModuleUpMeter`, afrotransact-go `host/metrics.go`) and unit-tested, but it was never scraped from a running stack: confirm it with `count by (job) (at_module_up)` after the first deploy (section Monitoring below).
 - The Go pool cap is in code; the chart's `pool` is a budget figure. A lower value goes in `pool_max_conns` of the module's URL.
 - Pre-existing, found on the way: `infra/ovh-vps/secrets.sh` splits a multi-line value on newlines (`SIGNING_KEY_PEM` is a PEM): `service_keys` builds `KEY=VALUE` lines and `mapfile` re-reads them per line, which
   yields junk keys for identity's Secret. Check the identity Secret's keys before the first apply (this also affects `afrotransact-core-secrets`, which is the union).
-- `generate_rules.py --check` reports `r2-backup.yaml` as a missing generated file on this branch too: run `make rules` once on main.
+- `generate_rules.py --check` used to report `r2-backup.yaml` as a missing generated file on this branch: the PrometheusRule CR is committed now (`make observability-check` is green).
+
+## 12. Monitoring in production (Release 1)
+
+Production monitoring is for the two deployables. What changed against the per-service layout, and what did not:
+
+| Topic | Release 1 | Where |
+|---|---|---|
+| Scrape | **Alloy** (`infra/k8s/platform/lean/alloy/config.alloy`) scrapes the two pods through the job `deployable_pods`: one target each, `honor_labels = true` (the app's `service` and `module` win), 60 s, `sample_limit = 40000`; the old per-pod job drops them. Local Prometheus does the same (`infra/observability/prometheus.yml`) | Alloy -> Grafana Cloud hosted Prometheus (`remote_write`, `env` and `cluster` external labels) |
+| Labels | HTTP, Hikari pool, Kafka client, business meters: `module` = `service` = the module's short name (`orders`, `cart`). Process series (`jvm_*`, `process_*`, `go_*`, `up`): `service` = `job` = `afrotransact-core` / `afrotransact-go` | `module-core` `ModuleMeterFilter`; Go `host/metrics.go` |
+| Readiness | `at_module_up{module,service}` 1/0, both deployables; alert `ModuleNotReady` (page, 3 min) | allowlisted in Alloy as `at_module_(up|ready)` |
+| Allowlist additions | `tasks_scheduled_execution_seconds_(count|sum|max)` (scheduled jobs per module, from the owning class's package) | Alloy `prometheus.relabel "guard"` |
+| Alert routing | unchanged: `infra/observability/grafana-cloud/alertmanager.yaml` groups by `alertname, env, service`; module alerts carry `service` = module, so two modules down page separately. `page` severity goes to the paging contact point, everything else to tickets | Grafana Cloud contact points |
+| SLO rules | valid with the merged series: they aggregate `by (env)` over meters whose names are unchanged (`checkout_attempts_total`, `payments_webhook_lag_seconds`, `payouts_completed_total`, `notifications_delivery_duration_seconds`) or select `service="search"` (the Go search module keeps its `service` label). `make observability-check` verifies every `service=` value in rules and dashboards is a real module | `infra/observability/rules/slo-*.yaml` |
+| Traces | OTLP from both deployables to the collector gateway, then Grafana Cloud; `service.name` is `afrotransact-core` / `afrotransact-go`, the module is a span attribute | `opentelemetry-collector-gateway.yaml` |
+| Logs | Alloy tails pod logs, labels only `namespace`, `app` (= the deployable), `pod`, `env`; the module is a JSON field: `{app="afrotransact-core"} \| json \| module="orders"` | `config.alloy` `loki.process "pods"` |
+| Dashboards | `at-release-1-modules` (new panels: schema pools, connection budget vs 500, Kafka per module, scheduled jobs, Temporal), `at-jvm` (Hikari/producer/outbox filter by `module`), `at-platform-overview` (services = modules; fleet panels use the deployables) | `make dashboards` (generator `scripts/generate_dashboards.py`) |
+| New alerts | `ModuleReadinessMetricMissing` (ticket), `ConnectionBudgetNearLimit` (ticket, above 400 of 500) | `infra/observability/rules/release-1.yaml` |
+
+**Gaps (nothing below could be run without a stack):**
+
+- Scheduler **pool** occupancy per module (queue length, active threads of `sched-<module>-n`) is not exported: the per-module `ThreadPoolTaskScheduler`s of `ModuleRoutingTaskScheduler` are not registered as executor meters. The dashboard shows job runs and duration per module instead. Closing the gap is a few lines (`ExecutorServiceMetrics` per pool, tag `module`); it was left out on purpose (the only code change allowed was `at_module_up`).
+- **Go database pools** (pgx) export nothing; the connection budget uses the capped figure (4 modules x 3 per pod). Temporal worker (SDK) metrics are not exported by the Java side (no `temporal-micrometer`); the board shows the Temporal server's workflow counters.
+- `tasks_scheduled_execution_seconds_*` assumes Spring's scheduled-task observation is on in core (it is on whenever an `ObservationRegistry` bean exists); unverified.
+- Core's raw exposition (14 modules, histograms) may be larger than the 40,000-sample limit (a scrape above it fails and `up` becomes 0): check `scrape_samples_post_metric_relabeling{job="afrotransact-core"}` after the first deploy. `ScrapeTargetCardinalityHigh` now warns at 30,000 for the two deployables (3,000 for every other target).
+- Postgres server metrics (`pg_stat_activity_count`) exist locally (postgres-exporter) but not on Layerbase; production connection counts are the sum of the Hikari series plus the static terms.

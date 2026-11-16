@@ -103,7 +103,7 @@ Local ports come from `infra/local/PORTS.md`.
 | customer app | `EXPO_PUBLIC_BOOKINGS_URL` | `http://<dev host>:8109` | `https://<api host>/bookings` | bookings |
 | driver app | `EXPO_PUBLIC_BFF_URL` | `http://<dev host>:8200` | `https://<api host>/bff` | in-app sign-in |
 | driver app | `EXPO_PUBLIC_FULFILMENT_URL` | `http://<dev host>:8108` | `https://<api host>/fulfilment` | driver API |
-| driver app | `EXPO_PUBLIC_MEDIA_URL` | `http://<dev host>:8207` | `https://<api host>/media` | proof photos, signatures |
+| driver app | `EXPO_PUBLIC_MEDIA_URL` | `http://<dev host>:8200` (media module in afrotransact-go) | `https://<api host>/media` | proof photos, signatures |
 | driver app | `EXPO_PUBLIC_OIDC_ISSUER` | `http://<dev host>:8100` | `https://<auth host>` | sign-in |
 | driver app | `EXPO_PUBLIC_IDENTITY_URL` | `http://<dev host>:8100` | `https://<api host>/identity` | push devices |
 | both apps | `EXPO_PUBLIC_APP_ENV` | `local` | `dev` / `uat` / `prod` | app name, bundle id suffix, mocks |

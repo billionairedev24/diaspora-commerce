@@ -130,15 +130,19 @@ kubectl -n observability port-forward deploy/alloy 12345 &   # http://localhost:
 Then in Grafana (https://afrotransact.grafana.net/) **Explore**:
 
 1. Data source: the hosted Prometheus one (named `grafanacloud-<stack>-prom`; UNVERIFIED). Run `count by (job) (up{env="prod"})`. Expected within
-   2-3 minutes: one row per Java/Go service name (`identity`, `catalog`, ... 21 of them), plus `temporal`, `cloudflared`, `kafka-exporter`, `valkey`,
-   `meilisearch`, `kube-state-metrics`, `kubelet`, `cadvisor`, `alloy`, all with value 1.
-2. `http_server_requests_seconds_count{env="prod", service="orders"}` returns rows; `jvm_memory_used_bytes{service="catalog"}` too.
-3. Data source: hosted Loki. `{env="prod", app="orders"}` shows JSON lines. Check the labels offered are only `app`, `namespace`, `pod`, `env`.
+   2-3 minutes (Release 1, ADR 0011): **`afrotransact-core` and `afrotransact-go`** (one row each, not one per service; during a batch cutover the services not
+   yet moved still show their own job, e.g. `identity`), plus `temporal`, `cloudflared`, `kafka-exporter`, `valkey`, `meilisearch`, `kube-state-metrics`, `kubelet`,
+   `cadvisor`, `alloy`, all with value 1.
+2. A module is a label: `http_server_requests_seconds_count{env="prod", service="orders"}` (also `module="orders"`) returns rows with `job="afrotransact-core"`;
+   `at_module_up{env="prod"}` returns one row per mounted module (Java and Go), all 1; `jvm_memory_used_bytes{service="afrotransact-core"}` is the process
+   (`service="catalog"` has no `jvm_*` series any more: one JVM). `hikaricp_connections_max{pool="orders"}` is the module's pool.
+3. Data source: hosted Loki. `{env="prod", app="afrotransact-core"} | json | module="orders"` shows one module's request lines (the `module` field is set on HTTP requests; Kafka and
+   scheduler threads do not set it); Go: `{env="prod", app="afrotransact-go"}`. Check the labels offered are only `app`, `namespace`, `pod`, `env`.
 4. **Redaction check:** search `{env="prod"} |~ "@[a-z0-9-]+\\.[a-z]{2,}"` (any e-mail shape) and `{env="prod"} |~ "(?i)bearer [a-z0-9]"`: expect nothing,
    except `[redacted-...]` markers. Log in once on the live site and repeat.
 5. **Probe noise check:** `{env="prod"} |= "/actuator/health"` returns nothing.
 
-If a series is missing, the `up` row for that job says why (`up == 0`: network policy, wrong port annotation, the 4000-sample guard).
+If a series is missing, the `up` row for that job says why (`up == 0`: network policy, wrong port annotation, the 4000-sample guard, 40000 for the two deployables).
 Common causes are in section 11.
 
 ## 6. Load the alert rules and dashboards
@@ -256,6 +260,8 @@ silent until the series exists.
 | Certificate / tunnel down | `CloudflareTunnelDown` (page) | `cloudflared_tunnel_ha_connections` | standard cloudflared name. There is no certificate in the cluster (Cloudflare terminates TLS): use the external uptime check of section 8 for the edge certificate |
 | Backup failed / not run in 26 h | `BackupJobFailed` (page), `BackupCronJobSuspended` (ticket) in `launch.yaml`; `BackupStale` (page, 26 h), `BackupSizeHigh`, `BackupBucketSizeHigh` in `backup.yaml` | `kube_cronjob_status_last_{schedule,successful}_time`, `kube_cronjob_created` (our kube-state-metrics); `afrotransact_backup_*` (needs a Pushgateway, none runs: silent; the Loki variant `loki-rules/backup.yaml` reads the `backup_metrics` log line instead) | standard kube-state-metrics names. Keep the dead-man's-switch `HEALTHCHECK_URL` too: it also works when the whole cluster is down |
 | `catalog_live_without_tax_decision` | `CatalogLiveWithoutTaxDecision` (page), `CatalogTaxGateClosedListings`, `CatalogTaxGateMetricMissing` (`catalog-tax-gate.yaml`) | `catalog_live_without_tax_decision`, `catalog_tax_gate_closed_total` | confirmed (`MicrometerTaxGateMetrics` in catalog); the Alloy allowlist passes `catalog_.*` |
+| Module not ready, readiness metric missing | `ModuleNotReady` (page), `ModuleReadinessMetricMissing` (ticket) in `release-1.yaml` | `at_module_up{module}` from module-core (Java) and afrotransact-go | exported and unit-tested on both sides, **not yet seen on a running stack**; the Alloy allowlist keeps `at_module_(up|ready)`; `ModuleReadinessMetricMissing` fires when a deployable is up and the series is absent |
+| Connection budget | `ConnectionBudgetNearLimit` (ticket), `CorePoolBudgetExceeded` (ticket) in `release-1.yaml` | `hikaricp_connections_max` (measured, Java) + 12 per Go pod (static: pgx pools are not exported) + 20 | Java part confirmed; the Go and Temporal terms are the chart budget, not measured |
 | The shipper itself | `AlloyNotReporting` (page), `AlloyRemoteWriteFailing` (ticket), `ScrapeTargetCardinalityHigh` (ticket) | `up{service="alloy"}`, `prometheus_remote_storage_*`, `loki_write_dropped_*`, `scrape_samples_post_metric_relabeling` | `AlloyNotReporting` is the dead-man's switch: if Alloy or the node dies, every other alert goes blind |
 
 Runbook links on the alerts point at this page. Business SLO alerts (`slo-*.yaml`) are not loaded until `checkout_attempts_total`,
