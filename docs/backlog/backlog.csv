@@ -2120,3 +2120,16 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - merge_backlog.py merges rows, renumbers into S600-S699, reports conflicts (13 tests)
 - helm lint/template/kubeconform, kustomize, actionlint run offline and green
 - NOT verified: the workflows have not run on GitHub; the owner settings in release-1-deploy.md 10b are not applied; tofu not run","E37","","High","8","release-1 ci parity argocd","platform","In Progress"
+"S613","Story","Release 1: bounded wait, bulkhead and the end-user actor for every in-process module call","BoundedModuleCalls (module-core) puts every in-process call on a virtual thread of the callee module's lane with a per-edge timeout (default: each HTTP adapter's read timeout, 5 s, 10 s with ai-gateway) and a bulkhead per callee module (503 <callee>.unavailable); EndUserActor (module-contract) is the sealed, Authentication-only actor for calls made for a signed-in person, entered through ModuleEntry.runAsUser with a delegation scope. architecture 12.10, runbook section 7.","- Timeout fires, interrupts the callee and maps to the HTTP read-timeout failure; a timed-out callee may still commit (documented)
+- Bulkhead rejects at once with 503 and leaves other modules alone; permits return only when the callee thread ends
+- MDC and the observation (trace) reach the callee thread; the caller's transaction and SecurityContext never do
+- Metrics at_module_call_seconds{caller,callee,outcome}, timeouts, rejections, active are exposed and named in the architecture doc
+- EndUserActor cannot be forged (sealed, Authentication only), refuses a SERVICE token, mirrors X-Acting-As: CUSTOMER and JwtActorResolver
+- Every production call site names its callee (InProcessCallSitesTest)
+- NOT verified: Docker ITs, a signed JWT end to end, a running core with the new APIs, trace export to a collector, load","E37","","High","8","release-1 java security","platform","In Review"
+"S614","Story","Release 1: remaining Java-to-Java HTTP edges in-process (identity, trust-ops, delivery-runs done; ai-gateway readers and mcp-server tools open)","Ten more edges converted: orders -> identity (address book for the signed-in customer, staff directory), trust-ops -> catalog (2), orders, ai-gateway, orders -> delivery-runs (3) and fulfilment -> delivery-runs (in-process while delivery-runs is enabled). Left: ai-gateway's 5 readers (they act for the shopper from Lola's worker thread) and mcp-server's 8 tool clients (next agent). at.core.legacy-ports.enabled (default true only in local until the mcp-server conversion).","- orders -> identity address book denies another customer, a missing delegation scope and a service token; parity with HTTP
+- trust-ops, orders and fulfilment edges keep the HTTP adapters' failure mapping (16 failure classes, 37 operations)
+- http-edges.txt and ModuleEdgeGuardTest list only what stays HTTP
+- at.core.legacy-ports.enabled gates the old ports (unit test); runbook 7.1 says they are compatibility only
+- OPEN: ai-gateway HttpCatalogReader, HttpOfferReader, HttpOrderTracker, HttpAccountReader, HttpServiceDirectory and mcp-server's 8 Http*Api clients
+- NOT verified: Docker ITs, Kafka, Temporal server, signed JWT, the new provider APIs on a booted core","E37","","High","13","release-1 java","platform","In Progress"
