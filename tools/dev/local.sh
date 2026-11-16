@@ -9,6 +9,7 @@
 #   tools/dev/local.sh links                   # print every link again (apps, docs portal, MCP, API docs)
 #   tools/dev/local.sh logs delivery-runs      # follow one log (web apps: web-storefront, web-staff-console, …)
 #   tools/dev/local.sh restart orders          # rebuild + restart one service (re-reads .local/secrets.env)
+#   tools/dev/local.sh web                     # restart ONLY the three web apps (rebuilds if web/ changed; REBUILD=1 forces, DEV=1 dev servers)
 #   tools/dev/local.sh mobile                  # only the Expo apps (customer :8081, driver :8082)
 #   MOBILE_HOST=lan tools/dev/local.sh up      # LAN mode: the whole stack on this Mac's Wi-Fi address, for a phone
 #   MOBILE_HOST=192.168.1.50 tools/dev/local.sh lan-env   # print the addresses LAN mode would use (dry run)
@@ -1328,6 +1329,17 @@ case "${1:-}" in
         "sign-in would fail. Switch everything with: make up MOBILE_HOST=${MOBILE_HOST:-localhost}" >&2
     fi
     mobile_up; links ;;
+  web) shift
+    load_secrets; mkdir -p "$LOGS" "$PIDS" "$STATE"
+    # Keep the address the stack runs on (same reason as `restart`): LAN mode must stay LAN mode.
+    if [[ -z "${MOBILE_HOST:-}" && -f "$PIDS/identity.env" ]]; then
+      stack_host=$(cat "$PIDS/identity.env" 2>/dev/null || true)
+      if [[ -n "$stack_host" && "$stack_host" != localhost ]]; then MOBILE_HOST="$stack_host"; export MOBILE_HOST; fi
+    fi
+    platform_env
+    # web_up stops a running app before it rebuilds and starts it again; apps named as arguments narrow the set.
+    if [[ $# -gt 0 ]]; then WEB_APPS="$*"; fi
+    web_up ;;
   docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift
