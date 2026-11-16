@@ -1,0 +1,13 @@
+# Classification read by tools/release/upstreams.py. The code (application*.yml, Go config structs) is scanned for every URL setting whose default points at a
+# platform service; the two maps below say which of those names are NOT rendered from the chart's values `upstreams`.
+version: 1
+
+# Names the scan matches (their local default is a platform port) that are not a URL of a module's HTTP API. Name: reason.
+not_upstream:
+  AUTH_ISSUER_URL: "the PUBLIC https issuer (identity's host, auth.<domain>), derived by the library chart from global.authHost for every container; JWT validation and the McpExposureGuard need https"
+  MCP_PUBLIC_URL: "mcp-server's own resource URL, not an upstream: core's template renders core's in-cluster Service URL (McpExposureGuard accepts it; checked by upstreams.py)"
+
+# Names every consumer of which reaches its module IN-PROCESS (no HTTP edge left), so the deployable chart no longer renders them. The edges agent moves a name
+# here (and deletes it from values `upstreams` in java/apps/core/deploy/helm/values.yaml) when the last consumer is converted. Name: consumers and reason.
+# Empty today: the Java -> Java edges are still HTTP, rendered as core's loopback.
+converted: {}

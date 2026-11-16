@@ -167,13 +167,15 @@ launch-set-check: ## Argo CD: list the Applications each env produces (release-1
 db-release-1: ## Local: create core / go with one schema + role per module on the running compose Postgres (idempotent; a fresh volume does it by itself), then verify
 	$(COMPOSE) exec -T -e PASSWORD_MODE=name -e ROLE_SUFFIX= -e CONN_LIMITS=false -e EXTRA_CORE_MODULES=retail:3,delivery_runs:3 -e PGUSER=postgres -e PGPASSWORD=postgres postgres bash /release-1/release-1-bootstrap.sh
 
-release-1-check: ## Release 1 delivery files, offline: workflows generated, launch set vs cutover, pools vs SQL, route-diff tests, chart env sync, PARITY of the monolith with the per-service world, shellcheck, action pins
+release-1-check: ## Release 1 delivery files, offline: workflows generated, launch set vs cutover, pools vs SQL, route-diff tests, chart env sync, UPSTREAM wiring (no old ports or per-service hosts in uat/prod, edge exposure), PARITY of the monolith with the per-service world, shellcheck, action pins
 	python3 tools/ci/gen_workflows.py --check
 	python3 tools/ci/check_action_pins.py
 	python3 infra/argocd/scripts/check_launch_set.py
 	python3 tools/release/check_delivery.py
 	python3 tools/release/test_route_diff.py
 	python3 tools/release/chart_env_sync.py
+	python3 tools/release/test_upstreams.py
+	python3 tools/release/upstreams.py
 	python3 tools/release/test_parity.py
 	python3 tools/release/test_capacity.py
 	python3 tools/release/check_capacity.py

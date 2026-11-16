@@ -3,6 +3,7 @@
 #   1. a module in cutover.services is switched on in the deployable (MODULE_<NAME>_ENABLED=true), others stay false;
 #   2. a service in cutover.services is scaled to 0 and its Service (same name) selects the deployable's pods, and without it nothing changes;
 #   3. the connection budget guard fails the render when the pools add up to more than dbBudget.maxPerPod;
+#   3b. upstreams follow cutover.services, no old ports (and tools/release/upstreams.py --helm over uat and prod, three states);
 #   4. the deployables render for every environment with the platform values.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -25,16 +26,28 @@ out="$("$helm" template go "$go" -f "$go/values-prod.yaml" --set-json 'cutover.s
 grep -A1 'name: AT_MODULES_CART_ENABLED' <<<"$out" | grep -q 'value: "true"' || fail "cart is not enabled in the Go deployable by cutover.services"
 grep -A1 'name: AT_MODULES_CARRIER_GATEWAY_ENABLED' <<<"$out" | grep -q 'value: "true"' || fail "carrier-gateway env name (CARRIER_GATEWAY) is wrong"
 grep -q 'replicas: 1' <<<"$out" || fail "a deployable with a module on must run 1 replica"
-# 1c. Go modules mounted `prefixed` (cart, search, carrier-gateway) answer only under /modules/<name>/: once moved into afrotransact-go, core's
-#     callers get the prefixed deployable URL; before the move, and for flat-mounted modules (geo), nothing is set.
-out="$("$helm" template core "$core" -f "$core/values-prod.yaml" --set-json 'cutover.services={"catalog":"afrotransact-core","cart":"afrotransact-go","carrier-gateway":"afrotransact-go"}')"
-grep -A1 'name: CART_URL' <<<"$out" | grep -q 'value: "http://afrotransact-go/modules/cart"' || fail "CART_URL is not the prefixed afrotransact-go URL after cart moved"
-grep -A1 'name: CARRIER_GATEWAY_URL' <<<"$out" | grep -q 'value: "http://afrotransact-go/modules/carrier-gateway"' || fail "CARRIER_GATEWAY_URL is not the prefixed URL"
-grep -q 'name: SEARCH_URL' <<<"$out" && fail "SEARCH_URL must not be set while search has not moved"
+# 1c. upstreams (values `upstreams`, library _upstreams.tpl; docs/runbooks/release-1-deploy.md "Upstream wiring"): a URL follows cutover.services.
+#     Go module moved to afrotransact-go: its Service (flat: geo) or /modules/<m> (prefixed: cart); Java module in core: loopback on core itself;
+#     a module that has not moved: its own per-service Service. Never an old port.
+cut='{"catalog":"afrotransact-core","cart":"afrotransact-go","geo":"afrotransact-go"}'
+out="$("$helm" template core "$core" -n afrotransact-prod -f "$core/values-prod.yaml" --set-json "cutover.services=$cut")"
+want() { grep -A1 "name: $2\$" <<<"$1" | grep -q "value: \"$3\"" || fail "$2 is not $3"; }
+want "$out" CART_URL "http://afrotransact-go.afrotransact-prod.svc/modules/cart"
+want "$out" GEO_URL "http://afrotransact-go.afrotransact-prod.svc"
+want "$out" CATALOG_URL "http://localhost:8080/modules/catalog"
+want "$out" INVENTORY_URL "http://inventory"
+want "$out" SEARCH_URL "http://search"
+grep -E 'value: "http://[^"]*:(81|82)[0-9][0-9]' <<<"$out" && fail "an old per-service port is rendered"
 grep -q 'name: MCP_PUBLIC_URL' <<<"$out" && fail "MCP_PUBLIC_URL must not be set while mcp-server is not in core"
 out2="$("$helm" template core "$core" -n afrotransact-prod -f "$core/values-prod.yaml" --set-json 'cutover.services={"mcp-server":"afrotransact-core"}')"
-grep -A1 'name: MCP_PUBLIC_URL' <<<"$out2" | grep -q 'value: "http://mcp-server.afrotransact-prod.svc.cluster.local"' || fail "core must set MCP_PUBLIC_URL to the in-cluster mcp-server Service when the module is on (McpExposureGuard)"
-grep -q 'name: GEO_URL' <<<"$out" && fail "GEO_URL must stay the old Service name (geo is mounted flat)"
+want "$out2" MCP_PUBLIC_URL "http://afrotransact-core.afrotransact-prod.svc.cluster.local/modules/mcp-server"
+outgo="$("$helm" template go "$go" -n afrotransact-prod -f "$go/values-prod.yaml" --set-json 'cutover.services={"payments":"afrotransact-core","identity":"afrotransact-core","gateway-bff":"afrotransact-go","geo":"afrotransact-go"}')"
+want "$outgo" PAYMENTS_URL "http://afrotransact-core.afrotransact-prod.svc/modules/payments"
+want "$outgo" IDENTITY_URL "http://afrotransact-core.afrotransact-prod.svc/modules/identity"
+want "$outgo" ORDERS_URL "http://orders"
+grep -q 'name: GEO_URL' <<<"$outgo" && fail "GEO_URL must not be rendered while geo runs in the same binary (in-process)"
+# 1d. the same rules over every environment and cutover state, against the scanned configuration and the edge routes
+python3 tools/release/upstreams.py --helm || fail "tools/release/upstreams.py"
 for c in "$core" "$go"; do
   "$helm" template idle "$c" -f "$c/values-prod.yaml" | grep -q 'replicas: 0' || fail "$c with no module on must be scaled to 0"
 done
