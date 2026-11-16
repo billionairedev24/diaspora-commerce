@@ -82,6 +82,24 @@ def check_release1(env, apps, pv, plan):
     return bad, lines, cut
 
 
+def generator_revisions(node):
+    """Every git generator `revision` value inside an ApplicationSet (matrix generators nest)."""
+    found = []
+    if isinstance(node, dict):
+        git = node.get("git")
+        if isinstance(git, dict) and "revision" in git:
+            found.append(str(git["revision"]))
+        for v in node.values():
+            found += generator_revisions(v)
+    elif isinstance(node, list):
+        for v in node:
+            found += generator_revisions(v)
+    return found
+
+
+REVISION_FAILS = []
+
+
 def apps_for(env):
     built, err = ra.kustomize_build(ra.ROOT / "infra/argocd/envs" / env)
     if built is None:
@@ -89,6 +107,11 @@ def apps_for(env):
     apps, pv = [], None
     for d in (x for x in yaml.safe_load_all(built) if x):
         if d.get("kind") == "ApplicationSet":
+            if RELEASE1.exists():
+                # release-1 is the production line: every generator must read it, or the Applications (and platform-values.yaml) come from main
+                bad = sorted({r for r in generator_revisions(d["spec"]) if r != "release-1"})
+                if bad:
+                    REVISION_FAILS.append(f"  FAIL [{env}] ApplicationSet {d['metadata']['name']} has a git generator on revision {bad}, expected release-1 (infra/argocd/release-branch)")
             generated, pv = ra.generate(d, env)
             apps += generated
     return apps, pv
@@ -179,6 +202,9 @@ def main():
                 if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(digest)):
                     bad += 1
                     print(f"  FAIL [{env}] {svc}: image.digest is {digest!r}, expected sha256:<64 hex> (the promote workflow pins it after verifying the signature; a tag alone can move)")
+    for line in REVISION_FAILS:
+        bad += 1
+        print(line)
     print("launch-set check: " + ("FAILED" if bad else "OK"))
     return 1 if bad else 0
 
