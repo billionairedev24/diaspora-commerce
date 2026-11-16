@@ -304,8 +304,9 @@ func (h *handlersImpl) home(w http.ResponseWriter, r *http.Request) {
 
 // recentlyViewed resolves the ATINs the browser remembers (comma separated, most recent first) into product cards.
 func (h *handlersImpl) recentlyViewed(w http.ResponseWriter, r *http.Request) {
-	items, err := h.s.Site.RecentlyViewed(r.Context(), strings.Split(r.URL.Query().Get("atins"), ","))
-	h.reply(w, r, http.StatusOK, map[string]any{"items": items}, err)
+	h.detectLocation(r)
+	items, fill, err := h.s.Site.RecentlyViewedRail(r.Context(), callerFrom(r.Context()), strings.Split(r.URL.Query().Get("atins"), ","))
+	h.reply(w, r, http.StatusOK, domain.RecentlyViewed{Items: items, Fill: fill}, err)
 }
 
 // adEvent counts an impression or click on a paid home module. Fire and forget for the browser: 204, no identity kept.

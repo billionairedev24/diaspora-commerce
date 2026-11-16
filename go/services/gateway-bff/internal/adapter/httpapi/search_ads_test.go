@@ -52,10 +52,11 @@ func TestSearchAdsAndClicks(t *testing.T) {
 		}
 	}
 
-	// Home rails are machine-made queries: track=false, no ads.
+	// Home rails are machine-made queries: track=false. (Only the sponsored tile of a short rail's fill asks for ads,
+	// through the same auction; it is not a rail query and never records a search.)
 	mustStatus(t, b.do("GET", "/v1/home", nil), 200)
-	if q := u.LastSearchQuery(); q.Get("track") != "false" || q.Has("ads") {
-		t.Fatalf("rails should send track=false without ads: %v", q)
+	if q := u.LastSearchQuery(); q.Get("track") != "false" {
+		t.Fatalf("rails should send track=false: %v", q)
 	}
 
 	// Clicks: organic and sponsored, relayed with the market; validation is local.

@@ -65,6 +65,9 @@ type Rail struct {
 	Title string           `json:"title"`
 	Href  string           `json:"href"`
 	Items []ProductSummary `json:"items"`
+	// Fill is the one tile that fills the columns a short rail leaves empty (absent when the rail is full, or nothing
+	// eligible exists: then the storefront narrows the rail instead of leaving a hollow area).
+	Fill *RailFill `json:"fill,omitempty"`
 }
 
 // Home is the home page.
@@ -144,6 +147,8 @@ type Placements struct {
 	// Body lists every body placement (rails, banners, sponsored modules, blocks) with its priority, in content's
 	// order. When empty the page body is built from Banners and Rails as before.
 	Body []BodyPlacement `json:"-"`
+	// RailFill are the rail_fill placements (tiles that fill a short rail), already scoped to the market, ZIP and schedule.
+	RailFill []BodyPlacement `json:"-"`
 }
 
 // BodyPlacement is one placement of the page body as content serves it. Payload is the slot's JSON.

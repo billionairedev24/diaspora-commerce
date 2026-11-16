@@ -405,6 +405,7 @@ func (s *siteServiceImpl) composeV2(ctx context.Context, req HomeRequest, st dom
 	ordered := domain.OrderModules(order, c.vis.seed, c.vis.deterministic)
 
 	blocks, decisions := c.assemble(ctx, ordered, autos, pinned, decisions)
+	s.fillRails(ctx, blocks, pl, sharedScope, c.used, c.vis.deterministic || req.Preview, now)
 	home := domain.Home{
 		Version: 2, GeneratedAt: now.UTC().Format(time.RFC3339), Locale: c.locale, Variant: variantOrControl(req.Variant),
 		Announcements: orEmpty(pl.Announcements), Hero: heroSlides(pl.Hero, now), Tiles: orEmpty(tiles), Blocks: orEmpty(blocks),
