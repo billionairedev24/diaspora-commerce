@@ -183,8 +183,8 @@ class OrderViews {
 
     /**
      * What this staff member may set now. By mode: AfroTransact-delivered shipments offer the delivery steps (to holders
-     * of delivery:manage; everything else there is cancelling), seller-shipped shipments only cancelling (the seller
-     * moves them, an override is separate), pickup shipments ready, collected and not collected.
+     * of delivery:manage; everything else there is cancelling), legacy seller-shipped history only cancelling (an override is
+     * separate), pickup shipments ready, collected and not collected.
      */
     private Set<ShipmentStatus> staffNext(Order order, Shipment s) {
         Set<ShipmentStatus> out = EnumSet.noneOf(ShipmentStatus.class);
@@ -203,13 +203,13 @@ class OrderViews {
             if (access.holds(OrdersPermissions.DELIVERY_MANAGE)) {
                 out.addAll(policy.nextFor(s, ActorKind.DELIVERY_STAFF));
             }
-        } else if (s.sellerResponsible()) {
+        } else if (s.legacySellerShipped()) {
             out.retainAll(EnumSet.of(ShipmentStatus.CANCELLED));
         }
         return out;
     }
 
-    /** What an override may set (staff holding orders:override-shipment, on a seller-shipped shipment). */
+    /** What an override may set (staff holding orders:override-shipment, on a Fulfilled by AfroTransact or legacy seller-shipped shipment). */
     private List<String> overrideActions(Shipment s, Viewer viewer) {
         if (viewer.kind() != Viewer.Kind.STAFF || !access.humanStaff()
                 || !access.holds(OrdersPermissions.OVERRIDE_SHIPMENT)) {

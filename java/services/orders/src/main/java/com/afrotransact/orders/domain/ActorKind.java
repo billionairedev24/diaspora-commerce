@@ -25,8 +25,8 @@ public enum ActorKind {
      */
     PICKUP_POINT,
     /**
-     * AfroTransact staff holding {@code orders:override-shipment} correcting a shipment the seller ships themselves
-     * (SELLER_SHIPS). Forward only, a reason is always required and the change is audited with who and why.
+     * AfroTransact staff holding {@code orders:override-shipment} correcting a shipment Fulfilled by AfroTransact or an
+     * old seller-shipped one (legacy history). Forward only, a reason is always required and the change is audited with who and why.
      */
     ADMIN_OVERRIDE,
     /** The checkout saga itself. */

@@ -133,13 +133,17 @@ class ShippingFeeContractTest {
                 }
                 String what = s.path("name").asString() + " / items " + items;
                 long delivery = c.path("afrotransactDeliveryMinor").asLong();
+                // Fulfilled by AfroTransact (kind AFROTRANSACT): the flat fee, paid by the customer; no selection means
+                // delivery. A plain seller package (kind SELLER) has no delivery any more: only pickup, at no charge.
+                assertThat(charged("AFROTRANSACT", items, "afrotransact_delivery")).as(what).isEqualTo(delivery);
+                assertThat(charged("AFROTRANSACT", items, null)).as(what + " default").isEqualTo(delivery);
                 for (String kind : List.of("AFROTRANSACT", "SELLER")) {
-                    // Delivery by AfroTransact (kind AFROTRANSACT) and the seller's package delivered by AfroTransact
-                    // (SELLER, carrier switch off) cost the same flat fee; no selection means delivery.
-                    assertThat(charged(kind, items, "afrotransact_delivery")).as(what + " " + kind).isEqualTo(delivery);
-                    assertThat(charged(kind, items, null)).as(what + " " + kind + " default").isEqualTo(delivery);
                     assertThat(charged(kind, items, "pickup")).as(what + " " + kind + " pickup")
                             .isEqualTo(c.path("pickupMinor").asLong());
+                }
+                for (String option : new String[] {"afrotransact_delivery", null}) {
+                    assertThatThrownBy(() -> charged("SELLER", items, option)).as(what + " seller delivery " + option)
+                            .isInstanceOf(ApplicationFailure.class).hasMessageContaining("does not offer delivery");
                 }
             }
         }
@@ -177,11 +181,20 @@ class ShippingFeeContractTest {
     }
 
     @Test
-    void theCarrierOptionExistsOnlyBehindTheStaffSwitch() {
+    void theCarrierOptionIsRetiredEvenWhileTheOldStaffSwitchIsOn() {
         settings.set(ShippingSettingsFixtures.of(599, null, true));
-        assertThat(charged("SELLER", 2000, "carrier")).as("carrier fee while the switch is on").isEqualTo(599);
-        assertThat(charged("SELLER", 3500, "carrier")).isZero();
-        assertThat(charged("SELLER", 2000, "afrotransact_delivery")).isEqualTo(599);
+        assertThatThrownBy(() -> charged("SELLER", 2000, "carrier")).isInstanceOf(ApplicationFailure.class)
+                .hasMessageContaining("delivery options have changed");
+        assertThatThrownBy(() -> charged("SELLER", 2000, null)).hasMessageContaining("does not offer delivery");
+        assertThat(charged("AFROTRANSACT", 2000, null)).isEqualTo(599);
+    }
+
+    @Test
+    void aSellerWithNeitherPickupNorFulfilledByAfroTransactCannotBeBought() {
+        settings.set(ShippingSettingsFixtures.of(599, null, false));
+        CheckoutInput in = input(List.of(item("ATA", "org-a", "SELLER", "SELLER", 2000, 1)), List.of());
+        assertThatThrownBy(() -> activities.prepare(in)).isInstanceOf(ApplicationFailure.class)
+                .extracting(t -> ((ApplicationFailure) t).getType()).isEqualTo(CheckoutCodes.FULFILMENT_UNAVAILABLE);
     }
 
     @Test
@@ -192,7 +205,11 @@ class ShippingFeeContractTest {
                 "ATB", new PreorderEligibility.Line("ATB", true, "win-1", "LBK-7", "Lubbock Pre-order #7",
                         PreorderStage.OPEN, deliversOn, NOW.plus(Duration.ofDays(3)), true, true, 899, 0, "USD",
                         Set.of("CARD"), "pp-1", null, null)));
-        CheckoutInput in = input(List.of(item("ATA", "org-a", "SELLER", "SELLER", 2000, 1),
+        PickupLocations.PickupLocation store = new PickupLocations.PickupLocation("loc-1", "org-a", true, 30.0, -97.0);
+        when(localDelivery.pickupFor(any())).thenReturn(store);
+        when(localDelivery.quote(anyString(), anyString(), any(), any())).thenReturn(new LocalDelivery("loc-1", 30.0,
+                -97.0, 8.0, 11.0, "ROAD_OSRM", 4200, 0, 3, 20.0));
+        CheckoutInput in = input(List.of(item("ATA", "org-a", "SELLER", LocalDeliveryQuotes.FULFILMENT, 2000, 1),
                 item("ATB", "org-b", "SELLER", "SELLER", 1500, 2)), List.of());
 
         CheckoutPlan plan = activities.prepare(in);

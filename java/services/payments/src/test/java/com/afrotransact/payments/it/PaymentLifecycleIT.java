@@ -77,7 +77,8 @@ class PaymentLifecycleIT extends PaymentsIntegrationTest {
         // AfroTransact Retail: no FBA fee, keeps its shipping, net (1000 + 300 − 49 fee share) is 4400 revenue.
         assertThat(balance(order, "2000", RETAIL)).isZero();
         assertThat(balance(order, "4400", "")).isEqualTo(1000 + 300 - 49);
-        assertThat(balance(order, "4100", "")).isEqualTo(975);
+        // Fulfilled by AfroTransact costs the seller nothing by default (V24): no FBA fee on org_b's FBA line.
+        assertThat(balance(order, "4100", "")).isZero();
         assertThat(balance(order, "4200", "")).isZero();
         assertThat(outbox(PaymentsEvents.CAPTURED, order)).isEqualTo(2);
 

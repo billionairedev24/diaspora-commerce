@@ -30,6 +30,7 @@ class ShipmentModeMatrixTest {
                 List.of(Shipments.line(1, 1250, 2, 103)), 0, local, null);
     }
 
+    /** A shipment from before self-shipping was retired: history, read-only for sellers. */
     private static Shipment sellerShips(ShipmentStatus status) {
         return Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.SELLER_SHIPS, status);
     }
@@ -111,20 +112,34 @@ class ShipmentModeMatrixTest {
                 ActorKind.DELIVERY_STAFF)).isInstanceOf(TransitionRefused.class);
     }
 
-    // ------------------------------------------------------------- Seller ships
+    // ------------------------------------------------------------- Seller self-shipping is retired (legacy history)
 
     @Test
-    void theSellerMovesTheirOwnShipmentAndStaffCannotWithoutTheOverride() {
-        assertThat(next(sellerShips(ShipmentStatus.READY), ActorKind.SELLER)).isEqualTo(set(ShipmentStatus.PICKED_UP));
-        assertThat(next(sellerShips(ShipmentStatus.PICKED_UP), ActorKind.SELLER))
-                .isEqualTo(set(ShipmentStatus.DELIVERED));
+    void aSellerCanNoLongerShipOrDeliverALegacySellerShippedShipment() {
+        for (ShipmentStatus status : ShipmentStatus.values()) {
+            assertThat(next(sellerShips(status), ActorKind.SELLER)).as("seller on %s", status).isEmpty();
+        }
         assertThat(next(sellerShips(ShipmentStatus.READY), ActorKind.DELIVERY_STAFF)).isEmpty();
+        assertThatThrownBy(() -> POLICY.decide(sellerShips(ShipmentStatus.READY), ShipmentStatus.PICKED_UP,
+                ActorKind.SELLER)).isInstanceOf(TransitionRefused.class);
         assertThat(next(sellerShips(ShipmentStatus.READY), ActorKind.PLATFORM_ADMIN))
                 .doesNotContain(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY);
     }
 
     @Test
-    void anOverrideMovesASellerShippedShipmentForwardOnly() {
+    void noSellerStepEverMarksAnyShipmentShippedOrDelivered() {
+        for (ShipmentStatus status : ShipmentStatus.values()) {
+            assertThat(next(fulfilledBySeller(status), ActorKind.SELLER))
+                    .as("seller on Fulfilled by AfroTransact %s", status)
+                    .doesNotContain(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
+                            ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.DELIVERED);
+        }
+    }
+
+    // ------------------------------------------------------------- Admin override (Fulfilled by AfroTransact, legacy)
+
+    @Test
+    void anOverrideMovesALegacySellerShippedShipmentForwardOnly() {
         assertThat(next(sellerShips(ShipmentStatus.PICKED_UP), ActorKind.ADMIN_OVERRIDE)).containsExactlyInAnyOrder(
                 ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.DELIVERY_FAILED,
                 ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED);
@@ -141,10 +156,17 @@ class ShipmentModeMatrixTest {
     }
 
     @Test
-    void anOverrideNeverAppliesToAfroTransactDeliveredOrPickupShipments() {
-        assertThat(next(fulfilledBySeller(ShipmentStatus.READY), ActorKind.ADMIN_OVERRIDE)).isEmpty();
+    void anOverrideAlsoCorrectsFulfilledByAfroTransactForwardOnly() {
+        assertThat(next(fulfilledBySeller(ShipmentStatus.READY), ActorKind.ADMIN_OVERRIDE))
+                .contains(ShipmentStatus.PICKED_UP, ShipmentStatus.DELIVERED).doesNotContain(ShipmentStatus.PACKED);
         assertThat(next(Shipments.of(FulfilmentType.FBA_AFROTRANSACT, DeliveryMethod.AFROTRANSACT_DELIVERY,
-                ShipmentStatus.READY), ActorKind.ADMIN_OVERRIDE)).isEmpty();
+                ShipmentStatus.PICKED_UP), ActorKind.ADMIN_OVERRIDE)).contains(ShipmentStatus.OUT_FOR_DELIVERY);
+        assertThatThrownBy(() -> POLICY.decide(fulfilledBySeller(ShipmentStatus.OUT_FOR_DELIVERY),
+                ShipmentStatus.PICKED_UP, ActorKind.ADMIN_OVERRIDE)).isInstanceOf(TransitionRefused.class);
+    }
+
+    @Test
+    void anOverrideNeverAppliesToPickupShipments() {
         assertThat(next(pickup(ShipmentStatus.READY), ActorKind.ADMIN_OVERRIDE)).isEmpty();
     }
 }
