@@ -47,6 +47,7 @@ import com.afrotransact.orders.port.Page;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.SellerAnalyticsRepository;
 import com.afrotransact.orders.port.ShipmentFeed;
+import com.afrotransact.orders.port.StaffDirectory;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
@@ -91,7 +92,7 @@ class OrdersTenantIsolationTest {
         ReturnWindowPolicy windows = mock(ReturnWindowPolicy.class);
         when(windows.windowEndsAt(any())).thenReturn(Optional.empty());
         views = new OrderViews(new DefaultShipmentTransitionPolicy(), mock(HandoverCodeVault.class), windows, access,
-                settings, clock);
+                settings, mock(StaffDirectory.class), clock);
         queries = new OrderQueryServiceImpl(access, orders, views, payments);
         ShipmentTransitions transitions = new ShipmentTransitions(orders, mock(FollowUpRepository.class),
                 new DefaultShipmentTransitionPolicy(), mock(DomainEventPublisher.class), mock(ShipmentFeed.class),

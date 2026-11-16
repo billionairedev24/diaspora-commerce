@@ -2,13 +2,12 @@ package com.afrotransact.orders.application;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.EnumSet;
 import java.util.Locale;
-import java.util.Set;
 
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.CourierProofPolicy;
 import com.afrotransact.orders.domain.DeliveryMethod;
+import com.afrotransact.orders.domain.FulfilmentMode;
 import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
@@ -28,11 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class ShipmentServiceImpl implements ShipmentService {
-
-    /** The delivery steps of an AfroTransact-delivered shipment (see {@link #requireDeliverySteps}). */
-    private static final Set<ShipmentStatus> DESK_STEPS = EnumSet.of(ShipmentStatus.PICKED_UP,
-            ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.DELIVERED,
-            ShipmentStatus.DELIVERY_FAILED);
 
     private final OrdersAccess access;
     private final OrderRepository orders;
@@ -64,7 +58,7 @@ class ShipmentServiceImpl implements ShipmentService {
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
                 (o, s) -> access.transitionActor(o, s), reason, TransitionSource.API, idempotencyKey, null, null,
                 s -> {
-                    requireDeliverySteps(s, target);
+                    requireOwnerSteps(s, target);
                     checkSellerShipDetails(s, target, reason);
                     checkPickupHandover(s, target, handoverCode, reason);
                 }));
@@ -72,20 +66,23 @@ class ShipmentServiceImpl implements ShipmentService {
     }
 
     /**
-     * The statuses of an AfroTransact-delivered shipment that people at the console set with the delivery steps (the
-     * Delivery module, delivery:manage): the same steps, proof and audit as the Delivery queue. The general transition
-     * endpoint refuses them for people, so the proof and the audit cannot be skipped by calling it directly. Services
-     * (fulfilment relay, carriers, couriers) are unaffected.
+     * People at the console move a shipment by who is responsible for it: AfroTransact-delivered shipments with the
+     * delivery steps (the Delivery module, delivery:manage: the same proof, audit and locking as the queue), seller-
+     * shipped shipments only by the seller or, forward only with a reason, by the override (orders:override-shipment).
+     * The general status change refuses what belongs to those, so none of it can be skipped by calling it directly.
+     * Services (fulfilment relay, carriers, couriers) and sellers are unaffected; cancelling stays with orders:manage.
      */
-    private void requireDeliverySteps(Shipment s, ShipmentStatus target) {
-        if (!s.fulfilmentMode().staffDelivers() || s.status() == target || !access.humanStaff()) {
+    private void requireOwnerSteps(Shipment s, ShipmentStatus target) {
+        if (s.status() == target || !access.humanStaff()) {
             return;
         }
-        boolean deskStep = DESK_STEPS.contains(target)
-                || target == ShipmentStatus.RETURNED && s.status() == ShipmentStatus.DELIVERY_FAILED;
-        if (deskStep) {
+        if (DeliverySteps.isStep(s, target)) {
             throw new ForbiddenActionException("orders.use-delivery-steps", "AfroTransact delivers this order: "
                     + "move it with the delivery steps (permission delivery:manage), not the general status change");
+        }
+        if (s.fulfilmentMode() == FulfilmentMode.SELLER_SHIPS && target != ShipmentStatus.CANCELLED) {
+            throw new ForbiddenActionException("orders.seller-ships", "The seller ships this order and updates it "
+                    + "themselves. Overriding it needs the permission orders:override-shipment and a reason");
         }
     }
 
