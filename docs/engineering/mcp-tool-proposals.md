@@ -5,7 +5,7 @@ writes it. Rule for agents: no new MCP tool without that approval; contracts and
 still updated as normal.
 
 Context: the MCP server (`java/services/mcp-server`) is private (no public route), every call needs a scoped token,
-and AI-calling tools count against the USD 2/day cap (`docs/runbooks/ai-spend-and-mcp-access.md`). Plain data reads
+and AI-calling tools count against the daily AI spend cap (USD 2/day until staff change it in the console; `docs/runbooks/ai-spend-and-mcp-access.md`). Plain data reads
 cost no AI spend.
 
 ## Existing tools (29, for reference)
@@ -89,8 +89,9 @@ Proposal 0 below.
 | A11 | `duplicate_candidates_queue` | read | Possible duplicate product pages from matching |
 | A12 | `search_index_status` | read | Why a product does or does not appear in search (live, photo, variant, tax, index lag) |
 | A13 | `service_health` | read | Services up, sweeps running, identity client scope drift |
-| A14 | `ai_spend_today` | read | AI spend against the USD 2/day cap, by feature. The REST endpoint it would call now exists (ai-gateway `GET /v1/ai/usage/today`, `ai:manage`; the staff console shows it); the tool is still not built or approved |
+| A14 | `ai_spend_today` | read | AI spend against the daily cap, by feature. The REST endpoint it would call now exists (ai-gateway `GET /v1/ai/usage/today`, `ai:manage`; the staff console shows it); the tool is still not built or approved |
 | A15 | `propose_tax_decision` | propose | Prepare approving or rejecting a tax review item (`tax:review`); a person confirms |
+| A16 | `set_ai_spend_cap` | propose | **Proposed only; not built, not approved.** Prepare a change of the daily AI spend cap (value and reason) as a PROPOSAL the staff member confirms in the console; the tool itself could never save it. Would need `ai:cap.manage` on the caller's own relayed token (ai-gateway `PUT /v1/ai/spend-cap` stays the judge: ceiling, reason, version). Today the cap is changed in the console only, and a test (`NoSpendCapToolTest`) keeps every tool away from it |
 
 ## For anyone integrating (all audiences)
 

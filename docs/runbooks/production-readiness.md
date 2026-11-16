@@ -257,7 +257,7 @@ specifics, a restore drill.
   prompts. Check that `AI_PROVIDER_DATA_COLLECTION` is `deny` (or unset) and `AI_PROVIDER_ZDR` is `true` on ai-gateway in prod. Record the date and who checked:
   ______ (date), ______ (name), re-check every quarter and whenever a model id in `at.ai.routes` changes.
 - [ ] **blocker** `OWNER · Open` **ai-gateway spend cap: USD 2.00 per UTC day, enforced in code** (owner decision; `docs/runbooks/ai-spend-and-mcp-access.md`). The gateway rejects
-  every call with `429 ai.budget-exceeded` once the day's total reaches `AI_GLOBAL_DAILY_COST_USD=2.00` (and one caller's share at `AI_CALLER_DAILY_COST_USD=0.50`), both pinned in
+  every call with `429 ai.budget-exceeded` once the day's total reaches `AI_GLOBAL_DAILY_COST_USD=2.00` (now only the initial default of the cap, which staff with `ai:cap.manage` can change in the console up to the hard ceiling `AI_GLOBAL_DAILY_COST_MAX_USD=20.00`; and one caller's share at `AI_CALLER_DAILY_COST_USD=0.50`), both pinned in
   `java/services/ai-gateway/deploy/helm/values-prod.yaml`, on the cheapest model. Still open: (a) `VENDOR`: set a credit limit on the OpenRouter key itself (for example USD 60 a
   month) as the second, independent guard; (b) an alert at 50 and 80 percent of the day's cap and the owner names who gets it; (c) one test: exceed the cap and see `429`.
 - [ ] **blocker** `OWNER/internal · Open` Data processing agreements are signed with OpenRouter and with each model provider we route to (for example

@@ -26,3 +26,10 @@ on conflict do nothing;
 - Update the README permission table and, if the Go BFF or a service checks the key, the check. **The console needs no change**: it reads the catalogue.
 - Mock BFF (dev and tests): `python3 tools/identity/gen_access_fixture.py` regenerates its catalogue from the migrations.
 - Deploy identity, then it appears in Settings > Roles and permissions under its module, off for every role not granted in the migration.
+
+## Example: `ai:cap.manage` (change the daily AI spend cap)
+
+V52 (`V52__ai_cap_manage_permission.sql`) adds it to the catalogue under `platform` and grants it to **Super Admin** and **Developer** only. Product Owner and the others keep
+`ai:manage` (look at the cap and today's spend) and do not get it unless someone switches it on in Settings > Roles and permissions (with a reason). It is deliberately not a
+client scope: service clients and the MCP server cannot change the cap (ai-gateway requires a staff principal), and a test keeps every MCP tool away from it. Numbering: V52 was
+the next free identity version on `main` and `release-1`; check both (`ls java/services/identity/src/main/resources/db/migration | sort -V | tail -3`) before adding the next one.

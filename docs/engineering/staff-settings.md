@@ -31,15 +31,26 @@ Reported: "I do not see permission in staff console settings." The owner is a Su
 | Markets and locations `/settings/markets` | countries and states | Markets | "1 country live" |
 | Language and display (row, opens `/account/preferences`) | personal | none | the language |
 | Notification templates `/settings/notifications` | templates, preview, versions | Notifications | |
-| AI and MCP spend cap `/settings/ai` | today's spend by feature against the cap, then what is in force (USD 2.00 per UTC day; 0.50 per caller; 20/120 calls per minute) | `ai:manage` | "USD 2.00 a day" |
+| AI and MCP spend cap `/settings/ai` | today's spend by feature against the cap, what is in force (the cap, where it comes from, the ceiling, what is left today; 0.50 per caller; 20/120 calls per minute), the form to change the cap (confirm step, required reason) and the history of changes by name | look `ai:manage`; change `ai:cap.manage` | the cap in force, e.g. "USD 2.00 a day", or "AI is switched off" |
 | Published pages, Site details and legal, Application review | as before | Site content / Applications | |
 | Payments, Credit, Membership, Referral, Fees, Flat delivery fee, Delivery fees, Run economics, Exchange rates, Plans | as before | their module | |
 | Sales tax review (row, opens `/tax?tab=tax-review-settings`) | link, not duplicated | Sales tax | "By risk" / "Every item reviewed" |
 
 The AI cap page shows **today's spend against the cap, by feature** (ai-gateway `GET /v1/ai/usage/today`, relayed as `GET /v1/staff/ai/spend-today`, needs
-`ai:manage`; read from the usage ledger, zero with "No AI call has been recorded today" when nothing was recorded, never an estimate of ours), then what is in force. The
-cap itself stays **deployment configuration** (`AI_GLOBAL_DAILY_COST_USD`, `AI_CALLER_DAILY_COST_USD` on ai-gateway; [ai-spend-and-mcp-access.md](../runbooks/ai-spend-and-mcp-access.md)):
-there is no endpoint that changes it, so the page has no switch or field and names where it is set. Cost is estimated by ai-gateway from provider usage after each call.
+`ai:manage`; read from the usage ledger, zero with "No AI call has been recorded today" when nothing was recorded, never an estimate of ours), then **what is in force**
+(`GET /v1/staff/ai/spend-cap`): the cap, where it comes from ("the starting value set on the deployment" until someone saves one, then who, when and why), the **ceiling**
+it cannot pass, and what is left today. Cost is estimated by ai-gateway from provider usage after each call.
+
+**The cap is editable** (owner request: "the AI spend cap can be configurable"). Staff with **`ai:cap.manage`** (Super Admin and Developer by default; V52) see, below the
+rows, one field "New daily limit (USD)" and a "Review the change" button; the confirm dialog says "From USD 2.00 to USD 5.50 per UTC day. It takes effect within seconds and
+applies to today", warns when the new value is below what was already spent today (AI stops straight away until 00:00 UTC) or is 0 (AI off for everyone), and **requires a reason
+(3 to 300 characters)** that is kept with the person's name. Everyone else with `ai:manage` sees the same text with no field and no button ("You can look but not change").
+The save is `PUT /v1/staff/ai/spend-cap` with `If-Match` (the version loaded; a stale one answers "Someone else changed this since you loaded it" and saves nothing). The
+**history** below lists every change newest first: who (by name), when, from what to what, and why; the same change is written to the audit log (`ai.spend-cap.changed`).
+Names of other people come from identity's user lookup (`access:read`); a viewer without it sees "Unknown user" for others and their own name for themselves. The
+deployment keeps only the starting value (`AI_GLOBAL_DAILY_COST_USD`) and the hard ceiling (`AI_GLOBAL_DAILY_COST_MAX_USD`, default USD 20); see
+[ai-spend-and-mcp-access.md](../runbooks/ai-spend-and-mcp-access.md). The section is listed for staff with `ai:manage`; give `ai:cap.manage` together with it. The caller's
+share, the per-minute rates and the per-feature budgets stay deployment configuration and are only described.
 Staff accounts are made by **invitation** (Staff accounts, "Invite a person"): see [staff-invitations.md](staff-invitations.md). There is no temporary password.
 Statuses come from saved state only; sections with nothing live to say show "View only" for read-only staff, or nothing.
 
