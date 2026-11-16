@@ -9,6 +9,14 @@ channels:
     messages:
       aiHandoffRequested:
         $ref: '#/components/messages/aiHandoffRequested'
+  aiSpendCapEvents:
+    address: at.ai-spend-cap.events
+    description: Changes of the gateway-wide daily AI spend cap made in Settings > AI and MCP spend cap (key = the version
+      the change created). Headers event-id, event-type, occurred-at. trust-ops copies every change into the hash-chained
+      audit log with who, when, the value before and after, and the reason.
+    messages:
+      aiSpendCapChanged:
+        $ref: '#/components/messages/aiSpendCapChanged'
   authzSyncDeadLetters:
     address: at.authz-sync.dlq.events
     description: Events authz-sync could not apply because they are malformed or OpenFGA rejected their tuples (same key,
@@ -389,8 +397,6 @@ channels:
         $ref: '#/components/messages/identityUserPhoneVerified'
       identityInvitationCreated:
         $ref: '#/components/messages/identityInvitationCreated'
-      identityStaffInvitationCreated:
-        $ref: '#/components/messages/identityStaffInvitationCreated'
       identityInvitationRevoked:
         $ref: '#/components/messages/identityInvitationRevoked'
       identityInvitationAccepted:
@@ -477,8 +483,6 @@ channels:
         $ref: '#/components/messages/identityUserRegistered'
       notificationsIdentityInvitationCreated:
         $ref: '#/components/messages/identityInvitationCreated'
-      notificationsIdentityStaffInvitationCreated:
-        $ref: '#/components/messages/identityStaffInvitationCreated'
       notificationsIdentityUserPhoneVerified:
         $ref: '#/components/messages/identityUserPhoneVerified'
       notificationsIdentityNotificationPreferencesUpdated:
@@ -1013,6 +1017,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/AiHandoffRequested'
+    aiSpendCapChanged:
+      name: ai.spend-cap.changed
+      title: Staff changed the daily AI spend cap
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/AiSpendCapChanged'
     bookingsRequested:
       name: booking.requested
       title: Deposit authorised; waiting for the provider (expires after the request SLA, 4 h)
@@ -2052,18 +2063,6 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/IdentityInvitationCreated'
-    identityStaffInvitationCreated:
-      name: identity.staff-invitation.created
-      title: A person was invited to be staff, or the invitation was sent again (key = invitation id)
-      description: 'Carries acceptUrl, the staff console link with the plain single-use token in its fragment (valid 72 hours
-        by default; identity stores only its SHA-256), so notifications-service can email recipient.email (template
-        account.staff_invitation). Security-style message: the invitee has no account yet, so resolve nothing through
-        identity. Resending issues a new token and publishes this again with resent = true; the earlier link stops working.
-        Never log the payload.'
-      headers:
-        $ref: '#/components/schemas/EventHeaders'
-      payload:
-        $ref: '#/components/schemas/IdentityStaffInvitationCreated'
     identityInvitationRevoked:
       name: identity.invitation.revoked
       title: An open invitation was withdrawn or replaced by a new one (key = organisation id)
@@ -3410,6 +3409,45 @@ components:
       - event-type
       - occurred-at
       type: object
+    AiSpendCapChanged:
+      type: object
+      required:
+      - version
+      - previousSource
+      - previousMicros
+      - newMicros
+      - changedBy
+      - reason
+      - at
+      properties:
+        version:
+          type: integer
+          format: int64
+          description: Version the change created (the ETag)
+        previousSource:
+          type: string
+          enum:
+          - DEFAULT
+          - SAVED
+          description: Whether the value before was the deployment default or a saved cap
+        previousMicros:
+          type: integer
+          format: int64
+          description: Cap before, micro-dollars (the deployment default when previousSource is DEFAULT)
+        newMicros:
+          type: integer
+          format: int64
+          description: Cap after, micro-dollars (0 = AI off)
+        changedBy:
+          type: string
+          description: Staff user id who saved it
+        reason:
+          type: string
+          description: Why
+          3 to 300 characters: null
+        at:
+          type: string
+          format: date-time
     AiHandoffRequested:
       type: object
       required:
@@ -7307,32 +7345,6 @@ components:
         verifiedAt:
           type: string
           format: date-time
-    IdentityStaffInvitationCreated:
-      type: object
-      description: Follows the notifications-service payload convention (recipient block).
-      required: [invitationId, email, firstName, lastName, roleKey, roleName, acceptUrl, expiresAt, expiresInHours, resent, invitedBy, recipient, transactional]
-      properties:
-        invitationId: {type: string, format: uuid}
-        email: {type: string, format: email}
-        firstName: {type: string}
-        lastName: {type: string}
-        roleKey: {type: string, examples: [platform.customer_support]}
-        roleName: {type: string, examples: [Customer Support]}
-        acceptUrl: {type: string, description: 'Staff console page with the single-use token after #token= (a fragment never reaches a server log)'}
-        expiresAt: {type: string, format: date-time}
-        expiresInHours: {type: integer, examples: [72]}
-        resent: {type: boolean}
-        invitedBy: {type: string, description: Subject of the inviter}
-        inviterName:
-          type: [string, 'null']
-        recipient:
-          type: object
-          required: [email]
-          properties:
-            id: {type: [string, 'null']}
-            email: {type: string, format: email}
-            phone: {type: [string, 'null']}
-        transactional: {type: boolean}
     IdentityInvitationCreated:
       type: object
       description: Follows the notifications-service payload convention (recipient block).
@@ -12950,6 +12962,11 @@ info:
   title: AfroTransact platform events
   version: 1.0.0
 operations:
+  publishAiSpendCapEvents:
+    action: send
+    channel:
+      $ref: '#/channels/aiSpendCapEvents'
+    summary: ai-gateway-service publishes each cap change via its transactional outbox; trust-ops audits it.
   publishAiHandoffEvents:
     action: send
     channel:

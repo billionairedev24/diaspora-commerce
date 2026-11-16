@@ -74,6 +74,10 @@ public final class DefaultAuditClassifier implements AuditClassifier {
                     "PREORDER_AREAS", s(p, "region"), null, "Pre-order coverage of " + s(p, "region") + " edited"));
             case "delivery-runs.location.changed" -> Optional.of(new AuditFacts(s(p, "actorId"), "STAFF", eventType,
                     "DELIVERY_RUN_LOCATION", first(s(p, "locationId"), key), null, locationSummary(p)));
+            case "ai.spend-cap.changed" -> Optional.of(new AuditFacts(s(p, "changedBy"), "STAFF", eventType,
+                    "AI_SPEND_CAP", key, null, "AI daily spend cap changed from " + usd(p.get("previousMicros"))
+                    + ("DEFAULT".equals(s(p, "previousSource")) ? " (default)" : "") + " to " + usd(p.get("newMicros"))
+                    + reason(p)));
             default -> Optional.of(new AuditFacts(first(s(p, "actorId"), s(p, "subject")), null, eventType, "EVENT",
                     key, s(p, "orgId"), eventType));
         };
@@ -104,6 +108,16 @@ public final class DefaultAuditClassifier implements AuditClassifier {
         return Optional.of(new AuditFacts(first(s(p, "actorId"), actorType), actorType, eventType, "SHIPMENT",
                 s(p, "shipmentId"), s(p, "sellerOrgId"), "Order " + s(p, "orderNumber") + " shipment "
                 + (from == null ? "" : from + " → ") + to + reason(p)));
+    }
+
+    /** Micro-dollars as "USD 2.00" (0 reads "USD 0.00, AI off"). */
+    private static String usd(Object micros) {
+        if (!(micros instanceof Number n)) {
+            return "an unknown amount";
+        }
+        long cents = n.longValue() / 10_000;
+        String text = "USD " + cents / 100 + "." + String.format(Locale.ROOT, "%02d", cents % 100);
+        return cents == 0 ? text + ", AI off" : text;
     }
 
     private static String locationSummary(Map<String, Object> p) {

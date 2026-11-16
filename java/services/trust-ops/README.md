@@ -73,7 +73,7 @@ providers) and `design/backoffice-data.js`.
   Escalations, manual or by the sweep, publish the full claim payload (`trustops.claim.escalated`) and the full
   moderation payload (`trustops.moderation.escalated`, with `sellerOrgId` and, for a shopper-reported live listing,
   the reporter's `customerId`).
-- **Immutable audit log (S119).** Audit-worthy events from other services (topics and event types configurable) plus
+- **Immutable audit log (S119).** Audit-worthy events from other services (topics and event types configurable; includes `ai.spend-cap.changed`, a staff change of the daily AI spend cap with who, before, after and reason) plus
   every trust-ops decision are appended to `audit_entry` with a **SHA-256 hash chain**: each row stores the previous
   row's hash; `hash = SHA-256(prevHash, seq, content)` with length-prefixed fields. Appends are serialised with a
   PostgreSQL advisory lock, so `seq` is gap-free. The payload is stored as text, exactly as hashed.
