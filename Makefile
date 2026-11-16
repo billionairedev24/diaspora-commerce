@@ -24,7 +24,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
-        web-dev web-build backlog tax-gate-sweep seed seed-test seed-check mobile-lan lan-env mobile-adb-reverse mobile-android-device \
+        web-dev web-build backlog tax-gate-sweep seed seed-test seed-check smoke smoke-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
         mobile-ios-device mobile-apk mobile-brand mobile-hero
 
 help: ## List targets
@@ -273,7 +273,7 @@ dev-links: ## Print every local URL (apps, docs portal, MCP, mobile, API docs, i
 	tools/dev/local.sh links
 
 seed: ## Demo data via the services' APIs: sellers, products with real photos, offers, stock, home content, pre-orders (ARGS="--only products")
-	python3 tools/seed/seed.py $(ARGS)
+	tools/dev/local.sh seed $(ARGS)
 
 seed-test: ## Unit tests of the demo-data seeder (tools/seed/tests, Python stdlib unittest)
 	python3 -m unittest discover -s tools/seed/tests -t tools/seed
@@ -281,6 +281,12 @@ seed-test: ## Unit tests of the demo-data seeder (tools/seed/tests, Python stdli
 seed-check: ## Offline, read-only: every demo product against the catalog's recorded schemas and publish gate (tools/seed/testdata)
 	python3 tools/seed/gen_testdata.py --check
 	python3 tools/seed/seed_check.py $(ARGS)
+
+smoke: ## Proof the running stack works: one PASS/FAIL line per check (health, catalogue, photos, search, cart, tax, checkout, apps, orders, metrics). STACK=services too; SMOKE_CHECKOUT=0 skips the checkout
+	tools/smoke/release1.sh
+
+smoke-test: ## The smoke script against a fake stack (no stack needed)
+	python3 -m unittest discover -s tools/smoke -p 'test_release1.py'
 
 web-dev: ## Web apps on mock data (no back end needed): storefront :3000, seller center :3010, staff console :3002
 	@command -v pnpm >/dev/null || { echo "pnpm not installed (corepack enable)"; exit 1; }

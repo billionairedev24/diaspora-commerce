@@ -811,6 +811,8 @@ links() {
   echo "  Kafka                localhost:9092                 Temporal gRPC localhost:7233 · UI http://localhost:8088"
   echo "  Postgres             localhost:5432                 Valkey   localhost:6379"
   echo "Manage"
+  echo "  make smoke           proves it works: one PASS/FAIL line per check (catalogue, photos, search, cart, tax, checkout, apps, orders, metrics); run it after make up"
+  echo "  make seed            re-runs the demo data (SEED=0 make up skips it); make seed-check validates it offline"
   echo "  make dev-status | make dev-logs SERVICE=orders (or web-storefront) | make dev-links | make down"
   echo "Secrets (.local/secrets.env; make secrets-check; docs/engineering/secrets-and-configuration.md)"
   secrets_summary
