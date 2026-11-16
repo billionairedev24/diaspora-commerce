@@ -64,7 +64,7 @@ the staff member's name are recorded.
 
 ## Why an order was stuck "waiting for the driver" (root cause, fixed)
 
-A package the seller packs and ships themselves was labelled `AFROTRANSACT_DELIVERY` at checkout. With seller carrier shipping off (launch
+(History.) A package the seller packs and ships themselves was labelled `AFROTRANSACT_DELIVERY` at checkout. With seller carrier shipping off (launch
 setting) `CheckoutActivitiesImpl.method()` gave that label to every seller-packed package with no explicit choice, not only to sellers who
 opted into AfroTransact delivery. Consequences: the seller's state machine stopped at "ready" (no "Mark shipped"), fulfilment created a
 delivery job and tried to auto-assign a driver, the staff Orders sheet said "Waiting for the driver", and nobody could finish the order.
@@ -77,26 +77,69 @@ admins only the oversight steps (confirm delivery, failure, return, cancel), bec
 steps (delivery staff) were not offered on the sheet. So picked up, in transit and out for delivery showed greyed with the generic "Not available from here" and only
 Cancelled was enabled. Now the sheet offers a Fulfilled by AfroTransact shipment the delivery steps to holders of `delivery:manage`, and says why when it does not.
 
-## The modes in the code
+## The modes (two, see [ADR 0011](../adr/0011-two-fulfilment-modes.md))
 
-`FulfilmentMode` is derived (orders `Shipment.fulfilmentMode()`, gateway-bff `domain.FulfilmentModeOf`), never typed in by a person.
+Owner decision: **seller self-shipping is not supported**. A customer's order is either **Seller pickup** or **Fulfilled by AfroTransact
+(FBA)**. `FulfilmentMode` is derived (orders `Shipment.fulfilmentMode()`, gateway-bff `domain.FulfilmentModeOf`), never typed in by a person.
 
-| Mode | When | Who moves it | Customer page says | Proof |
-|---|---|---|---|---|
-| `SELLER_SHIPS` | Seller packs, no AfroTransact opt-in | Seller: confirm, pack, **Mark shipped** (needs a tracking number or a "how you sent it" note), delivered | "Shipped by the seller" and the tracking number. Never a carrier name. | None |
-| `AFROTRANSACT_DELIVERY` | Seller opted in (store has a local-delivery snapshot) | Seller: confirm, pack, ready. Then the **Delivery desk** | "Delivered by AfroTransact" | Photo proof |
-| `FULFILLED_BY_AFROTRANSACT` | FBA or Retail (1P) | Warehouse until ready. Then the Delivery desk | "Delivered by AfroTransact" | Photo proof |
-| `PICKUP` | Customer collects (store or AfroTransact point) | Unchanged, see [store-pickup.md](store-pickup.md) | Pickup wording and handover code | Handover code |
-| `PREORDER_RUN` | Community delivery runs | Unchanged (delivery-runs, drivers) | Run wording | Run proof |
+| Mode | When | Who moves it | Customer page says | Proof | Delivery fee |
+|---|---|---|---|---|---|
+| `PICKUP` (Seller pickup) | Customer collects at the seller's place (or an AfroTransact point) | Seller: confirm, pack, ready, hand over with the code. See [store-pickup.md](store-pickup.md) | Pickup wording and handover code | Handover code | None for anyone |
+| `AFROTRANSACT_DELIVERY` (FBA from the seller's location) | The seller's location has Fulfilled by AfroTransact on (located address + pickup hours) | Seller: confirm, pack, ready. Then the **Delivery desk** collects and delivers | "Delivered by AfroTransact" | Photo proof | Customer pays, AfroTransact keeps |
+| `FULFILLED_BY_AFROTRANSACT` (FBA from stock AfroTransact holds, or Retail) | FBA or Retail (1P) | Warehouse until ready. Then the Delivery desk | "Delivered by AfroTransact" | Photo proof | Customer pays, AfroTransact keeps |
+| `PREORDER_RUN` | Community delivery runs | Unchanged (delivery-runs, drivers) | Run wording | Run proof | The window's own fee |
+| `LEGACY_SELLER_SHIPPED` (history) | Rows from before self-shipping was retired (`SELLER_SHIPS`, `CARRIER`, or a seller package mislabelled AfroTransact Delivery) | Nobody (see below) | "Shipped by the seller" | None | n/a |
 
-A legacy `SELLER_FULFILLED` + `AFROTRANSACT_DELIVERY` shipment with no local-delivery snapshot is a mislabel and counts as `SELLER_SHIPS`.
-The wire key `afrotransact_delivery` for seller packages was kept for compatibility.
+The wire key `afrotransact_delivery` stays for the seller's-location kind; the app wording for both AfroTransact kinds is "Fulfilled by AfroTransact".
+
+### Not purchasable without a mode
+
+A package whose seller offers neither Seller pickup nor Fulfilled by AfroTransact is **not purchasable** (never guessed into a delivery):
+
+- **orders** checkout refuses it: 422 `orders.fulfilment-unavailable` (gateway-bff `FULFILMENT_UNAVAILABLE`, on `errors.deliverySelections`).
+- **gateway-bff** checkout summary gives a seller package **no delivery option**, only pickup when the seller has an active pickup place near the
+  address; with none it sets `noFulfilment: true` on the package, `canPlaceOrder: false` and a plain `deliveryBlockedReason`.
+- **Seller Center** Settings > Shipping and delivery shows, per location with neither mode on, "No customer can buy from this location yet. Turn on
+  Fulfilled by AfroTransact below, or Seller pickup in Settings > Pickup." There is no "I am responsible" tick any more.
+
+### Defaults (server side)
+
+A new location is Fulfilled by AfroTransact **by default where that is possible**: `POST /v1/orgs/{org}/ship-from-addresses` takes optional
+`pickupHours`; with them, the seller service enables it when the organisation is approved, the address is located at street level and it is
+inside (or near) an AfroTransact delivery zone. Otherwise the location is saved with nothing enabled (never an error, **hours are never
+invented**). A seller can additionally enable Seller pickup (Settings > Pickup) and can switch Fulfilled by AfroTransact off (no tick: it only means
+customers cannot buy from the location unless Seller pickup is on). Checkout enforces all of it, not the UI.
+
+### Existing data (decision: keep read-only history, no row migration)
+
+Local data is disposable. For safety nothing rewrites rows: `SELLER_SHIPS` and `CARRIER` stay valid values so old shipments still load, derive
+`LEGACY_SELLER_SHIPPED`, and are history. Sellers have **no** step on them (a legacy carrier parcel already in flight still gets its carrier scans);
+staff finish an open one with `orders:override-shipment` (forward only, reason required, audited) or cancel it with `orders:manage`. Checkout never
+creates them again (`CARRIER` is refused whatever the old staff switch says). The orders `V14` data fix and fulfilment `V6` stay as they were.
 
 Rules enforced by the state machine (`DefaultShipmentTransitionPolicy`):
-- A seller-shipped shipment **never** enters an AfroTransact delivery queue.
-- Delivery staff (`ActorKind.DELIVERY_STAFF`) can only act on AfroTransact-delivered shipments: picked up (from ready), out for delivery
+- A legacy seller-shipped shipment **never** enters an AfroTransact delivery queue and the **seller cannot move it**.
+- No seller step marks any shipment shipped, in transit or delivered (except a pickup order handed over with the customer's code).
+- Delivery staff (`ActorKind.DELIVERY_STAFF`) can only act on Fulfilled by AfroTransact shipments: picked up (from ready), out for delivery
   (from picked up, in transit or delivery failed), delivered (from out for delivery), delivery failed. No cancel or return.
-- Honest wording: the storefront, customer app and emails say AfroTransact delivers only when it truly does, and never name a carrier.
+- Honest wording: the storefront, customer app and emails say AfroTransact delivers only when it truly does, and never name a carrier. The seller
+  package heading is "Sold by {seller}".
+
+## Money (Fulfilled by AfroTransact)
+
+- The **delivery fee is paid by the customer** (shown at checkout as "Delivery fee (paid by you)": the flat staff fee, free above the optional
+  threshold) and is **100 % AfroTransact revenue** (ledger 4200). It is never in the seller payable (`DefaultPaymentSplitter`: `shippingToPlatform`).
+- **No charge to the seller** for Fulfilled by AfroTransact by default: per-unit FBA fee 0, and the seller pickup-fee quoted at checkout 0
+  (`LocalDelivery.sellerFeeMinor`). Payments `V24__fba_free_for_sellers_by_default.sql` adds one fee-schedule version with those at 0 when only the
+  launch seed exists; a schedule staff already published is untouched.
+- A seller-side fee is a **setting**, default 0, staff only (`payments:configure`), audited and versioned: Staff console > Fees & commissions >
+  new version (per-unit FBA fee, per-plan FBA fee, the seller tariff of Delivery pricing and per-seller overrides, negotiated FBA fee). Seller order
+  sheets show the pickup fee row only when it is above 0.
+- **Marketplace commission rules are unchanged** in every mode. **Tax of the delivery fee is unchanged**: tax is the line's own and never moves with the fee
+  (pinned by `FulfilledByAfroTransactMoneyTest`).
+- Seller pickup: no delivery fee for anyone.
+- Pinned by payments splitter tests: `FulfilledByAfroTransactMoneyTest` (FBA: fee customer-paid to platform revenue, seller payable unaffected, no pickup fee;
+  staff-set fees apply only when configured; pickup: no fee; commission identical in every mode) and `FulfilmentModeSplitTest`.
 
 ## Delivery module (staff console)
 
@@ -181,10 +224,10 @@ Give someone the ability to deliver: add `delivery:manage` to their role (staff 
 ## Runbook: an order is stuck
 
 1. Find the shipment in the staff console: Orders, open the order. The sheet says the mode and, for AfroTransact delivery, links to Delivery.
-2. **Seller-shipped and stuck waiting**: this was the bug. Data fixes already shipped: orders `V14__seller_shipped_data_fix.sql` (relabels open
+2. **Old seller-shipped order stuck**: this was the bug; such orders are now legacy history. Finish them with Override status (reason required). Data fixes already shipped: orders `V14__seller_shipped_data_fix.sql` (relabels open
    `SELLER_FULFILLED` + `AFROTRANSACT_DELIVERY` shipments with no local-delivery snapshot to `SELLER_SHIPS`, writes a `DATA_FIX` row in
    `delivery_audit`) and fulfilment `V6__seller_shipped_driver_queue_fix.sql` (cancels the orphan driver job). Both are idempotent: re-running
-   changes nothing. The seller then marks it shipped with a tracking number or note.
+   changes nothing. 
 3. **AfroTransact-delivered, nobody took it**: Delivery, filter status Queued, Take or Assign by name.
 4. **Failed delivery**: record the reason, then Reattempt. If it cannot be delivered, handle the refund through Orders and Returns.
 5. **Wrong or missing proof**: Delivery sheet, Correct proof (reason required). Never edit the database; the audit is append-only.
@@ -197,7 +240,7 @@ Check query (read-only): `select count(*) from shipment where fulfilment_type='S
 Delivery queue: ![queue 1280](img/delivery-desk-queue-1280.png) ![queue 390](img/delivery-desk-queue-390.png)
 Delivered with proof: ![delivered 1280](img/delivery-desk-delivered-1280.png) ![delivered 390](img/delivery-desk-delivered-390.png)
 Customer order, AfroTransact-delivered (proof): ![proof 1280](img/order-delivery-proof-1280.png) ![proof 390](img/order-delivery-proof-390.png)
-Customer order, seller-shipped (tracking number, no proof): ![seller 1280](img/order-seller-shipped-1280.png) ![seller 390](img/order-seller-shipped-390.png)
+Customer order, old seller-shipped (history; tracking number, no proof): ![seller 1280](img/order-seller-shipped-1280.png) ![seller 390](img/order-seller-shipped-390.png)
 
 Regenerate with `E2E_SHOTS=1 E2E_SERVER=dev npx playwright test specs/staff-console.delivery.spec.ts specs/storefront.delivery-proof.spec.ts` in `tests/e2e`.
 

@@ -8,7 +8,7 @@ One place: `ArrivalService` (`go/services/gateway-bff/internal/app/arrival.go`) 
 
 | Fulfilment | Origin sent to promise | Basis |
 |---|---|---|
-| Seller ships (`SELLER`) | `SELLER`, the offer's **handling days** and **ship-from ZIP** (offers `PublicOffer.handlingDays`, `shipFromZip`), method `CARRIER` `GROUND` | Both must be on the offer. Seller cut-off is the promise service default (12:00): there is no seller cut-off setting yet. |
+| Seller offer (`SELLER`) | `SELLER`, the offer's **handling days** and **ship-from ZIP** | Only a pickup date is meaningful: sellers do not ship themselves (see [delivery-fulfilment.md](delivery-fulfilment.md)), so a plain seller package has no delivery. |
 | Fulfilled by AfroTransact | FC chosen by `fcFor(zip)` (north-east Edison, south-east Atlanta, else Houston), method by option (delivery zone, pickup, carrier) | A regional rule, not stock-aware (see owner decisions). |
 | AfroTransact Delivery from a seller's store | none | No basis: a store is not a fulfilment centre. No date. |
 | Pre-order | its own window | unchanged |

@@ -140,8 +140,12 @@ shop), or both, add a category, and add a photo of your work (without one, custo
 
 ## 3. Fulfil orders
 
-New orders appear in **Orders**. Ship with USPS, UPS or FedEx, add tracking, and mark as shipped. Customers are
-notified automatically. Use **Fulfilled by AfroTransact** to send stock to us and let us pick, pack and ship.
+New orders appear in **Orders**. You confirm, pack and mark them ready; you never ship or deliver them yourself.
+Every location offers one or both of: **Fulfilled by AfroTransact** (AfroTransact collects your packed orders during your hours
+and delivers them; the customer pays the delivery fee, it is AfroTransact's and you pay nothing for it) and **Seller pickup**
+(the customer collects from you, with no delivery fee). New locations are Fulfilled by AfroTransact by default when you give
+pickup hours and the address is located inside our delivery area. Customers can only buy from a location that offers at least
+one: Settings > Shipping and delivery tells you what to turn on. See [delivery and fulfilment modes](../../../engineering/delivery-fulfilment.md).
 
 ## 4. Returns, disputes and account health
 
