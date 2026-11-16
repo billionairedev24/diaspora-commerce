@@ -59,7 +59,7 @@ final class LolaToolSpecs {
                     the servings. Each ingredient is matched to a real in-stock product; the shopper gets one \
                     'Add all to cart' button. Ingredients with no match are reported, never invented.""", """
                     {"type":"object","properties":{
-                      "dish":{"type":"string","description":"e.g. 'Jollof rice' or 'Diwali dinner'"},
+                      "dish":{"type":"string","description":"e.g. 'Jollof rice' or 'Sunday lunch'"},
                       "servings":{"type":"integer","minimum":1,"maximum":500},
                       "ingredients":{"type":"array","minItems":1,"maxItems":40,"items":{"type":"object","properties":{
                         "name":{"type":"string","description":"Ingredient as a shopper would search it"},

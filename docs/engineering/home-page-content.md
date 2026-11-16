@@ -118,7 +118,7 @@ and **Shipping from near you** (`near-you`) from rules only, with no image pinne
 `tools/seed/seedlib/dataset.py`). The earlier per-category "Shop by department" tile is ended on the next run.
 Location demo content:
 
-- the hero **Fresh from Houston kitchens** is targeted at Texas ZIP prefixes (75 to 79) and **Diwali table** at the
+- the hero **Fresh from Houston kitchens** is targeted at Texas ZIP prefixes (75 to 79) and **Christmas table** at the
   Northeast (06, 07, 08, 10, 11, 12, 19); the other slides show everywhere;
 - the rails **Shipping from near {city}** (`near-you`) and **Get it by {day}** (`deliverable-fast`, 2 days) replace the
   earlier "Spice cupboard" and "Fabrics & fashion" rails (ended on the next run).
@@ -127,10 +127,10 @@ Location demo content:
 
 | ZIP | Place | Expect |
 |---|---|---|
-| 77042 | Houston, TX | the Texas hero, no Diwali slide; "Shipping from near Houston" starts with Houston sellers (Mama Put Pantry, Lagos Larder), then Dallas, then the South (Atlanta, Miami, Silver Spring) |
+| 77042 | Houston, TX | the Texas hero, no Christmas slide; "Shipping from near Houston" starts with Houston sellers (Mama Put Pantry, Lagos Larder), then Dallas, then the South (Atlanta, Miami, Silver Spring) |
 | 75212 | Dallas, TX | the Texas hero; Texas sellers first, same state before the rest of the South |
-| 08817 | Edison, NJ | the Diwali slide, no Texas slide; the near rail starts with Edison (Patel Grocers), then the Northeast (Bronx, Accra Market) |
-| 10453 | Bronx, NY | the Diwali slide; Bronx sellers first |
+| 08817 | Edison, NJ | the Christmas slide, no Texas slide; the near rail starts with Edison (Patel Grocers), then the Northeast (Bronx, Accra Market) |
+| 10453 | Bronx, NY | the Christmas slide; Bronx sellers first |
 
 1. `make seed ARGS="--only content"` (idempotent; changed placements are replaced, retired ones are ended). The content
    service needs migration `V17__home_location_rules.sql` first: `tools/dev/local.sh restart content`.

@@ -497,7 +497,7 @@ function seed(now: Date): MockStaffDb {
   const announcements = [
     placement('plc-1', 'announcement_bar', 'Free delivery over $49', 'LIVE', false, null, 'Free delivery on orders over $49 in Houston', 20),
     placement('plc-2', 'announcement_bar', 'Detty December pre-orders', 'IN_REVIEW', false, null, 'Pre-order party supplies for Detty December', 40),
-    placement('plc-3', 'announcement_bar', 'Diwali savings', 'DRAFT', false, null, 'Diwali: 5% off sweets with DIWALI5', 30)
+    placement('plc-3', 'announcement_bar', 'Christmas savings', 'DRAFT', false, null, 'Christmas: 5% off sweets with XMAS5', 30)
   ];
   const placements = [
     ...announcements,

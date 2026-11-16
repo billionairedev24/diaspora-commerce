@@ -32,7 +32,7 @@ reviews; occasions need 3 cells; hero slide schedule; ZIP targeting; "near you" 
 
 | # | Where | What is fixed | Effect on an empty or thin catalogue |
 |---|---|---|---|
-| 1 | `java/services/content/.../V2__seed_slots_and_placements.sql` | Flyway migration inserts LIVE placements in every environment, including `plc_tiles_communities` (Nigerian, Ghanaian, Ethiopian, ...), four hero slides (party jollof, Diwali table, a sponsored Kingston jerk slide, braider), a kente banner, three announcement bars ("Diwali and Detty December stock is landing") | Production ships demo-flavoured, product-claiming content on day 1, with `imageUrl: null` |
+| 1 | `java/services/content/.../V2__seed_slots_and_placements.sql` | Flyway migration inserts LIVE placements in every environment, including `plc_tiles_communities` (Nigerian, Ghanaian, Ethiopian, ...), four hero slides (party jollof, a seasonal table hero, a sponsored Kingston jerk slide, braider), a kente banner, three announcement bars ("festive stock is landing") | Production ships demo-flavoured, product-claiming content on day 1, with `imageUrl: null` |
 | 2 | `tools/seed/seedlib/dataset.py` `TILES` | "Shop by community" and "More kitchens to discover": 8 fixed cells with stock photos and `/communities/<slug>` links ("Caribbean" links to jamaican) | Dev and demo only (seed is guarded against prod), but it is the screenshot the owner saw and it is the shape staff copy |
 | 3 | `site_home.go` `resolveTiles` | A cell without a rule source is "fixed" and a tile of fixed cells "is never dropped for lack of products" (home-page-content.md) | Fixed community cells render whether or not the community has a product |
 | 4 | `ImagePlaceholder` (ui package) | A missing or failed image becomes a striped box instead of removing the cell | Blank striped tiles and a striped hero image area; also breaks "no icons or placeholders as images" for editorial cells |
@@ -44,7 +44,7 @@ reviews; occasions need 3 cells; hero slide schedule; ZIP targeting; "near you" 
 | 10 | `site_compose.go`, `site_home.go` | English strings in Go: "Based on your orders", "Deals of the day", "Services near {city}", "Spotlight: the {community} kitchen", "4.8 average from 120 reviews", "Browse services" | Not translated in fr / es / ar / yo; the 5-locale rule is broken for module copy. Content placement titles are single-language too |
 | 11 | `site_compose.go` `serviceCount` | Services module needs a valid 5-digit ZIP and at least one listing near it; it is a text band (title + button), not providers | A visitor with no ZIP never sees Services on the home even if 40 providers exist; no "popular services" and no "book again" |
 | 12 | `Header.tsx` | "Services" is always in the nav; "Deals" and "AfroTransact Brand" too | Dead entries when there are no providers, no deals, no first-party products |
-| 13 | `Hero.tsx` and hero placements | Hero slides are content; only the schedule is checked. A slide with a null image shows a 16:9 striped box under the headline | Day-1 hero looks unfinished; a slide can promise stock that does not exist (Diwali basmati) |
+| 13 | `Hero.tsx` and hero placements | Hero slides are content; only the schedule is checked. A slide with a null image shows a 16:9 striped box under the headline | Day-1 hero looks unfinished; a slide can promise stock that does not exist (Christmas basmati) |
 | 14 | `GET /v1/home` | `no-store`, per visitor, and every module resolves (one search each) before empty ones are dropped | Cost scales with the number of configured modules, not with what is shown; hidden modules still cost an upstream call |
 | 15 | `staff_home_layout.go` | Layout preview describes each module's rule in words ("hidden when it has fewer than 4 products") | Staff cannot see whether a module is hidden right now or why; drops are an `Info` log line |
 | 16 | `adTracking.ts`, `/v1/home/ad-events` | Impressions and clicks only for paid modules, by placement id | No organic module-level impressions, clicks or conversion |
@@ -61,7 +61,7 @@ reviews; occasions need 3 cells; hero slide schedule; ZIP targeting; "near you" 
    that says no providers when none serve the visitor.
 4. **Broken or slow image.** A tile whose photo fails after hydration swaps to the striped box (the cell stays, now blank); the server-rendered
    image that failed before hydration is only caught by the mount check.
-5. **Thin catalogue with a hero.** Hero slide "Light up the table" (Diwali) with no image and a link to `/communities/indian` which is empty.
+5. **Thin catalogue with a hero.** Hero slide "Set the Christmas table" with no image and a link to `/communities/indian` which is empty.
 6. **Guest without ZIP.** Services band and "near you" rails absent even though the market has providers; page looks product-only.
 
 ## 2. Design options
@@ -271,7 +271,7 @@ click in the same session within 24 hours (the link carries `hm=<module>:<positi
 5. Services: show it in the nav and home whenever any provider exists in the market, or only when one serves the visitor's ZIP?
 6. At 0 products, is a text-only brand hero plus "Sell on AfroTransact" acceptable, and what wording?
 7. Approve ending the Flyway-seeded demo placements (community tiles, heroes, announcements) in production.
-8. Seasonal calendar: who owns it (staff), and which seasons first (Diwali, Detty December, Eid, back to school, Black Friday)?
+8. Seasonal calendar: who owns it (staff), and which seasons first (Christmas, Easter, Thanksgiving, Detty December, back to school, Black Friday)?
 9. Personalisation: server-side history for signed-in shoppers only (recommended), or also guests with consent?
 10. Sponsored cap: one sponsored module per three organic modules as the default?
 11. A/B platform: use the edge cookie approach in this spike, or adopt a third-party experiment tool?

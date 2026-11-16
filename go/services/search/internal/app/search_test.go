@@ -92,7 +92,7 @@ func TestShortQueriesStayLexical(t *testing.T) {
 
 func TestNaturalLanguageQueriesBlendVectors(t *testing.T) {
 	idx, emb := &fakeIndex{}, &fakeEmbedder{}
-	page, err := app.NewProductSearcher(idx, emb, quiet).Search(context.Background(), domain.Query{Text: "something for a Diwali dinner"})
+	page, err := app.NewProductSearcher(idx, emb, quiet).Search(context.Background(), domain.Query{Text: "something for a Christmas dinner"})
 	if err != nil {
 		t.Fatal(err)
 	}
