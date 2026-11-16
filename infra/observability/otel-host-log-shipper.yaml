@@ -1,6 +1,15 @@
 # Ships the logs of everything `make up` runs as a local process (tools/dev/local.sh writes .local/logs/<name>.log,
 # mounted read-only at /host-logs) to Loki via the main collector. Each file becomes one service: service.name is the
-# file name (orders.log -> orders, web-storefront.log -> web-storefront), so Loki queries read {service_name="orders"}.
+# file name (afrotransact-go.log -> afrotransact-go, web-storefront.log -> web-storefront), so Loki queries read
+# {service_name="afrotransact-go"}.
+#
+# Release 1 (ADR 0011): `make up` writes TWO application logs, .local/logs/core.log (afrotransact-core, every Java module) and
+# .local/logs/afrotransact-go.log (every Go module). core.log is renamed to service.name afrotransact-core below, the name of the
+# Spring application, of its traces in Tempo and of its metrics (job/service), so Grafana's trace -> logs link and the dashboards
+# agree. The module a line belongs to is NOT a Loki label: it is extracted into the log attribute `module` when the line states it
+# (Go slog `module=cart`, JSON `"module":"orders"`), and is otherwise visible as the logger name (com.afrotransact.<module>.*) in
+# Spring lines. Query one module with:  {service_name="afrotransact-core"} | module="orders"   or   |= "com.afrotransact.orders".
+# With STACK=services the old per-service files (orders.log ...) still ship under their own names.
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
@@ -26,6 +35,15 @@ receivers:
       - type: move
         from: attributes.log_service
         to: resource["service.name"]
+      # The module, where the line says so. Go slog: module=cart; JSON logs: "module":"orders" (core's non-local profiles).
+      - type: regex_parser
+        if: 'body matches "\\bmodule=[a-z][a-z0-9-]*"'
+        regex: '\bmodule=(?P<module>[a-z][a-z0-9-]*)'
+        on_error: send_quiet
+      - type: regex_parser
+        if: 'attributes.module == nil and body matches "\"module\"\\s*:\\s*\"[a-z][a-z0-9-]*\""'
+        regex: '"module"\s*:\s*"(?P<module>[a-z][a-z0-9-]*)"'
+        on_error: send_quiet
       # Level: Spring "2026-…Z  INFO 123 ---", Go slog "level=INFO".
       - type: regex_parser
         regex: '^(?:\S+\s+(?P<level>TRACE|DEBUG|INFO|WARN|ERROR)\s|.*?\blevel=(?P<slog_level>[A-Za-z]+))'
@@ -68,6 +86,12 @@ receivers:
 
 processors:
   batch: {}
+  # core.log -> the application's own name (see the header).
+  transform/names:
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["service.name"], "afrotransact-core") where attributes["service.name"] == "core"
   resource:
     attributes:
       - {key: service.namespace, value: afrotransact, action: upsert}
@@ -83,5 +107,5 @@ service:
   pipelines:
     logs:
       receivers: [filelog/services, filelog/web]
-      processors: [resource, batch]
+      processors: [transform/names, resource, batch]
       exporters: [otlp]

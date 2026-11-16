@@ -1,7 +1,12 @@
-# Local Prometheus (docker compose). Generated service lists mirror infra/local/PORTS.md: every service is
-# scraped on host.docker.internal:<port>, which reaches both services run from the IDE and containers of the
-# compose "apps" profile (they publish the same host port). Targets that are not running simply show as down
-# (the local Alertmanager silences ServiceDown for env=local).
+# Local Prometheus (docker compose), Release 1 (ADR 0011): the application targets are the two deployables of the modular monolith,
+#   afrotransact-core   (Java, every module)  host.docker.internal:8120/actuator/prometheus
+#   afrotransact-go     (Go, every module)    host.docker.internal:8200/metrics   (`make up` runs it on 8200)
+# Per-module series come from LABELS, never from extra ports: every series carries `module` and `service` (the module's old short
+# name: catalog, orders, cart, search ...), so the dashboards and rules that select on `service` keep working. Process-level series
+# (jvm_*, process_*, go_*, up) carry service/job = the deployable. The old per-service ports (8100-8115 served by core for
+# compatibility, 8201-8209 only with STACK=services) are NOT scraped: they would duplicate every series. Standalone services
+# (STACK=services) are not monitored by this file; add a job for them in a local, uncommitted copy if you need it.
+# Targets that are not running show as down (the local Alertmanager silences ServiceDown for env=local).
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -17,80 +22,32 @@ alerting:
     - static_configs:
         - targets: [alertmanager:9093]
 
-# Normalise every app target: job = service name (as the Kubernetes ServiceMonitors do), env = local.
-# The scraped Spring "service" tag (catalog-service) is kept as exported_service.
+# honor_labels: true is what the Alloy job does in production too: the application's own `service` and `module` tags win over the
+# target's. Without it the target label (afrotransact-core) would replace every module's service value and the app's would be
+# renamed exported_service. job = the deployable, as the Kubernetes pod discovery sets it.
 scrape_configs:
-  - job_name: java-services
+  - job_name: afrotransact-core
     metrics_path: /actuator/prometheus
+    honor_labels: true
     fallback_scrape_protocol: PrometheusText0.0.4
+    # One target exposes what 14 services did; a runaway guard well above the expected size.
+    sample_limit: 40000
+    scrape_timeout: 10s
     static_configs:
-      - targets: [host.docker.internal:8100]
-        labels: {service: identity}
-      - targets: [host.docker.internal:8101]
-        labels: {service: catalog}
-      - targets: [host.docker.internal:8102]
-        labels: {service: offers}
-      - targets: [host.docker.internal:8103]
-        labels: {service: inventory}
-      - targets: [host.docker.internal:8104]
-        labels: {service: orders}
-      - targets: [host.docker.internal:8105]
-        labels: {service: payments}
-      - targets: [host.docker.internal:8106]
-        labels: {service: seller}
-      - targets: [host.docker.internal:8107]
-        labels: {service: retail}
-      - targets: [host.docker.internal:8108]
-        labels: {service: fulfilment}
-      - targets: [host.docker.internal:8109]
-        labels: {service: bookings}
-      - targets: [host.docker.internal:8110]
-        labels: {service: trust-ops}
-      - targets: [host.docker.internal:8111]
-        labels: {service: tax-returns}
-      - targets: [host.docker.internal:8112]
-        labels: {service: content}
-      - targets: [host.docker.internal:8113]
-        labels: {service: ai-gateway}
-      - targets: [host.docker.internal:8114]
-        labels: {service: mcp-server}
-    relabel_configs:
-      - source_labels: [service]
-        target_label: job
-      - target_label: env
-        replacement: local
-      - target_label: runtime
-        replacement: java
+      - targets: [host.docker.internal:8120]
+        labels: {service: afrotransact-core, env: local, runtime: java}
 
-  - job_name: go-services
+  - job_name: afrotransact-go
     metrics_path: /metrics
+    honor_labels: true
     fallback_scrape_protocol: PrometheusText0.0.4
+    sample_limit: 40000
+    scrape_timeout: 10s
+    # In local and dev /metrics is on the public listener (:8200); when MANAGEMENT_ADDR is set the metrics move to that
+    # listener, point this target at it (uat and prod always use the management listener, :9090 in the chart).
     static_configs:
       - targets: [host.docker.internal:8200]
-        labels: {service: gateway-bff}
-      - targets: [host.docker.internal:8201]
-        labels: {service: search}
-      - targets: [host.docker.internal:8202]
-        labels: {service: indexer}
-      - targets: [host.docker.internal:8203]
-        labels: {service: cart}
-      - targets: [host.docker.internal:8204]
-        labels: {service: promise}
-      - targets: [host.docker.internal:8205]
-        labels: {service: geo}
-      - targets: [host.docker.internal:8207]
-        labels: {service: media}
-      - targets: [host.docker.internal:8208]
-        labels: {service: notifications}
-      - targets: [host.docker.internal:8209]
-        labels: {service: carrier-gateway}
-    relabel_configs:
-      - source_labels: [service]
-        target_label: job
-      - target_label: env
-        replacement: local
-      - target_label: runtime
-        replacement: go
+        labels: {service: afrotransact-go, env: local, runtime: go}
 
   # ---- platform / infrastructure ----
   - job_name: prometheus

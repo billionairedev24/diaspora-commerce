@@ -1,7 +1,7 @@
 {
   "uid": "at-platform-overview",
   "title": "AfroTransact / Platform overview (RED)",
-  "description": "Rate, errors and duration for every Java and Go service.",
+  "description": "Rate, errors and duration for every module of afrotransact-core and afrotransact-go (service = module).",
   "tags": [
     "afrotransact",
     "red",
@@ -68,17 +68,17 @@
       },
       {
         "name": "service",
-        "label": "Service",
+        "label": "Service (module)",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
         "query": {
-          "query": "label_values(up{job!~\"prometheus|alertmanager|otel-collector|grafana|loki|tempo|postgres|elasticsearch|kafka|redis|temporal|openfga|minio\"}, service)",
+          "query": "label_values({__name__=~\"http_server_requests_seconds_count|http_server_requests_total\"}, service)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "definition": "label_values(up{job!~\"prometheus|alertmanager|otel-collector|grafana|loki|tempo|postgres|elasticsearch|kafka|redis|temporal|openfga|minio\"}, service)",
+        "definition": "label_values({__name__=~\"http_server_requests_seconds_count|http_server_requests_total\"}, service)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -125,7 +125,7 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Services up",
+      "title": "Deployables up",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -138,7 +138,7 @@
       },
       "targets": [
         {
-          "expr": "count(up{env=~\"$env\", service=~\"$service\"} == 1)",
+          "expr": "count(up{env=~\"$env\", job=~\"afrotransact-core|afrotransact-go\"} == 1) or vector(0)",
           "legendFormat": "",
           "instant": true,
           "refId": "A",
@@ -159,7 +159,7 @@
               },
               {
                 "color": "green",
-                "value": 1
+                "value": 2
               }
             ]
           }
@@ -182,7 +182,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Services down",
+      "title": "Modules NOT ready",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -195,7 +195,7 @@
       },
       "targets": [
         {
-          "expr": "count(up{env=~\"$env\", service=~\"$service\"} == 0) or vector(0)",
+          "expr": "count(at_module_up{env=~\"$env\"} == 0) or vector(0)",
           "legendFormat": "",
           "instant": true,
           "refId": "A",
@@ -852,7 +852,7 @@
     {
       "id": 18,
       "type": "table",
-      "title": "Scrape targets",
+      "title": "Scrape targets (the two deployables)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -860,12 +860,12 @@
       "gridPos": {
         "x": 0,
         "y": 41,
-        "w": 24,
+        "w": 12,
         "h": 8
       },
       "targets": [
         {
-          "expr": "up{env=~\"$env\", service=~\"$service\"}",
+          "expr": "up{env=~\"$env\", job=~\"afrotransact-core|afrotransact-go\"}",
           "format": "table",
           "instant": true,
           "refId": "A",
@@ -917,8 +917,74 @@
     },
     {
       "id": 19,
+      "type": "table",
+      "title": "Module readiness (at_module_up)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 41,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "max by (service, module) (at_module_up{env=~\"$env\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "NOT READY",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Value",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 20,
       "type": "logs",
-      "title": "Error logs",
+      "title": "Error logs (both deployables; add | module=\"orders\" or |= \"com.afrotransact.orders\" for one module)",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -931,7 +997,7 @@
       },
       "targets": [
         {
-          "expr": "{service_name=~\"$service\", deployment_environment=~\"$env\"} |~ \"(?i)level\\W+(error|fatal)\"",
+          "expr": "{service_name=~\"afrotransact-core|afrotransact-go\", deployment_environment=~\"$env\"} |~ \"(?i)(level\\W+(error|fatal)|\\bERROR\\b)\"",
           "refId": "A",
           "datasource": {
             "type": "loki",

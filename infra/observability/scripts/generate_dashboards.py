@@ -6,7 +6,11 @@ The same JSON is loaded locally (file provisioning) and in Kubernetes (Grafana s
 infra/k8s/platform/dashboards/kustomization.yaml).
 
 Label conventions (identical locally and in Kubernetes):
-  service  — service name from PORTS.md (catalog, search, ...)
+  service  — the module's old short service name (catalog, orders, search, ...); process-level series (jvm_*, process_*, go_*, up)
+             carry the deployable: afrotransact-core | afrotransact-go
+  module   — Release 1 (ADR 0011): the module inside a deployable; equals `service` for module series, `core` / `afrotransact-go`
+             for process-level ones. Hikari pool name = module.
+  job      — the deployable (afrotransact-core | afrotransact-go) for application targets
   env      — local | dev | uat | prod
 Metric conventions:
   Java (Micrometer): http_server_requests_seconds_{count,sum,bucket}{status,uri,method}
@@ -173,13 +177,18 @@ def p_quantile(q, by="service"):
 
 
 # --------------------------------------------------------------------------------------------- platform overview
+APP_JOBS = 'job=~"afrotransact-core|afrotransact-go"'
+
+
 def platform_overview():
+    """Release 1: the HTTP series carry service = the module's old short name, so the `service` variable lists modules (taken from the
+    HTTP series, not from `up`, which only exists per deployable)."""
     b = Board("at-platform-overview", "AfroTransact / Platform overview (RED)", ["red", "services"],
-              "Rate, errors and duration for every Java and Go service.",
-              [ENV_VAR, var_query("service", 'label_values(up{job!~"prometheus|alertmanager|otel-collector|grafana|loki|tempo|postgres|elasticsearch|kafka|redis|temporal|openfga|minio"}, service)', "Service")])
+              "Rate, errors and duration for every module of afrotransact-core and afrotransact-go (service = module).",
+              [ENV_VAR, var_query("service", 'label_values({__name__=~"http_server_requests_seconds_count|http_server_requests_total"}, service)', "Service (module)")])
     b.row("Fleet")
-    b.stat("Services up", f'count(up{{{SEL}}} == 1)', w=4, thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}])
-    b.stat("Services down", f'count(up{{{SEL}}} == 0) or vector(0)', w=4, thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}])
+    b.stat("Deployables up", f'count(up{{env=~"$env", {APP_JOBS}}} == 1) or vector(0)', w=4, thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 2}])
+    b.stat("Modules NOT ready", 'count(at_module_up{env=~"$env"} == 0) or vector(0)', w=4, thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}])
     b.stat("Requests / s", f'sum({rate_total()})', w=4, unit="reqps", thresholds=[{"color": "blue", "value": None}])
     b.stat("5xx ratio", f'sum({rate_total(extra=", status=~\"5..\"")}) / sum({rate_total()})', w=4, unit="percentunit", decimals=3,
            thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 0.001}, {"color": "red", "value": 0.01}])
@@ -199,18 +208,25 @@ def platform_overview():
             f'topk(15, sum by (service, method, uri) (rate(http_server_requests_seconds_count{{{SEL}}}[5m])))', unit="reqps")
     b.table("Top endpoints by request rate (Go)",
             f'topk(15, sum by (service, method, route) (rate(http_server_requests_total{{{SEL}}}[5m])))', unit="reqps")
-    b.table("Scrape targets", f'up{{{SEL}}}', w=24, mappings=[{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}])
-    b.logs("Error logs", '{service_name=~"$service", deployment_environment=~"$env"} |~ "(?i)level\\W+(error|fatal)"')
+    b.table("Scrape targets (the two deployables)", f'up{{env=~"$env", {APP_JOBS}}}', w=12, mappings=[{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}])
+    b.table("Module readiness (at_module_up)", 'max by (service, module) (at_module_up{env=~"$env"})', w=12,
+            mappings=[{"type": "value", "options": {"0": {"text": "NOT READY", "color": "red"}, "1": {"text": "UP", "color": "green"}}}])
+    b.logs("Error logs (both deployables; add | module=\"orders\" or |= \"com.afrotransact.orders\" for one module)",
+           '{service_name=~"afrotransact-core|afrotransact-go", deployment_environment=~"$env"} |~ "(?i)(level\\W+(error|fatal)|\\bERROR\\b)"')
     return b
 
 
 # --------------------------------------------------------------------------------------------- JVM
 def jvm():
     sel = 'env=~"$env", service=~"$service", instance=~"$instance"'
+    # Release 1: jvm_* / process_* are process-level (service=afrotransact-core); Hikari, the Kafka producer and the outbox are per module
+    # (module = pool name = old service name) and are selected with $module so they do not vanish behind service=afrotransact-core.
+    msel = 'env=~"$env", module=~"$module", instance=~"$instance"'
     b = Board("at-jvm", "AfroTransact / JVM (Spring Boot)", ["jvm", "java"],
-              "Micrometer JVM, GC, threads, HikariCP and Kafka client metrics for the Java services.",
-              [ENV_VAR, var_query("service", "label_values(jvm_memory_used_bytes, service)", "Service"),
-               var_query("instance", 'label_values(jvm_memory_used_bytes{service=~"$service"}, instance)', "Instance")])
+              "Micrometer JVM, GC and threads of the Java process (afrotransact-core); HikariCP, Kafka producer and outbox per module.",
+              [ENV_VAR, var_query("service", "label_values(jvm_memory_used_bytes, service)", "Process (service)"),
+               var_query("instance", 'label_values(jvm_memory_used_bytes{service=~"$service"}, instance)', "Instance"),
+               var_query("module", "label_values(hikaricp_connections_max, module)", "Module (pool)")])
     b.row("Memory")
     b.ts("Heap used vs max", [(f'sum by (instance) (jvm_memory_used_bytes{{{sel}, area="heap"}})', "used {{instance}}"),
                               (f'sum by (instance) (jvm_memory_max_bytes{{{sel}, area="heap"}})', "max {{instance}}")], unit="bytes")
@@ -225,14 +241,14 @@ def jvm():
                           (f'jvm_threads_daemon_threads{{{sel}}}', "{{instance}} daemon")])
     b.ts("Thread states", [(f'sum by (state) (jvm_threads_states_threads{{{sel}}})', "{{state}}")])
     b.row("Database pool (HikariCP)")
-    b.ts("Connections", [(f'sum by (instance, pool) (hikaricp_connections_active{{{sel}}})', "active {{instance}}"),
-                         (f'sum by (instance, pool) (hikaricp_connections_idle{{{sel}}})', "idle {{instance}}"),
-                         (f'sum by (instance, pool) (hikaricp_connections_max{{{sel}}})', "max {{instance}}")])
-    b.ts("Pending threads / acquire p95", [(f'sum by (instance) (hikaricp_connections_pending{{{sel}}})', "pending {{instance}}"),
-                                           (f'histogram_quantile(0.95, sum by (instance, le) (rate(hikaricp_connections_acquire_seconds_bucket{{{sel}}}[{RI}])))', "acquire p95 {{instance}}")])
+    b.ts("Connections (pool = module)", [(f'sum by (instance, pool) (hikaricp_connections_active{{{msel}}})', "active {{pool}} {{instance}}"),
+                         (f'sum by (instance, pool) (hikaricp_connections_idle{{{msel}}})', "idle {{pool}} {{instance}}"),
+                         (f'sum by (instance, pool) (hikaricp_connections_max{{{msel}}})', "max {{pool}} {{instance}}")])
+    b.ts("Pending threads / acquire p95", [(f'sum by (instance) (hikaricp_connections_pending{{{msel}}})', "pending {{instance}}"),
+                                           (f'histogram_quantile(0.95, sum by (instance, le) (rate(hikaricp_connections_acquire_seconds_bucket{{{msel}}}[{RI}])))', "acquire p95 {{instance}}")])
     b.row("Kafka producer")
-    b.ts("Records sent / s", [(f'sum by (instance) (rate(kafka_producer_record_send_total{{{sel}}}[{RI}]))', "{{instance}}")], unit="ops")
-    b.ts("Outbox backlog", [(f'sum by (instance) (outbox_pending_events{{{sel}}})', "{{instance}}")],
+    b.ts("Records sent / s by module", [(f'sum by (module) (rate(kafka_producer_record_send_total{{{msel}}}[{RI}]))', "{{module}}")], unit="ops")
+    b.ts("Outbox backlog by module", [(f'sum by (module) (outbox_pending_events{{{msel}}})', "{{module}}")],
          description="Unrelayed transactional-outbox rows (gauge outbox_pending_events from platform-events).")
     return b
 
@@ -522,6 +538,49 @@ def release1_modules():
            thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 48}, {"color": "red", "value": 49}],
            description="Java budget: under 100 connections with a rolling-update surge of two pods (2 x 48). Pools are set in java/apps/core/deploy/helm/values.yaml.")
     b.stat("Pool connections open now", f'sum(hikaricp_connections_active{{{core}}} + hikaricp_connections_idle{{{core}}})', w=6, h=6)
+    b.row("Schema pools: usage per module (one schema, one role, one Hikari pool each)")
+    b.ts("Pool usage (open / max) per module schema",
+         [(f'max by (pool) ((hikaricp_connections_active{{{core}}} + hikaricp_connections_idle{{{core}}}) / hikaricp_connections_max{{{core}}})', "{{pool}}")],
+         unit="percentunit", min_=0, max_=1,
+         description="Open connections (active + idle) over the pool maximum, per module. minimum-idle is 0, so a quiet module sits near 0.")
+    b.table("Pool table: open / max / pending per module",
+            f'max by (pool) (hikaricp_connections_active{{{core}}} + hikaricp_connections_idle{{{core}}})', w=12,
+            description="Instant open connections (active + idle) per module pool.")
+    b.ts("Connection acquire timeouts per module", [(f'sum by (pool) (increase(hikaricp_connections_timeout_total{{{core}}}[{RI}]))', "timeouts {{pool}}")],
+         description="Acquire timeouts per module pool (alert HikariConnectionTimeouts).")
+    b.row("Connection budget vs the Layerbase limit (500)")
+    java_max = f'sum(hikaricp_connections_max{{{core}}})'
+    go_static = f'(count(up{{{gob}}} == 1) or vector(0)) * 12'
+    b.ts("Worst case vs 500 (pool maximums, all pods)",
+         [(f'{java_max} + {go_static} + 20', "worst case: Java pool maximums + Go (4 modules x 3 per pod) + Temporal/operators (20)"),
+          (f'sum(hikaricp_connections_active{{{core}}} + hikaricp_connections_idle{{{core}}})', "Java connections open now (Hikari)"),
+          (go_static, "Go pool maximums (static: chart budget, not measured)"),
+          ('vector(500)', "Layerbase limit (500, owner statement, unverified in writing)"),
+          ('sum(pg_stat_activity_count{datname=~"core|go"})', "server: pg_stat_activity (postgres-exporter; local only, absent on Layerbase)")],
+         w=16, description="Java is measured (Hikari). afrotransact-go does not export its pgx pool: its 12 connections per pod are the capped budget "
+                           "(maxPoolConns = 3 in each of cart, geo, media, notifications). Temporal (2 x 5) and operators/backup (10) are a constant. "
+                           "Alert: ConnectionBudgetNearLimit (above 400).")
+    b.stat("Worst case / 500", f'({java_max} + {go_static} + 20) / 500', w=4, h=8, unit="percentunit",
+           thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 0.6}, {"color": "red", "value": 0.8}])
+    b.stat("Server connections now", 'sum(pg_stat_activity_count{datname=~"core|go"}) or vector(0)', w=4, h=8,
+           description="postgres-exporter only (local). On Layerbase use the provider's metrics.")
+    b.row("Kafka consumers per module")
+    b.ts("Consumer lag (max records) by module, from the client", [(f'max by (module) (kafka_consumer_fetch_manager_records_lag_max{{{mod}}})', "{{module}}")],
+         description="Client-side metric of each module's own listener containers (module attributed by client id prefix).")
+    b.ts("Consumer group lag (kafka-exporter), by group", [('sum by (consumergroup) (kafka_consumergroup_lag{env=~"$env", topic=~"at\\\\..*"})', "{{consumergroup}}")],
+         description="Group ids are the old per-service ids (catalog-service, orders-service ...), unchanged by the monolith.")
+    b.row("Scheduled jobs per module (each module has its own scheduler pool, threads sched-<module>-n)")
+    b.ts("Scheduled job runs / s by module",
+         [(f'label_replace(sum by (code_namespace) (rate(tasks_scheduled_execution_seconds_count{{env=~"$env"}}[{RI}])), "module", "$1", "code_namespace", "com\\\\.afrotransact\\\\.([a-z]+)\\\\..*")', "{{module}} {{code_namespace}}")],
+         unit="ops", description="Spring's tasks.scheduled.execution observation, grouped by the owning class's package. Thread-pool occupancy per module "
+                                 "(queue, active threads) is NOT exported: the scheduler pools are not registered as executor meters (gap, see the runbook).")
+    b.ts("Scheduled job mean duration by module",
+         [(f'label_replace(sum by (code_namespace) (rate(tasks_scheduled_execution_seconds_sum{{env=~"$env"}}[{RI}])) / sum by (code_namespace) (rate(tasks_scheduled_execution_seconds_count{{env=~"$env"}}[{RI}])), "module", "$1", "code_namespace", "com\\\\.afrotransact\\\\.([a-z]+)\\\\..*")', "{{module}} {{code_namespace}}")],
+         unit="s")
+    b.row("Temporal (the orders module runs the only worker)")
+    b.ts("Workflow outcomes (Temporal server)", [('sum by (namespace) (rate({__name__=~"workflow_(success|failed|timeout)(_total)?", namespace="afrotransact", env=~"$env"}[5m]))', "{{namespace}} outcomes/s"),
+         ('sum by (namespace) (rate({__name__=~"workflow_failed(_total)?", namespace="afrotransact", env=~"$env"}[5m]))', "{{namespace}} failed/s")],
+         unit="ops", description="Server-side counters (job=temporal). The Java Temporal SDK's worker metrics (poll latency, slots) are not exported by the app: no temporal-micrometer dependency. Alert: TemporalWorkflowFailures.")
     b.row("Traffic per module")
     b.ts("Requests / s by module", [(f'sum by (module) (rate(http_server_requests_seconds_count{{{mod}}}[{RI}])) or sum by (module) (rate(http_server_requests_total{{{mod}}}[{RI}]))', "{{module}}")], unit="reqps")
     b.ts("5xx ratio by module", [(f'(sum by (module) (rate(http_server_requests_seconds_count{{{mod}, status=~"5.."}}[{RI}])) or sum by (module) (rate(http_server_requests_total{{{mod}, status=~"5.."}}[{RI}]))) / (sum by (module) (rate(http_server_requests_seconds_count{{{mod}}}[{RI}])) or sum by (module) (rate(http_server_requests_total{{{mod}}}[{RI}])))', "{{module}}")],

@@ -1,7 +1,7 @@
 {
   "uid": "at-jvm",
   "title": "AfroTransact / JVM (Spring Boot)",
-  "description": "Micrometer JVM, GC, threads, HikariCP and Kafka client metrics for the Java services.",
+  "description": "Micrometer JVM, GC and threads of the Java process (afrotransact-core); HikariCP, Kafka producer and outbox per module.",
   "tags": [
     "afrotransact",
     "jvm",
@@ -68,7 +68,7 @@
       },
       {
         "name": "service",
-        "label": "Service",
+        "label": "Process (service)",
         "type": "query",
         "datasource": {
           "type": "prometheus",
@@ -109,6 +109,36 @@
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "definition": "label_values(jvm_memory_used_bytes{service=~\"$service\"}, instance)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "hide": 0,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "module",
+        "label": "Module (pool)",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(hikaricp_connections_max, module)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "definition": "label_values(hikaricp_connections_max, module)",
         "refresh": 2,
         "sort": 1,
         "multi": true,
@@ -646,7 +676,7 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Connections",
+      "title": "Connections (pool = module)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -659,8 +689,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (instance, pool) (hikaricp_connections_active{env=~\"$env\", service=~\"$service\", instance=~\"$instance\"})",
-          "legendFormat": "active {{instance}}",
+          "expr": "sum by (instance, pool) (hikaricp_connections_active{env=~\"$env\", module=~\"$module\", instance=~\"$instance\"})",
+          "legendFormat": "active {{pool}} {{instance}}",
           "range": true,
           "refId": "A",
           "datasource": {
@@ -669,8 +699,8 @@
           }
         },
         {
-          "expr": "sum by (instance, pool) (hikaricp_connections_idle{env=~\"$env\", service=~\"$service\", instance=~\"$instance\"})",
-          "legendFormat": "idle {{instance}}",
+          "expr": "sum by (instance, pool) (hikaricp_connections_idle{env=~\"$env\", module=~\"$module\", instance=~\"$instance\"})",
+          "legendFormat": "idle {{pool}} {{instance}}",
           "range": true,
           "refId": "B",
           "datasource": {
@@ -679,8 +709,8 @@
           }
         },
         {
-          "expr": "sum by (instance, pool) (hikaricp_connections_max{env=~\"$env\", service=~\"$service\", instance=~\"$instance\"})",
-          "legendFormat": "max {{instance}}",
+          "expr": "sum by (instance, pool) (hikaricp_connections_max{env=~\"$env\", module=~\"$module\", instance=~\"$instance\"})",
+          "legendFormat": "max {{pool}} {{instance}}",
           "range": true,
           "refId": "C",
           "datasource": {
@@ -732,7 +762,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (instance) (hikaricp_connections_pending{env=~\"$env\", service=~\"$service\", instance=~\"$instance\"})",
+          "expr": "sum by (instance) (hikaricp_connections_pending{env=~\"$env\", module=~\"$module\", instance=~\"$instance\"})",
           "legendFormat": "pending {{instance}}",
           "range": true,
           "refId": "A",
@@ -742,7 +772,7 @@
           }
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (instance, le) (rate(hikaricp_connections_acquire_seconds_bucket{env=~\"$env\", service=~\"$service\", instance=~\"$instance\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (instance, le) (rate(hikaricp_connections_acquire_seconds_bucket{env=~\"$env\", module=~\"$module\", instance=~\"$instance\"}[$__rate_interval])))",
           "legendFormat": "acquire p95 {{instance}}",
           "range": true,
           "refId": "B",
@@ -795,7 +825,7 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Records sent / s",
+      "title": "Records sent / s by module",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -808,8 +838,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (instance) (rate(kafka_producer_record_send_total{env=~\"$env\", service=~\"$service\", instance=~\"$instance\"}[$__rate_interval]))",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (module) (rate(kafka_producer_record_send_total{env=~\"$env\", module=~\"$module\", instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{module}}",
           "range": true,
           "refId": "A",
           "datasource": {
@@ -849,7 +879,7 @@
     {
       "id": 17,
       "type": "timeseries",
-      "title": "Outbox backlog",
+      "title": "Outbox backlog by module",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -862,8 +892,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (instance) (outbox_pending_events{env=~\"$env\", service=~\"$service\", instance=~\"$instance\"})",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (module) (outbox_pending_events{env=~\"$env\", module=~\"$module\", instance=~\"$instance\"})",
+          "legendFormat": "{{module}}",
           "range": true,
           "refId": "A",
           "datasource": {

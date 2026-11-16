@@ -18,8 +18,9 @@ spec:
         severity: page
       annotations:
         summary: Module {{ $labels.module }} is not ready in {{ $labels.env }}
-        description: The module's readiness inside {{ $labels.service }} has been DOWN for 3 minutes (a failed migration, an unreachable database, a startup error). The other modules keep serving. Look
-          at /actuator/health/{{ $labels.module }} and the pod log filtered by module.
+        description: 'The module''s readiness inside its deployable has been DOWN for 3 minutes (Java: its start state, a failed migration or startup error; Go: a failing readiness check such as its database
+          or Redis). The other modules keep serving. Java: look at /actuator/health/{{ $labels.module }} (adds the live database check) and the pod log filtered by module; Go: /modules/{{ $labels.module
+          }}/readyz.'
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
         dashboard: /d/at-release-1-modules
     - alert: CoreMemoryNearCap
@@ -53,5 +54,31 @@ spec:
         summary: '{{ $labels.job }} has {{ $value }} pods running for 20 minutes in {{ $labels.env }}'
         description: 'A rolling update normally overlaps for a minute. Two pods for 20 minutes mean a stuck rollout (the new pod is not Ready) or a manual scale-up: the second pod doubles the module schedulers,
           outbox relays and database connections.'
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
+        dashboard: /d/at-release-1-modules
+    - alert: ModuleReadinessMetricMissing
+      expr: |
+        count by (env) (up{job=~"afrotransact-core|afrotransact-go"} == 1) unless count by (env) (at_module_up)
+      for: 15m
+      labels:
+        severity: ticket
+      annotations:
+        summary: A deployable is up in {{ $labels.env }} but at_module_up is not arriving
+        description: ModuleNotReady cannot fire without the at_module_up series. Check the scrape (Alloy allowlist `at_module_(up|ready)` in infra/k8s/platform/lean/alloy/config.alloy, honor_labels) and
+          that the running image contains the module-core / afrotransact-go version that exports it.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
+        dashboard: /d/at-release-1-modules
+    - alert: ConnectionBudgetNearLimit
+      expr: |
+        sum by (env) (hikaricp_connections_max{job="afrotransact-core"})
+        + 12 * (count by (env) (up{job="afrotransact-go"} == 1) or on (env) (0 * sum by (env) (hikaricp_connections_max{job="afrotransact-core"})))
+        + 20 > 400
+      for: 15m
+      labels:
+        severity: ticket
+      annotations:
+        summary: Worst-case database connections are {{ $value }} of the 500 Layerbase limit in {{ $labels.env }}
+        description: 'Java pool maximums (Hikari, measured) + 12 per Go pod (4 modules x 3, capped in code, not measured) + 20 (Temporal, backup, operators) above 400, 80% of the limit. A rolling update
+          or a second replica doubles the pod terms. Lower a pool or revisit the budget: docs/runbooks/release-1-deploy.md, Connections.'
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/release-1/docs/runbooks/release-1-deploy.md
         dashboard: /d/at-release-1-modules

@@ -369,6 +369,8 @@ prometheus.relabel "guard" {
 			"checkout_.*", "payouts_.*", "notifications_.*", "indexer_.*", "search_events_total", "bff_upstream_.*", "catalog_.*",
 			// Release 1: a module's readiness inside a deployable (1 = UP), label module
 			"at_module_(up|ready)",
+			// Release 1: Spring's @Scheduled observation (per owning class, so per module): the scheduler panels of at-release-1-modules
+			"tasks_scheduled_execution_seconds_(count|sum|max)",
 			// Kafka (exporter), Valkey (exporter), Meilisearch, Temporal server
 			"kafka_brokers", "kafka_topic_partitions", "kafka_consumergroup_(lag|lag_sum|current_offset)", "kafka_topic_partition_current_offset",
 			"redis_(up|memory_used_bytes|memory_max_bytes|connected_clients|evicted_keys_total|keyspace_hits_total|keyspace_misses_total|commands_processed_total|db_keys|rejected_connections_total)",

@@ -988,7 +988,7 @@
     {
       "id": 18,
       "type": "row",
-      "title": "Traffic per module",
+      "title": "Schema pools: usage per module (one schema, one role, one Hikari pool each)",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -1001,7 +1001,7 @@
     {
       "id": 19,
       "type": "timeseries",
-      "title": "Requests / s by module",
+      "title": "Pool usage (open / max) per module schema",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1009,6 +1009,715 @@
       "gridPos": {
         "x": 0,
         "y": 47,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "max by (pool) ((hikaricp_connections_active{job=\"afrotransact-core\", env=~\"$env\"} + hikaricp_connections_idle{job=\"afrotransact-core\", env=~\"$env\"}) / hikaricp_connections_max{job=\"afrotransact-core\", env=~\"$env\"})",
+          "legendFormat": "{{pool}}",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Open connections (active + idle) over the pool maximum, per module. minimum-idle is 0, so a quiet module sits near 0."
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Pool table: open / max / pending per module",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 47,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "max by (pool) (hikaricp_connections_active{job=\"afrotransact-core\", env=~\"$env\"} + hikaricp_connections_idle{job=\"afrotransact-core\", env=~\"$env\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Value",
+            "desc": true
+          }
+        ]
+      },
+      "description": "Instant open connections (active + idle) per module pool.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Connection acquire timeouts per module",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (pool) (increase(hikaricp_connections_timeout_total{job=\"afrotransact-core\", env=~\"$env\"}[$__rate_interval]))",
+          "legendFormat": "timeouts {{pool}}",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Acquire timeouts per module pool (alert HikariConnectionTimeouts)."
+    },
+    {
+      "id": 22,
+      "type": "row",
+      "title": "Connection budget vs the Layerbase limit (500)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 63,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Worst case vs 500 (pool maximums, all pods)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 16,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(hikaricp_connections_max{job=\"afrotransact-core\", env=~\"$env\"}) + (count(up{job=\"afrotransact-go\", env=~\"$env\"} == 1) or vector(0)) * 12 + 20",
+          "legendFormat": "worst case: Java pool maximums + Go (4 modules x 3 per pod) + Temporal/operators (20)",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum(hikaricp_connections_active{job=\"afrotransact-core\", env=~\"$env\"} + hikaricp_connections_idle{job=\"afrotransact-core\", env=~\"$env\"})",
+          "legendFormat": "Java connections open now (Hikari)",
+          "range": true,
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "(count(up{job=\"afrotransact-go\", env=~\"$env\"} == 1) or vector(0)) * 12",
+          "legendFormat": "Go pool maximums (static: chart budget, not measured)",
+          "range": true,
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "vector(500)",
+          "legendFormat": "Layerbase limit (500, owner statement, unverified in writing)",
+          "range": true,
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum(pg_stat_activity_count{datname=~\"core|go\"})",
+          "legendFormat": "server: pg_stat_activity (postgres-exporter; local only, absent on Layerbase)",
+          "range": true,
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Java is measured (Hikari). afrotransact-go does not export its pgx pool: its 12 connections per pod are the capped budget (maxPoolConns = 3 in each of cart, geo, media, notifications). Temporal (2 x 5) and operators/backup (10) are a constant. Alert: ConnectionBudgetNearLimit (above 400)."
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Worst case / 500",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 64,
+        "w": 4,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "(sum(hikaricp_connections_max{job=\"afrotransact-core\", env=~\"$env\"}) + (count(up{job=\"afrotransact-go\", env=~\"$env\"} == 1) or vector(0)) * 12 + 20) / 500",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.6
+              },
+              {
+                "color": "red",
+                "value": 0.8
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Server connections now",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 64,
+        "w": 4,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_activity_count{datname=~\"core|go\"}) or vector(0)",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "description": "postgres-exporter only (local). On Layerbase use the provider's metrics."
+    },
+    {
+      "id": 26,
+      "type": "row",
+      "title": "Kafka consumers per module",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 72,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "Consumer lag (max records) by module, from the client",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "max by (module) (kafka_consumer_fetch_manager_records_lag_max{env=~\"$env\", module=~\"$module\"})",
+          "legendFormat": "{{module}}",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Client-side metric of each module's own listener containers (module attributed by client id prefix)."
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "Consumer group lag (kafka-exporter), by group",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 73,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (consumergroup) (kafka_consumergroup_lag{env=~\"$env\", topic=~\"at\\\\..*\"})",
+          "legendFormat": "{{consumergroup}}",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Group ids are the old per-service ids (catalog-service, orders-service ...), unchanged by the monolith."
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "Scheduled jobs per module (each module has its own scheduler pool, threads sched-<module>-n)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 81,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Scheduled job runs / s by module",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 82,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "label_replace(sum by (code_namespace) (rate(tasks_scheduled_execution_seconds_count{env=~\"$env\"}[$__rate_interval])), \"module\", \"$1\", \"code_namespace\", \"com\\\\.afrotransact\\\\.([a-z]+)\\\\..*\")",
+          "legendFormat": "{{module}} {{code_namespace}}",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Spring's tasks.scheduled.execution observation, grouped by the owning class's package. Thread-pool occupancy per module (queue, active threads) is NOT exported: the scheduler pools are not registered as executor meters (gap, see the runbook)."
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Scheduled job mean duration by module",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 82,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "label_replace(sum by (code_namespace) (rate(tasks_scheduled_execution_seconds_sum{env=~\"$env\"}[$__rate_interval])) / sum by (code_namespace) (rate(tasks_scheduled_execution_seconds_count{env=~\"$env\"}[$__rate_interval])), \"module\", \"$1\", \"code_namespace\", \"com\\\\.afrotransact\\\\.([a-z]+)\\\\..*\")",
+          "legendFormat": "{{module}} {{code_namespace}}",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "row",
+      "title": "Temporal (the orders module runs the only worker)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 90,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Workflow outcomes (Temporal server)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 91,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace) (rate({__name__=~\"workflow_(success|failed|timeout)(_total)?\", namespace=\"afrotransact\", env=~\"$env\"}[5m]))",
+          "legendFormat": "{{namespace}} outcomes/s",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum by (namespace) (rate({__name__=~\"workflow_failed(_total)?\", namespace=\"afrotransact\", env=~\"$env\"}[5m]))",
+          "legendFormat": "{{namespace}} failed/s",
+          "range": true,
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Server-side counters (job=temporal). The Java Temporal SDK's worker metrics (poll latency, slots) are not exported by the app: no temporal-micrometer dependency. Alert: TemporalWorkflowFailures."
+    },
+    {
+      "id": 34,
+      "type": "row",
+      "title": "Traffic per module",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 99,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "Requests / s by module",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 100,
         "w": 12,
         "h": 8
       },
@@ -1053,7 +1762,7 @@
       }
     },
     {
-      "id": 20,
+      "id": 36,
       "type": "timeseries",
       "title": "5xx ratio by module",
       "datasource": {
@@ -1062,7 +1771,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 47,
+        "y": 100,
         "w": 12,
         "h": 8
       },
@@ -1120,7 +1829,7 @@
       }
     },
     {
-      "id": 21,
+      "id": 37,
       "type": "timeseries",
       "title": "p95 latency by module",
       "datasource": {
@@ -1129,7 +1838,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 55,
+        "y": 108,
         "w": 12,
         "h": 8
       },

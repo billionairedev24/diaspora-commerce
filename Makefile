@@ -189,6 +189,7 @@ dashboards: ## Regenerate Grafana dashboards (JSON + Kubernetes ConfigMaps)
 
 observability-check: ## Check generated rules are fresh, promtool-check rules, validate dashboards JSON
 	python3 infra/observability/scripts/generate_rules.py --check
+	python3 infra/observability/scripts/check_monolith_series.py
 	@for f in infra/observability/grafana/dashboards/*.json; do python3 -m json.tool $$f >/dev/null || { echo "invalid JSON: $$f"; exit 1; }; done
 	@if command -v promtool >/dev/null; then promtool check rules infra/observability/rules/*.yaml; \
 	elif command -v docker >/dev/null; then docker run --rm --entrypoint /bin/sh -v $(CURDIR)/infra/observability:/obs:ro prom/prometheus:v3.6.0 -c 'promtool check rules /obs/rules/*.yaml'; \

@@ -191,7 +191,7 @@ groups:
           severity: page
         annotations:
           summary: "{{ $labels.service }} database pool {{ $labels.pool }} is exhausted"
-          description: "Every connection is in use and threads are waiting (pool maximum is 4 on the launch set). Requests queue and time out."
+          description: "Every connection is in use and threads are waiting (the pool is named after its module; maximums are 2 to 8, see java/apps/core/deploy/helm/values.yaml). Requests queue and time out."
           runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/observability-grafana-cloud.md#alert-reference
           dashboard: /d/at-jvm
 
