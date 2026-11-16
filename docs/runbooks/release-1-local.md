@@ -1,6 +1,68 @@
 # Release 1: running locally
 
-One section per deployable. One section per language: the Java one first, then the Go one.
+## Start everything: one command
+
+```bash
+make up        # everything, then prints every link
+make down      # stops everything make up started (data is kept; make reset wipes the Docker volumes)
+```
+
+On this branch `make up` (and `make dev-up`, the same path) starts the whole local stack with the two deployables instead of the
+16 Java and 10 Go services (`STACK=monolith`, the default here; `STACK=services` runs the old per-service processes as on main).
+In this order, stopping with one actionable message at the first problem:
+
+1. **Preflight**: JDK 25, the Go 1.27 toolchain (any Go 1.21+ fetches the pinned 1.27.4 itself), Docker running, and the ports free:
+   8120, 8100-8115, 8200 (8250 is only a note) and the web ports (those move to the next free port by themselves).
+   `make preflight` runs only this.
+2. **Infrastructure**, unchanged: your own Postgres on `localhost:5432` when something other than this stack's container listens there
+   (`PG_EXTERNAL=0|1` to force, `PG_SUPERUSER` / `PGPASSWORD` for the superuser), otherwise the Docker Postgres; Valkey, Meilisearch
+   (or Elasticsearch with `SEARCH_PROVIDER=elasticsearch`), Kafka and its topics, Temporal, MinIO, Mailpit, OpenFGA, and Grafana,
+   Prometheus, Loki and Tempo unless `OBS=0`.
+3. **The `core` database** (`infra/local/postgres/provision-core.sql`, idempotent) on that same Postgres with the same superuser
+   detection; `CORE_DB_URL` and `CORE_DB_ADMIN_URL` / `_USER` / `_PASSWORD` are exported for core. `make core-db` does only this step.
+   If it cannot, it says why (no Postgres running, no superuser, no PostGIS) and what to run. `CORE_DB_PROVISION=0` skips it for a
+   database you manage yourself. `GO_DB=single` also provisions the optional single `go` database for the Go modules (default: the
+   Go services keep their own databases, as before).
+4. **afrotransact-core**: builds `java/apps/core/target/afrotransact-core.jar` when it is missing or any file under `java/` is newer
+   (`REBUILD=1` forces it, `CORE_MVN_ARGS=-DnoAi` leaves the AI modules out), runs a copy as `.local/bin/core.jar` with the `local`
+   profile, `retail` and `delivery-runs` switched on as in the old stack, and waits for `http://localhost:8120/actuator/health/readiness`.
+   JVM options: `CORE_JAVA_OPTS` (default `-Xmx1536m -XX:+UseSerialGC -XX:TieredStopAtLevel=1`). Core keeps its own small pools: the
+   old per-service pool settings are not applied.
+5. **The search engine** is awaited (`:7700/health`, or Elasticsearch per `SEARCH_PROVIDER`), then **afrotransact-go** is built to
+   `.local/bin/afrotransact-go` and started on **:8200** (`AFROTRANSACT_GO_PORT` overrides), waiting for `/readyz`. Port 8200 is where
+   gateway-bff always was locally, so the web apps' `BFF_ORIGIN=http://localhost:8200` and the mobile apps' BFF URL are unchanged;
+   the web apps follow `AFROTRANSACT_GO_PORT` when you set it. promise and carrier-gateway run too (they did in the old stack;
+   `AT_MODULES_PROMISE_ENABLED=false` turns one off).
+6. Web apps, docs portal, Storybook, mobile apps, demo data (`SEED=0` skips it) and the links, exactly as before. The links print
+   `afrotransact-core` :8120 and `afrotransact-go` :8200 and the old-ports note.
+
+`SERVICES="geo identity" make up` still selects: a Java name starts core, a Go name starts afrotransact-go (the old names are modules
+of them now); `WEB=0`, `DOCS=0`, `STORYBOOK=0`, `MOBILE=0`, `MOBILE_HOST=lan`, `DEV=1`, `OBS=0` work as before. `DRYRUN=1 make up` prints
+the plan and the preflight and starts nothing.
+
+Everyday commands, with the names `core` and `afrotransact-go` (an old name such as `orders` or `search` maps to the deployable that
+holds it):
+
+```bash
+make status                          # health of both deployables, web apps and containers
+make logs SERVICE=core               # .local/logs/core.log  (afrotransact-go, web-storefront, ... likewise)
+make restart SERVICE=core            # rebuild if needed and restart one deployable (re-reads .local/secrets.env)
+make tax-gate-sweep                  # unchanged: catalog's old port :8101 is served by core
+make local-test                      # bash tests of the start script (no Docker needed)
+```
+
+**Old ports.** Core serves 8100-8115 as before, so scripts, the MCP links (`:8114/mcp`), the Stripe webhook forward (`:8105`), the
+mobile apps (fulfilment :8108, bookings :8109, identity :8100) and the demo-data seeder keep working. The Go services' own ports
+8201-8209 are **not** served any more: gateway-bff, geo, media, notifications and promise are on **:8200**, cart, search and
+carrier-gateway under `http://localhost:8200/modules/<name>`. `make up` points core, the seeder and the driver app's media URL
+(`EXPO_PUBLIC_MEDIA_URL`) there for you (names you set yourself win). Not changed: the Prometheus scrape targets
+(`infra/observability/prometheus.yml`) still list the old Go ports; afrotransact-go's `/metrics` on :8200 carries every module.
+
+What you may need to set: nothing for the defaults. `.local/secrets.env` (provider keys, `SEARCH_PROVIDER`), `PG_SUPERUSER` and
+`PGPASSWORD` only when your own Postgres on :5432 needs them, JDK 25 (`brew install openjdk@25`), PostGIS on your own Postgres.
+
+The rest of this page is the advanced path: running a deployable by hand, what each setting means, how to detach a module. One
+section per deployable, the Java one first, then the Go one.
 
 ## Java: afrotransact-core (one JVM, every Java module)
 
@@ -10,15 +72,18 @@ against the local Docker infrastructure, how its database works, and how to take
 
 ### Start
 
+`make up` starts core with everything else (see "Start everything" above). By hand, only core, in the foreground:
+
 ```bash
 make up-infra            # Postgres 17 (+PostGIS), Valkey, Kafka, Temporal, ... (as always)
-make core-db             # once: database `core` with ONE SCHEMA and ONE ROLE per module (idempotent, safe to repeat)
-make core-run            # builds the jar when missing (CORE_REBUILD=1 forces it) and starts core with the `local` profile
+make core-db             # the `core` database with ONE SCHEMA and ONE ROLE per module (idempotent); the same Postgres and superuser as make up
+make core-run            # provisions the database again (idempotent), builds the jar when missing or stale (REBUILD=1 forces it), runs core on :8120
 ```
 
 `make core-build` only builds (`CORE_MVN_ARGS=-DnoAi` leaves ai-gateway and mcp-server out of the jar). Needs JDK 25.
-The Go services, the web apps and the mobile apps start as usual (`make up` / `make dev-up` start the standalone Java services; do
-**not** run those and core at the same time, they use the same ports).
+`make core-db` and `make core-run` use the same detection as `make up` (your own Postgres on :5432 or the Docker one; `PG_EXTERNAL`,
+`PG_SUPERUSER`, `PGPASSWORD`), so they work with the Postgres the old flow used. With `STACK=services` (`make up STACK=services`) the
+standalone Java services start instead: do **not** run those and core at the same time, they use the same ports.
 
 #### Ports
 
@@ -42,7 +107,7 @@ re-configuring.
 
 `at.modules.<module>.database.mode` is `schema` (default in core) or `database`.
 
-* `schema`: all modules use `CORE_DB_URL` (default `jdbc:postgresql://localhost:5432/core`). Each module has its own role
+* `schema`: all modules use `CORE_DB_URL` (default `jdbc:postgresql://localhost:5432/core`; `make up` / `make core-db` / `make core-run` set it for the Postgres in use). Each module has its own role
   (`<module>` with `-` as `_`: `catalog`, `tax_returns`, `trust_ops`, `ai_gateway`, `delivery_runs` ...; password env
   `<MODULE>_DB_PASSWORD`, local default = role name), owns exactly one schema, has `search_path` pinned (role setting and every
   pooled connection) and keeps its own `flyway_schema_history` inside its schema. Migrations are the ones the services have.
@@ -51,7 +116,10 @@ re-configuring.
 * Temporal keeps its own databases (`init-databases.sh`). Extensions (`postgis`, `btree_gist`, `pg_trgm`) are created once in
   `public` by `make core-db` (module roles cannot create extensions; the migrations use `create extension if not exists`).
 * Locally the `local` profile also lets core create missing roles and schemas itself at start (`CORE_DB_ADMIN_URL`,
-  `CORE_DB_ADMIN_USER`, `CORE_DB_ADMIN_PASSWORD`, default `postgres`/`postgres`); never set these in uat or prod.
+  `CORE_DB_ADMIN_USER`, `CORE_DB_ADMIN_PASSWORD`, default `postgres`/`postgres`); never set these in uat or prod. The start script
+  exports them for the Postgres it provisioned (Docker: `postgres`/`postgres`; your own Postgres: your superuser over TCP, or switched
+  off when only a socket login is known: the roles and schemas exist by then). The error `database "core" does not exist` at start
+  means the provisioning did not run against the Postgres core connects to: run `make core-db` and read which Postgres it names.
 
 Pools: 4 connections per module (orders, payments, catalog 8), minimum idle 0. Enabled by default that is 13 modules and at most
 **64 connections** (limit on Layerbase: 500). Override with `<MODULE>_DB_POOL_SIZE`.
@@ -95,13 +163,17 @@ nothing below changes that.
 
 ### Run it
 
+`make up` builds and starts it on :8200 after core and the search engine are up (see "Start everything" above). By hand, with the
+infrastructure running (`make up-infra`; it needs Meilisearch on :7700, Valkey, Kafka):
+
 ```bash
 make go-monolith-run                 # builds go/bin/afrotransact-go and runs it on :8250
 APP_ENV=local AFROTRANSACT_GO_PORT=8250 go/bin/afrotransact-go
 make go-monolith-image               # container image (go/Dockerfile.afrotransact-go)
 ```
 
-One listener, port **8250** (`AFROTRANSACT_GO_PORT`, then `PORT`; the image sets `PORT=8080`). `MANAGEMENT_ADDR` (for example `:9090`)
+One listener: the binary's default is port **8250** (`AFROTRANSACT_GO_PORT`, then `PORT`; the image sets `PORT=8080`); `make up`
+runs it on **8200** locally so the web apps' BFF origin is unchanged. `MANAGEMENT_ADDR` (for example `:9090`)
 adds a private listener with probes and metrics only. In `uat`/`prod` `/metrics` is never served on the public port.
 
 Local default: the launch modules run (cart, geo, search, indexer, notifications, media, gateway-bff). **promise,

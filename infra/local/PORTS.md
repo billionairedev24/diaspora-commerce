@@ -28,7 +28,7 @@
 | notifications | Go | 8208 | email (Resend, SendGrid, SES), SMS (Twilio, Vonage), push, WhatsApp | Postgres `notifications` |
 | carrier-gateway | Go | 8209 | USPS, UPS, FedEx, DHL rates/labels/tracking | Postgres `carriers` |
 | authz-sync | Go | 8210 | identity/seller events → OpenFGA relationship tuples | OpenFGA |
-| afrotransact-go | Go | 8250 | release 1 (ADR 0011): every Go module in one process (`make go-monolith-run`); the per-service ports above keep working standalone | those of its modules |
+| afrotransact-go | Go | 8250 (8200 under `make up`) | release 1 (ADR 0011): every Go module in one process. `make up` runs it on **8200** (gateway-bff's port, so `BFF_ORIGIN` is unchanged; `AFROTRANSACT_GO_PORT` overrides) and serves geo/media/notifications/promise there flat, cart/search/carrier-gateway under `/modules/<name>`; `make go-monolith-run` uses 8250; the per-service ports above work only standalone (`STACK=services`) | those of its modules |
 
 ### Pre-order wiring (local defaults)
 

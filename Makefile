@@ -25,7 +25,8 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog tax-gate-sweep seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
-        mobile-ios-device mobile-apk mobile-brand mobile-hero db-release-1 release-1-check go-monolith go-monolith-run go-monolith-image
+        mobile-ios-device mobile-apk mobile-brand mobile-hero db-release-1 release-1-check go-monolith go-monolith-run go-monolith-image \
+        status restart preflight core-db core-build core-run local-test
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -41,8 +42,18 @@ deploy-guide-test: ## Static tests of the deploy guide with stubbed gh/curl/dig/
 	bash tools/deploy/test/test-guide.sh
 	bash tools/ovh/test/web-hosts.test.sh
 
-up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — the web apps run as production builds (DEV=1 for Next dev servers, REBUILD=1 to force a rebuild), MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
+up: ## Start EVERYTHING locally with ONE command and print all links. Release 1 (STACK=monolith, default): preflight, infra, the `core` database, afrotransact-core :8120 (old ports 8100-8115 too), afrotransact-go :8200, web apps, docs portal, mobile apps, demo data. STACK=services starts the 16+10 standalone services instead. Web apps are production builds (DEV=1 for Next dev servers, REBUILD=1 to rebuild everything), MOBILE_HOST=lan serves it on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo, DRYRUN=1 prints the plan, SERVICES="geo identity" starts only the deployables holding them
 	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
+
+preflight: ## Check what make up needs (JDK 25, Go toolchain, Docker, free ports 8120 8100-8115 8200) with one actionable message per problem; starts nothing
+	tools/dev/local.sh preflight $(SERVICES)
+
+status: dev-status ## Health of core, afrotransact-go, the web apps and the infrastructure make up started
+
+restart: dev-restart ## Rebuild and restart one process: make restart SERVICE=core | afrotransact-go (an old service name restarts the deployable that holds it)
+
+local-test: ## Bash tests of tools/dev/local.sh (service mapping, preflight, core database provisioning with stubbed psql/docker, DRYRUN); no Docker needed
+	bash tools/dev/test/test-local.sh
 
 up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo; ~12 GB). Search engine: Meilisearch by default; SEARCH_PROVIDER=elasticsearch (env or .local/secrets.env) adds Elasticsearch, its exporter and Kibana instead
 	@sp="$${SEARCH_PROVIDER:-$$(grep -s '^SEARCH_PROVIDER=' .local/secrets.env | tail -1 | cut -d= -f2)}"; sp="$${sp:-meilisearch}"; \
@@ -56,12 +67,14 @@ up-infra: ## Start only the full Docker infrastructure incl. observability (Graf
 	@infra/local/wait-healthy.sh 600
 	@echo "Grafana http://localhost:3200 · Kafka UI http://localhost:8090 · Search http://localhost:7700 (Meilisearch) or Kibana http://localhost:5601 (Elasticsearch) · Temporal http://localhost:8088 · Mailpit http://localhost:8025 · MinIO http://localhost:9001"
 
-down: ## Stop everything make up started: web apps, services, infrastructure (keeps data; make reset wipes it)
+down: ## Stop everything make up started: core, afrotransact-go (or the old services), web apps, docs, mobile, infrastructure (keeps data; make reset wipes it)
 	tools/dev/local.sh down
 	$(COMPOSE) --profile apps down
 
-logs: ## Follow logs (SERVICE=<name> for one service)
-	$(COMPOSE) --profile apps logs -f --tail=200 $(SERVICE)
+logs: ## Follow logs: SERVICE=core | afrotransact-go | web-storefront | ... follows .local/logs/<name>.log (an old service name maps to core / afrotransact-go); no SERVICE or a container name follows the Docker containers
+	@if [ -n "$(SERVICE)" ] && { [ -f .local/logs/$(SERVICE).log ] || [ "$(SERVICE)" = core ] || [ "$(SERVICE)" = afrotransact-go ]; }; then \
+	  tools/dev/local.sh logs $(SERVICE); \
+	else $(COMPOSE) --profile apps logs -f --tail=200 $(SERVICE); fi
 
 ps: ## Show local stack containers and health
 	$(COMPOSE) --profile apps ps -a
@@ -92,13 +105,13 @@ apps-down: ## Stop only the containerised services
 	$(COMPOSE) --profile apps stop catalog search log-shipper
 
 # ------------------------------------------------------------------------------------------------ build / test
-core-db: ## Release 1: create the single `core` database with one schema + role per Java module (idempotent; Docker Postgres or local psql)
+core-db: ## Release 1: create the single `core` database with one schema + role per Java module (idempotent; make up does it; uses the SAME Postgres as make up: yours on :5432 or the Docker one, PG_SUPERUSER/PGPASSWORD, PG_EXTERNAL=0|1)
 	bash tools/release/core-db.sh
 
 core-build: ## Release 1: build afrotransact-core (every Java module in one jar; CORE_MVN_ARGS=-DnoAi leaves ai-gateway and mcp-server out)
 	cd java && ./mvnw -B -q -pl apps/core -am -DskipTests $(CORE_MVN_ARGS) package
 
-core-run: ## Release 1: run afrotransact-core against the local infra (make up-infra, make core-db first): every module on :8120, old ports 8100-8115 too (docs/runbooks/release-1-local.md)
+core-run: ## Release 1, advanced: run afrotransact-core in the foreground against the running infra (make up-infra first; provisions the database, builds when stale, REBUILD=1) on :8120, old ports 8100-8115 too. make up does all of this (docs/runbooks/release-1-local.md)
 	bash tools/release/core-run.sh
 
 java-verify: ## Java: checkstyle + unit + ArchUnit + Testcontainers ITs for the whole reactor
@@ -122,7 +135,7 @@ go-verify: ## Go: vet, test and golangci-lint for go/pkg and every go/services/*
 go-monolith: ## Release 1: build the single Go deployable go/bin/afrotransact-go (all Go modules in one process, ADR 0011)
 	mkdir -p go/bin && cd go/apps/afrotransact-go && go build -ldflags="-s -w" -o $(CURDIR)/go/bin/afrotransact-go ./cmd/afrotransact-go
 
-go-monolith-run: go-monolith ## Release 1: run afrotransact-go on :8250 (env names: docs/runbooks/release-1-local.md; every module also builds alone from go/services/<svc>/cmd)
+go-monolith-run: go-monolith ## Release 1, advanced: run afrotransact-go by hand on :8250 (make up serves it on :8200; env names: docs/runbooks/release-1-local.md; every module also builds alone from go/services/<svc>/cmd)
 	APP_ENV=$${APP_ENV:-local} go/bin/afrotransact-go
 
 go-monolith-image: ## Release 1: build the afrotransact-go container image (go/Dockerfile.afrotransact-go, context go/)
@@ -160,7 +173,9 @@ release-1-check: ## Release 1 delivery files, offline: workflows generated, laun
 	python3 infra/argocd/scripts/check_launch_set.py
 	python3 tools/release/check_delivery.py
 	python3 tools/release/test_route_diff.py
-	shellcheck -S warning infra/ops/postgres/release-1-bootstrap.sh infra/local/postgres/20-release-1.sh tools/ci/core_ci_db.sh
+	shellcheck -S warning infra/ops/postgres/release-1-bootstrap.sh infra/local/postgres/20-release-1.sh tools/ci/core_ci_db.sh \
+	  tools/release/core-db.sh tools/release/core-run.sh tools/dev/test/test-local.sh
+	bash tools/dev/test/test-local.sh
 
 gitops-render: ## Argo CD: emulate the ApplicationSets per env, render each app and kubeconform it (incl. CRDs)
 	python3 infra/argocd/scripts/render_apps.py
@@ -240,7 +255,7 @@ perf-wrk: ## wrk on gateway healthz + search (WRK_THREADS, WRK_CONNECTIONS, WRK_
 	tools/perf/run-wrk.sh
 
 # ------------------------------------------------------------------------------------------------ web / misc
-dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
+dev-up: ## Same as make up (everything: infra, core, afrotransact-go, the 3 web apps, docs portal and the 2 Expo apps, then all links; STACK=services for the old per-service processes; SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
 	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
 stripe-setup: ## Check your Stripe TEST account: keys, Connect and the seller account settings (plans are synced by the seller service)
@@ -252,13 +267,13 @@ secrets-check: ## Which secrets/provider keys each app needs and which you set i
 dev-down: ## Stop what dev-up started (keeps data)
 	tools/dev/local.sh down
 
-dev-status: ## Health of the services and infra started by dev-up
+dev-status: ## Health of core, afrotransact-go (or the services), web apps and infra started by make up
 	tools/dev/local.sh status
 
-dev-logs: ## Follow one service's log: make dev-logs SERVICE=orders
+dev-logs: ## Follow one process's log: make dev-logs SERVICE=core (afrotransact-go, web-storefront, ...; an old service name maps to core / afrotransact-go)
 	tools/dev/local.sh logs $(SERVICE)
 
-dev-restart: ## Rebuild and restart one service: make dev-restart SERVICE=delivery-runs
+dev-restart: ## Rebuild and restart one process: make dev-restart SERVICE=core | afrotransact-go (an old service name restarts the deployable that holds it; STACK=services restarts the single service)
 	tools/dev/local.sh restart $(SERVICE)
 
 repair-orgs: ## Identity re-syncs every approved seller/provider organisation (status, owners) from the seller service now
@@ -318,7 +333,7 @@ web-build: ## Build the web apps (pnpm -C web build); skipped if web/ or pnpm is
 	else echo "web/ not present — skipped"; fi
 
 CATALOG_URL ?= http://localhost:8101
-tax-gate-sweep: ## Repair now: close every live listing tax-returns does not resolve, reopen resolved ones (catalog POST /v1/tax-gate/sweep; local security is off, else set TOKEN=<staff token with tax:classify-admin>)
+tax-gate-sweep: ## (core serves :8101) Repair now: close every live listing tax-returns does not resolve, reopen resolved ones (catalog POST /v1/tax-gate/sweep; local security is off, else set TOKEN=<staff token with tax:classify-admin>)
 	@curl -fsS -X POST $(if $(TOKEN),-H "Authorization: Bearer $(TOKEN)") "$(CATALOG_URL)/v1/tax-gate/sweep" | python3 -m json.tool
 
 backlog: ## List backlog stories and their status
