@@ -2,11 +2,16 @@ package com.afrotransact.ai.adapter.out.http;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.List;
+import java.util.function.Supplier;
 
+import com.afrotransact.ai.port.AccountReader;
 import com.afrotransact.platform.security.ActingAsActorResolver;
+import org.slf4j.Logger;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
 
 /** Shared plumbing of the downstream HTTP adapters: timeouts, bearer relay and lenient JSON reads. */
@@ -40,5 +45,24 @@ final class Downstream {
 
     static long number(JsonNode node, String field) {
         return node.path(field).asLong(0);
+    }
+
+    /** The list of a response that is either a bare array or an object with an {@code items} array. */
+    static Iterable<JsonNode> items(JsonNode body) {
+        if (body == null) {
+            return List.of();
+        }
+        return body.isArray() ? body : body.path("items");
+    }
+
+    /** One account read: anything that fails is "not available", as Lola says it. */
+    static <T> AccountReader.Result<T> read(Logger log, String what, Supplier<T> call) {
+        try {
+            T value = call.get();
+            return value == null ? AccountReader.Result.unavailable() : AccountReader.Result.of(value);
+        } catch (RestClientException e) {
+            log.debug("{} service unavailable: {}", what, e.getClass().getSimpleName());
+            return AccountReader.Result.unavailable();
+        }
     }
 }

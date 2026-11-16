@@ -14,6 +14,7 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import com.afrotransact.ai.api.AiUsageApi;
+import com.afrotransact.bookings.api.ShopperBookingsApi;
 import com.afrotransact.catalog.api.CatalogLookupApi;
 import com.afrotransact.catalog.api.LabelApi;
 import com.afrotransact.content.api.AdSpendApi;
@@ -21,16 +22,19 @@ import com.afrotransact.identity.api.StaffDirectoryApi;
 import com.afrotransact.inventory.api.ReturnsApi;
 import com.afrotransact.inventory.api.StorageUsageApi;
 import com.afrotransact.module.CallerPrincipal;
+import com.afrotransact.module.EndUserActor;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.module.ModuleApiException;
 import com.afrotransact.module.ModuleMode;
 import com.afrotransact.offers.api.OffersApi;
 import com.afrotransact.orders.api.OrderLookupApi;
+import com.afrotransact.orders.api.ShopperOrdersApi;
 import com.afrotransact.payments.api.ReturnRefundApi;
 import com.afrotransact.payments.api.SellerBillingApi;
 import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.seller.api.SellerLookupApi;
 import com.afrotransact.taxreturns.api.ListingDecisionApi;
+import com.afrotransact.taxreturns.api.ShopperReturnsApi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -42,6 +46,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 /**
  * Boots afrotransact-core on a real PostgreSQL (the same environment as {@link CoreBootTest}: {@code AT_TEST_PG_ADMIN_URL},
@@ -163,6 +170,12 @@ class ModuleEdgesInCoreTest {
 
     private static final LocalDate DAY = LocalDate.of(2026, 11, 1);
 
+    /** A signed-in customer, built the only way an {@link EndUserActor} can be: from an authenticated JWT authentication. */
+    private static EndUserActor shopper() {
+        Jwt jwt = Jwt.withTokenValue("test").header("alg", "none").subject("customer-scope-test").claim("pt", "CUSTOMER").build();
+        return EndUserActor.fromAuthentication(new JwtAuthenticationToken(jwt, AuthorityUtils.NO_AUTHORITIES));
+    }
+
     static Stream<Arguments> apiMethods() {
         OffersApi.OfferTerms terms = new OffersApi.OfferTerms("r1", "AT00000000", "SKU-1", "NEW", 100L, null, null,
                 "SELLER", 1, 1, null, null, null);
@@ -217,7 +230,16 @@ class ModuleEdgesInCoreTest {
                 method("OrderLookupApi.lookup", "orders", "orders:lookup",
                         c -> c.getBean(OrderLookupApi.class).lookup(UUID.randomUUID().toString())),
                 method("OrderLookupApi.purchase", "orders", "orders:purchase-check",
-                        c -> c.getBean(OrderLookupApi.class).purchase("cust-1", "AT00000000")));
+                        c -> c.getBean(OrderLookupApi.class).purchase("cust-1", "AT00000000")),
+                // for the signed-in shopper: the scope is ai-gateway's delegation scope, the person a validated-looking customer token
+                method("ShopperOrdersApi.mine", "orders", ShopperOrdersApi.CALLER_SCOPE,
+                        c -> c.getBean(ShopperOrdersApi.class).mine(shopper(), 5)),
+                method("ShopperOrdersApi.track", "orders", ShopperOrdersApi.CALLER_SCOPE,
+                        c -> c.getBean(ShopperOrdersApi.class).track(shopper(), "AT-0000-000000")),
+                method("ShopperBookingsApi.mine", "bookings", ShopperBookingsApi.CALLER_SCOPE,
+                        c -> c.getBean(ShopperBookingsApi.class).mine(shopper())),
+                method("ShopperReturnsApi.mine", "tax-returns", ShopperReturnsApi.CALLER_SCOPE,
+                        c -> c.getBean(ShopperReturnsApi.class).mine(shopper(), 5)));
         return methods.stream().map(m -> Arguments.of(m));
     }
 

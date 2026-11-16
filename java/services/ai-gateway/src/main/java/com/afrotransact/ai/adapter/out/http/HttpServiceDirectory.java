@@ -5,6 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.afrotransact.ai.port.ServiceDirectory;
+import com.afrotransact.ai.port.Shopper;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +18,7 @@ import tools.jackson.databind.JsonNode;
 
 /** bookings-service {@code GET /v1/services/search?q=&zip=} (port 8109); empty list when it does not answer. */
 @Component
+@ConditionalOnModuleMode(caller = "ai-gateway", callee = "bookings", value = ModuleMode.HTTP)
 class HttpServiceDirectory implements ServiceDirectory {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpServiceDirectory.class);
@@ -27,7 +31,8 @@ class HttpServiceDirectory implements ServiceDirectory {
     }
 
     @Override
-    public List<Listing> find(String query, String zip, String bearerToken) {
+    public List<Listing> find(String query, String zip, Shopper shopper) {
+        String bearerToken = shopper.bearerToken();
         JsonNode body;
         try {
             body = client.get()

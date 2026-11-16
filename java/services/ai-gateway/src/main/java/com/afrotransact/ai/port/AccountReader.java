@@ -3,20 +3,20 @@ package com.afrotransact.ai.port;
 import java.util.List;
 
 /**
- * The shopper's own account data, read under their relayed token (they only ever see their own): recent orders, the
+ * The shopper's own account data, read as them (their relayed token over HTTP, the person in-process; they only ever see their own): recent orders, the
  * cart and service bookings. Each answer says whether the service responded, so Lola can say "not available yet"
  * instead of guessing.
  */
 public interface AccountReader {
 
-    Result<List<OrderSummary>> recentOrders(String bearerToken, int limit);
+    Result<List<OrderSummary>> recentOrders(Shopper shopper, int limit);
 
-    Result<CartSummary> cart(String bearerToken);
+    Result<CartSummary> cart(Shopper shopper);
 
-    Result<List<BookingSummary>> bookings(String bearerToken);
+    Result<List<BookingSummary>> bookings(Shopper shopper);
 
     /** The shopper's returns (RMAs) and their refunds, newest first; {@code orderNumber} narrows to one order. */
-    Result<List<ReturnSummary>> returns(String bearerToken, String orderNumber);
+    Result<List<ReturnSummary>> returns(Shopper shopper, String orderNumber);
 
     /**
      * Outcome of a read.

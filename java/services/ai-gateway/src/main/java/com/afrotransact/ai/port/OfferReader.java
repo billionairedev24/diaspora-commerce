@@ -8,7 +8,7 @@ import java.util.List;
  */
 public interface OfferReader {
 
-    List<Offer> offers(String productAtin, String bearerToken);
+    List<Offer> offers(String productAtin, Shopper shopper);
 
     /** One seller's offer for a product. */
     record Offer(String offerId, String sellerName, String sellerKind, String fulfilment, long priceMinor,

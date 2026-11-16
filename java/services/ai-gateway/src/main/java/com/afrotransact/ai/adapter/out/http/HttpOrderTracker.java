@@ -5,6 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.afrotransact.ai.port.OrderTracker;
+import com.afrotransact.ai.port.Shopper;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +22,7 @@ import tools.jackson.databind.JsonNode;
  * anything else (including the service not being deployed yet) means "not available".
  */
 @Component
+@ConditionalOnModuleMode(caller = "ai-gateway", callee = "orders", value = ModuleMode.HTTP)
 class HttpOrderTracker implements OrderTracker {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpOrderTracker.class);
@@ -31,7 +35,8 @@ class HttpOrderTracker implements OrderTracker {
     }
 
     @Override
-    public Lookup track(String orderId, String bearerToken) {
+    public Lookup track(String orderId, Shopper shopper) {
+        String bearerToken = shopper.bearerToken();
         JsonNode o;
         try {
             o = client.get().uri("/v1/orders/{id}", orderId)

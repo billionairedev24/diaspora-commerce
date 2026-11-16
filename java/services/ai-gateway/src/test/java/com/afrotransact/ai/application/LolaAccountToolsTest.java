@@ -16,6 +16,7 @@ import com.afrotransact.ai.port.OfferReader;
 import com.afrotransact.ai.port.OrderTracker;
 import com.afrotransact.ai.port.ProductSearch;
 import com.afrotransact.ai.port.ServiceDirectory;
+import com.afrotransact.ai.port.Shopper;
 import com.afrotransact.ai.port.ToolCallRequest;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -33,22 +34,22 @@ class LolaAccountToolsTest {
             mock(OfferReader.class), mock(DeliveryPromises.class), mock(OrderTracker.class), mock(ServiceDirectory.class),
             new AccountReader() {
                 @Override
-                public Result<List<OrderSummary>> recentOrders(String bearerToken, int limit) {
+                public Result<List<OrderSummary>> recentOrders(Shopper shopper, int limit) {
                     return orders;
                 }
 
                 @Override
-                public Result<CartSummary> cart(String bearerToken) {
+                public Result<CartSummary> cart(Shopper shopper) {
                     return cart;
                 }
 
                 @Override
-                public Result<List<BookingSummary>> bookings(String bearerToken) {
+                public Result<List<BookingSummary>> bookings(Shopper shopper) {
                     return bookings;
                 }
 
                 @Override
-                public Result<List<ReturnSummary>> returns(String bearerToken, String orderNumber) {
+                public Result<List<ReturnSummary>> returns(Shopper shopper, String orderNumber) {
                     return returns;
                 }
             }, new InjectionFilter() {

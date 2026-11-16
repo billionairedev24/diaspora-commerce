@@ -7,7 +7,7 @@ import java.util.Optional;
 public interface CatalogReader {
 
     /** A live product or variant by ATIN (variant first, then product); empty when not live or unknown. */
-    Optional<Item> find(String atin, String bearerToken);
+    Optional<Item> find(String atin, Shopper shopper);
 
     /**
      * A live catalog item.

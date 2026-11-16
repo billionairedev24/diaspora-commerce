@@ -6,6 +6,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.ai.port.CatalogReader;
+import com.afrotransact.ai.port.Shopper;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +20,7 @@ import tools.jackson.databind.JsonNode;
 
 /** catalog-service public reads; 404 and outages read as "not found" (Lola then refuses to invent the product). */
 @Component
+@ConditionalOnModuleMode(caller = "ai-gateway", callee = "catalog", value = ModuleMode.HTTP)
 class HttpCatalogReader implements CatalogReader {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpCatalogReader.class);
@@ -29,7 +33,8 @@ class HttpCatalogReader implements CatalogReader {
     }
 
     @Override
-    public Optional<Item> find(String atin, String bearerToken) {
+    public Optional<Item> find(String atin, Shopper shopper) {
+        String bearerToken = shopper.bearerToken();
         Optional<JsonNode> variant = get("/v1/public/variants/{atin}", atin, bearerToken);
         if (variant.isPresent()) {
             JsonNode v = variant.get().path("variant");

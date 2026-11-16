@@ -75,7 +75,7 @@ class LolaController {
     @PostMapping(path = "/v1/lola/chat", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     SseEmitter chat(@Valid @RequestBody ChatRequest body, HttpServletRequest request) {
-        Caller caller = callers.current(request);
+        Caller caller = callers.shopper(request);
         lola.admit(caller);
         SseEmitter emitter = new SseEmitter(sseTimeout.toMillis());
         Map<String, String> mdc = MDC.getCopyOfContextMap();
@@ -103,7 +103,7 @@ class LolaController {
     @PostMapping(path = "/v1/lola/chat/complete", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     ChatReply complete(@Valid @RequestBody ChatRequest body, HttpServletRequest request) {
-        Caller caller = callers.current(request);
+        Caller caller = callers.shopper(request);
         List<EventView> events = new ArrayList<>();
         LolaEvent.Done done = lola.chat(caller, body.toRequest(), e -> events.add(EventView.of(e)));
         return new ChatReply(events, done);

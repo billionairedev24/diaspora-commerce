@@ -157,7 +157,7 @@ class LolaToolkitImpl implements LolaToolkit {
 
     private ToolOutcome compareOffers(JsonNode a, ToolContext ctx) {
         String atin = text(a, "atin").toUpperCase(Locale.ROOT);
-        Optional<CatalogReader.Item> item = catalog.find(atin, ctx.caller().bearerToken());
+        Optional<CatalogReader.Item> item = catalog.find(atin, ctx.caller().shopper());
         if (item.isEmpty()) {
             return failure(LolaToolSpecs.COMPARE_OFFERS, "No live product with ATIN " + atin);
         }
@@ -168,7 +168,7 @@ class LolaToolkitImpl implements LolaToolkit {
                     true, 0, false, 0, 0, ""));
         }
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (OfferReader.Offer o : offers.offers(product.productAtin(), ctx.caller().bearerToken())) {
+        for (OfferReader.Offer o : offers.offers(product.productAtin(), ctx.caller().shopper())) {
             ctx.facts().addAmount(o.priceMinor());
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("offerId", o.offerId());
@@ -222,7 +222,7 @@ class LolaToolkitImpl implements LolaToolkit {
         String atin = text(a, "atin").toUpperCase(Locale.ROOT);
         Optional<ProductCard> known = ctx.facts().product(atin);
         if (known.isEmpty()) {
-            known = catalog.find(atin, ctx.caller().bearerToken()).filter(i -> i.priceMinor() > 0)
+            known = catalog.find(atin, ctx.caller().shopper()).filter(i -> i.priceMinor() > 0)
                     .map(i -> new ProductCard(atin, clean(i.title()), "", "", i.priceMinor(), i.currency(), true, 0,
                             false, 0, 0, ""));
             known.ifPresent(ctx.facts()::addProduct);
@@ -312,7 +312,7 @@ class LolaToolkitImpl implements LolaToolkit {
         if (orderId.isBlank()) {
             return failure(LolaToolSpecs.TRACK_ORDER, "Ask the shopper for their order number.");
         }
-        OrderTracker.Lookup lookup = orders.track(orderId, ctx.caller().bearerToken());
+        OrderTracker.Lookup lookup = orders.track(orderId, ctx.caller().shopper());
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("orderId", orderId);
         data.put("availability", lookup.availability().name());
@@ -331,7 +331,7 @@ class LolaToolkitImpl implements LolaToolkit {
 
     private ToolOutcome myOrders(JsonNode a, ToolContext ctx) {
         int limit = Math.max(1, Math.min(10, a.path("limit").asInt(5)));
-        AccountReader.Result<List<AccountReader.OrderSummary>> r = account.recentOrders(ctx.caller().bearerToken(), limit);
+        AccountReader.Result<List<AccountReader.OrderSummary>> r = account.recentOrders(ctx.caller().shopper(), limit);
         Map<String, Object> data = new LinkedHashMap<>();
         if (!r.available()) {
             data.put("note", "Order history is not available yet; offer a hand-off to support.");
@@ -355,7 +355,7 @@ class LolaToolkitImpl implements LolaToolkit {
     }
 
     private ToolOutcome viewCart(ToolContext ctx) {
-        AccountReader.Result<AccountReader.CartSummary> r = account.cart(ctx.caller().bearerToken());
+        AccountReader.Result<AccountReader.CartSummary> r = account.cart(ctx.caller().shopper());
         Map<String, Object> data = new LinkedHashMap<>();
         if (!r.available()) {
             data.put("note", "The cart is not available right now.");
@@ -387,7 +387,7 @@ class LolaToolkitImpl implements LolaToolkit {
     }
 
     private ToolOutcome myBookings(ToolContext ctx) {
-        AccountReader.Result<List<AccountReader.BookingSummary>> r = account.bookings(ctx.caller().bearerToken());
+        AccountReader.Result<List<AccountReader.BookingSummary>> r = account.bookings(ctx.caller().shopper());
         Map<String, Object> data = new LinkedHashMap<>();
         if (!r.available()) {
             data.put("note", "Bookings are not available yet; offer a hand-off to support.");
@@ -413,7 +413,7 @@ class LolaToolkitImpl implements LolaToolkit {
 
     private ToolOutcome returnStatus(JsonNode a, ToolContext ctx, boolean refundsOnly) {
         String tool = refundsOnly ? LolaToolSpecs.REFUND_STATUS : LolaToolSpecs.RETURN_STATUS;
-        AccountReader.Result<List<AccountReader.ReturnSummary>> r = account.returns(ctx.caller().bearerToken(),
+        AccountReader.Result<List<AccountReader.ReturnSummary>> r = account.returns(ctx.caller().shopper(),
                 text(a, "orderId"));
         Map<String, Object> data = new LinkedHashMap<>();
         if (!r.available()) {
@@ -475,7 +475,7 @@ class LolaToolkitImpl implements LolaToolkit {
         String query = text(a, "query");
         String zip = text(a, "zip").isEmpty() ? Optional.ofNullable(ctx.zip()).orElse("") : text(a, "zip");
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (ServiceDirectory.Listing l : services.find(query, emptyToNull(zip), ctx.caller().bearerToken())) {
+        for (ServiceDirectory.Listing l : services.find(query, emptyToNull(zip), ctx.caller().shopper())) {
             ctx.facts().addAmount(l.priceFromMinor());
             ctx.facts().addAmount(l.depositMinor());
             Map<String, Object> row = new LinkedHashMap<>();

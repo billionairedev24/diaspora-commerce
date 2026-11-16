@@ -2,10 +2,10 @@ package com.afrotransact.ai.port;
 
 import java.util.List;
 
-/** orders-service {@code GET /v1/orders/{id}} under the shopper's token (they only see their own orders). */
+/** The shopper's own order by number or id: orders {@code GET /v1/orders/{id}} under their token, or in-process as them (they only see their own orders). */
 public interface OrderTracker {
 
-    Lookup track(String orderId, String bearerToken);
+    Lookup track(String orderId, Shopper shopper);
 
     /** Lookup outcome. */
     enum Availability {

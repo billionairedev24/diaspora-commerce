@@ -19,7 +19,7 @@ class ModuleCallSettingsTest {
         assertThat(settings.timeout("orders", "inventory", null)).isEqualTo(Duration.ofSeconds(5));
         assertThat(settings.timeout("orders", "payments", null)).isEqualTo(Duration.ofSeconds(5));
         assertThat(settings.timeout("catalog", "ai-gateway", null)).isEqualTo(Duration.ofSeconds(10));
-        assertThat(settings.timeout("ai-gateway", "orders", null)).isEqualTo(Duration.ofSeconds(10));
+        assertThat(settings.timeout("ai-gateway", "payments", null)).isEqualTo(Duration.ofSeconds(10));
         assertThat(settings.timeout("unspecified", "unspecified", null)).isEqualTo(Duration.ofSeconds(5));
     }
 
@@ -34,6 +34,10 @@ class ModuleCallSettingsTest {
         assertThat(settings.timeout("bookings", "payments", null)).isEqualTo(Duration.ofSeconds(10));
         assertThat(settings.timeout("seller", "ai-gateway", null)).isEqualTo(Duration.ofSeconds(10));
         assertThat(settings.timeout("trust-ops", "ai-gateway", null)).isEqualTo(Duration.ofSeconds(10));
+        // Lola's readers: at.ai.downstream.timeout was 5 s, so a tool degrades after 5 s although ai-gateway is on one side
+        for (String callee : new String[] {"catalog", "offers", "orders", "bookings", "tax-returns"}) {
+            assertThat(settings.timeout("ai-gateway", callee, null)).as("ai-gateway -> " + callee).isEqualTo(Duration.ofSeconds(5));
+        }
     }
 
     @Test

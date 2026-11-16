@@ -8,7 +8,7 @@ import java.util.List;
  */
 public interface ServiceDirectory {
 
-    List<Listing> find(String query, String zip, String bearerToken);
+    List<Listing> find(String query, String zip, Shopper shopper);
 
     /** A bookable service. */
     record Listing(String serviceId, String name, String providerName, String description, long priceFromMinor,

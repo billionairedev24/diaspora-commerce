@@ -397,6 +397,12 @@ at:
     ai-gateway:
       enabled: ${MODULE_AI_GATEWAY_ENABLED:true}
       client-id: ai-gateway-service
+      # Delegation, not token scopes: lets ai-gateway read the signed-in shopper's own orders, bookings and returns in-process for Lola
+      # (orders ShopperOrdersApi, bookings ShopperBookingsApi, tax-returns ShopperReturnsApi). Public reads (catalog, offers, service search) need none.
+      caller-scopes:
+        - orders:mine.read
+        - bookings:mine.read
+        - returns:mine.read
       datasource:
         url: ${AI_GATEWAY_DB_URL:${CORE_DB_URL:jdbc:postgresql://localhost:5432/core}}
         username: ${AI_GATEWAY_DB_USER:ai_gateway}
@@ -448,6 +454,10 @@ at:
   # in-process, and so are catalog (moderation, reviews), orders (lookup) and ai-gateway (triage).
   trustops:
     mode: ${AT_TRUSTOPS_MODE:in-process}
+  # ai-gateway (Lola's readers) -> catalog, offers, orders, bookings, tax-returns in-process; the person is captured at request entry. The cart
+  # (Go), search and promise (Go) stay HTTP. Per edge: AT_AIGATEWAY_<CALLEE>_MODE=http (callee tax-returns: AT_AIGATEWAY_TAXRETURNS_MODE).
+  aigateway:
+    mode: ${AT_AIGATEWAY_MODE:in-process}
   # identity -> seller (organisation mirror for the reconcile job) in-process; token validation stays on the real JWT/JWKS path.
   identity:
     mode: ${AT_IDENTITY_MODE:in-process}
