@@ -15,11 +15,13 @@ class SpendTodayServiceImpl implements SpendTodayService {
 
     private final UsageLedger ledger;
     private final SpendLimits limits;
+    private final AiSpendCapPolicy cap;
     private final Clock clock;
 
-    SpendTodayServiceImpl(UsageLedger ledger, SpendLimits limits, Clock clock) {
+    SpendTodayServiceImpl(UsageLedger ledger, SpendLimits limits, AiSpendCapPolicy cap, Clock clock) {
         this.ledger = ledger;
         this.limits = limits;
+        this.cap = cap;
         this.clock = clock;
     }
 
@@ -34,7 +36,7 @@ class SpendTodayServiceImpl implements SpendTodayService {
         long spent = byFeature.stream().mapToLong(FeatureSpend::costMicros).sum();
         long calls = byFeature.stream().mapToLong(FeatureSpend::calls).sum();
         long tokens = byFeature.stream().mapToLong(FeatureSpend::tokens).sum();
-        return new SpendToday(day, limits.globalDailyCostMicros(), limits.callerDailyCostMicros(), spent, calls, tokens,
+        return new SpendToday(day, cap.capMicros(), limits.callerDailyCostMicros(), spent, calls, tokens,
                 calls > 0, day.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC), byFeature);
     }
 }

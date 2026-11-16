@@ -35,25 +35,31 @@ public record AiProperties(Map<String, Route> routes, List<Price> prices, Price 
         maxInputChars = maxInputChars == null ? 4000 : maxInputChars;
         embeddings = embeddings == null ? new Embeddings(null) : embeddings;
         providerPrivacy = providerPrivacy == null ? new ProviderPrivacy(null, null) : providerPrivacy;
-        spend = spend == null ? new Spend(null, null, null, null) : spend;
+        spend = spend == null ? new Spend(null, null, null, null, null, null) : spend;
     }
 
     /**
-     * The gateway-wide spend ceiling (owner decision: USD 2 per day in total). Unlike {@code budgets} it applies to every
-     * feature together; 0 = unlimited.
+     * The gateway-wide daily spend cap (owner decision: USD 2 per day in total) and its bounds. Unlike {@code budgets} the cap
+     * applies to every feature together. Staff change it at runtime (Settings > AI and MCP spend cap); the deployment only
+     * sets where it starts and the most it can ever be.
      *
-     * @param globalDailyCostUsd    all callers and features together per UTC day (default 2.00)
+     * @param globalDailyCostUsd    INITIAL default of the cap: all callers and features together per UTC day (default
+     *                              2.00), used until a value is saved; 0 = AI off
+     * @param globalDailyCostMaxUsd hard ceiling for any saved cap (default 20.00); the default must not exceed it
+     * @param capCacheSeconds       how long a replica keeps the cap it read, 0 to 30 (default 10)
      * @param callerDailyCostUsd    one caller (user or service client) per UTC day, so one caller cannot use up the day
      *                              for everyone (default 0.50)
      * @param userCallsPerMinute    model calls per minute for a user token (default 20; one Lola message can take
      *                              several model rounds)
      * @param serviceCallsPerMinute model calls per minute for a service client such as media-service (default 120)
      */
-    public record Spend(BigDecimal globalDailyCostUsd, BigDecimal callerDailyCostUsd, Integer userCallsPerMinute,
-                        Integer serviceCallsPerMinute) {
+    public record Spend(BigDecimal globalDailyCostUsd, BigDecimal globalDailyCostMaxUsd, Integer capCacheSeconds,
+                        BigDecimal callerDailyCostUsd, Integer userCallsPerMinute, Integer serviceCallsPerMinute) {
 
         public Spend {
             globalDailyCostUsd = globalDailyCostUsd == null ? new BigDecimal("2.00") : globalDailyCostUsd;
+            globalDailyCostMaxUsd = globalDailyCostMaxUsd == null ? new BigDecimal("20.00") : globalDailyCostMaxUsd;
+            capCacheSeconds = capCacheSeconds == null ? 10 : capCacheSeconds;
             callerDailyCostUsd = callerDailyCostUsd == null ? new BigDecimal("0.50") : callerDailyCostUsd;
             userCallsPerMinute = userCallsPerMinute == null ? 20 : userCallsPerMinute;
             serviceCallsPerMinute = serviceCallsPerMinute == null ? 120 : serviceCallsPerMinute;

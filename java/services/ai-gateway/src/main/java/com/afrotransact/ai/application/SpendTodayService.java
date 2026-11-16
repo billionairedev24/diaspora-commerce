@@ -15,7 +15,7 @@ public interface SpendTodayService {
 
     /**
      * @param day             the UTC day
-     * @param capMicros       the gateway-wide daily cap in micro-dollars (0 = unlimited); set by {@code AI_GLOBAL_DAILY_COST_USD}
+     * @param capMicros       the gateway-wide daily cap in micro-dollars (0 = AI off): the saved cap, else the {@code AI_GLOBAL_DAILY_COST_USD} default
      * @param callerCapMicros one caller's daily share in micro-dollars (0 = unlimited); {@code AI_CALLER_DAILY_COST_USD}
      * @param spentMicros     estimated model cost so far today, all features
      * @param hasData         at least one model call was recorded today

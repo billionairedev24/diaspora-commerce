@@ -19,7 +19,7 @@ class ArchitectureTest {
 
     /**
      * The server is public and has no AI budget of its own: a tool that needs a model must call the ai-gateway with the
-     * caller's relayed token, so the gateway's USD 2 daily ceiling and per-caller limits apply. Direct model clients
+     * caller's relayed token, so the gateway's daily spend cap (a runtime setting, default USD 2) and per-caller limits apply. Direct model clients
      * would bypass them.
      */
     @Test
@@ -28,7 +28,7 @@ class ArchitectureTest {
                 .should().dependOnClassesThat().resideInAnyPackage("org.springframework.ai.chat..",
                         "org.springframework.ai.openai..", "org.springframework.ai.embedding..", "com.openai..",
                         "com.afrotransact.ai..")
-                .because("AI calls go through the ai-gateway, which enforces the daily spend ceiling")
+                .because("AI calls go through the ai-gateway, which enforces the daily spend cap")
                 .check(classes());
     }
 

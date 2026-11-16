@@ -9,6 +9,8 @@ POST /v1/ai/staff-assistant/complete | STAFF_ONLY | SellerAssistantServiceImpl.c
 POST /v1/ai/triage | STAFF_ONLY | ai:triage (platform roles and the trust-ops service client); fields are caller-supplied, subjectId is only echoed | -
 GET /v1/ai/usage/orgs | STAFF_ONLY | OrgUsageServiceImpl: STAFF with ai:manage or SERVICE with ai:usage.read; all orgs, never a member | -
 GET /v1/ai/usage/today | STAFF_ONLY | SpendTodayServiceImpl: STAFF with ai:manage only; gateway-wide totals, no per-person or per-org data | -
+GET /v1/ai/spend-cap | STAFF_ONLY | SpendCapServiceImpl.view: STAFF with ai:manage or ai:cap.manage; gateway-wide cap, spend and change history (staff ids, reasons), no per-person or per-org data | SpendCapServiceTest
+PUT /v1/ai/spend-cap | STAFF_ONLY | SpendCapServiceImpl.update: STAFF with ai:cap.manage only (never a service client or shopper), reason 3 to 300 characters, If-Match version, value 0 to the ceiling; audit event ai.spend-cap.changed | SpendCapServiceTest
 POST /v1/lola/chat | CUSTOMER_SELF | memory keyed by (session, token subject); tools take no identity argument and relay the caller's bearer token, so orders, cart, bookings and returns are enforced by their owning services | AiTenantIsolationTest
 POST /v1/lola/chat/complete | CUSTOMER_SELF | same as /v1/lola/chat | AiTenantIsolationTest
 GET /v1/lola/sessions/{sessionId}/messages | CUSTOMER_SELF | ConversationStore.recent(session, token subject) | AiTenantIsolationTest

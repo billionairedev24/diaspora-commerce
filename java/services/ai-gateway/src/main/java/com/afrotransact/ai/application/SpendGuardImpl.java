@@ -29,13 +29,16 @@ class SpendGuardImpl implements SpendGuard {
     private final UsageLedger ledger;
     private final CallRateLimiter limiter;
     private final SpendLimits limits;
+    private final AiSpendCapPolicy cap;
     private final AiMetrics metrics;
     private final Clock clock;
 
-    SpendGuardImpl(UsageLedger ledger, CallRateLimiter limiter, SpendLimits limits, AiMetrics metrics, Clock clock) {
+    SpendGuardImpl(UsageLedger ledger, CallRateLimiter limiter, SpendLimits limits, AiSpendCapPolicy cap, AiMetrics metrics,
+                   Clock clock) {
         this.ledger = ledger;
         this.limiter = limiter;
         this.limits = limits;
+        this.cap = cap;
         this.metrics = metrics;
         this.clock = clock;
     }
@@ -49,12 +52,14 @@ class SpendGuardImpl implements SpendGuard {
             throw new RateLimitedException(wait);
         }
         LocalDate today = LocalDate.ofInstant(Instant.now(clock), ZoneOffset.UTC);
-        if (limits.globalDailyCostMicros() > 0
-                && ledger.globalTotals(today).costMicros() >= limits.globalDailyCostMicros()) {
+        long dailyCap = cap.capMicros();
+        // 0 is "AI off": spend (never negative) is always at or above it. Lowering the cap below today's spend blocks at once.
+        if (ledger.globalTotals(today).costMicros() >= dailyCap) {
             metrics.budget(feature.key(), "deny_global");
-            LOG.warn("AI daily spend ceiling reached: feature={}", feature.key());
-            throw new BudgetExceededException(feature.key(), GLOBAL_SCOPE,
-                    "The daily AI spend limit has been reached; try again tomorrow");
+            LOG.warn("AI daily spend cap reached: feature={} capMicros={}", feature.key(), dailyCap);
+            throw new BudgetExceededException(feature.key(), GLOBAL_SCOPE, dailyCap == 0
+                    ? "AI is switched off by the daily AI spend limit"
+                    : "The daily AI spend limit has been reached; try again tomorrow");
         }
         if (limits.callerDailyCostMicros() > 0
                 && ledger.callerTotals(caller.subject(), today).costMicros() >= limits.callerDailyCostMicros()) {

@@ -9,6 +9,8 @@ public final class AiPermissions {
     public static final String TRIAGE = "ai:triage";
     /** Model routes, budgets and Lola settings (existing identity permission). */
     public static final String MANAGE = "ai:manage";
+    /** Change the gateway-wide daily AI spend cap (Super Admin and Developer by default); viewing needs {@link #MANAGE}. */
+    public static final String CAP_MANAGE = "ai:cap.manage";
     /** Service scope of seller-service: read AI usage (credits) per organisation and day for metered billing. */
     public static final String USAGE_READ = "ai:usage.read";
 

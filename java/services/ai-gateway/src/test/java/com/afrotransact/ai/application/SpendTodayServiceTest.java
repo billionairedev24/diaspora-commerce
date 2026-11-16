@@ -17,6 +17,7 @@ import com.afrotransact.ai.domain.SpendLimits;
 import com.afrotransact.ai.port.UsageLedger;
 import com.afrotransact.ai.port.UsageLedger.FeatureDayUsage;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class SpendTodayServiceTest {
@@ -26,8 +27,14 @@ class SpendTodayServiceTest {
     private static final Caller STAFF = new Caller("staff-1", "STAFF", null, Set.of("ai:manage"), null);
 
     private final UsageLedger ledger = mock(UsageLedger.class);
+    private final AiSpendCapPolicy cap = mock(AiSpendCapPolicy.class);
     private final SpendTodayServiceImpl service = new SpendTodayServiceImpl(ledger,
-            new SpendLimits(2_000_000, 500_000, 20, 120), Clock.fixed(NOW, ZoneOffset.UTC));
+            new SpendLimits(500_000, 20, 120), cap, Clock.fixed(NOW, ZoneOffset.UTC));
+
+    @BeforeEach
+    void capIs2Dollars() {
+        when(cap.capMicros()).thenReturn(2_000_000L);
+    }
 
     @Test
     void sumsTheLedgerByFeatureAgainstTheCapAndSaysWhenTheDayResets() {
@@ -62,11 +69,19 @@ class SpendTodayServiceTest {
 
     @Test
     void usesTheUtcDayNotTheServersLocalDay() {
-        SpendTodayServiceImpl late = new SpendTodayServiceImpl(ledger, new SpendLimits(2_000_000, 0, 20, 120),
+        SpendTodayServiceImpl late = new SpendTodayServiceImpl(ledger, new SpendLimits(0, 20, 120), cap,
                 Clock.fixed(Instant.parse("2026-11-15T23:59:59Z"), ZoneOffset.ofHours(9)));
         when(ledger.dayUsageByFeature(TODAY)).thenReturn(List.of());
 
         assertThat(late.today(STAFF).day()).isEqualTo(TODAY);
+    }
+
+    @Test
+    void reportsTheSavedCapNotTheDeploymentDefault() {
+        when(cap.capMicros()).thenReturn(7_500_000L);
+        when(ledger.dayUsageByFeature(TODAY)).thenReturn(List.of());
+
+        assertThat(service.today(STAFF).capMicros()).isEqualTo(7_500_000);
     }
 
     @Test
