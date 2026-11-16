@@ -36,13 +36,14 @@ the next free identity version on `main` and `release-1`; check both (`ls java/s
 
 ## Worked example: `orders:override-shipment` (Super Admin only)
 
-A permission that must **not** be handed out widely: it lets a person override the status of a shipment the seller ships
-themselves (`SELLER_SHIPS`), forward only, with a required reason, audited.
+A permission that must **not** be handed out widely: it lets a person override the status of a shipment Fulfilled by AfroTransact
+or of an old seller-shipped one (legacy history; self-shipping is retired), forward only, with a required reason, audited. Pickup
+shipments are never overridden.
 
 1. Migration `identity V53__orders_override_shipment_permission.sql` adds the permission (module `orders`) and grants it to
    `platform.super_admin` only. It is idempotent and is the same file on `main`, `develop` and `release-1`.
 2. Nobody else holds it. To give it to one more role: Settings > Roles and permissions > the role > search "override" > switch it
    on with a reason. For one person: People > the person > *Grant a permission directly*. Both are in the change log.
 3. The check is on the server (orders-service `OrdersAccess.overrideActor`) and in gateway-bff, which only shows the
-   **Override status** action to holders. Without it the order sheet says "Seller ships this order" and offers nothing.
+   **Override status** action to holders. Without it the order sheet offers no override (an old seller-shipped order says "Old seller-shipped order: use Override status").
 4. Mock BFF catalogue: the V52 permission was added by hand to `web/packages/api-client/src/mocks/staff/access-catalogue.ts` (running `tools/identity/gen_access_fixture.py` today also pulls in unrelated drift), and Super Admin gets it in `mocks/staff/model.ts`.

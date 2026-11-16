@@ -23,9 +23,10 @@ Open an order. Each shipment says who fulfils it, and **Set status** offers only
   like, who received it and a note) and the customer sees it on their order. If it cannot be delivered, record **Delivery failed** with a reason, then try again or **Return to the seller**.
   These are the same steps as the **Delivery** page. You cannot skip a step; each change keeps your name, the time and your note.
 - **Seller pickup**: **Ready for pickup**, **Collected** (the customer's 4-digit code, or a reason) or **Not collected** (a reason).
-- **Seller ships**: the seller updates it. The menu says "Updated by the seller". Only people with the special override permission see **Override status**; it only moves forward and needs a reason.
+- **Shipped by the seller (retired)**: sellers can no longer ship orders themselves, so there are no new ones; old ones are history. The menu says "Old seller-shipped order: use Override status".
+- **Override status**: only people with the special override permission see it. It corrects a shipment Fulfilled by AfroTransact (normally you use the delivery steps) or an old seller-shipped one, only moves forward and always needs a reason. Pickup orders have none.
 
-If a step is greyed, the reason is beside it: "You need the delivery permission", "Updated by the seller", "Not available for pickup orders" or "Finish earlier steps first".
+If a step is greyed, the reason is beside it: "You need the delivery permission", "Old seller-shipped order: use Override status", "Not available for pickup orders" or "Finish earlier steps first".
 **Delivery dispatch** and **Delivery quotes** are marked "Not in use" while AfroTransact does not use drivers. See [delivery and fulfilment modes](../../../engineering/delivery-fulfilment.md).
 
 ## Review a seller application
