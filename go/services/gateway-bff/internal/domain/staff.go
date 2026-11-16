@@ -522,14 +522,20 @@ type RecordShipment struct {
 	Tone       *string `json:"tone"`
 	// FulfilmentLabel says who packs it ("AfroTransact" or "Seller"); DeliveryLabel how it travels ("Carrier",
 	// "AfroTransact Delivery", "Pickup").
-	FulfilmentLabel string           `json:"fulfilmentLabel"`
-	DeliveryLabel   string           `json:"deliveryLabel"`
-	ItemCount       int              `json:"itemCount"`
-	ItemTitles      []string         `json:"itemTitles"`
-	Carrier         *string          `json:"carrier"`
-	TrackingNumber  *string          `json:"trackingNumber"`
-	Transitions     []ShipmentStep   `json:"transitions"`
-	History         []ShipmentChange `json:"history"`
+	FulfilmentLabel string `json:"fulfilmentLabel"`
+	DeliveryLabel   string `json:"deliveryLabel"`
+	// Mode is who moves it: seller_ships, afrotransact_delivery and fulfilled_by_afrotransact ("Fulfilled by AfroTransact"),
+	// pickup or preorder_run. CanOverride and OverrideSteps are for holders of orders:override-shipment on seller-shipped
+	// shipments.
+	Mode           string           `json:"mode"`
+	CanOverride    bool             `json:"canOverride"`
+	OverrideSteps  []string         `json:"overrideSteps"`
+	ItemCount      int              `json:"itemCount"`
+	ItemTitles     []string         `json:"itemTitles"`
+	Carrier        *string          `json:"carrier"`
+	TrackingNumber *string          `json:"trackingNumber"`
+	Transitions    []ShipmentStep   `json:"transitions"`
+	History        []ShipmentChange `json:"history"`
 }
 
 // ShipmentStep is one status staff could set on a shipment, with why they cannot when they cannot.
@@ -538,15 +544,22 @@ type ShipmentStep struct {
 	Allowed bool    `json:"allowed"`
 	Reason  *string `json:"reason"`
 	// Blocked classifies Reason so the console can word it in the staff member's language: PERMISSION (the role may not
-	// change shipments), SELLER (only the seller does this step), SEQUENCE (earlier steps come first), STATE (not
-	// reachable from the current status).
+	// change shipments), DELIVERY_PERMISSION (AfroTransact delivers it and the role lacks delivery:manage), SELLER (only
+	// the seller does this step), SELLER_UPDATES (the seller ships it and updates it themselves), PICKUP_ORDER (not
+	// available for pickup orders), SEQUENCE (earlier steps come first), STATE (not reachable from the current status).
 	Blocked *string `json:"blocked"`
 	// NoteRequired: the step needs a reason (or, where CodeAccepted, the customer's code instead).
 	NoteRequired bool `json:"noteRequired"`
 	// CodeAccepted: the customer's 4-digit handover code may be entered (handing over a pickup order).
 	CodeAccepted bool `json:"codeAccepted"`
-	// DriverStep: AfroTransact drivers normally take this step in the driver app; staff do it by hand.
+	// DriverStep: AfroTransact drivers normally take this step in the driver app; staff do it by hand. Always false
+	// while the driver app is dormant (staff are the delivery agents).
 	DriverStep bool `json:"driverStep"`
+	// Via is the API that takes the step: "orders" (the order's shipment-status action) or "delivery" (the Delivery module,
+	// the same steps the Delivery queue offers).
+	Via string `json:"via"`
+	// ProofRequired: delivered by AfroTransact needs a photo (optional recipient name and note).
+	ProofRequired bool `json:"proofRequired"`
 }
 
 // ShipmentChange is one line of a shipment's status history.

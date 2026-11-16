@@ -80,6 +80,8 @@ func deliveryOverride(w http.ResponseWriter, r *http.Request, _ map[string]any) 
 		problemDetail(w, 422, "orders.delivery-assignee-invalid", "That person cannot be assigned deliveries")
 	case strings.HasSuffix(p, "/picked-up") && strings.HasPrefix(p, "/v1/deliveries/"):
 		problemDetail(w, 409, "orders.delivery-unassigned", "Take this delivery, or assign it to someone, first")
+	case (strings.HasSuffix(p, "/in-transit") || strings.HasSuffix(p, "/returned")) && strings.HasPrefix(p, "/v1/deliveries/"):
+		writeJ(w, 200, dlvDetail("ready", true))
 	case strings.HasSuffix(p, "/delivered") && strings.HasPrefix(p, "/v1/deliveries/"):
 		writeJ(w, 200, dlvDetail("delivered", true))
 	case p == "/v1/uploads" && r.Method == http.MethodPost:
@@ -212,6 +214,19 @@ func TestStaffDeliveryModule(t *testing.T) {
 		t.Fatalf("conflict = %+v", conflict)
 	}
 	do("dlv-manager", "POST", one+"/failed", map[string]any{"reason": " "}, 422)
+	// In transit and returned (the owner's "Set status" menu offers them): readers are refused, a return needs a reason, and the
+	// status the screen showed is passed on so a stale screen gets a 409 from orders instead of overruling someone.
+	do("dlv-reader", "POST", one+"/in-transit", nil, 403)
+	do("dlv-reader", "POST", one+"/returned", map[string]any{"reason": "Nobody home twice"}, 403)
+	do("dlv-manager", "POST", one+"/returned", map[string]any{"reason": " "}, 422)
+	do("dlv-manager", "POST", one+"/in-transit", map[string]any{"expectedStatus": "picked_up", "note": "On the road"}, 200, "Idempotency-Key", "k-transit-1")
+	do("dlv-manager", "POST", one+"/returned", map[string]any{"reason": "Customer unreachable after two tries", "expectedStatus": "delivery_failed"}, 200)
+	if b := f.bodies["POST /v1/deliveries/"+dlvShipment+"/in-transit"]; b["expectedStatus"] != "picked_up" || b["note"] != "On the road" {
+		t.Fatalf("in transit body = %v", b)
+	}
+	if b := f.bodies["POST /v1/deliveries/"+dlvShipment+"/returned"]; b["expectedStatus"] != "delivery_failed" || b["reason"] == nil {
+		t.Fatalf("returned body = %v", b)
+	}
 	do("dlv-manager", "PUT", one+"/proof", map[string]any{"photoAssetIds": []string{dlvPhoto}, "reason": ""}, 422)
 
 	// Proof: no photo, a malformed id, someone else's file, a file that is too big, too many photos, half a position,

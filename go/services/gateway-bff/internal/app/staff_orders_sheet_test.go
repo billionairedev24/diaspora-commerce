@@ -45,21 +45,26 @@ func TestTransitionsWithoutPermissionAreListedDisabled(t *testing.T) {
 }
 
 func TestSellerFulfilledPreparationStepsBelongToTheSeller(t *testing.T) {
-	s := jobj{"status": "placed", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "CARRIER", "nextActions": []any{"cancelled"}}
+	s := fba("placed", "cancelled")
 	got := stepsOf(shipmentTransitions(s, "PLACED", true))
 	if b := got["PACKED"].Blocked; b == nil || *b != blockedSeller {
 		t.Fatalf("packing is the seller's: %+v", got["PACKED"])
 	}
+	// A seller who ships the parcel themselves updates every step; the sheet says so.
+	own := jobj{"status": "placed", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "CARRIER", "nextActions": []any{"cancelled"}}
+	if b := stepsOf(shipmentTransitions(own, "PLACED", true))["PACKED"].Blocked; b == nil || *b != blockedSellerUpdates {
+		t.Fatalf("a seller-shipped parcel is updated by the seller: %v", b)
+	}
 }
 
-func TestPickupHandoverAcceptsTheCodeAndDriverStepsAreFlagged(t *testing.T) {
+func TestPickupHandoverAcceptsTheCodeAndDeliveryStepsGoThroughDelivery(t *testing.T) {
 	pickup := jobj{"status": "ready", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "PICKUP", "handoverRequired": true, "nextActions": []any{"delivered"}}
 	if d := stepsOf(shipmentTransitions(pickup, "READY", true))["DELIVERED"]; !d.Allowed || !d.CodeAccepted || !d.NoteRequired {
 		t.Fatalf("a pickup handover takes the code or a note: %+v", d)
 	}
 	local := jobj{"status": "ready", "fulfilmentType": "FBA_AFROTRANSACT", "deliveryMethod": "AFROTRANSACT_DELIVERY", "nextActions": []any{"picked_up"}}
-	if d := stepsOf(shipmentTransitions(local, "READY", true))["PICKED_UP"]; !d.Allowed || !d.DriverStep {
-		t.Fatalf("staff may do the driver's step, flagged: %+v", d)
+	if d := stepsOf(shipmentTransitions(local, "READY", true))["PICKED_UP"]; !d.Allowed || d.DriverStep || d.Via != viaDelivery {
+		t.Fatalf("staff take the delivery step through the Delivery module, no driver involved: %+v", d)
 	}
 }
 
@@ -115,5 +120,128 @@ func TestOrderShipmentsNameTheSellerAndSummariseItems(t *testing.T) {
 	}
 	if h := got[0].History; len(h) != 2 || h[0].To != "PACKED" || h[0].Note == nil || *h[0].Note != "Boxed" || h[0].Actor != "Seller" {
 		t.Fatalf("history newest first: %+v", h)
+	}
+}
+
+// ---------------------------------------------------------------- the three fulfilment modes
+
+func stepFor(steps []domain.ShipmentStep, to string) domain.ShipmentStep { return stepsOf(steps)[to] }
+
+func blockReason(s domain.ShipmentStep) string {
+	if s.Reason == nil {
+		return ""
+	}
+	return *s.Reason
+}
+
+// Fulfilled by AfroTransact (the owner's FBA): the owner's screenshot was a ready shipment whose menu had every step greyed.
+func fba(status string, next ...any) jobj {
+	return jobj{"status": status, "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "AFROTRANSACT_DELIVERY", "nextActions": next,
+		"localDelivery": map[string]any{"roadMiles": 4.0}}
+}
+
+func TestFulfilledByAfroTransactMenuOffersTheDeliveryStepsToTheDeliveryPermission(t *testing.T) {
+	caps := shipmentCaps{orders: true, delivery: true}
+	got := shipmentTransitionsFor(fba("ready", "picked_up", "cancelled"), "READY", caps)
+	if d := stepFor(got, "PICKED_UP"); !d.Allowed || d.Via != viaDelivery || d.NoteRequired {
+		t.Fatalf("picked up from the seller is one step with an optional note: %+v", d)
+	}
+	for _, step := range []string{"IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"} {
+		if d := stepFor(got, step); d.Allowed || d.Blocked == nil || *d.Blocked != blockedSequence {
+			t.Fatalf("%s would skip a step: %+v", step, d)
+		}
+	}
+	if d := stepFor(got, "CANCELLED"); !d.Allowed || d.Via != viaOrders || !d.NoteRequired {
+		t.Fatalf("cancelling stays with the order permission: %+v", d)
+	}
+	if d := stepFor(shipmentTransitionsFor(fba("out_for_delivery", "delivered", "delivery_failed"), "OUT_FOR_DELIVERY", caps), "DELIVERED"); !d.Allowed || !d.ProofRequired || d.NoteRequired || d.Via != viaDelivery {
+		t.Fatalf("delivered needs the proof photo, not a typed reason: %+v", d)
+	}
+	failed := shipmentTransitionsFor(fba("delivery_failed", "out_for_delivery", "returned"), "DELIVERY_FAILED", caps)
+	if d := stepFor(failed, "OUT_FOR_DELIVERY"); !d.Allowed {
+		t.Fatalf("a failed attempt is tried again: %+v", d)
+	}
+	if d := stepFor(failed, "RETURNED"); !d.Allowed || !d.NoteRequired || d.Via != viaDelivery {
+		t.Fatalf("or the parcel goes back, with a reason: %+v", d)
+	}
+	if d := stepFor(shipmentTransitionsFor(fba("out_for_delivery", "delivered", "delivery_failed"), "OUT_FOR_DELIVERY", caps), "DELIVERY_FAILED"); !d.NoteRequired {
+		t.Fatalf("a failed delivery needs a reason: %+v", d)
+	}
+}
+
+func TestWithoutTheDeliveryPermissionTheMenuSaysSo(t *testing.T) {
+	got := shipmentTransitionsFor(fba("ready", "cancelled"), "READY", shipmentCaps{orders: true, delivery: false})
+	for _, step := range []string{"PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "DELIVERY_FAILED"} {
+		d := stepFor(got, step)
+		if d.Allowed || d.Blocked == nil || *d.Blocked != blockedDeliveryPermission || blockReason(d) != "You need the delivery permission" {
+			t.Fatalf("%s: %+v", step, d)
+		}
+	}
+	if d := stepFor(got, "CANCELLED"); !d.Allowed {
+		t.Fatalf("an order manager can still cancel: %+v", d)
+	}
+	none := shipmentTransitionsFor(fba("ready"), "READY", shipmentCaps{})
+	if d := stepFor(none, "CANCELLED"); d.Blocked == nil || *d.Blocked != blockedPermission {
+		t.Fatalf("no permission at all: %+v", d)
+	}
+}
+
+func TestSellerShipsMenuSaysTheSellerUpdatesIt(t *testing.T) {
+	s := jobj{"status": "picked_up", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "SELLER_SHIPS", "nextActions": []any{}}
+	got := shipmentTransitionsFor(s, "PICKED_UP", shipmentCaps{orders: true, delivery: true})
+	for _, step := range []string{"IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "DELIVERY_FAILED", "RETURNED"} {
+		d := stepFor(got, step)
+		if d.Allowed || d.Blocked == nil || *d.Blocked != blockedSellerUpdates || blockReason(d) != "Updated by the seller" {
+			t.Fatalf("%s: %+v", step, d)
+		}
+	}
+	// Even a person with every permission is told it is the seller's: only the override changes it.
+	got = shipmentTransitionsFor(s, "PICKED_UP", shipmentCaps{})
+	if d := stepFor(got, "DELIVERED"); *d.Blocked != blockedSellerUpdates {
+		t.Fatalf("%+v", d)
+	}
+}
+
+func TestPickupMenuIsReadyCollectedNotCollected(t *testing.T) {
+	s := jobj{"status": "ready", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "PICKUP", "nextActions": []any{"delivered", "returned", "cancelled"}}
+	got := shipmentTransitionsFor(s, "READY", shipmentCaps{orders: true, delivery: true})
+	if d := stepFor(got, "DELIVERED"); !d.Allowed || d.Via != viaOrders {
+		t.Fatalf("collected: %+v", d)
+	}
+	if d := stepFor(got, "RETURNED"); !d.Allowed || !d.NoteRequired {
+		t.Fatalf("not collected needs a reason: %+v", d)
+	}
+	for _, step := range []string{"PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERY_FAILED"} {
+		d := stepFor(got, step)
+		if d.Allowed || d.Blocked == nil || *d.Blocked != blockedPickupOrder || blockReason(d) != "Not available for pickup orders" {
+			t.Fatalf("%s: %+v", step, d)
+		}
+	}
+	confirmed := jobj{"status": "confirmed", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "PICKUP", "nextActions": []any{"ready"}}
+	if d := stepFor(shipmentTransitionsFor(confirmed, "CONFIRMED", shipmentCaps{orders: true}), "READY"); !d.Allowed {
+		t.Fatalf("staff can say a pickup order is ready: %+v", d)
+	}
+}
+
+func TestOnlyHoldersOfTheOverridePermissionSeeOverrideSteps(t *testing.T) {
+	ship := jobj{"shipmentId": "s1", "label": "Shipment 1 of 1", "status": "picked_up", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "SELLER_SHIPS",
+		"nextActions": []any{}, "overrideActions": []any{"in_transit", "delivered"}}
+	holder := orderShipments(staffCtx{access: domain.StaffAccess{Permissions: []string{"orders:override-shipment"}}}, jobj{"shipments": []any{ship}})
+	if !holder[0].CanOverride || len(holder[0].OverrideSteps) != 2 || holder[0].Mode != domain.ModeSellerShips {
+		t.Fatalf("%+v", holder[0])
+	}
+	other := orderShipments(staffCtx{access: domain.StaffAccess{Permissions: []string{"orders:manage"}}}, jobj{"shipments": []any{ship}})
+	if other[0].CanOverride || len(other[0].OverrideSteps) != 0 {
+		t.Fatalf("a manager without the permission gets nothing: %+v", other[0])
+	}
+	if opts := shipmentOverrideSteps(jobj{"shipments": []any{ship}}); len(opts) != 2 || opts[0].Value != "s1|IN_TRANSIT" || opts[1].Label != "Mark delivered" {
+		t.Fatalf("%+v", opts)
+	}
+}
+
+func TestHistoryNamesTheStaffMemberWhoMovedIt(t *testing.T) {
+	s := jobj{"timeline": []any{jobj{"to": "picked_up", "at": "2026-11-02T10:00:00Z", "actorType": "DELIVERY_STAFF", "actorName": "Chidi Nwosu", "reason": "2 boxes"}}}
+	if h := shipmentHistory(s); len(h) != 1 || h[0].Actor != "Chidi Nwosu" || h[0].Note == nil || *h[0].Note != "2 boxes" {
+		t.Fatalf("%+v", h)
 	}
 }

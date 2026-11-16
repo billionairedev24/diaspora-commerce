@@ -35,28 +35,14 @@ func TestShipmentNextStepNamesTheShipmentWhenThereAreSeveral(t *testing.T) {
 	}
 }
 
-func TestDriverAndExceptionStepsAreNotStaffButtons(t *testing.T) {
-	// AfroTransact-delivered steps are taken in the Delivery module (with the proof); delivered by hand, failed and cancelled keep the form.
+func TestDeliveryAndExceptionStepsAreNotOneTapButtons(t *testing.T) {
+	// AfroTransact-delivered steps are taken with the delivery steps in the order sheet's menu (with the proof and the audit);
+	// delivered by hand, failed and cancelled keep the form. There is no "in the Delivery queue" placeholder any more.
 	o := jobj{"shipments": []any{
 		ship("s1", "Local", "READY", "AFROTRANSACT_DELIVERY", "picked_up", "cancelled"),
 		ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered", "delivery_failed")}}
-	// No buttons; the AfroTransact-delivered shipment only carries the "in the Delivery queue" note.
-	if got := keysOf(shipmentNextStepActions(o)); got != "driver:s1=In the Delivery queue · Local" {
+	if got := keysOf(shipmentNextStepActions(o)); got != "" {
 		t.Fatalf("got %s", got)
-	}
-}
-
-func TestDriverShipmentsShowWhoMovesThemNext(t *testing.T) {
-	o := jobj{"shipments": []any{ship("s1", "Local", "OUT_FOR_DELIVERY", "AFROTRANSACT_DELIVERY", "delivered", "delivery_failed")}}
-	got := shipmentNextStepActions(o)
-	if len(got) != 1 || got[0].key != "driver:s1" || got[0].label != "In the Delivery queue" {
-		t.Fatalf("got %s", keysOf(got))
-	}
-	if why := got[0].when(staffCtx{}, o); !strings.Contains(why, "Mark it delivered in Delivery") || !strings.Contains(why, "photo as proof") {
-		t.Fatalf("reason %q", why)
-	}
-	if shipmentNextStepActions(jobj{"shipments": []any{ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered")}}) != nil && len(shipmentNextStepActions(jobj{"shipments": []any{ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered")}})) != 0 {
-		t.Fatal("carrier shipments are not driver-owned")
 	}
 }
 
