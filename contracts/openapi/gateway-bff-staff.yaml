@@ -1709,7 +1709,7 @@ paths:
         search, sort and page are sent here. Default statuses: ready, picked_up, in_transit, out_for_delivery,
         delivery_failed. Needs VIEW on the Delivery module and delivery:read (or delivery:manage).
       parameters:
-        - {name: status, in: query, schema: {type: string, maxLength: 200}, description: 'Comma separated: ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered, placed, confirmed, packed'}
+        - {name: status, in: query, schema: {type: string, maxLength: 200}, description: 'Comma separated: ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered, returned, placed, confirmed, packed'}
         - {name: mode, in: query, schema: {type: string, enum: [AFROTRANSACT_DELIVERY, FULFILLED_BY_AFROTRANSACT]}}
         - {name: q, in: query, schema: {type: string, maxLength: 120}, description: 'Order number, seller, customer, city or assignee'}
         - {name: assignee, in: query, schema: {type: string, maxLength: 120}, description: '`me`, `unassigned` or a staff id'}
@@ -7376,7 +7376,7 @@ components:
         orderNumber: {type: string}
         shipmentLabel: {type: string}
         mode: {type: string, enum: [AFROTRANSACT_DELIVERY, FULFILLED_BY_AFROTRANSACT], description: AFROTRANSACT_DELIVERY = the seller opted in; FULFILLED_BY_AFROTRANSACT = FBA or Retail}
-        status: {type: string, enum: [placed, confirmed, packed, ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered]}
+        status: {type: string, enum: [placed, confirmed, packed, ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered, returned]}
         sellerName: {type: string}
         originCity: {type: string, description: The seller's city or the fulfilment centre's; empty when it cannot be read}
         customerName: {type: string}
@@ -7459,7 +7459,7 @@ components:
       type: object
       required: [action, fromStatus, toStatus, actorName, note, at]
       properties:
-        action: {type: string, enum: [TAKE, ASSIGN, REASSIGN, PICKED_UP, OUT_FOR_DELIVERY, DELIVERED, FAILED, REATTEMPT, PROOF_CORRECTED, DATA_FIX]}
+        action: {type: string, enum: [TAKE, ASSIGN, REASSIGN, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED, RETURNED, REATTEMPT, PROOF_CORRECTED, DATA_FIX]}
         fromStatus: {type: string}
         toStatus: {type: string}
         actorName: {type: string}

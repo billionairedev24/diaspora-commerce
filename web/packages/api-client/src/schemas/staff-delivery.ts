@@ -9,7 +9,7 @@ const nullableString = z.string().nullable();
 export const DeliveryModeSchema = z.enum(['AFROTRANSACT_DELIVERY', 'FULFILLED_BY_AFROTRANSACT']);
 export type DeliveryMode = z.infer<typeof DeliveryModeSchema>;
 
-export const DeliveryStatusSchema = z.enum(['placed', 'confirmed', 'packed', 'ready', 'picked_up', 'in_transit', 'out_for_delivery', 'delivery_failed', 'delivered']);
+export const DeliveryStatusSchema = z.enum(['placed', 'confirmed', 'packed', 'ready', 'picked_up', 'in_transit', 'out_for_delivery', 'delivery_failed', 'delivered', 'returned']);
 export type DeliveryStatus = z.infer<typeof DeliveryStatusSchema>;
 
 /** The statuses the queue shows by default (AfroTransact holds them); delivered and preparing ones are other tabs. */
@@ -94,7 +94,7 @@ export const DeliveryProofViewSchema = z.object({
 export type DeliveryProofView = z.infer<typeof DeliveryProofViewSchema>;
 
 export const DeliveryAuditLineSchema = z.object({
-  action: z.enum(['TAKE', 'ASSIGN', 'REASSIGN', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'REATTEMPT', 'PROOF_CORRECTED', 'DATA_FIX']),
+  action: z.enum(['TAKE', 'ASSIGN', 'REASSIGN', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'RETURNED', 'REATTEMPT', 'PROOF_CORRECTED', 'DATA_FIX']),
   fromStatus: z.string(),
   toStatus: z.string(),
   actorName: z.string(),
@@ -140,6 +140,8 @@ export interface DeliveryActionInput {
   /** The job version the console saw (409 when stale). */
   version?: number;
   note?: string;
+  /** The shipment status the screen showed (409 when someone moved it first). */
+  expectedStatus?: string;
 }
 
 /** The proof of a delivery (delivered) or its correction (with a reason). */
@@ -151,6 +153,7 @@ export interface DeliveryProofInput {
   longitude?: number;
   reason?: string;
   version?: number;
+  expectedStatus?: string;
 }
 
 export const DELIVERY_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;

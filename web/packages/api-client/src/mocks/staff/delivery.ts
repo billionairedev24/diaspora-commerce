@@ -104,16 +104,17 @@ import { z } from 'zod';
 import { type DeliveryDetail, type DeliveryList, DeliveryStatusSchema, type DeliveryUploadTicket } from '../../schemas/staff-delivery';
 import { getStaffDb, type MockStaffDb } from './db';
 import { allows } from './model';
+import { modeOf, recordStep, staffDelivers } from './order-shipments';
 import { type PreorderCtx, type PreorderHandlerDeps } from './preorders';
 
 const ACTIVE = ['ready', 'picked_up', 'in_transit', 'out_for_delivery', 'delivery_failed'];
 const TAKEABLE = new Set(ACTIVE);
 const NEXT: Record<string, string[]> = {
   ready: ['picked_up'],
-  picked_up: ['out_for_delivery', 'delivery_failed'],
+  picked_up: ['in_transit', 'out_for_delivery', 'delivery_failed'],
   in_transit: ['out_for_delivery', 'delivery_failed'],
   out_for_delivery: ['delivered', 'delivery_failed'],
-  delivery_failed: ['out_for_delivery']
+  delivery_failed: ['out_for_delivery', 'returned']
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -131,7 +132,41 @@ export function deliveryHandlers(W: string, deps: PreorderHandlerDeps) {
     if (!ctx.permissions.includes('delivery:manage')) throw problem(403, 'FORBIDDEN', 'Forbidden', 'This needs the delivery:manage permission.');
   };
   const state = (ctx: PreorderCtx) => (ctx.db as MockStaffDb).delivery;
-  const find = (ctx: PreorderCtx, id: string | undefined) => state(ctx).deliveries.find((d) => d.row.shipmentId === id) ?? (() => { throw notFound(); })();
+  /* The order sheet and the queue show the same shipment: a shipment AfroTransact delivers that is not in the queue yet is
+     brought in from its order the first time it is opened or moved, and every step is written back to the order. */
+  const bridge = (ctx: PreorderCtx, id: string | undefined): MockDelivery | undefined => {
+    for (const r of (ctx.db as MockStaffDb).records.orders) {
+      const line = (r.lines ?? []).find((l) => l.id === id);
+      if (!line || !staffDelivers(line)) continue;
+      const [place = '', rest = ''] = String(r.fields.shipTo ?? '').split(', ');
+      const [state2 = '', zip = ''] = rest.split(' ');
+      const status = String(line.status ?? 'ready').toLowerCase() as DeliveryRow['status'];
+      const d: MockDelivery = {
+        row: {
+          shipmentId: String(line.id), orderNumber: r.id, shipmentLabel: String(line.label ?? ''), mode: modeOf(line) === 'afrotransact_delivery' ? 'AFROTRANSACT_DELIVERY' : 'FULFILLED_BY_AFROTRANSACT', status,
+          sellerName: String(line.sellerName ?? ''), originCity: 'Houston', customerName: String(r.fields.customer ?? ''), customerCity: place, customerState: state2, customerPostalCode: zip,
+          units: Number(line.itemCount ?? 1), perishable: false, promisedBy: null, assigneeName: null, assigneeId: null, attempts: 0, version: 0, proofAttached: false, updatedAt: ctx.now.toISOString(), deliveredAt: null
+        },
+        destination: { name: String(r.fields.customer ?? ''), line1: '1 Main St', line2: null, city: place, state: state2, postalCode: zip, phone: String(r.fields.customerPhone ?? '') || null, instructions: null, handToCustomer: false },
+        items: String(line.itemTitles ?? '').split('|').filter(Boolean).map((title) => ({ title, quantity: 1 })),
+        assignedAt: null, assignedBy: null, lastFailure: null, jobVersion: 0, proof: null, audit: []
+      };
+      state(ctx).deliveries.push(d);
+      return d;
+    }
+    return undefined;
+  };
+  const find = (ctx: PreorderCtx, id: string | undefined) => state(ctx).deliveries.find((d) => d.row.shipmentId === id) ?? bridge(ctx, id) ?? (() => { throw notFound(); })();
+  /** Writes a step back to the order the shipment belongs to (same status, history with who and why, the order's rollup). */
+  const writeBack = (ctx: PreorderCtx, d: MockDelivery, note: string) => {
+    const r = (ctx.db as MockStaffDb).records.orders.find((o) => o.id === d.row.orderNumber);
+    const line = r?.lines?.find((l) => l.id === d.row.shipmentId);
+    if (r && line) recordStep(r, line, d.row.status.toUpperCase(), ctx.action.actor, ctx.now, note);
+  };
+  /** Another person's earlier change answers 409: the screen is told, not overruled. */
+  const expected = (d: MockDelivery, status: string | undefined) => {
+    if (status && status !== d.row.status) throw conflict(`Someone already moved this shipment to ${d.row.status.replace(/_/g, ' ')}. Reload to see it.`);
+  };
   const me = (ctx: PreorderCtx) => ctx.db.user.id;
   const rowOf = (ctx: PreorderCtx, d: MockDelivery): DeliveryRow => {
     const { assigneeId, ...rest } = d.row;
@@ -158,20 +193,23 @@ export function deliveryHandlers(W: string, deps: PreorderHandlerDeps) {
     d.row.updatedAt = ctx.now.toISOString();
     d.jobVersion += 1;
     d.row.version = d.jobVersion;
+    writeBack(ctx, d, note);
   };
   const check = (d: MockDelivery, version: number | null | undefined) => {
     if (version !== undefined && version !== null && version !== d.jobVersion) throw conflict('Someone else changed this delivery. Reload and try again.');
   };
-  const ActionBody = z.object({ version: z.number().int().nullish(), note: z.string().max(500).optional() }).default({});
+  const ActionBody = z.object({ version: z.number().int().nullish(), note: z.string().max(500).optional(), expectedStatus: z.string().optional() }).default({});
   const step = (to: DeliveryRow['status'], action: MockDelivery['audit'][number]['action']) =>
     route(async (ctx, p) => {
       const b = await json(ctx.request, ActionBody);
       manage(ctx);
       const d = find(ctx, p.id);
+      expected(d, b.expectedStatus);
       check(d, b.version);
       if (d.row.status === to) return detail(ctx, d);
-      if (!d.row.assigneeName) throw conflict('Take this delivery, or assign it to someone, first');
       if (!(NEXT[d.row.status] ?? []).includes(to)) throw conflict(`This delivery can’t move from ${d.row.status.replace(/_/g, ' ')} to ${to.replace(/_/g, ' ')}.`);
+      // Nobody has it yet: whoever takes the step takes the job (audited as a take).
+      if (!d.row.assigneeName) assignTo(ctx, d, me(ctx), ctx.action.actor, true);
       stamp(ctx, d, d.row.status === 'delivery_failed' && to === 'out_for_delivery' ? 'REATTEMPT' : action, to, b.note ?? '');
       return detail(ctx, d);
     });
@@ -202,8 +240,11 @@ export function deliveryHandlers(W: string, deps: PreorderHandlerDeps) {
     latitude: z.number().min(-90).max(90).nullish(),
     longitude: z.number().min(-180).max(180).nullish(),
     reason: z.string().trim().optional(),
-    version: z.number().int().nullish()
+    version: z.number().int().nullish(),
+    expectedStatus: z.string().optional()
   });
+  const ReasonBody = (message: string) =>
+    z.object({ reason: z.string().trim().min(3, message).max(500, message), version: z.number().int().nullish(), expectedStatus: z.string().optional() });
   const proofChecks = (ctx: PreorderCtx, b: z.infer<typeof ProofBody>) => {
     const ids = [...new Set(b.photoAssetIds.map((i) => i.trim().toLowerCase()))];
     const errors: Record<string, string> = {};
@@ -317,6 +358,7 @@ export function deliveryHandlers(W: string, deps: PreorderHandlerDeps) {
       })
     ),
     http.post(`${W}/deliveries/:id/picked-up`, step('picked_up', 'PICKED_UP')),
+    http.post(`${W}/deliveries/:id/in-transit`, step('in_transit', 'IN_TRANSIT')),
     http.post(`${W}/deliveries/:id/out-for-delivery`, step('out_for_delivery', 'OUT_FOR_DELIVERY')),
     http.post(
       `${W}/deliveries/:id/delivered`,
@@ -325,10 +367,11 @@ export function deliveryHandlers(W: string, deps: PreorderHandlerDeps) {
         manage(ctx);
         const ids = proofChecks(ctx, b);
         const d = find(ctx, p.id);
+        expected(d, b.expectedStatus);
         check(d, b.version);
         if (d.row.status === 'delivered') return detail(ctx, d);
-        if (!d.row.assigneeName) throw conflict('Take this delivery, or assign it to someone, first');
         if (d.row.status !== 'out_for_delivery') throw conflict('Mark it out for delivery first.');
+        if (!d.row.assigneeName) assignTo(ctx, d, me(ctx), ctx.action.actor, true);
         stamp(ctx, d, 'DELIVERED', 'delivered', b.note ?? '');
         d.row.deliveredAt = ctx.now.toISOString();
         d.row.proofAttached = true;
@@ -342,16 +385,31 @@ export function deliveryHandlers(W: string, deps: PreorderHandlerDeps) {
     http.post(
       `${W}/deliveries/:id/failed`,
       route(async (ctx, p) => {
-        const b = await json(ctx.request, z.object({ reason: z.string().trim().min(3, 'Say why it failed (3 to 500 characters)').max(500, 'Say why it failed (3 to 500 characters)'), version: z.number().int().nullish() }));
+        const b = await json(ctx.request, ReasonBody('Say why it failed (3 to 500 characters)'));
         manage(ctx);
         const d = find(ctx, p.id);
+        expected(d, b.expectedStatus);
         check(d, b.version);
         if (d.row.status === 'delivery_failed') return detail(ctx, d);
-        if (!d.row.assigneeName) throw conflict('Take this delivery, or assign it to someone, first');
         if (!(NEXT[d.row.status] ?? []).includes('delivery_failed')) throw conflict('Only a delivery that was picked up or is out for delivery can fail.');
+        if (!d.row.assigneeName) assignTo(ctx, d, me(ctx), ctx.action.actor, true);
         stamp(ctx, d, 'FAILED', 'delivery_failed', b.reason);
         d.row.attempts += 1;
         d.lastFailure = b.reason;
+        return detail(ctx, d);
+      })
+    ),
+    http.post(
+      `${W}/deliveries/:id/returned`,
+      route(async (ctx, p) => {
+        const b = await json(ctx.request, ReasonBody('Say why it goes back to the seller (3 to 500 characters)'));
+        manage(ctx);
+        const d = find(ctx, p.id);
+        expected(d, b.expectedStatus);
+        check(d, b.version);
+        if (d.row.status === 'returned') return detail(ctx, d);
+        if (d.row.status !== 'delivery_failed') throw conflict('A parcel goes back to the seller only after a failed delivery.');
+        stamp(ctx, d, 'RETURNED', 'returned', b.reason);
         return detail(ctx, d);
       })
     ),

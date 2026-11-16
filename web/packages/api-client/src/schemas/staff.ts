@@ -30,7 +30,9 @@ export const StaffNavModuleSchema = z.object({
   label: z.string(),
   description: z.string(),
   level: AccessLevelSchema,
-  badge: z.number().int().nullable()
+  badge: z.number().int().nullable(),
+  /** AfroTransact does not use this for now (the driver app is off): shown muted with a "Not in use" label. */
+  dormant: z.boolean().default(false)
 });
 export type StaffNavModule = z.infer<typeof StaffNavModuleSchema>;
 export const StaffNavGroupSchema = z.object({ key: StaffNavGroupKeySchema, label: z.string(), modules: z.array(StaffNavModuleSchema) });
@@ -207,7 +209,7 @@ export const OneTimeSecretSchema = z.object({ label: z.string(), value: z.string
 export type OneTimeSecret = z.infer<typeof OneTimeSecretSchema>;
 
 /** Why a shipment status is not on offer (the console words it in the staff member's language). */
-export const ShipmentBlockedSchema = z.enum(['PERMISSION', 'SELLER', 'SEQUENCE', 'STATE']);
+export const ShipmentBlockedSchema = z.enum(['PERMISSION', 'DELIVERY_PERMISSION', 'SELLER', 'SELLER_UPDATES', 'PICKUP_ORDER', 'SEQUENCE', 'STATE']);
 export type ShipmentBlocked = z.infer<typeof ShipmentBlockedSchema>;
 export const ShipmentStepSchema = z.object({
   to: z.string(),
@@ -216,12 +218,19 @@ export const ShipmentStepSchema = z.object({
   blocked: ShipmentBlockedSchema.nullable(),
   noteRequired: z.boolean(),
   codeAccepted: z.boolean(),
-  driverStep: z.boolean()
+  driverStep: z.boolean(),
+  /** Which API takes the step: the order's own `shipment-status` action, or the Delivery module (the queue's steps). */
+  via: z.enum(['orders', 'delivery']),
+  /** Delivered by AfroTransact: a photo is required (optional recipient name and note). */
+  proofRequired: z.boolean()
 });
 export type ShipmentStep = z.infer<typeof ShipmentStepSchema>;
 export const ShipmentChangeSchema = z.object({ at: z.string(), from: nullableString, to: z.string(), actor: z.string(), note: nullableString });
 export type ShipmentChange = z.infer<typeof ShipmentChangeSchema>;
-/** One package of an order sheet with the statuses the caller may set on it (set with the order's `shipment-status` action). */
+/** Who moves a shipment: Fulfilled by AfroTransact (both delivery modes), seller pickup, or the seller ships it. */
+export const ShipmentModeSchema = z.enum(['seller_ships', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
+export type ShipmentMode = z.infer<typeof ShipmentModeSchema>;
+/** One package of an order sheet with the statuses the caller may set (`via` says which API takes each step). */
 export const RecordShipmentSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -230,10 +239,14 @@ export const RecordShipmentSchema = z.object({
   tone: RecordToneSchema.nullable(),
   fulfilmentLabel: z.string(),
   deliveryLabel: z.string(),
+  mode: ShipmentModeSchema,
   itemCount: z.number(),
   itemTitles: z.array(z.string()),
   carrier: nullableString,
   trackingNumber: nullableString,
+  canOverride: z.boolean(),
+  /** Statuses an override may set (upper case); empty unless `canOverride`. Taken with the `shipment-override` action. */
+  overrideSteps: z.array(z.string()),
   transitions: z.array(ShipmentStepSchema),
   history: z.array(ShipmentChangeSchema)
 });
