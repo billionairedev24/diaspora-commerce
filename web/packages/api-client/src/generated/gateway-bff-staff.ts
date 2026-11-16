@@ -2189,10 +2189,34 @@ export interface paths {
         };
         /**
          * Today's AI spend against the daily cap, by feature
-         * @description ai-gateway `GET /v1/ai/usage/today`. Needs the ai:manage permission. Amounts are micro-dollars (1,000,000 = USD 1); `capMicros` 0 means unlimited. Not cached.
+         * @description ai-gateway `GET /v1/ai/usage/today`. Needs the ai:manage permission. Amounts are micro-dollars (1,000,000 = USD 1); `capMicros` is the cap in force (see `/v1/staff/ai/spend-cap`), 0 means AI is off. Not cached.
          */
         get: operations["getAiSpendToday"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/ai/spend-cap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The daily AI spend cap, where it comes from, the ceiling, today's spend and the history of changes
+         * @description ai-gateway `GET /v1/ai/spend-cap`. Needs ai:manage or ai:cap.manage. `source` is `default` until a value is saved (then `saved`); `ceilingMicros` is the hard limit set on the deployment. People in the history are named, never shown as ids. The ETag is the version to send as If-Match when changing the cap. Not cached.
+         */
+        get: operations["getAiSpendCap"];
+        /**
+         * Change the daily AI spend cap
+         * @description ai-gateway `PUT /v1/ai/spend-cap`. Needs the ai:cap.manage permission (403 otherwise). `capMicros` is whole cents from 0 (AI off) up to the ceiling; `reason` is 3 to 300 characters and is logged with who and when. `If-Match` is the version loaded (428 `VERSION_REQUIRED` without it, 412 `VERSION_CONFLICT` when someone else saved first). Takes effect within seconds; lowering below today's spend stops further AI calls at once. The answer is the new state, like the GET.
+         */
+        put: operations["setAiSpendCap"];
         post?: never;
         delete?: never;
         options?: never;
@@ -7353,7 +7377,7 @@ export interface components {
             day: string;
             /**
              * Format: int64
-             * @description The daily cap for the whole gateway in micro-dollars; 0 is unlimited
+             * @description The daily cap in force for the whole gateway in micro-dollars; 0 is AI off
              */
             capMicros: number;
             /**
@@ -7377,9 +7401,87 @@ export interface components {
              * @description The next UTC midnight
              */
             resetsAt: string;
-            /** @description The ai-gateway environment variable that sets the cap */
-            capSetBy: string;
             byFeature: components["schemas"]["AiSpendFeature"][];
+        };
+        AiSpendCap: {
+            /**
+             * Format: int64
+             * @description The cap in force in micro-dollars per UTC day (1,000,000 = USD 1); 0 is AI off
+             */
+            capMicros: number;
+            /**
+             * @description default until a value is saved
+             * @enum {string}
+             */
+            source: "default" | "saved";
+            /**
+             * Format: int64
+             * @description The deployment default (AI_GLOBAL_DAILY_COST_USD), used until a value is saved
+             */
+            defaultMicros: number;
+            /**
+             * Format: int64
+             * @description The hard ceiling (AI_GLOBAL_DAILY_COST_MAX_USD) no saved value can exceed
+             */
+            ceilingMicros: number;
+            /**
+             * Format: int64
+             * @description The saved value's version (0 while the default is in force): the ETag and the next If-Match
+             */
+            version: number;
+            /** @description Who saved the value in force, by name; absent while the default is in force */
+            changedByName?: string;
+            /** Format: date-time */
+            changedAt?: string;
+            reason?: string;
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            /**
+             * Format: int64
+             * @description Spent so far today: the figure the cap is checked against
+             */
+            spentMicros: number;
+            /**
+             * Format: int64
+             * @description The cap minus spent, never below 0
+             */
+            remainingMicros: number;
+            /**
+             * Format: date-time
+             * @description The next UTC midnight
+             */
+            resetsAt: string;
+            /** @description The staff member holds ai:cap.manage */
+            canChange: boolean;
+            /** @description Newest first */
+            history: components["schemas"]["AiSpendCapChange"][];
+        };
+        AiSpendCapChange: {
+            /** Format: int64 */
+            version: number;
+            /**
+             * Format: int64
+             * @description The cap before; null when the value before was the deployment default
+             */
+            previousMicros?: number | null;
+            previousWasDefault: boolean;
+            /** Format: int64 */
+            newMicros: number;
+            changedByName: string;
+            /** Format: date-time */
+            changedAt: string;
+            reason: string;
+        };
+        AiSpendCapRequest: {
+            /**
+             * Format: int64
+             * @description The new cap in micro-dollars: whole cents (multiples of 10000), 0 for AI off, up to the ceiling
+             */
+            capMicros: number;
+            reason: string;
         };
         AiSpendFeature: {
             feature: string;
@@ -15435,6 +15537,67 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAiSpendCap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cap */
+            200: {
+                headers: {
+                    /** @description The cap's version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSpendCap"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setAiSpendCap: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiSpendCapRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description The new version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSpendCap"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            428: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

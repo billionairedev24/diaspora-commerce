@@ -1,6 +1,6 @@
 'use client';
 
-import { staffAccessQueries, staffMarketQueries, staffTaxQueries } from '@afrotransact/api-client';
+import { staffAccessQueries, staffAiSpendQueries, staffMarketQueries, staffTaxQueries, usdTextFromMicros } from '@afrotransact/api-client';
 import { localeInfo } from '@afrotransact/i18n';
 import { useI18n } from '@afrotransact/i18n/react';
 import { cx } from '@afrotransact/ui';
@@ -16,9 +16,6 @@ import { canEditSection, levelOn, SETTINGS_GROUPS, type SettingsKey, type Settin
 
 const TONE = { good: 'text-success', warn: 'text-warning', neutral: 'text-muted' } as const;
 
-/** The AI gateway's daily ceiling, an owner decision set in the deployment (docs/runbooks/ai-spend-and-mcp-access.md). */
-export const AI_DAILY_CAP_USD = '2.00';
-
 /** One status per section, from saved state only (never invented): undefined while loading, unavailable, or when there is nothing to say. */
 function useStatuses(sections: SettingsSection[]): Partial<Record<SettingsKey, SettingsStatus>> {
   const api = staffApi();
@@ -28,9 +25,11 @@ function useStatuses(sections: SettingsSection[]): Partial<Record<SettingsKey, S
   const roles = useQuery({ ...staffAccessQueries.roles(api.access, 'platform'), enabled: has('access') });
   const countries = useQuery({ ...staffMarketQueries.countries(api.markets), enabled: has('markets') });
   const review = useQuery({ ...staffTaxQueries.reviewSettings(api.tax), enabled: has('tax-review') });
+  const aiCap = useQuery({ ...staffAiSpendQueries.cap(api.aiSpend), enabled: has('ai') });
   const out: Partial<Record<SettingsKey, SettingsStatus>> = {};
   if (has('language')) out.language = { key: 'st.sx.status.language', vars: { language: localeInfo(locale).name }, tone: 'neutral' };
-  if (has('ai')) out.ai = { key: 'st.sx.status.ai', vars: { amount: AI_DAILY_CAP_USD }, tone: 'neutral' };
+  // the cap in force, read from the AI service (never a number typed here); nothing is said while it loads or cannot be read
+  if (aiCap.data) out.ai = aiCap.data.capMicros === 0 ? { key: 'st.sx.status.aiOff', tone: 'warn' } : { key: 'st.sx.status.ai', vars: { amount: usdTextFromMicros(aiCap.data.capMicros) }, tone: 'neutral' };
   if (roles.data) out.access = { key: 'st.sx.status.access', vars: { count: roles.data.items.length }, tone: 'neutral' };
   if (countries.data) {
     const live = countries.data.items.filter((c) => c.status === 'LIVE').length;
