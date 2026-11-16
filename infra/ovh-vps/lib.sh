@@ -62,13 +62,27 @@ STRIP_KINDS='ExternalSecret|ServiceMonitor|PodMonitor|PrometheusRule|ClusterSecr
 # SECRETS_OUT=<dir>: do not talk to a cluster; write each Secret as <dir>/<namespace>.<name>.yaml (kubectl is only used offline,
 # `--dry-run=client`) so it can be encrypted with SOPS/age and committed (infra/ops/secrets/README.md). Without it: apply live.
 secret() { # secret NAMESPACE NAME KEY=VALUE...   (create or replace, values never echoed)
+  # Each value goes into its own 0600 file under a private temp directory and kubectl reads it with --from-file=KEY=path:
+  #  - a value never appears in kubectl's argv (visible in `ps` and /proc/<pid>/cmdline to every local user);
+  #  - a multi-line value (SIGNING_KEY_PEM, a CA bundle) arrives byte for byte, as ONE key.
+  # The KEY is everything before the FIRST "="; the VALUE is the rest, newlines included.
   local ns="$1" name="$2"; shift 2
-  local args=() kv
-  for kv in "$@"; do args+=("--from-literal=$kv"); done
+  local args=() kv key dir i=0
+  dir="$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/at-secret.XXXXXX")"
+  for kv in "$@"; do
+    key="${kv%%=*}"
+    [[ "$key" =~ ^[A-Za-z0-9._-]+$ ]] || { rm -rf "$dir"; die "secret $name: '$key' is not a valid Secret key name"; }
+    i=$((i + 1))
+    ( umask 077; printf '%s' "${kv#*=}" > "$dir/$i" )
+    args+=("--from-file=$key=$dir/$i")
+  done
+  local rc=0
   if [[ -n "${SECRETS_OUT:-}" ]]; then
     install -d -m 700 "$SECRETS_OUT"
-    ( umask 077; kubectl -n "$ns" create secret generic "$name" "${args[@]}" --dry-run=client -o yaml > "$SECRETS_OUT/$ns.$name.yaml" )
+    ( umask 077; kubectl -n "$ns" create secret generic "$name" "${args[@]}" --dry-run=client -o yaml > "$SECRETS_OUT/$ns.$name.yaml" ) || rc=$?
   else
-    kubectl -n "$ns" create secret generic "$name" "${args[@]}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    kubectl -n "$ns" create secret generic "$name" "${args[@]}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null || rc=$?
   fi
+  rm -rf "$dir"
+  return "$rc"
 }

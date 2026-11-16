@@ -176,6 +176,7 @@ release-1-check: ## Release 1 delivery files, offline: workflows generated, laun
 	shellcheck -S warning infra/ops/postgres/release-1-bootstrap.sh infra/local/postgres/20-release-1.sh tools/ci/core_ci_db.sh \
 	  tools/release/core-db.sh tools/release/core-run.sh tools/dev/test/test-local.sh
 	bash tools/dev/test/test-local.sh
+	bash tools/ovh/test/secrets-multiline.test.sh
 
 gitops-render: ## Argo CD: emulate the ApplicationSets per env, render each app and kubeconform it (incl. CRDs)
 	python3 infra/argocd/scripts/render_apps.py
