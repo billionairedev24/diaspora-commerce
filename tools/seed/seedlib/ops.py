@@ -2,9 +2,11 @@
 
 AfroTransact Retail (suppliers, items, purchase orders in every state with shipments, receipts and three-way matched
 invoices), inventory (FBA inbound shipments in every stage, short-dated, held and damaged lots, cycle counts, a
-transfer), orders in every state placed by the test customers and moved through the fulfilment centre, carriers and
-AfroTransact Delivery (routes, the driver's day, an SOS, a vehicle defect, a seller pickup), returns, an A-to-z claim
-and a payout request.
+transfer), orders in every state placed by the test customers and moved through the fulfilment centre and
+the Delivery desk (staff take Fulfilled by AfroTransact deliveries: picked up, out for delivery, delivered with photo proof,
+failed, returned to the seller), Seller pickup (ready, collected with the customer's code), returns, an A-to-z claim and a
+payout request. Two fulfilment modes only (ADR 0011): no seller self-shipping, no carrier. The dormant driver app's routes
+run only with DRIVER_APP_ENABLED=true.
 
 Customers check out, sellers pack and the driver drives with their own tokens (locally the services act as the person
 whose token a call carries); staff work runs without a token, as the local super admin. Payments are authorised by the
@@ -34,8 +36,20 @@ STAGES = ("BOOKED", "CARGO_READY", "PICKED_UP", "EXPORT_CLEARED", "DEPARTED", "A
 SHIP_ORDER = ("pending_payment", "placed", "confirmed", "packed", "ready", "picked_up", "in_transit",
               "out_for_delivery", "delivered")
 TARGET_STATUS = {"placed": "placed", "picking": "confirmed", "packed": "packed", "ready": "ready",
-                 "shipped": "in_transit", "out_for_delivery": "out_for_delivery", "delivered": "delivered",
-                 "cancelled": "cancelled"}
+                 "out_for_delivery": "out_for_delivery", "delivered": "delivered", "failed": "delivery_failed",
+                 "returned": "returned", "collected": "delivered", "cancelled": "cancelled"}
+# The Delivery desk's steps (orders POST /v1/deliveries/{shipmentId}/<step>, delivery:manage) from "ready" to each target. Each call
+# carries an idempotency key made from its position, so an interrupted run replays the finished steps harmlessly.
+DESK_STEPS = {
+    "out_for_delivery": ("picked-up", "out-for-delivery"),
+    "delivered": ("picked-up", "out-for-delivery", "delivered"),
+    "failed": ("picked-up", "out-for-delivery", "failed"),
+    "returned": ("picked-up", "out-for-delivery", "failed", "out-for-delivery", "failed", "returned"),
+}
+DESK_REASONS = {"failed": "Nobody home and the gate was locked; the customer was called twice",
+                "returned": "Second attempt failed too: the customer asked for the parcel to go back to the seller"}
+DESK_FROM = ("ready", "picked_up", "in_transit", "out_for_delivery", "delivery_failed")  # a re-run finds it part-way
+LEGACY_METHODS = ("SELLER_SHIPS", "CARRIER")
 SHORT_DATED = "Short-dated"
 
 
@@ -139,7 +153,8 @@ class OpsSeeder:
         self.part("orders", self.place_orders)
         self.part("fulfilment", self.fulfil)
         self.part("returns and claims", self.returns_and_claims, ("tax-returns", "trust-ops"))
-        self.part("dispatch", self.dispatch, ("geo", "seller"))
+        if self.driver_app():  # the dormant driver app: routes, the driver's day (the Delivery desk does the rest)
+            self.part("dispatch", self.dispatch, ("geo", "seller"))
         self.part("returns", self.finish_returns, ("tax-returns",))
         self.part("payouts", self.payouts)
 
@@ -708,28 +723,27 @@ class OpsSeeder:
 
     def choose_option(self, pkg: O.Package, offered: dict[str, Any] | None) -> tuple[str, str | None]:
         """The delivery option to send for a scenario package, from what the checkout offers (`offered`: keys and a pickup
-        point; None when unknown). A parcel scenario ("carrier") uses the carrier only where it is offered (seller carrier
-        shipping is off at launch) and AfroTransact delivery otherwise; "afrotransact_delivery" and "pickup" must be offered;
-        "door" is the pre-order option. Raises SeedCause naming what is allowed."""
+        point; None when unknown): "afrotransact_delivery" (Fulfilled by AfroTransact) and "pickup" (Seller pickup) must be
+        offered; "door" is the pre-order option. There is no carrier option: seller self-shipping is retired (ADR 0011).
+        Raises SeedCause naming what is allowed."""
         keys = [k for k in (offered or {}).get("keys") or [] if k]
         known = offered is not None and bool(keys)
         want = pkg.option
         if want == "door":
             return "door", None
-        if want in ("carrier", "express"):
-            want = "carrier" if (not known or "carrier" in keys) and "carrier" in keys else "afrotransact_delivery"
         if want == "pickup":
             point = (offered or {}).get("pickup")
             if not point:
                 raise SeedCause("pickup:none", "the checkout offers no pickup point for this package",
-                                "turn on the seller's customer pickup in Seller Center, or run the pickups step "
-                                "(make seed ARGS=\"--only pickups\")")
+                                "turn on the seller's customer pickup in Seller Center, or run the locations step "
+                                "(make seed ARGS=\"--only locations\")")
             return "pickup", point
         if known and want not in keys:
             raise SeedCause(f"delivery-options:{want}:{','.join(sorted(keys))}",
-                            f"the checkout does not offer '{want}' for this cart (it offers: {', '.join(keys)})",
-                            "the scenario's delivery option no longer exists: update tools/seed/seedlib/ops_dataset.py "
-                            "(see docs/engineering/delivery-fulfilment.md)")
+                            f"the checkout does not offer '{want}' for this cart (it offers: {', '.join(keys)}); a seller package "
+                            "with neither Fulfilled by AfroTransact nor Seller pickup is refused (orders.fulfilment-unavailable)",
+                            "check the seller's location has Fulfilled by AfroTransact on (make seed ARGS=\"--only locations\") "
+                            "and the address is inside a delivery zone (docs/engineering/delivery-fulfilment.md)")
         return want, None
 
     def _checkout(self, order: O.Order) -> dict[str, Any]:
@@ -775,6 +789,11 @@ class OpsSeeder:
                     h, **{"Idempotency-Key": key if attempt == 1 else f"{key}:{attempt}"}))
                 break
             except ApiError as e:
+                if e.code == "orders.fulfilment-unavailable":
+                    raise SeedCause("fulfilment-unavailable", "orders refused a seller package that has neither Fulfilled by "
+                                    "AfroTransact nor Seller pickup (orders.fulfilment-unavailable)",
+                                    "give the seller's location pickup hours and a located address inside a delivery zone, or "
+                                    "turn on Seller pickup: make seed ARGS=\"--only locations\"") from None
                 if e.code == "orders.invalid-delivery-selection":
                     raise SeedCause("selection:" + str((e.body or {}).get("detail") if isinstance(e.body, dict) else e),
                                     "orders refused the delivery selection (" + ", ".join(sel["option"] for sel in selections)
@@ -840,16 +859,19 @@ class OpsSeeder:
     def _tasks(self) -> dict[str, dict[str, Any]]:
         return {t["shipmentId"]: t for t in items_of(self.svc["fulfilment"].get("/v1/fc/tasks", params={"limit": 500}))}
 
-    def _transition(self, shipment_id: str, to: str, headers: dict[str, str] | None = None, reason: str = "") -> None:
+    def _transition(self, shipment_id: str, to: str, headers: dict[str, str] | None = None, reason: str = "",
+                    code: str = "") -> None:
         body = {"to": to}
         if reason:
             body["reason"] = reason
+        if code:
+            body["handoverCode"] = code
         self.svc["orders"].post(f"/v1/shipments/{shipment_id}/transitions", body,
                                 headers=dict(headers or {}, **{"Idempotency-Key": f"seed-ops:{shipment_id}:{to}"}))
         self.add("shipment steps", to)
 
     def fulfil(self) -> None:
-        self.log("  · Fulfilment: the FC picks and packs, carriers move parcels, sellers pack their own")
+        self.log("  · Fulfilment: the FC picks and packs, sellers pack theirs, staff deliver from the Delivery desk, customers collect pickups")
         self._ensure_local_connected_accounts()
         tasks = self._tasks()
         for order in self.live_orders():
@@ -862,6 +884,23 @@ class OpsSeeder:
                     f"{s.get('sellerName')} {s.get('status')}" for s in view.get("shipments") or []))
             except (ApiError, ValueError, StopIteration) as e:
                 self.problem(f"fulfilment of {order.key}: {e}")
+        self._no_legacy()
+
+    def _no_legacy(self) -> None:
+        """The seeded orders use only the two modes: none may be a retired seller-shipped (SELLER_SHIPS / CARRIER) shipment."""
+        legacy = []
+        for order in self.live_orders():
+            try:
+                for sh in self._order_view(order).get("shipments") or []:
+                    if str(sh.get("deliveryMethod") or "").upper() in LEGACY_METHODS:
+                        legacy.append(f"{order.key} ({sh.get('deliveryMethod')})")
+            except (ApiError, ValueError):
+                continue
+        if legacy:
+            self.problem("seeded orders with a retired seller-shipped shipment: " + ", ".join(legacy)
+                         + ". Local data from before ADR 0011: make reset, then make seed")
+        else:
+            self.add("legacy seller-shipped shipments", "none")
 
     def _drive_shipment(self, order: O.Order, view: dict[str, Any], pkg: O.Package,
                         tasks: dict[str, dict[str, Any]]) -> None:
@@ -878,12 +917,9 @@ class OpsSeeder:
             self.add("shipment steps", "cancelled by the customer")
             return
         rank = SHIP_ORDER.index
-        local = pkg.option == "afrotransact_delivery"
-        # Parcels go by carrier only where checkout offered it (seller carrier shipping is off at launch): else AfroTransact
-        # delivers or the seller ships, and no carrier label or tracking event exists.
-        method = str(s.get("deliveryMethod") or "").upper()
-        by_carrier = method == "CARRIER" if method else self.chosen.get((order.key, order.packages.index(pkg)), pkg.option) == "carrier"
-        stop_at = min(rank(want), rank("ready")) if local else rank(want)
+        # The seller or the warehouse take it up to "ready"; after that the Delivery desk (staff) delivers it, or the customer
+        # collects it (Seller pickup).
+        stop_at = min(rank(want) if want in SHIP_ORDER else rank("ready"), rank("ready"))
         if s.get("fulfilmentType") == "SELLER_FULFILLED":
             actor = O.SELLER_FULFILMENT_ACTORS.get(s.get("sellerOrgId") or "")
             if not actor:
@@ -893,9 +929,10 @@ class OpsSeeder:
                 if rank(status) < rank(to) <= stop_at:
                     self._transition(sid, to, h)
                     status = to
-            if pkg.tracking and not s.get("trackingNumber") and not local:
-                self.svc["orders"].post(f"/v1/shipments/{sid}/tracking", {"carrier": pkg.carrier,
-                                                                         "trackingNumber": pkg.tracking}, headers=h)
+            if pkg.target == "collected":
+                self._collect(order, view, pkg, sid, h)
+            elif pkg.target in DESK_STEPS:
+                self._desk(order, view, pkg, sid)
             return
         task = tasks.get(sid) or self.poll(f"FC task of {sid}", lambda: self._tasks().get(sid), timeout=20)
         if task is None:
@@ -910,27 +947,47 @@ class OpsSeeder:
                 task = fc.post(f"/v1/fc/tasks/{tid}/pick", {
                     "picked": {ln["variantAtin"]: ln["quantity"] for ln in task.get("lines") or []}})
             if task["status"] == "PICKED":
-                body: dict[str, Any] = {"weightLb": 2.5 * sum(ln["quantity"] for ln in task.get("lines") or [])}
-                if by_carrier and not local and pkg.tracking:
-                    body.update({"carrier": pkg.carrier, "trackingNumber": pkg.tracking})
-                task = fc.post(f"/v1/fc/tasks/{tid}/pack", body)
+                task = fc.post(f"/v1/fc/tasks/{tid}/pack", {
+                    "weightLb": 2.5 * sum(ln["quantity"] for ln in task.get("lines") or [])})
         if stop_at >= rank("ready") and task["status"] == "PACKED":
             task = fc.post(f"/v1/fc/tasks/{tid}/ready")
         self.add("FC tasks", task["status"].lower())
-        if local or stop_at <= rank("ready"):
+        if pkg.target in DESK_STEPS:
+            self._desk(order, view, pkg, sid)
+
+    def _desk(self, order: O.Order, view: dict[str, Any], pkg: O.Package, sid: str) -> None:
+        """Staff with delivery:manage take a Fulfilled by AfroTransact shipment from ready to its target through the Delivery desk
+        (picked up, out for delivery, delivered with photo proof, failed with a reason, returned to the seller). With the dormant
+        driver app on (DRIVER_APP_ENABLED=true) the packages with a route are the driver's, not the desk's."""
+        if pkg.route and self.driver_app():
             return
-        status = self.poll(f"shipment {sid} ready", lambda: self._status(view, pkg) == "ready" and "ready",
-                           timeout=30) or self._status(view, pkg)
-        for to in ("picked_up", "in_transit", "out_for_delivery", "delivered"):
-            if rank(to) > stop_at:
-                break
-            if to == "in_transit" and not by_carrier:
-                continue  # only a carrier's tracking has an in-transit step
-            if rank(status) < rank(to):
-                if to == "delivered" and order.settle_early:
-                    self._settle_early(view, sid)
-                self._transition(sid, to)
-                status = to
+        if not self.poll(f"shipment {sid} ready", lambda: self._status(view, pkg) in DESK_FROM, timeout=30):
+            raise ValueError(f"shipment of {order.key} did not reach ready (it is {self._status(view, pkg)})")
+        if pkg.target == "delivered" and order.settle_early:
+            self._settle_early(view, sid)
+        for i, step in enumerate(DESK_STEPS[pkg.target]):
+            body: dict[str, Any] = {}
+            if step == "delivered":
+                # Proof needs a photo asset of purpose proof-photo; orders keeps the ids (gateway-bff re-checks each one with media
+                # before it calls orders, a call this seeder cannot make as staff), so a stable placeholder id stands for the photo.
+                body = {"photoAssetIds": [str(uuid.uuid5(uuid.NAMESPACE_URL, f"seed-proof/{sid}"))],
+                        "recipientName": "Left with the customer", "note": "Handed over at the door"}
+            elif step in ("failed", "returned"):
+                body = {"reason": DESK_REASONS[step]}
+            self.svc["orders"].post(f"/v1/deliveries/{sid}/{step}", body,
+                                    headers={"Idempotency-Key": f"seed-ops:desk:{sid}:{i}:{step}"})
+            self.add("delivery desk steps", step)
+
+    def _collect(self, order: O.Order, view: dict[str, Any], pkg: O.Package, sid: str, seller: dict[str, str]) -> None:
+        """Seller pickup: the customer gives the seller their 4-digit code and the order is handed over (collected)."""
+        fresh = self._order_view(order)
+        code = self._shipment_of(fresh, pkg).get("handoverCode")
+        if not code:
+            raise ValueError(f"{order.key}: the customer's view has no handover code, so the pickup cannot be collected")
+        self._transition(sid, "delivered", seller, code=str(code))
+
+    def driver_app(self) -> bool:
+        return str(self.env.get("DRIVER_APP_ENABLED", "")).strip().lower() == "true"
 
     def _status(self, view: dict[str, Any], pkg: O.Package) -> str:
         fresh = self.svc["orders"].get(f"/v1/lookup/orders/{view['orderNumber']}")
@@ -959,6 +1016,8 @@ class OpsSeeder:
         routes = items_of(fc.get("/v1/dispatch/routes", params={"limit": 200}))
         for key, (name, days, window, vehicle) in O.ROUTES.items():
             orders = [o for o in self.live_orders() if any(p.route == key for p in o.packages)]
+            if not orders and key != "returns":
+                continue
             route = next((r for r in routes if r.get("name") == name and r.get("status") != "CANCELLED"), None)
             if route is None:
                 ids = []
@@ -1145,7 +1204,11 @@ class OpsSeeder:
             methods = next((ln.get("methods") for s in eligibility.get("shipments") or []
                             for ln in s.get("lines") or [] if ln.get("lineId") == line["id"]), None) or []
             if method not in methods:
-                raise ValueError(f"{order.key}: {method} is not offered for {line.get('title')} ({methods})")
+                if not methods:
+                    raise ValueError(f"{order.key}: no return method is offered for {line.get('title')}")
+                self.log(f"    {order.key}: {method} is not offered (the driver app and carrier labels are not in use); "
+                         f"using {methods[0]}")
+                method = methods[0]
             rma = tr.post("/v1/returns", {
                 "orderId": view["id"], "shipmentId": shipment["id"], "method": method,
                 "lines": [{"lineId": line["id"], "quantity": 1, "reason": reason,

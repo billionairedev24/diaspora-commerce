@@ -11,7 +11,7 @@ import unittest
 from seedlib import dataset as D
 from seedlib import ops_dataset as O
 from seedlib.http import ApiError
-from seedlib.ops import PO_ORDER, STAGES, TARGET_STATUS, OpsSeeder, stable
+from seedlib.ops import DESK_REASONS, DESK_STEPS, PO_ORDER, STAGES, TARGET_STATUS, OpsSeeder, stable
 from seedlib.users import SignedIn
 
 PRODUCT_KEYS = {p.key: p for p in D.PRODUCTS}
@@ -112,29 +112,33 @@ class OpsDatasetTest(unittest.TestCase):
         self.assertTrue(any(30 <= ln.expires_in_days <= 60 for ln in lines), "markdown candidates")
         self.assertEqual(len({ln.lot for ln in lines}), len(lines))
 
-    def test_orders_cover_every_shipment_state_both_customers_and_both_fulfilments(self):
+    def test_orders_cover_the_two_fulfilment_modes_and_every_delivery_state(self):
         orders = O.ORDERS + [O.SELLER_PICKUP["order"]]
         self.assertEqual(len({o.key for o in orders}), len(orders), "keys are the orders' attribution")
         targets = {pkg.target for o in orders for pkg in o.packages}
-        self.assertTrue({"placed", "picking", "packed", "shipped", "out_for_delivery", "delivered", "cancelled"}
-                        <= targets)
+        self.assertTrue({"placed", "picking", "packed", "ready", "out_for_delivery", "delivered", "failed", "returned",
+                         "collected", "cancelled"} <= targets)
         self.assertTrue(all(t in TARGET_STATUS for t in targets))
         self.assertEqual({o.customer for o in orders}, {O.HOUSTON, O.LUBBOCK})
         self.assertTrue(any(len(o.packages) > 1 for o in orders), "a multi-package order")
         self.assertTrue(any(o.preorder for o in orders))
-        fulfilments = {D.SELLER_BY_KEY[ln.seller or PRODUCT_KEYS[ln.product].seller].fulfilment
-                       for o in orders for pkg in o.packages for ln in pkg.lines}
-        self.assertEqual(fulfilments, {"AFROTRANSACT", "SELLER"}, "FBA and seller-fulfilled packages")
+        options = {pkg.option for o in orders for pkg in o.packages}
+        self.assertEqual(options, {"afrotransact_delivery", "pickup", "door"}, "FBA, Seller pickup, pre-order: never a carrier")
         for o in orders:
             for pkg in o.packages:
-                if pkg.route:
-                    self.assertIn(pkg.route, O.ROUTES)
+                self.assertFalse(pkg.route, "the Delivery desk delivers; routes are the dormant driver app's")
+                if pkg.target in ("failed", "returned", "delivered", "out_for_delivery"):
                     self.assertEqual(pkg.option, "afrotransact_delivery")
-                if pkg.option == "afrotransact_delivery" and not pkg.lines[0].seller:
-                    self.assertEqual(D.SELLER_BY_KEY[PRODUCT_KEYS[pkg.lines[0].product].seller].node, "HOU-FC",
-                                     "local delivery leaves from the Houston FC")
+                if pkg.target == "collected":
+                    self.assertEqual(pkg.option, "pickup")
         self.assertTrue(any(o.returns for o in orders) and any(o.claim[0] for o in orders))
         self.assertTrue(any(o.settle_early for o in orders), "a payout")
+
+    def test_the_desk_walks_every_delivery_target_in_order_with_proof_and_reasons(self):
+        self.assertEqual(DESK_STEPS["delivered"][-1], "delivered")
+        self.assertEqual(DESK_STEPS["returned"][-1], "returned")
+        self.assertLess(DESK_STEPS["failed"].index("out-for-delivery"), DESK_STEPS["failed"].index("failed"))
+        self.assertEqual(set(DESK_REASONS), {"failed", "returned"})
 
     def test_stable_numbers_do_not_change_between_runs(self):
         self.assertEqual(stable("received-matched", 5), stable("received-matched", 5))
@@ -235,6 +239,57 @@ class OrdersTest(unittest.TestCase):
         s.part("returns and claims", lambda: ran.append(1), ("tax-returns", "trust-ops"))
         self.assertEqual(ran, [])
         self.assertIn("tax-returns not running", logs[0])
+
+
+class DeskTest(unittest.TestCase):
+    """Fulfilled by AfroTransact deliveries are taken by staff through orders' Delivery desk; pickups are collected with the code."""
+
+    def drive(self, order_key, status="ready", seller_fulfilled=False, env=None):
+        orders = Fake()
+        order = next(o for o in O.ORDERS + [O.SELLER_PICKUP["order"]] if o.key == order_key)
+        shipment = {"id": "sh-1", "status": status, "handoverCode": "4821",
+                    "fulfilmentType": "SELLER_FULFILLED" if seller_fulfilled else "FBA_AFROTRANSACT",
+                    "sellerOrgId": "org_mama_put_pantry", "lines": [{"variantAtin": "AT1"}]}
+        view = {"orderNumber": "AT-1", "id": "o1", "shipments": [shipment]}
+        orders.on("GET", "/v1/lookup/orders/*", lambda *a: {"shipments": [dict(shipment, status="ready")]})
+        orders.on("GET", "/v1/orders", lambda *a: {"items": [dict(view, attribution={"src": O.SEED_SOURCE, "cr": order_key})]})
+        orders.on("POST", "/v1/deliveries/*", lambda *a: {})
+        orders.on("POST", "/v1/shipments/*", lambda *a: {})
+        s = seeder(orders=orders, fulfilment=Fake())
+        s.env = env or {}
+        s.atin = lambda key, variant=0: "AT1"
+        return s, orders, order, view
+
+    def test_a_delivered_package_goes_picked_up_out_for_delivery_delivered_with_a_photo(self):
+        s, orders, order, view = self.drive("delivered-courier")
+        s._drive_shipment(order, view, order.packages[0], {"sh-1": {"id": "t1", "status": "READY", "lines": []}})
+        steps = [c for c in orders.calls if c[0] == "POST"]
+        self.assertEqual([c[1].rsplit("/", 1)[1] for c in steps], ["picked-up", "out-for-delivery", "delivered"])
+        self.assertTrue(steps[-1][2]["photoAssetIds"], "delivered needs a proof photo")
+        self.assertTrue(all(c[4]["Idempotency-Key"].startswith("seed-ops:desk:sh-1:") for c in steps))
+        self.assertFalse(any("/transitions" in c[1] for c in steps), "the general transition call refuses the delivery steps")
+
+    def test_a_failed_delivery_and_a_return_to_the_seller_carry_a_reason(self):
+        s, orders, order, view = self.drive("returned-to-seller", seller_fulfilled=True)
+        s._drive_shipment(order, view, order.packages[0], {})
+        desk = [c for c in orders.calls if c[0] == "POST" and "/v1/deliveries/" in c[1]]
+        self.assertEqual([c[1].rsplit("/", 1)[1] for c in desk],
+                         ["picked-up", "out-for-delivery", "failed", "out-for-delivery", "failed", "returned"])
+        self.assertTrue(all(c[2].get("reason") for c in desk if c[1].endswith(("failed", "returned"))))
+
+    def test_a_pickup_is_collected_by_the_seller_with_the_customers_code(self):
+        s, orders, order, view = self.drive("pickup-collected", status="ready", seller_fulfilled=True)
+        s._drive_shipment(order, view, order.packages[0], {})
+        last = [c for c in orders.calls if c[0] == "POST"][-1]
+        self.assertEqual(last[1], "/v1/shipments/sh-1/transitions")
+        self.assertEqual(last[2], {"to": "delivered", "handoverCode": "4821"})
+        self.assertFalse(any("/v1/deliveries/" in c[1] for c in orders.calls), "pickups never touch the Delivery desk")
+
+    def test_with_the_driver_app_a_routed_package_is_left_to_the_driver(self):
+        s, orders, order, view = self.drive("delivered-courier", env={"DRIVER_APP_ENABLED": "true"})
+        pkg = O.Package(order.packages[0].lines, target="delivered", route="today")
+        s._drive_shipment(order, view, pkg, {"sh-1": {"id": "t1", "status": "READY", "lines": []}})
+        self.assertFalse([c for c in orders.calls if c[0] == "POST"])
 
 
 def jwt(claims: dict) -> str:

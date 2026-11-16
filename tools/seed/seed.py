@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
                 if lost:
                     print(f"seed: {len(lost)} demo product(s) are missing from the catalog ({', '.join(p.key for p in lost[:6])}"
                           f"{'...' if len(lost) > 6 else ''}): seeding them again (sellers, products, ads, ops)")
-                    return seeder.run(tuple(s for s in ("sellers", "size-charts", "products", "ads", "ops") if s in steps))
+                    return seeder.run(tuple(s for s in ("sellers", "size-charts", "locations", "products", "ads", "ops") if s in steps))
                 if "ops" in steps and seeder.ops_missing():
                     print("seed: the catalog has products but no operations data yet (purchase orders, orders, "
                           "dispatch): seeding it (--only ops)")

@@ -166,6 +166,22 @@ class DatasetTest(unittest.TestCase):
                 for o in options:
                     self.assertIn(o["Size"].lower(), rows, f"{p.key} sells size {o['Size']} that {chart.name} has no row for")
 
+    def test_every_seller_location_has_a_valid_mode_and_never_self_shipping(self):
+        for loc in D.LOCATIONS:
+            self.assertIn(loc.seller, D.SELLER_BY_KEY)
+            self.assertTrue(loc.modes and set(loc.modes) <= {"fba", "pickup"}, loc.seller)
+            self.assertTrue(loc.line1 and loc.line1[0].isdigit(), "a street address a driver can find")
+        self.assertEqual(len(D.LOCATION_BY_SELLER), len(D.LOCATIONS), "one location per seller")
+        self.assertTrue(any("pickup" in loc.modes for loc in D.LOCATIONS), "some sellers offer Seller pickup")
+        self.assertTrue(any("fba" in loc.modes for loc in D.LOCATIONS), "some locations are Fulfilled by AfroTransact")
+        self.assertTrue(D.HOURS, "FBA needs pickup hours: they are never invented by the server")
+        for key in D.LOCATION_FBA:
+            product = next(p for p in D.PRODUCTS if p.key == key)
+            self.assertIn("fba", D.LOCATION_BY_SELLER[product.seller].modes, f"{key} is offered from an FBA location")
+            self.assertFalse(product.also, "one seller location per such product")
+        self.assertFalse(hasattr(D, "SELF_SHIPPED"))
+        self.assertNotIn("SELLER", {p.fulfilment for p in D.PRODUCTS})
+
     def test_sellers_offers_and_content_reference_known_things(self):
         keys = {p.key for p in D.PRODUCTS}
         orgs = [s.org_id for s in D.SELLERS] + [p.org_id for p in D.PROVIDERS]
@@ -176,7 +192,7 @@ class DatasetTest(unittest.TestCase):
         nodes = {"HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC"}
         for s in D.SELLERS:
             self.assertIn(s.node, nodes)
-            self.assertIn(s.fulfilment, ("AFROTRANSACT", "SELLER"))
+            self.assertEqual(s.fulfilment, "AFROTRANSACT", "no seller ships itself (ADR 0011)")
         for p in D.PRODUCTS:
             self.assertIn(p.seller, D.SELLER_BY_KEY)
             for other, factor in p.also:
