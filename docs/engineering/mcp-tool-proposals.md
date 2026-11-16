@@ -93,6 +93,12 @@ Proposal 0 below.
 | A15 | `propose_tax_decision` | propose | Prepare approving or rejecting a tax review item (`tax:review`); a person confirms |
 | A16 | `set_ai_spend_cap` | propose | **Proposed only; not built, not approved.** Prepare a change of the daily AI spend cap (value and reason) as a PROPOSAL the staff member confirms in the console; the tool itself could never save it. Would need `ai:cap.manage` on the caller's own relayed token (ai-gateway `PUT /v1/ai/spend-cap` stays the judge: ceiling, reason, version). Today the cap is changed in the console only, and a test (`NoSpendCapToolTest`) keeps every tool away from it |
 
+## Catalog import (proposed only; see catalog-import-spike.md)
+
+| # | Tool | Kind | What it does |
+|---|---|---|---|
+| I1 | `import_status` | read | Seller: where a "Bring your catalog" import stands (counts by state) and what is still missing per group; never returns credentials, tokens or tax codes; own organisation only. **Proposed only; not built, not approved.** Needs the catalog-import service (S499 onward) first |
+
 ## For anyone integrating (all audiences)
 
 | # | Tool | Kind | What it does |
