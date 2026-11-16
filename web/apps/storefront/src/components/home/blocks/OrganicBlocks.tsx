@@ -1,8 +1,9 @@
 import { type HomeBlock, type ProductSummary } from '@afrotransact/api-client';
 import { buttonClassName } from '@afrotransact/ui';
-import Link from 'next/link';
 
 import { Countdown } from '@/components/preorder/Countdown';
+// Content-driven addresses may be /sell or /provide (a cross-origin redirect): HandoffLink renders those as plain links.
+import { HandoffLink as Link } from '@/components/shell/HandoffLink';
 import { getT } from '@/i18n/server';
 
 import blocks from '../Blocks.module.css';

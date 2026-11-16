@@ -1,8 +1,9 @@
 import { type HomeBlock } from '@afrotransact/api-client';
 import { createFormatters } from '@afrotransact/i18n';
 import { buttonClassName } from '@afrotransact/ui';
-import Link from 'next/link';
 
+// Content-driven addresses may be /sell or /provide (a cross-origin redirect): HandoffLink renders those as plain links.
+import { HandoffLink as Link } from '@/components/shell/HandoffLink';
 import { getLocale, getT } from '@/i18n/server';
 
 import styles from './DynamicHome.module.css';
