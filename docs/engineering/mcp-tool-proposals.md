@@ -97,7 +97,7 @@ Proposal 0 below.
 
 | # | Tool | Kind | What it does |
 |---|---|---|---|
-| I1 | `import_status` | read | Seller: where a "Bring your catalog" import stands (counts by state) and what is still missing per group; never returns credentials, tokens or tax codes; own organisation only. **Proposed only; not built, not approved.** Needs the catalog-import service (S499 onward) first |
+| I1 | `import_status` | read | Seller: where a "Bring your catalog" import stands (counts by state) and what is still missing per group; never returns credentials, tokens or tax codes; own organisation only. **Proposed only; not built, not approved.** Needs the catalog-import service (S500 onward) first |
 
 ## For anyone integrating (all audiences)
 
