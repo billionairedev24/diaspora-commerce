@@ -22,8 +22,8 @@ class EndpointsTest(unittest.TestCase):
         ports = {url.rsplit(":", 1)[1].split("/")[0] for url, _ in e.values()}
         self.assertEqual(ports, {"8120", "8200"}, "no legacy per-service port")
 
-    def test_monolith_is_the_default_and_services_keeps_the_old_ports(self):
-        self.assertEqual(service_endpoints({}), service_endpoints({"STACK": "monolith"}))
+    def test_services_is_the_default_on_main_and_keeps_the_old_ports(self):
+        self.assertEqual(service_endpoints({}), service_endpoints({"STACK": "services"}))  # main: services is the default
         e = service_endpoints({"STACK": "services"})
         self.assertEqual(e["catalog"], ("http://localhost:8101", "/actuator/health"))
         self.assertEqual(e["media"][0], "http://localhost:8207")

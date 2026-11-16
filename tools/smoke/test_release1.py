@@ -152,7 +152,7 @@ class SmokeTest(unittest.TestCase):
         url = f"http://127.0.0.1:{server.server_address[1]}"
         env = dict(os.environ, BFF_URL=url, CORE_URL=url, IDENTITY_URL=url, ORDERS_URL=url, STOREFRONT_URL=url,
                    SELLER_CENTER_URL=url, STAFF_CONSOLE_URL=url, MAILPIT_URL=url, MEILISEARCH_URL=url, PROMETHEUS_URL=url,
-                   SMOKE_CHECKOUT="0", SMOKE_DEPT_SKIP="Services")
+                   SMOKE_CHECKOUT="0", SMOKE_DEPT_SKIP="Services", STACK="monolith")
         try:
             res = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=120)
         finally:
