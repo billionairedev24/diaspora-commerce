@@ -18,6 +18,7 @@ corrupt on either side is refused with the offending ids (repair it from main's 
 
   python3 tools/release/merge_backlog.py --git origin/main            merge main into the work tree's file (base = merge-base)
   python3 tools/release/merge_backlog.py --base b.csv --ours o.csv --theirs t.csv --out merged.csv
+  python3 tools/release/merge_backlog.py --validate docs/backlog/backlog.csv       exit 0 when the file parses and passes the backlog checks
   python3 tools/release/merge_backlog.py --driver %O %A %B           as a git merge driver (tools/release/setup-merge-driver.sh sets it up)
 Exit 0 merged (the file is written), 2 conflicts or a corrupt input (nothing is written; the report names them).
 Standard library only.
@@ -192,6 +193,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--git", metavar="THEIRS_REF", help="merge this ref's file into the work tree's (base = merge-base of HEAD and the ref)")
     ap.add_argument("--root", default=str(ROOT))
+    ap.add_argument("--validate", metavar="FILE", help="only validate FILE (header, ids, statuses, parents); exit 2 when it is corrupt")
     ap.add_argument("--driver", nargs=3, metavar=("BASE", "OURS", "THEIRS"), help="git merge driver mode: writes the result over OURS")
     ap.add_argument("--base")
     ap.add_argument("--ours")
@@ -199,6 +201,14 @@ def main(argv=None):
     ap.add_argument("--out")
     args = ap.parse_args(argv)
     root = pathlib.Path(args.root)
+    if args.validate:
+        try:
+            rows = parse(pathlib.Path(args.validate).read_text(encoding="utf-8", newline=""), args.validate)
+        except Refused as e:
+            print("merge_backlog: INVALID\n  " + "\n  ".join(e.lines), file=sys.stderr)
+            return 2
+        print(f"merge_backlog: {args.validate} ok ({len(rows)} rows)")
+        return 0
     if args.driver:
         args.base, args.ours, args.theirs = args.driver
         args.out = args.ours
