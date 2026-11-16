@@ -13,7 +13,6 @@ import java.util.stream.Collectors;
 
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.CourierProof;
-import com.afrotransact.orders.domain.FulfilmentMode;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrderTotals;
@@ -204,7 +203,7 @@ class OrderViews {
             if (access.holds(OrdersPermissions.DELIVERY_MANAGE)) {
                 out.addAll(policy.nextFor(s, ActorKind.DELIVERY_STAFF));
             }
-        } else if (s.fulfilmentMode() == FulfilmentMode.SELLER_SHIPS) {
+        } else if (s.sellerResponsible()) {
             out.retainAll(EnumSet.of(ShipmentStatus.CANCELLED));
         }
         return out;

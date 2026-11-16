@@ -148,7 +148,7 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
      * required by the use case. It never applies to AfroTransact-delivered or pickup shipments.
      */
     private static TransitionDecision override(Shipment s, ShipmentStatus to) {
-        if (s.fulfilmentMode() != FulfilmentMode.SELLER_SHIPS) {
+        if (!s.sellerResponsible()) {
             throw TransitionRefused.forbidden("Only a shipment the seller ships can be overridden; AfroTransact "
                     + "moves the others with the delivery steps");
         }

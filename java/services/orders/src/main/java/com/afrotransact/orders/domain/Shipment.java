@@ -167,6 +167,15 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         return localDelivery != null ? FulfilmentMode.AFROTRANSACT_DELIVERY : FulfilmentMode.SELLER_SHIPS;
     }
 
+    /**
+     * The seller is responsible for moving this shipment: a seller-packed shipment the seller sends themselves (their own
+     * courier, a label they bought). A shipment AfroTransact packs is never the seller's to update, even when it travels
+     * by carrier.
+     */
+    public boolean sellerResponsible() {
+        return fulfilmentMode() == FulfilmentMode.SELLER_SHIPS && fulfilmentType == FulfilmentType.SELLER_FULFILLED;
+    }
+
     /** A community pre-order shipment (S272). */
     public boolean preorderShipment() {
         return preorder != null;
