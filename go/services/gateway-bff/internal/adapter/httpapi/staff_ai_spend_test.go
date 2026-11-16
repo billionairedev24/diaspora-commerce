@@ -84,7 +84,7 @@ func TestStaffAISpendConformance(t *testing.T) {
 			map[string]any{"feature": "listing-writer", "calls": 3, "tokens": 2000, "costMicros": 150000}}}
 	got := do("admin", 200)
 	feats := got["byFeature"].([]any)
-	if got["spentMicros"].(float64) != 1400000 || got["capMicros"].(float64) != 2000000 || got["hasData"] != true || got["capSetBy"] != "AI_GLOBAL_DAILY_COST_USD" ||
+	if got["spentMicros"].(float64) != 1400000 || got["capMicros"].(float64) != 2000000 || got["hasData"] != true || got["capSetBy"] != nil ||
 		len(feats) != 2 || feats[1].(map[string]any)["label"] != "Listing writer" {
 		t.Fatalf("spend = %v", got)
 	}

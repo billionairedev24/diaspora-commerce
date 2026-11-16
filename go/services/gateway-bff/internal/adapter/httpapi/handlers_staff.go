@@ -59,7 +59,8 @@ type StaffServices struct {
 	// Invitations serves Settings > Staff accounts' invitations (invite, list, resend, revoke) and the invitee's two session-less
 	// pages; routes are registered when it and Access are set.
 	Invitations app.StaffInvitationsService
-	// AISpend serves Settings > AI and MCP spend cap: today's spend against the daily cap, by feature; routes are registered when set.
+	// AISpend serves Settings > AI and MCP spend cap: today's spend against the daily cap, by feature, and the cap itself (read, and
+	// changed with ai:cap.manage); routes are registered when set.
 	AISpend app.StaffAISpendService
 	// ContentPages serves Settings → Published pages (index, preview data, drafts, publication and rollback of legal
 	// documents and help pages); routes are registered when it is set.
@@ -166,6 +167,8 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.AISpend != nil {
 		route("GET /v1/staff/ai/spend-today", h.staffAISpendToday)
+		route("GET /v1/staff/ai/spend-cap", h.staffAISpendCap)
+		route("PUT /v1/staff/ai/spend-cap", h.staffSetAISpendCap)
 	}
 	if s.Access != nil {
 		h.registerStaffAccess(route)
