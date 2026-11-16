@@ -1,0 +1,15 @@
+{"products":[
+{"id":7001,"title":"Shea Moisture Curl Enhancing Smoothie 12oz","handle":"shea-moisture-curl-smoothie","body_html":"<p>Coconut &amp; hibiscus curl cream for <b>natural hair</b>.</p>","vendor":"SheaMoisture","product_type":"Hair Care","tags":["curls","natural hair"],
+ "variants":[{"id":8001,"title":"Default Title","sku":"SM-CURL-12","barcode":"764302215011","price":"11.99","compare_at_price":"13.99","grams":397,"available":true,"option1":"Default Title"}],
+ "images":[{"id":9001,"src":"https://cdn.example-fixture.test/img/curl-smoothie.jpg","width":1600,"height":1600,"alt":"Curl smoothie jar"}]},
+{"id":7002,"title":"Brazilian Body Wave Lace Front Wig 22 inch","handle":"body-wave-lace-wig","body_html":"","vendor":"","product_type":"Wigs","tags":["wig","lace front"],
+ "variants":[{"id":8002,"title":"18 inch","sku":"WIG-BW-18","barcode":"","price":"129.00","compare_at_price":null,"grams":0,"available":true,"option1":"18 inch"},
+             {"id":8003,"title":"22 inch","sku":"WIG-BW-22","barcode":"","price":"159.00","compare_at_price":"199.00","grams":0,"available":false,"option1":"22 inch"}],
+ "images":[{"id":9002,"src":"https://cdn.example-fixture.test/img/wig-main.jpg","width":600,"height":800,"alt":""}]},
+{"id":7003,"title":"Salon Gift Card","handle":"gift-card","body_html":"<p>Digital gift card</p>","vendor":"Example Hair Supply","product_type":"Gift Cards","tags":[],
+ "variants":[{"id":8004,"title":"$25","sku":"","barcode":"","price":"25.00","compare_at_price":null,"grams":0,"available":true,"option1":"$25"}],
+ "images":[{"id":9003,"src":"https://cdn.example-fixture.test/img/icons/gift-icon.svg","width":64,"height":64,"alt":"icon"}]},
+{"id":7004,"title":"Edge Control Gel Strong Hold 4oz","handle":"edge-control","body_html":"<p>Strong hold, no flaking.</p>","vendor":"Example Hair Supply","product_type":"","tags":["edges","hair gel"],
+ "variants":[{"id":8005,"title":"Default Title","sku":"EDGE-4","barcode":"","price":"6.50","compare_at_price":null,"grams":140,"available":false,"option1":"Default Title"}],
+ "images":[]}
+]}
