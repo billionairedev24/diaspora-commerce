@@ -22,7 +22,7 @@ class StaffMcpTools {
             description = "Seller and provider applications waiting for review (applications:review).",
             annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
     ToolResult applicationsQueue(McpTransportContext context,
-                                 @McpToolParam(description = "Status filter (default IN_REVIEW)", required = false)
+                                 @McpToolParam(description = "Status filter (default PENDING_REVIEW; also FLAGGED, AWAITING_FINAL_APPROVAL, INFO_REQUESTED, APPROVED, REJECTED)", required = false)
                                  String status,
                                  @McpToolParam(description = "Page number from 0", required = false) Integer page) {
         return staff.applicationsQueue(McpCallerExtractor.caller(context), status, page);
