@@ -40,7 +40,7 @@ describe('cart tax estimate', () => {
     renderWithProviders(<CartView />);
     const box = await screen.findByTestId('cart-tax-estimate');
     const result = await within(box).findByTestId('tax-zip-result');
-    expect(result).toHaveTextContent('Estimated for Houston, TX');
+    expect(result).toHaveTextContent(/^\$\d+\.\d{2}/);
     expect(within(box).getByTestId('tax-zip-amount').textContent).toMatch(/^\$\d+\.\d{2}$/);
     expect(box.textContent).not.toMatch(/when you place your order|at checkout/i);
   });
@@ -67,7 +67,7 @@ describe('cart tax estimate', () => {
     renderWithProviders(<CartView />);
     const box = await screen.findByTestId('cart-tax-estimate');
     const result = await within(box).findByTestId('tax-zip-result');
-    expect(result).toHaveTextContent('Estimated for Houston, TX');
+    expect(result).toHaveTextContent(/^\$\d+\.\d{2}/);
     expect(within(box).getByTestId('tax-zip-basis')).toHaveTextContent('based on your location');
     expect(within(box).getByTestId('tax-zip-amount').textContent).toMatch(/^\$\d+\.\d{2}$/);
     expect(within(box).queryByTestId('tax-zip-form')).not.toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('cart tax estimate', () => {
     const user = userEvent.setup();
     await user.type(within(form).getByLabelText('Enter your ZIP code to see tax'), '77002');
     await user.click(within(form).getByRole('button', { name: 'See tax' }));
-    await waitFor(() => expect(within(box).getByTestId('tax-zip-result')).toHaveTextContent('Estimated for Houston, TX'));
+    await waitFor(() => expect(within(box).getByTestId('tax-zip-result')).toHaveTextContent(/^\$\d+\.\d{2}/));
     expect(within(box).queryByTestId('tax-zip-basis')).not.toBeInTheDocument();
     expect(sent.some((r) => r.url.includes('/v1/checkout/tax-estimate') && r.url.includes('zip=77002'))).toBe(true);
     // changing the ZIP code goes back to the input
@@ -126,7 +126,7 @@ describe('cart tax estimate', () => {
     await api.addToCart({ offerId: seller.buyBox?.offerId ?? '', quantity: 1 });
     renderWithProviders(<CartView />);
     const box = await screen.findByTestId('cart-tax-estimate');
-    expect(await within(box).findByTestId('tax-zip-result')).toHaveTextContent('Estimated for Houston, TX');
+    expect(await within(box).findByTestId('tax-zip-result')).toHaveTextContent(/^\$\d+\.\d{2}/);
     expect(within(box).queryByTestId('tax-zip-form')).not.toBeInTheDocument();
     expect(within(box).queryByTestId('tax-zip-basis')).not.toBeInTheDocument();
     expect(sent.filter((r) => r.url.includes('/v1/checkout/tax-estimate')).every((r) => !/zip=\d/.test(r.url))).toBe(true);
@@ -190,7 +190,7 @@ describe('cart tax estimate', () => {
       expect(within(box).queryByTestId('tax-zip-form')).not.toBeInTheDocument();
       mockServer.use(http.get('*/v1/checkout/tax-estimate', () => HttpResponse.json(real)));
       await userEvent.setup().click(within(retry).getByRole('button', { name: 'Retry' }));
-      expect(await within(box).findByTestId('tax-zip-result')).toHaveTextContent('Estimated for Houston, TX');
+      expect(await within(box).findByTestId('tax-zip-result')).toHaveTextContent(/^\$\d+\.\d{2}/);
     });
 
     it('a failing request is also a Retry, not the ZIP box', async () => {

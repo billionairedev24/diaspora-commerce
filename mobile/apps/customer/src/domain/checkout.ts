@@ -65,9 +65,9 @@ export function blockedItemText(line: Pick<BlockedLine, 'title'>): string {
   return `We can’t sell ${line.title || 'an item'} yet. We’re still checking its details. Remove it from this order to continue, or try again later.`;
 }
 
-/** "Estimated tax" with where it was worked out, e.g. "Estimated tax · Houston, TX". */
-export function taxLabel(summary: CheckoutSummary): string {
-  return summary.taxJurisdictionLabel ? `Estimated tax · ${summary.taxJurisdictionLabel}` : 'Estimated tax';
+/** The tax row's label: plain "Estimated tax" (no place, no explanation: the value is the whole story). */
+export function taxLabel(_summary: CheckoutSummary): string {
+  return 'Estimated tax';
 }
 
 /**
@@ -85,14 +85,6 @@ export function taxValue(summary: CheckoutSummary, money: (minor: number, curren
     default:
       return 'We couldn’t work out your tax right now. Try again.';
   }
-}
-
-/** Says when some or all items carry no tax (mixed or exempt baskets); null when there is nothing to say. */
-export function taxNote(summary: CheckoutSummary): string | null {
-  const lines = summary.taxLines ?? [];
-  const exempt = lines.filter((l) => l.status === 'EXEMPT').length;
-  if (exempt === 0) return null;
-  return lines.some((l) => l.status === 'TAXABLE') ? 'No tax on some of your items, or on their delivery.' : 'No tax on these items, or on their delivery.';
 }
 
 export interface PackageChoice {

@@ -446,15 +446,6 @@ export function CheckoutView() {
   if (!s) return null;
 
   const addressList = addressOpen || !address;
-  // The tax row is worded from the BFF's taxEstimateStatus and taxUnavailableReason, never from its label text: a known estimate
-  // shows its amount and rate (when a taxable line has one); without one the row asks for what is missing (a ZIP code, a state)
-  // or says plainly that it didn't work and offers Retry. The shopper is never told the tax is "calculated later".
-  const taxNote =
-    s.taxEstimateStatus === 'ESTIMATED'
-      ? /\d\s*%/.test(s.taxRateLabel)
-        ? t('co.taxExplainRate', { rate: s.taxRateLabel })
-        : t('co.taxExplain')
-      : null;
   const placeNow = () => void (creditPaysAll ? placeWithCredit() : payWith === 'new' || !pm ? placeWithElement() : placeWithSaved());
   /** The shopper confirmed the new total: place again (a new Idempotency-Key was made when the 409 came), carrying its lock. */
   const confirmTotal = () => {
@@ -610,7 +601,6 @@ export function CheckoutView() {
         shippingMinor={selectedShipping}
         total={total}
         itemCount={itemCount}
-        taxNote={taxNote}
         paymentChosen={paymentChosen}
         creditMinor={split.appliedMinor}
         pmLabel={payWith === 'saved' ? pm?.label : newMethodName(newMethod.type)}

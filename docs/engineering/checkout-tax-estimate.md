@@ -39,9 +39,9 @@ The shipping line is **what orders will charge**, from the **same record** (orde
 
 ## What the summary shows
 
-- Row **"Estimated tax"** with the amount, "Estimated for Houston, TX" under it (`taxJurisdictionLabel`) and "This is the tax you will pay unless something in your order changes". The total is labelled "Order total" with "Includes tax. If your total would change before you pay, we show you the new total first. You are never charged more without your OK." No ids.
+- Row **"Estimated tax"** with its value, always shown once there is an estimate (owner rule: about 99% of estimates match the final tax). Plain: no "Estimated for <city>" line, no "this is the tax you will pay" sentence, no "Includes tax" footnote, no per-category reasons. The total is labelled "Order total". If the total would change before payment, a short neutral banner appears only then: "The total changed. New total $X" with **Accept** and **Cancel**; nothing is charged more without that consent. No ids.
 - Without an estimate the amount is "—" and the row says what is needed (see [Where there is no estimate](#where-there-is-no-estimate)). The total is then labelled "Total before tax" and Pay is disabled.
-- Mixed baskets: items with no tax are tagged "No tax" in the item list, with "No tax on some of your items, or on their delivery." A basket of exempt items only shows $0.00 with "No tax on these items, or on their delivery."
+- Mixed baskets and exempt-only baskets show the same plain row (the value, which may be $0.00). The per-line decisions (`taxLines`, `exemptReason`) stay in the API for staff and the tax review UI; the shopper UI does not render them.
 - Blocked items: see above.
 
 ## Delivery charge allocation (TX-05, TX-06, TX-07)
@@ -133,7 +133,7 @@ The estimate needs a destination (state and ZIP code). The checkout puts the **a
 | `UNAVAILABLE` / `BLOCKED_ITEMS` | an item has no definite tax decision (`blockedLines`) | "Remove the items we can't sell yet to see your tax." (the blocked-items panel above offers Remove) |
 | `UNAVAILABLE` / `SERVICE_UNAVAILABLE`, `FACTS_UNAVAILABLE` | tax-returns (or catalog's facts for an item) did not answer: the **only** exceptional state | "We couldn't work out your tax right now. Try again." with **Retry**; Pay is disabled; `tax_estimate_unavailable_total` counts it and an alert pages |
 
-`GET /v1/checkout/tax-estimate` (cart page, new shopper): the same quote for the selected lines at each package's first delivery option, in the place the ZIP code is in (city and state from geo). No coupon, membership or delivery choice is known yet, so it can differ from the checkout's locked estimate; it is labelled "Estimated for Houston, TX".
+`GET /v1/checkout/tax-estimate` (cart page, new shopper): the same quote for the selected lines at each package's first delivery option, in the place the ZIP code is in (city and state from geo). No coupon, membership or delivery choice is known yet, so it can differ from the checkout's locked estimate; the row shows its value only.
 
 ### The cart page never asks for what it already knows
 
@@ -145,13 +145,13 @@ The cart's tax row (`TaxZipEstimate`) asks the BFF with no `zip`; the BFF (`Plac
 4. **The market's default place** (`commerce.defaultZip`, the place the header shows when nothing else is known): `DEFAULT_PLACE`. Owner decision: it is a real ZIP, shown as "based on your delivery area".
 5. **The ZIP prompt**: nothing above gave a place.
 
-The response carries `taxPlaceSource` and `taxPlacePrecision` (`ZIP` or `CITY`). For CITY precision the BFF sends tax-returns `shipTo.precision = CITY`; the rate looked up is still the ZIP's (tax-returns has no city table), and the quote lines report `addressPrecision: CITY`. The row reads "$x.xx · Estimated for Houston, TX · based on your location" (detected) or "based on your delivery area" (default) with a small **Change** link that opens the ZIP input. The checkout recomputes from the real chosen address. Tests: `checkout_tax_known_place_test.go`, `location_detect_test.go`, `web/apps/storefront/test/cart-tax.test.tsx`.
+The response carries `taxPlaceSource` and `taxPlacePrecision` (`ZIP` or `CITY`). For CITY precision the BFF sends tax-returns `shipTo.precision = CITY`; the rate looked up is still the ZIP's (tax-returns has no city table), and the quote lines report `addressPrecision: CITY`. The row reads "$x.xx · based on your location" (detected) or "based on your delivery area" (default) with a small **Change** link that opens the ZIP input. The checkout recomputes from the real chosen address. Tests: `checkout_tax_known_place_test.go`, `location_detect_test.go`, `web/apps/storefront/test/cart-tax.test.tsx`.
 
 What the row then shows comes from `taxEstimateStatus` / `taxUnavailableReason` and is **never replaced by the ZIP prompt** because something failed:
 
 | Answer | Cart row |
 |---|---|
-| `ESTIMATED` with a place | the amount and "Estimated for Houston, TX"; "Estimate for another ZIP code" is a small secondary link (for a typed ZIP it reads "Change ZIP code"). An estimate with no place is treated as a failure, never shown |
+| `ESTIMATED` with a place | the amount (a place we worked out ourselves adds "based on your location" or "based on your delivery area"); "Estimate for another ZIP code" is a small secondary link (for a typed ZIP it reads "Change ZIP code"). An estimate with no place is treated as a failure, never shown |
 | `UNAVAILABLE` / `BLOCKED_ITEMS` | "We can't sell {names} yet. Remove it to see your tax." (the item names from `blockedLines`, never ids; plural-aware) with one **Remove** button per item (removes the line from the cart; same keys as the checkout's blocked-items panel) |
 | `UNAVAILABLE` / `ADDRESS_INCOMPLETE` | the saved address has no state or ZIP: "Add your state and ZIP code to this address to see your tax." with **Edit address** (`/account/addresses`) |
 | `UNAVAILABLE` / `SERVICE_UNAVAILABLE`, `FACTS_UNAVAILABLE`, or the request itself failing | "We couldn't work out your tax right now. Try again." with **Retry** |
@@ -179,8 +179,7 @@ The summary showed the label "Calculated when you place your order" (or nothing)
 
 ## Wording that needs the tax professional's sign-off
 
-- The exempt-line reasons shown in the summary are tax-returns' own explanation per decision ("Groceries: no sales tax applies. Standard qualifying item."), unchanged. **Marked for tax-professional sign-off** together with the new sentence "This is the tax you will pay unless something in your order changes" and the shipping attribution note (open decision 5).
-- Pickup taxed at the delivery address (above).
+- The exempt-line reasons are no longer shown to the shopper (owner decision); tax-returns keeps them for staff. The shipping attribution note (open decision 5) and pickup taxed at the delivery address (below) still need sign-off.
 
 ## Translations
 
