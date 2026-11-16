@@ -14,4 +14,12 @@
     <artifactId>tax-returns-api</artifactId>
     <name>AfroTransact :: tax-returns-api</name>
     <description>Published API of the tax-returns module (interfaces and records, no framework). Other modules may depend on this and nothing else of tax-returns.</description>
+
+    <dependencies>
+        <!-- EndUserActor: the signed-in person an API method acts for. -->
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>module-contract</artifactId>
+        </dependency>
+    </dependencies>
 </project>

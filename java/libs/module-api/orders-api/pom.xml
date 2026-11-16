@@ -14,4 +14,12 @@
     <artifactId>orders-api</artifactId>
     <name>AfroTransact :: orders-api</name>
     <description>Published API of the orders module (interfaces and records, no framework). Other modules may depend on this and nothing else of catalog.</description>
+
+    <dependencies>
+        <!-- EndUserActor: the signed-in person an API method acts for. -->
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>module-contract</artifactId>
+        </dependency>
+    </dependencies>
 </project>
