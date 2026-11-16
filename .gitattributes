@@ -1,0 +1,2 @@
+# docs/backlog/backlog.csv has multi-line rows: a line-based merge interleaves them. tools/release/setup-merge-driver.sh enables the row merge.
+docs/backlog/backlog.csv merge=backlog-csv -text

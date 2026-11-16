@@ -157,6 +157,30 @@ class MergeBacklog(unittest.TestCase):
             self.assertIn("S001", r.stderr)
             self.assertEqual(f.read_bytes().decode(), before)
 
+    def test_as_a_git_merge_driver_a_plain_merge_no_longer_interleaves_rows(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            git = lambda *a, check=True: subprocess.run(["git", "-C", d, "-c", "user.email=t@t", "-c", "user.name=t", *a], check=check, capture_output=True, text=True)  # noqa: E731
+            (root / "docs/backlog").mkdir(parents=True)
+            (root / ".gitattributes").write_text("docs/backlog/backlog.csv merge=backlog-csv -text\n")
+            f = root / "docs/backlog/backlog.csv"
+            f.write_bytes(text(*EPICS, row("S001", parent="E01")).encode())
+            git("init", "-q", "-b", "main")
+            git("config", "merge.backlog-csv.driver", f"{sys.executable} {HERE / 'merge_backlog.py'} --driver %O %A %B")
+            git("add", "-A")
+            git("commit", "-q", "-m", "base")
+            git("checkout", "-q", "-b", "release-1")
+            f.write_bytes(text(*EPICS, row("S001", parent="E01"), row("E37", "R1"), row("S600", parent="E37", ac="- r1 a\n- r1 b")).encode())
+            git("commit", "-qam", "release adds")
+            git("checkout", "-q", "main")
+            f.write_bytes(text(*EPICS, row("S001", parent="E01"), row("S002", parent="E02", ac="- m a\n- m b\n- m c")).encode())
+            git("commit", "-qam", "main adds")
+            git("checkout", "-q", "release-1")
+            git("merge", "--no-ff", "-m", "merge main", "main")
+            self.assertEqual(self.ids(f.read_bytes().decode()), ["E01", "E02", "S001", "S002", "E37", "S600"])
+            rows = {r[0]: r for r in mb.parse(f.read_bytes().decode(), "m")}
+            self.assertEqual(rows["S002"][4], "- m a\n- m b\n- m c")
+
 
 if __name__ == "__main__":
     unittest.main()

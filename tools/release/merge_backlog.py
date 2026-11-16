@@ -18,6 +18,7 @@ corrupt on either side is refused with the offending ids (repair it from main's 
 
   python3 tools/release/merge_backlog.py --git origin/main            merge main into the work tree's file (base = merge-base)
   python3 tools/release/merge_backlog.py --base b.csv --ours o.csv --theirs t.csv --out merged.csv
+  python3 tools/release/merge_backlog.py --driver %O %A %B           as a git merge driver (tools/release/setup-merge-driver.sh sets it up)
 Exit 0 merged (the file is written), 2 conflicts or a corrupt input (nothing is written; the report names them).
 Standard library only.
 """
@@ -191,12 +192,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--git", metavar="THEIRS_REF", help="merge this ref's file into the work tree's (base = merge-base of HEAD and the ref)")
     ap.add_argument("--root", default=str(ROOT))
+    ap.add_argument("--driver", nargs=3, metavar=("BASE", "OURS", "THEIRS"), help="git merge driver mode: writes the result over OURS")
     ap.add_argument("--base")
     ap.add_argument("--ours")
     ap.add_argument("--theirs")
     ap.add_argument("--out")
     args = ap.parse_args(argv)
     root = pathlib.Path(args.root)
+    if args.driver:
+        args.base, args.ours, args.theirs = args.driver
+        args.out = args.ours
     if args.git:
         mb = subprocess.run(["git", "-C", str(root), "merge-base", "HEAD", args.git], capture_output=True, text=True).stdout.strip()
         base_text, theirs_text = git_show(mb, cwd=root), git_show(args.git, cwd=root)
