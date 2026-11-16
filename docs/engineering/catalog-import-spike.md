@@ -600,9 +600,9 @@ Sizing is a rough T-shirt for a team of two backend engineers, one frontend engi
 
 | Phase | Scope | Size | Depends on | Stories |
 |---|---|---|---|---|
-| **0 (build first)** | Module skeleton on all lines; draft API in catalog; **export presets + generic mapper (any platform's CSV/XLSX)**; canonical/staging/idempotency; mapping ladder + search-first matching; gate report + prohibited screen; **Google Merchant feed (file and URL)**; **JSON-LD/sitemap reader for proven domains**; detection ladder + plug-in SPI; ownership proofs + source policy; egress door; vault; consent/GDPR; Seller Center wizard and review queue; staff-assisted console; AI mapping/extraction (capped); metrics; test gates | **L: about 10 to 14 weeks** in total, but a usable slice (presets + staging + drafts + review queue + staff-assisted) in **about 5 to 6 weeks** | none external | S499 to S516, S523 |
-| **1** | **Shopify** connector (authorised app, bulk read, webhooks) and **WooCommerce** connector (read key, Store API fallback); **sync engine** with field-level rules | L: 6 to 8 weeks, plus Shopify app review lead time [U] | Phase 0 core, vault, egress, S519 | S517, S518, S519 |
-| **2** | **BigCommerce**, **Squarespace**, **Wix** connectors | M each: 3 to 4 weeks each (parallelisable) | SPI and conformance kit | S520, S521, S522 |
+| **0 (build first)** | Module skeleton on all lines; draft API in catalog; **export presets + generic mapper (any platform's CSV/XLSX)**; canonical/staging/idempotency; mapping ladder + search-first matching; gate report + prohibited screen; **Google Merchant feed (file and URL)**; **JSON-LD/sitemap reader for proven domains**; detection ladder + plug-in SPI; ownership proofs + source policy; egress door; vault; consent/GDPR; Seller Center wizard and review queue; staff-assisted console; AI mapping/extraction (capped); metrics; test gates | **L: about 10 to 14 weeks** in total, but a usable slice (presets + staging + drafts + review queue + staff-assisted) in **about 5 to 6 weeks** | none external | S500 to S517, S524 |
+| **1** | **Shopify** connector (authorised app, bulk read, webhooks) and **WooCommerce** connector (read key, Store API fallback); **sync engine** with field-level rules | L: 6 to 8 weeks, plus Shopify app review lead time [U] | Phase 0 core, vault, egress, S520 | S518, S519, S520 |
+| **2** | **BigCommerce**, **Squarespace**, **Wix** connectors | M each: 3 to 4 weeks each (parallelisable) | SPI and conformance kit | S521, S522, S523 |
 | **3** | **Amazon** (SP-API: developer registration, role approval, Reports + Listings Items, LWA authorisation, reauthorise every 365 days) and **Walmart** (Marketplace API credentials, item reports and feeds; limits are tight) via official APIs and seller-authorised exports only; Etsy/eBay if asked | L: 8 to 10 weeks, dominated by third-party approvals (unknown lead time [U]) | Phase 1 engine; legal review of Amazon/Walmart data terms | not yet written |
 | **4** | **Two-way inventory**: push our stock decrements to the source with separate explicit write scopes, outbox-driven, idempotent, per connector; oversell reconciliation report | L: 6 to 8 weeks | Phase 1 sync, owner decision Q3 | not yet written |
 
@@ -611,7 +611,7 @@ Sizing is a rough T-shirt for a team of two backend engineers, one frontend engi
 The recommendation is a **two-track start in the same sprint**:
 
 * **Track 1, concierge (week 0 to 1, almost no code):** a staff member talks to her (rung 0), identifies her software and asks her for the platform's own export, or a Google Merchant feed, or a price-list spreadsheet/PDF. Staff run the **existing bulk upload** (it already imports a spreadsheet to drafts, with preview, error report and image URL import) after mapping columns by hand; she reviews and publishes. This needs no new code and starts the relationship while the module is built. Where an export is impossible, staff key the first 10 best sellers from her photos so a listing is live in a day ("start with a few").
-* **Track 2, Phase 0 vertical slice (weeks 1 to 6):** S499, S500, S501, S502, S503, S504, S508, S509, S510 (module skeleton, draft API, presets and mapper, staging, mapping, gate report, wizard, review queue, assisted console). This turns the concierge into a tool and works for **any** platform because every platform exports a file. Then S505 and S506 (feed and JSON-LD), S507 (detection ladder), S512 to S516 (proof, egress, vault, consent, metrics) before the first public-site read or any seller-facing self-serve launch. **No public site is read until S512 and S513 are done** (staff-assisted file imports do not need them).
+* **Track 2, Phase 0 vertical slice (weeks 1 to 6):** S500, S501, S502, S503, S504, S505, S509, S510, S511 (module skeleton, draft API, presets and mapper, staging, mapping, gate report, wizard, review queue, assisted console). This turns the concierge into a tool and works for **any** platform because every platform exports a file. Then S506 and S507 (feed and JSON-LD), S508 (detection ladder), S513 to S517 (proof, egress, vault, consent, metrics) before the first public-site read or any seller-facing self-serve launch. **No public site is read until S513 and S514 are done** (staff-assisted file imports do not need them).
 
 Why not start with a Shopify or Woo connector? They serve sellers on those platforms only, need app review (Shopify), carry the heaviest legal question (Shopify terms), and her platform is **unknown**. The export-first slice serves her whatever it is, and the connector work (Phase 1) then reuses the same staging, mapping, review and gates.
 
@@ -633,15 +633,15 @@ Why not start with a Shopify or Woo connector? They serve sellers on those platf
 | Risk | Mitigation |
 |---|---|
 | Legal exposure from public reading (Shopify/host terms) | export- and authorisation-first; public read denied by default per source policy; counsel review (Q4); every fetch audited |
-| SSRF through seller-supplied URLs | one egress door out of process, pinned DNS, test vectors as merge gate (S513, S523) |
-| Stolen or leaked platform tokens | envelope encryption, read-only scopes, revoke on disconnect, rotation (S514) |
-| Importing a competitor's or an unrelated store | ownership proofs, one store one org, two-person rule for E-type, possible-copy moderation (S512) |
-| AI budget exhausted by one big import | deterministic first, per-category calls, cache, defer not fail, preview estimate (S511) |
-| Oversell between channels | buffer, short poll, honest copy; write-back only in Phase 4 (S519) |
+| SSRF through seller-supplied URLs | one egress door out of process, pinned DNS, test vectors as merge gate (S514, S524) |
+| Stolen or leaked platform tokens | envelope encryption, read-only scopes, revoke on disconnect, rotation (S515) |
+| Importing a competitor's or an unrelated store | ownership proofs, one store one org, two-person rule for E-type, possible-copy moderation (S513) |
+| AI budget exhausted by one big import | deterministic first, per-category calls, cache, defer not fail, preview estimate (S512) |
+| Oversell between channels | buffer, short poll, honest copy; write-back only in Phase 4 (S520) |
 | Regulated items flood the review queue | group by missing field, bulk-fill, "start with a few", staff-assisted |
 | Third-party approvals stall (Shopify app review, Amazon roles, Etsy commercial access, Wix/Squarespace OAuth) | start the paperwork at the beginning of Phase 0 (owner action), keep the file route as the fallback |
 | Platform API drift (Shopify versions, Wix V1/V3, Woo `per_page`) | connector `spiVersion`, golden fixtures, per-connector kill switch, quarterly check |
-| Capacity on the single prod node | re-run `check_capacity.py` before adding the module to the launch set (S499) |
+| Capacity on the single prod node | re-run `check_capacity.py` before adding the module to the launch set (S500) |
 | Spike evidence is second-hand (sandbox blocked developer sites) | re-verify every [D] fact on the live page when each connector story starts |
 
 ### 6.4 Not built, not promised
@@ -650,7 +650,7 @@ Order or customer import, review import, price write-back, two-way stock before 
 
 ### 6.5 Release-1 parity convention for the backlog
 
-Per `release-1-parity.md`: product stories are added once (here on `develop`, then `main` and `release-1` by the same docs-only change) with ids below 600; release-1's own stories live in S600 to S699 (epic E37) and are for release-1-specific work. Mounting `catalog-import` as a module in `afrotransact-core` is part of the **Done** definition of S499 ("set `Done` once release-1 parity is green"), so **no separate S6xx id is added**. If the owner wants the monolith mount tracked as its own work item, add one E37 story (S6xx) then.
+Per `release-1-parity.md`: product stories are added once (here on `develop`, then `main` and `release-1` by the same docs-only change) with ids below 600; release-1's own stories live in S600 to S699 (epic E37) and are for release-1-specific work. Mounting `catalog-import` as a module in `afrotransact-core` is part of the **Done** definition of S500 ("set `Done` once release-1 parity is green"), so **no separate S6xx id is added**. If the owner wants the monolith mount tracked as its own work item, add one E37 story (S6xx) then.
 
 ### 6.6 Questions where the spike found no answer
 
@@ -702,31 +702,31 @@ Sensible first move for her: **steps 1 and 2 on a call, with step 7 as the guara
 
 | Id | Epic | Story |
 |---|---|---|
-| S499 | E03 | catalog-import module: contract first, hexagonal layout, wiring on every line |
-| S500 | E03 | `ProductDraftApi` in catalog (drafts:batch + catalog-api), idempotent, gate-preserving |
-| S501 | E03 | Phase 0: export presets and generic column mapper for any platform's file or feed |
-| S502 | E03 | Canonical product, staging and external-id mapping (idempotent re-runs) |
-| S503 | E03 | Deterministic category mapping, learned rules, search-first matching |
-| S504 | E03 | Draft gate report and prohibited-item screen at staging |
-| S505 | E03 | Phase 0: Google Merchant style feed reader (file and URL) |
-| S506 | E03 | Phase 0: JSON-LD, Open Graph and sitemap reader for proven sources |
-| S507 | E03 | Detection ladder and the `SourceConnector` SPI with conformance kit |
-| S508 | E24 | Seller Center: Bring your catalog wizard |
-| S509 | E24 | Seller Center: "Finish your listings" review queue |
-| S510 | E25 | Staff console: assisted import, consent, second approver, source policies |
-| S511 | E21 | AI-assisted mapping and extraction under the USD/day cap |
-| S512 | E18 | Ownership proof routes, source policy, duplicate-connection refusal |
-| S513 | E03 | Hardened egress door (SSRF defences) in media |
-| S514 | E03 | Credential vault: envelope encryption, rotation, revoke, log scrubbing |
-| S515 | E31 | Consent record, retention, disconnect and deletion (GDPR/CCPA) |
-| S516 | E28 | Metrics, dashboards and alerts |
-| S517 | E03 | Phase 1: Shopify connector |
-| S518 | E03 | Phase 1: WooCommerce connector |
-| S519 | E03 | Phase 1: sync engine with field-level conflict rules |
-| S520 | E03 | Phase 2: BigCommerce connector |
-| S521 | E03 | Phase 2: Squarespace connector |
-| S522 | E03 | Phase 2: Wix connector |
-| S523 | E33 | Tenant isolation, SSRF, secret-log and gate-bypass suites as merge gates |
+| S500 | E03 | catalog-import module: contract first, hexagonal layout, wiring on every line |
+| S501 | E03 | `ProductDraftApi` in catalog (drafts:batch + catalog-api), idempotent, gate-preserving |
+| S502 | E03 | Phase 0: export presets and generic column mapper for any platform's file or feed |
+| S503 | E03 | Canonical product, staging and external-id mapping (idempotent re-runs) |
+| S504 | E03 | Deterministic category mapping, learned rules, search-first matching |
+| S505 | E03 | Draft gate report and prohibited-item screen at staging |
+| S506 | E03 | Phase 0: Google Merchant style feed reader (file and URL) |
+| S507 | E03 | Phase 0: JSON-LD, Open Graph and sitemap reader for proven sources |
+| S508 | E03 | Detection ladder and the `SourceConnector` SPI with conformance kit |
+| S509 | E24 | Seller Center: Bring your catalog wizard |
+| S510 | E24 | Seller Center: "Finish your listings" review queue |
+| S511 | E25 | Staff console: assisted import, consent, second approver, source policies |
+| S512 | E21 | AI-assisted mapping and extraction under the USD/day cap |
+| S513 | E18 | Ownership proof routes, source policy, duplicate-connection refusal |
+| S514 | E03 | Hardened egress door (SSRF defences) in media |
+| S515 | E03 | Credential vault: envelope encryption, rotation, revoke, log scrubbing |
+| S516 | E31 | Consent record, retention, disconnect and deletion (GDPR/CCPA) |
+| S517 | E28 | Metrics, dashboards and alerts |
+| S518 | E03 | Phase 1: Shopify connector |
+| S519 | E03 | Phase 1: WooCommerce connector |
+| S520 | E03 | Phase 1: sync engine with field-level conflict rules |
+| S521 | E03 | Phase 2: BigCommerce connector |
+| S522 | E03 | Phase 2: Squarespace connector |
+| S523 | E03 | Phase 2: Wix connector |
+| S524 | E33 | Tenant isolation, SSRF, secret-log and gate-bypass suites as merge gates |
 
 Phase 3 (Amazon, Walmart) and Phase 4 (two-way inventory) stories are deliberately not written until the owner answers Q1, Q3, Q4 and Q8.
 
