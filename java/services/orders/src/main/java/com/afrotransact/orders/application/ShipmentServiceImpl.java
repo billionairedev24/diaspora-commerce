@@ -7,7 +7,6 @@ import java.util.Locale;
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.CourierProofPolicy;
 import com.afrotransact.orders.domain.DeliveryMethod;
-import com.afrotransact.orders.domain.FulfilmentMode;
 import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
@@ -80,7 +79,7 @@ class ShipmentServiceImpl implements ShipmentService {
             throw new ForbiddenActionException("orders.use-delivery-steps", "AfroTransact delivers this order: "
                     + "move it with the delivery steps (permission delivery:manage), not the general status change");
         }
-        if (s.fulfilmentMode() == FulfilmentMode.SELLER_SHIPS && target != ShipmentStatus.CANCELLED) {
+        if (s.sellerResponsible() && target != ShipmentStatus.CANCELLED) {
             throw new ForbiddenActionException("orders.seller-ships", "The seller ships this order and updates it "
                     + "themselves. Overriding it needs the permission orders:override-shipment and a reason");
         }
