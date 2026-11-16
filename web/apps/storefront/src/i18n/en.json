@@ -622,7 +622,7 @@
   "co.step.address": "Delivery address",
   "co.step.items": "Delivery or pickup, and your items",
   "co.step.delivery": "Delivery & pickup",
-  "co.step.payment": "Payment",
+  "co.step.payment": "Payment method",
   "co.pickupAt": "Pickup at {place}, {address}",
   "co.pickupReady": "Pickup · {ready}",
   "co.fulfilAria": "How {seller}’s items reach you",

@@ -628,7 +628,7 @@
   "co.step.address": "عنوان التوصيل",
   "co.step.items": "التوصيل أو الاستلام، ومنتجاتك",
   "co.step.delivery": "التوصيل والاستلام",
-  "co.step.payment": "الدفع",
+  "co.step.payment": "طريقة الدفع",
   "co.pickupAt": "الاستلام من {place}، {address}",
   "co.pickupReady": "الاستلام · {ready}",
   "co.fulfilAria": "كيف تصلك منتجات {seller}",

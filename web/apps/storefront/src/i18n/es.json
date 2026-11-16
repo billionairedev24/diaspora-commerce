@@ -628,7 +628,7 @@
   "co.step.address": "Dirección de entrega",
   "co.step.items": "Entrega o recogida, y tus artículos",
   "co.step.delivery": "Entrega y recogida",
-  "co.step.payment": "Pago",
+  "co.step.payment": "Método de pago",
   "co.pickupAt": "Recogida en {place}, {address}",
   "co.pickupReady": "Recogida · {ready}",
   "co.fulfilAria": "Cómo te llegan los artículos de {seller}",
