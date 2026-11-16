@@ -735,11 +735,11 @@ paths:
     post:
       tags:
       - Shipments
-      summary: Override the status of a seller-shipped shipment (orders:override-shipment)
-      description: The seller ships and updates these shipments themselves. Staff holding orders:override-shipment can correct
-        one, forward only, with a required reason that is kept with who and when. Refused (403) for AfroTransact-delivered
-        and pickup shipments, which are moved with the delivery steps and the pickup steps. The optional Idempotency-Key makes
-        retries safe.
+      summary: Override the status of a Fulfilled by AfroTransact or legacy seller-shipped shipment (orders:override-shipment)
+      description: Staff holding orders:override-shipment can correct a shipment Fulfilled by AfroTransact (normally moved with
+        the delivery steps) or an old seller-shipped one (history; sellers no longer ship themselves), forward only, with a
+        required reason that is kept with who and when. Refused (403) for pickup shipments, which are moved with the pickup
+        steps. The optional Idempotency-Key makes retries safe.
       operationId: override
       parameters:
       - name: id
@@ -1130,7 +1130,7 @@ components:
               totalMinor: {type: integer, format: int64}
     OverrideRequest:
       type: object
-      description: Override the status of a shipment the seller ships (orders:override-shipment)
+      description: Override the status of a shipment Fulfilled by AfroTransact or an old seller-shipped one (orders:override-shipment), forward only
       properties:
         to:
           type: string

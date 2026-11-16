@@ -608,6 +608,10 @@ type CheckoutPackage struct {
 	// PickupUnavailableReason is why the package has no pickup option (PickupWhy*); empty when it has one. Machine-readable:
 	// the app words it, shoppers never see ids or the code itself.
 	PickupUnavailableReason string `json:"pickupUnavailableReason,omitempty"`
+	// NoFulfilment: the seller offers neither Seller pickup (here, for this address) nor Fulfilled by AfroTransact for this
+	// package, so it cannot be bought. Sellers do not ship themselves; the app says what the shopper can do (remove it, choose
+	// another address). Never set while the pickup facts are unknown (no address yet, lookup failed).
+	NoFulfilment bool `json:"noFulfilment"`
 }
 
 // Reasons a package has no pickup option at checkout (CheckoutPackage.PickupUnavailableReason).

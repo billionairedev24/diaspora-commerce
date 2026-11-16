@@ -48,7 +48,7 @@ type ShipmentDetail struct {
 	Items          string `json:"items"`
 	SellerName     string `json:"sellerName"`
 	DeliveryMethod string `json:"deliveryMethod"`
-	// FulfilmentMode is who moves it: seller_ships, afrotransact_delivery (the seller opted in), fulfilled_by_afrotransact,
+	// FulfilmentMode is who moves it: legacy_seller_shipped (history), afrotransact_delivery (from the seller's location), fulfilled_by_afrotransact,
 	// pickup or preorder_run. The app words "AfroTransact delivers" and shows proof only for the AfroTransact modes.
 	FulfilmentMode string `json:"fulfilmentMode"`
 	Cancellable    bool   `json:"cancellable"`
@@ -514,7 +514,7 @@ type TrackedShipment struct {
 	Perishable   bool            `json:"perishable"`
 	DeliveryCode *string         `json:"deliveryCode"`
 	Driver       *TrackingDriver `json:"driver"`
-	// FulfilmentMode is who moves it (seller_ships, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run); the
+	// FulfilmentMode is who moves it (legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run); the
 	// apps name AfroTransact as the deliverer, and show proof, only for the AfroTransact modes.
 	FulfilmentMode string `json:"fulfilmentMode"`
 	// Proof is how AfroTransact handed it over; null for every other mode.

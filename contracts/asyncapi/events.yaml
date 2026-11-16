@@ -9139,6 +9139,7 @@ components:
                 $ref: '#/components/schemas/OrdersPreorderBlock'
               deliveryMethod:
                 type: string
+                description: CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced for a new order
                 enum:
                 - CARRIER
                 - SELLER_SHIPS
@@ -9449,6 +9450,7 @@ components:
           - PREORDER
         deliveryMethod:
           type: string
+          description: CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced for a new order
           enum:
           - CARRIER
           - SELLER_SHIPS

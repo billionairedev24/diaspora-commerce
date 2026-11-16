@@ -59,6 +59,18 @@ func TestShippingFeeContractEstimateEqualsWhatOrdersCharges(t *testing.T) {
 			// Every package kind the shopper can see offers the same flat delivery fee and a free pickup.
 			for _, kind := range []string{domain.FulfilledByAfroTransact, domain.AfroTransactDelivery, domain.ShipsFromSeller} {
 				opts := e.Options(kind, c.ItemsMinor)
+				if kind == domain.ShipsFromSeller {
+					// A seller's own package has no delivery (sellers do not ship themselves): pickup is the only option.
+					if len(opts) != 0 {
+						t.Fatalf("%s %s: options = %+v", where, kind, opts)
+					}
+					pkg := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "p:" + kind, Fulfilment: kind, SubtotalMinor: c.ItemsMinor, DeliveryOptions: opts}}
+					addPickupOption(&pkg, []domain.PickupPoint{{ID: "pp-1", Ready: "Ready the same day"}})
+					if got := packageShippingFee(pkg, map[string]string{pkg.PackageID: domain.OptionPickup}); got != c.PickupMinor {
+						t.Errorf("%s %s items %d: pickup estimate %d, orders charges %d", where, kind, c.ItemsMinor, got, c.PickupMinor)
+					}
+					continue
+				}
 				if len(opts) != 1 || opts[0].Key != domain.OptionDelivery || opts[0].FeeUnknown {
 					t.Fatalf("%s %s: options = %+v", where, kind, opts)
 				}
@@ -81,24 +93,24 @@ func TestShippingFeeContractEstimateEqualsWhatOrdersCharges(t *testing.T) {
 	}
 }
 
-func TestNoExpressNoCarrierOptionWhileTheStaffSwitchIsOff(t *testing.T) {
+func TestNoExpressNoCarrierOptionEvenWithTheRetiredStaffSwitchOn(t *testing.T) {
 	e := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 3500})
-	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599})
-	for _, kind := range []string{domain.FulfilledByAfroTransact, domain.AfroTransactDelivery, domain.ShipsFromSeller} {
-		for _, o := range e.Options(kind, 2000) {
-			if o.Key == "express" || o.Key == domain.OptionCarrier {
-				t.Errorf("%s offers %q with the seller carrier switch off", kind, o.Key)
+	for _, on := range []bool{false, true} {
+		e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599, SellerCarrierShippingEnabled: on})
+		for _, kind := range []string{domain.FulfilledByAfroTransact, domain.AfroTransactDelivery, domain.ShipsFromSeller} {
+			for _, o := range e.Options(kind, 2000) {
+				if o.Key == "express" || o.Key == domain.OptionCarrier {
+					t.Errorf("%s offers %q (switch %v)", kind, o.Key, on)
+				}
 			}
 		}
-	}
-	// On: only a seller-shipped package gets the carrier option, still with AfroTransact delivery beside it.
-	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 2, FlatFeeMinor: 599, SellerCarrierShippingEnabled: true})
-	seller := e.Options(domain.ShipsFromSeller, 2000)
-	if len(seller) != 2 || seller[0].Key != domain.OptionCarrier || seller[1].Key != domain.OptionDelivery {
-		t.Fatalf("seller options with the switch on: %+v", seller)
-	}
-	if fc := e.Options(domain.FulfilledByAfroTransact, 2000); len(fc) != 1 || fc[0].Key != domain.OptionDelivery {
-		t.Fatalf("AfroTransact-fulfilled stays delivery only: %+v", fc)
+		// A seller's own package has no delivery: pickup (added at checkout) or nothing. Fulfilled by AfroTransact stays delivery.
+		if seller := e.Options(domain.ShipsFromSeller, 2000); len(seller) != 0 {
+			t.Fatalf("a plain seller package offers no delivery: %+v", seller)
+		}
+		if fc := e.Options(domain.FulfilledByAfroTransact, 2000); len(fc) != 1 || fc[0].Key != domain.OptionDelivery {
+			t.Fatalf("AfroTransact-fulfilled stays delivery only: %+v", fc)
+		}
 	}
 }
 
@@ -179,8 +191,8 @@ func TestOutsideEveryDeliveryZoneTheOnlyDeliveryOptionIsQuoteRequired(t *testing
 func TestAPreorderPackagePaysItsOwnWindowFeeBesideTheFlatFee(t *testing.T) {
 	e := domain.NewEstimator(domain.DeliveryPolicy{})
 	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", FlatFeeMinor: 599})
-	inStock := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_a:SELLER", Fulfilment: domain.ShipsFromSeller, SubtotalMinor: 2000,
-		DeliveryOptions: e.Options(domain.ShipsFromSeller, 2000)}}
+	inStock := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_a:SELLER", Fulfilment: domain.AfroTransactDelivery, SubtotalMinor: 2000,
+		DeliveryOptions: e.Options(domain.AfroTransactDelivery, 2000)}}
 	pre := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_b:SELLER:preorder", Fulfilment: domain.ShipsFromSeller, SubtotalMinor: 3000,
 		Preorder: json.RawMessage(`{"windowId":"win-1","fulfilment":"DOOR","feeMinor":899}`), DeliveryOptions: []domain.DeliveryOption{}}}
 	sum := domain.CheckoutSummary{Packages: []domain.CheckoutPackage{inStock, pre}}
@@ -290,5 +302,33 @@ func TestEnsureReadsOnceWhenNothingWasEverReadAndBacksOff(t *testing.T) {
 	s.Ensure(context.Background())
 	if reader.calls != 2 {
 		t.Fatalf("no read once a value is known: %d", reader.calls)
+	}
+}
+
+// A seller package with neither Seller pickup nor Fulfilled by AfroTransact cannot be bought: the summary says so in plain
+// words and the order is blocked. It is only claimed when the pickup facts are known (not while they are unknown).
+func TestASellerPackageWithNoFulfilmentModeBlocksTheOrder(t *testing.T) {
+	e := domain.NewEstimator(domain.DeliveryPolicy{})
+	e.(domain.ShippingSettingsSetter).SetShippingSettings(&domain.ShippingSettings{Currency: "USD", Version: 1, FlatFeeMinor: 599})
+	pkg := domain.CheckoutPackage{CartPackage: domain.CartPackage{PackageID: "org_a:SELLER", Fulfilment: domain.ShipsFromSeller, SubtotalMinor: 2000,
+		DeliveryOptions: e.Options(domain.ShipsFromSeller, 2000)}, NoFulfilment: true}
+	s := &checkoutPaymentServiceImpl{d: ShopperDeps{Estimator: e}}
+	sum := domain.CheckoutSummary{CanPlaceOrder: true, Packages: []domain.CheckoutPackage{pkg}}
+	s.blockUndeliverable(&sum, nil)
+	if sum.CanPlaceOrder || sum.DeliveryBlockedReason != noFulfilmentMessage {
+		t.Fatalf("a package with no mode blocks the order: %+v", sum)
+	}
+	for _, name := range []string{"carrier", "UPS", "FedEx", "USPS", "DHL"} {
+		if strings.Contains(strings.ToLower(noFulfilmentMessage), strings.ToLower(name)) {
+			t.Fatalf("the message names %s", name)
+		}
+	}
+	// With pickup offered the package can be bought, and nothing is blocked.
+	pkg.NoFulfilment = false
+	addPickupOption(&pkg, []domain.PickupPoint{{ID: "pp-1"}})
+	sum = domain.CheckoutSummary{CanPlaceOrder: true, Packages: []domain.CheckoutPackage{pkg}}
+	s.blockUndeliverable(&sum, nil)
+	if !sum.CanPlaceOrder {
+		t.Fatalf("pickup is a way forward: %+v", sum)
 	}
 }

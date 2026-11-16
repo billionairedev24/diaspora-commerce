@@ -48,7 +48,7 @@ func TestCartFlowWithStockCapsAndSelection(t *testing.T) {
 		t.Fatalf("line enrichment = %v", ls[0])
 	}
 	pkg := cart["packages"].([]any)[0].(map[string]any)
-	if pkg["packageId"] != "org_kente:SELLER" || pkg["heading"] != "Shipped by Kente Naturals" || pkg["freeShippingNudge"] != nil {
+	if pkg["packageId"] != "org_kente:AFROTRANSACT" || pkg["heading"] != "Sold by Kente Naturals" || pkg["freeShippingNudge"] != nil {
 		t.Fatalf("package = %v", pkg)
 	}
 

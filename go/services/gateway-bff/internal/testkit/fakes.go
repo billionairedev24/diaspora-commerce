@@ -636,7 +636,8 @@ func (u *Upstreams) view(c *fakeCart) map[string]any {
 	line := func(l cartLine) map[string]any {
 		p, v, _ := u.variant(l.atin)
 		ff := "SELLER"
-		if p.OwnerKind == "PLATFORM" {
+		// Kente Naturals is Fulfilled by AfroTransact (sellers do not ship themselves: a plain seller package has no delivery).
+		if p.OwnerKind == "PLATFORM" || p.SellerOrgID == "org_kente" {
 			ff = "AFROTRANSACT"
 		}
 		return map[string]any{"offerId": l.offer, "variantAtin": v.ATIN, "productAtin": p.ATIN, "title": p.Title, "options": v.Options,

@@ -21,7 +21,7 @@ type SellerOrdersService interface {
 	Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error)
 	// UpdateStatus moves a seller's shipment one step; handoverCode is the buyer's 4-digit code for handing a pickup order over.
 	// ship carries how a seller who ships it themselves sent it (tracking number, courier name, handover details).
-	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status, handoverCode string, ship domain.ShipDetails) (domain.SellerOrderDetail, error)
+	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status, handoverCode string) (domain.SellerOrderDetail, error)
 	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress, carrier string) (domain.RateQuotes, error)
 	BuyLabel(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error)
 	// Label downloads the shipping label bought for the shipment.
@@ -62,20 +62,19 @@ func shipmentOf(s port.OrderShipmentView) domain.SellerShipment {
 	status := strings.ToUpper(s.Status)
 	ff := shipmentFulfilment(s)
 	mode := domain.FulfilmentModeOf(s.FulfilmentType, s.DeliveryMethod, s.LocalDelivery != nil)
-	// The seller carries it themselves (no carrier label): SELLER_SHIPS, or a package the old checkout mislabelled.
-	ownShipping := mode == domain.ModeSellerShips && !strings.EqualFold(s.DeliveryMethod, "CARRIER") && s.DeliveryMethod != ""
+	// Sellers no longer ship themselves: an old seller-shipped package (not a carrier parcel already in flight) is history.
+	history := mode == domain.ModeLegacySellerShipped && !strings.EqualFold(s.DeliveryMethod, "CARRIER")
 	out := domain.SellerShipment{ShipmentID: s.ID, Label: s.Label, Status: status, StatusLabel: domain.ShipmentStatusLabel(status),
 		Fulfilment: ff, FulfilmentMode: mode, Perishable: s.Perishable, Lines: []domain.SellerShipmentLine{}, ItemsMinor: s.ItemsMinor,
 		ShippingMinor: s.ShippingMinor, TotalMinor: s.TotalMinor, Carrier: strPtr(s.Carrier), TrackingNumber: strPtr(s.TrackingNumber),
 		NextActions: domain.SellerNextActions(s.NextActions), CanBuyLabel: domain.CanBuyLabel(ff, s.DeliveryMethod, status, s.TrackingNumber),
-		HasLabel: ff == domain.ShipsFromSeller && s.TrackingNumber != "" && s.Carrier != "" && !strings.EqualFold(s.DeliveryMethod, "PICKUP") && !ownShipping,
+		HasLabel: ff == domain.ShipsFromSeller && s.TrackingNumber != "" && s.Carrier != "" && !strings.EqualFold(s.DeliveryMethod, "PICKUP") && !history,
 		Timeline: []domain.TimelineEntry{}}
 	if ff == domain.FulfilledByAfroTransact {
 		out.NextActions = []string{} // AfroTransact owns every step of FBA and 1P shipments; sellers pack AfroTransact Delivery ones
 	}
-	// A seller who ships it themselves marks it shipped with a tracking number or handover details (no label to buy).
-	out.NeedsShipDetails = ownShipping && slices.Contains(out.NextActions, "PICKED_UP")
-	if ownShipping {
+	if history {
+		out.NextActions = []string{} // history: the seller can neither ship nor deliver it, staff finish it
 		out.CanBuyLabel = false
 	}
 	if ld := s.LocalDelivery; ld != nil {
@@ -338,16 +337,9 @@ func (s *sellerOrdersImpl) earnings(ctx context.Context, c *domain.Caller, orgID
 	return nil
 }
 
-func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status, handoverCode string, ship domain.ShipDetails) (domain.SellerOrderDetail, error) {
+func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status, handoverCode string) (domain.SellerOrderDetail, error) {
 	if !domain.IsSellerStatus(status) {
-		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack, mark ready, mark shipped and hand a pickup order over"})
-	}
-	ship = ship.Clean()
-	if err := ship.Validate(); err != nil {
-		return domain.SellerOrderDetail{}, err
-	}
-	if status != "PICKED_UP" {
-		ship = domain.ShipDetails{}
+		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack, mark ready and hand a pickup order over"})
 	}
 	handoverCode = strings.TrimSpace(handoverCode)
 	if status != "DELIVERED" {
@@ -357,20 +349,12 @@ func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, k
 		return domain.SellerOrderDetail{}, err
 	}
 	if status == "DELIVERED" && !domain.IsHandoverCode(handoverCode) {
-		// A pickup order is handed over against the buyer's code; a parcel the seller shipped is confirmed delivered
-		// without one (orders refuses any other case).
+		// A pickup order is handed over against the buyer's code (orders refuses any other delivered step from a seller).
 		if handoverCode != "" || s.waitingForHandover(ctx, c, orderNumber, shipmentID) {
 			return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"handoverCode": "Ask the buyer for their 4-digit code"})
 		}
 	}
-	if ship.TrackingNumber != "" {
-		// Recorded first so orders sees the tracking when it checks how the seller sent it. The courier name stays with the
-		// seller and staff; customers only ever see the tracking number.
-		if _, err := s.r.d.Orders.AttachTracking(ctx, c.BearerToken, shipmentID, firstNonEmpty(ship.TrackingCarrier, "seller"), ship.TrackingNumber); err != nil {
-			return domain.SellerOrderDetail{}, mapErr("orders", err)
-		}
-	}
-	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status), handoverCode, ship.Note)
+	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status), handoverCode, "")
 	if err != nil {
 		return domain.SellerOrderDetail{}, mapErr("orders", err)
 	}
