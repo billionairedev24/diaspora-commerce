@@ -115,9 +115,11 @@ in two modules (`POST /v1/returns` inventory and tax-returns, `POST /v1/receipts
 the core port) goes to that module; a request on the core port without prefix goes to the module mounted first (see the
 architecture doc, "Route collisions").
 
-Modules that still reach each other over HTTP (every edge except catalog and tax-returns, see the status table in
-`docs/engineering/release-1-architecture.md`) use their old `http://localhost:81xx` URLs; those ports are now core, so nothing needs
-re-configuring.
+Modules that still reach each other over HTTP (the edges listed as "still HTTP" in sections 12.7 and 12.8 of
+`docs/engineering/release-1-architecture.md`: ai-gateway and mcp-server tools, trust-ops to catalog/orders/ai-gateway, orders to identity's address
+book, and the edges to delivery-runs while it is off) use their old `http://localhost:81xx` URLs; locally those ports are now core, so nothing needs
+re-configuring. **Only the local profile serves the old ports**: in uat and prod these edges and gateway-bff's calls need their URLs set, see
+`docs/runbooks/release-1-verification.md` section 5.
 
 #### Database: one database, one schema per module
 

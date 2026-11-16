@@ -462,16 +462,19 @@ Retail and delivery-runs are mounted with `enabled=false`.
 |---|---|---|---|---|---|---|
 | 1 | catalog, tax-returns | yes | yes | yes | catalog <-> tax-returns, and the edges of 12.8 | not run |
 | 2 | offers, inventory, content, seller | yes | yes | yes (all pass) | the outbound edges of offers, inventory and seller (12.8); content has none | not run |
-| 3 | orders, payments, bookings, fulfilment, trust-ops | yes | orders, payments, bookings, trust-ops yes; **fulfilment not booted here (needs PostGIS, not installed in the sandbox)** | see 12.5 | payments -> seller (live membership) | not run |
+| 3 | orders, payments, bookings, fulfilment, trust-ops | yes | orders, payments, bookings, trust-ops yes; **fulfilment not booted here (needs PostGIS, not installed in the sandbox)** | see 12.5 | the edges of 12.7 (orders -> inventory, payments, catalog, tax-returns, offers, content, seller; payments -> seller; bookings -> payments; fulfilment -> orders, inventory; trust-ops -> payments, bookings, offers, seller) | checkout failure paths and error parity tested, route diff run (12.9); SLO not run |
 | 4 | ai-gateway, mcp-server | yes, profile `ai-modules` | yes (no provider key; MCP and AI paths not exercised) | see 12.5 | none | not run |
-| 5 | identity | yes | yes: `/login`, `/oauth2/jwks`, `/.well-known/openid-configuration` answer 200 in core | see 12.5 | none | token issue/refresh and signed-JWT validation across modules **not verified** |
+| 5 | identity | yes | yes: `/login`, `/oauth2/jwks`, `/.well-known/openid-configuration` answer 200 in core | see 12.5 | identity -> seller (organisation mirror) | token issue/refresh and signed-JWT validation across modules **not verified** |
 | later | retail, delivery-runs | mounted, `enabled=false`; both booted once enabled to prove no bean or route collision | yes | see 12.5 | none | n/a |
 
 In-process adapters (pattern of catalog and tax-returns, `<m>-api` jar, provider adapter in `adapter/in/module`, consumer in `adapter/out/module`,
 explicit caller principal): catalog <-> tax-returns (spike) and **payments -> seller `OrgMembershipApi`** (scope `sellers:membership.read`,
 `at.payments.mode=in-process`, fails the start naming both modules when seller is disabled). **The Java-to-Java HTTP adapters of section 2.2 are being
 converted in two passes, listed edge by edge in 12.7 (orders, payments, fulfilment, trust-ops, bookings, identity) and 12.8 (catalog, offers,
-inventory, seller, content, tax-returns)**; what stays HTTP is listed there with the reason, and `ModuleEdgeGuardTest` keeps that list honest.
+inventory, seller, content, tax-returns)**: 43 port adapters are converted (19 in 12.7, 24 in 12.8 with the 3 of the spike). 19 Java-to-Java HTTP
+adapters are not (ai-gateway's 5 readers, mcp-server's 8 tool clients, trust-ops' 4 clients to catalog, orders and ai-gateway, orders -> identity's
+address book and staff directory) and 4 more point at delivery-runs, which is off in core; together with the 43 that is the ~65 of section 2.2. What stays
+HTTP is listed with the reason in 12.7 and 12.8 and in `apps/core/src/test/resources/http-edges.txt`, and `ModuleEdgeGuardTest` keeps that list honest.
 The principal registry (`at.modules.<m>.caller-scopes`, copied from identity's client list) holds every module's scopes.
 
 ### 12.5 What was and was not verified
@@ -634,3 +637,21 @@ tax-returns and catalog from the spike) all green after the changes (the ITs, wh
 because they need Valkey/Temporal, PostGIS and provider keys; readiness UP, anonymous storefront and webhook permits, 401 elsewhere). `CoreBootTest`
 and `ModuleSchemaPostgresTest` need `AT_TEST_PG_ADMIN_URL`, `AT_TEST_PG_ADMIN_USER`, `AT_TEST_PG_ADMIN_PASSWORD` (a throw-away database; CI's Postgres service
 container) and are skipped without them; `AT_TEST_CORE_FULL=true` also enables the four modules above.
+
+### 12.9 Verification of the in-process conversion and of checkout (2026-11-16)
+
+Full account, owner checklist and the list of behaviour differences: `docs/runbooks/release-1-verification.md`. Summary:
+
+* **Checkout is a Temporal saga, not a database transaction, by design** (modules commit in separate schemas). Its compensation path was proven for every step through the real
+  in-process adapters of orders: `InProcessCheckoutSagaFailureTest` (22 tests: real `CheckoutWorkflowImpl` and `CheckoutActivitiesImpl` on the in-JVM Temporal test environment, stateful
+  stand-ins for the called modules' published APIs) asserts stock restored, no order left active, PaymentIntent cancelled or never created, coupon and run slot released, and the failure code.
+* **Error parity**: `InProcessVersusHttpFailureParityTest` runs 14 callee failure classes through 28 operations of the HTTP and the in-process adapter of orders' checkout path and requires equal
+  outcomes (393 cases). It found and fixed two divergences: a callee 404 was thrown instead of read as "none" (payment of an order, offer inventory SKU, pickup location; and fulfilment's
+  reservation lookup), and a callee's unexpected exception text reached the shopper (orders, fulfilment, trust-ops, tax-returns `ModuleUpstream`).
+* **Route diff** (`tools/release/route_scan.py`, `route_probe.py`): every contract route of the 13 modules probed live on a booted core answers on its old port, the core port and `/modules/<name>`;
+  the only gaps are 3 seller routes that no build implements. The three duplicate routes route correctly by port and prefix; **without a prefix `POST /v1/reconciliation/runs` and `/v1/receipts`
+  go to inventory**, so the staff payments reconciliation needs `PAYMENTS_URL=.../modules/payments`.
+* **Found, not fixed (deployment)**: outside the local profile nothing serves the old ports and the charts set no upstream URLs, so the remaining HTTP edges (notably checkout's address lookup,
+  orders -> identity) and gateway-bff -> Java need URLs or alias Services (runbook section 5).
+* Local-only checkout fault injection (`LocalCheckoutFaults`, profile `local`, default off) lets the owner fail any saga step by hand.
+* Not verified: Docker ITs, Kafka, a real Temporal server, Stripe, signed JWTs, fulfilment (PostGIS), ai-gateway and mcp-server live, Playwright (see the runbook).
