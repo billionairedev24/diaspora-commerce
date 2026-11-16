@@ -975,3 +975,25 @@ func withSections(cfg map[string]any, ids ...string) map[string]any {
 	out["sections"] = secs
 	return out
 }
+
+// The store page preview is the caller's own draft: it works before the page has an address (made when the payout account is set
+// up) and before the first save or publish, for a seller and for a provider, and publishing still needs the address.
+func TestStorePagePreviewWorksBeforeThePageHasAnAddress(t *testing.T) {
+	_, b := sellerSetup(t, testkit.Options{SellerNoPageAddress: true})
+	for _, org := range []struct{ id, kind string }{{testkit.SellerOrgID, "SELLER"}, {testkit.ProviderOrgID, "PROVIDER"}} {
+		mustStatus(t, b.do("PUT", "/v1/seller/session/active-org", map[string]any{"orgId": org.id}), 200)
+		r := b.do("GET", "/v1/seller/store-page/preview", nil)
+		v := r.json(t)
+		if r.status != 200 || v["preview"] != true || v["indexable"] != false || v["slug"] != "" || v["kind"] != org.kind {
+			t.Fatalf("%s preview without an address = %d %s", org.kind, r.status, r.body)
+		}
+		// No featured products and no hero image yet: arrays, not errors or nulls.
+		if f, ok := v["featured"].([]any); !ok || len(f) != 0 {
+			t.Fatalf("%s featured = %s", org.kind, r.body)
+		}
+		sp := b.do("GET", "/v1/seller/store-page", nil).json(t)
+		if sp["slug"] != nil && sp["slug"] != "" || sp["canPublish"] != false || sp["isPublished"] != false {
+			t.Fatalf("%s publishing needs the address: %v", org.kind, sp)
+		}
+	}
+}

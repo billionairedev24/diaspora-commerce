@@ -79,6 +79,19 @@ class StorePageServiceTest {
         assertThat(service.publishedFor(ORG)).isEmpty();
     }
 
+    @Test
+    void theDraftReadsBeforeAnySaveOrPublishAndTheUnpublishedPageIsNeverPublic() {
+        // The seller center's preview is built from this read: it must work for a new, not yet published page.
+        when(pages.find(ORG)).thenReturn(Optional.empty());
+        StorePageService.StorePageView view = service.get(ORG);
+        assertThat(view.page()).isNull();
+        assertThat(view.approved()).isTrue();
+        assertThat(service.publishedFor(ORG)).isEmpty();
+        when(pages.find(ORG)).thenReturn(Optional.of(row(1, null, null)));
+        assertThat(service.get(ORG).page()).isNotNull();
+        assertThat(service.publishedFor(ORG)).isEmpty();
+    }
+
     private static StorePage row(long version, String published, Long publishedVersion) {
         return new StorePage(ORG, "{\"a\":1}", published, version, publishedVersion, NOW, "user_1",
                 published == null ? null : NOW);

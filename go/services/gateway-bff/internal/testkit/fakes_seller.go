@@ -803,12 +803,25 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
 		if r.PathValue("id") == ProviderOrgID {
-			writeJSON(w, 200, map[string]any{"orgId": ProviderOrgID, "slug": "amas-braiding-studio", "kind": "PROVIDER", "name": "Ama's Braiding Studio",
+			slug := "amas-braiding-studio"
+			if u.opts.SellerNoPageAddress {
+				slug = ""
+			}
+			writeJSON(w, 200, map[string]any{"orgId": ProviderOrgID, "slug": slug, "kind": "PROVIDER", "name": "Ama's Braiding Studio",
 				"description": "Braids by appointment.", "brandColor": "", "logoUrl": "", "contactEmail": "ama@example.com", "approved": true})
 			return
 		}
 		if r.PathValue("id") != SellerOrgID {
 			problem(w, 403, "seller.org-role-required", "not your organisation", nil)
+			return
+		}
+		if u.opts.SellerNoPageAddress {
+			noAddr := map[string]any{}
+			for k, v := range page {
+				noAddr[k] = v
+			}
+			noAddr["slug"] = ""
+			writeJSON(w, 200, noAddr)
 			return
 		}
 		writeJSON(w, 200, page)
