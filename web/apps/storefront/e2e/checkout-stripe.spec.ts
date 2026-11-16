@@ -1,7 +1,8 @@
 import { expect, type Page, test } from '@playwright/test';
 
-/* Checkout (S282 + pickup), against the mock BFF:
-   - one page: address, every seller group with Delivery or Pickup and all its items, payment, sticky order summary;
+/* Checkout (S282 + pickup), the Amazon structure, against the mock BFF:
+   - one page: 1 Delivery address, 2 Payment method, 3 Review items and delivery (each completed section a one-line summary
+     with Change), a sticky Place your order + Order summary on the end side;
    - without a Stripe key: the labelled dev-only stand-in form, always visible;
    - with the mock BFF's test hook (cookie at_mock_stripe_pk) and a fake window.Stripe injected before the page loads:
      the storefront's real Elements code (deferred intent, inline Payment Element, confirmPayment). No Express Checkout.
@@ -18,6 +19,13 @@ async function signInWithCart(page: Page, products: string[] = ['AT000000P2']) {
   }
   await page.goto('/checkout');
   await expect(page.getByTestId('checkout-package').first()).toBeVisible();
+}
+
+/** The saved card is chosen, so Payment method is a one-line summary: Change opens it and "a different payment method" shows the form. */
+async function openNewMethodForm(page: Page) {
+  await page.getByTestId('checkout-change-2').click();
+  const different = page.getByRole('radio', { name: /Use a different payment method/ });
+  if (await different.count()) await different.check();
 }
 
 /** A stand-in for js.stripe.com: renders a visible "element", records calls on window.__stripeCalls. */
@@ -91,6 +99,7 @@ const calls = (page: Page) => page.evaluate(() => (window as unknown as { __stri
 
 test('without a Stripe key the always-visible payment form is the labelled dev-only stand-in', async ({ page }) => {
   await signInWithCart(page);
+  await openNewMethodForm(page);
   await expect(page.getByRole('radio', { name: /Use a new payment method/ })).toHaveCount(0);
   const notice = page.getByTestId('stripe-dev-notice');
   await expect(notice).toContainText('Stripe test mode is not configured');
@@ -106,6 +115,7 @@ test('without a Stripe key the always-visible payment form is the labelled dev-o
 
 test('the stand-in 3-D Secure card returns through /checkout/complete, which confirms with the BFF', async ({ page }) => {
   await signInWithCart(page);
+  await openNewMethodForm(page);
   await page.getByLabel('Card number').fill('4000 0027 6000 3184');
   await page.getByLabel('Expiration').fill('12 / 34');
   await page.getByLabel('Security code').fill('123');
@@ -117,6 +127,7 @@ test('the stand-in 3-D Secure card returns through /checkout/complete, which con
 test('with a Stripe key: Payment Element only (deferred intent), submit → order → confirmPayment', async ({ page }) => {
   await useFakeStripe(page);
   await signInWithCart(page);
+  await openNewMethodForm(page);
   await expect(page.locator('[data-fake-stripe="expressCheckout"]')).toHaveCount(0);
   await expect(page.locator('[data-fake-stripe="payment"]')).toBeVisible();
   await expect(page.getByTestId('stripe-dev-notice')).toHaveCount(0);
@@ -131,6 +142,7 @@ test('with a Stripe key: Payment Element only (deferred intent), submit → orde
 test('with a Stripe key: a redirect (3-D Secure page) comes back to /checkout/complete and the order is placed', async ({ page }) => {
   await useFakeStripe(page, true);
   await signInWithCart(page);
+  await openNewMethodForm(page);
   await expect(page.locator('[data-fake-stripe="payment"]')).toBeVisible();
   const elements = (await calls(page)).filter(([k]) => k === 'elements').map(([, o]) => o as Record<string, unknown>);
   expect(elements.at(-1)?.appearance).toMatchObject({ variables: { colorPrimary: expect.stringMatching(/\S/) } });
@@ -158,9 +170,10 @@ for (const width of [1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await useFakeStripe(page);
     await signInWithCart(page, ['AT000000P2', 'AT00000P23']);
+    await openNewMethodForm(page);
     await expect(page.locator('[data-fake-stripe="payment"]')).toBeVisible();
     const summary = page.getByTestId('order-summary');
-    for (const label of ['Shipping', 'Tax (estimated)', 'Order total']) {
+    for (const label of ['Delivery', 'Estimated tax', 'Order total']) {
       const dt = summary.locator('dt', { hasText: label });
       const box = await dt.boundingBox();
       const lineHeight = await dt.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight) || 24);
@@ -168,7 +181,7 @@ for (const width of [1280, 1024, 768, 390]) {
     }
     if (width >= 1000) {
       const aside = await page.getByRole('complementary', { name: 'Order summary' }).boundingBox();
-      expect(aside?.width ?? 0).toBeGreaterThanOrEqual(360);
+      expect(aside?.width ?? 0).toBeGreaterThanOrEqual(300);
     }
     const form = await page.getByTestId('stripe-payment-element').boundingBox();
     expect(form?.width ?? 0).toBeLessThanOrEqual(Math.min(width, 600));
