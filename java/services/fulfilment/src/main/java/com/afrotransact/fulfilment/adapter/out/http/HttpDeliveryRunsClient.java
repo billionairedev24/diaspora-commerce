@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.fulfilment.domain.GeoPoint;
 import com.afrotransact.fulfilment.domain.RunPickupPoint;
 import com.afrotransact.fulfilment.port.DeliveryRunsClient;
@@ -17,6 +19,7 @@ import tools.jackson.databind.JsonNode;
 
 /** delivery-runs-service (port 8115): {@code GET /v1/service/runs/{runId}/dispatch} with the service token. */
 @Component
+@ConditionalOnModuleMode(caller = "fulfilment", callee = "delivery-runs", value = ModuleMode.HTTP)
 class HttpDeliveryRunsClient implements DeliveryRunsClient {
 
     private final Upstream runs;

@@ -160,6 +160,11 @@
             </dependency>
             <dependency>
                 <groupId>com.afrotransact</groupId>
+                <artifactId>delivery-runs-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.afrotransact</groupId>
                 <artifactId>inventory-api</artifactId>
                 <version>${project.version}</version>
             </dependency>

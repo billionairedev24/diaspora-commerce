@@ -60,7 +60,8 @@ import org.springframework.context.ConfigurableApplicationContext;
 class ModuleEdgesInCoreTest {
 
     private static final boolean FULL = "true".equals(System.getenv("AT_TEST_CORE_FULL"));
-    private static final Set<String> OFF = FULL ? Set.of() : Set.of("orders", "fulfilment", "ai-gateway", "mcp-server");
+    private static final Set<String> OFF = FULL ? Set.of("delivery-runs", "retail")
+            : Set.of("orders", "fulfilment", "ai-gateway", "mcp-server", "delivery-runs", "retail");
 
     private ConfigurableApplicationContext ctx;
 

@@ -26,6 +26,7 @@
         <module>libs/module-api/ai-gateway-api</module>
         <module>libs/module-api/content-api</module>
         <module>libs/module-api/identity-api</module>
+        <module>libs/module-api/delivery-runs-api</module>
         <module>libs/module-api/inventory-api</module>
         <module>libs/module-api/payments-api</module>
         <module>libs/module-api/offers-api</module>

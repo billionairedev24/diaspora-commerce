@@ -21,6 +21,7 @@ import java.util.stream.Stream;
 
 import com.afrotransact.catalog.api.ProductListingApi;
 import com.afrotransact.content.api.MarketEligibilityApi;
+import com.afrotransact.deliveryruns.api.DeliveryRunsApi;
 import com.afrotransact.identity.api.AddressBookApi;
 import com.afrotransact.identity.api.StaffDirectoryApi;
 import com.afrotransact.inventory.api.NodeAddressApi;
@@ -34,12 +35,15 @@ import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.port.AddressBook;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.DeliveryFeeRules;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.MemberBenefits;
 import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.PickupLocations;
+import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.ShipFromAddresses;
 import com.afrotransact.orders.port.StaffDirectory;
@@ -236,6 +240,12 @@ class InProcessVersusHttpFailureParityTest {
                         List.of(new MemberBenefits.Fee("1", MemberBenefits.FeeKind.PICKUP, 599)))),
                 new Op("pickupLocations", "forOffer", w -> pickups(w).forOffer(OFFER)),
                 new Op("addressBook", "find", w -> signedIn(() -> addressBook(w).find("customer-token", "addr-1"))),
+                new Op("runSlots", "openRuns", w -> runSlots(w).openRuns("78602")),
+                new Op("runSlots", "reserve", w -> run(() -> runSlots(w).reserve("run-1", "o1", "c1", 24,
+                        new DeliveryRunSlots.RunCharge(799, 2500, "DOOR")))),
+                new Op("runSlots", "release", w -> run(() -> runSlots(w).release("run-1", "o1"))),
+                new Op("preorders", "eligibility", w -> preorders(w).eligibility("US", "TX", "Lubbock", List.of("A1"), 0)),
+                new Op("deliveryFeeRules", "carrier", w -> feeRules(w).carrier("USD", 900L, 5000)),
                 new Op("staffDirectory", "withPermission", w -> staff(w).withPermission("orders:review")),
                 new Op("staffDirectory", "withRole", w -> staff(w).withRole("staff.support")),
                 new Op("staffDirectory", "people", w -> staff(w).people(List.of("u1"))),
@@ -263,7 +273,7 @@ class InProcessVersusHttpFailureParityTest {
     void theMatrixCoversEveryAdapterOfTheCheckoutPathAndEveryFailureClass() {
         assertThat(operations().map(Op::adapter).distinct()).containsExactlyInAnyOrder("inventory", "payments", "coupons",
                 "tax", "offerInventory", "productFacts", "markets", "memberBenefits", "pickupLocations",
-                "shipFromAddresses", "addressBook", "staffDirectory");
+                "shipFromAddresses", "addressBook", "staffDirectory", "runSlots", "preorders", "deliveryFeeRules");
         assertThat(failures().count()).isEqualTo(16);
     }
 
@@ -298,6 +308,18 @@ class InProcessVersusHttpFailureParityTest {
         } finally {
             SecurityContextHolder.clearContext();
         }
+    }
+
+    private static DeliveryRunSlots runSlots(Wiring w) {
+        return w.http() ? HttpWiring.runSlots(w.url(), TIMEOUT) : InProcessWiring.runSlots(w.api(DeliveryRunsApi.class));
+    }
+
+    private static PreorderEligibility preorders(Wiring w) {
+        return w.http() ? HttpWiring.preorders(w.url(), TIMEOUT) : InProcessWiring.preorders(w.api(DeliveryRunsApi.class));
+    }
+
+    private static DeliveryFeeRules feeRules(Wiring w) {
+        return w.http() ? HttpWiring.feeRules(w.url(), TIMEOUT) : InProcessWiring.feeRules(w.api(DeliveryRunsApi.class));
     }
 
     private static AddressBook addressBook(Wiring w) {

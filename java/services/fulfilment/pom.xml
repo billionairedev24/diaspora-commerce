@@ -47,6 +47,10 @@
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
+            <artifactId>delivery-runs-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
             <artifactId>fulfilment-api</artifactId>
         </dependency>
         <dependency>

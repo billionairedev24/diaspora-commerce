@@ -434,13 +434,14 @@ at:
   payments:
     mode: ${AT_PAYMENTS_MODE:in-process}
   # orders -> inventory, payments, catalog, offers, tax-returns, seller, content in-process (per edge: AT_ORDERS_<CALLEE>_MODE=http detaches
-  # one). orders -> cart, promise, geo, carrier-gateway (Go), delivery-runs (disabled in core) and identity stay HTTP.
+  # one), identity too (address book for the signed-in customer, staff directory) and delivery-runs (in-process only while that module is
+  # enabled: it is off in core by default and the HTTP adapters then answer). orders -> cart, promise, geo, carrier-gateway (Go) stay HTTP.
   orders:
     mode: ${AT_ORDERS_MODE:in-process}
   # bookings -> payments in-process; bookings -> geo (Go) stays HTTP.
   bookings:
     mode: ${AT_BOOKINGS_MODE:in-process}
-  # fulfilment -> orders, inventory in-process; fulfilment -> delivery-runs (disabled in core) and geo (Go) stay HTTP.
+  # fulfilment -> orders, inventory in-process, delivery-runs when it is enabled (off by default: HTTP then); fulfilment -> geo (Go) stays HTTP.
   fulfilment:
     mode: ${AT_FULFILMENT_MODE:in-process}
   # trust-ops -> payments (claim refunds), seller (suspend / reinstate), bookings (review moderation), offers (seller performance)

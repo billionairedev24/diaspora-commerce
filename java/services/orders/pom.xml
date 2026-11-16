@@ -68,6 +68,10 @@
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
+            <artifactId>delivery-runs-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
             <artifactId>orders-api</artifactId>
         </dependency>
         <dependency>

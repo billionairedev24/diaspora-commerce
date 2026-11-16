@@ -5,12 +5,15 @@ import java.time.Duration;
 import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.port.AddressBook;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.DeliveryFeeRules;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.MemberBenefits;
 import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.PickupLocations;
+import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.ShipFromAddresses;
@@ -60,6 +63,18 @@ public final class HttpWiring {
 
     public static PickupLocations pickupLocations(String url, Duration timeout) {
         return new HttpPickupLocations(RestClient.builder(), url, url, timeout, TOKEN);
+    }
+
+    public static DeliveryRunSlots runSlots(String url, Duration timeout) {
+        return new HttpDeliveryRunSlots(RestClient.builder(), url, timeout, TOKEN);
+    }
+
+    public static PreorderEligibility preorders(String url, Duration timeout) {
+        return new HttpPreorderEligibility(RestClient.builder(), url, timeout, TOKEN);
+    }
+
+    public static DeliveryFeeRules feeRules(String url, Duration timeout) {
+        return new HttpDeliveryFeeRules(RestClient.builder(), url, timeout, TOKEN);
     }
 
     public static AddressBook addressBook(String url, Duration timeout) {

@@ -13,9 +13,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.domain.PreorderStage;
 import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ServiceTokenProvider;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -30,6 +32,7 @@ import tools.jackson.databind.JsonNode;
  * method.
  */
 @Component
+@ConditionalOnModuleMode(caller = "orders", callee = "delivery-runs", value = ModuleMode.HTTP)
 class HttpPreorderEligibility implements PreorderEligibility {
 
     private final Upstream deliveryRuns;

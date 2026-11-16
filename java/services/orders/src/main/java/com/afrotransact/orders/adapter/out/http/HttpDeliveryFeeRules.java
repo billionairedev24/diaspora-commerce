@@ -6,12 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
 import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.port.DeliveryFeeRules;
 import com.afrotransact.orders.port.ServiceTokenProvider;
 import com.afrotransact.orders.port.UpstreamFailure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -24,6 +26,7 @@ import tools.jackson.databind.JsonNode;
  * own flat carrier rates (logged).
  */
 @Component
+@ConditionalOnModuleMode(caller = "orders", callee = "delivery-runs", value = ModuleMode.HTTP)
 class HttpDeliveryFeeRules implements DeliveryFeeRules {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpDeliveryFeeRules.class);

@@ -4,6 +4,7 @@ import java.util.Set;
 
 import com.afrotransact.catalog.api.ProductListingApi;
 import com.afrotransact.content.api.MarketEligibilityApi;
+import com.afrotransact.deliveryruns.api.DeliveryRunsApi;
 import com.afrotransact.identity.api.AddressBookApi;
 import com.afrotransact.identity.api.StaffDirectoryApi;
 import com.afrotransact.inventory.api.ReservationApi;
@@ -13,11 +14,14 @@ import com.afrotransact.offers.api.CheckoutOffersApi;
 import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.port.AddressBook;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.DeliveryFeeRules;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.MemberBenefits;
 import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.PaymentsClient;
+import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.StaffDirectory;
 import com.afrotransact.orders.port.TaxQuoteClient;
@@ -37,7 +41,7 @@ public final class InProcessWiring {
     /** The principal orders runs in-process calls as (the client id identity grants the orders service). */
     public static final CallerPrincipal ORDERS = new CallerPrincipal("orders", "orders-service",
             Set.of("inventory:reserve", "inventory:read", "payments:service", "tax:quote", "offers:read",
-                    "sellers:ship-from.read", "users:read", "identity:addresses.read"));
+                    "sellers:ship-from.read", "users:read", "identity:addresses.read", "delivery-runs:reserve"));
 
     private InProcessWiring() {
     }
@@ -85,6 +89,21 @@ public final class InProcessWiring {
         DefaultListableBeanFactory b = beans(MarketEligibilityApi.class, api);
         return new InProcessMarketEligibility(b.getBeanProvider(MarketEligibilityApi.class),
                 b.getBean(ModuleUpstream.class), b);
+    }
+
+    public static DeliveryRunSlots runSlots(DeliveryRunsApi api) {
+        DefaultListableBeanFactory b = beans(DeliveryRunsApi.class, api);
+        return new InProcessDeliveryRunSlots(b.getBeanProvider(DeliveryRunsApi.class), b.getBean(ModuleUpstream.class), b);
+    }
+
+    public static PreorderEligibility preorders(DeliveryRunsApi api) {
+        DefaultListableBeanFactory b = beans(DeliveryRunsApi.class, api);
+        return new InProcessPreorderEligibility(b.getBeanProvider(DeliveryRunsApi.class), b.getBean(ModuleUpstream.class), b);
+    }
+
+    public static DeliveryFeeRules feeRules(DeliveryRunsApi api) {
+        DefaultListableBeanFactory b = beans(DeliveryRunsApi.class, api);
+        return new InProcessDeliveryFeeRules(b.getBeanProvider(DeliveryRunsApi.class), b.getBean(ModuleUpstream.class), b);
     }
 
     public static AddressBook addressBook(AddressBookApi api, EndUsers endUsers) {
