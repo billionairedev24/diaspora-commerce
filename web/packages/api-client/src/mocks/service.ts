@@ -622,7 +622,7 @@ export function buildCart(s: MockSession, now: Date): Cart {
       seller: { id: o.sellerId, name: o.sellerName, kind: o.sellerName === PLATFORM_SELLER ? 'PLATFORM' : 'SELLER', city: o.city },
       fulfilment: o.fulfilment,
       // Plain wording: who sells it, who ships it (only when the seller does), or "Delivery from the store"; never "AfroTransact delivers".
-      heading: isAT ? `Sold by ${o.sellerName}` : local ? `Delivery from ${o.city}` : `Shipped by ${o.sellerName} from ${o.city}`,
+      heading: isAT ? `Sold by ${o.sellerName}` : local ? `Delivery from ${o.city}` : `Sold by ${o.sellerName}, pickup from ${o.city}`,
       shipsFrom: isAT ? nearestFc(metro) : o.city,
       delivery: arrival.basis === 'PROMISE'
         ? { ...promise, days: arrival.days, label: arrival.label, basis: 'PROMISE' as const, earliestDate: arrival.earliestDate, latestDate: arrival.latestDate }

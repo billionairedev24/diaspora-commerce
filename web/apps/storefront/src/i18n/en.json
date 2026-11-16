@@ -604,7 +604,7 @@
   "co.reviewItems": "Review {n, plural, one {# item} other {# items}}",
   "co.sellers": "From {n, plural, one {# seller} other {# sellers}}",
   "co.itemsTotal": "Items ({n})",
-  "co.shipping": "Shipping & handling",
+  "co.shipping": "Delivery fee (paid by you)",
   "co.tax": "Estimated tax",
   "co.total": "Order total",
   "co.stripeNote": "Stripe · authorised now, captured per shipment",
@@ -1987,7 +1987,6 @@
   "nav.customerService": "Customer service",
   "nav.language": "Language",
   "nav.deliverTo": "Deliver to {label}",
-  "ord.mode.seller_ships": "Shipped by the seller",
   "ord.mode.afrotransact": "Delivered by AfroTransact",
   "ord.trackingNumber": "Tracking number {number}",
   "ord.proofReceivedBy": "Received by {name}",
@@ -2088,5 +2087,7 @@
   "store.gone.body": "The store you are looking for is not open right now, or the address is not right.",
   "store.gone.home": "Go to AfroTransact",
   "store.gone.search": "Search all products",
-  "store.meta.title": "{name}"
+  "store.meta.title": "{name}",
+  "ord.mode.legacy_seller_shipped": "Shipped by the seller",
+  "co.noFulfilment": "This seller doesn’t offer delivery or pickup for these items near you, so they can’t be bought right now. Remove them or choose another address."
 }

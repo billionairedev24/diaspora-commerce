@@ -433,17 +433,15 @@ function refreshShipment(o: SellerOrderDetail, shipmentId: string) {
   s.nextActions = s.fulfilment !== 'AFROTRANSACT' && next && SellerStatusActionSchema.safeParse(next).success ? [next as 'CONFIRMED' | 'PACKED' | 'READY'] : [];
   if (s.fulfilment === 'SELLER' && s.status === SHIPPED_FROM && s.trackingNumber) s.nextActions = ['PICKED_UP'];
   const own = shipsThemselves(s);
-  if (own) {
-    // Shipped by the seller: marked shipped with tracking or handover details (no label to buy), then confirmed delivered by them.
-    s.nextActions = s.status === 'READY' ? ['PICKED_UP'] : s.status === 'PICKED_UP' || s.status === 'IN_TRANSIT' ? ['DELIVERED'] : s.nextActions.filter((a) => a !== 'PICKED_UP');
-  }
-  s.needsShipDetails = own && s.status === 'READY';
+  // Seller self-shipping is retired: those are old (legacy) shipments, the seller has no steps on them.
+  if (own) s.nextActions = [];
   s.hasLabel = s.fulfilment === 'SELLER' && !own && Boolean(s.trackingNumber);
   s.canBuyLabel = s.fulfilment === 'SELLER' && !own && !s.trackingNumber && ['CONFIRMED', 'PACKED', 'READY'].includes(s.status);
   return s;
 }
 
 /** A seller-packed shipment the seller ships themselves (no carrier label): the seed alternates it with the label flow. */
+/** An old seller-shipped shipment (history): half of the seed shipments of a plain seller package. */
 const shipsThemselves = (s: { fulfilment: string; shipmentId: string }) => s.fulfilment === 'SELLER' && Number(s.shipmentId.replace(/\D/g, '')) % 2 === 0;
 
 /* ── dashboard ── */
@@ -647,7 +645,7 @@ export function gtinValid(code: string): boolean {
 
 /* Small request bodies validated like the BFF does. */
 const ActiveOrgBody = z.object({ orgId: z.string().min(1, 'Choose an organisation') });
-const StatusBody = z.object({ status: z.string(), shipNote: z.string().max(500).optional(), trackingNumber: z.string().max(80).optional(), trackingCarrier: z.string().max(40).optional() });
+const StatusBody = z.object({ status: z.string(), handoverCode: z.string().optional() });
 const RatesBody = z.object({ carrier: CarrierSchema.optional(), parcel: ParcelSchema, shipFrom: SellerAddressSchema });
 const LabelBody = RatesBody.extend({ carrier: CarrierSchema, service: z.string().min(1, 'Choose a rate') });
 const ActiveBody = z.object({ active: z.boolean() });
@@ -1479,22 +1477,15 @@ export const sellerHandlers = [
   http.post(
     `${W}/orders/:orderNumber/shipments/:shipmentId/status`,
     route(async (ctx, p) => {
-      const { status, shipNote, trackingNumber, trackingCarrier } = await body(ctx.request, StatusBody);
+      const { status } = await body(ctx.request, StatusBody);
       if (!SellerStatusActionSchema.safeParse(status).success) throw invalid({ status: 'Sellers can confirm, pack and mark ready only' });
       require(ctx, 'orders', 'EDIT', 'SELLER');
       const o = findOrder(ctx.db, p.orderNumber ?? '');
       const s = refreshShipment(o, p.shipmentId ?? '');
       if (s.fulfilment === 'AFROTRANSACT') throw forbidden('AfroTransact handles every step of this shipment.');
-      if (shipsThemselves(s) && status === 'PICKED_UP' && s.status === SHIPPED_FROM) {
-        // orders.ship-details-required: how it left is the seller's to say (a tracking number or handover details).
-        if (!trackingNumber?.trim() && !shipNote?.trim()) throw invalid({ shipNote: 'Add a tracking number, or say how you sent it' });
-        if (trackingNumber?.trim()) {
-          s.trackingNumber = trackingNumber.trim();
-          s.carrier = (trackingCarrier?.trim().toLowerCase() || 'seller') as typeof s.carrier;
-        }
-      } else if (shipsThemselves(s) && status === 'DELIVERED' && (s.status === 'PICKED_UP' || s.status === 'IN_TRANSIT')) {
-        // the seller confirms it was delivered
-      } else if (NEXT[s.status] !== status && !(status === 'PICKED_UP' && s.status === SHIPPED_FROM && s.trackingNumber)) throw conflict(`This order is ${s.statusLabel.toLowerCase()}; it can’t move to ${SHIPMENT_LABELS[status as ShipmentStatus].toLowerCase()}.`);
+      // Sellers do not ship themselves any more: an old seller-shipped shipment is history (staff finish it with the override).
+      if (shipsThemselves(s)) throw forbidden('Sellers can no longer ship orders themselves. This order is history; AfroTransact staff finish it.');
+      if (NEXT[s.status] !== status && !(status === 'PICKED_UP' && s.status === SHIPPED_FROM && s.trackingNumber)) throw conflict(`This order is ${s.statusLabel.toLowerCase()}; it can’t move to ${SHIPMENT_LABELS[status as ShipmentStatus].toLowerCase()}.`);
       s.status = status as ShipmentStatus;
       s.timeline.push({ status, at: ctx.now.toISOString(), actor: 'seller' });
       refreshShipment(o, s.shipmentId);

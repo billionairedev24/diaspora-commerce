@@ -610,7 +610,7 @@
   "co.reviewItems": "عرض {n, plural, zero {# عنصر} one {عنصر واحد} two {عنصران} few {# عناصر} many {# عنصرًا} other {# عنصر}}",
   "co.sellers": "من {n, plural, zero {# بائع} one {بائع واحد} two {بائعان} few {# بائعين} many {# بائعًا} other {# بائع}}",
   "co.itemsTotal": "العناصر ({n})",
-  "co.shipping": "الشحن والمناولة",
+  "co.shipping": "رسوم التوصيل (على حسابك)",
   "co.tax": "الضريبة المقدرة",
   "co.total": "إجمالي الطلب",
   "co.stripeNote": "Stripe · مفوّض الآن، ويُحصَّل لكل شحنة",
@@ -1994,7 +1994,6 @@
   "nav.customerService": "خدمة العملاء",
   "nav.language": "اللغة",
   "nav.deliverTo": "التوصيل إلى {label}",
-  "ord.mode.seller_ships": "يشحنه البائع",
   "ord.mode.afrotransact": "توصيل AfroTransact",
   "ord.trackingNumber": "رقم التتبع {number}",
   "ord.proofReceivedBy": "استلمها {name}",
@@ -2095,5 +2094,7 @@
   "store.gone.body": "المتجر الذي تبحث عنه غير مفتوح الآن، أو أن العنوان غير صحيح.",
   "store.gone.home": "انتقل إلى AfroTransact",
   "store.gone.search": "ابحث في كل المنتجات",
-  "store.meta.title": "{name}"
+  "store.meta.title": "{name}",
+  "ord.mode.legacy_seller_shipped": "شحنه البائع",
+  "co.noFulfilment": "لا يقدّم هذا البائع التوصيل أو الاستلام لهذه المنتجات بالقرب منك، لذا لا يمكن شراؤها الآن. أزلها أو اختر عنواناً آخر."
 }

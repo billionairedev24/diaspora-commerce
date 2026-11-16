@@ -4804,6 +4804,8 @@ export interface components {
              * @description Version being edited (updates)
              */
             version?: number | null;
+            /** @description Creates only: the hours AfroTransact can collect here. With them the new location is Fulfilled by AfroTransact by default whenever that is possible (approved, located at street level, inside the delivery area); without them nothing is enabled. Hours are never invented. */
+            pickupHours?: components["schemas"]["PickupWindow"][];
         };
         PostalAddress: {
             name: string;
@@ -4817,7 +4819,7 @@ export interface components {
         };
         /**
          * @description How AfroTransact handed the parcel over, shown on a delivered shipment (a driver, or AfroTransact staff with a photo).
-         *     Null for seller-shipped orders (the seller ships and confirms those), carrier deliveries, pickups and deliveries staff
+         *     Null for old seller-shipped orders (history), carrier deliveries, pickups and deliveries staff
          *     confirmed by hand. It is never shown for an order AfroTransact did not deliver. The photo and signature links are
          *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
          */
@@ -4855,12 +4857,10 @@ export interface components {
             statusLabel: string;
             fulfilment: components["schemas"]["Fulfilment"];
             /**
-             * @description seller_ships: you ship it and mark it shipped and delivered, it is never in an AfroTransact delivery queue. afrotransact_delivery: you opted into delivery by AfroTransact. fulfilled_by_afrotransact: AfroTransact fulfils and delivers it.
+             * @description Two modes exist. afrotransact_delivery: Fulfilled by AfroTransact from your location (AfroTransact collects and delivers; the customer pays the delivery fee, you pay nothing for it). fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired; history, you have no steps on it.
              * @enum {string}
              */
-            fulfilmentMode: "seller_ships" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
-            /** @description The next step is Mark shipped and you ship it yourself: send a tracking number or say how it was sent (shipNote) */
-            needsShipDetails: boolean;
+            fulfilmentMode: "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
             perishable: boolean;
             lines: {
                 title: string;
@@ -4908,12 +4908,6 @@ export interface components {
             status: components["schemas"]["SellerStatusAction"];
             /** @description The buyer's 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise */
             handoverCode?: string;
-            /** @description Marking shipped a shipment you ship yourself: how it was sent (who took it, a local delivery). Needed unless a trackingNumber is given (422 orders.ship-details-required) */
-            shipNote?: string;
-            /** @description Marking shipped a shipment you ship yourself: the tracking number (no spaces) */
-            trackingNumber?: string;
-            /** @description Optional courier name for your own records; customers are never shown it */
-            trackingCarrier?: string;
         };
         Parcel: {
             weightLb: number;

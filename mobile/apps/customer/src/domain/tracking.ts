@@ -31,14 +31,14 @@ export function headline(status: string, eta?: string | null): string {
   return when ? `Arriving ${when}` : 'Preparing your order';
 }
 
-export type FulfilmentMode = 'seller_ships' | 'afrotransact_delivery' | 'fulfilled_by_afrotransact' | 'pickup' | 'preorder_run';
+export type FulfilmentMode = 'legacy_seller_shipped' | 'afrotransact_delivery' | 'fulfilled_by_afrotransact' | 'pickup' | 'preorder_run';
 
 /** True when AfroTransact itself delivers (or hands over) this mode: the only modes that may say so or show a proof of delivery. */
 export const deliveredByAfroTransact = (mode: FulfilmentMode): boolean => mode === 'afrotransact_delivery' || mode === 'fulfilled_by_afrotransact' || mode === 'preorder_run';
 
 /** What a step says about who does it: the seller's own shipments never mention AfroTransact Delivery or the fulfilment centre. */
 export function stepDetail(step: (typeof TRACKING_STEPS)[number], mode: FulfilmentMode): string {
-  if (mode !== 'seller_ships') return step.detail;
+  if (mode !== 'legacy_seller_shipped') return step.detail;
   if (step.key === 'packed') return 'Packed by the seller';
   if (step.key === 'picked_up') return 'Shipped by the seller';
   if (step.key === 'out_for_delivery') return 'On the way to you';
@@ -46,7 +46,7 @@ export function stepDetail(step: (typeof TRACKING_STEPS)[number], mode: Fulfilme
 }
 
 export interface ShipmentForCode {
-  method: 'afrotransact_delivery' | 'carrier' | 'express' | 'seller_ships' | 'pickup';
+  method: 'afrotransact_delivery' | 'carrier' | 'express' | 'legacy_seller_shipped' | 'pickup';
   handover: 'hand' | 'door' | 'desk' | null;
   perishable: boolean;
   deliveryCode: string | null;

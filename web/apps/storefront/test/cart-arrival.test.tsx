@@ -29,7 +29,7 @@ function overridePackage(real: Cart, patch: (p: Cart['packages'][number]) => Car
 const WINDOW = /^Arrives [A-Z][a-z]{2} \d{1,2}( – (\d{1,2}|[A-Z][a-z]{2} \d{1,2}))?$/;
 
 describe('cart package header', () => {
-  it('a seller package shows a date RANGE from real inputs, "Shipped by {seller}", and no "Package 1 of 1"', async () => {
+  it('a seller package shows a date RANGE from real inputs, "Sold by {seller}", and no "Package 1 of 1"', async () => {
     const cart = await addProduct('AT000000P6');
     const pkg = cart.packages[0];
     expect(pkg?.delivery.basis).toBe('PROMISE');
@@ -40,7 +40,7 @@ describe('cart package header', () => {
     const title = await screen.findByTestId('cart-package-title');
     expect(title.textContent).toMatch(WINDOW);
     const meta = screen.getByTestId('cart-package-meta');
-    expect(meta.textContent).toMatch(/^Shipped by /);
+    expect(meta.textContent).toMatch(/^Sold by /);
     expect(meta.textContent).not.toMatch(/Package/);
     expect(screen.queryByTestId('cart-package-date-note')).not.toBeInTheDocument();
   });

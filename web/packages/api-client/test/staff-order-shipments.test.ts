@@ -31,7 +31,7 @@ describe('staff order sheet (mock BFF, same shape as the Go one)', () => {
   it('lists what cannot be done with the reason instead of leaving it out', async () => {
     const sheet = await as('platform.super_admin').getRecord('orders', ORDER);
     const [first, patel] = sheet.shipments as [RecordShipment, RecordShipment];
-    expect(byTo(patel, 'READY')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES', reason: 'Updated by the seller' });
+    expect(byTo(patel, 'READY')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES', reason: 'Old seller-shipped order: use Override status' });
     expect(byTo(first, 'DELIVERED')).toMatchObject({ allowed: false, blocked: 'SEQUENCE', reason: 'Earlier steps come first' });
     expect(byTo(patel, 'DELIVERED')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES' });
     expect(byTo(patel, 'DELIVERY_FAILED')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES' });
@@ -49,9 +49,9 @@ describe('staff order sheet (mock BFF, same shape as the Go one)', () => {
     expect(byTo(patel, 'DELIVERED')).toMatchObject({ blocked: 'SELLER_UPDATES' });
   });
 
-  it('names the mode of every package: fulfilled by AfroTransact, seller pickup, or the seller ships it', async () => {
+  it('names the mode of every package: fulfilled by AfroTransact, seller pickup, or an old seller-shipped one (history)', async () => {
     const api = as('platform.super_admin');
-    expect(((await api.getRecord('orders', ORDER)).shipments ?? []).map((s) => s.mode)).toEqual(['fulfilled_by_afrotransact', 'seller_ships']);
+    expect(((await api.getRecord('orders', ORDER)).shipments ?? []).map((s) => s.mode)).toEqual(['fulfilled_by_afrotransact', 'legacy_seller_shipped']);
     expect(((await api.getRecord('orders', 'AT-200435')).shipments ?? []).map((s) => s.mode)).toEqual(['afrotransact_delivery']);
     expect(((await api.getRecord('orders', 'AT-200421')).shipments ?? []).map((s) => s.mode)).toEqual(['pickup']);
     expect(((await api.getRecord('orders', 'AT-200407')).shipments ?? []).map((s) => s.mode)).toEqual(['fulfilled_by_afrotransact']);
@@ -86,10 +86,10 @@ describe('staff order sheet (mock BFF, same shape as the Go one)', () => {
     expect(byTo(pickup, 'OUT_FOR_DELIVERY')).toMatchObject({ allowed: false, blocked: 'PICKUP_ORDER', reason: 'Not available for pickup orders' });
   });
 
-  it('shows who a seller-shipped order belongs to and offers the override only to its holders, with a reason, forward only', async () => {
+  it('offers the override on an old seller-shipped order only to its holders, with a reason, forward only', async () => {
     const owner = as('platform.super_admin');
     const patel = ((await owner.getRecord('orders', ORDER)).shipments ?? [])[1] as RecordShipment;
-    expect(patel.mode).toBe('seller_ships');
+    expect(patel.mode).toBe('legacy_seller_shipped');
     expect(patel.canOverride).toBe(true);
     expect(patel.overrideSteps).toContain('PICKED_UP');
     const noReason = await owner.runAction('orders', ORDER, 'shipment-override', { step: `${patel.id}|PICKED_UP` }, 'k-o1').catch((e: unknown) => e);

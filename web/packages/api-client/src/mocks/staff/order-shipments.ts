@@ -13,7 +13,7 @@ const BLOCKED_TEXT: Record<ShipmentBlocked, string> = {
   PERMISSION: 'No permission',
   DELIVERY_PERMISSION: 'You need the delivery permission',
   SELLER: 'Only the seller does this step',
-  SELLER_UPDATES: 'Updated by the seller',
+  SELLER_UPDATES: 'Old seller-shipped order: use Override status',
   PICKUP_ORDER: 'Not available for pickup orders',
   SEQUENCE: 'Earlier steps come first',
   STATE: 'Not available from here'
@@ -57,13 +57,13 @@ export function modeOf(line: Line): ShipmentMode {
   const method = s(line.deliveryMethod);
   if (type === 'PREORDER') return 'preorder_run';
   if (method === 'PICKUP') return 'pickup';
-  if (method === 'SELLER_SHIPS' || method === 'CARRIER') return 'seller_ships';
+  if (method === 'SELLER_SHIPS' || method === 'CARRIER') return 'legacy_seller_shipped';
   if (type === 'FBA_AFROTRANSACT' || type === 'RETAIL_1P') return 'fulfilled_by_afrotransact';
-  return method === 'AFROTRANSACT_DELIVERY' && line.localDelivery === true ? 'afrotransact_delivery' : 'seller_ships';
+  return method === 'AFROTRANSACT_DELIVERY' && line.localDelivery === true ? 'afrotransact_delivery' : 'legacy_seller_shipped';
 }
 export const staffDelivers = (line: Line): boolean => ['afrotransact_delivery', 'fulfilled_by_afrotransact'].includes(modeOf(line));
-/** A shipment the seller is responsible for: seller-packed and sent by the seller (never one AfroTransact packs). */
-const sellerResponsible = (line: Line): boolean => modeOf(line) === 'seller_ships' && s(line.fulfilmentType) === 'SELLER_FULFILLED';
+/** An old seller-shipped shipment (history, self-shipping is retired): seller-packed, moved only by the override. */
+const sellerResponsible = (line: Line): boolean => modeOf(line) === 'legacy_seller_shipped' && s(line.fulfilmentType) === 'SELLER_FULFILLED';
 const isDeskStep = (line: Line, to: string): boolean => staffDelivers(line) && DESK_STEPS.includes(to) && (to !== 'RETURNED' || s(line.status) !== 'DELIVERED');
 
 /** The statuses a platform admin / fulfilment ops may move a shipment to, by the orders state machine. */
@@ -93,7 +93,7 @@ function sources(to: string, line: Line): string[] {
 /**
  * What the orders service lists as the shipment's `nextActions` for the staff caller. By mode: AfroTransact-delivered
  * shipments offer the delivery steps to holders of delivery:manage (everything else there is cancelling), seller-shipped
- * shipments only cancelling, pickup shipments ready, collected and not collected.
+ * legacy seller-shipped history only cancelling, pickup shipments ready, collected and not collected.
  */
 export function nextStatuses(line: Line, caps: ShipmentCaps = NO_CAPS): string[] {
   const status = s(line.status);
@@ -105,12 +105,12 @@ export function nextStatuses(line: Line, caps: ShipmentCaps = NO_CAPS): string[]
   return [...FORWARD, ...EXCEPTIONS].filter((to) => next.includes(to));
 }
 
-/** What an override may set on a seller-shipped shipment: later steps only, a delivered one can still be returned. */
+/** What an override may set on a Fulfilled by AfroTransact or old seller-shipped shipment: later steps only, a delivered one can still be returned. */
 export function overrideStatuses(line: Line, caps: ShipmentCaps): string[] {
-  if (!caps.override || !sellerResponsible(line)) return [];
+  if (!caps.override || !(sellerResponsible(line) || staffDelivers(line))) return [];
   const status = s(line.status);
   if (status === 'DELIVERED') return ['RETURNED'];
-  if (TERMINAL.includes(status) || ['PLACED', 'PENDING_PAYMENT'].includes(status)) return [];
+  if (TERMINAL.includes(status) || ['PENDING_PAYMENT'].includes(status)) return [];
   const beforePickup = ['CONFIRMED', 'PACKED', 'READY'].includes(status);
   return [...FORWARD, ...EXCEPTIONS].filter((to) => (RANK[to] ?? 0) > (RANK[status] ?? 0) && (to !== 'CANCELLED' || beforePickup) && (RANK[to] ?? 0) >= 2);
 }

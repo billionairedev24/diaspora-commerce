@@ -234,13 +234,6 @@ import { createSellerMatchingApi } from './seller-matching';
 import { tableSearchParams } from './table-query';
 
 /** Server-driven orders table query: one search over every column, the sort (`<column>,asc|desc`), cursor, limit. */
-/** How a seller who ships an order themselves says it left: a tracking number (with an optional courier name for their own records) or handover details. */
-export interface SellerShipDetails {
-  shipNote?: string;
-  trackingNumber?: string;
-  trackingCarrier?: string;
-}
-
 export interface SellerOrdersQuery {
   status?: ShipmentStatus;
   q?: string;
@@ -357,19 +350,13 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/orders', SellerOrderPageSchema, { query: tableSearchParams({ status: q.status, q: q.q, cursor: q.cursor, limit: num(q.limit) }, q.sort), signal }),
     getOrder: (orderNumber: string, signal?: AbortSignal): Promise<SellerOrderDetail> => request(`/v1/seller/orders/${enc(orderNumber)}`, SellerOrderDetailSchema, { signal }),
     /**
-     * One step forward; `handoverCode` is the buyer's 4-digit code, needed to hand a pickup order over (DELIVERED). A shipment
-     * you ship yourself is marked shipped (PICKED_UP) with `ship`: a tracking number, or a note saying how it was sent.
+     * One step forward (confirm, pack, ready); `handoverCode` is the buyer's 4-digit code, needed to hand a pickup order over
+     * (DELIVERED). Sellers do not ship or deliver orders themselves: AfroTransact does (Fulfilled by AfroTransact).
      */
-    updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string, handoverCode?: string, ship?: SellerShipDetails): Promise<SellerOrderDetail> =>
+    updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string, handoverCode?: string): Promise<SellerOrderDetail> =>
       request(`${shipment(orderNumber, shipmentId)}/status`, SellerOrderDetailSchema, {
         method: 'POST',
-        body: {
-          status,
-          ...(handoverCode ? { handoverCode } : {}),
-          ...(ship?.shipNote ? { shipNote: ship.shipNote } : {}),
-          ...(ship?.trackingNumber ? { trackingNumber: ship.trackingNumber } : {}),
-          ...(ship?.trackingCarrier ? { trackingCarrier: ship.trackingCarrier } : {})
-        },
+        body: { status, ...(handoverCode ? { handoverCode } : {}) },
         headers: idem(key)
       }),
     quoteRates: (orderNumber: string, shipmentId: string, parcel: Parcel, shipFrom: SellerAddress, carrier?: string): Promise<RateQuotes> =>
