@@ -349,6 +349,26 @@ func TestMetricsAreMergedWithModuleAndServiceLabels(t *testing.T) {
 	}
 }
 
+func TestModuleUpGaugeFollowsReadiness(t *testing.T) {
+	down := spec("cart", nil, func(o *fakeOpts) {
+		o.checks = []httpserver.ReadinessCheck{check{name: "postgres", err: errors.New("down")}}
+	})
+	h := newHost(t, nil, []host.Spec{down, spec("geo", nil)})
+	body := get(t, h.Handler(), "/metrics").Body.String()
+	for _, want := range []string{
+		`at_module_up{module="cart",service="cart"} 0`,
+		`at_module_up{module="geo",service="geo"} 1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/metrics lacks %s", want)
+		}
+	}
+	one := get(t, h.Handler(), "/modules/geo/metrics").Body.String()
+	if strings.Contains(one, `at_module_up{module="cart"`) || !strings.Contains(one, `at_module_up{module="geo"`) {
+		t.Errorf("per-module metrics must hold only that module's at_module_up: %.300s", one)
+	}
+}
+
 func TestMetricsAreNotPublicWhenTheHostSaysSo(t *testing.T) {
 	t.Setenv("MANAGEMENT_ADDR", "")
 	h, err := host.New(host.Config{Getenv: env(nil), MetricsPublic: false, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))},

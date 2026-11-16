@@ -1,7 +1,9 @@
 package host
 
 import (
+	"context"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -58,9 +60,40 @@ func ptr(s string) *string { return &s }
 
 // newMergedGatherer merges the modules' registries; the first one also contributes the Go and process collectors.
 func newMergedGatherer(mods []*running) prometheus.Gatherer {
-	gs := make(prometheus.Gatherers, 0, len(mods))
+	gs := make(prometheus.Gatherers, 0, len(mods)+1)
+	up := prometheus.NewRegistry()
+	up.MustRegister(&moduleUp{mods: mods})
+	gs = append(gs, up)
 	for i, m := range mods {
 		gs = append(gs, labelled{name: m.spec.Name, g: m.mod.Gatherer, keepProc: i == 0})
 	}
 	return gs
+}
+
+// readyCheckTimeout bounds the readiness checks of one scrape, as /readyz bounds them.
+const readyCheckTimeout = 2 * time.Second
+
+var moduleUpDesc = prometheus.NewDesc("at_module_up",
+	"1 when every readiness check of the module passes, 0 otherwise (same series name as afrotransact-core).",
+	[]string{"module", "service"}, nil)
+
+// moduleUp exports at_module_up{module,service} per mounted module, evaluated at scrape time with the checks /readyz runs, so
+// the ModuleNotReady alert sees Go modules the same way as Java ones.
+type moduleUp struct{ mods []*running }
+
+func (c *moduleUp) Describe(ch chan<- *prometheus.Desc) { ch <- moduleUpDesc }
+
+func (c *moduleUp) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), readyCheckTimeout)
+	defer cancel()
+	for _, m := range c.mods {
+		value := 1.0
+		for _, check := range m.mod.Checks {
+			if err := check.Check(ctx); err != nil {
+				value = 0
+				break
+			}
+		}
+		ch <- prometheus.MustNewConstMetric(moduleUpDesc, prometheus.GaugeValue, value, m.spec.Name, m.spec.Name)
+	}
 }
