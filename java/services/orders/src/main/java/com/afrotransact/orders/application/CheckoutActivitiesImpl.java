@@ -227,12 +227,14 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 method = method == DeliveryMethod.PICKUP ? DeliveryMethod.PICKUP
                         : DeliveryMethod.AFROTRANSACT_DELIVERY;
             }
-            if (!sellerStore && method == DeliveryMethod.AFROTRANSACT_DELIVERY
+            if (!sellerStore && method != DeliveryMethod.PICKUP
                     && fulfilmentType(first) == FulfilmentType.SELLER_FULFILLED) {
-                // The seller did not opt into delivery by AfroTransact and AfroTransact does not hold the stock: the
-                // seller ships it. The shopper still sees "Delivery" at the flat fee; no driver or staff queue is
-                // involved (docs/engineering/delivery-fulfilment.md).
-                method = DeliveryMethod.SELLER_SHIPS;
+                // The seller is not Fulfilled by AfroTransact (no collection location) and AfroTransact does not hold the
+                // stock, so the only way to get this package is Seller pickup. Sellers do not ship themselves: never
+                // guess a mode (docs/engineering/delivery-fulfilment.md).
+                throw new OrdersRuleViolation(CheckoutCodes.FULFILMENT_UNAVAILABLE, (first.sellerName() == null
+                        ? first.sellerOrgId() : first.sellerName()) + " does not offer delivery for this item. "
+                        + "Choose pickup if the seller offers it, or remove the item");
             }
             String level = sel != null && sel.serviceLevel() != null && !sel.serviceLevel().isBlank()
                     ? sel.serviceLevel().trim().toLowerCase(Locale.ROOT)
@@ -1003,27 +1005,21 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     }
 
     /**
-     * The delivery method a package's selection names. With the seller carrier switch off (launch), a package with no
-     * selection is delivered by AfroTransact, and the retired options (carrier, standard, express) are refused in plain
+     * The delivery method a package's selection names. A package with no selection is delivered by AfroTransact (only
+     * when it truly is, see the caller), and the retired options (carrier, standard, express) are refused in plain
      * words so a stale page is told to reload instead of being charged something it did not show.
      */
     private DeliveryMethod method(CheckoutInput.Selection sel) {
         String option = sel == null || sel.option() == null || sel.option().isBlank() ? null
                 : sel.option().trim().toLowerCase(Locale.ROOT);
-        boolean carrier = shipping.carrierEnabled();
         if (option == null) {
-            return carrier ? DeliveryMethod.CARRIER : DeliveryMethod.AFROTRANSACT_DELIVERY;
+            return DeliveryMethod.AFROTRANSACT_DELIVERY;
         }
         return switch (option) {
             case "afrotransact_delivery", "delivery", "local" -> DeliveryMethod.AFROTRANSACT_DELIVERY;
             case "pickup" -> DeliveryMethod.PICKUP;
-            case "carrier", "standard", "ship" -> {
-                if (!carrier) {
-                    throw optionsChanged();
-                }
-                yield DeliveryMethod.CARRIER;
-            }
-            case "express" -> throw optionsChanged();
+            // Seller carrier labels are retired with self-shipping: the staff switch no longer creates carrier shipments.
+            case "carrier", "standard", "ship", "express" -> throw optionsChanged();
             case "quote_required" -> throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION,
                     "This address is too far for standard delivery. Ask us for a quote, or choose another address.");
             default -> throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION,

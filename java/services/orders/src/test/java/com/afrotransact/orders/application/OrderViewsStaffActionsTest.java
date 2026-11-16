@@ -97,7 +97,7 @@ class OrderViewsStaffActionsTest {
     }
 
     @Test
-    void sellerShipsOffersNoStatusesButCancellingAndTheOverrideOnlyToItsHolders() {
+    void legacySellerShippedOffersNoStatusesButCancellingAndTheOverrideOnlyToItsHolders() {
         tenants.as(TenantFixture.staff("orders:manage", "orders:read", "delivery:manage"));
         OrderView.ShipmentView v = view(DeliveryMethod.SELLER_SHIPS, null, ShipmentStatus.PICKED_UP);
         assertThat(v.nextActions()).isEmpty();
@@ -107,8 +107,10 @@ class OrderViewsStaffActionsTest {
         tenants.as(TenantFixture.staff("orders:manage", "orders:read", "orders:override-shipment"));
         assertThat(view(DeliveryMethod.SELLER_SHIPS, null, ShipmentStatus.PICKED_UP).overrideActions())
                 .containsExactly("in_transit", "out_for_delivery", "delivery_failed", "delivered", "returned");
+        // The override also corrects Fulfilled by AfroTransact (forward only), never pickup.
         assertThat(view(DeliveryMethod.AFROTRANSACT_DELIVERY, sellerStore(), ShipmentStatus.PICKED_UP)
-                .overrideActions()).isEmpty();
+                .overrideActions()).contains("out_for_delivery", "delivered").doesNotContain("picked_up");
+        assertThat(view(DeliveryMethod.PICKUP, null, ShipmentStatus.READY).overrideActions()).isEmpty();
     }
 
     @Test

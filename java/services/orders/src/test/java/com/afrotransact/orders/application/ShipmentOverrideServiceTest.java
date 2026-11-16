@@ -168,13 +168,24 @@ class ShipmentOverrideServiceTest {
         assertThatThrownBy(() -> service.override(shipmentId, "picked_up", "Wrong status, going back", "k1"))
                 .isInstanceOf(TransitionRefused.class);
 
-        place(DeliveryMethod.AFROTRANSACT_DELIVERY, sellerStore(), ShipmentStatus.READY);
-        assertThatThrownBy(() -> service.override(shipmentId, "picked_up", "Not mine to override", "k2"))
+        // Fulfilled by AfroTransact can be corrected forward, never back.
+        place(DeliveryMethod.AFROTRANSACT_DELIVERY, sellerStore(), ShipmentStatus.OUT_FOR_DELIVERY);
+        assertThatThrownBy(() -> service.override(shipmentId, "picked_up", "Going back is not allowed", "k2"))
                 .isInstanceOf(TransitionRefused.class);
         place(DeliveryMethod.PICKUP, null, ShipmentStatus.READY);
         assertThatThrownBy(() -> service.override(shipmentId, "delivered", "Not mine to override", "k3"))
                 .isInstanceOf(TransitionRefused.class);
         assertThat(status()).isEqualTo(ShipmentStatus.READY);
+    }
+
+    @Test
+    void anOverrideCorrectsAFulfilledByAfroTransactShipmentForwardWithAReason() {
+        place(DeliveryMethod.AFROTRANSACT_DELIVERY, sellerStore(), ShipmentStatus.PICKED_UP);
+        tenants.as(TenantFixture.staff("orders:override-shipment", "orders:read"));
+        assertThatThrownBy(() -> service.override(shipmentId, "out_for_delivery", " ", "k0"))
+                .isInstanceOf(OrdersRuleViolation.class);
+        service.override(shipmentId, "out_for_delivery", "Staff forgot to record the step", "k1");
+        assertThat(status()).isEqualTo(ShipmentStatus.OUT_FOR_DELIVERY);
     }
 
     @Test
@@ -221,11 +232,12 @@ class ShipmentOverrideServiceTest {
     }
 
     @Test
-    void theSellerMovesTheirOwnSellerShippedShipment() {
+    void theSellerCanNoLongerMoveALegacySellerShippedShipment() {
         place(DeliveryMethod.SELLER_SHIPS, null, ShipmentStatus.PICKED_UP);
         tenants.as(TenantFixture.sellerOf("org-seller", "orders:update-status", "orders:read"));
-        service.transition(shipmentId, "delivered", null, null, "k1");
-        assertThat(status()).isEqualTo(ShipmentStatus.DELIVERED);
+        assertThatThrownBy(() -> service.transition(shipmentId, "delivered", null, null, "k1"))
+                .isInstanceOf(TransitionRefused.class);
+        assertThat(status()).isEqualTo(ShipmentStatus.PICKED_UP);
     }
 
     @Test

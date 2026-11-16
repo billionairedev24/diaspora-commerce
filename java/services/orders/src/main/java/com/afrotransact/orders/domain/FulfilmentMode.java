@@ -4,19 +4,30 @@ package com.afrotransact.orders.domain;
  * Who moves a shipment to the customer, derived from what the shipment carries (never stored, never guessed):
  * the fulfilment type, the delivery method and the seller-store snapshot. It decides which queue a shipment is in:
  * only {@link #AFROTRANSACT_DELIVERY} and {@link #FULFILLED_BY_AFROTRANSACT} shipments ever enter the staff
- * Delivery queue.
+ * Delivery queue. The product has two modes: Seller pickup ({@link #PICKUP}) and Fulfilled by AfroTransact
+ * ({@link #AFROTRANSACT_DELIVERY} from the seller's location, {@link #FULFILLED_BY_AFROTRANSACT} from stock AfroTransact
+ * holds); seller self-shipping is not supported.
  */
 public enum FulfilmentMode {
-    /** The seller ships it and marks it shipped and delivered. No AfroTransact driver or staff queue. */
-    SELLER_SHIPS,
-    /** The seller opted into delivery by AfroTransact: staff collect from the seller's store and deliver. */
+    /**
+     * History only. Shipments the seller shipped themselves (or sent by a carrier label) before self-shipping was
+     * retired. Never derived for a new order, never offered to a seller, never in a staff queue; only staff with
+     * orders:override-shipment can still move an open one, forward only with a reason.
+     */
+    LEGACY_SELLER_SHIPPED,
+    /** Fulfilled by AfroTransact from the seller's store: staff collect from the seller's location and deliver. */
     AFROTRANSACT_DELIVERY,
-    /** Fulfilled by AfroTransact (FBA or Retail): staff deliver from the fulfilment centre. */
+    /** Fulfilled by AfroTransact (FBA stock or Retail): staff deliver from the fulfilment centre. */
     FULFILLED_BY_AFROTRANSACT,
     /** The customer collects it (the seller's store, an AfroTransact counter or a locker). */
     PICKUP,
     /** A community pre-order delivered by its window's run (delivery-runs), not by the Delivery module. */
     PREORDER_RUN;
+
+    /** A shipment from before self-shipping was retired (read-only history). */
+    public boolean legacy() {
+        return this == LEGACY_SELLER_SHIPPED;
+    }
 
     /** Enters the staff Delivery queue. */
     public boolean staffDelivers() {

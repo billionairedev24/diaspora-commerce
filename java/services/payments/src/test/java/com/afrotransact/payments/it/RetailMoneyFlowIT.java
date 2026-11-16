@@ -61,14 +61,14 @@ class RetailMoneyFlowIT extends PaymentsIntegrationTest {
         assertEveryJournalBalances();
         long retailNet = 3900 + 700 - 156;
         long netA = 2000 + 500 - 160 - 84;
-        long netB = 3000 - 360 - 975 - 103;
+        long netB = 3000 - 360 - 0 - 103; // FBA is free for the seller by default (V24)
         assertThat(balance(order, "4400", "")).isEqualTo(retailNet);
         assertThat(balance(order, "2000", RETAIL)).isZero();
         assertThat(balance(order, "2000", orgA)).isEqualTo(netA);
         assertThat(balance(order, "2000", orgB)).isEqualTo(netB);
         assertThat(balance(order, "2100", "US-TX-48201")).isEqualTo(198 + 124 + 165 + 248);
         assertThat(balance(order, "4000", "")).isEqualTo(160 + 360);
-        assertThat(balance(order, "4100", "")).isEqualTo(975);
+        assertThat(balance(order, "4100", "")).isZero();
         assertThat(balance(order, "4200", "")).isEqualTo(600);
         assertThat(-balance(order, "5000", "")).isEqualTo(19);
         assertThat(-balance(order, "1000", "")).isEqualTo(11_435 - 362);
