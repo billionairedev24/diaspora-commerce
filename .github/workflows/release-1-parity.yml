@@ -47,6 +47,7 @@ jobs:
           python3 tools/release/test_merge_backlog.py
           python3 tools/release/test_capacity.py
           python3 tools/release/test_route_diff.py
+          python3 tools/release/test_reverse_parity.py
           bash tools/release/test_sync.sh
       - name: Parity with main (state of the tree, gaps from main marked)
         run: |
@@ -55,6 +56,14 @@ jobs:
           rc=$?
           { echo "### release-1 parity with main"; echo; cat parity-main.md; } | tee -a "$GITHUB_STEP_SUMMARY"
           exit "$rc"
+      - name: Reverse parity (what release-1 has that main lacks; report only, never fails the run)
+        if: always()
+        run: |
+          set +e
+          python3 tools/release/parity.py --reverse --main origin/main --format markdown > reverse-main.md
+          { echo "### reverse parity: release-1 has, main lacks (port-back = to port with tools/release/port-back.sh; sync-pending = main is ahead)"; echo; cat reverse-main.md; } | tee -a "$GITHUB_STEP_SUMMARY"
+          if grep -q '^| .* | port-back |$\|^| .* | both |$' reverse-main.md; then echo "::warning::release-1 has functional differences main lacks: see the reverse parity summary"; fi
+          exit 0
       - name: Parity with develop (when the branch exists)
         if: always()
         run: |

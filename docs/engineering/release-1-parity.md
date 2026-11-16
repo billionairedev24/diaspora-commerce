@@ -50,6 +50,15 @@ sync). Output is a table of gaps with a one-line fix hint each (`--format markdo
 | `delivery` | a per-service Dockerfile/chart/workflow for a service that is not a module in `release-1.yaml`; a service missing from `services.conf`; a workflow nobody classified in `parity.yaml` (`release-1`, `per-service-only`, `manual`, `reusable`) or whose triggers contradict its class; a workflow, `Chart.yaml` or values file that is not valid YAML | classify it; make it trigger on release-1 |
 | `http-edges` | a new always-on `Http*` adapter under `adapter/out` that is not in `java/apps/core/src/test/resources/http-edges.txt` (the static twin of `ModuleEdgeGuardTest`) | add an in-process adapter and `@ConditionalOnModuleMode`, or list it with the reason |
 
+### The other direction: `--reverse`
+
+`python3 tools/release/parity.py --reverse --main origin/main` (`tools/release/reverse_parity.py`, tests `test_reverse_parity.py`) answers "what does release-1
+have that main lacks". It compares the Flyway migrations (file sets and contents), `contracts/**`, the permission seeds (`*Permissions.java`, identity's
+`Permission.java`, the tenant-isolation matrices) and the i18n keys of web and mobile, and labels each difference by who changed it since the merge base:
+`port-back` (release-1 changed it: port it with `tools/release/port-back.sh`), `sync-pending` (main is ahead: the next sync brings it) or `both`. It is a
+report: exit 0 unless `--strict`, and `release-1-parity.yml` runs it as a non-blocking step with a warning when something has to be ported back. A
+difference that is intentional goes under `reverse_skip` in `parity.yaml` (glob: reason).
+
 `parity.yaml` is the allow-list: `unmounted` (service, reason), `per_service_only`, the classification of every workflow, `config.env_skip` and
 `secret_skip` (name, reason). An entry without a reason does not count.
 

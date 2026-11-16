@@ -10,6 +10,8 @@ setting, scrape/alert and delivery file that exists in the per-service world als
   python3 tools/release/parity.py --only mounted-java,config
   python3 tools/release/parity.py --route-report r.json include the route diff of core (tools/release/route_diff.py --json-out r.json)
   python3 tools/release/parity.py --format markdown     table for $GITHUB_STEP_SUMMARY / a PR comment
+  python3 tools/release/parity.py --reverse --main origin/main   the other direction (report only): migrations, contracts, permission seeds and
+                                                        i18n keys that release-1 has and main lacks (tools/release/reverse_parity.py)
 
 Checks (id: what fails)
   mounted-java   a java/services/<s> directory that CoreApplication does not mount as a @ModuleSpec (or core's pom does not depend on)
@@ -600,7 +602,13 @@ def main(argv=None):
     ap.add_argument("--route-report", help="JSON written by route_diff.py --json-out")
     ap.add_argument("--require-route-report", action="store_true")
     ap.add_argument("--format", choices=["text", "markdown", "json"], default="text")
+    ap.add_argument("--reverse", action="store_true", help="report what release-1 has that --main lacks (non-blocking; see reverse_parity.py)")
+    ap.add_argument("--strict", action="store_true", help="with --reverse: exit 1 when something has to be ported back")
     args = ap.parse_args(argv)
+    if args.reverse:
+        import reverse_parity
+        return reverse_parity.main(["--root", args.root, "--main", args.main or "origin/main", "--format", args.format]
+                                   + (["--strict"] if args.strict else []))
     only = [c for c in (args.only or "").split(",") if c] or None
     for c in only or []:
         if c not in RUNNERS:

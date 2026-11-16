@@ -177,6 +177,7 @@ release-1-check: ## Release 1 delivery files, offline: workflows generated, laun
 	python3 tools/release/test_upstreams.py
 	python3 tools/release/upstreams.py
 	python3 tools/release/test_parity.py
+	python3 tools/release/test_reverse_parity.py
 	python3 tools/release/test_capacity.py
 	python3 tools/release/check_capacity.py
 	python3 tools/release/test_merge_backlog.py
