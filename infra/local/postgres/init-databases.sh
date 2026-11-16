@@ -1,16 +1,17 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Creates one database and one login role per service (password = service name — LOCAL ONLY).
 # Runs once, on the first start of an empty postgres volume (docker-entrypoint-initdb.d).
 # To add a service: append its database name to SERVICES below and run `make reset && make up`.
-set -euo pipefail
+# POSIX sh on purpose: the local Postgres image is Alpine and has no bash.
+set -eu
 
-SERVICES=(
+SERVICES="
   identity catalog offers inventory orders payments seller retail fulfilment bookings
   trustops taxreturns content ai cart geo media notifications carriers deliveryruns
   temporal openfga
-)
+"
 
-for svc in "${SERVICES[@]}"; do
+for svc in $SERVICES; do
   echo "creating role + database: ${svc}"
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-SQL
     CREATE ROLE "${svc}" LOGIN PASSWORD '${svc}';
