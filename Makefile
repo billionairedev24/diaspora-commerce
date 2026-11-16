@@ -21,7 +21,7 @@ TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
 .PHONY: supply-chain-check help db-reset ovh-gh-setup deploy-guide deploy-guide-test upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
-        java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
+        java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart web dev-links repair-orgs reindex-search \
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog tax-gate-sweep seed seed-test seed-check smoke smoke-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
@@ -284,6 +284,9 @@ dev-status: ## Health of core, afrotransact-go (or the services), web apps and i
 
 dev-logs: ## Follow one process's log: make dev-logs SERVICE=core (afrotransact-go, web-storefront, ...; an old service name maps to core / afrotransact-go)
 	tools/dev/local.sh logs $(SERVICE)
+
+web: ## Restart ONLY the web apps (storefront, seller center, staff console): rebuilds if web/ changed (REBUILD=1 forces, DEV=1 dev servers); APPS="storefront" for one
+	tools/dev/local.sh web $(APPS)
 
 dev-restart: ## Rebuild and restart one process: make dev-restart SERVICE=core | afrotransact-go (an old service name restarts the deployable that holds it; STACK=services restarts the single service)
 	tools/dev/local.sh restart $(SERVICE)
