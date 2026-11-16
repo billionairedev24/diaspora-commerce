@@ -19,7 +19,8 @@ The publish-gate answers (description, typed facts, dangerous goods, package per
 derived from the catalog's own schemas by `seedlib/listing.py`; `testdata/` holds the recorded category tree, product types and
 listing rules (`gen_testdata.py`). See docs/runbooks/release-1-local.md, "Demo data".
 
-Steps: `sellers`, `size-charts`, `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
+Steps: `sellers`, `size-charts`, `locations` (seller locations: Fulfilled by AfroTransact with pickup hours inside a delivery zone, and Seller
+pickup places), `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
 carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets are
 `seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
 `seed.py` and the guide.
@@ -69,8 +70,8 @@ See [docs/engineering/taxonomy.md](../../docs/engineering/taxonomy.md).
 
 Needs the catalogue (the `products` step) and, besides the catalogue services, retail, orders, payments, fulfilment,
 cart, geo, seller, tax-returns and trust-ops (`make up` starts them all). It goes through the APIs the apps use: the
-test customers check out with their own tokens, Mama Put's owner packs as the seller and the driver drives with the
-driver's token (locally the services act as the customer, driver or organisation member whose token a call carries;
+test customers check out with their own tokens, Mama Put's owner packs as the seller and staff take the deliveries through the
+Delivery desk (the dormant driver app only runs with `DRIVER_APP_ENABLED=true`) (locally the services act as the customer, driver or organisation member whose token a call carries;
 staff work runs without a token, as the local super admin). Payments are authorised by the payments service's local
 test stand-in for Stripe (only allowed on the local profile), or by Stripe test mode when `.local/secrets.env` has a key.
 
@@ -78,15 +79,15 @@ test stand-in for Stripe (only allowed on the local profile), or by Stripe test 
 |---|---|
 | Staff › AfroTransact Retail | 4 suppliers (Lagos, Kumasi, Addis Ababa, Kingston; one on watch), 8 items linked to AfroTransact Brand ATINs with costs and case packs, purchase orders in every state (draft, pending approval in the Finance tier, approved, sent and in the air, confirmed and at the dock, partially received, received with a matched invoice, received with a 4 % price exception, closed with the supplier payment released, cancelled), their shipments, customs documents and goods receipts |
 | Staff › Inventory | FBA inbound shipments of Mama Put, Lagos Larder and Accra Market in every stage (draft, shipped in transit, arrived awaiting receiving, receiving, closed) with lot, made-on and expiry dates; short-dated lots released for markdown (31–60 days), a QC hold, damaged units, a lot that expires tomorrow (EXPIRED after the nightly run; receiving refuses expired lots), a cycle count waiting for review and a posted one, a transfer HOU-FC → ATL-FC |
-| Staff › Orders & shipments | 14 orders of `customer.houston` and `customer.lubbock`: placed, picking, packed, shipped with UPS tracking, out for delivery, delivered (carrier and AfroTransact Delivery), cancelled, a Lubbock pre-order, a two-package order (AfroTransact + Bonwire Weavers), seller-fulfilled orders (Diaspora Books waiting, Mama Put's kitchen packed for pickup). Seeded orders carry the attribution `src=demo-seed` |
-| Staff › Delivery dispatch | Houston FC as the depot and a Houston delivery zone; a completed returns run, today's route in progress for `driver@afrotransact.test` (one stop delivered with a photo, one out for delivery, an open SOS), tomorrow's route blocked by a vehicle defect, Mama Put's seller pickup waiting for a route |
-| Staff › Disputes & returns | a driver-pickup return collected, inspected and refunded; two drop-off returns approved (their carrier labels need carrier-gateway with carrier sandbox credentials, not in the local stack); an A-to-z claim waiting for Tamale Naturals |
+| Staff › Orders & shipments | 18 orders of `customer.houston` and `customer.lubbock`, in the two fulfilment modes only (no seller self-shipping, no carrier): Fulfilled by AfroTransact placed, picking, packed, ready, out for delivery, delivered with photo proof, a failed delivery waiting for a reattempt, a parcel returned to the seller, cancelled; Seller pickup ready and collected with the customer's code (Mama Put's kitchen); a two-package order; a Lubbock pre-order. Staff take the delivery steps (`delivery:manage`) through the Delivery desk. Seeded orders carry the attribution `src=demo-seed`, and the step reports any retired seller-shipped shipment it finds (run `make reset` for data from before ADR 0011) |
+| Staff › Delivery | the Fulfilled by AfroTransact queue: ready for pickup, out for delivery, failed, delivered with proof. The seller locations (`locations` step): Mama Put, Lagos Larder, Patel Grocers and Bamako Home are Fulfilled by AfroTransact (pickup hours, street-level address in the Houston or New York and New Jersey zone); Mama Put and Patel also allow Seller pickup; Addis Spice House is Seller pickup only. Products without a location are Fulfilled by AfroTransact from stock at a fulfilment centre. The proof photo id is a placeholder (the seeder cannot upload as staff) |
+| Staff › Disputes & returns | returns of delivered orders requested and approved (the driver app and carrier labels are not in use locally, so they wait for their return method); an A-to-z claim waiting for Tamale Naturals |
 | Staff › Payouts | Mama Put Pantry's payout request: its sale's settlement hold is started as matured and a test Connect account (`acct_1LocalTest…`) is registered, on the local stand-in only. The settlement job runs every minute locally; the step waits up to two minutes for the balance |
 | Seller Center (seller.owner) | Mama Put's orders (FBA and its own), inbound shipments, lots and expiry |
 | Storefront (the two customers) | Your orders, with tracking, returns and the claim |
 
 Every record is found by a stable key before anything is created (suppliers by code, items by ATIN, purchase orders by
-supplier and lines, inbound shipments by name, orders by attribution, routes by name), so a re-run creates nothing; a
+supplier and lines, inbound shipments by name, orders by attribution, locations by street address), so a re-run creates nothing; a
 scenario an interrupted run left half-way is taken on to its target state.
 
 ## Test users

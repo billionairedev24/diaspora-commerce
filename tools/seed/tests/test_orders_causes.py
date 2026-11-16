@@ -1,5 +1,4 @@
-"""The orders step names each cause once: a delivery option checked against what checkout offers (carrier shipping is off
-at launch), products verified purchasable before any checkout, Stripe test payments confirmed with the test card, and the
+"""The orders step names each cause once: a delivery option checked against what checkout offers (two fulfilment modes: no carrier), products verified purchasable before any checkout, Stripe test payments confirmed with the test card, and the
 orders a cause blocks are left out of the later steps."""
 from __future__ import annotations
 
@@ -28,22 +27,22 @@ def live_product(title):
 
 
 class ChooseOptionTest(unittest.TestCase):
-    parcel = O.Package((O.Line("at-basmati"),))  # option "carrier"
-    local = O.Package((O.Line("egusi"),), option="afrotransact_delivery", route="today")
+    fba = O.Package((O.Line("at-basmati"),))  # option "afrotransact_delivery" (Fulfilled by AfroTransact)
 
-    def test_a_parcel_scenario_uses_afrotransact_delivery_when_the_carrier_is_not_offered(self):
+    def test_fulfilled_by_afrotransact_is_the_default_and_a_carrier_is_never_chosen(self):
         s = make()
-        self.assertEqual(s.choose_option(self.parcel, {"keys": ["afrotransact_delivery", "pickup"], "pickup": None}),
+        self.assertEqual(s.choose_option(self.fba, {"keys": ["afrotransact_delivery", "pickup"], "pickup": None}),
                          ("afrotransact_delivery", None))
-        self.assertEqual(s.choose_option(self.parcel, {"keys": ["carrier", "afrotransact_delivery"], "pickup": None})[0],
-                         "carrier")
-        self.assertEqual(s.choose_option(self.parcel, None)[0], "afrotransact_delivery", "unknown: the launch default")
+        self.assertEqual(s.choose_option(self.fba, None)[0], "afrotransact_delivery", "unknown: the launch default")
+        for pkg in (p for o in O.ORDERS for p in o.packages):
+            self.assertIn(pkg.option, ("afrotransact_delivery", "pickup", "door"))
 
     def test_a_delivery_option_that_is_not_offered_is_one_named_cause(self):
         with self.assertRaises(SeedCause) as ctx:
-            make().choose_option(self.local, {"keys": ["pickup"], "pickup": "pt1"})
+            make().choose_option(self.fba, {"keys": ["pickup"], "pickup": "pt1"})
         self.assertIn("offers: pickup", ctx.exception.message)
-        self.assertIn("ops_dataset.py", ctx.exception.hint)
+        self.assertIn("orders.fulfilment-unavailable", ctx.exception.message)
+        self.assertIn("--only locations", ctx.exception.hint)
 
     def test_pickup_needs_an_offered_point_and_sends_its_id(self):
         pickup = O.Package((O.Line("at-basmati"),), option="pickup")

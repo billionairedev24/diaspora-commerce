@@ -32,7 +32,7 @@ MAIN_MIN_EDGE = 1000  # catalog: the main product image must be at least 1000 x 
 FOOD_TYPES = {"grocery", "perishable"}
 FC_NODES = ("HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC")
 PREORDER_TIME_ZONE = "America/Chicago"
-STEPS = ("sellers", "size-charts", "products", "content", "ads", "preorders", "pickups", "bookings", "ops", "users")
+STEPS = ("sellers", "size-charts", "locations", "products", "content", "ads", "preorders", "pickups", "bookings", "ops", "users")
 OPS_REQUIRED = ("identity", "catalog", "offers", "inventory", "retail", "orders", "payments", "fulfilment", "cart")
 
 SERVICES = {  # env var, per-service local URL (STACK=services: infra/local/PORTS.md), health path
@@ -106,7 +106,7 @@ def service_endpoints(env: dict[str, str]) -> dict[str, tuple[str, str]]:
 
 # The services each step talks to: its base URLs are logged once when the step starts.
 STEP_SERVICES = {
-    "sellers": ("seller", "catalog"), "size-charts": ("catalog",),
+    "sellers": ("seller", "catalog"), "size-charts": ("catalog",), "locations": ("seller", "geo", "carrier-gateway"),
     "products": ("catalog", "media", "offers", "inventory", "tax-returns"), "content": ("content", "media", "catalog"),
     "ads": ("content", "catalog"), "preorders": ("delivery-runs", "media"), "pickups": ("carrier-gateway",),
     "bookings": ("bookings", "media"),
@@ -153,6 +153,10 @@ def _now() -> dt.datetime:
 
 def _iso(t: dt.datetime) -> str:
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def loc_city(site: dict[str, Any], seller: D.Seller) -> str:
+    return site.get("city") or seller.city
 
 
 def sku_for(seller_key: str, product_key: str, options: dict[str, str]) -> str:
@@ -288,6 +292,8 @@ class Seeder:
         self.up: dict[str, bool] = {}
         self._rules: dict[str, L.Rules | None] = {}  # listing rules by category code
         self.products: dict[str, dict[str, Any]] = {}  # dataset key -> catalog product
+        self.locations: dict[str, dict[str, Any] | None] = {}  # seller key -> its Fulfilled by AfroTransact location (None: none)
+        self._zones_ready = False
         self.charts: dict[str, dict[str, Any]] = {}  # dataset size chart key -> catalog size chart
         self.tax_atins: dict[str, str] = {}  # variant ATIN -> product title, every variant of this run's products
         self.sleep: Callable[[float], None] = time.sleep
@@ -439,6 +445,105 @@ class Seeder:
                 raise ValueError(f"{org_id}: department {', '.join(missing)} is not in the catalog tree")
             out[org_id] = sorted(codes[n] for n in names)
         return out
+
+    # ------------------------------------------------------------------------------------------------ locations
+    def step_locations(self) -> None:
+        self.log("== seller locations: Fulfilled by AfroTransact (pickup hours, located address, delivery zone) and Seller pickup")
+        if not self.up.get("seller"):
+            self.log("  ! seller-service is down: no locations; their products are offered from AfroTransact stock instead")
+            self.report.add("locations", "skipped", len(D.LOCATIONS))
+            return
+        for loc in D.LOCATIONS:
+            address = self._ensure_location(loc)
+            modes = " + ".join({"fba": "Fulfilled by AfroTransact", "pickup": "Seller pickup"}[m] for m in loc.modes)
+            if address is not None or "fba" not in loc.modes:
+                self.log(f"  ✓ {D.SELLER_BY_KEY[loc.seller].name} · {loc.line1}, {loc.city}: {modes}")
+
+    def _ensure_zones(self) -> None:
+        if self._zones_ready or not self.up.get("geo"):
+            return
+        self._zones_ready = True
+        try:
+            have = {z.get("name") for z in (self.svc["geo"].get("/v1/zones", params={"type": "DELIVERY"}) or {}).get("zones") or []}
+            for zone in D.DELIVERY_ZONES:
+                if zone["name"] not in have:
+                    self.svc["geo"].post("/v1/zones", dict(zone))
+                    self.report.add("delivery zones", "created")
+        except ApiError as e:
+            self._problem(f"delivery zones (geo): {e}")
+
+    def _location(self, seller_key: str) -> dict[str, Any] | None:
+        """The seller's location that is Fulfilled by AfroTransact, or None (the seller has none, or it could not be set up)."""
+        loc = D.LOCATION_BY_SELLER.get(seller_key)
+        if loc is None or "fba" not in loc.modes or not self.up.get("seller"):
+            return None
+        if seller_key not in self.locations:
+            self.locations[seller_key] = self._ensure_location(loc)
+        return self.locations[seller_key]
+
+    def _ensure_location(self, loc: D.Location) -> dict[str, Any] | None:
+        """Creates the location with pickup hours (the seller service then turns Fulfilled by AfroTransact on by default when the
+        address is located at street level inside a delivery zone), makes sure it is on, and gives Seller pickup places a
+        carrier-gateway pickup point. Returns the address when it is Fulfilled by AfroTransact, else None. Never invents a mode."""
+        seller = D.SELLER_BY_KEY[loc.seller]
+        sel = self.svc["seller"]
+        fba = "fba" in loc.modes
+        hours = [dict(h) for h in D.HOURS]
+        try:
+            if fba:
+                self._ensure_zones()
+            addresses = (sel.get(f"/v1/orgs/{seller.org_id}/ship-from-addresses") or [])
+            addresses = addresses if isinstance(addresses, list) else addresses.get("items") or []
+            address = next((a for a in addresses if a.get("line1") == loc.line1), None)
+            if address is None:
+                body: dict[str, Any] = {"label": loc.label, "name": seller.name, "company": seller.legal, "phone": loc.phone,
+                                        "line1": loc.line1, "city": loc.city, "state": loc.state, "postalCode": loc.zip,
+                                        "country": "US"}
+                if loc.line2:
+                    body["line2"] = loc.line2
+                if fba:
+                    body["pickupHours"] = hours
+                created = sel.post(f"/v1/orgs/{seller.org_id}/ship-from-addresses", body)
+                found = created if isinstance(created, list) else [created]
+                address = next((a for a in found if a.get("line1") == loc.line1), found[0])
+                self.report.add("locations", "created")
+            else:
+                self.report.add("locations", "existing")
+            if fba and not (address.get("afrotransactPickup") or {}).get("enabled"):
+                put = {"enabled": True, "hours": hours}
+                if address.get("version") is not None:
+                    put["version"] = address["version"]
+                address = sel.put(f"/v1/orgs/{seller.org_id}/ship-from-addresses/{address['id']}/afrotransact-pickup", put) or address
+            if "pickup" in loc.modes:
+                self._customer_pickup(seller, loc, address, hours)
+            if fba and not (address.get("afrotransactPickup") or {}).get("enabled"):
+                raise ValueError("Fulfilled by AfroTransact is not on after enabling it")
+            return address if fba else None
+        except (ApiError, ValueError, KeyError) as e:
+            self._problem(f"location of {seller.name} ({loc.line1}): {e}; its products are offered from AfroTransact stock")
+            return None
+
+    def _customer_pickup(self, seller: D.Seller, loc: D.Location, address: dict[str, Any], hours: list[dict[str, str]]) -> None:
+        """Seller pickup: the location is an active SELLER pickup point customers can collect from (carrier-gateway)."""
+        if not self.up.get("carrier-gateway"):
+            self.log(f"  ! carrier-gateway is down: {seller.name} has no Seller pickup place")
+            return
+        days = {"SUNDAY": 0, "MONDAY": 1, "TUESDAY": 2, "WEDNESDAY": 3, "THURSDAY": 4, "FRIDAY": 5, "SATURDAY": 6}
+        position = address.get("position") or {}
+        body: dict[str, Any] = {
+            "kind": "SELLER", "ownerOrg": seller.org_id, "name": f"{seller.name} · {loc.label}",
+            "timezone": "America/Chicago" if loc.state == "TX" else "America/New_York",
+            "address": {"line1": loc.line1, "line2": loc.line2, "city": loc.city, "state": loc.state, "postalCode": loc.zip,
+                        "country": "US"},
+            "hours": [{"weekday": days[h["day"]], "open": h["opens"], "close": h["closes"]} for h in hours],
+            "readyHours": 3, "active": True, "hoursConfirmed": True}
+        if position.get("lat") is not None and position.get("lng") is not None:
+            body["position"] = {"lat": position["lat"], "lng": position["lng"]}
+        try:
+            self.svc["carrier-gateway"].put(f"/v1/pickup-locations/{address['id']}", body)
+            self.report.add("seller pickup points", "saved")
+        except ApiError as e:
+            self._problem(f"seller pickup point of {seller.name}: {e}")
 
     # ------------------------------------------------------------------------------------------------ size charts
     def step_size_charts(self) -> None:
@@ -862,7 +967,6 @@ class Seeder:
             retail = self._wait_retail_offer(v["atin"], required=retail_wanted,
                                              timeout=None if retail_wanted else RETAIL_OFFER_WAIT_NEXT)
             for seller, factor in sellers:
-                fulfilment = p.fulfilment or seller.fulfilment
                 price_minor = price if factor == 1.0 else int(round(price * factor / 10.0) * 10) - 1
                 listp = int(round(price_minor * (1 + p.deal) / 10.0) * 10) - 1 if p.deal and seller is main else None
                 if seller.org_id == D.RETAIL_ORG:
@@ -877,7 +981,15 @@ class Seeder:
                     stocked[seller.key].append(retail)
                     self.report.add("offers", "ready")
                     continue
+                site = self._location(seller.key) if p.key in D.LOCATION_FBA else None
+                fulfilment = "AFROTRANSACT_DELIVERY" if site else "AFROTRANSACT"
                 existing = self._list_offers(seller.org_id, v["atin"])
+                legacy = [o for o in existing if o.get("fulfilment") in ("SELLER", "CARRIER") or (
+                    site and o.get("fulfilment") == "AFROTRANSACT")]
+                for o in legacy:  # an offer from before self-shipping was retired: withdrawn, replaced below
+                    self.svc["offers"].post(f"/v1/offers/{o['id']}/withdraw")
+                    self.report.add("offers", f"{o.get('fulfilment', '?').lower()} offer withdrawn")
+                existing = [o for o in existing if o not in legacy]
                 if existing:
                     offer = existing[0]
                     if offer.get("priceMinor") != price_minor or (listp and offer.get("listPriceMinor") != listp):
@@ -893,14 +1005,14 @@ class Seeder:
                         "atin": v["atin"], "sellerOrgId": seller.org_id, "sellerSku": v["sellerSku"] if seller is main
                         else sku_for(seller.key, p.key, v.get("options") or {}), "inventorySku": v["atin"],
                         "condition": "NEW", "priceMinor": price_minor, "currency": "USD", "fulfilment": fulfilment,
-                        "shippingMinor": 0, "quantity": 0, "handlingDays": 1 if fulfilment == "AFROTRANSACT" else 2}
+                        "shippingMinor": 0, "quantity": 0, "handlingDays": 1}
                     if listp:
                         body["listPriceMinor"] = listp
-                    if fulfilment == "SELLER":
+                    if site:  # Fulfilled by AfroTransact from the seller's own location: the stock is counted on the offer
                         body["quantity"] = p.stock
-                        body["shippingMinor"] = 599
-                        body["shipFrom"] = {"city": seller.city, "region": seller.region, "country": "US",
-                                            "postalCode": seller.zip}
+                        body["shipFrom"] = {"city": loc_city(site, seller), "region": site.get("state") or seller.region,
+                                            "country": "US", "postalCode": site.get("postalCode") or seller.zip,
+                                            "locationId": site["id"]}
                     offer = self.svc["offers"].post("/v1/offers", body)
                     self.report.add("offers", "created")
                 if fulfilment == "AFROTRANSACT":

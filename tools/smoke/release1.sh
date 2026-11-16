@@ -211,7 +211,7 @@ else
     req POST "$BFF_URL/v1/cart/items" "${auth[@]}" -H 'Content-Type: application/json' -d "{\"offerId\":\"$offer\",\"quantity\":1}"
     req GET "$BFF_URL/v1/checkout/summary" "${auth[@]}"
     address=$(j '.addresses[0].id // empty'); quote=$(j '.taxQuoteId // empty')
-    selections=$(jq -c '[.packages // [] | .[] | {packageId: .packageId, option: ([.deliveryOptions[]?.key | select(. == "afrotransact_delivery" or . == "carrier" or . == "pickup")] | first // "afrotransact_delivery")}]' "$BODY" 2>/dev/null)
+    selections=$(jq -c '[.packages // [] | .[] | {packageId: .packageId, option: ([.deliveryOptions[]?.key | select(. == "afrotransact_delivery" or . == "pickup")] | first // "afrotransact_delivery")}]' "$BODY" 2>/dev/null)
     if [[ -z "$address" ]]; then
       fail "checkout reaches the payment-intent step" "$BFF_URL/v1/checkout/summary status $CODE: $CUSTOMER has no saved address"
     else

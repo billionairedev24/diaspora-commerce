@@ -212,6 +212,76 @@ class OffersAndStockTest(unittest.TestCase):
         self.assertEqual(self.s.report.counts[("inventory receipts", "replayed")], 1)
 
 
+    def locations(self, enabled=True):
+        """seller-service fake: a new address is Fulfilled by AfroTransact when it came with pickup hours (the server default)."""
+        made = []
+
+        def create(path, body, kw):
+            a = dict(body, id=f"loc-{len(made)}", version=0, position={"lat": 29.7, "lng": -95.4},
+                     afrotransactPickup={"enabled": enabled and bool(body.get("pickupHours")), "hours": body.get("pickupHours")})
+            made.append(a)
+            return a
+
+        self.s.svc["seller"].on("GET", "/v1/orgs/*", lambda path, body, kw: list(made))
+        self.s.svc["seller"].on("POST", "/v1/orgs/*", create)
+
+        def enable(path, body, kw):
+            a = next(x for x in made if x["id"] == path.split("/")[5])
+            a["afrotransactPickup"] = {"enabled": enabled and body["enabled"], "hours": body["hours"]}
+            return a
+
+        self.s.svc["seller"].on("PUT", "/v1/orgs/*", enable)
+        self.s.svc["geo"].on("GET", "/v1/zones", lambda *a: {"zones": []})
+        self.s.svc["geo"].on("POST", "/v1/zones", lambda path, body, kw: body)
+        self.s.svc["carrier-gateway"].on("PUT", "/v1/pickup-locations/*", lambda path, body, kw: body)
+        return made
+
+    def test_a_location_product_is_offered_from_the_fba_location_with_its_stock_on_the_offer(self):
+        made = self.locations()
+        p, product = self.product("turmeric")  # Patel Grocers, Edison NJ
+        stocked = self.s._offers(p, product)
+
+        mine = [o for o in self.store if o["sellerOrgId"] == "org_patel_grocers" and o["status"] == "ACTIVE"]
+        self.assertEqual({o["fulfilment"] for o in mine}, {"AFROTRANSACT_DELIVERY"})
+        self.assertTrue(all(o["quantity"] == p.stock and o["shipFrom"]["locationId"] == made[0]["id"] for o in mine))
+        self.assertEqual(made[0]["pickupHours"], list(D.HOURS), "FBA is requested with pickup hours, never without")
+        self.assertEqual(stocked, {}, "no FC stock for an offer from the seller's own location")
+        self.assertNotIn("SELLER", {o["fulfilment"] for o in self.store if "fulfilment" in o})
+
+    def test_a_location_that_cannot_be_fba_falls_back_to_fc_stock_and_says_so(self):
+        self.locations(enabled=False)
+        p, product = self.product("kuli-kuli")
+        stocked = self.s._offers(p, product)
+        self.assertEqual({o["fulfilment"] for o in self.store if o["sellerOrgId"] == "org_lagos_larder"}, {"AFROTRANSACT"})
+        self.assertEqual(set(stocked), {"lagos-larder"})
+        self.assertTrue(any("Fulfilled by AfroTransact is not on" in m for m in self.s.report.problems))
+
+    def test_an_offer_from_before_self_shipping_was_retired_is_withdrawn_and_replaced(self):
+        self.locations()
+        p, product = self.product("namkeen")
+        atin = product["variants"][0]["atin"]
+        self.store.append({"id": "old", "atin": atin, "sellerOrgId": "org_patel_grocers", "status": "ACTIVE",
+                           "fulfilment": "SELLER", "priceMinor": 1, "version": 0})
+        self.s._offers(p, product)
+        self.assertEqual(next(o for o in self.store if o["id"] == "old")["status"], "WITHDRAWN")
+        self.assertEqual([o["fulfilment"] for o in self.store if o["sellerOrgId"] == "org_patel_grocers"
+                          and o["status"] == "ACTIVE"], ["AFROTRANSACT_DELIVERY"] * len(product["variants"]))
+
+    def test_step_locations_creates_zones_and_pickup_points_for_pickup_sellers(self):
+        made = self.locations()
+        self.s.step_locations()
+        self.assertEqual(len(made), len(D.LOCATIONS))
+        fba = {m["line1"] for m in made if m["afrotransactPickup"]["enabled"]}
+        self.assertEqual(fba, {loc.line1 for loc in D.LOCATIONS if "fba" in loc.modes})
+        picked = [c for c in self.s.svc["carrier-gateway"].calls if c[0] == "PUT"]
+        self.assertEqual(len(picked), sum("pickup" in loc.modes for loc in D.LOCATIONS))
+        self.assertTrue(all(c[2]["kind"] == "SELLER" and c[2]["active"] for c in picked))
+        self.assertEqual(len([c for c in self.s.svc["geo"].calls if c[0] == "POST"]), len(D.DELIVERY_ZONES))
+        calls_before = len(made)
+        self.s.step_locations()
+        self.assertEqual(len(made), calls_before, "a re-run finds the locations by street address")
+
+
 class RetailOfferWaitTest(OffersAndStockTest):
     """The Retail offer comes from Kafka (catalog.product.created -> offers): a bounded, longer wait and a clear error."""
 
