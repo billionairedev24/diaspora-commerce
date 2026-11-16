@@ -9,7 +9,7 @@ import { SERVICES } from './shopper-state';
 
 type Emit = (event: string, data: unknown) => void;
 
-const SUGGESTIONS = ['Jollof for 20', 'Diwali dinner for 8', 'Track my order', 'Book knotless braids'];
+export const LOLA_MOCK_SUGGESTIONS = ['Track my order', 'Jollof for 20', 'Delivery to my ZIP code', 'Find a product', 'Book knotless braids', 'Compare prices'];
 const STOP = new Set(['a', 'an', 'the', 'for', 'me', 'i', 'need', 'want', 'some', 'find', 'show', 'buy', 'get', 'please', 'add', 'to', 'cart', 'my', 'of', 'and', 'with', 'plan', 'what', 'do']);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -69,7 +69,7 @@ function turn(req: LolaChatRequest, session: MockSession, now: Date, emit: Emit)
     } else answer = 'I couldn’t find that in the catalogue yet. Try another name — gari, egusi, bissap and suya all work.';
   }
   for (const piece of answer.match(/\S+\s*/g) ?? []) emit('token', { text: piece });
-  emit('done', { sessionId, message: answer, products, proposals, suggestions: SUGGESTIONS.filter((s) => s.toLowerCase() !== text).slice(0, 3), dropped: [], models: ['mock'], promptTokens: 0, completionTokens: 0 });
+  emit('done', { sessionId, message: answer, products, proposals, suggestions: LOLA_MOCK_SUGGESTIONS.filter((s) => s.toLowerCase() !== text).slice(0, 3), dropped: [], models: ['mock'], promptTokens: 0, completionTokens: 0 });
 }
 
 /** The SSE body of one mock turn; events are paced like a streamed model answer. */

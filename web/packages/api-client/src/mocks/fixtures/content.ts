@@ -18,12 +18,12 @@ export type MockTile = Omit<Tile, 'cells'> & { cells: MockTileCell[] };
 export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile[]; rails: Array<{ id: string; title: string; href: string; source: RailSource }> } = {
   announcements: [
     { id: 'a1', tone: 'ink', icon: 'truck', text: 'One flat delivery fee on every order. Pickup is free where offered.', cta: 'Shop now', href: '/s' },
-    { id: 'a2', tone: 'gold', icon: 'calendar-star', text: 'Diwali and Detty December stock is landing — order early', cta: 'See picks', href: '/s?community=Indian' },
+    { id: 'a2', tone: 'gold', icon: 'calendar-star', text: 'Christmas and Detty December stock is landing — order early', cta: 'See picks', href: '/s?community=Indian' },
     { id: 'a3', tone: 'green', icon: 'storefront', text: 'Sellers: 0% commission for your first 30 days', cta: 'Start selling', href: '/sell' }
   ],
   hero: [
     { id: 'h1', theme: 'gold', kicker: 'AfroTransact Brand', title: 'Party jollof, sorted.', sub: 'Our own seasoning, rice and pepper sauce — sold and fulfilled by AfroTransact.', cta: 'Shop AfroTransact Brand', href: '/s?soldBy=platform', label: 'AfroTransact', imageUrl: null },
-    { id: 'h2', theme: 'green', kicker: 'Diwali', title: 'Light up the table.', sub: 'Aged basmati, diyas and spices from Edison to your door.', cta: 'Shop Indian kitchen', href: '/s?community=Indian', label: 'AfroTransact', imageUrl: null },
+    { id: 'h2', theme: 'green', kicker: 'Christmas', title: 'Set the Christmas table.', sub: 'Aged basmati, rice and spices from Edison to your door.', cta: 'Shop Indian kitchen', href: '/s?community=Indian', label: 'AfroTransact', imageUrl: null },
     { id: 'h3', theme: 'ink', kicker: 'Kingston Kitchen', title: 'Jerk season is every season.', sub: 'Blue Mountain jerk paste, fulfilled by AfroTransact.', cta: 'Shop now', href: '/p/AT000000P9', label: 'Sponsored', imageUrl: null },
     { id: 'h-tx', theme: 'green', kicker: 'Texas', title: 'Fresh from Texas kitchens.', sub: 'Houston and Dallas sellers ship same day across Texas.', cta: 'Shop Texas sellers', href: '/s?q=Houston', label: 'AfroTransact', imageUrl: null },
     { id: 'h-nj', theme: 'gold', kicker: 'New Jersey', title: 'Edison to your door tomorrow.', sub: 'Spices, rice and sweets from the Garden State, fulfilled from Edison.', cta: 'Shop Edison', href: '/s?q=Edison', label: 'AfroTransact', imageUrl: null },
