@@ -33,3 +33,16 @@ V52 (`V52__ai_cap_manage_permission.sql`) adds it to the catalogue under `platfo
 `ai:manage` (look at the cap and today's spend) and do not get it unless someone switches it on in Settings > Roles and permissions (with a reason). It is deliberately not a
 client scope: service clients and the MCP server cannot change the cap (ai-gateway requires a staff principal), and a test keeps every MCP tool away from it. Numbering: V52 was
 the next free identity version on `main` and `release-1`; check both (`ls java/services/identity/src/main/resources/db/migration | sort -V | tail -3`) before adding the next one.
+
+## Worked example: `orders:override-shipment` (Super Admin only)
+
+A permission that must **not** be handed out widely: it lets a person override the status of a shipment the seller ships
+themselves (`SELLER_SHIPS`), forward only, with a required reason, audited.
+
+1. Migration `identity V53__orders_override_shipment_permission.sql` adds the permission (module `orders`) and grants it to
+   `platform.super_admin` only. It is idempotent and is the same file on `main`, `develop` and `release-1`.
+2. Nobody else holds it. To give it to one more role: Settings > Roles and permissions > the role > search "override" > switch it
+   on with a reason. For one person: People > the person > *Grant a permission directly*. Both are in the change log.
+3. The check is on the server (orders-service `OrdersAccess.overrideActor`) and in gateway-bff, which only shows the
+   **Override status** action to holders. Without it the order sheet says "Seller ships this order" and offers nothing.
+4. Mock BFF catalogue: `python3 tools/identity/gen_access_fixture.py` (already run for V52).

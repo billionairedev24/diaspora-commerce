@@ -258,6 +258,26 @@ class OrdersAccess {
         };
     }
 
+    /**
+     * The staff member overriding a seller-shipped shipment: staff only (never a seller, service or driver) and holding
+     * {@code orders:override-shipment}, checked on the server whatever the console shows.
+     */
+    TransitionActor overrideActor(Order order, Shipment shipment) {
+        Actor actor = actors.current();
+        if (actor.type() != PrincipalType.STAFF && !superAdmin(actor)) {
+            throw new ForbiddenActionException("orders.override-staff-only",
+                    "Only AfroTransact staff can override a shipment status");
+        }
+        permissions.require(OrdersPermissions.OVERRIDE_SHIPMENT);
+        return new TransitionActor(ActorKind.ADMIN_OVERRIDE, actor.subject(), null);
+    }
+
+    /** True for a person at the staff console (a staff member or a super admin), not a seller, service or driver. */
+    boolean humanStaff() {
+        Actor actor = actors.current();
+        return actor.type() == PrincipalType.STAFF || superAdmin(actor);
+    }
+
     /** RBAC permission AND {@code can_update_status} on the shipment (seller's fulfilment roles, market staff). */
     private void updateStatusRelation(String permission, Order order, Shipment shipment) {
         relationships.require(permission, OrdersRelations.CAN_UPDATE_STATUS, OrdersRelations.shipment(shipment),

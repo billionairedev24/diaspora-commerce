@@ -92,6 +92,13 @@ class DeliveryDeskController {
         return desk.pickedUp(shipmentId, command(key, body));
     }
 
+    @Operation(summary = "Mark in transit, an optional step between picked up and out for delivery (delivery:manage)")
+    @PostMapping("/v1/deliveries/{shipmentId}/in-transit")
+    DeliveryDeskService.Detail inTransit(@PathVariable String shipmentId, @RequestHeader(value = "Idempotency-Key",
+            required = false) String key, @Valid @RequestBody(required = false) ActionRequest body) {
+        return desk.inTransit(shipmentId, command(key, body));
+    }
+
     @Operation(summary = "Mark out for delivery, or reattempt after a failed delivery (delivery:manage)",
             description = "Notifies the customer.")
     @PostMapping("/v1/deliveries/{shipmentId}/out-for-delivery")
@@ -118,6 +125,14 @@ class DeliveryDeskController {
         return desk.failed(shipmentId, body.reason(), command(key, body));
     }
 
+    @Operation(summary = "Return a parcel to the seller after a failed delivery (delivery:manage)",
+            description = "Only from delivery failed, with a reason that is kept in the audit trail.")
+    @PostMapping("/v1/deliveries/{shipmentId}/returned")
+    DeliveryDeskService.Detail returned(@PathVariable String shipmentId, @RequestHeader(value = "Idempotency-Key",
+            required = false) String key, @Valid @RequestBody FailedRequest body) {
+        return desk.returned(shipmentId, body.reason(), command(key, body));
+    }
+
     @Operation(summary = "Correct a saved proof of delivery (delivery:manage)",
             description = "The only way a proof changes: a reason is required and the old values are kept in the "
                     + "audit trail.")
@@ -128,7 +143,8 @@ class DeliveryDeskController {
     }
 
     private static Command command(String key, Versioned body) {
-        return new Command(body == null ? null : body.version(), key, body == null ? null : body.note());
+        return new Command(body == null ? null : body.version(), key, body == null ? null : body.note(),
+                body == null ? null : body.expectedStatus());
     }
 
     /** A request that carries the job version the caller saw and a note. */
@@ -137,20 +153,25 @@ class DeliveryDeskController {
         Long version();
 
         String note();
+
+        /** The shipment status the caller saw (optional): another person's earlier change is reported, not overruled. */
+        String expectedStatus();
     }
 
-    record ActionRequest(Long version, @Size(max = 500) String note) implements Versioned {
+    record ActionRequest(Long version, @Size(max = 500) String note, String expectedStatus) implements Versioned {
     }
 
-    record AssignRequest(String assigneeId, Long version, @Size(max = 500) String note) implements Versioned {
+    record AssignRequest(String assigneeId, Long version, @Size(max = 500) String note, String expectedStatus)
+            implements Versioned {
     }
 
-    record FailedRequest(String reason, Long version, @Size(max = 500) String note) implements Versioned {
+    record FailedRequest(String reason, Long version, @Size(max = 500) String note, String expectedStatus)
+            implements Versioned {
     }
 
     record ProofRequest(List<String> photoAssetIds, @Size(max = 120) String recipientName,
-                        @Size(max = 500) String note, Double latitude, Double longitude, Long version)
-            implements Versioned {
+                        @Size(max = 500) String note, Double latitude, Double longitude, Long version,
+                        String expectedStatus) implements Versioned {
 
         ProofInput toInput() {
             return new ProofInput(photoAssetIds, recipientName, note, latitude, longitude);
@@ -159,7 +180,7 @@ class DeliveryDeskController {
 
     record CorrectionRequest(List<String> photoAssetIds, @Size(max = 120) String recipientName,
                              @Size(max = 500) String note, Double latitude, Double longitude, String reason,
-                             Long version) implements Versioned {
+                             Long version, String expectedStatus) implements Versioned {
 
         ProofInput toInput() {
             return new ProofInput(photoAssetIds, recipientName, note, latitude, longitude);

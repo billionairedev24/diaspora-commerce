@@ -11,6 +11,12 @@ public interface ShipmentService {
     ShipmentActionResult transition(String shipmentId, String to, String reason, String handoverCode,
                                     String idempotencyKey);
 
+    /**
+     * {@code POST /v1/shipments/{id}/override}: staff holding {@code orders:override-shipment} correct the status of a
+     * shipment the seller ships (SELLER_SHIPS), forward only. The reason is required and is kept with who and when.
+     */
+    ShipmentActionResult override(String shipmentId, String to, String reason, String idempotencyKey);
+
     /** The customer cancels one shipment of their order (until it is packed). */
     OrderView cancelByCustomer(String orderNumber, String shipmentId, String reason, String idempotencyKey);
 

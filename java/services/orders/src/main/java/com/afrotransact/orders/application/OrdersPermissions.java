@@ -39,6 +39,12 @@ public final class OrdersPermissions {
      */
     public static final String DELIVERY_MANAGE = "delivery:manage";
 
+    /**
+     * Override the status of a shipment the seller ships themselves (SELLER_SHIPS): forward only, a reason is
+     * required, audited. Super Admin only (identity V53 on every line).
+     */
+    public static final String OVERRIDE_SHIPMENT = "orders:override-shipment";
+
     /** See delivery quote requests, their timeline and who has them (customer care, supervisors). */
     public static final String QUOTES_VIEW = "delivery-quotes:view";
     /** Hold a delivery quote request, agree an amount or decline it (reason required, audited). */
