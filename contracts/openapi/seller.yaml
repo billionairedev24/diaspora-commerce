@@ -3595,6 +3595,14 @@ components:
           type: integer
           format: int64
           description: Version being edited (updates); 409 when it changed
+        pickupHours:
+          type: array
+          description: 'Creates only: the hours AfroTransact can collect here. With them the new location is Fulfilled by
+            AfroTransact by default whenever that is possible (approved organisation, street-level located address inside
+            the delivery area); without them nothing is enabled. Hours are never invented.'
+          items:
+            $ref: '#/components/schemas/PickupWindow'
+          maxItems: 14
       required:
       - city
       - line1
